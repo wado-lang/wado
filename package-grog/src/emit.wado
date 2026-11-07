@@ -203,6 +203,8 @@ struct Access {
     take: Take,
     /// The turbofish every call names, or `""`.
     types: String,
+    /// A repeated message field's element type, which it is read one value at a time as.
+    element: Option<String> = null,
 }
 
 /// How `merge_field` reads a field.
@@ -262,6 +264,34 @@ impl MessagePlan {
         }
     }
 
+    /// A function per repeated message field that reads its values out of an
+    /// encoded message one at a time.
+    fn write_each(&self, w: &mut CodeWriter) {
+        let mut opened = false;
+        for let slot of &self.slots {
+            let Field([field, a]) = slot else {
+                continue;
+            };
+            let Some(element) = &a.element else {
+                continue;
+            };
+            if !opened {
+                w.blank();
+                w.begin(`impl ${self.spec.name}`);
+                opened = true;
+            } else {
+                w.blank();
+            }
+            let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
+            w.begin(`pub fn ${field}_of<S: AsByteSlice>(input: S) -> ${RUNTIME}::Each<${element}>`);
+            w.line(`return ${RUNTIME}::each::<${element}, S>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`);
+            w.end();
+        }
+        if opened {
+            w.end();
+        }
+    }
+
     fn write(&self, w: &mut CodeWriter) {
         self.spec.emit(w);
         for let v of &self.oneofs {
@@ -269,6 +299,7 @@ impl MessagePlan {
             v.emit(w);
         }
         let name = &self.spec.name;
+        self.write_each(w);
         w.blank();
         w.begin(`impl ${RUNTIME}::Message for ${name}`);
         w.begin(`fn size(&self, s: &mut ${RUNTIME}::Sizer) -> i64`);
@@ -553,7 +584,9 @@ impl Emitter {
                 },
                 Message([wado, group]) => {
                     let put = if group { Call::Groups } else { Call::Messages };
-                    Result::Ok([`List<${wado}>`, "[]", access(n, put, Take::Into(put), "")]);
+                    let mut a = access(n, put, Take::Into(put), "");
+                    a.element = Option::Some(wado);
+                    Result::Ok([`List<${wado}>`, "[]", a]);
                 },
             };
         }

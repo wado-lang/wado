@@ -141,19 +141,64 @@ pub fn decode<M: Message + Default, S: AsByteSlice>(input: S) -> Result<M, Decod
 /// Read `input` into `message` as protobuf merges: a scalar is replaced, a
 /// message merged, a repeated field appended to.
 pub fn merge<M: Message, S: AsByteSlice>(message: &mut M, input: S) -> Result<(), DecodeError> {
-    let bytes = input.as_byte_slice();
-    let mut r = Reader {
-        input: bytes,
-        pos: 0,
-        end: bytes.len(),
-        tag_start: 0,
-        value_start: 0,
-        number: 0,
-        wire_type: WireType::Varint,
-        depth: 0,
-        stray: [],
-    };
+    let mut r = Reader::new(input.as_byte_slice());
     return merge_fields(message, &mut r, 0);
+}
+
+/// The values of the repeated message field numbered `number` in an encoded
+/// message, decoded one at a time, so a caller holds one value rather than the
+/// whole message. Only that field is checked: the others are skipped, not
+/// decoded. A value of another wire type is skipped, as a decode keeps it as an
+/// unknown field.
+pub fn each<M: Message + Default, S: AsByteSlice>(input: S, number: i32, wire_type: WireType) -> Each<M>
+    contract wire_type == WireType::Len || wire_type == WireType::SGroup
+{
+    return Each { r: Reader::new(input.as_byte_slice()), number, wire_type, done: false };
+}
+
+/// What [`each`] returns: after an error, nothing more.
+pub struct Each<M> {
+    r: Reader,
+    number: i32,
+    wire_type: WireType,
+    done: bool,
+}
+
+impl<M: Message + Default> Iterator for Each<M> {
+    type Item = Result<M, DecodeError>;
+
+    fn next(&mut self) -> Option<Result<M, DecodeError>> {
+        if self.done {
+            return null;
+        }
+        let read = self.read();
+        if !read matches { Ok(Some(_)) } {
+            self.done = true;
+        }
+        return match read {
+            Ok(m) => m.map(|v| Result::Ok(v)),
+            Err(e) => Option::Some(Result::Err(e)),
+        };
+    }
+}
+
+impl<M: Message + Default> Each<M> {
+    fn read(&mut self) -> Result<Option<M>, DecodeError> {
+        let r = &mut self.r;
+        while r.next_field(0)? {
+            if r.number != self.number || r.wire_type != self.wire_type {
+                r.skip_value()?;
+                continue;
+            }
+            let mut m = M::default();
+            match self.wire_type {
+                Len => r.merge_nested(&mut m)?,
+                _ => r.merge_group(&mut m)?,
+            }
+            return Result::Ok(Option::Some(m));
+        }
+        return Result::Ok(null);
+    }
 }
 
 /// Read fields into `message` up to the reader's end, or for a group up to the
@@ -514,6 +559,20 @@ pub struct Reader {
 }
 
 impl Reader {
+    fn new(input: ByteSlice) -> Reader {
+        return Reader {
+            input,
+            pos: 0,
+            end: input.len(),
+            tag_start: 0,
+            value_start: 0,
+            number: 0,
+            wire_type: WireType::Varint,
+            depth: 0,
+            stray: [],
+        };
+    }
+
     fn fail<T>(&self, reason: String) -> Result<T, DecodeError> {
         return Result::Err(DecodeError { offset: self.pos, reason });
     }

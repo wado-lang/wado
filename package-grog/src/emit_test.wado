@@ -17,6 +17,13 @@ test "nested declarations flatten by path" {
     assert out.contains("pub kind: OuterInnerKind = OuterInnerKind::A,");
 }
 
+test "a repeated message field is read one value at a time" {
+    let out = generate("syntax = \"proto3\"; message M { repeated M children = 3; repeated int32 n = 4; }");
+    assert out.contains("pub fn children_of<S: AsByteSlice>(input: S) -> grog::Each<M> {");
+    assert out.contains("return grog::each::<M, S>(input, 3, grog::WireType::Len);");
+    assert !out.contains("n_of");
+}
+
 test "a map is a TreeMap" {
     let out = generate(
         "syntax = \"proto3\"; message M { map<sint32, M> children = 1; map<string, E> e = 2; } enum E { Z = 0; }",

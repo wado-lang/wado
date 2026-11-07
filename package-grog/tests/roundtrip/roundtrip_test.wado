@@ -114,6 +114,50 @@ test "a message merges field by field" {
     assert account.name == "hi";
 }
 
+test "a repeated message field is read one value at a time" {
+    let account = Account {
+        id: 7,
+        history: [
+            AccountAddress { city: "Osaka" },
+            AccountAddress { zip: 1 },
+        ],
+        address: Option::Some(AccountAddress { city: "Kyoto" }),
+    };
+    let mut read: List<AccountAddress> = [];
+    for let a of Account::history_of(&grog::encode(&account)) {
+        read.push(a.unwrap());
+    }
+    assert read == account.history;
+}
+
+test "a repeated message read one at a time skips a value of another wire type" {
+    // Field 14 as a varint, then as the message `{ zip: 1 }`.
+    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("70057202 1001".replace(" ", ""))).collect();
+    assert read.len() == 1;
+    assert read[0].unwrap().zip == 1;
+}
+
+test "a repeated message read one at a time stops at a malformed input" {
+    let read: List<Result<AccountAddress, grog::DecodeError>> = Account::history_of(&unhex("7203100172")).collect();
+    assert read.len() == 2;
+    assert read[0].unwrap().zip == 1;
+    assert read[1] matches { Err(_) };
+}
+
+test "a repeated group is read one value at a time" {
+    let record = legacy::Record {
+        id: Option::Some(1),
+        tag: [
+            legacy::RecordTag { name: Option::Some("a") },
+            legacy::RecordTag {},
+        ],
+    };
+    let read: List<Result<legacy::RecordTag, grog::DecodeError>> = legacy::Record::tag_of(&grog::encode(&record)).collect();
+    assert read.len() == 2;
+    assert read[0].unwrap() == record.tag[0];
+    assert read[1].unwrap() == record.tag[1];
+}
+
 test "a truncated or malformed input is refused" {
     assert grog::decode::<Account>(&unhex("08")) matches { Err(_) };
     assert grog::decode::<Account>(&unhex("1205ab")) matches { Err(_) };
