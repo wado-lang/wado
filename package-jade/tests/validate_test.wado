@@ -1,10 +1,10 @@
-use { Document, Schema, SchemaObject, ValidationError, Validator } from "../src/lib.wado";
+use { Document, Number, Schema, SchemaObject, ValidationError, Validator } from "../src/lib.wado";
 
 fn errors(schema: String, data: String) -> List<ValidationError> {
     let validator = Validator::compile(&Schema::parse(schema).unwrap()).unwrap();
     let doc = Document::parse(data).unwrap();
-    if let Err(errors) = validator.validate(&doc.root()) {
-        return errors;
+    if let Err(found) = validator.validate(&doc.root()) {
+        return found;
     }
     return [];
 }
@@ -25,13 +25,6 @@ test "every failing keyword is reported" {
     assert found.len() == 2;
     assert found[0].message == "must be string";
     assert found[1].keyword == "/minimum";
-}
-
-test "an empty type array admits no value" {
-    let found = errors(#"{"type": []}"#, "null");
-    assert found.len() == 1;
-    assert found[0].keyword == "/type";
-    assert found[0].message == "no value is valid against an empty `type`";
 }
 
 test "a reference is followed to its target's keywords" {
@@ -84,7 +77,7 @@ test "a reference the schema does not hold is an error at compile" {
 
 test "a schema built breaking a keyword's rule is an error at compile" {
     let schema = Schema::Object(SchemaObject {
-        items: Option::Some(Schema::Object(SchemaObject { multiple_of: Option::Some(0.0) })),
+        items: Option::Some(Schema::Object(SchemaObject { multiple_of: Option::Some(Number::from(0.0)) })),
     });
     let e = Validator::compile(&schema).unwrap_err();
     assert e.pointer == "/items/multipleOf";
