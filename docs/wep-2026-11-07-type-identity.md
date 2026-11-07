@@ -84,8 +84,8 @@ being an identity. The second universe needs no slots of its own: `f64` and
 
 ## Decision
 
-The table never changes what a slot means. Erasure and boxing rewrite the IR's
-types instead, at the points in the pipeline where they run today.
+The table never changes what a slot means. Erasure rewrites the IR's types
+instead, and boxing changes no type at all.
 
 ### 1. The table is append-only
 
@@ -97,36 +97,40 @@ settles one afterwards. An id names one type for the table's whole life, so
 `Meters` keeps its id after erasure and still means `Meters`. Nothing after
 erasure holds that id, so nothing asks.
 
-### 2. Two functions say what a type becomes
+### 2. Erasure is a function on types
 
-Each is memoized, and each is the only place that states its rule:
+`erase_type(TypeId) -> TypeId`, memoized, is the only place that states the
+rule: a newtype becomes what its base becomes, `flags` becomes `u32`, and every
+other spelling is rebuilt from what its parts become and interned. `List<Meters>`
+therefore erases to the id `List<f64>` already has, with no settling step.
 
-- `erase_type(TypeId) -> TypeId`: a newtype becomes what its base becomes,
-  `flags` becomes `u32`, and a function type drops its row;
-- `box_type(TypeId) -> TypeId`: a reference whose target
-  `is_boxed_reference_target` names becomes `Box<T>` of its target.
+The erasure rewrites every `TypeId` the `FlatPackage` holds through it:
+expressions, locals, parameters, declarations, and the type-keyed tables beside
+them. Two TIR struct declarations that erase to one id become one declaration.
 
-Both rebuild every other spelling from what its parts become, and intern it.
-`List<Meters>` therefore erases to the id `List<f64>` already has, with no
-settling step.
+### 3. Boxing changes no type
 
-### 3. The IR is rewritten where erasure and boxing run
+A reference keeps its type to the end: `&i32` is `&i32` in TIR, NIR and the
+analyses over them, and `&mut i32` stays apart from it. What boxing decides is
+storage, which one predicate states, `is_boxed_reference_target`: a reference
+to a struct, a tuple or a list points at that object, and a reference to
+anything else points at a cell, an object of one field `value`.
 
-The TIR passes between erasure and the TIR → NIR fold read the erased types, and
-those after boxing (value copy, closure lifting, the write-back) read the boxed
-ones. So each rewrite stays where it runs today, and maps every `TypeId` the
-`FlatPackage` holds through its function: expressions, locals, parameters,
-declarations, and the type-keyed tables beside them. The boxing pass rewrites
-bodies as it does now, and no longer touches a slot.
+- The boxing pass rewrites bodies only. An address-taken local `x: T` becomes
+  `x: &mut T`, initialized with a new cell; a read of `x` reads `x.value`, and
+  `&x` is `x`. A `*r` through a cell reads `r.value`, and `&temp` builds a cell.
+- In NIR a cell is a struct literal and a field access whose type is the
+  reference. The windows that answer a type's fields (`aggregate_field_info`,
+  `StructDecls::of_type`, `heap_object_key`) answer `[value: T]` for a cell
+  reference, so every pass that removes or forwards a one-field struct does the
+  same to a cell.
+- WIR build gives a cell reference the type `ref $Cell<R>`, where `R` is the
+  representation of its target. A `&` and a `&mut`, a reference at any depth,
+  and two function types differing by a row or a parameter all share one
+  representation, so they share one cell type without a key of their own.
 
-Two TIR struct declarations that erase to one id become one declaration, so
-`List<Meters>` and `List<f64>` need no deduplication further down.
-
-A pass that mints a type after a rewrite, such as `sroa_param`'s `make_ref` or
-`sroa_variant_return`'s `make_option`, maps it through the same function. A
-debug assertion after each rewrite, and in WIR build, checks that the IR holds
-only rewritten types: no newtype, no `flags`, no row, and after boxing no
-reference that should be a `Box`.
+Since a reference never changes type, whether it is writable is its type, and
+the names lowering mints do not change across boxing.
 
 ### 4. Source questions are answered before erasure
 
@@ -179,23 +183,14 @@ Each step leaves the compiler green and is a commit series of its own.
   declared members and anonymous shapes the table keeps. From erasure on,
   `intern` answers the erased id and `iter_type_ids` yields only erased ids.
   Erasure no longer touches `redirects`, and `get_unerased` is `get`.
-- [ ] Add `box_type` and rewrite the `FlatPackage` through it where boxing
-  runs. Done when `redefine_to`, `redirects` and `box_payload_types` are
-  gone.
+- [ ] Boxing changes no type: cells are references, and WIR build keys them by
+  representation. Done when `redefine_to`, `redirects`, `box_payload_types`,
+  `box_key`, the prelude `Box` and the `is_mut_ref` captures are gone.
 - [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`,
   the `_unboxed` and `_resolving_newtypes` renderers, and the rule in
   `wado-compiler/AGENTS.md`.
 
 ## Known gaps
-
-### `&T` and `&mut T` lower to one `Box`
-
-Both lower to one `Box<T>` struct, which is what lets a `&mut` argument reach a
-`&` parameter. `is_mut_box` tells them apart today by the spelling left in the
-redefined slot, and `sroa_param`, `niri::region` and value-copy's points-to
-analysis read it. Section 1 leaves no such slot. Where those analyses learn
-whether a box is writable is undecided, and the boxing step of the roadmap
-waits on it.
 
 ### A remark after lowering has no source name to print
 
