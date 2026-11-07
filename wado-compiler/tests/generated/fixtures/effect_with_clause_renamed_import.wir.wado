@@ -32,14 +32,14 @@ struct core:prelude/list.wado//List<u8> {  // TypeId(7)
     mut used: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, u64) -> ref "core:prelude/list.wado//List<u8>";  // TypeId(8)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> u64;  // TypeId(8)
 
 struct canonical//CanonicalClosure_0 {  // TypeId(9)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> u64;  // TypeId(10)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, u64) -> ref "core:prelude/list.wado//List<u8>";  // TypeId(10)
 
 struct canonical//CanonicalClosure_1 {  // TypeId(11)
     env: ref null struct,
@@ -125,13 +125,13 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     let tens: i32;
     let start_184: i32;
     fixed = struct.new "effect_with_clause_renamed_import.wado//FixedRandom" { byte: 1 };
-    global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {}, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } };
+    global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {}, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } };
     self_22 = $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_5: block -> ref "core:prelude/list.wado//List<u8>" {
         if ref.is_null(local.tee $local_1(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random)) == 0 {
             global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2(ref.as_non_null($local_1)).outer;
             $local_3 = block -> ref "core:prelude/list.wado//List<u8>" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2.op_get_random_bytes)).env, 4_i64);
+                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($local_2.op_get_random_bytes)).env, 4_i64);
             };
             global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = $local_1;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_5: $local_3;

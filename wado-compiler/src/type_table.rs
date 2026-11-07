@@ -336,21 +336,26 @@ impl TypeTable {
         table
     }
 
+    /// The id `ty` interns to; from erasure on, the id of what it erases to,
+    /// the only one the IR holds.
     pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
-        if let Some(&id) = self.intern_map.get(&ty) {
+        let id = if let Some(&id) = self.intern_map.get(&ty) {
             if self.unindexed.swap_remove(&id) {
                 self.index_type(id, &ty);
             }
-            return id;
-        }
-        let id = self.types.next_id();
-        self.index_type(id, &ty);
-        self.push_type(ty.clone());
-        self.intern_map.insert(ty, id);
+            id
+        } else {
+            let id = self.types.next_id();
+            self.index_type(id, &ty);
+            self.push_type(ty.clone());
+            self.intern_map.insert(ty, id);
+            id
+        };
         if self.instances_settled {
-            self.settle_spelling(id);
+            self.settle_spelling(id)
+        } else {
+            id
         }
-        id
     }
 
     /// Append `ty` at [`TypeMap::next_id`]: the only way a slot is filled.
@@ -668,9 +673,12 @@ impl TypeTable {
         self.is_integer(id) || self.is_float(id)
     }
 
-    /// Iterate over all live type IDs in the table. Erased slots are skipped.
+    /// Every type the IR may hold: from erasure on, only the ids that are their
+    /// own erasure, since the IR holds no other.
     pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.types.ids()
+        self.types.ids().filter(|&id| {
+            !self.instances_settled || self.settled_spellings.get(id) == Some(&id)
+        })
     }
 
     pub fn mark_unrestricted_resource(&mut self, def: DefId, classes: Option<HandleClasses>) {
@@ -5168,6 +5176,49 @@ impl TypeTable {
             }
         }
         self.settle_instance_spellings();
+        self.erase_member_tables();
+    }
+
+    /// Rewrite the members of declarations and shapes to erased ids, keyed by
+    /// erased arguments, as the IR's are.
+    fn erase_member_tables(&mut self) {
+        let fields = std::mem::take(&mut self.struct_field_index);
+        for ((def, args), types) in fields {
+            let args: Vec<TypeId> = args.iter().map(|key| self.erase_type(key.0)).collect();
+            let types = types.iter().map(|&ty| self.erase_type(ty)).collect();
+            self.register_struct_fields(def, args, types);
+        }
+        let mut cases = std::mem::take(&mut self.variant_case_index);
+        for (_, _, payload) in cases.values_mut().flatten() {
+            *payload = self.erase_type(*payload);
+        }
+        self.variant_case_index = cases;
+        // A shape keeps its id, so its struct keeps its declaration; two that
+        // erase alike stay two structs, as two declarations would.
+        let mut shapes = std::mem::take(&mut self.anon_structs);
+        for entry in &mut shapes {
+            match &mut entry.shape {
+                AnonShape::Fields(fields) => {
+                    for (_, ty) in fields {
+                        *ty = self.erase_type(*ty);
+                    }
+                }
+                AnonShape::Template(shape) => {
+                    for hole in &mut shape.holes {
+                        hole.ty = self.erase_type(hole.ty);
+                    }
+                }
+                AnonShape::Synthetic(_) => {}
+            }
+        }
+        self.anon_struct_index.clear();
+        for (index, entry) in shapes.iter().enumerate() {
+            let id = AnonStructId(u32::try_from(index).expect("anon struct space"));
+            self.anon_struct_index
+                .entry((entry.module.clone(), entry.shape.clone()))
+                .or_insert(id);
+        }
+        self.anon_structs = shapes;
     }
 
     /// The type `id` names once newtypes and `flags` are erased, spelled with

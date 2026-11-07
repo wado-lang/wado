@@ -137,8 +137,10 @@ impl FlatPackage {
             .find(|s| s.represents(type_table, def, type_args))
     }
 
-    /// Erase newtypes and `flags`, and rewrite every type the functions and
-    /// globals hold to its erased id, so one type has one id there.
+    /// Erase newtypes and `flags`, and rewrite every type the functions,
+    /// globals, structs and variants hold to its erased id, so one type has
+    /// one id there. A `flags` declaration keeps its own id: it declares that
+    /// type rather than holding one.
     pub fn erase_newtypes_and_flags(&mut self) {
         struct Eraser<'t>(&'t mut TypeTable);
         impl TirMutVisitor for Eraser<'_> {
@@ -154,6 +156,12 @@ impl FlatPackage {
         }
         for global in &mut self.globals {
             eraser.walk_global(global);
+        }
+        for decl in &mut self.structs {
+            eraser.walk_struct(decl);
+        }
+        for decl in &mut self.variants {
+            eraser.walk_variant_decl(decl);
         }
     }
 
