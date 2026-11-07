@@ -584,10 +584,11 @@ impl Graph for WebGpuBackend {
 
     /// The backend's attention kernels, and the decomposition where they
     /// cannot run it. A shared past holds `past_length` valid positions, the
-    /// kernels attend over those and the new ones, as many columns of the bias,
-    /// and the present is the past's buffer with the new ones written after
-    /// the valid ones. Past the valid ones a causal attention reads none, so
-    /// the kernels compute what the decomposition does.
+    /// kernels attend over those and the new ones, or the first `reach` of
+    /// them, as many columns of the bias, and the present is the past's buffer
+    /// with the new ones written after the valid ones. Past the valid ones a
+    /// causal attention reads none, so the kernels compute what the
+    /// decomposition does.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
         q: &Placed<f32, [B, S, Q]>,

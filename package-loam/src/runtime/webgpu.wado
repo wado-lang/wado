@@ -2427,7 +2427,7 @@ impl WebGpuBackend {
         attend_operands.extend(&tables);
         if let Some(b) = bias {
             // Bound over every position it holds, as the cache is, so its
-            // binding too stays the step before's. The kernel reads `total`.
+            // binding too stays the step before's. The kernel reads `reach`.
             let over = [batch, heads, s, b.extents[3]] as List<i32>;
             attend_operands.push(DeviceTensor { ..*b, strides: stretched(b, &over), extents: over });
         }
@@ -3561,7 +3561,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let seq = p[3];
     let heads = p[4];
     let d = p[5];
-    let total = p[6];
+    let reach = p[6];
     let past = p[7];
     let half = p[9];
     let scale = bitcast<f32>(p[10]);
@@ -3585,7 +3585,7 @@ ${turning}        query[e] = turned;
     // Adjacent lanes split one position's dot, reading adjacent elements.
     let split = lid % ${splits}u;
     let j = first + lid / ${splits}u;
-    let attended = j < total;
+    let attended = j < reach;
     let masked = (causal && j > position) || (window > 0 && i32(position) - i32(j) >= window);
     var dot = 0.0;
     if attended && !masked {
@@ -3628,7 +3628,7 @@ ${biasing}    }
     }
     workgroupBarrier();
     let at = flat * (d + 2u);
-    let count = min(${part}u, total - first);
+    let count = min(${part}u, reach - first);
     let values = ${view_index_wgsl(24, ["b", "kh", "first"])};
     let next = bitcast<i32>(p[27]);
     let along = bitcast<i32>(p[28]);
