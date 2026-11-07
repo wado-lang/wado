@@ -1,6 +1,19 @@
 use { JsonSchema, SchemaGenerator, schema_for } from "../src/lib.wado";
 use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 use { to_string } from "core:json";
+use {
+    Duration,
+    Instant,
+    PlainDate,
+    PlainDateTime,
+    PlainMonthDay,
+    PlainTime,
+    PlainYearMonth,
+    ZonedDateTime,
+} from "core:temporal";
+use { Uri } from "core:uri";
+use { Url } from "core:url";
+use { Uuid } from "core:uuid";
 
 fn inline<T: JsonSchema>() -> String {
     let mut gen = SchemaGenerator::new();
@@ -59,6 +72,23 @@ test "String" {
 
 test "a byte type is unpadded base64url" {
     assert inline::<ByteList>() == `{"type":"string","contentEncoding":"base64url"}`;
+}
+
+test "a Temporal type is a string, with the RFC 3339 format its text meets" {
+    assert inline::<Instant>() == `{"type":"string","format":"date-time"}`;
+    assert inline::<PlainDate>() == `{"type":"string","format":"date"}`;
+    assert inline::<Duration>() == `{"type":"string","format":"duration"}`;
+    assert inline::<PlainTime>() == `{"type":"string"}`;
+    assert inline::<PlainDateTime>() == `{"type":"string"}`;
+    assert inline::<PlainYearMonth>() == `{"type":"string"}`;
+    assert inline::<PlainMonthDay>() == `{"type":"string"}`;
+    assert inline::<ZonedDateTime>() == `{"type":"string"}`;
+}
+
+test "an identifier is a string in its format" {
+    assert inline::<Uri>() == `{"type":"string","format":"uri-reference"}`;
+    assert inline::<Uuid>() == `{"type":"string","format":"uuid"}`;
+    assert inline::<Url>() == `{"type":"string"}`;
 }
 
 test "unit is null" {

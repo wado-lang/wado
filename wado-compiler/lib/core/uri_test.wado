@@ -1,5 +1,6 @@
 use { Uri, UriError } from "core:uri";
 use { HashMap } from "core:collections";
+use { from_string, to_string } from "core:json";
 
 fn uri(text: String) -> Uri {
     return Uri::from_str(text).unwrap();
@@ -121,6 +122,13 @@ test "a reference keys a map by its components" {
     assert names.get(uri("http://a/b")) matches { Some(1) };
     assert names.get(uri("http://a/b#")) matches { None };
     assert uri("HTTP://a/b") == uri("http://a/b");
+}
+
+test "a reference goes over the wire as its text" {
+    assert to_string(&uri("HTTP://a/b#c")).unwrap() == #""http://a/b#c""#;
+    assert from_string::<Uri>(#""../x""#).unwrap() == uri("../x");
+    assert from_string::<Uri>(#""a b""#).unwrap_err().message == "invalid URI reference: invalid character in path at offset 1";
+    assert from_string::<Uri>("1") matches { Err(_) };
 }
 
 test "an error is a UriError" {

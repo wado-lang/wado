@@ -3,6 +3,8 @@
 //! base, and write one back. Every scheme is read by the generic syntax, and
 //! only ASCII is admitted. A URI to fetch over HTTP is `core:url`'s.
 
+use { Deserialize, DeserializeError, Deserializer, Serialize, SerializeError, Serializer } from "core:serde";
+
 /// A URI reference (RFC 3986 §4.1): a URI, or a relative reference to resolve
 /// against one. Every component is valid by construction. Two references are
 /// equal when their components are equal as written, the scheme's case aside.
@@ -95,6 +97,23 @@ impl Uri {
             return `${self.path.substr_bytes(0, slash + 1)}${*path}`;
         }
         return *path;
+    }
+}
+
+impl Serialize for Uri {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(&self.to_string());
+    }
+}
+
+impl Deserialize for Uri {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uri, DeserializeError> {
+        return match Uri::from_str(d.deserialize_string()?) {
+            Ok(uri) => Result::Ok(uri),
+            Err(e) => Result::Err(DeserializeError::invalid_value(
+                `invalid URI reference: ${e.message} at offset ${e.offset}`,
+            )),
+        };
     }
 }
 

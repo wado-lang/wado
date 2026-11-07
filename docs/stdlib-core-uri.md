@@ -49,6 +49,14 @@ This reference with no fragment: the resource it names.
 
 ##### `fn from_str<S: AsStrSlice>(input: S) -> Result<Uri, UriError>`
 
+#### `impl Serialize for Uri`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for Uri`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uri, DeserializeError>`
+
 #### `impl Display for Uri`
 
 ##### `fn fmt(&self, f: &mut Formatter)`

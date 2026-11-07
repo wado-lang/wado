@@ -33,7 +33,8 @@ impl Display for Uri;              // recomposition (§5.3)
 ```
 
 `Uri` derives `Eq` and `Hash`, so it keys a `HashMap`. Two values are equal
-when their components are equal as written.
+when their components are equal as written. It serializes as its text, which
+is what JSON Schema's `uri-reference` format describes.
 
 ### What a `Uri` holds
 

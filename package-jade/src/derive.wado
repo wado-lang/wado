@@ -3,6 +3,19 @@
 
 use { Serialize, wire_name } from "core:serde";
 use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
+use {
+    Duration,
+    Instant,
+    PlainDate,
+    PlainDateTime,
+    PlainMonthDay,
+    PlainTime,
+    PlainYearMonth,
+    ZonedDateTime,
+} from "core:temporal";
+use { Uri } from "core:uri";
+use { Url } from "core:url";
+use { Uuid } from "core:uuid";
 use { Document } from "./document.wado";
 use { JsonTypes, Schema, SchemaObject } from "./schema.wado";
 
@@ -375,6 +388,82 @@ impl JsonSchema for char {
 }
 
 impl JsonSchema for String {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::String);
+    }
+}
+
+/// A string in the `format` named, for a type whose text always meets it.
+fn formatted(format: String) -> Schema {
+    return Schema::Object(SchemaObject { type: JsonTypes::String, format: Option::Some(format) });
+}
+
+impl JsonSchema for Instant {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return formatted("date-time");
+    }
+}
+
+impl JsonSchema for PlainDate {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return formatted("date");
+    }
+}
+
+impl JsonSchema for Duration {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return formatted("duration");
+    }
+}
+
+// RFC 3339's `time` and `date-time` require an offset, which these lack, and
+// no format names a time zone annotation.
+
+impl JsonSchema for PlainTime {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::String);
+    }
+}
+
+impl JsonSchema for PlainDateTime {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::String);
+    }
+}
+
+impl JsonSchema for PlainYearMonth {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::String);
+    }
+}
+
+impl JsonSchema for PlainMonthDay {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::String);
+    }
+}
+
+impl JsonSchema for ZonedDateTime {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::String);
+    }
+}
+
+impl JsonSchema for Uri {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return formatted("uri-reference");
+    }
+}
+
+impl JsonSchema for Uuid {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return formatted("uuid");
+    }
+}
+
+/// A WHATWG URL, which no RFC 3986 format describes: its text may hold
+/// characters RFC 3986 excludes, and `core:url` reads only the special schemes.
+impl JsonSchema for Url {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return of_type(JsonTypes::String);
     }
