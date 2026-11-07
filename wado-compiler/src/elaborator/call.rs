@@ -861,9 +861,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 tt.make_ref(pointee)
             })
         };
-        std::iter::once(arg)
-            .chain(shared)
-            .any(|ty| self.tysys.type_implements_trait(&self.annotate_ctx, ty, &list_arg))
+        std::iter::once(arg).chain(shared).any(|ty| {
+            self.tysys
+                .type_implements_trait(&self.annotate_ctx, ty, &list_arg)
+        })
     }
 }
 

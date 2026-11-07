@@ -208,11 +208,11 @@ impl<M: Message + Default> Iterator for Messages<M> {
             Ok(Some(m)) => Option::Some(Result::Ok(m)),
             Ok(None) => {
                 self.done = true;
-                null
+                null;
             },
             Err(e) => {
                 self.done = true;
-                Option::Some(Result::Err(e))
+                Option::Some(Result::Err(e));
             },
         };
     }
@@ -289,7 +289,7 @@ fn field_at(input: &mut LinearBuffer) -> Result<Option<FieldAt>, DecodeError> {
                 r.pos = r.value_start;
                 return Result::Err(r.skip_value().unwrap_err());
             }
-            size
+            size;
         } else {
             let held = input.len();
             match r.skip_value() {
