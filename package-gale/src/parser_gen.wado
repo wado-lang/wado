@@ -2898,9 +2898,7 @@ fn gen_scan_gates_before<S: AsStrSlice>(
         }
         match g.step {
             Assign([field, value]) => w.line(`${ctx.scan_gate_member(&field)} = ${value};`),
-            Check(cond) => w.line(
-                `if ${ctx.scan_gate_member(&SCAN_EDGE_FIELD)} == pos && ${negate_cond(ctx.scan_gate_cond(&cond))} { ${fail_stmt} }`,
-            ),
+            Check(cond) => w.line(`if ${negate_cond(ctx.scan_gate_cond(&cond))} { ${fail_stmt} }`),
         }
     }
 }

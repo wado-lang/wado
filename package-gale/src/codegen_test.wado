@@ -1231,6 +1231,20 @@ a * b + c => (s (e (e a) * (e b)) + c)
     }
 }
 
+test "the simulator answers a called rule's predicate behind a nullable prefix" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar Q;
+s : r EOF ;
+r : q 'x' | 'a' 'y' | 'a' 'x' ;
+q : '-'? {false}? 'a' | 'b' ;
+WS : ' ' -> skip ;
+", "s", ["a x", "b x", "- a x"], &GenerateOptions { atn }) == "a x => (s (r a x))
+b x => (s (r (q b) x))
+- a x => error
+";
+    }
+}
+
 test "prediction leaves a predicate past a consumed token to the parse" {
     for let atn of [AtnMode::Never, AtnMode::Verify] {
         let options = GenerateOptions { atn };
