@@ -15,7 +15,7 @@ use {
     deeper,
 } from "core:serde";
 use { JsonDeserializer, to_bytes } from "core:json";
-use { TreeSet } from "core:collections";
+use { HashSet } from "core:collections";
 
 /// What a JSON value is.
 pub enum NodeKind {
@@ -406,7 +406,7 @@ impl Reader {
 
     fn object(&mut self) -> Result<(), DeserializeError> {
         let at = self.open(NodeKind::Object)?;
-        let mut seen: Option<TreeSet<String>> = null;
+        let mut seen: Option<HashSet<String>> = null;
         if self.de.peek_after_whitespace() == b'}' {
             self.de.advance();
         } else {
@@ -439,7 +439,7 @@ impl Reader {
 
     /// Whether `key` repeats a key the object at `at` has read so far. Once it
     /// has read `LINEAR_KEY_CHECK` of them, `seen` holds them all.
-    fn repeats(&self, at: i32, seen: &mut Option<TreeSet<String>>, key: &String) -> bool {
+    fn repeats(&self, at: i32, seen: &mut Option<HashSet<String>>, key: &String) -> bool {
         if let Some(set) = seen {
             return !set.insert(*key);
         }
@@ -448,7 +448,7 @@ impl Reader {
             return true;
         }
         if object.len() + 1 == LINEAR_KEY_CHECK {
-            let mut set = TreeSet::<String>::new();
+            let mut set = HashSet::<String>::new();
             for let [k, _] of object.entries() {
                 set.insert(k.to_string());
             }
