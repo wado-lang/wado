@@ -210,7 +210,10 @@ impl SchemaObject {
         if let Some(id) = &self.id && let Some(hash) = id.find("#") && hash != id.len() - 1 {
             return fail(&`${*at}/$id`, "must have an empty fragment or none");
         }
-        let anchors: List<[String, Option<String>]> = [["$anchor", self.anchor], ["$dynamicAnchor", self.dynamic_anchor]];
+        let anchors: List<[String, Option<String>]> = [
+            ["$anchor", self.anchor],
+            ["$dynamicAnchor", self.dynamic_anchor],
+        ];
         for let [keyword, anchor] of anchors {
             if let Some(a) = &anchor && !is_anchor(a) {
                 return fail(
