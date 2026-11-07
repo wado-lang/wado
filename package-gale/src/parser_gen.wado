@@ -354,8 +354,8 @@ fn lr_frame_prec(ctx: &EmitContext) -> String {
     return if ctx.helpers_take_prec() { "min_prec" } else { "0" };
 }
 
-/// The test that the continuation `cont` still holds at `pos`, by the rule's
-/// `__cont_holds`.
+/// The test that the continuation `cont` holds at `pos`. No continuation holds
+/// anywhere, which spares the hot ungated loop the rule's `__cont_holds` call.
 fn lr_cont_holds_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice = String>(
     scan_fn: S,
     tokens: S1,
@@ -369,7 +369,7 @@ fn lr_cont_holds_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSl
     ];
     args.extend(&ctx.scan_state_args());
     args.push(cont.to_string());
-    return `${scan_fn}__cont_holds(${args.join(", ")})`;
+    return `(${cont} == 0 || ${scan_fn}__cont_holds(${args.join(", ")}))`;
 }
 
 /// The LR loop's caller-continuation argument. Separate from `follow`
@@ -946,11 +946,10 @@ fn gen_scan_lr_cut_walk<S: AsStrSlice, S1: AsStrSlice>(
     loop_walk.emit_begin(w);
     w.line("let mut pos = pos;");
     w.line(
-        `let mut good = if lr_cont == 0 || ${lr_cont_holds_call(&fn_name, "tokens", "pos", ctx)} { pos } else { -1 };`,
+        `let mut good = if ${lr_cont_holds_call(&fn_name, "tokens", "pos", ctx)} { pos } else { -1 };`,
     );
     gen_scan_gate_save(w, ctx, "good", true);
-    w.line("let lr_outer = lr_cont;");
-    w.line(`let lr_cont = ${lr_loop_cont()};`);
+    bind_lr_loop_cont(w);
     gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, true);
     gen_scan_gate_restore(w, ctx, "good");
     w.line("return good;");
@@ -962,6 +961,13 @@ fn gen_scan_lr_cut_walk<S: AsStrSlice, S1: AsStrSlice>(
 /// loop, then the invocation's own.
 fn lr_loop_cont() -> String {
     return `lr_loop_frame(min_prec, ${follow_forward_args()}, lr_cont)`;
+}
+
+/// Rebind `lr_cont` to `lr_loop_cont`, which the suffixes forward, keeping the
+/// invocation's own as `lr_outer`, which the cut reads.
+fn bind_lr_loop_cont(w: &mut CodeWriter) {
+    w.line("let lr_outer = lr_cont;");
+    w.line(`let lr_cont = ${lr_loop_cont()};`);
 }
 
 /// `scan_X` as the memo in front of its walk, which `walk` declares: the key is
@@ -1055,6 +1061,7 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
 
 /// `scan_X__cont_holds`, which says whether the continuation an invocation of
 /// `X` must leave behind holds at `pos`, and a scan of each rest it may name.
+/// Its callers have already answered for no continuation (`lr_cont_holds_call`).
 /// A follow mask holds where its tokens are next. A loop frame holds where the
 /// loop it names can go on to a cut. A rest frame holds where the remainder of
 /// a mid operand's alternative scans and the frame's own continuation then
@@ -1093,7 +1100,6 @@ fn gen_lr_cont_fns<S: AsStrSlice>(
     f.add_param("lr_cont", "i64");
     f.set_return_type("bool");
     f.emit_begin(w);
-    w.line("if lr_cont == 0 { return true; }");
     w.begin("if let Some(frame) = lr_frame_of(lr_cont)");
     let mut state: List<String> = ["tokens", "pos"];
     state.extend(&ctx.scan_state_args());
@@ -1304,7 +1310,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
         gen_scan_rewind_break(w, ctx, "lr_saved_pos", if may_match_empty { "pos <= lr_saved_pos" } else { "pos < 0" });
     }
     if mid_operand_gated {
-        w.begin(`if lr_outer == 0 || ${lr_cont_holds_call(&scan_fn, "tokens", "pos", ctx, "lr_outer")}`);
+        w.begin(`if ${lr_cont_holds_call(&scan_fn, "tokens", "pos", ctx, "lr_outer")}`);
         w.line("good = pos;");
         for let line of scan_gate_snapshot(ctx, "good") {
             w.line(&line);
@@ -4153,8 +4159,7 @@ fn gen_lr_fn<S: AsStrSlice>(
     // A gated invocation stops its loop at the scan's cut (`gen_scan_lr_cut_walk`),
     // and hands the atom and each suffix the loop's own continuation.
     if mid_operand_gated {
-        w.line("let lr_outer = lr_cont;");
-        w.line(`let lr_cont = ${lr_loop_cont()};`);
+        bind_lr_loop_cont(w);
     }
     // The atom seeds the accumulator (the left operand's value); each LR
     // continuation folds a right operand into it (`emit_lr_branch_body`).
