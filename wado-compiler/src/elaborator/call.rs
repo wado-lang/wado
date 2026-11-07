@@ -5267,8 +5267,7 @@ impl TypeSystem {
     /// * expected-return constraints from the declaration-site's type parameters,
     ///   unified against the caller's expected generic-instance type args.
     ///
-    /// Falls back to a bare `Variant` type if any type parameter remains unbound
-    /// and we are in a non-generic context — preserving the legacy behaviour.
+    /// Falls back to a bare `Variant` type if any type parameter remains unbound.
     pub(super) fn infer_variant_type_args(
         &mut self,
         ctx: &Scope,
@@ -5315,18 +5314,26 @@ impl TypeSystem {
             }
         }
 
-        let type_args = infer.solve();
+        let (type_args, bindings) = infer.solve_with_bindings();
 
-        // If unresolved type params remain in concrete code, fall back to bare
-        // Variant. A variable an enclosing call answers is not unresolved.
-        let has_unresolved = {
-            let tt = self.type_table.borrow();
-            type_args
-                .iter()
-                .any(|&t| tt.contains_type_param(t) && !ctx.awaits_pending_call(&tt, t))
-        };
+        // A slot nothing bound falls back to the bare Variant, which the use
+        // site's expected type answers later. In generic code a bound answer
+        // may name the enclosing parameters, so only the binding map tells an
+        // unbound slot from one bound to an enclosing parameter of its name.
+        // In concrete code any parameter left is unresolved, unless it is a
+        // variable an enclosing call answers.
+        let has_unresolved = variant_info
+            .type_param_type_ids
+            .iter()
+            .any(|param| !bindings.contains_key(param))
+            || ctx.trait_ctx.type_params.is_empty() && {
+                let tt = self.type_table.borrow();
+                type_args
+                    .iter()
+                    .any(|&t| tt.contains_type_param(t) && !ctx.awaits_pending_call(&tt, t))
+            };
 
-        if has_unresolved && ctx.trait_ctx.type_params.is_empty() {
+        if has_unresolved {
             return self
                 .type_table
                 .borrow()
