@@ -213,6 +213,19 @@ impl SchemaObject {
     /// object's own keywords, at the JSON Pointer `at` to it. Each subschema is
     /// checked where it is read, written or compiled.
     internal fn check(&self, at: &String) -> Result<(), SchemaError> {
+        if let Some(dialect) = &self.dialect {
+            // Core §8.1.1: a schema must validate against the meta-schema
+            // `$schema` names, and Jade holds only Draft 2020-12's.
+            if *dialect != Schema::DRAFT && *dialect != `${Schema::DRAFT}#` {
+                return fail(
+                    &`${*at}/$schema`,
+                    "must name Draft 2020-12's meta-schema, the only one Jade can validate against",
+                );
+            }
+            if !at.is_empty() && self.id matches { None } {
+                return fail(&`${*at}/$schema`, "may appear only at a schema resource's root");
+            }
+        }
         if let Some(id) = &self.id && let Some(hash) = id.find("#") && hash != id.len() - 1 {
             return fail(&`${*at}/$id`, "must have an empty fragment or none");
         }
