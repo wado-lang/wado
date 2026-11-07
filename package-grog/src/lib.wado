@@ -171,13 +171,16 @@ impl<M: Message + Default> Iterator for Each<M> {
         if self.done {
             return null;
         }
-        let read = self.read();
-        if !read matches { Ok(Some(_)) } {
-            self.done = true;
-        }
-        return match read {
-            Ok(m) => m.map(|v| Result::Ok(v)),
-            Err(e) => Option::Some(Result::Err(e)),
+        return match self.read() {
+            Ok(Some(m)) => Option::Some(Result::Ok(m)),
+            Ok(None) => {
+                self.done = true;
+                null;
+            },
+            Err(e) => {
+                self.done = true;
+                Option::Some(Result::Err(e));
+            },
         };
     }
 }
@@ -186,17 +189,14 @@ impl<M: Message + Default> Each<M> {
     fn read(&mut self) -> Result<Option<M>, DecodeError> {
         let r = &mut self.r;
         while r.next_field(0)? {
-            if r.number != self.number || r.wire_type != self.wire_type {
-                r.skip_value()?;
-                continue;
+            if r.number == self.number {
+                let mut m = M::default();
+                let took = if self.wire_type == WireType::Len { r.message(&mut m)? } else { r.group(&mut m)? };
+                if took {
+                    return Result::Ok(Option::Some(m));
+                }
             }
-            let mut m = M::default();
-            if self.wire_type == WireType::Len {
-                r.merge_nested(&mut m)?;
-            } else {
-                r.merge_group(&mut m)?;
-            }
-            return Result::Ok(Option::Some(m));
+            r.skip_value()?;
         }
         return Result::Ok(null);
     }

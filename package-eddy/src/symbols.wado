@@ -86,11 +86,22 @@ pub fn empty_index() -> SymbolIndex {
 impl SymbolIndex {
     /// Add the encoded SCIP index `bytes`. It is read a document at a time: a
     /// tree's index decoded whole is a live set the GC copies on every cycle.
+    /// On an error the index holds the documents read before it.
     pub fn add(&mut self, bytes: &ByteList) -> Result<(), grog::DecodeError> {
+        let read = self.add_documents(bytes);
+        self.index_names();
+        return read;
+    }
+
+    fn add_documents(&mut self, bytes: &ByteList) -> Result<(), grog::DecodeError> {
         for let doc of scip::Index::documents_of(bytes) {
             self.add_document(&doc?);
         }
-        // Names are read once every document has given its symbols theirs.
+        return Ok(());
+    }
+
+    /// Names are read once every document has given its symbols theirs.
+    fn index_names(&mut self) {
         self.by_name = HashMap::<String, List<i32>>::new();
         for let i of 0..<self.syms.len() {
             let name = self.syms[i].name;
@@ -101,7 +112,6 @@ impl SymbolIndex {
             ids.push(i);
             self.by_name[name] = ids;
         }
-        return Ok(());
     }
 
     fn add_document(&mut self, doc: &scip::Document) {

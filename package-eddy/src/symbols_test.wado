@@ -162,6 +162,17 @@ test "the symbol tools read a path and a page as the other tools do" {
     assert ws.call(&"FindSymbol", &tool_input(`{"name": "area", "offset": 2}`)).unwrap() == "";
 }
 
+test "an index cut short keeps the documents before the cut, by name too" {
+    let mut bytes = grog::encode(&shapes());
+    // A second document whose length runs past the input.
+    bytes.push(0x12);
+    bytes.push(0x05);
+    let mut symbols = empty_index();
+    assert symbols.add(&bytes).is_err();
+    let ws = Workspace { root: "src", symbols: Some(symbols) };
+    assert ws.call(&"FindSymbol", &tool_input(`{"name": "area"}`)).unwrap() == "testdata/shapes.rs:6-8: method Circle::area\n    pub fn area(&self) -> f64\n";
+}
+
 test "the symbol tools are offered only with an index" {
     assert !Workspace { root: "src" }.tools().into_iter().any(|t| t.name == "FindSymbol");
     assert workspace().tools().into_iter().any(|t| t.name == "FindSymbol");
