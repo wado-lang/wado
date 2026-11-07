@@ -1,0 +1,92 @@
+//! A tiny GPT-2 over a batch of rows, its lengths held at a capacity. Its
+//! projections merge the rows and positions for a `Gemm` and split them back,
+//! which puts each row's padding between the rows while they are merged. Each
+//! row computes what it computes alone.
+
+use { Cpu, Tensor, capacity_of } from "lib:loam";
+use { assert_close } from "./oracle.wado";
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        type: "onnx",
+        generator: { module: "lib:loam" },
+    };
+
+/// The logits for each of `rows` after the `past` positions `cache` holds in
+/// each, and the cache grown by theirs.
+fn run(
+    rows: List<List<i64>>,
+    past: i32,
+    cache: &merged::Cache<Cpu>,
+    model: &mut merged::Model<Cpu>,
+) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, merged::Cache<Cpu>] {
+    let s = rows[0].len();
+    let mut ids: List<i64> = [];
+    for let row of &rows {
+        ids.extend(row);
+    }
+    let o = merged::compute(
+        &mut Cpu {},
+        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: ids,
+            extents: [rows.len(), s],
+        },
+        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: List::<i64>::filled(rows.len() * (past + s), 1),
+            extents: [rows.len(), past + s],
+        },
+        &Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [past > 0],
+            extents: [1],
+        },
+        cache,
+        model,
+    );
+    return [o.logits, o.cache];
+}
+
+/// Row `r` of `t`'s first axis.
+fn row_of<Axes>(t: &Tensor<f32, Axes>, r: i32) -> List<f32> {
+    let size = t.data.len() / t.extents[0];
+    return t.data[r * size..<(r + 1) * size].to_list();
+}
+
+test "each row of a batch computes the logits it computes alone, its prompt and each step after it" {
+    let cpu = &mut Cpu {};
+    let mut model = merged::Model::new(merged::Params::embedded(cpu));
+    let prompts: List<List<i64>> = [
+        [1, 5, 42, 7, 9],
+        [3, 8, 2, 77, 15],
+    ];
+    let steps: List<List<i64>> = [
+        [11, 13],
+        [12, 21],
+    ];
+    let mut both = merged::Cache::empty(cpu, 2);
+    let mut alone: List<merged::Cache<Cpu>> = [
+        merged::Cache::empty(cpu, 1),
+        merged::Cache::empty(cpu, 1),
+    ];
+    let mut past = 0;
+    let mut padded = false;
+    for let at of 0..<steps[0].len() + 1 {
+        let rows: List<List<i64>> = if at == 0 {
+            prompts;
+        } else {
+            [
+                [steps[0][at - 1]],
+                [steps[1][at - 1]],
+            ];
+        };
+        let [logits, grown] = run(rows, past, &both, &mut model);
+        for let r of 0..<rows.len() {
+            let [own, own_grown] = run([rows[r]], past, &alone[r], &mut model);
+            assert_close(&row_of(&logits, r), &own.data);
+            alone[r] = own_grown;
+        }
+        past += rows[0].len();
+        assert grown.past_key_values_0_key.extents == [2, 4, capacity_of(past), 8] as List<i32>;
+        padded = padded || capacity_of(past) > past;
+        both = grown;
+    }
+    assert padded, "some pass holds padding between the rows";
+}

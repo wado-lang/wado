@@ -4,8 +4,16 @@
 //! devices.md § "An extent that varies is a capacity".
 
 use { HashMap } from "core:collections";
-use { GROUP_QUERY_ATTENTION, Graph, Node } from "./graph.wado";
-use { Checked, attention_options, owed_presumed, split_axis } from "./infer.wado";
+use { GROUP_QUERY_ATTENTION, Graph, Node, is_binary_elementwise } from "./graph.wado";
+use {
+    Checked,
+    attention_options,
+    gemm_options,
+    is_unary_elementwise,
+    owed_presumed,
+    split_axis,
+    transpose_perm,
+} from "./infer.wado";
 use { branches } from "./lowering.wado";
 use { Poly, equalities } from "./poly.wado";
 use { Shape, short_of } from "./shape.wado";
@@ -30,6 +38,9 @@ pub enum Why {
     /// The graph owes the length equal to a sum of lengths, one of them
     /// refused, whose exact extent a capacity would not match.
     Tied,
+    /// A node reads across the rows a regrouping merged the length behind,
+    /// where their padding lies between them.
+    ReadsMerged,
 }
 
 impl Display for Why {
@@ -42,6 +53,7 @@ impl Display for Why {
             Shrinks => "an extent may fall as it rises",
             Acausal => "a non-causal attention reads every key",
             Tied => "it must equal a sum of lengths, one refused there",
+            ReadsMerged => "it reads rows a regrouping merged",
         });
     }
 }
@@ -73,7 +85,7 @@ impl Display for Judged {
 pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
     let mut refusals = HashMap::<String, PadRefusal>::new();
     let mut ties: List<Poly> = [];
-    judge_scope(graph, checked, &mut refusals, &mut ties);
+    judge_scope(graph, checked, &mut refusals, &mut ties, &mut HashMap::<String, Merges>::new());
     // A refusal spreads to every length it is owed equal to a sum with,
     // through as many equalities as link them.
     let mut spread = true;
@@ -106,9 +118,23 @@ pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
     return symbols;
 }
 
+/// What each axis of a tensor merged: the extents a regrouping merged into it,
+/// the first leading, where a length may sit behind the first; none where its
+/// valid elements are a prefix.
+type Merges = List<Option<List<Poly>>>;
+
 /// Each refusal the nodes of a scope make, the first one per symbol kept, and
-/// each slack the scope owes to be 0.
-fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, PadRefusal>, ties: &mut List<Poly>) {
+/// each slack the scope owes to be 0. `merged` holds the tensors with an axis
+/// that merged lengths behind its first extent: each row's padding lies inside
+/// it, so a node may only compute each of its elements apart until a
+/// regrouping splits it back.
+fn judge_scope(
+    graph: &Graph,
+    checked: &Checked,
+    refusals: &mut HashMap<String, PadRefusal>,
+    ties: &mut List<Poly>,
+    merged: &mut HashMap<String, Merges>,
+) {
     ties.extend(&equalities(&checked.owed));
     for let node of &graph.nodes {
         let mut refuse = |read: List<String>, why: Why| {
@@ -122,14 +148,143 @@ fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, 
         if !folded && let Some([read, why]) = refused_by(node, checked) {
             refuse(read, why);
         }
+        if !folded {
+            match carried(node, checked, merged) {
+                Ok(Some(merges)) && merges.into_iter().any(|m| m matches { Some(_) }) => {
+                    merged[node.outputs[0]] = merges;
+                },
+                Ok(_) => {
+                },
+                Err([read, why]) => refuse(read, why),
+            }
+        }
         // A folded output is spelled at the capacity too.
         refuse(shrinking(node, checked), Why::Shrinks);
         if !folded && checked.branches.contains_key(node.outputs[0]) {
             for let b of branches(node, checked) {
-                judge_scope(&b.graph, &b.checked, refusals, ties);
+                judge_scope(&b.graph, &b.checked, refusals, ties, merged);
             }
         }
     }
+    // Read back cut to their lengths, the outputs keep their valid elements a
+    // prefix.
+    for let vi of &graph.outputs {
+        let Some(merges) = merged.get(vi.name) else {
+            continue;
+        };
+        let node = graph.nodes.into_iter().find(|n| n.outputs.contains(&vi.name)).unwrap();
+        for let symbol of behind(&merges) {
+            if !refusals.contains_key(symbol) {
+                refusals[symbol] = PadRefusal { node: vi.name, op: node.op, why: Why::MergedBehind };
+            }
+        }
+    }
+}
+
+/// The symbols an extent behind the first of each merged axis reads.
+fn behind(merges: &Merges) -> List<String> {
+    let mut read: List<String> = [];
+    for let m of merges {
+        if let Some(extents) = m {
+            for let e of extents.into_iter().skip(1) {
+                read.extend(&e.symbols());
+            }
+        }
+    }
+    return read;
+}
+
+/// What `node`'s output merged, where it carries a merged axis, or why it
+/// refuses the lengths an operand merged: an output axis carries one only from
+/// an operand axis of the same elements, which `node` computes apart.
+fn carried(
+    node: &Node,
+    checked: &Checked,
+    merged: &HashMap<String, Merges>,
+) -> Result<Option<Merges>, [List<String>, Why]> {
+    let op = node.op;
+    let shapes = &checked.shapes;
+    if op == "Reshape" || op == "Flatten" || op == "Squeeze" || op == "Unsqueeze" {
+        // A folded operand stage 0 gives no axes holds no padding.
+        let Some(x) = shapes.get(node.inputs[0]) else {
+            return Result::Ok(null);
+        };
+        return regrouped(&x, merged.get(node.inputs[0]), &shapes[node.outputs[0]]);
+    }
+    let mut operands: List<[i32, Merges]> = [];
+    for let [at, t] of node.inputs.into_iter().enumerate() {
+        if let Some(m) = merged.get(t) {
+            operands.push([at, m]);
+        }
+    }
+    if operands.is_empty() {
+        return Result::Ok(null);
+    }
+    let reads = || {
+        let mut read: List<String> = [];
+        for let [_, m] of &operands {
+            read.extend(&behind(m));
+        }
+        return Result::<Option<Merges>, [List<String>, Why]>::Err([read, Why::ReadsMerged]);
+    };
+    let out = shapes[node.outputs[0]];
+    let mut merges = List::<Option<List<Poly>>>::filled(out.rank(), null) as Merges;
+    if is_unary_elementwise(&op) {
+        return Result::Ok(Option::Some(operands[0].1));
+    }
+    if op == "Transpose" {
+        let perm = transpose_perm(node, out.rank()).unwrap();
+        for let [k, from] of perm.into_iter().enumerate() {
+            merges[k] = operands[0].1[from];
+        }
+        return Result::Ok(Option::Some(merges));
+    }
+    if is_binary_elementwise(&op) && node.attr("axis") matches { None } || op == "Where" {
+        // Numpy's broadcast aligns the operands at their ends.
+        for let k of 0..<out.rank() {
+            let mut agreed: Option<Option<List<Poly>>> = null;
+            for let t of &node.inputs {
+                let shape = shapes[*t];
+                let at = k - (out.rank() - shape.rank());
+                if at < 0 || shape.axes[at].extent.is_one() {
+                    continue;
+                }
+                let own = match merged.get(*t) {
+                    Some(m) => m[at],
+                    None => null,
+                };
+                if agreed matches { Some(a) && a != own } {
+                    return reads();
+                }
+                agreed = Option::Some(own);
+            }
+            if let Some(a) = agreed {
+                merges[k] = a;
+            }
+        }
+        return Result::Ok(Option::Some(merges));
+    }
+    // A product keeps the rows of its left operand apart, the axes before the
+    // one it contracts.
+    let [a, a_rank] = [operands[0], shapes[node.inputs[0]].rank()];
+    if operands.len() != 1 || a.0 != 0 || a_rank < 2 || a.1[a_rank - 1] matches { Some(_) } {
+        return reads();
+    }
+    if op == "Gemm" {
+        let [_, _, trans_a, _] = gemm_options(node).unwrap();
+        if trans_a {
+            return reads();
+        }
+        merges[0] = a.1[0];
+        return Result::Ok(Option::Some(merges));
+    }
+    if op == "MatMul" {
+        for let i of 0..<a_rank - 1 {
+            merges[out.rank() - a_rank + i] = a.1[i];
+        }
+        return Result::Ok(Option::Some(merges));
+    }
+    return reads();
 }
 
 /// The symbols some extent of `node`'s outputs may fall as they rise. An
@@ -177,16 +332,12 @@ fn refused_by(node: &Node, checked: &Checked) -> Option<[List<String>, Why]> {
         }
         return refusing(read, Why::Acausal);
     }
-    let regroups = op == "Reshape" || op == "Flatten" || op == "Squeeze" || op == "Unsqueeze";
     let windowed = op == "Conv" || op == "MaxPool";
     // A folded operand stage 0 gives no axes holds no padding.
-    if !(regroups || windowed || op == "Split") || !shapes.contains_key(node.inputs[0]) {
+    if !(windowed || op == "Split") || !shapes.contains_key(node.inputs[0]) {
         return null;
     }
     let x = shapes[node.inputs[0]];
-    if regroups {
-        return misaligned(&x, &shapes[node.outputs[0]]);
-    }
     if op == "Split" {
         // Stage 0 resolved the axis already.
         let axis = split_axis(node, x.rank()).unwrap();
@@ -204,43 +355,77 @@ fn refusing(read: List<String>, why: Why) -> Option<[List<String>, Why]> {
     return if read.is_empty() { null } else { Option::Some([read, why]) };
 }
 
-/// The symbols a regrouping of `from` into `to` reads behind the leading axis
-/// of some run, a run being the fewest axes on each side holding the same
-/// elements. Only a run's leading axis keeps its valid elements a prefix.
-/// Extent-1 axes hold no element, so they lead no run.
-fn misaligned(from: &Shape, to: &Shape) -> Option<[List<String>, Why]> {
-    let ins = extents_past_units(from);
-    let outs = extents_past_units(to);
-    let mut behind: List<String> = [];
+/// What a regrouping of `from`, which merged `merges`, into `to` merges, or the
+/// symbols it reads behind the leading extent of some run and why. A run is the
+/// fewest extents on each side holding the same elements, a merged axis read
+/// as the extents it merged. Only a run's leading extent keeps its valid
+/// elements a prefix: a run that merges into one axis leaves that axis merged,
+/// and one that splits an extent refuses what lands behind. Extent-1 axes hold
+/// no element, so they lead no run.
+fn regrouped(from: &Shape, merges: Option<Merges>, to: &Shape) -> Result<Option<Merges>, [List<String>, Why]> {
+    let mut ins: List<Poly> = [];
+    for let [at, axis] of from.axes.into_iter().enumerate() {
+        if axis.extent.is_one() {
+            continue;
+        }
+        if let Some(m) = merges && let Some(extents) = m[at] {
+            ins.extend(&extents);
+        } else {
+            ins.push(axis.extent.poly());
+        }
+    }
+    let mut outs: List<[i32, Poly]> = [];
+    for let [at, axis] of to.axes.into_iter().enumerate() {
+        if !axis.extent.is_one() {
+            outs.push([at, axis.extent.poly()]);
+        }
+    }
+    let mut result = List::<Option<List<Poly>>>::filled(to.rank(), null) as Merges;
+    let mut split: List<String> = [];
     let mut i = 0;
     let mut j = 0;
     while i < ins.len() && j < outs.len() {
+        let [first_in, first_out] = [i, j];
         let mut consumed = ins[i];
-        let mut produced = outs[j];
+        let mut produced = outs[j].1;
         i += 1;
         j += 1;
         while consumed != produced {
             if i < ins.len() && short_of(&consumed, &produced) && let Some(c) = consumed.try_mul(&ins[i]) {
-                behind.extend(&ins[i].symbols());
                 consumed = c;
                 i += 1;
-            } else if j < outs.len() && short_of(&produced, &consumed) && let Some(p) = produced.try_mul(&outs[j]) {
-                behind.extend(&outs[j].symbols());
+            } else if j < outs.len() && short_of(&produced, &consumed) && let Some(p) = produced.try_mul(&outs[j].1) {
                 produced = p;
                 j += 1;
             } else {
                 let mut read = consumed.symbols();
                 read.extend(&produced.symbols());
-                for let e of ins.into_iter().skip(i).chain(outs.into_iter().skip(j)) {
+                for let e of ins.into_iter().skip(i) {
                     read.extend(&e.symbols());
                 }
-                return refusing(read, Why::Unaligned);
+                for let [_, e] of outs.into_iter().skip(j) {
+                    read.extend(&e.symbols());
+                }
+                return Result::Err([read, Why::Unaligned]);
             }
         }
+        let taken = ins[first_in..<i].to_list();
+        let behind_in = taken.into_iter().skip(1).any(|e| !e.symbols().is_empty());
+        if j - first_out == 1 {
+            if behind_in {
+                result[outs[first_out].0] = Option::Some(taken);
+            }
+            continue;
+        }
+        for let [_, e] of outs[first_out + 1..<j].to_list() {
+            split.extend(&e.symbols());
+        }
+        for let e of taken.into_iter().skip(1) {
+            split.extend(&e.symbols());
+        }
     }
-    return refusing(behind, Why::MergedBehind);
-}
-
-fn extents_past_units(shape: &Shape) -> List<Poly> {
-    return shape.axes.into_iter().filter(|a| !a.extent.is_one()).map(|a| a.extent.poly()).collect();
+    if !split.is_empty() {
+        return Result::Err([split, Why::MergedBehind]);
+    }
+    return Result::Ok(Option::Some(result));
 }

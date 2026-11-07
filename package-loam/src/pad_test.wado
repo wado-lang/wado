@@ -39,6 +39,44 @@ test "a regrouping that merges a length behind an axis before it refuses it" {
     assert judged(source) == ["S: refused at Y = Reshape: it merges behind an axis before it"] as List<String>;
 }
 
+test "a length merged behind the rows keeps it padded where each row is computed apart and split back" {
+    // GPT-2's projections: the rows and positions merged for a `Gemm`, then
+    // split back as they were.
+    let source = `g (float[2, S, 4] X) => (float[2, S, 4] Y) <float[4, 4] W, float[4] B, int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        F = Reshape(X, Flat)
+        G = Gemm(F, W, B)
+        H = Relu(G)
+        C = Cast<to = 1>(H)
+        Y = Reshape(C, Back)
+    }`;
+    assert judged(source) == ["S: padded"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where a node reads across the rows" {
+    let source = `g (float[2, S, 4] X) => (float[2, S, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        F = Reshape(X, Flat)
+        G = Softmax<axis = 0>(F)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: refused at G = Softmax: it reads rows a regrouping merged"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where it is split back in another order" {
+    let source = `g (float[2, S, 4] X) => (float[S, 2, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {-1, 2, 4}> {
+        F = Reshape(X, Flat)
+        Y = Reshape(F, Back)
+    }`;
+    assert judged(source) == ["S: refused at Y = Reshape: the regrouping lines up with it at no axis"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where a product contracts the merged axis" {
+    let source = `g (float[2, S, 4] X) => (float[4, 4] Y) <int64[2] Flat = {-1, 4}> {
+        F = Reshape(X, Flat)
+        Y = Gemm<transA = 1>(F, F)
+    }`;
+    assert judged(source) == ["S: refused at Y = Gemm: it reads rows a regrouping merged"] as List<String>;
+}
+
 test "a regrouping that cuts a length into axes it never lines up with refuses it" {
     let source = `g (float[S] X) => (float[?, 2] Y) <int64[2] Shape = {-1, 2}> {
         Y = Reshape(X, Shape)

@@ -304,6 +304,13 @@ each symbolic axis whether it can promise that, at build time:
   length.
 - A merge of a padded axis with an axis after it keeps the valid elements a
   prefix.
+- A merge of a padded axis behind an axis before it, as GPT-2's projections
+  merge the rows and positions for a `Gemm`, puts each row's padding between
+  the rows. The merged axis may pass through operations that compute each of
+  its elements apart: an elementwise operation, a transpose, and a product
+  that keeps it among its left operand's rows. A regrouping that splits it
+  back as it was merged restores the prefix. Anything else that reads it, or a
+  graph output that keeps it merged, makes the generator refuse the length.
 - An extent that may fall as a length rises, such as a `Range` by the length,
   would hold fewer elements at the capacity than at the length, so the
   generator refuses to pad that length.
@@ -311,9 +318,9 @@ each symbolic axis whether it can promise that, at build time:
   the generator refuses the lengths it reads.
 - A length the graph owes equal to a sum with a refused length is refused
   too, since its capacity would not match the refused length's exact extent.
-- Any other operation that reads across a padded axis, such as a merge with an
-  axis before it, which would interleave the padding, makes the generator
-  refuse to pad that axis. It then compiles one program per length of that
+- Any other operation that reads across a padded axis, such as a split of it
+  into axes it never lines up with, makes the generator refuse to pad that
+  axis. It then compiles one program per length of that
   axis, and `loam dump` says which node refused.
 
 A valid length is one per row of the batch axis, since the rows of one pass are
