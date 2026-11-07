@@ -144,7 +144,7 @@ pub fn follow_opened<S: AsStrSlice, S1: AsStrSlice>(cont: S, open: S1) -> String
 
 /// A `follow_yields` call on the forwarded continuation.
 pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
-    return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);
+    return follow_query("follow_yields", tokens, pos, &FOLLOW_PARAM);
 }
 
 /// A `follow_admits` call on the forwarded continuation: whether it can start
@@ -179,11 +179,6 @@ fn follow_query<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
 /// `follow_yields_call` where the site is `gated` on the caller's FOLLOW, else "".
 pub fn follow_yields_call_if<S: AsStrSlice, S1: AsStrSlice>(gated: bool, tokens: S, pos: S1) -> String {
     return if gated { follow_yields_call(tokens, pos) } else { String::new() };
-}
-
-/// A `follow_yields` call on a continuation held in one local.
-fn follow_yields_call_of<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(tokens: S, pos: S1, head: S2) -> String {
-    return follow_query("follow_yields", tokens, pos, head);
 }
 
 /// The caller's own `lr_cont`, handed on where the callee's trailing operand reads it.

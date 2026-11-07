@@ -755,7 +755,6 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx, &mut cont_rests);
     }
     stamp_lr_self_ref_min_prec(&mut lr_alts, rule, ctx, atn_class, &mut cont_rests);
-    let mid_operand_gated = !cont_rests.is_empty();
     // The simulator is handed no predicate's verdict, so a loop a predicate
     // gates stays unchecked.
     let loop_checked = !atn_class
@@ -764,7 +763,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     if loop_checked {
         ctx.mark_checks_with_simulator();
     }
-    if mid_operand_gated {
+    if !cont_rests.is_empty() {
         forward_lr_cont_to_trailing_operands(&mut atom, &mut lr_alts, &rule.name, &rule.snake_name);
         ctx.mark_caller_follow_gate();
         ctx.mark_rule_reads_follow();
@@ -777,7 +776,6 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         lr_dispatch,
         atn_class,
         loop_checked,
-        mid_operand_gated,
         cont_rests,
     };
 }

@@ -1068,18 +1068,17 @@ the compiled fast path:**
    an alternative this operand's precedence excludes (`lr_atn_trailing.g4`).
    The same shape inside an LR alternative (SQLite's
    `expr NOT? BETWEEN expr AND expr`) is **not** routed here, since a hot
-   expression rule cannot pay for that (`perf.md`). It stays static: the mid
-   operand also drops to `expr[0]`, and it is handed what it must leave behind
+   expression rule cannot pay for that (`perf.md`). It stays static. The mid
+   operand also drops to `expr[0]`, and is handed what it must leave behind
    (`lr_cont`): the rest of its alternative, then the enclosing invocation's
-   own continuation. The scan finds that by scanning the rest. The operand's
-   loop climbs greedily and stops at the last iteration boundary where the
-   continuation holds, which is the one ANTLR4's full context picks. Each
-   iteration hands its suffix the loop itself as the continuation, so an
-   operand inside it stops only where the loop can still go on to that
-   boundary. A trailing operand keeps ANTLR4's precedence. A mid operand is
-   gated this way wherever what follows it can open with a loop operator or be
-   empty, in an atom (`'new' e args`) as in a suffix. Fixture
-   `lr_mid_operand.g4`.
+   own continuation. Its loop climbs greedily and stops at the last iteration
+   boundary where a scan of that continuation succeeds, which is the boundary
+   ANTLR4's full context picks. Each iteration hands its suffix the loop
+   itself as the continuation, so an operand inside it stops only where the
+   loop can still reach that boundary. A trailing operand keeps ANTLR4's
+   precedence. A mid operand is gated this way wherever what follows it can
+   open with a loop operator or be empty, in an atom (`'new' e args`) as in a
+   suffix. Fixture `lr_mid_operand.g4`.
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
    several `??` in one rule decide independently. Both emit walkers route it
    here — the surface-element walker from `RepeatElement.non_greedy`, the

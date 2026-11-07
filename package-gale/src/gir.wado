@@ -365,18 +365,22 @@ pub struct LeftRecursiveRule {
     pub atn_class: bool = false,
     /// Under `atn: "verify"`, the simulator checks each pick of the static
     /// loop. A mid operand's continuation gate stands in for the full context
-    /// the simulator reads, so every static loop is checked, not only one
-    /// whose atom choice `auto` hands it.
+    /// the simulator reads, so every static loop no predicate gates is
+    /// checked, not only one whose atom choice `auto` hands it.
     pub loop_checked: bool = false,
-    /// True when an alternative's mid-operand self-reference climbs a
-    /// delimiter the alternative itself needs (`e 'between' e 'and' e`).
-    /// ANTLR4 parses that operand as `e[0]` and stops it by prediction; the
-    /// equivalent here lets it climb and stops it at the last iteration
-    /// boundary where the caller's continuation holds, which this flag turns
-    /// on. No ATN.
-    pub mid_operand_gated: bool = false,
-    /// What follows each suffix mid operand, `LrCont::Rest`'s index here.
+    /// What each gated mid operand leaves behind, indexed by `LrCont::Rest`.
     pub cont_rests: List<LrContRest> = [],
+}
+
+impl LeftRecursiveRule {
+    /// True when a mid-operand self-reference could climb past what its
+    /// alternative needs (`e 'between' e 'and' e`). ANTLR4 parses that
+    /// operand as `e[0]` and stops it by prediction; the equivalent here lets
+    /// it climb and stops it at the last iteration boundary where the caller's
+    /// continuation holds. No ATN.
+    pub fn mid_operand_gated(&self) -> bool {
+        return !self.cont_rests.is_empty();
+    }
 }
 
 /// The continuation a self-reference hands its callee's LR loop as `lr_cont`.
