@@ -9985,7 +9985,7 @@ fn scan_expr__rest_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo
 fn scan_expr__cont_holds(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, lr_cont: i64) -> bool {
     let frame = lr_frame_at(lr_cont);
     let holds = if frame.rest == LR_LOOP_REST {
-        scan_expr__loop(tokens, pos, atn, memo, frame.follow, frame.min_prec, frame.cont) >= 0
+        (frame.cont == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, frame.cont)) || scan_expr__loop(tokens, pos, atn, memo, frame.follow, frame.min_prec, frame.cont) >= 0
     } else {
         let end = match frame.rest {
             0 => scan_expr__rest_0(tokens, pos, atn, memo, frame.min_prec, frame.follow, frame.cont),
@@ -10029,7 +10029,7 @@ fn scan_expr__loop(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: 
 
 fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
-    let mut good = if (lr_cont == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_cont)) { pos } else { -1 };
+    let mut lr_bounds: List<i32> = [];
     let lr_outer = lr_cont;
     let lr_cont = lr_loop_frame(min_prec, follow, lr_cont);
     loop {
@@ -10039,8 +10039,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_4(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10050,8 +10050,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_5(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10061,8 +10061,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_6(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10072,8 +10072,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_7(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10083,8 +10083,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_8(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10094,8 +10094,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_9(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10106,8 +10106,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_10(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                     if pos < 0 { pos = lr_saved_pos; break; }
-                    if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                        good = pos;
+                    if lr_outer != 0 {
+                        lr_bounds.push(pos);
                     }
                 } else {
                     break;
@@ -10117,8 +10117,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_17(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                     if pos < 0 { pos = lr_saved_pos; break; }
-                    if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                        good = pos;
+                    if lr_outer != 0 {
+                        lr_bounds.push(pos);
                     }
                 } else {
                     break;
@@ -10128,8 +10128,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_18(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                     if pos < 0 { pos = lr_saved_pos; break; }
-                    if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                        good = pos;
+                    if lr_outer != 0 {
+                        lr_bounds.push(pos);
                     }
                 } else {
                     break;
@@ -10139,8 +10139,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_20(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                     if pos < 0 { pos = lr_saved_pos; break; }
-                    if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                        good = pos;
+                    if lr_outer != 0 {
+                        lr_bounds.push(pos);
                     }
                 } else {
                     break;
@@ -10152,8 +10152,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_10(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                         if pos < 0 { pos = lr_saved_pos; break; }
-                        if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                            good = pos;
+                        if lr_outer != 0 {
+                            lr_bounds.push(pos);
                         }
                     } else {
                         break;
@@ -10163,8 +10163,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_17(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                         if pos < 0 { pos = lr_saved_pos; break; }
-                        if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                            good = pos;
+                        if lr_outer != 0 {
+                            lr_bounds.push(pos);
                         }
                     } else {
                         break;
@@ -10174,8 +10174,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_18(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                         if pos < 0 { pos = lr_saved_pos; break; }
-                        if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                            good = pos;
+                        if lr_outer != 0 {
+                            lr_bounds.push(pos);
                         }
                     } else {
                         break;
@@ -10185,8 +10185,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_20(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                         if pos < 0 { pos = lr_saved_pos; break; }
-                        if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                            good = pos;
+                        if lr_outer != 0 {
+                            lr_bounds.push(pos);
                         }
                     } else {
                         break;
@@ -10198,8 +10198,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_11(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10209,8 +10209,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_12(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10220,8 +10220,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_16(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10231,8 +10231,8 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_19(tokens, pos, atn, memo, min_prec, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if (lr_outer == 0 || scan_expr__cont_holds(tokens, pos, atn, memo, lr_outer)) {
-                    good = pos;
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
                 }
             } else {
                 break;
@@ -10241,7 +10241,11 @@ fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
             break;
         }
     }
-    return good;
+    if lr_outer == 0 { return pos; }
+    for let mut i = lr_bounds.len() - 1; i >= 0; i -= 1 {
+        if (lr_outer == 0 || scan_expr__cont_holds(tokens, lr_bounds[i], atn, memo, lr_outer)) { return lr_bounds[i]; }
+    }
+    return -1;
 }
 
 fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
