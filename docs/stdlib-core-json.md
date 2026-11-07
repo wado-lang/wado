@@ -376,7 +376,7 @@ it and its `end` lowers it again.
 
 #### `max_depth: i32`
 
-#### `pub fn new(input: ByteSlice, max_depth: i32 = DEFAULT_MAX_DEPTH) -> JsonDeserializer`
+#### `pub fn new<S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> JsonDeserializer`
 
 A reader at the start of `input`, nesting at most `max_depth` deep.
 

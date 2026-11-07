@@ -53,7 +53,7 @@ impl Document {
     pub fn parse<S: AsByteSlice>(text: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<Document, DeserializeError> {
         let mut r = Reader {
             doc: Document {},
-            de: JsonDeserializer::new(text.as_byte_slice(), max_depth),
+            de: JsonDeserializer::new(text, max_depth),
         };
         r.value()?;
         if r.de.peek_after_whitespace() >= 0 {
