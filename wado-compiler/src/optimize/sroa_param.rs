@@ -407,11 +407,14 @@ fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
     is_wrapper(type_id, type_table).then(|| wrapper_key(type_id, type_table))
 }
 
-/// The key one kind of wrapper is matched by. A cell is keyed by what it holds,
-/// so a `&mut T` argument matches the `&T` parameter it coerces to; no struct
-/// shares a key with a cell's payload, which is never a struct.
+/// The key one kind of wrapper is matched by: a cell's [`TypeTable::cell_key`],
+/// so a `&mut T` argument at any depth matches the `&T` parameter it coerces
+/// to.
 fn wrapper_key(wrapper: TypeId, type_table: &TypeTable) -> TypeId {
-    type_table.cell_payload(wrapper).unwrap_or(wrapper)
+    if type_table.cell_payload(wrapper).is_some() {
+        return type_table.cell_key(wrapper);
+    }
+    wrapper
 }
 
 /// The struct a reference `type_id` points to.

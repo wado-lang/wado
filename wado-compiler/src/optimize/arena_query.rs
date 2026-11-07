@@ -1473,8 +1473,8 @@ pub(super) fn for_each_mutated_root(
     sink: &mut impl FnMut(RootMutation),
 ) {
     let through_storage = |sink: &mut dyn FnMut(RootMutation), e: ExprId| {
-        // A rootless chain here is a fresh temporary (e.g. a `Box { … }`
-        // literal receiver): mutating it cannot touch a named local.
+        // A rootless chain here is a fresh temporary (a struct literal
+        // receiver, say): mutating it cannot touch a named local.
         if let Some(root) = storage_root(body, e) {
             aliases.expand(root, &mut |r| sink(RootMutation::Through(r)));
         }

@@ -17,7 +17,8 @@
 
 use super::callgraph::{CallGraph, body_ids};
 use super::funcset::FuncKeyMap;
-use super::place::{copies_into_cell, field_owner, slot_ref_copies, unwrap_ref};
+use super::analyze::{Slot, SlotTypes};
+use super::place::{PlaceKind, PlaceRef, field_owner, unwrap_ref};
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
 use crate::cut_memo::CutWalk;
@@ -26,7 +27,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
-    RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
+    RetainInto, RetainSpec, ReturnConvention, StructDef, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -986,7 +987,8 @@ fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
 /// `List::push` takes `Sink { r: &Item }` by value: a parameter carries a
 /// reference when its type holds one, not only when it is one.
 pub struct RefCarrying<'a> {
-    flat: &'a FlatPackage,
+    /// The field types of each struct the plan phase sees, by instance.
+    struct_fields: IndexMap<(StructDef, &'a [TypeId]), Vec<TypeId>>,
     type_table: &'a TypeTable,
     captures: &'a ClosureCaptures,
     memo: RefCell<IndexMap<TypeId, bool>>,
@@ -1000,7 +1002,14 @@ impl<'a> RefCarrying<'a> {
         captures: &'a ClosureCaptures,
     ) -> Self {
         Self {
-            flat,
+            struct_fields: flat
+                .structs
+                .iter()
+                .map(|s| {
+                    let fields = s.fields.iter().map(|f| f.type_id).collect();
+                    ((s.def, s.type_args.as_slice()), fields)
+                })
+                .collect(),
             type_table,
             captures,
             memo: RefCell::new(IndexMap::default()),
@@ -1107,86 +1116,46 @@ impl RefCarrying<'_> {
         let ResolvedType::Struct { def, type_args } = self.type_table.get(ty) else {
             unreachable!("a struct type")
         };
-        self.flat
-            .listed_struct(*def, type_args)
-            .map(|s| s.fields.iter().map(|f| f.type_id).collect())
+        self.struct_fields
+            .get(&(*def, type_args.as_slice()))
+            .cloned()
     }
 
-    /// Each binding of `pattern` over a value of type `slot` (`None`: a type
-    /// this walk cannot follow), with the type of what it carries. That is the
-    /// binding's own, except where match ergonomics binds `&` of a nested slot
-    /// the reference copies into a new cell: it carries what the slot holds.
-    fn binding_types(
-        &self,
-        pattern: &TirPattern,
-        slot: Option<TypeId>,
-        nested: bool,
-        out: &mut Vec<(u32, TypeId)>,
-    ) {
+    /// Each binding of `pattern` over `source`, with the type of what it
+    /// carries. That is the binding's own, except where match ergonomics binds
+    /// `&` of a slot the reference copies into a new cell: it carries what the
+    /// slot holds.
+    fn binding_types(&self, pattern: &TirPattern, source: TypeId) -> Vec<(u32, TypeId)> {
         let tt = self.type_table;
-        match pattern {
-            TirPattern::Binding {
-                local_index,
-                type_id,
-                ..
-            } => {
-                let carries = match slot {
-                    Some(slot)
-                        if nested
-                            && !tt.is_reference(slot)
-                            && tt.is_reference(*type_id)
-                            && slot_ref_copies(slot, tt) =>
-                    {
-                        slot
-                    }
-                    _ => *type_id,
-                };
-                out.push((*local_index, carries));
-            }
-            TirPattern::Narrow {
-                local_index,
-                type_id,
-                ..
-            } => out.push((*local_index, *type_id)),
-            TirPattern::Struct {
-                struct_type,
-                fields,
-                ..
-            } => {
-                let types = self.field_types(field_owner(*struct_type, tt));
-                for field in fields {
-                    let field_type = types.as_ref().map(|t| t[field.field_index as usize]);
-                    self.binding_types(&field.pattern, field_type, true, out);
+        let scrutinee = Slot {
+            ty: Some(source),
+            kind: PlaceKind::Storage,
+        };
+        let mut out = Vec::new();
+        analyze::for_each_pattern_binding_in(pattern, scrutinee, self, &mut |local, ty, slot| {
+            let carries = match slot.ty {
+                Some(held)
+                    if !tt.is_reference(held)
+                        && tt.is_reference(ty)
+                        && PlaceRef::of(slot.kind, held, tt) == PlaceRef::NewCell =>
+                {
+                    held
                 }
-            }
-            TirPattern::Tuple(elements, _) => {
-                let types = slot.and_then(|s| tt.as_tuple(field_owner(s, tt)));
-                for (index, element) in elements.iter().enumerate() {
-                    let element_type = types.as_ref().map(|t| t[index]);
-                    self.binding_types(element, element_type, true, out);
-                }
-            }
-            TirPattern::Variant {
-                bindings,
-                payload_type,
-                ..
-            } => {
-                for binding in bindings {
-                    self.binding_types(binding, Some(*payload_type), true, out);
-                }
-            }
-            TirPattern::Or(alternatives) => {
-                for alternative in alternatives {
-                    self.binding_types(alternative, slot, nested, out);
-                }
-            }
-            TirPattern::Wildcard
-            | TirPattern::Literal(_)
-            | TirPattern::Enum { .. }
-            | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. }
-            | TirPattern::PerInstance { .. } => {}
-        }
+                _ => ty,
+            };
+            out.push((local, carries));
+        });
+        out
+    }
+}
+
+impl SlotTypes for RefCarrying<'_> {
+    fn struct_fields(&self, struct_type: TypeId) -> Option<Vec<TypeId>> {
+        self.field_types(field_owner(struct_type, self.type_table))
+    }
+
+    fn tuple_elements(&self, tuple: TypeId) -> Option<Vec<TypeId>> {
+        self.type_table.as_tuple(field_owner(tuple, self.type_table))
     }
 }
 
@@ -1473,7 +1442,7 @@ impl StoresWalker<'_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
-            } if copies_into_cell(place, self.type_table) => {
+            } if PlaceRef::of_place(place, self.type_table) == PlaceRef::NewCell => {
                 Carried::held(self.carried(place).all())
             }
             TirExprKind::Unary {
@@ -1959,10 +1928,7 @@ impl StoresWalker<'_> {
         if carried.is_empty() {
             return;
         }
-        let mut bound = Vec::new();
-        self.carrying
-            .binding_types(pattern, Some(source.type_id), false, &mut bound);
-        for (local_index, type_id) in bound {
+        for (local_index, type_id) in self.carrying.binding_types(pattern, source.type_id) {
             let placed = self.placed(type_id, carried.clone());
             self.rebind(local_index, &placed);
         }

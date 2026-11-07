@@ -15,6 +15,7 @@ use crate::nir::StructFieldTypes;
 use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::name::RefKind;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, ObjectTypes, ResolvedType, RetainInto, RetainSpec,
@@ -793,15 +794,10 @@ impl HeapEffects<'_> {
                     out.set_any();
                     return;
                 };
-                // A reference to a cell target, or to another reference, is a
-                // cell, keyed as `TypeTable::cell_key` keys it. A table without
-                // that key's type holds no such cell.
-                if (tt.ref_depth(payload) > 1 || tt.is_boxed_reference_target(arg))
-                    && let Some(shared) = tt.shared_ref_to(tt.peel_refs(arg))
-                {
-                    out.insert(shared);
-                }
-                self.reach_into(arg, seen, out);
+                // A table without the instance holds no value of it, so no
+                // cell its layers would be.
+                let reached = instantiated_reference(tt, payload, arg).unwrap_or(arg);
+                self.reach_into(reached, seen, out);
             }
             _ => {
                 out.set_any();
@@ -826,6 +822,20 @@ impl HeapEffects<'_> {
     fn tuple_element_type(&self, ty: Option<TypeId>, index: usize) -> Option<TypeId> {
         let ty = self.type_table.strip_handles(ty?);
         self.type_table.as_tuple(ty)?.get(index).copied()
+    }
+}
+
+/// `payload`, a chain of references to a type parameter, with `arg` for the
+/// parameter, if the table holds it.
+fn instantiated_reference(tt: &TypeTable, payload: TypeId, arg: TypeId) -> Option<TypeId> {
+    match tt.get(payload) {
+        ResolvedType::Ref(inner) => {
+            tt.find_ref(RefKind::Shared, instantiated_reference(tt, *inner, arg)?)
+        }
+        ResolvedType::MutRef(inner) => {
+            tt.find_ref(RefKind::Mut, instantiated_reference(tt, *inner, arg)?)
+        }
+        _ => Some(arg),
     }
 }
 

@@ -478,14 +478,19 @@ impl TypeTable {
     #[must_use]
     pub fn cell_key(&self, cell: TypeId) -> TypeId {
         assert!(self.cell_payload(cell).is_some(), "a cell reference");
-        self.shared_ref_to(self.peel_refs(cell))
+        self.find_ref(RefKind::Shared, self.peel_refs(cell))
             .expect("interning `&mut X` interns `&X`")
     }
 
-    /// `&pointee`, if the table holds it. It holds one for every `&mut pointee`.
+    /// The reference of `kind` to `pointee`, if the table holds it. It holds
+    /// `&pointee` for every `&mut pointee`.
     #[must_use]
-    pub fn shared_ref_to(&self, pointee: TypeId) -> Option<TypeId> {
-        self.intern_map.get(&ResolvedType::Ref(pointee)).copied()
+    pub fn find_ref(&self, kind: RefKind, pointee: TypeId) -> Option<TypeId> {
+        let spelling = match kind {
+            RefKind::Shared => ResolvedType::Ref(pointee),
+            RefKind::Mut => ResolvedType::MutRef(pointee),
+        };
+        self.intern_map.get(&spelling).copied()
     }
 
     /// The heap object a value of `ty` is, or reaches first through its
@@ -1746,7 +1751,7 @@ impl TypeTable {
                     ResolvedType::MutRef(inner) => {
                         components.push(*inner);
                         components.push(
-                            self.shared_ref_to(*inner)
+                            self.find_ref(RefKind::Shared, *inner)
                                 .expect("interning `&mut X` interns `&X`"),
                         );
                     }

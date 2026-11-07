@@ -640,28 +640,65 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
     }
 }
 
-/// Whether `&place` lowers to a new cell holding a copy of the place's value,
-/// so the reference names nothing the place's root owns. A local's cell and
-/// the cell `*r` reads are the place itself; any other place is a slot, which
-/// [`slot_ref_copies`] decides.
-#[must_use]
-pub fn copies_into_cell(place: &TirExpr, type_table: &TypeTable) -> bool {
-    match &place.kind {
-        TirExprKind::Local { .. }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            ..
-        } => false,
-        _ => slot_ref_copies(place.type_id, type_table),
+/// What a place is, as far as taking its address goes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PlaceKind {
+    /// A local, or what `*r` reads: storage of its own.
+    Storage,
+    /// A struct field or a tuple element.
+    Field,
+    /// Any other value: a payload, a call's result.
+    Value,
+}
+
+impl PlaceKind {
+    #[must_use]
+    pub fn of(place: &TirExpr) -> Self {
+        match &place.kind {
+            TirExprKind::Local { .. }
+            | TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                ..
+            } => Self::Storage,
+            TirExprKind::FieldAccess { .. } => Self::Field,
+            _ => Self::Value,
+        }
     }
 }
 
-/// Whether a reference to a slot (a field, a tuple element or a payload)
-/// holding a `slot` is a new cell holding a copy of it: a cell target is,
-/// unless the slot holds it in a cell already.
-#[must_use]
-pub fn slot_ref_copies(slot: TypeId, type_table: &TypeTable) -> bool {
-    type_table.is_boxed_reference_target(slot) && !type_table.boxes_slot(slot)
+/// What `&place` lowers to.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PlaceRef {
+    /// The handle of the object the place holds.
+    Handle,
+    /// The cell that is the place's storage: the one boxing moves a local
+    /// into, or the one `*r` reads through.
+    Storage,
+    /// The cell the field holds its value in.
+    FieldCell,
+    /// A new cell holding a copy of the value, naming nothing the place's
+    /// root owns.
+    NewCell,
+}
+
+impl PlaceRef {
+    /// `&` of a place of `kind` holding a `ty`.
+    #[must_use]
+    pub fn of(kind: PlaceKind, ty: TypeId, type_table: &TypeTable) -> Self {
+        if !type_table.is_boxed_reference_target(ty) {
+            return Self::Handle;
+        }
+        match kind {
+            PlaceKind::Storage => Self::Storage,
+            PlaceKind::Field if type_table.boxes_slot(ty) => Self::FieldCell,
+            PlaceKind::Field | PlaceKind::Value => Self::NewCell,
+        }
+    }
+
+    #[must_use]
+    pub fn of_place(place: &TirExpr, type_table: &TypeTable) -> Self {
+        Self::of(PlaceKind::of(place), place.type_id, type_table)
+    }
 }
 
 /// The type a [`Selector::Field`] is keyed by. Minted here alone, so a callee

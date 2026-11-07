@@ -64,8 +64,8 @@ impl AggregateShapes {
             })
             .collect();
         let instances: Vec<VariantInstance> = type_table
-            .all_types()
-            .filter_map(|(_, ty)| match ty {
+            .iter_type_ids()
+            .filter_map(|id| match type_table.get(id) {
                 ResolvedType::Variant { def, type_args }
                     if project.find_variant(*def).is_some() =>
                 {

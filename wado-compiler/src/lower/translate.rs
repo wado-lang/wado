@@ -19,7 +19,7 @@ use crate::call_args::CallArgs;
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place;
+use crate::lower::plan::value_copy::place::{self, PlaceRef};
 use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
@@ -938,97 +938,104 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn try_boxing_ref(&self, inner: &TirExpr, ref_type: tir::TypeId, span: Span) -> Option<ExprId> {
-        // `&local` of a cell local: the cell is the address, so collapse to the
-        // local without wrapping it again.
-        if let TirExprKind::Local { index, name } = &inner.kind
-            && let Some(cell) = self.box_type_of_local(*index, inner.type_id)
-        {
-            return Some(self.alloc_expr(
-                ExprKind::Local {
-                    index: *index,
-                    name: name.clone(),
+        let lowering = PlaceRef::of_place(inner, &self.base.type_table.borrow());
+        match (lowering, &inner.kind) {
+            (PlaceRef::Handle, _) => None,
+            // `&local` of a cell local: the cell is the address, so collapse to
+            // the local without wrapping it again. A local lowering mints, such
+            // as a pattern's temporary, came after boxing and lives in no cell,
+            // so its reference is a fresh cell holding its value.
+            (PlaceRef::Storage, TirExprKind::Local { index, name }) => {
+                match self.box_type_of_local(*index, inner.type_id) {
+                    Some(cell) => Some(self.alloc_expr(
+                        ExprKind::Local {
+                            index: *index,
+                            name: name.clone(),
+                        },
+                        cell,
+                        span,
+                    )),
+                    None => {
+                        let inner_nir = self.convert_operand(inner);
+                        Some(self.new_cell(inner_nir, ref_type, inner.span))
+                    }
+                }
+            }
+            // `&*r` / `&mut *r` through a cell is the cell: a fresh one would
+            // hold a copy, so a write through it would be lost (`|| n.bump()`
+            // on a mut-captured `i32`), and an affine variant's slot would be
+            // detached.
+            (
+                PlaceRef::Storage,
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: reference,
                 },
-                cell,
-                span,
-            ));
+            ) => Some(self.convert_expr(reference)),
+            (PlaceRef::Storage, _) => unreachable!("storage is a local or a dereference"),
+            // A slot holding an affine variant holds it in a cell, which is the
+            // place: `&s.f` is the cell the field holds, read by a builtin
+            // rather than `Unary::Ref`, which the optimizer reads as the
+            // referent itself.
+            (
+                PlaceRef::FieldCell,
+                TirExprKind::FieldAccess {
+                    expr: receiver,
+                    field_index,
+                    ..
+                },
+            ) => Some(self.field_cell(receiver, *field_index, inner.type_id, span)),
+            (PlaceRef::FieldCell, _) => unreachable!("a field cell is a field's"),
+            // `&value` of a cell target is a fresh cell holding the value.
+            (PlaceRef::NewCell, _) => {
+                let inner_nir = self.convert_operand(inner);
+                Some(self.new_cell(inner_nir, ref_type, inner.span))
+            }
         }
-        // `&*r` / `&mut *r` through a cell is the cell: a fresh one would hold a
-        // copy, so a write through it would be lost (`|| n.bump()` on a
-        // mut-captured `i32`), and an affine variant's slot would be detached.
-        if let TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: reference,
-        } = &inner.kind
-            && self
+    }
+
+    /// `&receiver.<field_index>` where the field holds a `slot` in a cell: that
+    /// cell.
+    fn field_cell(
+        &self,
+        receiver: &TirExpr,
+        field_index: u32,
+        slot: tir::TypeId,
+        span: Span,
+    ) -> ExprId {
+        let is_reference = self.base.type_table.borrow().is_reference(receiver.type_id);
+        let holder = if is_reference {
+            receiver.clone()
+        } else {
+            let holder_type = self
                 .base
                 .type_table
-                .borrow()
-                .cell_payload(reference.type_id)
-                .is_some()
-        {
-            return Some(self.convert_expr(reference));
-        }
-        let (boxes_slot, cell_target) = {
-            let tt = self.base.type_table.borrow();
-            (
-                tt.boxes_slot(inner.type_id),
-                tt.is_boxed_reference_target(inner.type_id),
+                .borrow_mut()
+                .make_mut_ref(receiver.type_id);
+            TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::MutRef,
+                    expr: Box::new(receiver.clone()),
+                },
+                holder_type,
+                span,
             )
         };
-        // A slot holding an affine variant holds it in a cell, which is the
-        // place: `&s.f` is the cell the field holds, read by a builtin rather
-        // than `Unary::Ref`, which the optimizer reads as the referent itself.
-        if boxes_slot
-            && let TirExprKind::FieldAccess {
-                expr: receiver,
-                field_index,
-                ..
-            } = &inner.kind
-        {
-            let is_reference = self.base.type_table.borrow().is_reference(receiver.type_id);
-            let holder = if is_reference {
-                (**receiver).clone()
-            } else {
-                let holder_type = self
-                    .base
-                    .type_table
-                    .borrow_mut()
-                    .make_mut_ref(receiver.type_id);
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::MutRef,
-                        expr: receiver.clone(),
-                    },
-                    holder_type,
-                    span,
-                )
-            };
-            let field = TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: u64::from(*field_index),
-                    repr: field_index.to_string(),
-                },
-                TypeTable::I32,
-                span,
-            );
-            let slot_box = self
-                .base
-                .type_table
-                .borrow()
-                .slot_box(inner.type_id)
-                .expect("the boxing plan registers a cell for every slot that holds one");
-            return Some(self.convert_expr(&builtin_call(
-                "field_slot",
-                vec![holder, field],
-                slot_box,
-            )));
-        }
-        if !cell_target {
-            return None;
-        }
-        // `&value` of a cell target is a fresh cell holding the value.
-        let inner_nir = self.convert_operand(inner);
-        Some(self.new_cell(inner_nir, ref_type, inner.span))
+        let field = TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: u64::from(field_index),
+                repr: field_index.to_string(),
+            },
+            TypeTable::I32,
+            span,
+        );
+        let slot_box = self
+            .base
+            .type_table
+            .borrow()
+            .slot_box(slot)
+            .expect("the boxing plan registers a cell for every slot that holds one");
+        self.convert_expr(&builtin_call("field_slot", vec![holder, field], slot_box))
     }
 
     /// A new cell of type `cell` holding `value`.
