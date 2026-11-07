@@ -49,6 +49,20 @@ pub struct SpelledAttention {
     pub hidden: f32,
 }
 
+impl SpelledAttention {
+    /// The tensors the composite reads.
+    pub fn operands(&self) -> List<String> {
+        let mut read = [self.query, self.key, self.value] as List<String>;
+        if let Some([k, v]) = &self.past {
+            read.extend(&[*k, *v]);
+        }
+        if let Some(b) = &self.bias {
+            read.push(*b);
+        }
+        return read;
+    }
+}
+
 /// How `build` lowers each of `graph`'s nodes, by position.
 pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
     let mut lowered: List<Lowering> = graph.nodes.into_iter().map(|n| lowering_of(&n, checked)).collect();
@@ -188,19 +202,19 @@ impl Walk {
         if value_heads != heads || value_width != width || !both_join || !joins_heads {
             return null;
         }
-        let present = self.checked.shapes[present_value];
-        let total = present.axes[2].extent.poly();
-        let new = self.checked.shapes[query].axes[1].extent.poly();
-        let polys = |tensor: &String| -> List<Poly> {
-            return self.checked.shapes[*tensor].extents().into_iter().map(|e| e.poly()).collect();
-        };
-        let batch = polys(&query)[0];
+        let shapes = &self.checked.shapes;
+        let total = shapes[present_value].axes[2].extent.poly();
+        let [batch, new] = [
+            shapes[query].axes[0].extent.poly(),
+            shapes[query].axes[1].extent.poly(),
+        ];
+        let rows = [batch, new] as List<Poly>;
         // Keys of another sequence than the queries' are a cross-attention, and
         // a broadcast that widens the scores computes more than the composite.
-        let attends_itself = polys(&key)[0..<2].to_list() == [batch, new] as List<Poly>
-            && polys(&value)[0..<2].to_list() == [batch, new] as List<Poly>
-            && polys(&self.node(softmax).outputs[0]) == [batch, Poly::constant(heads as i64), new, total] as List<Poly>;
-        if !attends_itself {
+        let scores_fit = shapes[key].polys()[0..<2].to_list() == rows
+            && shapes[value].polys()[0..<2].to_list() == rows
+            && self.shape_of(softmax).polys() == [batch, Poly::constant(heads as i64), new, total] as List<Poly>;
+        if !scores_fit {
             return null;
         }
         self.causal(&mask, &total, &new)?;
@@ -218,33 +232,24 @@ impl Walk {
             [Some(k), Some(v)] => Option::Some([k, v]),
             _ => null,
         };
-        let mut operands = [query, key, value] as List<String>;
-        if let Some([k, v]) = &past {
-            operands.extend(&[*k, *v]);
-        }
-        if let Some(b) = &bias {
-            operands.push(*b);
-        }
-        if operands.into_iter().any(|t| self.made.get(t) matches { Some(at) && self.taken.contains(&at) }) {
+        let spelled = SpelledAttention {
+            query,
+            key,
+            value,
+            past,
+            bias,
+            present_key,
+            present_value,
+            heads,
+            width,
+            scale,
+            divides,
+            hidden,
+        };
+        if spelled.operands().into_iter().any(|t| self.made.get(t) matches { Some(at) && self.taken.contains(&at) }) {
             return null;
         }
-        return Option::Some([
-            merged,
-            SpelledAttention {
-                query,
-                key,
-                value,
-                past,
-                bias,
-                present_key,
-                present_value,
-                heads,
-                width,
-                scale,
-                divides,
-                hidden,
-            },
-        ]);
+        return Option::Some([merged, spelled]);
     }
 
     /// What the `Transpose` turning the keys for the scores reads: the past the

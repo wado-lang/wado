@@ -907,7 +907,7 @@ impl Symbols {
 
     /// A shape's extents as the list literal of `i32` an operation takes.
     fn spell_shape(&mut self, shape: &Shape) -> Result<String, EmitError> {
-        return self.spell_polys(&shape.axes.into_iter().map(|axis| axis.extent.poly()).collect());
+        return self.spell_polys(&shape.polys());
     }
 
     /// Lengths or positions as the list literal of `i32` an operation takes.
@@ -2657,7 +2657,11 @@ fn spelled_attention_call(
             for let past of [past_k, past_v] {
                 let operand = as_axes(past, &held);
                 operands.push(
-                    if padded { `&fitted::<${BACKEND_PARAM}, f32, [${held}]>(backend, ${operand}, 2, ${room})` } else { operand },
+                    if padded {
+                        `&fitted::<${BACKEND_PARAM}, f32, [${held}]>(backend, ${operand}, 2, ${room})`;
+                    } else {
+                        operand;
+                    },
                 );
             }
             operands.push(symbols.length_operand(&positions.extent.poly())?);
@@ -2878,15 +2882,8 @@ fn read_by_graph(read: &mut HashSet<String>, graph: &Graph, checked: &Checked) {
             continue;
         }
         if let Attention(a) = lowered[at] {
-            read.insert(a.query);
-            read.insert(a.key);
-            read.insert(a.value);
-            if let Some([past_k, past_v]) = a.past {
-                read.insert(past_k);
-                read.insert(past_v);
-            }
-            if let Some(b) = a.bias {
-                read.insert(b);
+            for let t of a.operands() {
+                read.insert(t);
             }
             continue;
         }

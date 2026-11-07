@@ -209,8 +209,9 @@ A subgraph matches only where the composite computes what it says. GPT-2 hides
 a position through a table cut to the queries' rows, so the generator reads the
 table and matches it only where every row is true on and below its diagonal. No
 table reaches the device then, and no `gather` cuts it each pass. The keys must
-be the queries' own sequence, and nothing outside the subgraph may read a tensor
-inside it but the presents.
+be the queries' own batch and sequence, no broadcast may widen the scores past
+the composite's, and nothing outside the subgraph may read a tensor inside it
+but the presents.
 
 A matched subgraph is the composite's decomposition as it stands, with every
 choice it makes kept: a scale applied by `Div` or by `Mul`, a mask of f32's
