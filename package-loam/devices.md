@@ -477,7 +477,7 @@ and a program for each shape class it has met. The caller owns it, and
 4. [x] The WebGPU compiler.
 5. [x] Attention matched from its parts.
 6. [x] The loop on the device.
-7. [ ] Slots. Finished when the tokens per second at several numbers of slots
+7. [x] Slots. Finished when the tokens per second at several numbers of slots
    are recorded on the CPU plugin and on `WebGpuBackend`, each request's
    tokens unchanged from its run alone.
 8. [ ] A TPU. Finished when Gemma 3 picks onnxruntime's tokens on a TPU VM, and
@@ -552,6 +552,31 @@ steps a call. Over 100 tokens:
 [The benchmarks](./benchmark/README.md#gemma-3-270m) time the first prompt
 against onnxruntime on CUDA and on WebGPU, and against llama.cpp.
 
+### GPT-2 in slots
+
+GPT-2 (124M) placing a different prompt in each slot and decoding 31 greedy
+tokens in every slot with one call of `Requests::decode`, at `-O2`. Each
+request picks the tokens it picks alone, through `compute` and `decode`, on
+both devices. WebGPU is an RTX 4060 Ti under Vulkan on the release build of
+`wado-run-webgpu`, and PJRT the `dev` build on XLA's CPU plugin. The second of
+two runs is timed, so no compile is included:
+
+| Slots | Tokens a second, PJRT at one slot as 1 | WebGPU |
+| ----- | -------------------------------------- | ------ |
+| 1     | 1                                      | 5.53   |
+| 2     | 1.78                                   | 2.55   |
+| 4     | 2.82                                   | 3.02   |
+| 8     | 4.16                                   | 3.12   |
+
+`example/gpt2-124m/slots.wado` is the program, which `pjrt_slots.wado` and
+`webgpu_slots.wado` run:
+
+```sh
+cd package-loam/example/gpt2-124m
+wado run-pjrt -O2 --plugin libpjrt_cpu.so pjrt_slots.wado
+wado run-webgpu -O2 webgpu_slots.wado
+```
+
 ### A loop's submissions
 
 Gemma 3 (270M) over 8 tokens a prompt on the same device, under the `dev` build,
@@ -611,6 +636,9 @@ model, and it does not price 94 and 93 of each program's operations
 
 - Where a node takes one length for every row, the rows share their lengths,
   and the module offers no `Requests`.
+- On WebGPU a step of GPT-2 in two slots takes 4.3 times as long as in one, so
+  more slots there serve fewer tokens a second than one does. Why is not
+  measured.
 - Only GPT-2's spelling of attention is matched. Any other, a mask that is no
   causal table among them, stays operations, which write the scores.
 - `build` cannot check what the graph owes over a padded length, which only

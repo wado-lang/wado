@@ -1,0 +1,137 @@
+//! GPT-2 (124M) serving requests side by side in slots. For each number of
+//! slots it places a prompt in every slot, decodes `STEPS` greedy tokens in each
+//! with one call, and prints the tokens a second across the slots, and whether
+//! each request picked the tokens it picks alone. `pjrt_slots.wado` and
+//! `webgpu_slots.wado` run it on a device.
+
+use { eprintln, println, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { LinearArray } from "core:linear";
+use { MonotonicClock } from "wasi:clocks";
+use { Graph, Sampling, Tensor } from "lib:loam";
+use { Tokenizer } from "./tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        generator: { module: "lib:loam" },
+    };
+/// `model.wado`'s graph at any number of rows, each row holding its lengths
+/// apart, and the logits a sampler reads rather than their greatest index.
+use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/onnx/decoder_model_merged.onnx"
+    with {
+        type: "onnx",
+        integrity: "sha256:e6fc046fe5a7cfeeb8bb3c7d4c1b6a8bd90ced7339a75d5567957e3bc9d48abe",
+        generator: {
+            module: "lib:loam",
+            options: {
+                last: { logits: 1 },
+                decode: { ids: "input_ids", mask: "attention_mask", logits: "logits" },
+                embed: false,
+            },
+        },
+    };
+
+global PROMPTS: List<String> = [
+    "Hello, my name is",
+    "The capital of France",
+    "Once upon a time, there was a",
+    "In 1969, the first",
+    "My favorite food is",
+    "The quick brown fox",
+    "Water boils at",
+    "The best way to learn a language is to",
+];
+
+/// The tokens each request picks after its first.
+global STEPS: i32 = 31;
+
+/// The positions each slot holds: the longest prompt and its tokens, at a
+/// capacity.
+global CAPACITY: i32 = 64;
+
+global SLOTS: List<i32> = [1, 2, 4, 8];
+
+pub fn read_checkpoint() -> Option<LinearArray<u8>> with (Stderr, Preopens) {
+    return match fs::read_linear("model.onnx") {
+        Ok(bytes) => Option::Some(bytes),
+        Err(e) => {
+            eprintln(`${e}; run package-loam/example/gpt2-124m/fetch.sh`);
+            null;
+        },
+    };
+}
+
+fn ids(tokens: List<i64>) -> Tensor<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
+    return Tensor {
+        data: tokens,
+        extents: [1, tokens.len()],
+    };
+}
+
+fn mask(length: i32) -> Tensor<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
+    return Tensor {
+        data: List::<i64>::filled(length, 1),
+        extents: [1, length],
+    };
+}
+
+fn branch(cached: bool) -> Tensor<bool, [gpt2::UseCacheBranch0]> {
+    return Tensor {
+        data: [cached],
+        extents: [1],
+    };
+}
+
+fn prompt(i: i32) -> List<i64> {
+    return Tokenizer::encode(&PROMPTS[i]).into_iter().map(|id| id as i64).collect();
+}
+
+/// The `1 + STEPS` tokens `prompt` picks alone: its prompt through `compute`,
+/// the rest in one call of `decode`. A pass with no past owes the mask the
+/// prompt's length, so the prompt leaves no room, and `decode` grows the cache.
+fn alone<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, prompt: List<i64>) -> List<i64> with _ {
+    let sampling = Sampling {};
+    let first = gpt2::compute(g, &ids(prompt), &mask(prompt.len()), &branch(false), &gpt2::Cache::empty(g, 1), 0, model);
+    let mut tokens = sampling.first_tokens(&first.logits, prompt.len() as i64);
+    let next = gpt2::decode(g, &ids(tokens), &mask(prompt.len() + 1), &branch(true), &first.cache, STEPS, &sampling, model);
+    tokens.extend(&next.tokens.data);
+    return tokens;
+}
+
+/// Each slot's `1 + STEPS` tokens, a prompt placed in every slot, and the
+/// nanoseconds the one call of `decode` took.
+fn side_by_side<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, slots: i32) -> [List<List<i64>>, u64] with (MonotonicClock, _) {
+    let sampling = Sampling {};
+    let mut requests = gpt2::Requests::new(g, slots, CAPACITY);
+    let mut tokens: List<List<i64>> = [];
+    for let slot of 0..<slots {
+        let p = prompt(slot);
+        tokens.push([requests.place(g, slot, &ids(p), &mask(p.len()), &branch(false), &sampling, model)]);
+    }
+    let started = MonotonicClock::now();
+    let next = requests.decode(g, &branch(true), STEPS, &sampling, model);
+    let ended = MonotonicClock::now();
+    for let slot of 0..<slots {
+        tokens[slot].extend(&next.data[slot * STEPS..<(slot + 1) * STEPS].to_list());
+    }
+    return [tokens, (ended - started) as u64];
+}
+
+/// Prints the tokens a second each number of `SLOTS` decodes, the second of two
+/// runs, whose programs the first compiled.
+pub fn measured<affine Bk: Graph>(backend: Bk, checkpoint: &LinearArray<u8>) with (Stdout, MonotonicClock, _) {
+    let mut g = backend;
+    let mut model = gpt2::Model::new(gpt2::Params::load(&mut g, checkpoint).unwrap());
+    let mut alone_tokens: List<List<i64>> = [];
+    for let i of 0..<PROMPTS.len() {
+        alone_tokens.push(alone(&mut g, &mut model, prompt(i)));
+    }
+    for let slots of SLOTS {
+        side_by_side(&mut g, &mut model, slots);
+        let [tokens, nanoseconds] = side_by_side(&mut g, &mut model, slots);
+        let apart = (0..<slots).filter(|slot| tokens[slot] != alone_tokens[slot]).count();
+        let per_second = (slots * STEPS) as f64 / (nanoseconds as f64 / 1_000_000_000.0);
+        let ms = nanoseconds as f64 / 1_000_000.0 / STEPS as f64;
+        println(`${slots} slots: ${per_second:.1} tokens/s, ${ms:.1} ms a step, ${apart} of ${slots} requests apart from their runs alone`);
+    }
+}
