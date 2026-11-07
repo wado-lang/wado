@@ -188,7 +188,7 @@ impl<M: Message + Default> Iterator for Each<M> {
             return null;
         }
         let read = self.read();
-        self.done = !(read matches { Ok(Some(_)) });
+        self.done = !read matches { Ok(Some(_)) };
         return yielded(read);
     }
 }
@@ -236,7 +236,7 @@ impl<M: Message + Default> Iterator for Delimited<M> {
             return null;
         }
         let read = self.read();
-        self.done = !(read matches { Ok(Some(_)) });
+        self.done = !read matches { Ok(Some(_)) };
         return yielded(read);
     }
 }
@@ -791,10 +791,9 @@ impl<B: Input> Reader<B> {
         // `advance` kept the four bytes inside `end`.
         let b = &self.input;
         return Result::Ok(
-            unchecked b.byte(at) as u32
-                | unchecked b.byte(at + 1) as u32 << 8
-                | unchecked b.byte(at + 2) as u32 << 16
-                | unchecked b.byte(at + 3) as u32 << 24,
+            unchecked b.byte(at) as u32 | unchecked b.byte(at + 1) as u32 << 8 | unchecked b.byte(at + 2) as u32 << 16 | unchecked b.byte(
+                at + 3,
+            ) as u32 << 24,
         );
     }
 
@@ -1096,7 +1095,7 @@ trait EntryValue with () {
 
     /// Read the value field into `v`, answering whether the type holds what
     /// was read.
-    fn read<B: Input>(r: &mut Reader<B>, v:&mut Self::Value) -> Result<bool, DecodeError>;
+    fn read<B: Input>(r: &mut Reader<B>, v: &mut Self::Value) -> Result<bool, DecodeError>;
 }
 
 struct ScalarEntry<T> {
@@ -1113,7 +1112,7 @@ impl<T: Scalar> EntryValue for ScalarEntry<T> {
         return T::zero();
     }
 
-    fn read<B: Input>(r: &mut Reader<B>, v:&mut T::Value) -> Result<bool, DecodeError> {
+    fn read<B: Input>(r: &mut Reader<B>, v: &mut T::Value) -> Result<bool, DecodeError> {
         let Some(taken) = T::take(r)? else {
             return Result::Ok(false);
         };
@@ -1136,7 +1135,7 @@ impl<M: Message + Default> EntryValue for MessageEntry<M> {
         return M::default();
     }
 
-    fn read<B: Input>(r: &mut Reader<B>, v:&mut M) -> Result<bool, DecodeError> {
+    fn read<B: Input>(r: &mut Reader<B>, v: &mut M) -> Result<bool, DecodeError> {
         r.merge_nested(v)?;
         return Result::Ok(true);
     }
@@ -1164,7 +1163,7 @@ impl Scalar for Int32 {
         w.varint(*v as i64 as u64);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<i32>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? as i32));
     }
 }
@@ -1191,7 +1190,7 @@ impl Scalar for Int64 {
         w.varint(*v as u64);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<i64>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? as i64));
     }
 }
@@ -1218,7 +1217,7 @@ impl Scalar for UInt32 {
         w.varint(*v as u64);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<u32>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? as u32));
     }
 }
@@ -1245,7 +1244,7 @@ impl Scalar for UInt64 {
         w.varint(*v);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<u64>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()?));
     }
 }
@@ -1289,7 +1288,7 @@ impl Scalar for SInt32 {
         w.varint(zigzag_32(*v));
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<i32>, DecodeError> {
         return Result::Ok(Option::Some(unzigzag_32(r.varint()?)));
     }
 }
@@ -1316,7 +1315,7 @@ impl Scalar for SInt64 {
         w.varint(zigzag_64(*v));
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<i64>, DecodeError> {
         return Result::Ok(Option::Some(unzigzag_64(r.varint()?)));
     }
 }
@@ -1343,7 +1342,7 @@ impl Scalar for Fixed32 {
         w.fixed32(*v);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<u32>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed32()?));
     }
 }
@@ -1370,7 +1369,7 @@ impl Scalar for Fixed64 {
         w.fixed64(*v);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<u64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<u64>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed64()?));
     }
 }
@@ -1397,7 +1396,7 @@ impl Scalar for SFixed32 {
         w.fixed32(*v as u32);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<i32>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed32()? as i32));
     }
 }
@@ -1424,7 +1423,7 @@ impl Scalar for SFixed64 {
         w.fixed64(*v as u64);
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<i64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<i64>, DecodeError> {
         return Result::Ok(Option::Some(r.fixed64()? as i64));
     }
 }
@@ -1451,7 +1450,7 @@ impl Scalar for Bool {
         w.varint(if *v { 1 } else { 0 });
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<bool>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<bool>, DecodeError> {
         return Result::Ok(Option::Some(r.varint()? != 0));
     }
 }
@@ -1483,7 +1482,7 @@ impl Scalar for Float {
         w.fixed32(v.to_bits());
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<f32>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<f32>, DecodeError> {
         return Result::Ok(Option::Some(f32::from_bits(r.fixed32()?)));
     }
 }
@@ -1514,7 +1513,7 @@ impl Scalar for Double {
         w.fixed64(v.to_bits());
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<f64>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<f64>, DecodeError> {
         return Result::Ok(Option::Some(f64::from_bits(r.fixed64()?)));
     }
 }
@@ -1542,7 +1541,7 @@ impl Scalar for Str {
         w.length_delimited(v.as_byte_slice());
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<String>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<String>, DecodeError> {
         let [start, end] = r.length_delimited()?;
         let Ok(text) = r.input.text_between(start, end) else {
             return r.fail("a string field is not UTF-8");
@@ -1573,7 +1572,7 @@ impl Scalar for Bytes {
         w.length_delimited(v.as_byte_slice());
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<ByteList>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<ByteList>, DecodeError> {
         let [start, end] = r.length_delimited()?;
         return Result::Ok(Option::Some(r.input.bytes_between(start, end)));
     }
@@ -1602,7 +1601,7 @@ impl<E: Enumeration> Scalar for Enum<E> {
         Int32::put(w, &v.number());
     }
 
-    fn take<B: Input>(r: &mut Reader<B>) ->Result<Option<E>, DecodeError> {
+    fn take<B: Input>(r: &mut Reader<B>) -> Result<Option<E>, DecodeError> {
         return Result::Ok(E::from_number(r.varint()? as i32));
     }
 }

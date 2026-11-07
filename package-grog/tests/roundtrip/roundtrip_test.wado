@@ -222,7 +222,9 @@ test "messages one after another are read each behind its length" {
 }
 
 test "a delimited message cut short is refused" {
-    let read: List<Result<AccountAddress, grog::DecodeError>> = grog::delimited::<AccountAddress>(held(&unhex("0210010310"))).collect();
+    let read: List<Result<AccountAddress, grog::DecodeError>> = grog::delimited::<AccountAddress>(held(&unhex(
+        "0210010310",
+    ))).collect();
     assert read.len() == 2;
     assert read[0].unwrap().zip == 1;
     assert read[1] matches { Err(e) && e.offset == 4 };

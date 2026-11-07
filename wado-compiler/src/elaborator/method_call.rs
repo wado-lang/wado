@@ -488,8 +488,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             Some(receiver)
         };
-        let subject_ref_kind =
-            subject.and_then(|s| RefKind::from_resolved(&self.tysys.type_table.borrow().get(s).clone()));
+        let subject_ref_kind = subject
+            .and_then(|s| RefKind::from_resolved(&self.tysys.type_table.borrow().get(s).clone()));
         if let Some(ref_kind) = subject_ref_kind {
             let result = self.find_trait_method_for_type(
                 &ImplTargetKey::Ref(ref_kind),

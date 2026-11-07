@@ -344,7 +344,12 @@ impl LinearBuffer {
     /// A buffer reading `stream`, which it drops once the stream ends or the
     /// buffer drops.
     pub fn of_stream(stream: Stream<u8>) -> LinearBuffer {
-        return LinearBuffer { bytes: LinearArray::<u8>::unwritten(0), start: 0, source: Option::Some(stream), dropped: 0 };
+        return LinearBuffer {
+            bytes: LinearArray::<u8>::unwritten(0),
+            start: 0,
+            source: Option::Some(stream),
+            dropped: 0,
+        };
     }
 
     /// What was read, from `start()` on not yet consumed.

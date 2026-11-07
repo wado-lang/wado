@@ -2820,7 +2820,8 @@ impl<T: Eq> Eq for Pair<T> {
 
 #[test]
 fn test_format_namespaced_trait_bound() {
-    let formatted = wado_compiler::format("fn f<T:geo::Show+Eq>(t: &T) {}\n").expect("format failed");
+    let formatted =
+        wado_compiler::format("fn f<T:geo::Show+Eq>(t: &T) {}\n").expect("format failed");
     assert_eq!(formatted, "fn f<T: geo::Show + Eq>(t: &T) {\n}\n");
 }
 
