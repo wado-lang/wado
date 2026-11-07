@@ -807,8 +807,8 @@ allocation it deletes.
 ## Judging gale-gen at its one benchmark heap size (2026-10-06)
 
 gale-gen ran at `--gc-heap-initial 512m` then, and at that one size a change
-can read as a regression that wins across the sweep. It now reports the
-256 MiB default and 1 GiB as two rows. Two gale changes that only remove copies
+can read as a regression that wins across the sweep. It now runs at the 256 MiB
+default alone. Two gale changes that only remove copies
 measured 4.1% slower at 512m, and each size reproduced across two sweeps.
 ms/iter, best of two:
 
