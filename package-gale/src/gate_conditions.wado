@@ -160,7 +160,8 @@ fn element_predicates_met(
         },
         Label(l) => element_predicates_met(&l.element, site, analysis, visited, out),
         Repeat(r) => element_predicates_met(&r.element, site, analysis, visited, out),
-        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {},
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+        },
     }
 }
 
@@ -311,7 +312,12 @@ fn any_alt_scan_answers(
     );
 }
 
-fn element_scan_answers(elem: &Element, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
+fn element_scan_answers(
+    elem: &Element,
+    settings: &GenSettings,
+    analysis: &GrammarAnalysis,
+    site: &PredicateSite,
+) -> bool {
     return match *elem {
         Group(g) => any_alt_scan_answers(&g.alternatives, settings, analysis, site),
         Label(l) => element_scan_answers(&l.element, settings, analysis, site),

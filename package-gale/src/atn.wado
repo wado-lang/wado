@@ -439,15 +439,9 @@ fn build_alternation(
     }
     for let mut i = 0; i < alts.len(); i += 1 {
         let operand_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
-        let seg = build_sequence(
-            b,
-            &alts[i].elements,
-            rule,
-            rule_index,
-            operand_prec,
-            &alts[i].predicates_before_actions(),
-        );
-        b.add_eps(start, guard_with_predicates(b, &alts[i], rule, seg.0));
+        let preds = alts[i].predicates_before_actions();
+        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, operand_prec, &preds);
+        b.add_eps(start, guard_with(b, &predicates_before(&preds, 0), rule, seg.0));
         b.add_eps(seg.1, end);
     }
     if alts.is_empty() {
@@ -493,16 +487,10 @@ fn terminal_leaf_site(elem: &Element) -> i32 {
     };
 }
 
-/// The state ahead of `entry` an alternative is entered at: one epsilon edge
-/// per predicate at its left edge, each labelled with the predicate's action
-/// id. Prediction closes an edge whose predicate is false at the decision, and
-/// every other reader sees a plain epsilon.
-fn guard_with_predicates(b: &mut AtnBuilder, alt: &Alternative, rule: i32, entry: i32) -> i32 {
-    return guard_with(b, &alt.left_edge_predicates(), rule, entry);
-}
-
-/// The state ahead of `entry` that passes `preds` in turn, as
-/// `guard_with_predicates` does.
+/// The state ahead of `entry` that passes `preds` in turn: one epsilon edge per
+/// predicate, each labelled with the predicate's action id. Prediction closes
+/// an edge whose predicate is false at the decision, and every other reader
+/// sees a plain epsilon.
 fn guard_with(b: &mut AtnBuilder, preds: &List<AltAction>, rule: i32, entry: i32) -> i32 {
     let mut at = entry;
     for let mut k = preds.len() - 1; k >= 0; k -= 1 {

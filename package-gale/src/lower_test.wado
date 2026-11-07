@@ -4468,7 +4468,9 @@ WS : ' ' -> skip ;
 
 /// The action id of the predicate opening `rule`'s alternative `index`.
 fn left_edge_pred_id(g: &Grammar, rule: i32, index: i32) -> i32 {
-    return g.parser_rules[rule].alternatives[index].left_edge_predicates()[0].source.action_id;
+    let opening = g.parser_rules[rule].alternatives[index].predicates_before_actions()[0];
+    assert opening.before_index == 0;
+    return opening.source.action_id;
 }
 
 // ANTLR4 finds the viable alternatives first and only then drops the ones a

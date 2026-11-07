@@ -1885,7 +1885,7 @@ fn gen_scan_labeled_walk<S: AsStrSlice, S1: AsStrSlice>(
     gates: &List<ScanGate> = &NO_SCAN_GATES,
     gate_cond: &String = &NO_SCAN_GATE_COND,
 ) -> bool {
-    let can_fail = !gate_cond.is_empty() || scan_elements_can_fail(elements, from, known, ctx);
+    let can_fail = scan_gates_can_fail(gates, gate_cond) || scan_elements_can_fail(elements, from, known, ctx);
     if can_fail {
         w.begin(`${label}:`);
     }
@@ -2584,10 +2584,11 @@ fn gen_scan_group_decided<S: AsStrSlice>(
     let mut bodies: List<CodeWriter> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         let mut body = CodeWriter::with_capacity(256);
-        let alt = &ge.alts[branches[i].alts[0]];
+        let ai = branches[i].alts[0];
+        let alt = &ge.alts[ai];
         let _ = gen_scan_labeled_walk(
             &mut body,
-            `sg_${gc}_${branches[i].alts[0]}`,
+            `sg_${gc}_${ai}`,
             &alt.elements,
             0,
             &branch_proves(branches, i),
@@ -2694,7 +2695,13 @@ fn scan_group_can_fail(ge: &ScanGroupElement, known: &List<List<i32>>, ctx: &Emi
 }
 
 fn scan_body_is_gated(body: &ScanBody) -> bool {
-    return !body.gates.is_empty() || !body.gate_cond.is_empty();
+    return scan_gates_can_fail(&body.gates, &body.gate_cond);
+}
+
+/// Whether a scan's gates can reject the walk: the alt-initial gate, or a
+/// predicate the scan answers past the left edge.
+fn scan_gates_can_fail(gates: &List<ScanGate>, gate_cond: &String) -> bool {
+    return !gate_cond.is_empty() || gates.iter_ref().any(|g| g.step matches { Check(_) });
 }
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —

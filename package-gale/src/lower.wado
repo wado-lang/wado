@@ -761,6 +761,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         let alt = &rule.alternatives[a.alt_index];
         if ctx.meets_predicate_at(alt, 0) || ctx.meets_predicate_at(alt, 1) {
             loop_meets_predicate = true;
+            break;
         }
     }
     let loop_checked = !atn_class && ctx.settings.atn.verifies() && !loop_meets_predicate;
@@ -1795,11 +1796,7 @@ fn lower_scan_body<S: AsStrSlice>(
             &probe_rule,
         ));
     }
-    return ScanBody {
-        elements,
-        gates: scan_gates_for(alt, ctx),
-        gate_cond: ctx.alt_scan_gate_conditions(alt),
-    };
+    return alt_scan_body(alt, elements, ctx);
 }
 
 /// What a scan of `alt` runs between elements — see `scan_gate.wado`: the
@@ -1932,7 +1929,7 @@ fn lower_scan_group(
                 ));
             }
             return ScanElement::Group(ScanGroupElement {
-                alts: [group_alt_scan_body(alt, elements, ctx)],
+                alts: [alt_scan_body(alt, elements, ctx)],
                 lenient: false,
                 alt_classes: [alt_class_of(alt, &mut ctx.analysis)],
             });
@@ -1943,7 +1940,7 @@ fn lower_scan_group(
             for let alt of alts {
                 let elem = &alt.elements[0];
                 let token = lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false);
-                bodies.push(group_alt_scan_body(alt, [token], ctx));
+                bodies.push(alt_scan_body(alt, [token], ctx));
                 classes.push(AltClass::Selects([ctx.analysis.terminal_kind(elem)]));
             }
             return ScanElement::Group(ScanGroupElement {
@@ -2033,16 +2030,20 @@ fn lower_general_scan_group(
                 outer_suffix,
             ));
         }
-        bodies.push(group_alt_scan_body(alt, elements, ctx));
+        bodies.push(alt_scan_body(alt, elements, ctx));
     }
     return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);
 }
 
-/// The scan body of the group alternative `alt`, walking `elements`. It clears
-/// the alternative's predicates where a rule alternative's scan does, since
-/// prediction meets one inside a group as it does in a rule.
-fn group_alt_scan_body(alt: &Alternative, elements: List<ScanElement>, ctx: &LowerContext) -> ScanBody {
-    return ScanBody { elements, gates: scan_gates_for(alt, ctx), gate_cond: ctx.alt_scan_gate_conditions(alt) };
+/// The scan body of `alt`, walking `elements` and clearing the alternative's
+/// gates. A group's alternative clears them as a rule's does, since prediction
+/// meets a predicate inside a group as it does in a rule.
+fn alt_scan_body(alt: &Alternative, elements: List<ScanElement>, ctx: &LowerContext) -> ScanBody {
+    return ScanBody {
+        elements,
+        gates: scan_gates_for(alt, ctx),
+        gate_cond: ctx.alt_scan_gate_conditions(alt),
+    };
 }
 
 /// A standalone scan group over `bodies` — the leniency its alternatives call
@@ -2500,7 +2501,7 @@ fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut LowerContext
 /// is a single-alt Group, flatten its inner elements into the scan
 /// body directly. Otherwise lower the unwrapped element.
 ///
-/// The shape clears `alt`'s predicates as `group_alt_scan_body` does. One
+/// The shape clears `alt`'s predicates as `alt_scan_body` does. One
 /// placed before an element the shape leaves out runs before the next element
 /// it keeps.
 fn lower_scan_shape_body(shape: &List<i32>, alt: &Alternative, ctx: &mut LowerContext) -> ScanBody {
@@ -3407,7 +3408,7 @@ fn lower_simple_cst_scan_group(
     let mut bodies: List<ScanBody> = [];
     for let alt of alts {
         let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_NO_FOLLOW, FollowArg::NoFollow, false);
-        bodies.push(group_alt_scan_body(alt, [call], ctx));
+        bodies.push(alt_scan_body(alt, [call], ctx));
     }
     return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);
 }
