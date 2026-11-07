@@ -1,0 +1,15 @@
+// Two namespaced bounds name two traits spelled `Show` alike. The report names
+// each as written, which is also how a call names one of them.
+use a from "./sub/cross_module_same_name_trait_bound_dispatch_a.wado";
+use b from "./sub/cross_module_same_name_trait_bound_dispatch_b.wado";
+
+fn both<T: a::Show + b::Show>(t: &T) -> i32 {
+    return t.show();
+}
+
+test {
+    assert both(&1) == 0;
+}
+
+__DATA__
+{"compile_error": "declared by 'a::Show' and 'b::Show'; name the trait, e.g. 'a::Show::show(&value)'"}

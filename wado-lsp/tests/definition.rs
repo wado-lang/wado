@@ -894,6 +894,51 @@ fn namespace_import_name_definition() {
 }
 
 #[test]
+fn namespaced_bound_trait_definition() {
+    futures::executor::block_on(async {
+        let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
+        let entry = concat!(
+            "use geo from \"./lib.wado\";\n",
+            "fn shown<T: geo::Show>(t: &T) -> i32 with _ {\n",
+            "    return t.show();\n",
+            "}\n",
+        );
+        let result = def_at_in(
+            &[("./lib.wado", lib), ("/test.wado", entry)],
+            "/test.wado",
+            1,
+            18,
+        )
+        .await
+        .expect("cursor on the trait name");
+        assert_eq!(result.uri, "file:///lib.wado");
+        assert_eq!(result.range.start.line, 0);
+    });
+}
+
+#[test]
+fn bound_trait_definition() {
+    futures::executor::block_on(async {
+        let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
+        let entry = concat!(
+            "use { Show } from \"./lib.wado\";\n",
+            "fn shown<T: Show>(t: &T) -> i32 with _ {\n",
+            "    return t.show();\n",
+            "}\n",
+        );
+        let result = def_at_in(
+            &[("./lib.wado", lib), ("/test.wado", entry)],
+            "/test.wado",
+            1,
+            13,
+        )
+        .await
+        .expect("cursor on the trait name");
+        assert_eq!(result.uri, "file:///lib.wado");
+    });
+}
+
+#[test]
 fn trait_qualified_call_definition() {
     futures::executor::block_on(async {
         let source = concat!(

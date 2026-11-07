@@ -111,6 +111,22 @@ impl<H: CompilerHost> AstVisitor<'_> for ForwardDefaults<'_, '_, H> {
     fn visit_block(&mut self, _: &ast::Block) {}
 }
 
+/// Records the use→def edge of every trait bound an item writes, so a bound
+/// reaches its trait as a written type reaches its declaration.
+struct BoundReferences<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
+
+impl<H: CompilerHost> AstVisitor<'_> for BoundReferences<'_, '_, H> {
+    fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
+        for bound in bounds {
+            if let Some(trait_) = self.0.tysys.resolutions.bound_decl(bound) {
+                let node = self.0.tysys.resolutions.defs().ast_id(trait_);
+                self.0.record_reference_to_def(bound.id, node);
+            }
+        }
+        ast::walk_trait_bounds(self, bounds);
+    }
+}
+
 /// The sentence every `#[unavailable]` declaration in the program reports,
 /// keyed by the declaration. Only its `impl` or `trait` can qualify the name.
 pub(crate) fn collect_unavailable(
@@ -1828,6 +1844,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut test_count = 0usize;
         for item in &module.items {
             ForwardDefaults(self).visit_item(item);
+            BoundReferences(self).visit_item(item);
             if let Item::Struct(ast::StructDecl { id, .. })
             | Item::Variant(ast::VariantDecl { id, .. })
             | Item::Newtype(ast::Newtype { id, .. }) = item

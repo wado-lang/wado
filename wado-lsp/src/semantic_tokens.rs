@@ -1211,6 +1211,19 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 1, "Show"), token_type::TYPE);
     }
 
+    /// The bound's reference to its trait, recorded at the bound's start,
+    /// leaves the namespace segment a type.
+    #[test]
+    fn a_resolved_namespaced_bound_is_a_type_on_both_segments() {
+        let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
+        let src = "use geo from \"./lib.wado\";\nfn f<\n    T: geo::Show,\n>(t: &T) {}\n";
+        let host = in_memory_host(&[("/lib.wado", lib), ("/test.wado", src)]);
+        let sem = futures::executor::block_on(wado_compiler::semantics(src, &host, Some("/test.wado")));
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "geo"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 2, "Show"), token_type::TYPE);
+    }
+
     /// `::<` is a turbofish, so the name before it is the callee, not the
     /// middle of a path like `A::B::C`.
     #[test]

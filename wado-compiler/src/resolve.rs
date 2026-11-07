@@ -776,6 +776,22 @@ impl Resolver<'_> {
             .map_or(Resolution::Unresolved, Resolution::Def)
     }
 
+    /// Record what `namespace::member`, written at `site` as a type or a bound,
+    /// refers to. A namespace import registers each member under its
+    /// `ns$member` alias, and that is the only spelling naming the declaration
+    /// behind it. A binder namespace (`T::Assoc`) is an associated-type
+    /// projection, which names no declaration — and neither does a namespace
+    /// reaching no member. Resolving the bare member in the writing module
+    /// instead would confidently answer with a different declaration that
+    /// happens to share the name.
+    fn record_qualified(&mut self, site: AstId, namespace: &str, member: &str) {
+        let answer = match self.binder(namespace) {
+            Some(base) => Resolution::Projection(base),
+            None => self.namespace_member(namespace, member),
+        };
+        self.record(site, &namespace_member_alias(namespace, member), answer);
+    }
+
     fn resolve_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
@@ -1351,11 +1367,7 @@ impl AstVisitor<'_> for Resolver<'_> {
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
             match &bound.namespace {
-                Some(ns) => self.record(
-                    bound.id,
-                    &namespace_member_alias(ns, &bound.name),
-                    self.namespace_member(ns, &bound.name),
-                ),
+                Some(ns) => self.record_qualified(bound.id, ns, &bound.name),
                 None => self.record_name(bound.id, &bound.name),
             }
             for assoc in &bound.assoc_types {
@@ -1448,23 +1460,7 @@ impl AstVisitor<'_> for Resolver<'_> {
                 }
             }
             Type::NamespacedGeneric(ns) => {
-                // `ns::Type` and `T::Assoc` both land here. A namespace import
-                // registers each member under its `ns$member` alias, and that
-                // is the only spelling naming the declaration behind
-                // `ns::Type`. A binder namespace is an associated-type
-                // projection, which names no declaration — and neither does a
-                // namespace reaching no member. Resolving the bare member in
-                // the writing module instead would confidently answer with a
-                // different declaration that happens to share the name.
-                let answer = match self.binder(&ns.namespace) {
-                    Some(base) => Resolution::Projection(base),
-                    None => self.namespace_member(&ns.namespace, &ns.name),
-                };
-                self.record(
-                    ns.id,
-                    &namespace_member_alias(&ns.namespace, &ns.name),
-                    answer,
-                );
+                self.record_qualified(ns.id, &ns.namespace, &ns.name);
                 for arg in &ns.args {
                     self.visit_type(arg);
                 }

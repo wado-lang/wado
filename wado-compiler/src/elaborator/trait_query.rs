@@ -2354,9 +2354,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Two candidates can share a spelling; reporting both as "Base"
             // names no escape from the collision.
             let ambiguous_spelling = |c: &BoundCandidate| {
-                candidates
-                    .iter()
-                    .any(|other| other.bound.name == c.bound.name && other.decl != c.decl)
+                candidates.iter().any(|other| {
+                    other.bound.written_name() == c.bound.written_name() && other.decl != c.decl
+                })
             };
             let traits = candidates
                 .iter()
