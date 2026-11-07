@@ -293,7 +293,12 @@ impl Validator {
             if inst.get(key) matches { Some(_) } {
                 for let name of *names {
                     if inst.get(&name) matches { None } {
-                        run.fail(ip, &n.at, `dependentRequired/${pointer_token(key)}`, `must have the property ${name:?}`);
+                        run.fail(
+                            ip,
+                            &n.at,
+                            `dependentRequired/${pointer_token(key)}`,
+                            `must have the property ${name:?}`,
+                        );
                     }
                 }
             }
@@ -460,7 +465,11 @@ impl Compiler {
         let i = self.nodes.len();
         let mut uri = *base;
         let mut owner = parent;
-        let id = if let Object(o) = schema { o.id } else { null };
+        let id = if let Object(o) = schema {
+            o.id;
+        } else {
+            null;
+        };
         if parent matches { None } || id matches { Some(_) } {
             if let Some(id) = &id {
                 uri = base.resolve(&parse_uri(id, `${at}/$id`)?).without_fragment();
@@ -493,10 +502,18 @@ impl Compiler {
             self.resources[r].dynamic_anchors[*a] = i;
         }
         if let Some(reference) = &o.reference {
-            self.refs.push(PendingRef { node: i, uri: uri.resolve(&parse_uri(reference, `${at}/$ref`)?), dynamic: false });
+            self.refs.push(PendingRef {
+                node: i,
+                uri: uri.resolve(&parse_uri(reference, `${at}/$ref`)?),
+                dynamic: false,
+            });
         }
         if let Some(reference) = &o.dynamic_ref {
-            self.refs.push(PendingRef { node: i, uri: uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?), dynamic: true });
+            self.refs.push(PendingRef {
+                node: i,
+                uri: uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?),
+                dynamic: true,
+            });
         }
         node.type = o.type;
         node.const_ = o.const_;
@@ -534,7 +551,10 @@ impl Compiler {
         node.properties = self.add_map(&o.properties, `${at}/properties`, &uri, r)?;
         for let [p, s] of o.pattern_properties.entries() {
             let here = `${at}/patternProperties/${pointer_token(p)}`;
-            node.pattern_properties.push([regex(p, here)?, self.add(s, here, &uri, owner)?]);
+            node.pattern_properties.push([
+                regex(p, here)?,
+                self.add(s, here, &uri, owner)?,
+            ]);
         }
         node.required = o.required;
         node.dependent_required = o.dependent_required;
@@ -564,7 +584,13 @@ impl Compiler {
         return Result::Ok(out);
     }
 
-    fn add_map(&mut self, map: &HashMap<String, Schema>, at: String, base: &Uri, r: i32) -> Result<HashMap<String, i32>, SchemaError> {
+    fn add_map(
+        &mut self,
+        map: &HashMap<String, Schema>,
+        at: String,
+        base: &Uri,
+        r: i32,
+    ) -> Result<HashMap<String, i32>, SchemaError> {
         let mut out = HashMap::<String, i32>::new();
         for let [k, s] of map.entries() {
             out[*k] = self.add(s, `${at}/${pointer_token(k)}`, base, Option::Some(r))?;
@@ -657,7 +683,11 @@ fn has_type(inst: &Node, types: JsonTypes) -> bool {
         String => JsonTypes::String,
         Number => {
             let x = inst.as_f64().unwrap();
-            if x == f64::trunc(x) { JsonTypes::Number | JsonTypes::Integer } else { JsonTypes::Number }
+            if x == f64::trunc(x) {
+                JsonTypes::Number | JsonTypes::Integer;
+            } else {
+                JsonTypes::Number;
+            }
         },
     };
     return types & t != JsonTypes::none();
