@@ -624,10 +624,8 @@ impl Graph for WebGpuBackend {
                 break kernels;
             }
             let positions = self.extents_of(past_k)[2];
-            let [rows, fresh] = [
-                self.extents_of(q)[0],
-                self.extents_of(q)[1],
-            ];
+            let queries = self.extents_of(q);
+            let [rows, fresh] = [queries[0], queries[1]];
             let valid = row_lengths(self, past_length, rows, |_| positions);
             let attended = row_lengths(self, reach, rows, |row| valid[row] + fresh);
             for let row of 0..<rows {
