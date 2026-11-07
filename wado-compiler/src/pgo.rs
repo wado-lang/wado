@@ -784,13 +784,12 @@ mod tests {
         );
     }
 
-<<<<<<< HEAD
     #[test]
     fn a_tenth_of_the_code_around_a_path_refutes_its_marker() {
         assert!(Thresholds::refutes_marker(100, 1000));
         assert!(!Thresholds::refutes_marker(99, 1000));
-||||||| 648fe5563d1
-=======
+    }
+
     /// Functions of one hash share their counts, as a generic function's
     /// instances do, and each module lists them under its own name.
     #[test]
@@ -848,7 +847,6 @@ mod tests {
             BTreeSet::from(["f"])
         );
         assert!(profile.names_in("acme:app@0.2.0/src/main.wado").is_empty());
->>>>>>> origin/main
     }
 
     /// LLVM's default: a branch is predictable when one side takes 99% of its

@@ -540,30 +540,12 @@ output at every level. It is a nightly campaign, not a gate.
 
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
-<<<<<<< HEAD
-  of one it ran.
+  of one it ran. So does a function copied into another module under its
+  name.
 - [ ] On the `benchmark/` pilot `fts` and `json_canada` ser run longer by the
   wall clock than `-f no-pgo`, for less fuel. In `fts` a hot site splices
   `f64::fmt_fixed` into a loop: native instructions fall and cycles rise, and
   what the splice costs is not known. The tables are in
-||||||| 648fe5563d1
-  of one it ran.
-- [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
-  up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
-  longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
-  faster, so the hot splices make its collections dearer, and why is not known.
-  `zlib` decompression and `json_twitter` serialization run about 10% longer
-  for slightly less fuel. The tables are in
-=======
-  of one it ran. So does a function copied into another module under its
-  name.
-- [ ] On the `benchmark/` pilot the profile is mixed. Against `-f no-pgo` it buys
-  up to 19% of fuel on the serde rows. But `microgpt`'s inference runs 46%
-  longer by the wall clock for 4% more fuel: with a 2 GiB heap the PGO build is
-  faster, so the hot splices make its collections dearer, and why is not known.
-  `zlib` decompression and `json_twitter` serialization run about 10% longer
-  for slightly less fuel. The tables are in
->>>>>>> origin/main
   [the benchmark README](../benchmark/README.md#profile-guided-optimization).
   `http_routing` records a profile but is in neither table: its `oha` run was
   not repeated under the three builds.
