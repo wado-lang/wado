@@ -214,9 +214,9 @@ type "functype//core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(82)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$f2eafe17852bc6dd,[u8]>$spec0$spec0$sroa[t.h0]" = fn(u8) -> ref "core:prelude/string.wado//String";  // TypeId(83)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec1$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(83)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec1$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(84)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$f2eafe17852bc6dd,[u8]>$spec0$spec0$sroa[t.h0]" = fn(u8) -> ref "core:prelude/string.wado//String";  // TypeId(84)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec1$spec0$sroa[t.h0]" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(85)
 
@@ -312,7 +312,7 @@ global global:reference.wado::$const_obj_61: ref Array<u8> = array.new_fixed<u8>
 global global:core:prelude/primitive.wado::$const_obj_91: ref Array<u8> = array.new_fixed<u8>(78, 97, 78);
 global global:core:prelude/primitive.wado::$const_obj_92: ref Array<u8> = array.new_fixed<u8>(45);
 global global:core:prelude/primitive.wado::$const_obj_93: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
-global global:core:prelude/string.wado::$const_obj_141: ref Array<u8> = array.new_fixed<u8>(108, 101, 110, 58, 32);
+global global:core:prelude/string.wado::$const_obj_139: ref Array<u8> = array.new_fixed<u8>(108, 101, 110, 58, 32);
 global global:core:prelude/string.wado::$const_obj_152: ref Array<u8> = array.new_fixed<u8>(44, 32);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
@@ -4025,6 +4025,25 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return digit_count;
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec1$sroa[t.h0]"(t) {
+    let out_3: ref "core:prelude/string.wado//String";
+    let is_negative: bool;
+    let x: i64;
+    let $sroa_view_repr_117: ref Array<u8>;
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
+    $sroa_view_repr_117 = global:core:prelude/string.wado::$const_obj_139;
+    out_3.used = 5;
+    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_117, 0, 5);
+    is_negative = t < 0;
+    t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative, t);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative, x, t);
+    $inline_core_prelude_string_wado_String__internal_push_view_39: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_39;
+    };
+    return out_3;
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$f2eafe17852bc6dd,[u8]>$spec0$spec0$sroa[t.h0]"(t) {
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
@@ -4135,25 +4154,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<reference.w
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
-    };
-    return out_3;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<reference.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec1$sroa[t.h0]"(t) {
-    let out_3: ref "core:prelude/string.wado//String";
-    let is_negative: bool;
-    let x: i64;
-    let $sroa_view_repr_117: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    $sroa_view_repr_117 = global:core:prelude/string.wado::$const_obj_141;
-    out_3.used = 5;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_117, 0, 5);
-    is_negative = t < 0;
-    t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative, t);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative, x, t);
-    $inline_core_prelude_string_wado_String__internal_push_view_39: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_39;
     };
     return out_3;
 }

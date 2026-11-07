@@ -761,11 +761,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::clo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(265)
 
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(266)
+type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(266)
 
 type "functype//core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, i32, bool];  // TypeId(267)
 
-type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(268)
+type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(268)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(269)
 
@@ -5392,48 +5392,40 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 1);
 }
 
-fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]"($mv$self$repr, $mv$self$start, $mv$self$end, start, end, valid) {
-    let s_4: ref "core:prelude/string.wado//String";
-    let $qm_e: ref "core:serde//DeserializeError";
-    let slice_14: ref "core:prelude/slice.wado//Slice<u8>";
-    s_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(end - start), used: 0 };
-    $thread_$inline_core_json_JsonDeserializer__append_scanned_run_1: block {
-        if @unlikely(valid == 0) {
+fn "core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($mv$self$repr, $mv$self$start, $mv$self$end, dst, start, end, valid) {
+    let slice_5: ref "core:prelude/slice.wado//Slice<u8>";
+    if @unlikely(valid == 0) {
+        cold_path;
+        return ref.as_non_null(cold_path; "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in string"), used: 23 }, builtin::i64_extend_i32_s(start)));
+    }
+    $mv$self$end = $mv$self$end - $mv$self$start;
+    if @unlikely(0 > $mv$self$end) {
+        cold_path;
+        "core:prelude/primitive.wado/i32::clamp$contract_report0"(0, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:106"), used: 27 });
+        unreachable;
+    }
+    if @unlikely(local.tee start(select i32(start < $mv$self$end, local.tee start(select i32(start > 0, start, 0)), $mv$self$end)) > $mv$self$end) {
+        cold_path;
+        "core:prelude/primitive.wado/i32::clamp$contract_report0"(start, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:107"), used: 27 });
+        unreachable;
+    }
+    $mv$self$end = select i32(end < $mv$self$end, local.tee end(select i32(end > start, end, start)), $mv$self$end);
+    if @unlikely(("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_5(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$self$repr, start: $mv$self$start + start, end: $mv$self$start + $mv$self$end }).repr, slice_5.start, slice_5.end) == (local.tee $mv$self$start(slice_5.end) - local.tee $mv$self$end(slice_5.start))) == 0) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes<core:prelude/bytes.wado/ByteSlice>$contract_report0"(slice_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1455"), used: 14 });
+        unreachable;
+    }
+    $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__11: block {
+        break_if $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__11 local.tee $mv$self$start($mv$self$start - $mv$self$end) == 0;
+        if @unlikely(local.tee $mv$self$end(dst.used + $mv$self$start) > builtin::array_len(dst.repr)) {
             cold_path;
-            $qm_e = "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in string"), used: 23 }, builtin::i64_extend_i32_s(start));
-            cold_path;
-            return 1, ref.null none, $qm_e;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(dst, $mv$self$end);
         }
-        $mv$self$end = $mv$self$end - $mv$self$start;
-        if @unlikely(0 > $mv$self$end) {
-            cold_path;
-            "core:prelude/primitive.wado/i32::clamp$contract_report0"(0, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:106"), used: 27 });
-            unreachable;
-        }
-        if @unlikely(local.tee start(select i32(start < $mv$self$end, local.tee start(select i32(start > 0, start, 0)), $mv$self$end)) > $mv$self$end) {
-            cold_path;
-            "core:prelude/primitive.wado/i32::clamp$contract_report0"(start, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:107"), used: 27 });
-            unreachable;
-        }
-        $mv$self$end = select i32(end < $mv$self$end, local.tee end(select i32(end > start, end, start)), $mv$self$end);
-        if @unlikely(("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_14(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$self$repr, start: $mv$self$start + start, end: $mv$self$start + $mv$self$end }).repr, slice_14.start, slice_14.end) == (local.tee $mv$self$start(slice_14.end) - local.tee $mv$self$end(slice_14.start))) == 0) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes<core:prelude/bytes.wado/ByteSlice>$contract_report0"(slice_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1455"), used: 14 });
-            unreachable;
-        }
-        $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__13: block {
-            break_if $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__13 local.tee $mv$self$start($mv$self$start - $mv$self$end) == 0;
-            if @unlikely(local.tee $mv$self$end(0 + $mv$self$start) > builtin::array_len(s_4.repr)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_4, $mv$self$end);
-            }
-            start = s_4.used;
-            s_4.used = $mv$self$end;
-            builtin::array_copy<u8>(s_4.repr, start, slice_14.repr, slice_14.start, $mv$self$start);
-        };
-        break $thread_$inline_core_json_JsonDeserializer__append_scanned_run_1;
+        start = dst.used;
+        dst.used = $mv$self$end;
+        builtin::array_copy<u8>(dst.repr, start, slice_5.repr, slice_5.start, $mv$self$start);
     };
-    return 0, s_4, ref.null none;
+    return ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self, from) {
@@ -5482,40 +5474,48 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self
     return from, stop, valid;
 }
 
-fn "core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($mv$self$repr, $mv$self$start, $mv$self$end, dst, start, end, valid) {
-    let slice_5: ref "core:prelude/slice.wado//Slice<u8>";
-    if @unlikely(valid == 0) {
-        cold_path;
-        return ref.as_non_null(cold_path; "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in string"), used: 23 }, builtin::i64_extend_i32_s(start)));
-    }
-    $mv$self$end = $mv$self$end - $mv$self$start;
-    if @unlikely(0 > $mv$self$end) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$contract_report0"(0, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:106"), used: 27 });
-        unreachable;
-    }
-    if @unlikely(local.tee start(select i32(start < $mv$self$end, local.tee start(select i32(start > 0, start, 0)), $mv$self$end)) > $mv$self$end) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$contract_report0"(start, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:107"), used: 27 });
-        unreachable;
-    }
-    $mv$self$end = select i32(end < $mv$self$end, local.tee end(select i32(end > start, end, start)), $mv$self$end);
-    if @unlikely(("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_5(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$self$repr, start: $mv$self$start + start, end: $mv$self$start + $mv$self$end }).repr, slice_5.start, slice_5.end) == (local.tee $mv$self$start(slice_5.end) - local.tee $mv$self$end(slice_5.start))) == 0) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes<core:prelude/bytes.wado/ByteSlice>$contract_report0"(slice_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1455"), used: 14 });
-        unreachable;
-    }
-    $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__11: block {
-        break_if $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__11 local.tee $mv$self$start($mv$self$start - $mv$self$end) == 0;
-        if @unlikely(local.tee $mv$self$end(dst.used + $mv$self$start) > builtin::array_len(dst.repr)) {
+fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]"($mv$self$repr, $mv$self$start, $mv$self$end, start, end, valid) {
+    let s_4: ref "core:prelude/string.wado//String";
+    let $qm_e: ref "core:serde//DeserializeError";
+    let slice_14: ref "core:prelude/slice.wado//Slice<u8>";
+    s_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(end - start), used: 0 };
+    $thread_$inline_core_json_JsonDeserializer__append_scanned_run_1: block {
+        if @unlikely(valid == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(dst, $mv$self$end);
+            $qm_e = "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in string"), used: 23 }, builtin::i64_extend_i32_s(start));
+            cold_path;
+            return 1, ref.null none, $qm_e;
         }
-        start = dst.used;
-        dst.used = $mv$self$end;
-        builtin::array_copy<u8>(dst.repr, start, slice_5.repr, slice_5.start, $mv$self$start);
+        $mv$self$end = $mv$self$end - $mv$self$start;
+        if @unlikely(0 > $mv$self$end) {
+            cold_path;
+            "core:prelude/primitive.wado/i32::clamp$contract_report0"(0, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:106"), used: 27 });
+            unreachable;
+        }
+        if @unlikely(local.tee start(select i32(start < $mv$self$end, local.tee start(select i32(start > 0, start, 0)), $mv$self$end)) > $mv$self$end) {
+            cold_path;
+            "core:prelude/primitive.wado/i32::clamp$contract_report0"(start, $mv$self$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:107"), used: 27 });
+            unreachable;
+        }
+        $mv$self$end = select i32(end < $mv$self$end, local.tee end(select i32(end > start, end, start)), $mv$self$end);
+        if @unlikely(("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_14(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$self$repr, start: $mv$self$start + start, end: $mv$self$start + $mv$self$end }).repr, slice_14.start, slice_14.end) == (local.tee $mv$self$start(slice_14.end) - local.tee $mv$self$end(slice_14.start))) == 0) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes<core:prelude/bytes.wado/ByteSlice>$contract_report0"(slice_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1455"), used: 14 });
+            unreachable;
+        }
+        $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__13: block {
+            break_if $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__13 local.tee $mv$self$start($mv$self$start - $mv$self$end) == 0;
+            if @unlikely(local.tee $mv$self$end(0 + $mv$self$start) > builtin::array_len(s_4.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_4, $mv$self$end);
+            }
+            start = s_4.used;
+            s_4.used = $mv$self$end;
+            builtin::array_copy<u8>(s_4.repr, start, slice_14.repr, slice_14.start, $mv$self$start);
+        };
+        break $thread_$inline_core_json_JsonDeserializer__append_scanned_run_1;
     };
-    return ref.null none;
+    return 0, s_4, ref.null none;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {

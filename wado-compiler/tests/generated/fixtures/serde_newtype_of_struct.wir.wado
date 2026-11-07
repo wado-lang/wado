@@ -1342,9 +1342,9 @@ type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[se
 
 type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(463)
 
-type "functype//core:serde/serde_newtype_of_struct.wado/P^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]$dae[self]" = fn(ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(464)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(464)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(465)
+type "functype//core:serde/serde_newtype_of_struct.wado/P^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]$dae[self]" = fn(ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(465)
 
 type "functype//core:serde/serde_newtype_of_struct.wado/Point^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]$dae[self]" = fn(ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(466)
 
@@ -1470,8 +1470,8 @@ global global:core:json::$const_obj_172: ref Array<u8> = array.new_fixed<u8>(44,
 global global:core:serde::$const_obj_185: ref Array<u8> = array.new_fixed<u8>(93);
 global global:core:serde::$const_obj_186: ref Array<u8> = array.new_fixed<u8>(44);
 global global:core:serde::$const_obj_187: ref Array<u8> = array.new_fixed<u8>(91);
-global global:core:serde::$const_obj_192: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 };
-global global:core:serde::$const_obj_193: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
+global global:core:serde::$const_obj_195: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 };
+global global:core:serde::$const_obj_196: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
 global global:core:serde::$const_obj_209: ref Array<u8> = array.new_fixed<u8>(119, 114, 105, 116, 101);
 global global:core:serde::$const_obj_210: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 100);
 global global:core:prelude/string.wado::$const_obj_213: ref Array<u8> = array.new_fixed<u8>(117, 110, 107, 110, 111, 119, 110, 32, 102, 108, 97, 103, 58, 32);
@@ -11760,6 +11760,21 @@ fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,retur
     return 0, s_4, ref.null none;
 }
 
+fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
+    let bits_per_digit: i32;
+    let digit_count: i32;
+    let offset: i32;
+    bits_per_digit = (if base == 2 -> i32 {
+        1;
+    } else {
+        select i32(base == 8, 3, 4);
+    });
+    base = base - 1;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$spec0$sroa[self.buf]$dae[is_negative,alt_prefix]"(f, digit_count);
+    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, base, upper);
+}
+
 fn "core:serde/serde_newtype_of_struct.wado/P^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]$dae[self]"(s) {
     let $load_11: ref Array<u8>;
     let new_used_32: i32;
@@ -11771,7 +11786,7 @@ fn "core:serde/serde_newtype_of_struct.wado/P^core:serde/Serialize::serialize<co
     start_33 = s.used;
     s.used = new_used_32;
     builtin::array_copy<u8>(s.repr, start_33, global:serde_newtype_of_struct.wado::$const_obj_14, 0, 1);
-    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_193, 0);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_196, 0);
     if @unlikely(local.tee new_used_32(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_32);
@@ -11779,7 +11794,7 @@ fn "core:serde/serde_newtype_of_struct.wado/P^core:serde/Serialize::serialize<co
     start_33 = s.used;
     s.used = new_used_32;
     "core:prelude/primitive.wado/write_decimal_digits"(s.repr, start_33, 1_i64, 1);
-    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_192, 1);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_195, 1);
     if @unlikely(local.tee new_used_32(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_32);
@@ -11797,21 +11812,6 @@ fn "core:serde/serde_newtype_of_struct.wado/P^core:serde/Serialize::serialize<co
     return ref.null none;
 }
 
-fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
-    let bits_per_digit: i32;
-    let digit_count: i32;
-    let offset: i32;
-    bits_per_digit = (if base == 2 -> i32 {
-        1;
-    } else {
-        select i32(base == 8, 3, 4);
-    });
-    base = base - 1;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$spec0$sroa[self.buf]$dae[is_negative,alt_prefix]"(f, digit_count);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, offset, self, digit_count, bits_per_digit, base, upper);
-}
-
 fn "core:serde/serde_newtype_of_struct.wado/Point^core:serde/Serialize::serialize<core:json/JsonSerializer>$spec0$sroa[s.buf]$dae[self]"(s) {
     let $load_11: ref Array<u8>;
     let new_used_32: i32;
@@ -11823,7 +11823,7 @@ fn "core:serde/serde_newtype_of_struct.wado/Point^core:serde/Serialize::serializ
     start_33 = s.used;
     s.used = new_used_32;
     builtin::array_copy<u8>(s.repr, start_33, global:serde_newtype_of_struct.wado::$const_obj_14, 0, 1);
-    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_193, 0);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_196, 0);
     if @unlikely(local.tee new_used_32(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_32);
@@ -11831,7 +11831,7 @@ fn "core:serde/serde_newtype_of_struct.wado/Point^core:serde/Serialize::serializ
     start_33 = s.used;
     s.used = new_used_32;
     "core:prelude/primitive.wado/write_decimal_digits"(s.repr, start_33, 1_i64, 1);
-    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_192, 1);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec3"(s, global:core:serde::$const_obj_195, 1);
     if @unlikely(local.tee new_used_32(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_32);

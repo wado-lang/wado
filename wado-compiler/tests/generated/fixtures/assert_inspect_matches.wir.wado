@@ -113,7 +113,7 @@ type "functype//assert_inspect_matches.wado/$cm_export__run" = fn();  // TypeId(
 
 type "functype//assert_inspect_matches.wado/run$cold0" = fn(ref "assert_inspect_matches.wado//Shape");  // TypeId(26)
 
-type "functype//assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$spec0$dae[index]" = fn(ref "core:prelude//$Cell<assert_inspect_matches.wado/Shape>") -> f64;  // TypeId(27)
+type "functype//assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$sroa[v.value]$spec0$dae[index]" = fn(ref "assert_inspect_matches.wado//Shape") -> f64;  // TypeId(27)
 
 type "functype//assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$[f64,f64]$spec0$dae[index]" = fn(ref "core:prelude//$Cell<assert_inspect_matches.wado/Shape>") -> ref "tuple//[f64, f64]";  // TypeId(28)
 
@@ -369,7 +369,7 @@ global global:core:prelude/traits.wado::$const_obj_18: ref "core:prelude/string.
 global global:core:prelude/tuple.wado::$const_obj_20: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 };
 global global:core:prelude/tuple.wado::$const_obj_21: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
 global global:core:prelude/tuple.wado::$const_obj_22: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91), used: 1 };
-global global:core:prelude/primitive.wado::$const_obj_27: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_32: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:prelude/primitive.wado::$const_obj_33: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 48), used: 2 };
 global global:core:prelude/primitive.wado::$const_obj_34: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 46, 48), used: 3 };
 global global:core:prelude/primitive.wado::$const_obj_35: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46), used: 1 };
@@ -407,12 +407,11 @@ s: "), used: 99 }, s1: struct.new "core:prelude/string.wado//String" { repr: arr
     unreachable;
 }
 
-fn "assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$spec0$dae[index]"(v) {
-    let $load_0: ref "assert_inspect_matches.wado//Shape";
-    if @unlikely(local.tee $load_0(v.value).discriminant != 0) {
+fn "assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$sroa[v.value]$spec0$dae[index]"(v) {
+    if @unlikely(v.discriminant != 0) {
         unreachable;
     }
-    return ref.cast "assert_inspect_matches.wado//Shape::Circle"($load_0).payload_0;
+    return ref.cast "assert_inspect_matches.wado//Shape::Circle"(v).payload_0;
 }
 
 fn "assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$[f64,f64]$spec0$dae[index]"(v) {
@@ -1679,12 +1678,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_insp
 }
 
 fn "core:prelude/traits.wado/assert_inspect_matches.wado/Shape^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $load_0: ref "assert_inspect_matches.wado//Shape";
     let $load_2: ref "core:prelude/string.wado//String";
-    if self.value.discriminant == 0 {
+    if local.tee $load_0(self.value).discriminant == 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_7);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"($load_2, global:core:prelude/traits.wado::$const_obj_12);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<f64>$sroa[payload.value]"(let $mv_value_1: f64; multivalue_bind [$mv_value_1] = "assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$spec0$dae[index]"(self); $mv_value_1, f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<f64>$sroa[payload.value]"(let $mv_value_1: f64; multivalue_bind [$mv_value_1] = "assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$sroa[v.value]$spec0$dae[index]"($load_0); $mv_value_1, f);
     }
     if self.value.discriminant == 1 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
@@ -1975,7 +1975,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_27, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_32, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
