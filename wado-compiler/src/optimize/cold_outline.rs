@@ -164,13 +164,21 @@ fn find_region(
         if region.is_empty() {
             continue;
         }
+        // A region that holds no more than the call replacing it stays, which
+        // is also what makes a second scan a fixed point. Weighing rather than
+        // counting statements is what sees a lone `panic(…)` whose argument
+        // builds a message. The helper takes the frame's parameters and then
+        // the locals it is handed: the parameters alone bound the call below
+        // without walking the body for those locals.
+        let size = region_size(body, &type_table, &runs, &region);
+        if size <= call_site_size(params) {
+            continue;
+        }
         let Some(args) = free_vars(body, &region, params as u32, under_loop, &func, &type_table)
         else {
             continue;
         };
-        // The helper takes the frame's parameters and then the locals it is
-        // handed, so its call passes both.
-        if buys_nothing(body, &type_table, &runs, &region, params + args.len()) {
+        if size <= call_site_size(params + args.len()) {
             continue;
         }
         compiler_trace!(
@@ -178,7 +186,7 @@ fn find_region(
             "{}: region of {} stmt(s), {} to hold",
             func.name,
             region.len(),
-            region_size(body, &type_table, &runs, &region),
+            size,
         );
         // A region ending in a `-> !` call cannot fall through, so the helper
         // inherits that: the call left behind still tells every later pass the
@@ -246,20 +254,6 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
         body.for_each_child(node, |c| stack.push((c, inner)));
     }
     out
-}
-
-/// Whether the region holds no more than the call of `arity` arguments that
-/// would replace it, which is also what makes a second scan a fixed point.
-/// Weighing rather than counting statements is what sees a lone `panic(…)`
-/// whose argument builds a message.
-fn buys_nothing(
-    body: &Body,
-    type_table: &TypeTable,
-    runs: &RareRuns,
-    region: &[StmtId],
-    arity: usize,
-) -> bool {
-    region_size(body, type_table, runs, region) <= call_site_size(arity)
 }
 
 /// How one local the region mentions gets to the helper.

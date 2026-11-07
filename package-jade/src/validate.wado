@@ -7,7 +7,7 @@ use { percent_decode } from "core:url";
 use { Regex } from "lib:re";
 use { Document, Node } from "./document.wado";
 use { Divisor, Number } from "./number.wado";
-use { JsonTypes, Schema, SchemaError, pointer_token, type_names, write_location } from "./schema.wado";
+use { JsonTypes, Schema, SchemaError, pointer_token, type_names, write_location, write_place } from "./schema.wado";
 
 /// The base URI of a schema that declares no `$id`.
 internal global DEFAULT_BASE: String = "jade:root";
@@ -37,10 +37,8 @@ pub struct ValidationError {
 impl Display for ValidationError {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(`${self.instance}: ${self.message} (`);
-        if let Some(u) = &self.uri {
-            f.write_str(`${u}#`);
-        }
-        f.write_str(`${self.keyword})`);
+        write_place(f, &self.uri, &self.keyword);
+        f.write_str(")");
     }
 }
 
@@ -64,13 +62,11 @@ impl SchemaSet {
     pub fn insert(&mut self, uri: Uri, schema: Schema)
         contract uri.fragment() matches { None }, "a document's URI has no fragment"
     {
-        for let k of 0..<self.documents.len() {
-            if self.documents[k].0 == uri {
-                self.documents[k].1 = schema;
-                return;
-            }
+        if let Some(k) = self.find(&uri) {
+            self.documents[k].1 = schema;
+        } else {
+            self.documents.push([uri, schema]);
         }
-        self.documents.push([uri, schema]);
     }
 
     /// A document some reference names that the set does not hold yet, or
@@ -85,7 +81,11 @@ impl SchemaSet {
     }
 
     internal fn holds(&self, uri: &Uri) -> bool {
-        return self.documents.iter_ref().any(|d| d.0 == *uri);
+        return self.find(uri) matches { Some(_) };
+    }
+
+    fn find(&self, uri: &Uri) -> Option<i32> {
+        return self.documents.iter_ref().position(|d| d.0 == *uri);
     }
 }
 
@@ -316,7 +316,7 @@ impl Validator {
     /// Evaluates subschema `t` without reporting what it fails.
     fn passes(&self, t: i32, inst: &Node, ip: &String, run: &mut Run) -> [bool, Evaluated] {
         let before = run.failures;
-        run.sinks.push(Sink {});
+        run.sinks.push(Sink { quiet: true });
         let ev = self.eval(t, inst, ip, run);
         run.sinks.pop();
         let ok = run.failures == before;
@@ -660,12 +660,15 @@ impl Run {
     /// Reports `n`'s `keyword`, or `n` itself when `keyword` is empty, as
     /// failing at the value `ip` points to.
     fn fail(&mut self, ip: &String, n: &Compiled, keyword: String, message: String) {
+        self.failures += 1;
+        if self.sinks[self.sinks.len() - 1].quiet {
+            return;
+        }
         let pointer = if keyword.is_empty() { n.at } else { `${n.at}/${keyword}` };
-        self.report(ValidationError { instance: *ip, uri: n.source, keyword: pointer, message });
+        self.keep(ValidationError { instance: *ip, uri: n.source, keyword: pointer, message });
     }
 
-    fn report(&mut self, e: ValidationError) {
-        self.failures += 1;
+    fn keep(&mut self, e: ValidationError) {
         let top = self.sinks.len() - 1;
         if self.sinks[top].seen.insert(`${e}`) {
             self.sinks[top].errors.push(e);
@@ -674,17 +677,25 @@ impl Run {
 
     /// Reports outcome `k` here, as though its subschema were evaluated again.
     fn replay(&mut self, k: i32, out: &mut Evaluated) {
-        for let e of self.outcomes[k].errors {
-            self.report(e);
+        let outcome = &self.outcomes[k];
+        if outcome.errors.is_empty() {
+            out.merge(&outcome.evaluated);
+            return;
         }
-        if self.outcomes[k].errors.is_empty() {
-            out.merge(&self.outcomes[k].evaluated);
+        self.failures += outcome.errors.len();
+        if !self.sinks[self.sinks.len() - 1].quiet {
+            for let e of &outcome.errors {
+                self.keep(*e);
+            }
         }
     }
 }
 
 /// A subschema's errors, each once.
 struct Sink {
+    /// Whether only that the subschema failed matters, not why, so no error is
+    /// kept.
+    quiet: bool = false,
     errors: List<ValidationError> = [],
     seen: HashSet<String> = HashSet::new(),
 }
@@ -731,8 +742,8 @@ impl Compiler {
     /// A compiler holding every document of `set`.
     fn of(set: &SchemaSet) -> Result<Compiler, SchemaError> {
         let mut c = Compiler {};
-        for let [uri, schema] of set.documents {
-            c.add_document(&uri, &schema)?;
+        for let [uri, schema] of &set.documents {
+            c.add_document(uri, schema)?;
         }
         return Result::Ok(c);
     }
@@ -897,8 +908,8 @@ impl Compiler {
         // A document's root and every subschema outside `$defs` are led to by
         // the keyword holding them.
         let mut leads: List<i32> = List::filled(self.nodes.len(), 1);
-        for let d of self.defs {
-            leads[d] = 0;
+        for let d of &self.defs {
+            leads[*d] = 0;
         }
         let mut anchors: List<String> = [];
         for let k of 0..<self.refs.len() {
@@ -914,7 +925,7 @@ impl Compiler {
                 let declared = self.resources[self.nodes[target].owner].dynamic_anchors.get_str(&fragment);
                 if declared matches { Some(t) && t == target } {
                     anchor = Option::Some(fragment);
-                    for let declaring of self.resources {
+                    for let declaring of &self.resources {
                         if let Some(t) = declaring.dynamic_anchors.get_str(&fragment) && t != target {
                             leads[t] += 1;
                         }
@@ -941,9 +952,9 @@ impl Compiler {
         let document = r.uri.without_fragment();
         let held = self.targets.contains_key(`${document}#`);
         if !held {
-            for let [uri, schema] of META_SCHEMAS {
-                if uri == document {
-                    self.add_document(&uri, &schema)?;
+            for let [uri, schema] of &META_SCHEMAS {
+                if *uri == document {
+                    self.add_document(uri, schema)?;
                     return self.resolve(r);
                 }
             }

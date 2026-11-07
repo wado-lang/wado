@@ -531,12 +531,18 @@ impl Display for SchemaError {
 
 /// `uri#pointer: `, leaving out what is absent.
 internal fn write_location(f: &mut Formatter, uri: &Option<Uri>, pointer: &String) {
+    if uri matches { Some(_) } || !pointer.is_empty() {
+        write_place(f, uri, pointer);
+        f.write_str(": ");
+    }
+}
+
+/// `uri#pointer`, or `pointer` alone with no `uri`.
+internal fn write_place(f: &mut Formatter, uri: &Option<Uri>, pointer: &String) {
     if let Some(u) = uri {
         f.write_str(`${u}#`);
     }
-    if uri matches { Some(_) } || !pointer.is_empty() {
-        f.write_str(`${*pointer}: `);
-    }
+    f.write_str(pointer);
 }
 
 impl Error for SchemaError {

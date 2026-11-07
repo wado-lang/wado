@@ -157,10 +157,13 @@ fn raw(text: &String) -> String {
 /// text, read from `remotes/` as the suite serves them. Err holds why one
 /// cannot be.
 fn remotes_of(text: &String) -> Result<List<[String, String]>, String> with Preopens {
-    let mut set = SchemaSet::new();
-    set.insert(Uri::from_str(&DEFAULT_BASE).unwrap(), Schema::parse(text).unwrap());
     let mut remotes: List<[String, String]> = [];
     // A schema Jade rejects is left to its test to report.
+    let Ok(root) = Schema::parse(text) else {
+        return Result::Ok(remotes);
+    };
+    let mut set = SchemaSet::new();
+    set.insert(Uri::from_str(&DEFAULT_BASE).unwrap(), root);
     while let Ok(Some(uri)) = set.missing() {
         let name = uri.to_string();
         let unserved = `refers to ${name}, which the suite does not serve`;
