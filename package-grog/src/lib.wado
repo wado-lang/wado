@@ -198,21 +198,18 @@ impl<M: Message + Default> Each<M> {
         while let Some(size) = field_size(&mut self.input)? {
             let mut r = reader_of(&self.input, size);
             r.next_field(0)?;
-            let mut took: Option<M> = null;
-            if r.number == self.number {
+            if r.number == self.number && r.wire_type == self.wire_type {
                 let mut m = M::default();
-                let held = if self.wire_type == WireType::Len { r.message(&mut m)? } else { r.group(&mut m)? };
-                if held {
-                    took = Option::Some(m);
+                if self.wire_type == WireType::Len {
+                    r.merge_nested(&mut m)?;
+                } else {
+                    r.merge_group(&mut m)?;
                 }
+                self.input.consume(size);
+                return Result::Ok(Option::Some(m));
             }
-            if took matches { None } {
-                r.skip_value()?;
-            }
+            r.skip_value()?;
             self.input.consume(size);
-            if took matches { Some(_) } {
-                return Result::Ok(took);
-            }
         }
         return Result::Ok(null);
     }

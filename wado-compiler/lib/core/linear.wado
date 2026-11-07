@@ -266,10 +266,8 @@ impl LinearArray<u8> {
     pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8>
         contract expected >= 0
     {
-        let mut array = LinearArray::<u8> {
-            block: Block { ptr: builtin::realloc(0, 0, ALIGN, expected), bytes: expected },
-            len: 0,
-        };
+        let mut array = LinearArray::<u8>::unwritten(expected);
+        array.len = 0;
         while array.read_more(stream) == CopyResult::Completed {
         }
         return array;
@@ -346,8 +344,7 @@ impl LinearBuffer {
     /// A buffer reading `stream`, which it drops once the stream ends or the
     /// buffer drops.
     pub fn of_stream(stream: Stream<u8>) -> LinearBuffer {
-        let bytes = LinearArray::<u8> { block: Block { ptr: builtin::realloc(0, 0, ALIGN, 0), bytes: 0 }, len: 0 };
-        return LinearBuffer { bytes, start: 0, source: Option::Some(stream), dropped: 0 };
+        return LinearBuffer { bytes: LinearArray::<u8>::unwritten(0), start: 0, source: Option::Some(stream), dropped: 0 };
     }
 
     /// What was read, from `start()` on not yet consumed.

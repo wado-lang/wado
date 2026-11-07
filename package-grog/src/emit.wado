@@ -270,8 +270,6 @@ impl MessagePlan {
         }
     }
 
-    /// A function per repeated message field that reads its values out of an
-    /// encoded message one at a time.
     /// Whether a field is read one value at a time, which `write_each` writes.
     fn reads_each(&self) -> bool {
         for let slot of &self.slots {
@@ -282,6 +280,8 @@ impl MessagePlan {
         return false;
     }
 
+    /// A function per repeated message field that reads its values out of an
+    /// encoded message one at a time.
     fn write_each(&self, w: &mut CodeWriter) {
         let mut opened = false;
         for let slot of &self.slots {
