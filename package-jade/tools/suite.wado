@@ -108,10 +108,12 @@ test ${to_string(&name).unwrap()} {
         out.push_str(skipped.join("\n"));
         out.push_str("\n");
     }
-    out.push_str(`
+    if !tests.is_empty() {
+        out.push_str(`
 use { check } from "../suite.wado";
 `);
-    out.push_str(tests);
+        out.push_str(tests);
+    }
     return out;
 }
 
