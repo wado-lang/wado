@@ -1592,12 +1592,11 @@ impl Gate<'_> {
         self.immediate_params[func_id.index()].contains(&pos)
     }
 
-    /// Whether a value of `ty` owns heap storage worth building only once.
-    /// Hoisting costs a global, a guard branch, and an object live for the whole
-    /// program, which only pays when rebuilding would re-allocate — when the
-    /// value transitively owns a GC array, as `String` and `List` do. A small
-    /// aggregate of scalars owns nothing and is strictly worse hoisted:
-    /// `multi_value_return` already lifts one into Wasm multi-values.
+    /// Whether a value of `ty` owns heap storage worth building only once: it
+    /// transitively owns a GC array, as `String` and `List` do. Hoisting costs a
+    /// global, a guard branch, and an object live for the whole program. For a
+    /// transient aggregate of scalars that buys back a couple of field stores,
+    /// and in return position it takes the value from `multi_value_return`.
     fn owns_heap_storage(&self, ty: TypeId) -> bool {
         let mut seen = IndexSet::default();
         self.owns_heap_storage_inner(ty, &mut seen)

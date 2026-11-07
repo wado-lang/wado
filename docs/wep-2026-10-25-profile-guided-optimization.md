@@ -59,8 +59,8 @@ module marked `#![TODO]`, it is a compile error: such a test traps by design,
 and a workload that traps fails the recording (below).
 
 A deterministic workload's counts come out the same on every run, so the
-committed profile changes only when the code or the workload does. A workload that reads a clock or randomness still works, but its
-profile churns.
+committed profile changes only when the code or the workload does. A workload
+that reads a clock or randomness still works, but its profile churns.
 
 An attribute was chosen over a new `workload` block. A block would add a
 keyword to the reserved vocabulary, and it would not run under `wado test`.
