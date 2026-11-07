@@ -781,7 +781,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if !bound.names_a_trait() {
             if !out
                 .iter()
-                .any(|(b, _)| b.bound.name == bound.name && b.bound.id == bound.id)
+                .any(|(b, _)| b.bound.id == bound.id)
             {
                 out.push((entry(), None));
             }
@@ -801,7 +801,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .find(|(b, d)| *d == Some(decl) && mergeable(&b.bound)),
             None => out
                 .iter_mut()
-                .find(|(b, d)| d.is_none() && b.bound.name == bound.name && mergeable(&b.bound)),
+                .find(|(b, d)| {
+                    d.is_none() && b.bound.written_name() == bound.written_name() && mergeable(&b.bound)
+                }),
         };
         if let Some((existing, _)) = duplicate {
             if existing.bound.assoc_types.is_empty() {
