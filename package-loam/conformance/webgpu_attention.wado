@@ -157,8 +157,8 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
                 hidden: Option::Some(f32::MIN),
             },
         },
-        // A hidden score low enough to lose to no valid position's would show
-        // the padding here: a finite one only just below them.
+        // A hidden score near the valid ones weighs a position, so only `reach`
+        // keeps a query from the padding.
         Case {
             name: "reached",
             seq: 3,

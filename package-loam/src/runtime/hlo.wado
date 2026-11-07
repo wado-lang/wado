@@ -419,10 +419,9 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         let tanh = g.unary(Unary::Tanh, &g.binary(Binary::Divide, &scores, &cap));
         scores = g.binary(Binary::Multiply, &cap, &tanh);
     }
-    let mut unbiased = bias;
-    if options.hidden matches { None } {
-        scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, unbiased, &score_extents);
-        unbiased = null;
+    let bias_first = options.hidden matches { None };
+    if let Some(b) = bias && bias_first {
+        scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
     if options.causal || options.window > 0 {
         let hidden = attention_mask::<G, B, Heads, S, T>(g, &first, options, &score_extents);
@@ -433,7 +432,9 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         );
         scores = g.select(&hidden, &lowest, &scores);
     }
-    scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, unbiased, &score_extents);
+    if let Some(b) = bias && !bias_first {
+        scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
+    }
     if let Some(length) = reach {
         scores = masked::<G, f32, [B, Heads, S, T]>(g, &scores, 3, length, f32::NEG_INFINITY);
     }
@@ -449,17 +450,14 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     return [g.reshape(&back, [batch, s, heads * d]), present_k, present_v];
 }
 
-/// `scores` plus `bias`, its extents of 1 repeated, where one is given.
+/// `scores` plus `bias`, its extents of 1 repeated.
 fn biased<affine G: Graph, Axes, BiasAxes>(
     g: &mut G,
     scores: &G::Tensor<f32, Axes>,
-    bias: Option<&G::Tensor<f32, BiasAxes>>,
+    bias: &G::Tensor<f32, BiasAxes>,
     extents: &List<i32>,
 ) -> G::Tensor<f32, Axes> with _ {
-    let Some(b) = bias else {
-        return *scores;
-    };
-    let stretched: G::Tensor<f32, Axes> = g.broadcast_in_dim(b, *extents, [0, 1, 2, 3]);
+    let stretched: G::Tensor<f32, Axes> = g.broadcast_in_dim(bias, *extents, [0, 1, 2, 3]);
     return g.binary(Binary::Add, scores, &stretched);
 }
 

@@ -2657,16 +2657,14 @@ fn spelled_attention_call(
     };
     operands.push(past_length);
     operands.push(if symbols.reads_lengths(&total) { `Option::Some(&${symbols.value(&total)?})` } else { "null" });
+    // No rotary tables.
     operands.push("null");
     operands.push("null");
-    let bias = match &a.bias {
-        Some(b) => shapes[*b],
-        None => present,
+    let [bias, bias_operand] = match &a.bias {
+        Some(b) => [shapes[*b], `Option::Some(${exprs.reference(b)})`],
+        None => [present, "null"],
     };
-    operands.push(match &a.bias {
-        Some(b) => `Option::Some(${exprs.reference(b)})`,
-        None => "null",
-    });
+    operands.push(bias_operand);
     operands.push(
         `&Attention { heads: ${a.heads}, kv_heads: ${a.heads}, scale: ${float_literal(a.scale)}, divides: ${a.divides}, softcap: 0.0, window: -1, causal: true, hidden: Option::Some(${float_literal(
             a.hidden,

@@ -217,8 +217,7 @@ choice it makes kept: a scale applied by `Div` or by `Mul`, a mask of f32's
 lowest value, as GPT-2's is, rather than negative infinity, and that mask before
 the bias rather than after it. A padded position reads negative infinity past
 the composite's `reach`, as the softmax of the parts does. So `Cpu` computes what
-the graph says.
-A kernel may differ from its decomposition only in what
+the graph says. A kernel may differ from its decomposition only in what
 [WEP: Loam § Results Are Held to a Tolerance, Not to the Bit](../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
 already allows: the order of a sum, a fused multiply-add, and an online
 softmax's rescaling, which reorders a sum. A kernel that replaced the mask by

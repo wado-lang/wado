@@ -161,7 +161,6 @@ impl Walk {
             self.node(product).inputs[1],
         ];
         let [query, heads, width] = self.split_heads(&queries, [0, 2, 1, 3])?;
-
         let turned = self.taking(&keys, "Transpose")?;
         let [key_past, key, present_key] = self.keys(turned, heads, width)?;
         let present_value = self.node(weighing).inputs[1];
@@ -176,9 +175,10 @@ impl Walk {
         // Keys of another sequence than the queries' are a cross-attention.
         let attends_itself = self.checked.shapes[key].axes[1].extent.poly() == new
             && self.checked.shapes[value].axes[1].extent.poly() == new;
-        if !attends_itself || !self.causal(&mask, &total, &new) {
+        if !attends_itself {
             return null;
         }
+        self.causal(&mask, &total, &new)?;
         if let Some(b) = &bias && !self.bias_fits(b) {
             return null;
         }
@@ -189,7 +189,6 @@ impl Walk {
         if !self.reads_stay_inside(&kept, merged) {
             return null;
         }
-        self.taken = self.taken.into_iter().filter(|t| t != merged).collect();
         let past = match [key_past, value_past] {
             [Some(k), Some(v)] => Option::Some([k, v]),
             _ => null,
@@ -354,11 +353,11 @@ impl Walk {
         };
     }
 
-    /// Whether `mask` shows exactly each position up to the query reading it,
-    /// over `total` positions of which the last `new` query. A mask is known,
-    /// or `Slice`s of a table known, whose every row the proof reads, so what
-    /// a length picks of it is shown causal for any length.
-    fn causal(&mut self, mask: &String, total: &Poly, new: &Poly) -> bool {
+    /// `Some` where `mask` shows exactly each position up to the query reading
+    /// it, over `total` positions of which the last `new` query. A mask is
+    /// known, or `Slice`s of a table known, whose every row is read here, so
+    /// what a length picks of it is causal for any length.
+    fn causal(&mut self, mask: &String, total: &Poly, new: &Poly) -> Option<()> {
         let mut starts = HashMap::<i32, Poly>::new();
         let mut extents = HashMap::<i32, Poly>::new();
         let mut tensor = *mask;
@@ -366,53 +365,38 @@ impl Walk {
             let operand = self.node(cut).inputs[0];
             let cuts = settled(slice_cuts(self.node(cut), &self.checked.known, &self.checked.shapes[operand]));
             for let c of cuts {
-                let start = owed_presumed(&c.start, self.checked);
-                let extent = owed_presumed(&c.extent.poly(), self.checked);
-                let [Some(s), Some(e)] = [start, extent] else {
-                    return false;
-                };
                 if c.step != 1 || starts.contains_key(c.axis) {
-                    return false;
+                    return null;
                 }
-                starts[c.axis] = s;
-                extents[c.axis] = e;
+                starts[c.axis] = owed_presumed(&c.start, self.checked)?;
+                extents[c.axis] = owed_presumed(&c.extent.poly(), self.checked)?;
             }
             tensor = operand;
         }
-        let Some(table) = self.checked.known.get(tensor) else {
-            return false;
-        };
+        let table = self.checked.known.get(tensor)?;
         let Bools(held) = table.elements else {
-            return false;
+            return null;
         };
         let e = table.extents;
         if e.len() != 4 || e[0] != 1 || e[1] != 1 {
-            return false;
+            return null;
         }
         let row_start = starts.get(2).unwrap_or(Poly::constant(0));
         let rows = extents.get(2).unwrap_or(Poly::constant(e[2] as i64));
         let columns = extents.get(3).unwrap_or(Poly::constant(e[3] as i64));
-        let Some(first) = total.try_sub(new) else {
-            return false;
-        };
-        let Some(past_first) = first.try_sub(&row_start) else {
-            return false;
-        };
         // The position of the table's row `r`, less `r`.
-        let Some(before) = past_first.as_constant() else {
-            return false;
-        };
+        let before = total.try_sub(new)?.try_sub(&row_start)?.as_constant()?;
         if rows != *new || columns != *total || starts.get(3).unwrap_or(Poly::constant(0)) != Poly::constant(0) {
-            return false;
+            return null;
         }
         for let row of 0..<e[2] {
             for let column of 0..<e[3] {
                 if held[row * e[3] + column] != (column as i64 <= row as i64 + before) {
-                    return false;
+                    return null;
                 }
             }
         }
-        return true;
+        return Option::Some(());
     }
 
     /// Whether `bias` adds to each score as the composite's does, a value for
