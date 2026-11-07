@@ -3,6 +3,7 @@
 
 use { HashMap, HashSet } from "core:collections";
 use { Uri } from "core:uri";
+use { percent_decode } from "core:url";
 use { Regex } from "lib:re";
 use { Document, Node } from "./document.wado";
 use { JsonTypes, Schema, SchemaError, pointer_token, type_names } from "./schema.wado";
@@ -112,8 +113,7 @@ impl Validator {
         run: &mut Run,
         out: &mut Evaluated,
     ) {
-        for let k of 0..<run.following.len() {
-            let [held, at] = run.following[k];
+        for let [held, at] of run.following {
             if held == t && Document::same_node(&at, inst) {
                 run.fail(ip, &n.at, keyword, "refers back to itself without moving into the instance");
                 return;
@@ -653,7 +653,7 @@ impl Compiler {
     fn lookup(&self, uri: &Uri) -> Option<i32> {
         let mut fragment = "";
         if let Some(f) = uri.fragment() {
-            let Some(decoded) = percent_decode(f) else {
+            let Ok(decoded) = percent_decode(f) else {
                 return null;
             };
             fragment = decoded;
@@ -674,30 +674,6 @@ fn regex(pattern: &String, at: String) -> Result<Regex, SchemaError> {
         Ok(re) => Result::Ok(re),
         Err(e) => Result::Err(SchemaError { pointer: at, message: `${e}` }),
     };
-}
-
-/// `text` with its percent-encodings decoded, or `None` when that is not UTF-8.
-fn percent_decode(text: StrSlice) -> Option<String> {
-    let mut bytes: ByteList = [];
-    let mut i = 0;
-    while i < text.len() {
-        let c = text.byte_at(i);
-        if c == b'%' {
-            bytes.push((hex(text.byte_at(i + 1)) << 4 | hex(text.byte_at(i + 2))) as u8);
-            i += 3;
-        } else {
-            bytes.push(c);
-            i += 1;
-        }
-    }
-    if let Ok(s) = String::try_from_utf8(bytes) {
-        return Option::Some(s);
-    }
-    return null;
-}
-
-fn hex(c: u8) -> i32 {
-    return (c as char).hex_digit_value();
 }
 
 fn has_type(inst: &Node, types: JsonTypes) -> bool {

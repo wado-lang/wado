@@ -54,6 +54,10 @@ offset, so every `Uri` is one RFC 3986 admits. Only ASCII is admitted: an IRI
 The base must have a scheme, as §5.1 requires; a call with one that does not
 breaks the function's contract.
 
+A result with no authority whose path starts `//` would read back with that
+path as its authority, which §3.3 forbids. `resolve` writes `/.` before such a
+path, so `foo:` resolves `/.//bar` to `foo:/.//bar`.
+
 ### What `core:uri` leaves out
 
 `core:uri` has none of `core:url`'s conveniences: no host or port accessors, no

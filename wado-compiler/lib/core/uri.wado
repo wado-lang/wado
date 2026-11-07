@@ -116,7 +116,7 @@ impl Deserialize for Uri {
         return match Uri::from_str(d.deserialize_string()?) {
             Ok(uri) => Result::Ok(uri),
             Err(e) => Result::Err(DeserializeError::invalid_value(
-                `invalid URI reference: ${e.message} at offset ${e.offset}`,
+                `invalid URI reference: ${e}`,
             )),
         };
     }
@@ -239,8 +239,7 @@ impl Reader {
         }
         for let i of 0..<end {
             let c = self.text.byte_at(i);
-            let ok = (c as char).is_ascii_alphabetic()
-                || i > 0 && ((c as char).is_ascii_digit() || c == b'+' || c == b'-' || c == b'.');
+            let ok = c.is_ascii_alphabetic() || i > 0 && (c.is_ascii_digit() || c == b'+' || c == b'-' || c == b'.');
             if !ok {
                 return fail(i, "invalid scheme");
             }
@@ -277,7 +276,7 @@ impl Reader {
             self.check(host, host_end, &"", "host")?;
         }
         for let i of host_end + 1..<end {
-            if !(self.text.byte_at(i) as char).is_ascii_digit() {
+            if !self.text.byte_at(i).is_ascii_digit() {
                 return fail(i, "invalid character in port");
             }
         }
@@ -291,7 +290,7 @@ impl Reader {
         while i < end {
             let c = self.text.byte_at(i);
             if c == b'%' {
-                if i + 2 >= end || !is_hex(self.text.byte_at(i + 1)) || !is_hex(self.text.byte_at(i + 2)) {
+                if i + 2 >= end || !self.text.byte_at(i + 1).is_hexdigit() || !self.text.byte_at(i + 2).is_hexdigit() {
                     return fail(i, "invalid percent-encoding");
                 }
                 i += 3;
@@ -311,16 +310,11 @@ fn fail<T>(offset: i32, message: String) -> Result<T, UriError> {
 }
 
 fn is_unreserved(c: u8) -> bool {
-    let ch = c as char;
-    return ch.is_ascii_alphanumeric() || c == b'-' || c == b'.' || c == b'_' || c == b'~';
+    return c.is_ascii_alphanumeric() || c == b'-' || c == b'.' || c == b'_' || c == b'~';
 }
 
 fn is_sub_delim(c: u8) -> bool {
     return "!$&'()*+,;=".as_bytes().contains(&c);
-}
-
-fn is_hex(c: u8) -> bool {
-    return (c as char).is_hexdigit();
 }
 
 /// `IPv6address`: eight 16-bit pieces, or fewer around one `::` that stands
@@ -347,7 +341,7 @@ fn ipv6_pieces(part: StrSlice, v4_last: bool) -> i32 {
         if i == last && v4_last && p.find(".") matches { Some(_) } {
             return if is_ipv4(p) { last + 2 } else { -1 };
         }
-        if p.is_empty() || p.len() > 4 || !p.bytes().all(|c| is_hex(c)) {
+        if p.is_empty() || p.len() > 4 || !p.bytes().all(|c| c.is_hexdigit()) {
             return -1;
         }
     }
@@ -364,7 +358,7 @@ fn is_ipv4(s: &String) -> bool {
         if o.is_empty()
             || o.len() > 3
             || o.len() > 1 && o.byte_at(0) == b'0'
-            || !o.bytes().all(|c| (c as char).is_ascii_digit())
+            || !o.bytes().all(|c| c.is_ascii_digit())
             || i32::from_str(o).unwrap() > 255 {
             return false;
         }
@@ -380,7 +374,7 @@ fn is_ip_future(s: StrSlice) -> bool {
     return dot >= 2
         && dot + 1 < s.len()
         && (s.byte_at(0) == b'v' || s.byte_at(0) == b'V')
-        && s.slice(1, dot).bytes().all(|c| is_hex(c))
+        && s.slice(1, dot).bytes().all(|c| c.is_hexdigit())
         && s.slice(dot + 1, s.len()).bytes().all(|c| is_unreserved(c) || is_sub_delim(c) || c == b':');
 }
 

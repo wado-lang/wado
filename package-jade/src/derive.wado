@@ -188,7 +188,7 @@ fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
         names.push(Document::string(wire_name(&bit, policy)));
     }
     let member = SchemaObject { type: JsonTypes::String, enum_: Option::Some(names) };
-    return Schema::Object(SchemaObject { ..array_of(Schema::Object(member)), unique_items: true });
+    return set_of(Schema::Object(member));
 }
 
 fn array_of(items: Schema) -> SchemaObject {
@@ -301,8 +301,7 @@ fn unsigned_decimal(max: String) -> Schema {
 fn signed_decimal(max: String) -> Schema
     contract max.byte_at(max.len() - 1) != b'9', "a two's complement maximum never ends in 9"
 {
-    // A two's complement range ends one further below zero than above it, and
-    // incrementing the maximum's last digit carries nothing.
+    // A two's complement range ends one further below zero than above it.
     let last = max.len() - 1;
     let below = `${max.substr_bytes(0, last)}${(max.byte_at(last) + 1) as char}`;
     return decimal_string(`^(0|-?${one_to(max)}|-${below})$`);
