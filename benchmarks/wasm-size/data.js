@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794038233012,
+  "lastUpdate": 1794044058032,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75341,6 +75341,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c23dbdbed099fab8e9bef371aa2434c02aa03171"
         },
         "date": 1794038232397,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 385142,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "062cbb92809154bd4a2bfbb9728cd81f8b17c13f",
+          "message": "Merge pull request #2570 from wado-lang/ccr-0b9ab1da-p8vs07\n\nfix(release): build `wado` for Windows, and publish a release only once every build succeeds",
+          "timestamp": "2026-11-07T18:18:09+09:00",
+          "tree_id": "75947b98521965871cf8a19ec37ed19d65008eb4",
+          "url": "https://github.com/wado-lang/wado/commit/062cbb92809154bd4a2bfbb9728cd81f8b17c13f"
+        },
+        "date": 1794044056964,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
