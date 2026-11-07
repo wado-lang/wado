@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794065075262,
+  "lastUpdate": 1794093311354,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75517,6 +75517,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/43e4ebb4a34d6253c1cb9d4da20a99655e5a5a0c"
         },
         "date": 1794065074126,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404793,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad627f8a2243aba490383db41bc306ba8cc6a552",
+          "message": "Merge pull request #2578 from wado-lang/ccr-8124cd04-j2f06n\n\nperf(eddy): load a SCIP index a document at a time, out of linear memory",
+          "timestamp": "2026-11-08T07:55:36+09:00",
+          "tree_id": "71004e83f5ff75dcecc2d11436d5aa634a297010",
+          "url": "https://github.com/wado-lang/wado/commit/ad627f8a2243aba490383db41bc306ba8cc6a552"
+        },
+        "date": 1794093310088,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
