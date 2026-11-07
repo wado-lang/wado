@@ -17,7 +17,8 @@ corpus, read as data. No validator's source is read.
 A `format` means what Draft 2020-12 defines, read strictly: by the grammar the
 specification cites, as the Test Suite's `optional/format/` cases hold it. Jade
 defines no format of its own and writes no format name the specification does
-not define, whatever another tool or registry uses.
+not define, whatever another tool or registry uses. A derived schema takes a
+`format` only when every text its type writes meets it.
 
 ## Layout
 

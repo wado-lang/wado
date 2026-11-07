@@ -398,26 +398,27 @@ fn formatted(format: String) -> Schema {
     return Schema::Object(SchemaObject { type: JsonTypes::String, format: Option::Some(format) });
 }
 
+// A Temporal type takes no `format`: each writes some text its RFC 3339 format
+// rejects, such as an expanded year, a duration of `P1Y2D`, or a time with no
+// offset.
+
 impl JsonSchema for Instant {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return formatted("date-time");
+        return of_type(JsonTypes::String);
     }
 }
 
 impl JsonSchema for PlainDate {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return formatted("date");
+        return of_type(JsonTypes::String);
     }
 }
 
 impl JsonSchema for Duration {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return formatted("duration");
+        return of_type(JsonTypes::String);
     }
 }
-
-// RFC 3339's `time` and `date-time` require an offset, which these lack, and
-// no format names a time zone annotation.
 
 impl JsonSchema for PlainTime {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {

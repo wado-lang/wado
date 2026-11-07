@@ -74,10 +74,10 @@ test "a byte type is unpadded base64url" {
     assert inline::<ByteList>() == `{"type":"string","contentEncoding":"base64url"}`;
 }
 
-test "a Temporal type is a string, with the RFC 3339 format its text meets" {
-    assert inline::<Instant>() == `{"type":"string","format":"date-time"}`;
-    assert inline::<PlainDate>() == `{"type":"string","format":"date"}`;
-    assert inline::<Duration>() == `{"type":"string","format":"duration"}`;
+test "a Temporal type is a string with no format, as some of its text meets none" {
+    assert inline::<Instant>() == `{"type":"string"}`;
+    assert inline::<PlainDate>() == `{"type":"string"}`;
+    assert inline::<Duration>() == `{"type":"string"}`;
     assert inline::<PlainTime>() == `{"type":"string"}`;
     assert inline::<PlainDateTime>() == `{"type":"string"}`;
     assert inline::<PlainYearMonth>() == `{"type":"string"}`;
