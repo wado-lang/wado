@@ -14,6 +14,7 @@ use { PARSER_HANDLE } from "./ident.wado";
 use { and_operand } from "./gen_util.wado";
 use { SCAN_EDGE_FIELD, SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
 use { translate_predicate } from "./java2wado.wado";
+use { alt_is_left_recursive } from "./lr_util.wado";
 
 /// Where a predicate's condition is rendered: the rule whose environment it
 /// translates in, whether that rule's value channel is in scope, and the
@@ -369,9 +370,9 @@ pub fn scan_answered_at_edge<S: AsStrSlice>(cond: S) -> String {
     return `(${SCAN_GATE_HANDLE}.${SCAN_EDGE_FIELD} != pos || ${and_operand(cond)})`;
 }
 
-/// The predicates past the left edge of `alt`, from element `from` on, that a
-/// scan answers, each beside the element it sits before: those prediction
-/// meets behind a prefix that matched nothing (`predicates_met_at`). Each is
+/// The predicates past the left edge of `alt` that a scan starting at element
+/// `from` answers, each beside the element it sits before: those prediction
+/// meets there behind a prefix that matched nothing (`predicates_met_at`). Each is
 /// answered at the edge alone (`scan_answered_at_edge`). One the scan cannot
 /// answer holds there, as a gate it cannot answer does.
 pub fn alt_scan_checks(
@@ -386,11 +387,9 @@ pub fn alt_scan_checks(
         return out;
     }
     let mut met: List<MetPredicate> = [];
-    let _ = predicates_met_at(&alt.elements, &alt.actions, 0, site, analysis, &mut [], &mut met);
+    let _ = predicates_met_at(&alt.elements, &alt.actions, from, site, analysis, &mut [], &mut met);
     for let [a, _] of &met {
-        if a.before_index == 0
-            || a.before_index < from
-            || !alt.actions.iter_ref().any(|own| own.source.action_id == a.source.action_id) {
+        if a.before_index == 0 || !alt.actions.iter_ref().any(|own| own.source.action_id == a.source.action_id) {
             continue;
         }
         if let Some(code) = scan_gate_condition_for(a, settings, analysis, site) {
@@ -405,22 +404,26 @@ pub fn alt_scan_checks(
 pub fn scan_answers_predicates(rules: &List<ParserRule>, settings: &GenSettings, analysis: &mut GrammarAnalysis) -> bool {
     for let mut r = 0; r < rules.len(); r += 1 {
         let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(&rules[r]) };
-        if any_alt_scan_answers(&rules[r].alternatives, settings, analysis, &site) {
+        if any_alt_scan_answers(&rules[r].alternatives, settings, analysis, &site, &rules[r].name) {
             return true;
         }
     }
     return false;
 }
 
+/// `rule_name` is the rule whose own alternatives `alts` are, or empty for a
+/// group's: a scan of a left-recursive one starts past its self-reference.
 fn any_alt_scan_answers(
     alts: &List<Alternative>,
     settings: &GenSettings,
     analysis: &mut GrammarAnalysis,
     site: &PredicateSite,
+    rule_name: &String = &NO_RULE,
 ) -> bool {
     for let alt of alts {
+        let from = if !rule_name.is_empty() && alt_is_left_recursive(alt, rule_name) { 1 } else { 0 };
         if !alt_scan_gate_conjunction(alt, settings, analysis, site).is_empty()
-            || !alt_scan_checks(alt, settings, analysis, site, 0).is_empty() {
+            || !alt_scan_checks(alt, settings, analysis, site, from).is_empty() {
             return true;
         }
         for let e of &alt.elements {
@@ -431,6 +434,8 @@ fn any_alt_scan_answers(
     }
     return false;
 }
+
+global NO_RULE: String = "";
 
 fn element_scan_answers(
     elem: &Element,

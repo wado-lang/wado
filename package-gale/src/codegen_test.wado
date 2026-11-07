@@ -1210,7 +1210,7 @@ b => (s (r b))
 // consuming a token. Behind a nullable prefix it does; past a consumed token,
 // in a rule the decision scans into, it does not. The trees are the jar's.
 test "prediction answers a predicate behind a nullable prefix" {
-    for let atn of [AtnMode::Never, AtnMode::Verify] {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
         let options = GenerateOptions { atn };
         assert parses("grammar Q;
 s : r EOF ;
