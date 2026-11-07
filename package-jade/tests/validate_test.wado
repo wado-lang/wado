@@ -69,6 +69,43 @@ test "a dynamic reference's fragment is percent-decoded before it names an ancho
     assert found[0].keyword == "/$defs/node/type";
 }
 
+/// A schema whose every level refers to the next twice, `depth` levels deep,
+/// ending in `leaf`.
+fn doubling(depth: i32, leaf: String) -> String {
+    let mut defs: List<String> = [];
+    for let i of 0..<depth {
+        defs.push(`"d${i}": {"allOf": [{"$ref": "#/$defs/d${i + 1}"}, {"$ref": "#/$defs/d${i + 1}"}]}`);
+    }
+    defs.push(`"d${depth}": ${leaf}`);
+    return `{"$ref": "#/$defs/d0", "$defs": {${defs.join(", ")}}}`;
+}
+
+test "a target many references share is evaluated once per value" {
+    assert errors(doubling(40, #"{"type": "string"}"#), #""x""#).is_empty();
+    let found = errors(doubling(40, #"{"type": "string"}"#), "[1]");
+    assert found.len() == 1;
+    assert found[0].keyword == "/$defs/d40/type";
+    let deep = doubling(40, ##"{"items": {"$ref": "#/$defs/d0"}, "type": ["array", "integer"]}"##);
+    assert errors(deep, "[[[1]], [2]]").is_empty();
+}
+
+test "a shared target is evaluated apart under each binding of a dynamic anchor" {
+    let schema = ##"{
+        "$id": "https://x.test/root",
+        "anyOf": [{"$ref": "a"}, {"$ref": "b"}],
+        "$defs": {
+            "a": {"$id": "a", "$ref": "s", "$defs": {"t": {"$dynamicAnchor": "t", "type": "string"}}},
+            "b": {"$id": "b", "$ref": "s", "$defs": {"t": {"$dynamicAnchor": "t", "type": "number"}}},
+            "s": {"$id": "s", "$dynamicRef": "#t", "$defs": {"t": {"$dynamicAnchor": "t"}}}
+        }
+    }"##;
+    assert errors(schema, "1").is_empty();
+    assert errors(schema, #""x""#).is_empty();
+    let found = errors(schema, "null");
+    assert found.len() == 1;
+    assert found[0].keyword == "/anyOf";
+}
+
 test "a reference the schema does not hold is an error at compile" {
     let e = Validator::compile(&Schema::parse(#"{"items": {"$ref": "other.json"}}"#).unwrap()).unwrap_err();
     assert e.pointer == "/items/$ref";

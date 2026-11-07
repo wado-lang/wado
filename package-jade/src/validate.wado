@@ -16,6 +16,8 @@ internal global DEFAULT_BASE: String = "jade:root";
 pub struct Validator {
     nodes: List<Compiled>,
     resources: List<Resource>,
+    /// The anchors a `$dynamicRef` may resolve through the dynamic scope.
+    dynamic_anchors: List<String>,
 }
 
 /// An instance failing one keyword.
@@ -42,18 +44,20 @@ impl Validator {
     pub fn compile(schema: &Schema) -> Result<Validator, SchemaError> {
         let mut c = Compiler {};
         c.add(schema, "", &Uri::from_str(&DEFAULT_BASE).unwrap(), null)?;
-        c.link()?;
-        return Result::Ok(Validator { nodes: c.nodes, resources: c.resources });
+        let dynamic_anchors = c.link()?;
+        return Result::Ok(Validator { nodes: c.nodes, resources: c.resources, dynamic_anchors });
     }
 
-    /// Every keyword `instance` fails, or `Ok` when it fails none.
+    /// Every keyword `instance` fails, once per value it fails at, or `Ok` when
+    /// it fails none.
     pub fn validate(&self, instance: &Node) -> Result<(), List<ValidationError>> {
         let mut run = Run {};
         self.eval(0, instance, &"", &mut run);
-        if run.errors.is_empty() {
+        let errors = run.sinks[0].errors;
+        if errors.is_empty() {
             return Result::Ok(());
         }
-        return Result::Err(run.errors);
+        return Result::Err(errors);
     }
 
     fn eval(&self, i: i32, inst: &Node, ip: &String, run: &mut Run) -> Evaluated {
@@ -92,14 +96,21 @@ impl Validator {
     /// `d`'s target: the outermost schema in the dynamic scope that declares
     /// the anchor, when `d` names one, or else the target its URI names.
     fn dynamic_target(&self, d: &DynamicRef, scope: &List<i32>) -> i32 {
-        if let Some(name) = &d.anchor {
-            for let r of *scope {
-                if let Some(t) = self.resources[r].dynamic_anchors.get_str(name) {
-                    return t;
-                }
-            }
+        if let Some(name) = &d.anchor && let Some(t) = self.outermost(name, scope) {
+            return t;
         }
         return d.target;
+    }
+
+    /// The schema the outermost resource in `scope` declares the dynamic
+    /// anchor `name` at.
+    fn outermost(&self, name: &String, scope: &List<i32>) -> Option<i32> {
+        for let r of *scope {
+            if let Some(t) = self.resources[r].dynamic_anchors.get_str(name) {
+                return Option::Some(t);
+            }
+        }
+        return null;
     }
 
     /// Follows `n`'s reference `keyword` to `t`. Reaching `t` again at the same
@@ -116,21 +127,55 @@ impl Validator {
     ) {
         for let [held, at] of run.following {
             if held == t && Document::same_node(&at, inst) {
+                run.cycles += 1;
                 run.fail(ip, &n.at, keyword, "refers back to itself without moving into the instance");
                 return;
             }
         }
+        if !self.nodes[t].shared {
+            run.following.push([t, *inst]);
+            self.apply(t, inst, ip, run, out);
+            run.following.pop();
+            return;
+        }
+        // Evaluating `t` answers alike wherever the dynamic scope binds each
+        // anchor alike, so two references reaching it at one value share it.
+        let key = MemoKey {
+            target: t,
+            at: Document::position(inst),
+            anchors: self.dynamic_anchors.iter_ref().map(|a| self.outermost(a, &run.scope).unwrap_or(-1)).collect(),
+        };
+        if let Some(k) = run.memo.get(key) && Document::same_node(&run.outcomes[k].node, inst) {
+            if !run.outcomes[k].errors.is_empty() {
+                run.failures += 1;
+            }
+            run.replay(k, out);
+            return;
+        }
+        let cycles = run.cycles;
+        run.sinks.push(Sink {});
         run.following.push([t, *inst]);
-        self.apply(t, inst, ip, run, out);
+        let evaluated = self.eval(t, inst, ip, run);
         run.following.pop();
+        let errors = run.sinks.pop().unwrap().errors;
+        let k = run.outcomes.len();
+        run.outcomes.push(Outcome { node: *inst, errors, evaluated });
+        // A cycle's error depends on the references being followed, which the
+        // next reference to `t` may not share.
+        if run.cycles == cycles && run.memo.try_insert(key, k) {
+            run.replay(k, out);
+            return;
+        }
+        run.replay(k, out);
+        run.outcomes.pop();
     }
 
     /// Evaluates subschema `t` in place, keeping what it evaluated when it
     /// passes.
     fn apply(&self, t: i32, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
-        let before = run.errors.len();
+        let before = run.failures;
         let ev = self.eval(t, inst, ip, run);
-        if run.errors.len() == before {
+        if run.failures == before {
             out.merge(&ev);
         }
     }
@@ -142,9 +187,13 @@ impl Validator {
 
     /// Evaluates subschema `t` without reporting what it fails.
     fn passes(&self, t: i32, inst: &Node, ip: &String, run: &mut Run) -> [bool, Evaluated] {
-        let mut quiet = Run { scope: run.scope, following: run.following };
-        let ev = self.eval(t, inst, ip, &mut quiet);
-        return [quiet.errors.is_empty(), ev];
+        let before = run.failures;
+        run.sinks.push(Sink {});
+        let ev = self.eval(t, inst, ip, run);
+        run.sinks.pop();
+        let ok = run.failures == before;
+        run.failures = before;
+        return [ok, ev];
     }
 
     /// The keywords that assert on the instance's value: `type`, `const`,
@@ -382,6 +431,9 @@ struct Compiled {
     always: Option<bool> = null,
     reference: Option<i32> = null,
     dynamic_ref: Option<DynamicRef> = null,
+    /// Whether more than one keyword leads here, so evaluating it once per
+    /// value saves the rest.
+    shared: bool = false,
     type: JsonTypes = JsonTypes::none(),
     const: Option<Document> = null,
     enum: Option<List<Document>> = null,
@@ -454,20 +506,71 @@ impl Evaluated {
     }
 }
 
-/// The state of one validation: the errors so far, the dynamic scope as the
-/// resources entered, outermost first, and the references being followed, each
-/// as its target and the instance it was followed at.
+/// The state of one validation.
 struct Run {
-    errors: List<ValidationError> = [],
+    /// Where errors go, innermost last: the first is the caller's, and each
+    /// other one gathers a subschema's errors apart.
+    sinks: List<Sink> = [Sink {}],
+    /// How many errors were raised, a repeat included, so a caller sees whether
+    /// a subschema failed.
+    failures: i32 = 0,
+    /// The dynamic scope, as the resources entered, outermost first.
     scope: List<i32> = [],
+    /// The references being followed, each as its target and the instance it
+    /// was followed at.
     following: List<[i32, Node]> = [],
+    /// How many times a reference was found to loop.
+    cycles: i32 = 0,
+    memo: HashMap<MemoKey, i32> = HashMap::new(),
+    outcomes: List<Outcome> = [],
 }
 
 impl Run {
     fn fail(&mut self, ip: &String, at: &String, keyword: String, message: String) {
         let pointer = if keyword.is_empty() { *at } else { `${*at}/${keyword}` };
-        self.errors.push(ValidationError { instance: *ip, keyword: pointer, message });
+        self.report(ValidationError { instance: *ip, keyword: pointer, message });
     }
+
+    fn report(&mut self, e: ValidationError) {
+        self.failures += 1;
+        let top = self.sinks.len() - 1;
+        if self.sinks[top].seen.insert(`${e.keyword}\n${e.instance}`) {
+            self.sinks[top].errors.push(e);
+        }
+    }
+
+    /// Reports outcome `k` here, as though its subschema were evaluated again.
+    fn replay(&mut self, k: i32, out: &mut Evaluated) {
+        let failures = self.failures;
+        for let e of self.outcomes[k].errors {
+            self.report(e);
+        }
+        if self.outcomes[k].errors.is_empty() {
+            out.merge(&self.outcomes[k].evaluated);
+        }
+        self.failures = failures;
+    }
+}
+
+/// A subschema's errors, each once.
+struct Sink {
+    errors: List<ValidationError> = [],
+    seen: HashSet<String> = HashSet::new(),
+}
+
+/// A shared subschema evaluated at a value, under a binding of every dynamic
+/// anchor: the schema each one resolves to, or -1 for none.
+struct MemoKey {
+    target: i32,
+    at: i32,
+    anchors: List<i32>,
+}
+
+/// What evaluating a shared subschema at `node` found.
+struct Outcome {
+    node: Node,
+    errors: List<ValidationError>,
+    evaluated: Evaluated,
 }
 
 struct Compiler {
@@ -477,6 +580,8 @@ struct Compiler {
     /// by `uri#anchor`.
     targets: HashMap<String, i32> = HashMap::new(),
     refs: List<PendingRef> = [],
+    /// The subschemas under `$defs`, which only a reference leads to.
+    defs: List<i32> = [],
 }
 
 /// A reference, resolved against its base, to look up once every target is
@@ -592,7 +697,9 @@ impl Compiler {
         node.min_properties = o.min_properties;
         node.max_properties = o.max_properties;
         node.unevaluated_properties = self.add_some(&o.unevaluated_properties, `${at}/unevaluatedProperties`, &uri, r)?;
-        self.add_map(&o.defs, `${at}/$defs`, &uri, r)?;
+        for let [_, d] of self.add_map(&o.defs, `${at}/$defs`, &uri, r)?.entries() {
+            self.defs.push(*d);
+        }
         self.nodes[i] = node;
         return Result::Ok(i);
     }
@@ -626,8 +733,17 @@ impl Compiler {
         return Result::Ok(out);
     }
 
-    /// Points every reference at its target.
-    fn link(&mut self) -> Result<(), SchemaError> {
+    /// Points every reference at its target, and marks the targets more than
+    /// one keyword leads to. Returns the anchors a `$dynamicRef` may resolve
+    /// through the dynamic scope.
+    fn link(&mut self) -> Result<List<String>, SchemaError> {
+        // The root and every subschema outside `$defs` are led to by the
+        // keyword holding them.
+        let mut leads: List<i32> = List::filled(self.nodes.len(), 1);
+        for let d of self.defs {
+            leads[d] = 0;
+        }
+        let mut anchors: List<String> = [];
         for let r of self.refs {
             let keyword = if r.dynamic { "$dynamicRef" } else { "$ref" };
             let Some([target, fragment]) = self.lookup(&r.uri) else {
@@ -636,6 +752,7 @@ impl Compiler {
                     message: "refers to no schema this document holds",
                 });
             };
+            leads[target] += 1;
             if !r.dynamic {
                 self.nodes[r.node].reference = Option::Some(target);
                 continue;
@@ -645,11 +762,22 @@ impl Compiler {
                 let declared = self.resources[self.nodes[target].owner].dynamic_anchors.get_str(&fragment);
                 if declared matches { Some(t) && t == target } {
                     anchor = Option::Some(fragment);
+                    for let declaring of self.resources {
+                        if let Some(t) = declaring.dynamic_anchors.get_str(&fragment) && t != target {
+                            leads[t] += 1;
+                        }
+                    }
+                    if !anchors.contains_str(&fragment) {
+                        anchors.push(fragment);
+                    }
                 }
             }
             self.nodes[r.node].dynamic_ref = Option::Some(DynamicRef { target, anchor });
         }
-        return Result::Ok(());
+        for let i of 0..<self.nodes.len() {
+            self.nodes[i].shared = leads[i] > 1;
+        }
+        return Result::Ok(anchors);
     }
 
     /// The subschema `uri` names, and its fragment percent-decoded.

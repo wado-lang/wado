@@ -81,6 +81,12 @@ impl Document {
         };
     }
 
+    /// Where `node` stands in its document, which tells it apart from every
+    /// other node there.
+    internal fn position(node: &Node) -> i32 {
+        return node.at;
+    }
+
     /// Whether `a` and `b` are one node, not merely equal ones.
     internal fn same_node(a: &Node, b: &Node) -> bool {
         return ref_eq(a.doc, b.doc) && a.at == b.at;
