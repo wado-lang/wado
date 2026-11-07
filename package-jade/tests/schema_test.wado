@@ -75,8 +75,7 @@ test "a value the meta-schema rejects is an error at its pointer" {
 test "$schema names Draft 2020-12's meta-schema, at a schema resource's root" {
     let draft = "https://json-schema.org/draft/2020-12/schema";
     assert reread(`{"$schema": "${draft}#"}`) == `{"$schema":"${draft}#"}`;
-    assert error_of(`{"$schema": "http://json-schema.org/draft-07/schema#"}`)
-        == "/$schema: must name Draft 2020-12's meta-schema, the only one Jade can validate against";
+    assert error_of(`{"$schema": "http://json-schema.org/draft-07/schema#"}`) == "/$schema: must name Draft 2020-12's meta-schema, the only one Jade can validate against";
     assert error_of(`{"items": {"$schema": "${draft}"}}`) == "/items/$schema: may appear only at a schema resource's root";
     assert reread(`{"items": {"$id": "i", "$schema": "${draft}"}}`) == `{"items":{"$schema":"${draft}","$id":"i"}}`;
 }

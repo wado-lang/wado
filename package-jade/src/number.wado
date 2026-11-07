@@ -63,7 +63,11 @@ impl Number {
             return Result::Ok(Number { nearest: x, decimal: null });
         }
         let d = Decimal::of_token(&de.input, &token);
-        let nearest = if let Ok(x) = rounded { x } else { f64::from_str(d.scientific()).unwrap() };
+        let nearest = if let Ok(x) = rounded {
+            x;
+        } else {
+            f64::from_str(d.scientific()).unwrap();
+        };
         if nearest.is_finite() && Decimal::of_f64(nearest) == d {
             return Result::Ok(Number { nearest, decimal: null });
         }
@@ -155,7 +159,7 @@ impl Divisor {
             return true;
         }
         let k = a.exp - self.whole.exp;
-        // `b` would then divide `a` by 10, which ends in no 0.
+        // `a` would then be a multiple of `b × 10^(−k)`, ending in a 0 it lacks.
         if k < 0 {
             return false;
         }
@@ -177,7 +181,7 @@ fn divide_small(digits: &String, n: i32) -> Option<String> {
         }
         r %= n;
     }
-    return if r == 0 { Option::Some(q); } else { null; };
+    return if r == 0 { Option::Some(q) } else { null };
 }
 
 /// Whether `divisor` divides `digits` followed by `zeros` zeros, by long
@@ -286,7 +290,13 @@ impl Decimal {
 
     /// -1, 0 or 1 as the number is negative, zero or positive.
     fn signum(&self) -> i32 {
-        return if self.digits.is_empty() { 0 } else if self.negative { -1 } else { 1 };
+        return if self.digits.is_empty() {
+            0;
+        } else if self.negative {
+            -1;
+        } else {
+            1;
+        };
     }
 }
 
@@ -319,7 +329,7 @@ struct Token {
     negative: bool,
     first: i32,
     last: i32,
-    /// The digits from `first` to `last`.
+    /// How many digits run from `first` to `last`.
     count: i32,
     exp: i64,
     /// One past the token.
@@ -396,7 +406,7 @@ impl Token {
     /// that f64 tells.
     fn fits_f64(&self) -> bool {
         let lead = self.exp + (self.count - 1) as i64;
-        return self.count == 0 || (self.count <= F64_DIGITS && -F64_EXPONENT <= lead && lead <= F64_EXPONENT);
+        return self.count == 0 || self.count <= F64_DIGITS && -F64_EXPONENT <= lead && lead <= F64_EXPONENT;
     }
 }
 

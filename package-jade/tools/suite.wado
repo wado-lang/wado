@@ -44,7 +44,7 @@ export fn run() with (Stdout, Preopens) {
         }
     }
     files.sort();
-    files.extend(OPTIONAL_FILES);
+    files.extend(&OPTIONAL_FILES);
     for let file of files {
         if let Some(why) = skip_reason(&file) {
             println(`left out ${file}: ${why}`);
@@ -121,14 +121,18 @@ fn json(node: &Node) -> String {
     return match node.kind() {
         Number => {
             let n = node.as_number().unwrap();
-            if n.is_f64() { to_string(&n).unwrap() } else { `${n}` };
+            if n.is_f64() {
+                to_string(&n).unwrap();
+            } else {
+                `${n}`;
+            }
         },
         Array => {
             let items: List<String> = node.items().map(|v| json(&v)).collect();
             `[${items.join(",")}]`;
         },
         Object => {
-            let members: List<String> = node.entries().map(|[k, v]| `${to_string(&k).unwrap()}:${json(&v)}`).collect();
+            let members: List<String> = node.entries().map(|m| `${to_string(&m.0).unwrap()}:${json(&m.1)}`).collect();
             `{${members.join(",")}}`;
         },
         Null | Bool | String => to_string(node).unwrap(),

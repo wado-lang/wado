@@ -1,4 +1,4 @@
-use { Document, Schema, SchemaObject, ValidationError, Validator } from "../src/lib.wado";
+use { Document, Number, Schema, SchemaObject, ValidationError, Validator } from "../src/lib.wado";
 
 fn errors(schema: String, data: String) -> List<ValidationError> {
     let validator = Validator::compile(&Schema::parse(schema).unwrap()).unwrap();
@@ -77,7 +77,7 @@ test "a reference the schema does not hold is an error at compile" {
 
 test "a schema built breaking a keyword's rule is an error at compile" {
     let schema = Schema::Object(SchemaObject {
-        items: Option::Some(Schema::Object(SchemaObject { multiple_of: Option::Some(0.0) })),
+        items: Option::Some(Schema::Object(SchemaObject { multiple_of: Option::Some(Number::from(0.0)) })),
     });
     let e = Validator::compile(&schema).unwrap_err();
     assert e.pointer == "/items/multipleOf";
