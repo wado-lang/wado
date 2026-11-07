@@ -97,6 +97,7 @@ use {
     LrAlt,
     LrCont,
     LrContRest,
+    LrRestBody,
     LrDispatchData,
     RuleHeader,
     AltBody,
@@ -749,10 +750,17 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     // pass `atn_class` through.
     let lr_dispatch = compute_lr_dispatch_data(&lr_alts, &suffix_classes, atn_class);
 
-    let atom_gated = !atn_class && stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx);
-    let cont_rests = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, atn_class);
-    let mid_operand_gated = atom_gated || !cont_rests.is_empty();
-    let loop_checked = !atn_class && ctx.settings.atn.verifies();
+    let mut cont_rests: List<LrContRest> = [];
+    if !atn_class {
+        stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx, &mut cont_rests);
+    }
+    stamp_lr_self_ref_min_prec(&mut lr_alts, rule, ctx, atn_class, &mut cont_rests);
+    let mid_operand_gated = !cont_rests.is_empty();
+    // The simulator is handed no predicate's verdict, so a loop a predicate
+    // gates stays unchecked.
+    let loop_checked = !atn_class
+        && ctx.settings.atn.verifies()
+        && !lr_alts.iter_ref().any(|a| ctx.alt_has_gate(&rule.alternatives[a.alt_index]));
     if loop_checked {
         ctx.mark_checks_with_simulator();
     }
@@ -892,17 +900,19 @@ fn fixed_token_kind(elem: &Element, analysis: &mut GrammarAnalysis) -> Option<i3
 }
 
 /// Stamps each operand of an LR suffix, parse and scan side alike, with its
-/// precedence and continuation gate; returns the rests the gated mid operands
-/// leave behind. A self-reference nested in a subrule is not an operand but a
-/// plain call, ANTLR4's `e[0]`, so it keeps the callee's defaults.
-fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
+/// precedence and continuation gate, adding to `rests` what each gated mid
+/// operand leaves behind. A self-reference nested in a subrule is not an
+/// operand but a plain call, ANTLR4's `e[0]`, so it keeps the callee's defaults.
+fn stamp_lr_self_ref_min_prec(
     lr_alts: &mut List<LrAlt>,
-    rule_name: S,
-    rule_snake: S1,
+    rule: &ParserRule,
+    ctx: &mut LowerContext,
     atn_class: bool,
-) -> List<LrContRest> {
+    rests: &mut List<LrContRest>,
+) {
+    let rule_name = &rule.name;
+    let rule_snake = &rule.snake_name;
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
-    let mut rests: List<LrContRest> = [];
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let suffix_len = lr_alts[i].suffix.ops.len();
         let conflict_min = lr_alts[i].conflict_min;
@@ -935,10 +945,16 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
                 prec = if k + 1 < suffix_len { 0 } else { natural_trailing };
             } else if alt_gated && k + 1 == suffix_len {
                 prec = natural_trailing;
-            } else if prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
+            } else if k + 1 < suffix_len
+                && mid_operand_rest_contested(
+                    &rule.alternatives[lr_alts[i].alt_index].elements,
+                    k + 2,
+                    &lr_suffix_first_tokens,
+                    ctx,
+                ) {
                 prec = 0;
                 cont = LrCont::Rest(rests.len());
-                rests.push(LrContRest { alt: i, from: k + 1 });
+                rests.push(LrContRest { body: LrRestBody::Suffix(i), from: k + 1 });
                 alt_gated = true;
             }
             lr_alts[i].suffix.ops[k] = rebind_self_ref_lr_cont(
@@ -952,24 +968,35 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
             );
         }
     }
-    return rests;
+}
+
+/// Whether what follows a mid operand, `elements[from..]`, can start with a
+/// token the loop takes, or be empty. The operand's loop could then climb past
+/// what its alternative needs, so it is gated: it stops at the last boundary
+/// where that rest still parses. Elsewhere, as in `'(' e ')'`, the loop stops
+/// by itself.
+fn mid_operand_rest_contested(
+    elements: &List<Element>,
+    from: i32,
+    lr_suffix_first_tokens: &List<i32>,
+    ctx: &mut LowerContext,
+) -> bool {
+    return ctx.analysis.tail_is_nullable_deep(elements, from)
+        || sets_overlap(&ctx.analysis.first_of_elements_from(elements, from), lr_suffix_first_tokens);
 }
 
 /// Stamps an atom's mid operand the way `stamp_lr_self_ref_min_prec` stamps a
-/// suffix's; returns whether any is gated. `'new' e '<'? args` owes `args` to
-/// the `new`, and the operand's own call suffix would take them, so the operand
-/// climbs only while what follows it can still start. Only where the suffix
-/// loop can take that continuation's first token: elsewhere, as in
-/// `'(' e ')'`, the loop stops by itself.
+/// suffix's. `'new' e '<'? args` owes `args` to the `new`, and the operand's
+/// own call suffix would take them.
 fn stamp_lr_atom_mid_operands(
     atom: &mut MultiAltRule,
     rule: &ParserRule,
     non_lr_indices: &List<i32>,
     lr_alts: &List<LrAlt>,
     ctx: &mut LowerContext,
-) -> bool {
+    rests: &mut List<LrContRest>,
+) {
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
-    let mut gated = false;
     for let mut a = 0; a < atom.alts.len(); a += 1 {
         let elements = &rule.alternatives[non_lr_indices[a]].elements;
         let ops_len = atom.alts[a].ops.len();
@@ -979,29 +1006,19 @@ fn stamp_lr_atom_mid_operands(
             if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { None } {
                 continue;
             }
-            if ctx.analysis.tail_is_nullable_deep(elements, k + 1) {
+            if !mid_operand_rest_contested(elements, k + 1, &lr_suffix_first_tokens, ctx) {
                 continue;
             }
-            let cont_first = ctx.analysis.first_of_elements_from(elements, k + 1);
-            if !sets_overlap(&cont_first, &lr_suffix_first_tokens) {
-                continue;
-            }
-            let Some(id) = ctx.intern_follow_mask(&[cont_first]) else {
-                continue;
-            };
-            atom.alts[a].ops[k] = rebind_self_ref_lr_cont(
-                rebind_self_ref_min_prec(atom.alts[a].ops[k], 0),
-                LrCont::Mask(id),
-            );
+            let cont = LrCont::Rest(rests.len());
+            rests.push(LrContRest { body: LrRestBody::Atom(a), from: k + 1 });
+            atom.alts[a].ops[k] = rebind_self_ref_lr_cont(rebind_self_ref_min_prec(atom.alts[a].ops[k], 0), cont);
             atom.scan_alts[a].elements[k] = rebind_scan_self_ref_lr_cont(
                 rebind_scan_self_ref_min_prec(atom.scan_alts[a].elements[k], &rule.snake_name, 0),
                 &rule.snake_name,
-                LrCont::Mask(id),
+                cont,
             );
-            gated = true;
         }
     }
-    return gated;
 }
 
 /// A trailing operand ends the invocation it sits in, so the continuation that

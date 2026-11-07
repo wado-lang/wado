@@ -361,9 +361,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             highlight: emit_highlight,
             superclass: ctx.settings.has_superclass(),
             scan_memo: ctx.plan.scan_memo,
-            lr_frames: lowered.parser_rules.iter_ref().any(
-                |r| r matches { LeftRecursive(l) && l.mid_operand_gated },
-            ),
+            lr_frames: ctx.plan.lr_frames,
         },
     );
     let mut head = CodeWriter::new();

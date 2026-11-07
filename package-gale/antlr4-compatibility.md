@@ -1076,7 +1076,9 @@ the compiled fast path:**
    continuation holds, which is the one ANTLR4's full context picks. Each
    iteration hands its suffix the loop itself as the continuation, so an
    operand inside it stops only where the loop can still go on to that
-   boundary. A trailing operand keeps ANTLR4's precedence. Fixture
+   boundary. A trailing operand keeps ANTLR4's precedence. A mid operand is
+   gated this way wherever what follows it can open with a loop operator or be
+   empty, in an atom (`'new' e args`) as in a suffix. Fixture
    `lr_mid_operand.g4`.
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
    several `??` in one rule decide independently. Both emit walkers route it

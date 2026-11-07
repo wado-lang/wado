@@ -386,19 +386,25 @@ pub variant LrCont {
     /// A trailing operand ends the invocation it sits in, so it leaves behind
     /// whatever that invocation must.
     Forward,
-    /// An atom's mid operand: the follow mask of what the atom owes after it.
-    Mask(i32),
-    /// A suffix's mid operand: the rest of its alternative, then whatever the
-    /// invocation must leave behind. That rest holds another operand of the
+    /// A mid operand: the rest of its alternative, then whatever the
+    /// invocation must leave behind. That rest may hold another operand of the
     /// rule, so only scanning it says where the operand may stop.
     Rest(i32),
 }
 
-/// The elements of `lr_alts[alt]`'s suffix from `from` on, which a mid operand
-/// at `from - 1` must leave behind.
+/// The elements of `body` from `from` on, which a mid operand at `from - 1`
+/// must leave behind.
 pub struct LrContRest {
-    pub alt: i32,
+    pub body: LrRestBody,
     pub from: i32,
+}
+
+/// The walk a mid operand sits in.
+pub variant LrRestBody {
+    /// `atom.scan_alts[a]`.
+    Atom(i32),
+    /// `lr_alts[i].scan_suffix`.
+    Suffix(i32),
 }
 
 /// One left-recursive alternative, with the prefix self-reference

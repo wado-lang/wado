@@ -1084,6 +1084,53 @@ a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and 
 ";
 }
 
+// The mid operand's rest opens with a group of loop operators, so it climbs
+// only to where the group and the trailing operand still parse. The trees are
+// the jar's.
+test "a mid operand stops where a rest opening with a group still parses" {
+    let g4 = "grammar M;
+s : e EOF ;
+e : e 'x' e ('y' | 'z') e
+  | e 'y' e
+  | e 'z' e
+  | ID
+  ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses_each(g4, [
+        ["s", "a x b z c y d z e"],
+        ["s", "a y b x c z d y e y f y g"],
+    ]) == "a x b z c y d z e => (s (e (e a) x (e (e b) z (e (e c) y (e d))) z (e e)))
+a y b x c z d y e y f y g => (s (e (e a) y (e (e b) x (e (e c) z (e (e (e d) y (e e)) y (e f))) y (e g))))
+";
+}
+
+// An atom's mid operand owes `args` to its `new`, and climbs past a call whose
+// end no `(` follows to the last end one does. The trees are the jar's.
+test "an atom's mid operand climbs to the last boundary its rest parses at" {
+    let g4 = "grammar N;
+s : e EOF ;
+e : 'new' e args
+  | e args
+  | e '.' ID
+  | e '+' e
+  | ID
+  ;
+args : '(' e? ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    assert parses_each(g4, [
+        ["s", "new a . b ( c . d ) + e + new f ( ) ( g . h )"],
+        ["s", "new a ( b ) . c ( d . e ) ( f )"],
+        ["s", "new new a ( ) . b ( c ) + d . e"],
+    ]) == "new a . b ( c . d ) + e + new f ( ) ( g . h ) => (s (e new (e (e (e (e (e a) . b) (args ( (e (e c) . d) ))) + (e e)) + (e new (e f) (args ( )))) (args ( (e (e g) . h) ))))
+new a ( b ) . c ( d . e ) ( f ) => (s (e new (e (e (e (e a) (args ( (e b) ))) . c) (args ( (e (e d) . e) ))) (args ( (e f) ))))
+new new a ( ) . b ( c ) + d . e => (s (e (e new (e (e new (e a) (args ( ))) . b) (args ( (e c) ))) + (e (e d) . e)))
+";
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;

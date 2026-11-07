@@ -41,7 +41,6 @@ use {
     lr_cont_forward,
     follow_yields_call,
     follow_yields_call_if,
-    follow_yields_call_of,
     rule_kind_const,
     open_chain_arm,
 } from "./gen_util.wado";
@@ -344,7 +343,6 @@ fn lr_cont_expr(cont: &LrCont, ctx: &mut EmitContext) -> Option<String> {
     return match *cont {
         Unset => null,
         Forward => Option::Some("lr_cont"),
-        Mask(id) => Option::Some(ctx.follow_mask_ref(id)),
         Rest(id) => Option::Some(`lr_frame(${id}, ${lr_frame_prec(ctx)}, ${follow_forward_args()}, lr_cont)`),
     };
 }
@@ -857,7 +855,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         let LeftRecursive(l) = lowered_rule else {
             unreachable();
         };
-        gen_lr_cont_fns(w, lr_alts, &l.cont_rests, ctx, fn_name);
+        gen_lr_cont_fns(w, lr_alts, atom_scan_alts, &l.cont_rests, ctx, fn_name);
     }
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop,
@@ -888,14 +886,12 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     ctx.cursor.begin_ref_frame();
     f2.emit_begin(w);
-    w.line(
-        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`,
-    );
+    w.line(`let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)});`);
     w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
         gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
     } else {
-        gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
+        gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx);
     }
     w.line("return pos;");
     end_fn(w, ctx);
@@ -1059,39 +1055,41 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
     }
 }
 
-/// `scan_X__cont_holds`, which says whether the continuation an invocation of
-/// `X` must leave behind holds at `pos`, and a scan of each rest it may name.
-/// Its callers have already answered for no continuation (`lr_cont_holds_call`).
-/// A follow mask holds where its tokens are next. A loop frame holds where the
-/// loop it names can go on to a cut. A rest frame holds where the remainder of
-/// a mid operand's alternative scans and the frame's own continuation then
-/// holds.
+/// `scan_X__cont_holds`, which says whether the continuation frame an
+/// invocation of `X` must leave behind holds at `pos`, and a scan of each rest
+/// a frame may name. Its callers have already answered for no continuation
+/// (`lr_cont_holds_call`). A loop frame holds where the loop it names can go on
+/// to a cut. A rest frame holds where the remainder of a mid operand's
+/// alternative scans and the frame's own continuation then holds. The answer
+/// leaves the scan gate as it found it.
 fn gen_lr_cont_fns<S: AsStrSlice>(
     w: &mut CodeWriter,
     lr_alts: &List<LrAlt>,
+    atom_scan_alts: &List<ScanBody>,
     rests: &List<LrContRest>,
     ctx: &mut EmitContext,
     fn_name: S,
 ) {
     let was_scan = ctx.cursor.set_in_scan_fn(true);
     for let mut i = 0; i < rests.len(); i += 1 {
-        let suffix = &lr_alts[rests[i].alt].scan_suffix;
+        // An atom's walk calls its groups' scans with `lr_cont`, which a
+        // suffix's does not, so the rest takes it the way its walk does.
+        let [body, in_atom] = match rests[i].body {
+            Atom(a) => [&atom_scan_alts[a], true],
+            Suffix(s) => [&lr_alts[s].scan_suffix, false],
+        };
+        let was_in_atom = ctx.cursor.set_lr_cont_in_atom(in_atom);
         let mut f = scan_fn_spec(lr_cont_rest_fn(&fn_name, i), ctx);
-        add_lr_cont_param(&mut f);
+        if !in_atom {
+            add_lr_cont_param(&mut f);
+        }
         f.emit_begin(w);
         w.line("let mut pos = pos;");
-        gen_scan_op_elements(
-            w,
-            &suffix.elements,
-            rests[i].from,
-            suffix.elements.len(),
-            ctx,
-            "return -1;",
-            &suffix.gates,
-        );
+        gen_scan_op_elements(w, &body.elements, rests[i].from, body.elements.len(), ctx, "return -1;", &body.gates);
         w.line("return pos;");
         end_fn(w, ctx);
         w.blank();
+        ctx.cursor.set_lr_cont_in_atom(was_in_atom);
     }
 
     ctx.cursor.begin_ref_frame();
@@ -1100,41 +1098,34 @@ fn gen_lr_cont_fns<S: AsStrSlice>(
     f.add_param("lr_cont", "i64");
     f.set_return_type("bool");
     f.emit_begin(w);
-    w.begin("if let Some(frame) = lr_frame_of(lr_cont)");
+    w.line("let frame = lr_frame_at(lr_cont);");
     let mut state: List<String> = ["tokens", "pos"];
     state.extend(&ctx.scan_state_args());
     gen_scan_gate_save(w, ctx, "cont");
-    let loop_cut = `${fn_name}__loop(${state.join(", ")}, frame.follow, frame.min_prec, frame.cont)`;
-    if !rests.is_empty() {
-        w.begin("if frame.rest == LR_LOOP_REST");
+    w.begin("let holds = if frame.rest == LR_LOOP_REST");
+    w.line(`${fn_name}__loop(${state.join(", ")}, frame.follow, frame.min_prec, frame.cont) >= 0`);
+    w.else_begin("else");
+    let mut args = state;
+    if ctx.helpers_take_prec() {
+        args.push("frame.min_prec");
     }
-    w.line(`let cut = ${loop_cut};`);
+    args.push("frame.follow");
+    args.push("frame.cont");
+    let rest_args = args.join(", ");
+    if rests.len() == 1 {
+        w.line(`let end = ${lr_cont_rest_fn(&fn_name, 0)}(${rest_args});`);
+    } else {
+        w.begin("let end = match frame.rest");
+        for let mut i = 0; i < rests.len(); i += 1 {
+            let pattern = if i + 1 < rests.len() { `${i}` } else { "_" };
+            w.line(`${pattern} => ${lr_cont_rest_fn(&fn_name, i)}(${rest_args}),`);
+        }
+        w.end_with(";");
+    }
+    w.line(`end >= 0 && ${lr_cont_holds_call(&fn_name, "tokens", "end", ctx, "frame.cont")}`);
+    w.end_with(";");
     gen_scan_gate_restore(w, ctx, "cont");
-    w.line("return cut >= 0;");
-    if !rests.is_empty() {
-        w.end();
-        let mut args = state;
-        if ctx.helpers_take_prec() {
-            args.push("frame.min_prec");
-        }
-        args.push("frame.follow");
-        args.push("frame.cont");
-        let rest_args = args.join(", ");
-        if rests.len() == 1 {
-            w.line(`let end = ${lr_cont_rest_fn(&fn_name, 0)}(${rest_args});`);
-        } else {
-            w.begin("let end = match frame.rest");
-            for let mut i = 0; i < rests.len(); i += 1 {
-                let pattern = if i + 1 < rests.len() { `${i}` } else { "_" };
-                w.line(`${pattern} => ${lr_cont_rest_fn(&fn_name, i)}(${rest_args}),`);
-            }
-            w.end_with(";");
-        }
-        gen_scan_gate_restore(w, ctx, "cont");
-        w.line(`return end >= 0 && ${lr_cont_holds_call(&fn_name, "tokens", "end", ctx, "frame.cont")};`);
-    }
-    w.end();
-    w.line(`return ${follow_yields_call_of("tokens", "pos", "lr_cont")};`);
+    w.line("return holds;");
     end_fn(w, ctx);
     w.blank();
     ctx.cursor.set_in_scan_fn(was_scan);
@@ -4188,7 +4179,7 @@ fn gen_lr_fn<S: AsStrSlice>(
     if mid_operand_gated {
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         w.line(
-            `let _lr_cut = if lr_outer == 0 { i32::MAX } else { ${scan_fn}__loop(&p.kinds, p.pos${scan_trailing_args(
+            `let _lr_cut = if lr_outer == 0 || p.recovering { i32::MAX } else { ${scan_fn}__loop(&p.kinds, p.pos${scan_trailing_args(
                 ctx,
                 true,
             )}, min_prec, lr_outer) };`,
