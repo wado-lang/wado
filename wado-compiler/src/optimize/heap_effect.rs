@@ -795,9 +795,12 @@ impl HeapEffects<'_> {
                     return;
                 };
                 // A reference to a cell target, or to another reference, is a
-                // cell, keyed as `TypeTable::cell_key` keys it.
-                if tt.ref_depth(payload) > 1 || tt.is_boxed_reference_target(arg) {
-                    out.insert(tt.type_key(tt.peel_refs(arg)));
+                // cell, keyed as `TypeTable::cell_key` keys it. A table without
+                // that key's type holds no such cell.
+                if (tt.ref_depth(payload) > 1 || tt.is_boxed_reference_target(arg))
+                    && let Some(shared) = tt.shared_ref_to(tt.peel_refs(arg))
+                {
+                    out.insert(tt.type_key(shared));
                 }
                 self.reach_into(arg, seen, out);
             }

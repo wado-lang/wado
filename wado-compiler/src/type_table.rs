@@ -318,7 +318,15 @@ impl TypeTable {
             let id = self.types.next_id();
             self.index_type(id, &ty);
             self.push_type(ty.clone());
+            let shared_counterpart = match ty {
+                ResolvedType::MutRef(pointee) => Some(ResolvedType::Ref(pointee)),
+                _ => None,
+            };
             self.intern_map.insert(ty, id);
+            // `cell_key` keys every cell by the shared reference to its pointee.
+            if let Some(shared) = shared_counterpart {
+                self.intern(shared);
+            }
             id
         };
         if self.erased { self.erase_type(id) } else { id }
@@ -480,14 +488,23 @@ impl TypeTable {
         }
     }
 
-    /// The key a cell `cell` names is made under: its innermost pointee, so a
-    /// `&X` and a `&mut X`, at any depth, name one cell. A cell of a struct,
-    /// variant or function shares the key of that object, which only merges
-    /// what an analysis may assume apart.
+    /// The key a cell `cell` names is made under: the shared reference to its
+    /// innermost pointee, so a `&X` and a `&mut X`, at any depth, name one
+    /// cell, as a reference coerces under a shared one. No struct, variant or
+    /// function object is keyed by a reference, so none shares it.
     #[must_use]
     pub fn cell_key(&self, cell: TypeId) -> TypeKey {
         assert!(self.cell_payload(cell).is_some(), "a cell reference");
-        self.type_key(self.peel_refs(cell))
+        let shared = self
+            .shared_ref_to(self.peel_refs(cell))
+            .expect("interning `&mut X` interns `&X`");
+        self.type_key(shared)
+    }
+
+    /// `&pointee`, if the table holds it. It holds one for every `&mut pointee`.
+    #[must_use]
+    pub fn shared_ref_to(&self, pointee: TypeId) -> Option<TypeId> {
+        self.intern_map.get(&ResolvedType::Ref(pointee)).copied()
     }
 
     /// The heap object a value of `ty` is, or reaches first through its
@@ -7508,6 +7525,7 @@ mod tests {
         assert_eq!(table.cell_key(shared), table.cell_key(mutable));
         assert_eq!(table.cell_key(deep_shared), table.cell_key(deep_mutable));
         assert_eq!(table.heap_object_key(mutable), Some(table.cell_key(shared)));
+        assert_ne!(table.cell_key(shared), table.type_key(TypeTable::I32));
         assert_eq!(table.heap_object_key(TypeTable::I32), None);
     }
 
