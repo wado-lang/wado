@@ -75,24 +75,25 @@ impl TirOptVisitor for ListViewExpander<'_> {
     }
 }
 
-/// `value` dereferenced to the layer whose own impl of `list_arg` answers, and
-/// the type that impl is written for: a reference holds the trait by its
-/// pointee's answer, unless an impl is written for the reference itself
-/// (`&LinearArray<T>`), which a `&mut` to the same pointee reaches too.
+/// `value` dereferenced to the outermost layer with an impl of `list_arg`
+/// written for it, or for what it passes for, and that type: a reference holds
+/// the trait by its pointee's answer, unless an impl is written for the
+/// reference itself (`&LinearArray<T>`).
 fn answering_layer(
     mut value: TirExpr,
     list_arg: &FqTraitName,
     trait_env: &TraitEnv,
     tt: &mut TypeTable,
 ) -> (TirExpr, TypeId) {
-    while let Some(pointee) = tt.ref_pointee(value.type_id) {
-        let shared = tt.make_ref(pointee);
-        if written_impl_at(trait_env, list_arg, shared, tt) {
-            return (value, shared);
-        }
+    let layers = tt.reference_layers(value.type_id);
+    let &(depth, answering) = layers
+        .iter()
+        .find(|&&(_, ty)| written_impl_at(trait_env, list_arg, ty, tt))
+        .unwrap_or_else(|| layers.last().expect("a type is its own first layer"));
+    for _ in 0..depth {
+        let pointee = tt.ref_pointee(value.type_id).expect("a layer under a reference");
         let span = value.span;
         value = deref_expr(value, pointee, span);
     }
-    let value_type = value.type_id;
-    (value, value_type)
+    (value, answering)
 }

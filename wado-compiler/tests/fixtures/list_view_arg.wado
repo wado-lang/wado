@@ -113,12 +113,15 @@ test "a view pins a generic view parameter's element" {
 test "a reference converts as what it points at" {
     let mut list: List<u8> = [1, 2, 3];
     let bytes: ByteList = b"\x01\x02";
-    let linear = LinearArray::<u8>::filled(2, 4);
+    let mut linear = LinearArray::<u8>::filled(2, 4);
     let lent = &linear;
     assert sum(&list) == 6;
     assert sum(&mut list) == 6;
     assert sum(&bytes) == 3;
     assert sum(&lent) == 8;
+    let lent_mut = &mut linear;
+    assert sum(lent_mut) == 8;
+    assert sum(&lent_mut) == 8;
 }
 
 test "a temporary array lives through the call" {

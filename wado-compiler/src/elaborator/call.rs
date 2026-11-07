@@ -853,15 +853,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             tt.compiler_trait_fq(CompilerItem::ListArg)
                 .with_args(vec![tt.fq_type_name(element)])
         };
-        // A `&mut` converts as the `&` to its pointee does, as it passes for one.
-        let shared = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            (tt.ref_kind(arg) == Some(RefKind::Mut)).then(|| {
-                let pointee = tt.ref_pointee(arg).expect("a `&mut` has a pointee");
-                tt.make_ref(pointee)
-            })
-        };
-        std::iter::once(arg).chain(shared).any(|ty| {
+        let layers = self.tysys.type_table.borrow_mut().reference_layers(arg);
+        layers.into_iter().any(|(_, ty)| {
             self.tysys
                 .type_implements_trait(&self.annotate_ctx, ty, &list_arg)
         })
