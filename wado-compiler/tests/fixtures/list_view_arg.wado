@@ -109,6 +109,17 @@ test "a view pins a generic view parameter's element" {
     assert count(&view) == 3;
 }
 
+test "a reference converts as what it points at" {
+    let mut list: List<u8> = [1, 2, 3];
+    let bytes: ByteList = b"\x01\x02";
+    let linear = LinearArray::<u8>::filled(2, 4);
+    let lent = &linear;
+    assert sum(&list) == 6;
+    assert sum(&mut list) == 6;
+    assert sum(&bytes) == 3;
+    assert sum(&lent) == 8;
+}
+
 test "a temporary array lives through the call" {
     // The debug allocator poisons a freed block with 0xFF, so a block freed
     // before the call reads as 765.

@@ -9,7 +9,9 @@ use std::rc::Rc;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::synthesis::common::ref_expr;
+use crate::name::FqTraitName;
+use crate::synthesis::common::{deref_expr, ref_expr};
+use crate::synthesis::template::written_impl_at;
 use crate::synthesis::traits::trait_call_on_type;
 use crate::tir::{TirExpr, TirExprKind, TirModule};
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
@@ -54,9 +56,10 @@ impl TirOptVisitor for ListViewExpander<'_> {
         let list_arg = tt
             .compiler_trait_fq(CompilerItem::ListArg)
             .with_args(vec![tt.fq_type_name(element)]);
+        let value = answering_layer(*value, &list_arg, self.trait_env, &tt);
         let value_type = value.type_id;
         let lowered = trait_call_on_type(
-            *value,
+            value,
             value_type,
             &list_arg,
             "lowered",
@@ -71,4 +74,22 @@ impl TirOptVisitor for ListViewExpander<'_> {
         *expr = ref_expr(lowered, expr.type_id, expr.span);
         true
     }
+}
+
+/// `value` dereferenced to the layer whose own impl of `list_arg` answers: a
+/// reference holds the trait by its pointee's answer, unless an impl is written
+/// for the reference itself (`&LinearArray<T>`).
+fn answering_layer(
+    mut value: TirExpr,
+    list_arg: &FqTraitName,
+    trait_env: &TraitEnv,
+    tt: &TypeTable,
+) -> TirExpr {
+    while let Some(pointee) = tt.ref_pointee(value.type_id)
+        && !written_impl_at(trait_env, list_arg, value.type_id, tt)
+    {
+        let span = value.span;
+        value = deref_expr(value, pointee, span);
+    }
+    value
 }
