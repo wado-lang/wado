@@ -107,6 +107,7 @@ use {
     TournamentDispatch,
     ScanBody,
     ScanGate,
+    ScanGateStep,
     ScanElement,
     ScanTokenElement,
     ScanRuleCallElement,
@@ -755,12 +756,14 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx, &mut cont_rests);
     }
     stamp_lr_self_ref_min_prec(&mut lr_alts, rule, ctx, atn_class, &mut cont_rests);
-    let loop_checked = !atn_class
-        && ctx.settings.atn.verifies()
-        && !lr_alts.iter_ref().any(|a| {
-            let alt = &rule.alternatives[a.alt_index];
-            return ctx.meets_predicate_at(alt, 0) || ctx.meets_predicate_at(alt, 1);
-        });
+    let mut loop_meets_predicate = false;
+    for let a of &lr_alts {
+        let alt = &rule.alternatives[a.alt_index];
+        if ctx.meets_predicate_at(alt, 0) || ctx.meets_predicate_at(alt, 1) {
+            loop_meets_predicate = true;
+        }
+    }
+    let loop_checked = !atn_class && ctx.settings.atn.verifies() && !loop_meets_predicate;
     if loop_checked {
         ctx.mark_checks_with_simulator();
     }
@@ -1485,7 +1488,7 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut LowerCo
             false,
         ));
     }
-    return ScanBody { elements, gates: scan_gates_for(alt, &ctx.settings, 1) };
+    return ScanBody { elements, gates: scan_gates_for(alt, ctx, 1) };
 }
 
 /// Index (within `alt.elements`) of the LAST self-reference to
@@ -1794,14 +1797,17 @@ fn lower_scan_body<S: AsStrSlice>(
     }
     return ScanBody {
         elements,
-        gates: scan_gates_for(alt, &ctx.settings),
+        gates: scan_gates_for(alt, ctx),
         gate_cond: ctx.alt_scan_gate_conditions(alt),
     };
 }
 
-/// The gate actions of `alt` a scan can run by walking — see `scan_gate.wado`.
-/// Empty unless the grammar declares a simulable gate member, so a grammar
-/// without one lowers exactly as before.
+/// What a scan of `alt` runs between elements — see `scan_gate.wado`: the
+/// predicates past its left edge it answers, then the gate actions it can run
+/// by walking. They keep `alt`'s order, since every answered predicate sits
+/// ahead of the first action. Empty unless the grammar declares a simulable
+/// gate member or a scan answers a predicate, so any other grammar lowers
+/// exactly as before.
 ///
 /// `from` is the surface index the scan body starts at. An LR suffix walks
 /// `elements[1..]`, so it positions its gates against what it actually emits.
@@ -1810,11 +1816,15 @@ fn lower_scan_body<S: AsStrSlice>(
 /// with the leading self-ref, and `emit_lr_branch_body` interleaves the
 /// alternative's actions from `before == 1`. The parse never runs it, so
 /// simulating it leaves the scan holding a value no parse produces.
-pub fn scan_gates_for(alt: &Alternative, settings: &GenSettings, from: i32 = 0) -> List<ScanGate> {
+fn scan_gates_for(alt: &Alternative, ctx: &LowerContext, from: i32 = 0) -> List<ScanGate> {
+    let settings = &ctx.settings;
     if !settings.emit_scan_gate() {
         return [];
     }
     let mut gates: List<ScanGate> = [];
+    for let [before_index, cond] of ctx.alt_scan_checks(alt, from) {
+        gates.push(ScanGate { step: ScanGateStep::Check(cond), before_index: before_index - from });
+    }
     for let a of &alt.actions {
         if a.kind matches { Predicate } || a.before_index < from {
             continue;
@@ -1822,7 +1832,7 @@ pub fn scan_gates_for(alt: &Alternative, settings: &GenSettings, from: i32 = 0) 
         let body = settings.gate_body(a.source.action_id);
         if let Some(hit) = gate_assignment(&body) {
             if settings.scan_gate_fields.contains(&hit.0) {
-                gates.push(ScanGate { field: hit.0, value: hit.1, before_index: a.before_index - from });
+                gates.push(ScanGate { step: ScanGateStep::Assign(hit), before_index: a.before_index - from });
             }
         }
     }
@@ -2953,7 +2963,7 @@ fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut LowerContext) -> Op {
 fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut LowerContext) -> i32 {
     if !ctx.settings.atn.verifies()
         || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1)
-        || g.alternatives.iter_ref().any(|a| ctx.meets_predicate_at(a, 0)) {
+        || ctx.any_meets_predicate(&g.alternatives) {
         return -1;
     }
     ctx.mark_checks_with_simulator();
@@ -4309,7 +4319,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     let checked = contested_somewhere
         && !non_greedy
         && ctx.settings.atn.verifies()
-        && !ctx.meets_predicate_at_element(&alt_elements[index]);
+        && !ctx.meets_predicate_at(&Alternative::new(*alt_elements), index);
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {

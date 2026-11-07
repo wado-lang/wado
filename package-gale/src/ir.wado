@@ -966,6 +966,19 @@ impl Alternative {
         return out;
     }
 
+    /// The predicates ahead of the alternative's first action, wherever they
+    /// sit: prediction meets one through any prefix that matched nothing.
+    pub fn predicates_before_actions(&self) -> List<AltAction> {
+        let mut out: List<AltAction> = [];
+        for let a of &self.actions {
+            if a.kind matches { Action } {
+                break;
+            }
+            out.push(*a);
+        }
+        return out;
+    }
+
     /// Whether an action runs at the left edge, which hides from prediction
     /// every predicate behind it.
     pub fn opens_with_action(&self) -> bool {

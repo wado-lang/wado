@@ -8,6 +8,11 @@
 //! `@after` pair that scopes one. Anything else leaves the gate unsimulated, as
 //! it was before this existed.
 //!
+//! A scan answers a predicate only where prediction would: at the position the
+//! decision it serves started from (`SCAN_EDGE_FIELD`), which the parse seeds
+//! as it seeds the members. Past a consumed token the predicate holds, and the
+//! parse answers it when it gets there.
+//!
 //! Every body here is the translator's, never the grammar text. Java and Wado
 //! spell a member write differently and identically once translated, so one
 //! recogniser answers for both and the member is already named the way the
@@ -25,6 +30,10 @@ use { dedup_append_arr, push_unique } from "./list_util.wado";
 pub global SCAN_GATE_HANDLE: String = "gate";
 pub global SCAN_GATE_FIELD: String = "scan_gate";
 pub global SCAN_GATE_TYPE: String = "ScanGate";
+
+/// The gate's field holding where the decision the scan serves started, which
+/// is the one position its predicates are answered at.
+pub global SCAN_EDGE_FIELD: String = "_scan_edge";
 
 /// `<parser handle>.<member> = <int literal>`, with an optional trailing `;` and
 /// any surrounding whitespace — the whole body, not a prefix of it. Returns the

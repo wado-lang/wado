@@ -1206,6 +1206,56 @@ b => (s (r b))
 ";
 }
 
+// Prediction evaluates a predicate exactly where it reaches one before
+// consuming a token. Behind a nullable prefix it does; past a consumed token,
+// in a rule the decision scans into, it does not. The trees are the jar's.
+test "prediction answers a predicate behind a nullable prefix" {
+    for let atn of [AtnMode::Never, AtnMode::Verify] {
+        let options = GenerateOptions { atn };
+        assert parses("grammar Q;
+s : r EOF ;
+r : '-'? {false}? 'a' | 'a' ;
+WS : ' ' -> skip ;
+", "s", ["a", "- a"], &options) == "a => (s (r a))
+- a => error
+";
+        assert parses("grammar L;
+s : e ('+' ID)? EOF ;
+e : e '-'? {false}? '+' e | e '*' e | ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["a + b", "a - + b", "a * b + c"], &options) == "a + b => (s (e a) + b)
+a - + b => error
+a * b + c => (s (e (e a) * (e b)) + c)
+";
+    }
+}
+
+test "prediction leaves a predicate past a consumed token to the parse" {
+    for let atn of [AtnMode::Never, AtnMode::Verify] {
+        let options = GenerateOptions { atn };
+        assert parses("grammar G;
+s : x EOF ;
+x : 'a' q | 'a' 'b' 'c' ;
+q : {false}? 'b' 'c' | 'd' ;
+WS : ' ' -> skip ;
+", "s", ["a b c", "a d"], &options) == "a b c => error
+a d => (s (x a (q d)))
+";
+        assert parses("grammar M;
+s : e EOF ;
+e : e 'x' e p | e '+' e | ID ;
+p : {false}? '+' ID | 'z' ;
+ID : [a-y]+ ;
+WS : ' ' -> skip ;
+", "s", ["a x b + c z", "a x b z", "a x b + c + d", "a x b z + c"], &options) == "a x b + c z => (s (e (e a) x (e (e b) + (e c)) (p z)))
+a x b z => (s (e (e a) x (e b) (p z)))
+a x b + c + d => error
+a x b z + c => (s (e (e (e a) x (e b) (p z)) + (e c)))
+";
+    }
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;
@@ -3616,7 +3666,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ");
     assert out.contains("let _sd_p_0 = "), "the grammar must reach a tournament";
     assert !out.contains("else { -1 }"), "the gate is tested twice";
-    assert out.contains("if gate.no_struct != 0 { return -1; }"), "the candidate scan tests the gate";
+    assert out.contains("if !(gate._scan_edge != pos || gate.no_struct == 0) { return -1; }"), "the candidate scan tests the gate where its decision starts";
 }
 
 test "a single-token rule with a gated alternative keeps the gate in its scan" {

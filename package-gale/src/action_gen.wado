@@ -25,10 +25,12 @@ use {
     invoked_left_edge_predicates,
     join_gate_conds,
     pred_fn_name,
+    predicate_condition_for,
     scan_gate_condition_for,
 } from "./gate_conditions.wado";
+use { SCAN_EDGE_FIELD, SCAN_GATE_HANDLE } from "./scan_gate.wado";
 use { HashMap } from "core:collections";
-use { follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
+use { and_operand, follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { elements_match } from "./ir_shape.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec } from "lib:wadopoet";
 use { AmbiguousNode, PredictionNode, build_group_prediction_tree } from "./prediction.wado";
@@ -540,21 +542,22 @@ pub fn atn_decision_gates(
     let mut visible: List<[AltAction, PredicateSite]> = [];
     let mut visited: List<String> = [];
     for let idx of amb_alts {
-        for let a of &alts[*idx].left_edge_predicates() {
+        for let a of &alts[*idx].predicates_before_actions() {
             visible.push([*a, own]);
         }
         invoked_left_edge_predicates(&alts[*idx], &ctx.analysis, &mut visited, &mut visible);
     }
     for let [a, site] of &visible {
-        let cond = if in_scan {
-            scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, site);
-        } else {
-            gate_condition_for(a, &ctx.settings, &ctx.analysis, site);
-        };
-        if let Some(c) = cond {
-            if !in_scan {
-                need_predicate_fn(a, ctx);
+        if in_scan {
+            // A scan's simulator answers a predicate only where its decision
+            // started, as a scan does.
+            if let Some(c) = scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, site) {
+                gates.push(
+                    [a.source.action_id, `(${SCAN_GATE_HANDLE}.${SCAN_EDGE_FIELD} != pos || ${and_operand(&c)})`],
+                );
             }
+        } else if let Some(c) = predicate_condition_for(a, &ctx.settings, &ctx.analysis, site) {
+            need_predicate_fn(a, ctx);
             gates.push([a.source.action_id, c]);
         }
     }

@@ -70,6 +70,9 @@ pub struct GenSettings {
     /// The members fields a scan simulates: assigned only integer literals, so
     /// a walk can run their actions without a parser. See `scan_gate.wado`.
     pub scan_gate_fields: List<String> = [],
+    /// Whether a scan answers a predicate, which it does only at the position
+    /// the decision it serves started from (`SCAN_EDGE_FIELD`).
+    pub scan_answers_predicates: bool = false,
     /// Each gate-relevant action body as the translator renders it, by
     /// `ActionSource::action_id`. Java and Wado spell a member write
     /// differently in the grammar and identically after translation, so this is
@@ -100,7 +103,7 @@ impl GenSettings {
     /// Whether the generated parser carries a scan gate at all. Off
     /// leaves every scan byte-identical to one emitted before it existed.
     pub fn emit_scan_gate(&self) -> bool {
-        return self.emit_actions && !self.scan_gate_fields.is_empty();
+        return self.emit_actions && (!self.scan_gate_fields.is_empty() || self.scan_answers_predicates);
     }
 
     /// Whether the generated parser recovers a fragment under the start rule.

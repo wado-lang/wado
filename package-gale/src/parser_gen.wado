@@ -46,7 +46,7 @@ use {
 } from "./gen_util.wado";
 use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
-use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
+use { GateScope, SCAN_EDGE_FIELD, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
@@ -1002,14 +1002,33 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     let cont = if mid_operand_gated { "lr_cont" } else { "0" };
     let prec = if climbs { "min_prec" } else { "0" };
     let key = `${memo_rule}, pos, ${prec}, ${follow}, ${cont}`;
-    w.line(`let memo_at = ${SCAN_MEMO_HANDLE}.find(${key}, &${gate});`);
+    // Past the edge no predicate is answered, so which edge it was is no part of
+    // the key.
+    let edges = ctx.settings.scan_answers_predicates;
+    let edge = `${SCAN_GATE_HANDLE}.${SCAN_EDGE_FIELD}`;
+    if edges {
+        w.line(
+            `let memo_gate = if ${edge} == pos { ${gate} } else { ${SCAN_GATE_TYPE} { ..${gate}, ${SCAN_EDGE_FIELD}: -1 } };`,
+        );
+        w.line(`let memo_at = ${SCAN_MEMO_HANDLE}.find(${key}, &memo_gate);`);
+    } else {
+        w.line(`let memo_at = ${SCAN_MEMO_HANDLE}.find(${key}, &${gate});`);
+    }
     w.begin("if memo_at >= 0");
+    if edges {
+        w.line(`let memo_edge = ${edge};`);
+    }
     if gated {
         w.line(`${gate} = ${SCAN_MEMO_HANDLE}.gate_of(memo_at);`);
     }
+    if edges {
+        w.line(`${edge} = memo_edge;`);
+    }
     w.line(`return ${SCAN_MEMO_HANDLE}.end_of(memo_at);`);
     w.end();
-    w.line(`let memo_gate = ${gate};`);
+    if !edges {
+        w.line(`let memo_gate = ${gate};`);
+    }
     // The key holds no caller stack, so a walk whose prediction read one is
     // not kept for another caller.
     if ctx.plan.needs_atn {
@@ -1238,6 +1257,9 @@ fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &EmitContext, from: &ScanOrigin) 
                 for let f of &ctx.settings.scan_gate_fields {
                     w.line(`${ctx.scan_gate_member(f)} = ${PARSER_HANDLE}.${*f};`);
                 }
+            }
+            if ctx.settings.scan_answers_predicates {
+                w.line(`${ctx.scan_gate_member(&SCAN_EDGE_FIELD)} = ${PARSER_HANDLE}.pos;`);
             }
         },
         Entry(slot) => gen_scan_gate_restore(w, ctx, slot),
@@ -1831,7 +1853,8 @@ fn gen_scan_alt_in_place(
     known: &List<List<i32>>,
     ctx: &mut EmitContext,
 ) -> bool {
-    let from = scan_skip_known_token(&body.elements, known, ctx);
+    // The gate is answered at the alternative's start, so the walk starts there.
+    let from = if body.gate_cond.is_empty() { scan_skip_known_token(&body.elements, known, ctx) } else { 0 };
     let rest_known = if from == 1 { known_after(&body.elements[0], known, ctx) } else { *known };
     if from > 0 {
         w.line(`pos = start + ${from};`);
@@ -2745,7 +2768,7 @@ fn gen_scan_op_elements<S: AsStrSlice>(
     let mut k = *known;
     let mut proven_run = 0;
     for let mut i = start; i <= end; i += 1 {
-        gen_scan_gates_before(w, ctx, gates, i, start, end);
+        gen_scan_gates_before(w, ctx, gates, i, start, end, &fail_stmt);
         if i == end {
             break;
         }
@@ -2858,12 +2881,26 @@ fn gen_scan_entry(w: &mut CodeWriter, ctx: &EmitContext, from: &ScanOrigin) {
 /// flag the head closed. Walking `start..=end` rather than `start..end` is what
 /// keeps both ends reachable when the body is empty, which is a single-element
 /// alternative whose one element the candidate skipped.
-fn gen_scan_gates_before(w: &mut CodeWriter, ctx: &EmitContext, gates: &List<ScanGate>, at: i32, start: i32, end: i32) {
+fn gen_scan_gates_before<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    ctx: &EmitContext,
+    gates: &List<ScanGate>,
+    at: i32,
+    start: i32,
+    end: i32,
+    fail_stmt: S,
+) {
     let lo = if at == start { i32::MIN } else { at };
     let hi = if at == end { i32::MAX } else { at + 1 };
     for let g of gates {
-        if g.before_index >= lo && g.before_index < hi {
-            w.line(`${ctx.scan_gate_member(&g.field)} = ${g.value};`);
+        if g.before_index < lo || g.before_index >= hi {
+            continue;
+        }
+        match g.step {
+            Assign([field, value]) => w.line(`${ctx.scan_gate_member(&field)} = ${value};`),
+            Check(cond) => w.line(
+                `if ${ctx.scan_gate_member(&SCAN_EDGE_FIELD)} == pos && ${negate_cond(ctx.scan_gate_cond(&cond))} { ${fail_stmt} }`,
+            ),
         }
     }
 }

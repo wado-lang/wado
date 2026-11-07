@@ -3,7 +3,8 @@
 //! its decision; emit renders the same conditions into the dispatch. Both read
 //! one answer here, each from the site it stands at.
 
-use { AltAction, Alternative, Element } from "./ir.wado";
+use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
+use { rule_returns_vals } from "./action_translate.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { AltBinding } from "./attr_resolve.wado";
@@ -11,7 +12,7 @@ use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this } from "./superclass.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { and_operand } from "./gen_util.wado";
-use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
+use { SCAN_EDGE_FIELD, SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
 use { translate_predicate } from "./java2wado.wado";
 
 /// Where a predicate's condition is rendered: the rule whose environment it
@@ -46,6 +47,17 @@ pub fn gate_condition_for(
     if a.before_index != 0 {
         return null;
     }
+    return predicate_condition_for(a, settings, analysis, site, handle);
+}
+
+/// `gate_condition_for` at any position in the alternative.
+pub fn predicate_condition_for(
+    a: &AltAction,
+    settings: &GenSettings,
+    analysis: &GrammarAnalysis,
+    site: &PredicateSite,
+    handle: &String = &PARSER_HANDLE,
+) -> Option<String> {
     if a.kind matches { Action } {
         return null;
     }
@@ -108,26 +120,66 @@ pub fn invoked_left_edge_predicates(
     rule_left_edge_predicates(&r.name, analysis, visited, out);
 }
 
-/// Whether prediction entering `alt` at element `index` meets a predicate: one
-/// placed there, or one at the left edge of what that element opens. The
+/// Whether prediction entering `alt` at element `index` meets a predicate
+/// before consuming a token: one placed there or behind elements that matched
+/// nothing, or one at the left edge of what such an element opens. The
 /// simulator is handed no predicate's verdict, so `atn: "verify"` leaves a
 /// decision that meets one unchecked.
-pub fn alt_meets_predicate_at(alt: &Alternative, index: i32, analysis: &GrammarAnalysis) -> bool {
-    return alt.actions.iter_ref().any(|a| a.before_index == index && a.kind matches { Predicate })
-        || index < alt.elements.len() && element_meets_predicate(&alt.elements[index], analysis);
+pub fn alt_meets_predicate_at(alt: &Alternative, index: i32, analysis: &mut GrammarAnalysis) -> bool {
+    return alt_meets_predicate_from(alt, index, analysis, &mut []);
 }
 
-/// `alt_meets_predicate_at` for the left edge of `elem`.
-pub fn element_meets_predicate(elem: &Element, analysis: &GrammarAnalysis) -> bool {
+/// `alt_meets_predicate_at`, past the rules in `visited`.
+fn alt_meets_predicate_from(
+    alt: &Alternative,
+    index: i32,
+    analysis: &mut GrammarAnalysis,
+    visited: &mut List<String>,
+) -> bool {
+    for let mut i = index; i <= alt.elements.len(); i += 1 {
+        if alt.actions.iter_ref().any(|a| a.before_index == i && a.kind matches { Predicate }) {
+            return true;
+        }
+        if i == alt.elements.len() {
+            break;
+        }
+        let elem = &alt.elements[i];
+        if element_meets_predicate(elem, analysis, visited) {
+            return true;
+        }
+        if !analysis.element_is_nullable_deep(elem, &mut []) {
+            break;
+        }
+    }
+    return false;
+}
+
+fn any_alt_meets_predicate(alts: &List<Alternative>, analysis: &mut GrammarAnalysis, visited: &mut List<String>) -> bool {
+    for let a of alts {
+        if alt_meets_predicate_from(a, 0, analysis, visited) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// `alt_meets_predicate_at` for the left edge of `elem`, past the rules in
+/// `visited`.
+fn element_meets_predicate(elem: &Element, analysis: &mut GrammarAnalysis, visited: &mut List<String>) -> bool {
     return match *elem {
         RuleRef(r) => {
-            let mut visible: List<[AltAction, PredicateSite]> = [];
-            rule_left_edge_predicates(&r.name, analysis, &mut [], &mut visible);
-            !visible.is_empty();
+            if visited.contains_str(&r.name) {
+                return false;
+            }
+            visited.push(r.name);
+            let Some(callee) = analysis.find_rule(&r.name) else {
+                return false;
+            };
+            any_alt_meets_predicate(&callee.alternatives, analysis, visited);
         },
-        Group(g) => g.alternatives.iter_ref().any(|a| alt_meets_predicate_at(a, 0, analysis)),
-        Label(l) => element_meets_predicate(&l.element, analysis),
-        Repeat(r) => element_meets_predicate(&r.element, analysis),
+        Group(g) => any_alt_meets_predicate(&g.alternatives, analysis, visited),
+        Label(l) => element_meets_predicate(&l.element, analysis, visited),
+        Repeat(r) => element_meets_predicate(&r.element, analysis, visited),
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
     };
 }
@@ -165,7 +217,64 @@ pub fn rule_left_edge_predicates<S: AsStrSlice>(
 /// condition is the dispatch's own, rendered with the handle pointed at the
 /// scan gate; whatever names something else — a method, an unsimulated field,
 /// the parser — leaves the scan ungated.
+///
+/// The scan answers the gate only at the position its decision started from,
+/// the way prediction answers a predicate only before consuming a token. Every
+/// emit site tests the condition where `pos` is the alternative's start.
 pub fn alt_scan_gate_conditions(
+    alt: &Alternative,
+    settings: &GenSettings,
+    analysis: &GrammarAnalysis,
+    site: &PredicateSite,
+) -> String {
+    let conds = alt_scan_gate_conjunction(alt, settings, analysis, site);
+    if conds.is_empty() {
+        return conds;
+    }
+    return `(${SCAN_GATE_HANDLE}.${SCAN_EDGE_FIELD} != pos || ${and_operand(&conds)})`;
+}
+
+/// The predicates past the left edge of `alt`, from element `from` on, that a
+/// scan answers, each beside the element it sits before: those ahead of the
+/// first action, which prediction meets behind a prefix that matched nothing.
+/// One the scan cannot answer holds there, as a gate it cannot answer does.
+pub fn alt_scan_checks(
+    alt: &Alternative,
+    settings: &GenSettings,
+    analysis: &GrammarAnalysis,
+    site: &PredicateSite,
+    from: i32,
+) -> List<[i32, String]> {
+    let mut out: List<[i32, String]> = [];
+    if !settings.emit_actions {
+        return out;
+    }
+    for let a of &alt.predicates_before_actions() {
+        if a.before_index == 0 || a.before_index < from {
+            continue;
+        }
+        if let Some(code) = scan_gate_condition_for(a, settings, analysis, site) {
+            out.push([a.before_index, code]);
+        }
+    }
+    return out;
+}
+
+/// Whether a scan of some alternative of `rules` answers a predicate.
+pub fn scan_answers_predicates(rules: &List<ParserRule>, settings: &GenSettings, analysis: &GrammarAnalysis) -> bool {
+    for let mut r = 0; r < rules.len(); r += 1 {
+        let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(&rules[r]) };
+        for let alt of &rules[r].alternatives {
+            if !alt_scan_gate_conjunction(alt, settings, analysis, &site).is_empty()
+                || !alt_scan_checks(alt, settings, analysis, &site, 0).is_empty() {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn alt_scan_gate_conjunction(
     alt: &Alternative,
     settings: &GenSettings,
     analysis: &GrammarAnalysis,
@@ -198,7 +307,7 @@ pub fn scan_gate_condition_for(
     analysis: &GrammarAnalysis,
     site: &PredicateSite,
 ) -> Option<String> {
-    let Some(rendered) = gate_condition_for(a, settings, analysis, site, &SCAN_GATE_HANDLE) else {
+    let Some(rendered) = predicate_condition_for(a, settings, analysis, site, &SCAN_GATE_HANDLE) else {
         return null;
     };
     let code = scan_gate_condition(&rendered, &settings.scan_gate_fields);

@@ -1324,16 +1324,24 @@ pub variant ScanElement {
     OptionalLookahead(ScanOptionalLookaheadElement),
 }
 
-/// A gate action the scan runs as it walks, so a tournament measuring a stretch
-/// that crosses one measures it under the gate the parse will apply. Positioned
-/// into `elements` the way `AltAction` is into the surface elements, and held in
-/// a sidecar for the same reason: it consumes nothing, and every index-based
-/// analysis over the element sequence stays unchanged. See `scan_gate.wado`.
+/// What the scan runs between elements as it walks. Positioned into `elements`
+/// the way `AltAction` is into the surface elements, and held in a sidecar for
+/// the same reason: it consumes nothing, and every index-based analysis over
+/// the element sequence stays unchanged. See `scan_gate.wado`.
 pub struct ScanGate {
-    pub field: String,
-    pub value: i32,
+    pub step: ScanGateStep,
     /// Runs after `elements[before_index - 1]` and before `elements[before_index]`.
     pub before_index: i32,
+}
+
+pub variant ScanGateStep {
+    /// A gate action: the member takes the value, so a tournament measuring a
+    /// stretch that crosses one measures it under the gate the parse will apply.
+    Assign([String, i32]),
+    /// A predicate, rendered against the scan's copy of the members. It holds
+    /// unless the scan meets it where the decision started: prediction answers a
+    /// predicate it reaches before consuming a token, and no other.
+    Check(String),
 }
 
 pub struct ScanTokenElement {

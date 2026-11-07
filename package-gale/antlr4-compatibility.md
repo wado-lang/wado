@@ -1105,9 +1105,12 @@ the compiled fast path:**
    carries the simulator, every other ambiguity the prediction tree gives up
    on goes to it as well (`ambiguity_routes`). The tournament picks the
    longest scan, and ANTLR4 the lowest alternative the rest of the input
-   admits. The simulator disables an alternative whose predicate is false,
-   including one the alternative reaches at the left edge of a rule it opens
-   with: ANTLR4 finds those visible at the decision (`doc/predicates.md`).
+   admits. The simulator disables an alternative whose predicate is false
+   where prediction reaches it before consuming a token: at the
+   alternative's left edge, behind elements that matched nothing, or at the
+   left edge of a rule it opens with. ANTLR4 finds those visible at the
+   decision (`doc/predicates.md`). A scan answers a predicate under the
+   same rule: only at the position its decision started from.
    A left-recursive rule whose atom choice reaches the simulator is routed as
    in 1, in any grammar: its static loop would take a suffix the full context
    gives the caller (TypeScript's `new Map<T>()`, where `()` is the `new`'s).
