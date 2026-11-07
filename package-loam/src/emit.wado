@@ -1491,22 +1491,23 @@ fn prepared_entry(
     if has_cache {
         spec.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
-    lines.extend(&owed_checks(checked, &mut symbols)?);
-    lines.extend(&branch_checks(graph, checked, names, conditions, &mut symbols)?);
+    // A step past what the graph owes reads past a table, and answers anyway.
+    let mut at_end: Option<Symbols> = null;
     if let Some(r) = room {
-        // A step past what the graph owes reads past a table, and answers anyway.
-        let mut at_end = symbols;
+        let mut end = symbols;
         let mut moving: List<String> = [r.symbol];
         moving.extend(&owed.into_iter().map(|o| o.0.symbol).collect());
         for let symbol of moving {
             if moves_a_step(&symbol, &r.symbol, owed)? {
-                at_end.idents[symbol] = `(${symbols.idents[symbol]} + ${r.spelled})`;
+                end.idents[symbol] = `(${symbols.idents[symbol]} + ${r.spelled})`;
             }
         }
-        let mut checks = owed_checks(checked, &mut at_end)?;
-        checks.extend(&branch_checks(graph, checked, names, conditions, &mut at_end)?);
-        lines.extend(&checks.into_iter().filter(|c| !lines.contains(&c)).collect());
-        for let symbol of at_end.used {
+        at_end = Option::Some(end);
+    }
+    lines.extend(&checks_at(checked, &mut symbols, &mut at_end)?);
+    lines.extend(&branch_checks(graph, checked, names, conditions, &mut symbols, &mut at_end)?);
+    if let Some(end) = &at_end {
+        for let symbol of end.used {
             symbols.used.insert(symbol);
         }
     }
@@ -2908,6 +2909,19 @@ fn held_conditions(graph: &Graph, checked: &Checked, inputs: &List<String>) -> L
     return found;
 }
 
+/// What one scope owes at its lengths, then at `at_end`'s where those differ.
+fn checks_at(checked: &Checked, symbols: &mut Symbols, at_end: &mut Option<Symbols>) -> Result<List<String>, EmitError> {
+    let mut lines = owed_checks(checked, symbols)?;
+    if let Some(end) = at_end {
+        for let check of owed_checks(checked, end)? {
+            if !lines.contains(&check) {
+                lines.push(check);
+            }
+        }
+    }
+    return Result::Ok(lines);
+}
+
 /// What each `If` in `graph` owes in the branch it takes, checked on the host
 /// against its condition, which must be one of `conditions`, the inputs the
 /// host holds.
@@ -2917,6 +2931,7 @@ fn branch_checks(
     names: &Names,
     conditions: &List<String>,
     symbols: &mut Symbols,
+    at_end: &mut Option<Symbols>,
 ) -> Result<List<String>, EmitError> {
     let mut lines: List<String> = [];
     for let node of &graph.nodes {
@@ -2925,8 +2940,8 @@ fn branch_checks(
         }
         let mut owed: List<List<String>> = [];
         for let b of branches(node, checked) {
-            let mut scope = owed_checks(&b.checked, symbols)?;
-            scope.extend(&branch_checks(&b.graph, &b.checked, names, conditions, symbols)?);
+            let mut scope = checks_at(&b.checked, symbols, at_end)?;
+            scope.extend(&branch_checks(&b.graph, &b.checked, names, conditions, symbols, at_end)?);
             owed.push(scope);
         }
         if owed.into_iter().all(|o| o.is_empty()) {
