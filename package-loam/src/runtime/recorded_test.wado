@@ -27,8 +27,8 @@ use {
     windowed,
     windowed_input,
 } from "./graph_cases.wado";
-use { Any, Recorder, Untyped, host_of, run } from "./recorded.wado";
-use { Graph, Slots } from "./hlo.wado";
+use { Any, Recorder, Untyped, f32_of, host_of, run } from "./recorded.wado";
+use { Binary, Graph, Slots, branched } from "./hlo.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 
 test "a recorded graph run on the CPU computes what the CPU computes as each operation is added" {
@@ -134,6 +134,52 @@ test "a recorded loop runs its body as many times as its count, reading what lie
             host_of(&want.1),
         ] as List<Any<Cpu>>;
     }
+}
+
+/// `x` doubled `count` times by a loop whose body doubles it in the branch the
+/// host took.
+fn doubled_on_host<affine G: Graph>(
+    g: &mut G,
+    count: &G::Tensor<i64, []>,
+    x: &G::Tensor<f32, [A]>,
+    pred: &G::Tensor<bool, [C]>,
+) -> List<Any<G>> with _ {
+    return g.repeated(count, &[Any::F32(g.relabeled::<f32, [A], Untyped>(x))], |_, state| {
+        let v = f32_of::<G, [A]>(g, &state[0]);
+        let doubled = branched::<G, [C], G::Tensor<f32, [A]>>(g, pred, Option::Some(true), || {
+            let sum = g.binary(Binary::Add, &v, &v);
+            return g.yielded(&sum);
+        }, || g.yielded(&v));
+        return [Any::F32(g.relabeled::<f32, [A], Untyped>(&doubled))];
+    });
+}
+
+test "a branch the host took in a loop's body adds nothing to what the loop returns" {
+    let x = Tensor::<f32, [A]> {
+        data: [1.0, 2.0],
+        extents: [2],
+    };
+    let mut r = Recorder::new();
+    let rcount = r.parameter::<i64, []>([]);
+    let rx = r.parameter::<f32, [A]>(x.extents);
+    let pred = r.parameter::<bool, [C]>([1]);
+    let last = doubled_on_host(&mut r, &rcount, &rx, &pred);
+    assert last.len() == 1;
+    let result = f32_of::<Recorder, [A]>(&r, &last[0]);
+    let recorded = r.finished([result.id]);
+    let count = Tensor::<i64, []> {
+        data: [2],
+        extents: [],
+    };
+    let taken = Tensor::<bool, [C]> {
+        data: [true],
+        extents: [1],
+    };
+    assert run(&mut Cpu {}, &recorded, &[
+        host_of(&count),
+        host_of(&x),
+        host_of(&taken),
+    ]) == [host_of(&Tensor::<f32, [A]> { data: [4.0, 8.0], extents: [2] })] as List<Any<Cpu>>;
 }
 
 test "a loop's body runs on the values the run before returned" {

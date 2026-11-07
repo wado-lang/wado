@@ -409,6 +409,13 @@ impl Graph for Recorder {
         return Value { id };
     }
 
+    fn taken<T>(&mut self, branch: fn() -> T with _) -> T with _ {
+        let results = self.current.results.len();
+        let value = branch();
+        self.current.results.truncate(results);
+        return value;
+    }
+
     /// Records the body into a region of its own, over a node for which run it
     /// is and one for each carried value, each result yielded, so it names
     /// the loop's outside it whatever the body returns.

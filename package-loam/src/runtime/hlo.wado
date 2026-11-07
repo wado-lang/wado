@@ -267,6 +267,11 @@ pub affine trait Graph: Holds with _ {
     fn yielded<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return *x;
     }
+    /// `branch`, the one the host took, whose results are its own: nothing it
+    /// yields is a result of the region it is added to.
+    fn taken<T>(&mut self, branch: fn() -> T with _) -> T with _ {
+        return branch();
+    }
     /// StableHLO's `while` over a count: `body` run `count` times, each given
     /// which run it is, from 0, and what the run before returned, the first
     /// `initial`, and what the last returned. `body` adds its operations through
@@ -616,8 +621,8 @@ pub fn branched<affine G: Graph, Axes, T>(
     otherwise: fn() -> T with _,
 ) -> T with _ {
     return match chosen {
-        Some(true) => then(),
-        Some(false) => otherwise(),
+        Some(true) => g.taken(then),
+        Some(false) => g.taken(otherwise),
         None => g.conditional(pred, then, otherwise),
     };
 }
