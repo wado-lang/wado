@@ -2,9 +2,7 @@
 //! is reached through. A callee this analysis cannot read writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{
-    Names, Resolver, ReturnPaths, Selector, carries_storage, field_owner,
-};
+use super::place::{Names, Resolver, ReturnPaths, Selector, carries_storage, field_owner};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -497,7 +495,7 @@ impl TirRefVisitor for Walker<'_> {
             // Re-seating a reference writes no storage.
             TirExprKind::Assign { target, .. } => {
                 let reseats = matches!(target.kind, TirExprKind::Local { .. })
-                    && self.type_table.is_reference_shaped(target.type_id);
+                    && self.type_table.is_reference(target.type_id);
                 if !reseats {
                     let names = self.resolver.names(target);
                     self.record(&names, WholeOf::CallerStorage);

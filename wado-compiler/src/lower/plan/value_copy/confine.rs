@@ -579,7 +579,7 @@ fn body_defies_model(body: &TirBlock) -> bool {
 }
 
 fn carries_identity(type_id: TypeId, needs: &CopyNeeds) -> bool {
-    needs.of(type_id) || needs.type_table.is_reference_shaped(type_id)
+    needs.of(type_id) || needs.type_table.is_reference(type_id)
 }
 
 /// Whether what the reference `type_id` points to hands on an identity: an

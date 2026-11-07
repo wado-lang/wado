@@ -1176,9 +1176,7 @@ impl DceWalker<'_> {
             params,
             return_type,
             ..
-        } = self
-            .type_table
-            .get(self.type_table.peel_refs(recv_ty))
+        } = self.type_table.get(self.type_table.peel_refs(recv_ty))
         {
             self.analysis
                 .inspect_signatures

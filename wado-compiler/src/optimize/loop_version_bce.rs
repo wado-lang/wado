@@ -861,11 +861,7 @@ fn analyze_loop(
     if offset != 0 && (!is_i32 || demanded < 0 || !spells_same(type_table, ty, offset)?) {
         return None;
     }
-    let of_ty = |l: u32| {
-        locals
-            .get(l as usize)
-            .is_some_and(|d| d.type_id == ty)
-    };
+    let of_ty = |l: u32| locals.get(l as usize).is_some_and(|d| d.type_id == ty);
     // Every local the residual reads, which must hold still across the loop.
     let mut invariant: Vec<u32> = Vec::new();
     // The one local a reloaded bound's length is read off.

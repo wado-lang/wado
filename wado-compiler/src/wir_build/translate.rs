@@ -1847,7 +1847,7 @@ impl FunctionTranslator<'_, '_> {
     /// reference to it, which lowers as a `borrow`.
     fn is_owned_handle_box(&self, op: Operand) -> bool {
         let type_id = self.operand_type_id(op);
-        self.is_handle_box(type_id) && !self.type_table.is_reference_shaped(type_id)
+        self.is_handle_box(type_id) && !self.type_table.is_reference(type_id)
     }
 
     /// Write 0 into the box `resource`, which the Component Model never issues

@@ -118,7 +118,7 @@ pub fn analyze_ownership(
             .filter(|&l| {
                 func.locals
                     .get(l as usize)
-                    .is_some_and(|local| type_table.is_reference_shaped(local.type_id))
+                    .is_some_and(|local| type_table.is_reference(local.type_id))
             })
             .collect(),
         field_slots: FieldSlots {
@@ -955,7 +955,7 @@ fn released_edges(alias_sites: &[(u32, u32, IndexSet<u32>)]) -> IndexSet<(u32, u
 fn is_reference_local(func: &TirFunction, local: u32, type_table: &TypeTable) -> bool {
     func.locals
         .get(local as usize)
-        .is_some_and(|l| type_table.is_reference_shaped(l.type_id))
+        .is_some_and(|l| type_table.is_reference(l.type_id))
 }
 
 /// Every local holding what `destinations` hold: they themselves, and whatever
@@ -1757,8 +1757,7 @@ impl<'a> Analyzer<'a> {
         };
         // What a reference hands over is the storage it names; any other value lands
         // in the result whole.
-        let Some((ty, fresh)) =
-            result_type.filter(|_| self.type_table.is_reference_shaped(arg.type_id))
+        let Some((ty, fresh)) = result_type.filter(|_| self.type_table.is_reference(arg.type_id))
         else {
             return landing(true);
         };
@@ -2168,7 +2167,7 @@ impl<'a> Analyzer<'a> {
         else {
             // A reference handed on is written through, confined or not.
             if let TirExprKind::Local { index, .. } = &arg.kind
-                && !self.type_table.is_reference_shaped(arg.type_id)
+                && !self.type_table.is_reference(arg.type_id)
                 && !ref_receiver
                 && callee.is_some_and(|(c, position)| {
                     self.confined_params.is_confined(c, position as usize)
@@ -3321,7 +3320,7 @@ fn reference_escape(expr: &TirExpr, type_table: &TypeTable) -> Option<(u32, Opti
     ) {
         return None;
     }
-    if !type_table.is_reference_shaped(expr.type_id) {
+    if !type_table.is_reference(expr.type_id) {
         return None;
     }
     Some((alias_root(expr)?, top_field_of(expr)))
@@ -3684,7 +3683,7 @@ impl MoveEligible {
             read: |local: u32, local_type: Option<TypeId>, moved: bool| {
                 let moved = moved
                     && local_type.is_some_and(|t| {
-                        needs_value_copy(t, type_table) && !type_table.is_reference_shaped(t)
+                        needs_value_copy(t, type_table) && !type_table.is_reference(t)
                     });
                 reads
                     .entry(local)

@@ -121,10 +121,7 @@ fn format_closure_signature(
     return_type: TypeId,
     type_table: &TypeTable,
 ) -> String {
-    let param_names: Vec<String> = params
-        .iter()
-        .map(|(_, ty)| type_table.name(*ty))
-        .collect();
+    let param_names: Vec<String> = params.iter().map(|(_, ty)| type_table.name(*ty)).collect();
     let ret_name = type_table.name(return_type);
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }

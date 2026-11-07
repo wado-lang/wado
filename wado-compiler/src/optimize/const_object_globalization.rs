@@ -1854,7 +1854,7 @@ impl Gate<'_> {
         let Some(param) = f.params.get(param_pos) else {
             return false;
         };
-        if self.type_table.is_reference_shaped(param.type_id) {
+        if self.type_table.is_reference(param.type_id) {
             return false;
         }
         let Some(body) = f.body.as_ref() else {

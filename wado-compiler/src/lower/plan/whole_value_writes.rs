@@ -8,8 +8,8 @@ use super::value_copy::retention::RefCarrying;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    CaptureSource, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt,
-    TirStmtKind, TirUnaryOp, capture_at,
+    CaptureSource, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
+    TirUnaryOp, capture_at,
 };
 use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
 
@@ -235,7 +235,7 @@ impl<'a> WriteWalker<'a> {
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. } => {
-                if self.carrying.type_table().is_reference_shaped(expr.type_id) {
+                if self.carrying.type_table().is_reference(expr.type_id) {
                     self.carried(inner)
                 } else {
                     IndexSet::default()
@@ -350,7 +350,7 @@ impl TirRefVisitor for WriteWalker<'_> {
                 .type_table()
                 .is_mut_ref(*type_id)
                 .then(|| self.root_of(value))
-            .flatten();
+                .flatten();
             match alias {
                 Some(root) => {
                     self.aliases.insert(*local_index, root);

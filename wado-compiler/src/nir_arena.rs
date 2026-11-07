@@ -2103,7 +2103,7 @@ impl Body {
     }
 
     /// Whether some step of the place `e`, its root included, may name storage
-    /// rather than hold a value ([`TypeTable::is_reference_shaped`]): what it
+    /// rather than hold a value ([`TypeTable::is_reference`]): what it
     /// reaches the frame need not own. Without a type table, and past a step
     /// that is no place, every step might be.
     pub fn place_crosses_reference(&self, e: ExprId, types: Option<&TypeTable>) -> bool {
@@ -2112,7 +2112,7 @@ impl Body {
         };
         let mut cur = e;
         loop {
-            if types.is_reference_shaped(self.exprs[cur].type_id) {
+            if types.is_reference(self.exprs[cur].type_id) {
                 return true;
             }
             let inner = match &self.exprs[cur].kind {

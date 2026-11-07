@@ -840,7 +840,7 @@ impl Interpreter<'_> {
         // `place_of` drops a deref, so `*h.f` names the place field `h.f` does;
         // only the reference itself rebinds.
         let type_id = body.exprs[value.as_expr()?].type_id;
-        if !self.type_table.is_reference_shaped(type_id) {
+        if !self.type_table.is_reference(type_id) {
             return None;
         }
         if index.is_some() {
@@ -1115,7 +1115,7 @@ impl Interpreter<'_> {
         // reference — would leave the snapshot standing for a value the program
         // no longer holds. The writes it performs are still applied; only its
         // result is refused.
-        let returns_reference = self.type_table.is_reference_shaped(callee.return_type);
+        let returns_reference = self.type_table.is_reference(callee.return_type);
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
@@ -1124,7 +1124,7 @@ impl Interpreter<'_> {
         for (arg, param) in args.iter().zip(&callee.params) {
             let place = self.frame_place_of(body, *arg);
             retains_unsettled_storage |= callee.retains.contains(&param.name)
-                && self.type_table.is_reference_shaped(param.type_id)
+                && self.type_table.is_reference(param.type_id)
                 && !place
                     .as_ref()
                     .is_some_and(|(root, _)| self.frame.place_is_settled(*root));
@@ -1240,7 +1240,7 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if self.type_table.is_reference_shaped(body.exprs[e].type_id) {
+        if self.type_table.is_reference(body.exprs[e].type_id) {
             compiler_trace!("region_seed", "region {e:?}: reference-shaped, refused");
             return None;
         }

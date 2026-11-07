@@ -949,9 +949,7 @@ fn flat_types_from_type_id_inner(
             if type_table.is_string(type_id) {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
-            } else if let Some(struct_decl) =
-                struct_decl_of(*def, type_args, tir_modules)
-            {
+            } else if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
                 flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
             } else {
                 // A record with no TIR declaration has no known field layout;

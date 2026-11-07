@@ -1323,7 +1323,9 @@ fn element_layout_of(
         }
         let field_types: Vec<TypeId> = fields.into_iter().map(|(_, ty)| ty).collect();
         let layout = ElementLayout::Struct {
-            key: type_table.heap_object_key(elem_ty).expect("a struct or cell is a heap object"),
+            key: type_table
+                .heap_object_key(elem_ty)
+                .expect("a struct or cell is a heap object"),
         };
         return Some((layout, field_types));
     }

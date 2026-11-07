@@ -308,7 +308,7 @@ impl<'a> ParamShape<'a> {
         Self {
             name,
             carries_storage: may_carry_storage(ty, type_table),
-            is_reference: type_table.is_reference_shaped(ty),
+            is_reference: type_table.is_reference(ty),
             is_mut_ref: type_table.is_mut_ref(ty),
             is_array: is_array(ty, type_table),
             is_integer: type_table.is_integer(ty),

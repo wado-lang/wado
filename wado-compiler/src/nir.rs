@@ -1134,7 +1134,11 @@ impl StructFieldTypes {
     /// The field types of `type_id`, when it is a concrete struct type or a
     /// cell.
     #[must_use]
-    pub fn of_type<'s>(&'s self, type_id: TypeId, type_table: &'s TypeTable) -> Option<&'s [TypeId]> {
+    pub fn of_type<'s>(
+        &'s self,
+        type_id: TypeId,
+        type_table: &'s TypeTable,
+    ) -> Option<&'s [TypeId]> {
         if let Some(cell) = type_table.cell_field_types(type_id) {
             return Some(cell);
         }

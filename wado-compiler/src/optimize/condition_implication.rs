@@ -1374,7 +1374,7 @@ fn is_reference(engine: &Engine, local: u32) -> bool {
     engine.locals().get(local as usize).is_none_or(|l| {
         engine
             .value_graph_type_table()
-            .is_none_or(|types| types.is_reference_shaped(l.type_id))
+            .is_none_or(|types| types.is_reference(l.type_id))
     })
 }
 

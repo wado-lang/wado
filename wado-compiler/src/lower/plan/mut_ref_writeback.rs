@@ -12,8 +12,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
 use crate::tir::{
-    LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId,
+    LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
@@ -357,7 +357,7 @@ impl WriteBack<'_> {
         {
             return true;
         }
-        if !self.type_table.is_reference_shaped(sibling.type_id) {
+        if !self.type_table.is_reference(sibling.type_id) {
             return false;
         }
         place_root(sibling) == Some(root)

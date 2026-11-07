@@ -31,9 +31,7 @@ use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
-use crate::name::{
-    self, FunctionId, closure_capture_field, variant_tag_helper_name,
-};
+use crate::name::{self, FunctionId, closure_capture_field, variant_tag_helper_name};
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
     NirFunction, NirGlobal, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest,
@@ -359,18 +357,26 @@ struct BoxedLocals(IndexMap<u32, tir::TypeId>);
 
 impl BoxedLocals {
     fn of(func: &TirFunction, plan: &BoxPlan) -> Self {
-        Self(plan.cell_locals(func).map_or_else(IndexMap::default, |cells| {
-            cells
-                .iter()
-                .map(|&local| (local, func.locals[local as usize].type_id))
-                .collect()
-        }))
+        Self(
+            plan.cell_locals(func)
+                .map_or_else(IndexMap::default, |cells| {
+                    cells
+                        .iter()
+                        .map(|&local| (local, func.locals[local as usize].type_id))
+                        .collect()
+                }),
+        )
     }
 
     /// The cell `local` lives in, where a read of it typed `ty` reads the value
     /// the cell holds. A read typed as a reference to that value, as a closure
     /// capture spells one, is the cell itself.
-    fn box_of_value(&self, local: u32, ty: tir::TypeId, type_table: &TypeTable) -> Option<tir::TypeId> {
+    fn box_of_value(
+        &self,
+        local: u32,
+        ty: tir::TypeId,
+        type_table: &TypeTable,
+    ) -> Option<tir::TypeId> {
         let declared = *self.0.get(&local)?;
         let held = type_table
             .cell_payload(declared)
@@ -979,11 +985,7 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } = &inner.kind
         {
-            let is_reference = self
-                .base
-                .type_table
-                .borrow()
-                .is_reference_shaped(receiver.type_id);
+            let is_reference = self.base.type_table.borrow().is_reference(receiver.type_id);
             let holder = if is_reference {
                 (**receiver).clone()
             } else {
@@ -1466,10 +1468,7 @@ impl FunctionTranslator<'_, '_> {
     ) -> Option<ExprId> {
         // A reference to anything but a cell is its referent's own handle, so
         // its `Deref` stays a no-op the default path keeps.
-        self.base
-            .type_table
-            .borrow()
-            .cell_payload(inner.type_id)?;
+        self.base.type_table.borrow().cell_payload(inner.type_id)?;
         let inner_nir = self.convert_expr(inner);
         Some(self.read_cell(inner_nir.into(), outer_type_id, span))
     }

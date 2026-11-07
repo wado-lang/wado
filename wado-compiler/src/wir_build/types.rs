@@ -20,8 +20,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 use crate::name::{
-    CELL_FIELD, RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name, unqualified_name,
-    wir_enum_type_key, wir_tuple_type_key, wir_type_key, wir_variant_case_key,
+    CELL_FIELD, RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name,
+    unqualified_name, wir_enum_type_key, wir_tuple_type_key, wir_type_key, wir_variant_case_key,
 };
 use crate::wir::{WirAbstractHeapType, WirTypeId};
 use crate::{hashmap, tir};
@@ -544,7 +544,6 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
         }),
     )
 }
-
 
 fn register_library_types(ctx: &mut WirContext<'_>) {
     let entry_source = &ctx.package.entry_module_source;

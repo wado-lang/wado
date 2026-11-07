@@ -294,7 +294,7 @@ impl<'a> Resolver<'a> {
         self.builtins.part_of_params(&**func).is_some_and(|params| {
             params
                 .iter()
-                .any(|&p| !self.type_table.is_reference_shaped(arg_at(func, args, p).type_id))
+                .any(|&p| !self.type_table.is_reference(arg_at(func, args, p).type_id))
         })
     }
 
@@ -329,7 +329,7 @@ impl<'a> Resolver<'a> {
                         index: *field_index,
                     },
                 );
-                if !self.type_table.is_reference_shaped(expr.type_id) {
+                if !self.type_table.is_reference(expr.type_id) {
                     return names;
                 }
                 match names {
@@ -680,7 +680,7 @@ pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
 /// confined: passed uncopied and copied before a write, and handed back only as
 /// a projection the caller copies where it takes it over.
 pub fn names_caller_storage(param: &TirParam, type_table: &TypeTable) -> bool {
-    type_table.is_reference_shaped(param.type_id)
+    type_table.is_reference(param.type_id)
 }
 
 /// The parameter bound to `local`, by position.
@@ -708,7 +708,7 @@ pub fn arg_at<'e>(func: &FunctionRef, args: &'e [CallArg], param: usize) -> &'e 
 /// none of its own, so a reader of it gets an independent value.
 #[must_use]
 pub fn carries_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
-    type_table.is_reference_shaped(type_id) || needs_value_copy(type_id, type_table)
+    type_table.is_reference(type_id) || needs_value_copy(type_id, type_table)
 }
 
 /// [`carries_storage`] asked before monomorphization. A type parameter is
@@ -741,7 +741,7 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
                 // associated type can still carry the unresolved projection
                 // as its own `type_id` where the local's declared type is
                 // already the monomorphized reference.
-                let names = if self.resolver.type_table.is_reference_shaped(*type_id) {
+                let names = if self.resolver.type_table.is_reference(*type_id) {
                     self.resolver.names(value)
                 } else {
                     Names::Place(Place::local(*local_index))
@@ -761,7 +761,7 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
         match &expr.kind {
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::Local { index, .. } = &target.kind
-                    && self.resolver.type_table.is_reference_shaped(target.type_id)
+                    && self.resolver.type_table.is_reference(target.type_id)
                 {
                     let names = self.resolver.names(value);
                     self.resolver.bindings.set(*index, names);

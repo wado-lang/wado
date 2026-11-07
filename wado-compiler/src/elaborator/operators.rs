@@ -2188,7 +2188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // accumulate in the logger rather than early-returning, as method calls do.
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
         for (&(arg, arg_span), &param_ty) in args.iter().zip(resolved.param_types.iter()) {
-            let wrap = self.tysys.type_table.borrow().is_reference_shaped(param_ty);
+            let wrap = self.tysys.type_table.borrow().is_reference(param_ty);
             // For a `&Self` parameter the "value-level" expected type is the
             // receiver's type, preserving newtype identity when an impl on the
             // base is dispatched through a newtype receiver. A parameterized

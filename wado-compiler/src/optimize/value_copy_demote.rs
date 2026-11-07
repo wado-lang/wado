@@ -1350,8 +1350,8 @@ fn is_self_derived(
             // `container_sroa` rewrites it to the builtin. Other array
             // builtins (`array_clone`, `array_new`) and every by-value return
             // (`$value_copy$T`) produce fresh storage.
-            let hands_back_ref = element_accessors.contains(func_id)
-                || tt.is_reference_shaped(body.exprs[id].type_id);
+            let hands_back_ref =
+                element_accessors.contains(func_id) || tt.is_reference(body.exprs[id].type_id);
             hands_back_ref
                 && args
                     .iter()

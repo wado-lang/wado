@@ -51,13 +51,11 @@ impl FieldWrites {
     /// Whether a write may reach `root`'s object: one through no local, or
     /// through a local whose objects `shares` does not rule apart from it.
     fn reach(&self, pointee: TypeId, field_idx: u32, shares: impl Fn(u32) -> bool) -> bool {
-        self.0
-            .get(&(pointee, field_idx))
-            .is_some_and(|receivers| {
-                receivers
-                    .iter()
-                    .any(|receiver| receiver.is_none_or(&shares))
-            })
+        self.0.get(&(pointee, field_idx)).is_some_and(|receivers| {
+            receivers
+                .iter()
+                .any(|receiver| receiver.is_none_or(&shares))
+        })
     }
 }
 
@@ -122,10 +120,9 @@ impl ModifiedVars {
         field_idx: u32,
     ) -> bool {
         let pointee = ctx.type_table.peel_refs(root_type);
-        self.field_writes
-            .reach(pointee, field_idx, |receiver| {
-                ctx.heap.get(body).locals_may_share(receiver, root)
-            })
+        self.field_writes.reach(pointee, field_idx, |receiver| {
+            ctx.heap.get(body).locals_may_share(receiver, root)
+        })
     }
 
     /// True when hoisting `root.field_idx` is unsound: another handle on the

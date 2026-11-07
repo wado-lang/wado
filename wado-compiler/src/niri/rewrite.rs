@@ -115,7 +115,7 @@ impl Interpreter<'_> {
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
         if value.is_scalar() {
-            if self.type_table.is_reference_shaped(node_type) {
+            if self.type_table.is_reference(node_type) {
                 compiler_trace!("region_seed", "commit {e:?}: refused, reference-shaped");
                 return false;
             }
@@ -251,7 +251,7 @@ impl Interpreter<'_> {
         // A reference names storage; a literal is a fresh object, and `ref.eq`
         // tells the two apart. The node's own type answers for the root, and
         // this answers for every leaf under it.
-        if self.type_table.is_reference_shaped(ty) {
+        if self.type_table.is_reference(ty) {
             return None;
         }
         match value {
@@ -476,9 +476,7 @@ impl Interpreter<'_> {
                     case_index: held,
                     payload,
                     ..
-                } if *variant_type == type_id && *held == case_index => {
-                    Some(*payload)
-                }
+                } if *variant_type == type_id && *held == case_index => Some(*payload),
                 _ => None,
             },
             None => None,

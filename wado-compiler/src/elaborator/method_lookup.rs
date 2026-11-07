@@ -335,7 +335,7 @@ impl TypeSystem {
     /// mark promotes it to.
     pub(crate) fn mut_self_receiver_needs_box(&self, type_id: TypeId) -> bool {
         let table = self.type_table.borrow();
-        !table.is_reference_shaped(type_id)
+        !table.is_reference(type_id)
             && table.is_boxed_reference_target(table.representation_head(type_id))
     }
 
@@ -3906,8 +3906,7 @@ pub(super) fn adjusted_receiver_type(
     let held = type_table.borrow().ref_layers(receiver, layers);
     let fits = {
         let tt = type_table.borrow();
-        tt.ref_depth(held) == layers
-            && (!mutable || tt.is_mut_ref(held))
+        tt.ref_depth(held) == layers && (!mutable || tt.is_mut_ref(held))
     };
     if fits {
         return held;

@@ -10,8 +10,7 @@ use crate::synthesis::common::bool_lit;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
     TirExpr, TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStructPatternField, TirUnaryOp, TypeId,
-    struct_fields,
+    TirPattern, TirStmt, TirStmtKind, TirStructPatternField, TirUnaryOp, TypeId, struct_fields,
 };
 use crate::tir_visitor::for_each_block_result;
 use crate::token::Span;
@@ -27,7 +26,7 @@ fn coerce_value_to_binding(
     type_table: &TypeTable,
     span: Span,
 ) -> TirExpr {
-    if type_table.is_reference_shaped(value.type_id) {
+    if type_table.is_reference(value.type_id) {
         return value;
     }
     match type_table.get(binding_type) {
@@ -1717,8 +1716,7 @@ impl<'a> PatternLowerer<'a> {
                 writable
             }
             _ => place::projection_base(expr).is_some_and(|inner| {
-                type_table.is_reference_shaped(inner.type_id)
-                    || self.place_is_writable(inner, type_table)
+                type_table.is_reference(inner.type_id) || self.place_is_writable(inner, type_table)
             }),
         }
     }
@@ -1774,7 +1772,7 @@ impl<'a> PatternLowerer<'a> {
         let name = self.next_temp_name();
         let type_id = value.type_id;
         // A temp holding a reference names the scrutinee's storage, not its own.
-        let aliases_scrutinee = type_table.is_reference_shaped(type_id);
+        let aliases_scrutinee = type_table.is_reference(type_id);
         if !aliases_scrutinee {
             self.owned_temps.insert(local_index);
         }

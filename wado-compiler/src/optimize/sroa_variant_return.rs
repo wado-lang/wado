@@ -786,8 +786,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     // repair is not trusted on faith.
     for global in &project.globals {
         let body = global.init.slot_expr().body();
-        let handled =
-            handled_call_sites(body, &scalarized, global.ty);
+        let handled = handled_call_sites(body, &scalarized, global.ty);
         let stragglers = straggler_calls(body, &scalarized, &handled);
         assert!(
             stragglers.is_empty(),
@@ -902,7 +901,9 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             }
         }
         ResolvedType::Newtype { base_type, .. } => slot_shape(*base_type, type_table),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) if type_table.cell_payload(payload).is_some() => {
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            if type_table.cell_payload(payload).is_some() =>
+        {
             Some(SlotShape::Wrapped)
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => slot_shape(*inner, type_table),
@@ -1131,9 +1132,7 @@ fn collect_and_validate(
                 continue;
             }
             let func = project.functions[callee.index()].borrow();
-            if !is_eligible(&func)
-                || func.return_type != variant_type
-            {
+            if !is_eligible(&func) || func.return_type != variant_type {
                 continue;
             }
             let layout = layout_cache
@@ -1328,11 +1327,7 @@ fn null_return_case(body: &Body, op: Operand, cand: &Candidate) -> Option<u32> {
 /// happen before a later side effect. The rewrite retypes the binding in place,
 /// so nothing moves and no trap or ordering analysis is needed. Returns the
 /// construction.
-fn single_def_variant_construct(
-    body: &Body,
-    local: u32,
-    cand: &Candidate,
-) -> Option<ExprId> {
+fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Option<ExprId> {
     let mut defs: Vec<StmtId> = Vec::new();
     let mut reads = 0usize;
     count_local_def_use(
@@ -1354,9 +1349,7 @@ fn single_def_variant_construct(
     }
     let init = value.as_expr()?;
     match &body.exprs[init].kind {
-        ExprKind::VariantConstruct { variant_type, .. }
-            if *variant_type == cand.variant_type =>
-        {
+        ExprKind::VariantConstruct { variant_type, .. } if *variant_type == cand.variant_type => {
             Some(init)
         }
         _ => None,
@@ -1683,8 +1676,7 @@ impl<'t> Rebind<'t> {
         if let Some(held) = tt.cell_payload(declared) {
             return (held == payload_type).then_some(Rebound::Celled { cell: declared });
         }
-        (tt.peel_refs(declared) == payload_type)
-            .then_some(Rebound::Direct { let_type: declared })
+        (tt.peel_refs(declared) == payload_type).then_some(Rebound::Direct { let_type: declared })
     }
 }
 
@@ -1814,8 +1806,7 @@ impl ReturnRewrite<'_> {
                 body.exprs[expr].type_id = cand.layout.tuple_type;
             }
             ExprKind::Local { index, .. } => {
-                if let Some(init) = single_def_variant_construct(body, index, cand)
-                {
+                if let Some(init) = single_def_variant_construct(body, index, cand) {
                     rewrite_construct(body, init, cand, span);
                     body.exprs[expr].type_id = cand.layout.tuple_type;
                     self.retyped.push(index);

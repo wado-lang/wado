@@ -622,7 +622,7 @@ fn shared_reference_root(
     const_views: &LocalSet,
 ) -> Option<u32> {
     let e = op.as_expr()?;
-    if !type_table.is_reference_shaped(body.exprs[e].type_id) {
+    if !type_table.is_reference(body.exprs[e].type_id) {
         return None;
     }
     let ExprKind::Local { index, .. } = &body.exprs[body.strip_casts(e)].kind else {

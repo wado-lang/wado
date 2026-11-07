@@ -812,7 +812,7 @@ impl MoveWalker<'_, '_> {
     fn is_reference(&self, expr: &Expr) -> bool {
         self.sem()
             .expression_type(expr.id())
-            .is_some_and(|ty| self.sem().types.is_reference_shaped(ty))
+            .is_some_and(|ty| self.sem().types.is_reference(ty))
     }
 
     /// Whether a field path passes through a reference or a dereference.

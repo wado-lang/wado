@@ -66,7 +66,9 @@ impl AggregateShapes {
         let instances: Vec<VariantInstance> = type_table
             .all_types()
             .filter_map(|(_, ty)| match ty {
-                ResolvedType::Variant { def, type_args } if project.find_variant(*def).is_some() => {
+                ResolvedType::Variant { def, type_args }
+                    if project.find_variant(*def).is_some() =>
+                {
                     Some((*def, type_args.clone()))
                 }
                 _ => None,

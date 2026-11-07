@@ -445,7 +445,6 @@ impl TypeTable {
         self.types.get(id)
     }
 
-
     /// The struct `id` instantiates, with its arguments.
     #[must_use]
     pub fn struct_parts(&self, id: TypeId) -> Option<(StructDef, &[TypeId])> {
@@ -934,7 +933,7 @@ impl TypeTable {
     /// are struct-backed but immutable, so their storage may be shared and is
     /// never written. A reference names storage rather than holding a value.
     pub fn is_in_place_aggregate(&self, ty: TypeId) -> bool {
-        if self.is_reference_shaped(ty) {
+        if self.is_reference(ty) {
             return false;
         }
         match self.get(ty) {
@@ -2603,10 +2602,7 @@ impl TypeTable {
     /// struct's fields, a variant's payloads. `None` where nothing registered
     /// them.
     fn declared_members(&self, def: DefId, type_args: &[TypeId]) -> Option<DeclaredMembers> {
-        if let Some(fields) = self
-            .struct_field_index
-            .get(&(def, type_args.to_vec()))
-        {
+        if let Some(fields) = self.struct_field_index.get(&(def, type_args.to_vec())) {
             return Some(DeclaredMembers {
                 types: fields.clone(),
                 of_template: false,
@@ -3000,8 +2996,7 @@ impl TypeTable {
     /// function types.
     #[must_use]
     pub fn cell_struct_name(&self, cell: TypeId) -> String {
-        let payload =
-            self.representation_head(self.cell_payload(cell).expect("a cell reference"));
+        let payload = self.representation_head(self.cell_payload(cell).expect("a cell reference"));
         let spelled = match self.get(payload) {
             ResolvedType::Function { .. } => name::CELL_FN_PAYLOAD.to_string(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
@@ -3061,7 +3056,7 @@ impl TypeTable {
 
     /// Whether `type_id` names storage rather than holding a value: a `&T` or
     /// a `&mut T`.
-    pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
+    pub fn is_reference(&self, type_id: TypeId) -> bool {
         RefKind::from_resolved(self.get(type_id)).is_some()
     }
 
@@ -3517,8 +3512,7 @@ impl TypeTable {
         let bounds: Arc<[TraitRef]> = self
             .instantiate_trait_refs(&sig, &sig.bounds, param_id, trait_args.as_deref(), &args)
             .into();
-        self.projection_bounds_cache
-            .insert(id, Arc::clone(&bounds));
+        self.projection_bounds_cache.insert(id, Arc::clone(&bounds));
         Some(bounds)
     }
 
@@ -5075,7 +5069,6 @@ impl TypeTable {
             }
         }
     }
-
 
     /// Get the base type if this is a newtype, or None otherwise
     pub fn get_newtype_base(&self, id: TypeId) -> Option<TypeId> {

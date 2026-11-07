@@ -319,7 +319,7 @@ fn free_vars(
         let storage_in_slot = type_table.cell_payload(type_id).is_none();
         // A reference's pointee is shared, so a write through it lands where
         // the caller reads it too.
-        let value_in_slot = storage_in_slot && !type_table.is_reference_shaped(type_id);
+        let value_in_slot = storage_in_slot && !type_table.is_reference(type_id);
         // One question, asked of every crossing that leaves the storage behind:
         // a write inside the region is one no call carries back.
         if crossing.leaves_storage_behind()

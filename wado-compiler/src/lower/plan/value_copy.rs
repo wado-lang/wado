@@ -253,7 +253,7 @@ pub fn plan(
         if receiver.is_some_and(|ty| type_table.is_mut_ref(ty)) {
             mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
         }
-        if receiver.is_some_and(|ty| type_table.is_reference_shaped(ty)) {
+        if receiver.is_some_and(|ty| type_table.is_reference(ty)) {
             ref_receiver_methods.insert(f.module_source.clone(), f.name.clone());
         }
         if f.def_id.is_some() && f.def_id == list_index_assign {
@@ -262,7 +262,10 @@ pub fn plan(
         mut_ref_params.insert(
             f.module_source.clone(),
             f.name.clone(),
-            f.params.iter().map(|p| type_table.is_mut_ref(p.type_id)).collect(),
+            f.params
+                .iter()
+                .map(|p| type_table.is_mut_ref(p.type_id))
+                .collect(),
         );
     }
     drop(type_table);
@@ -390,9 +393,7 @@ impl<'a> CopyNeeds<'a> {
 
     pub fn of(&self, type_id: TypeId) -> bool {
         self.answers
-            .get_or_compute(type_id, || {
-                needs_value_copy(type_id, self.type_table)
-            })
+            .get_or_compute(type_id, || needs_value_copy(type_id, self.type_table))
     }
 }
 

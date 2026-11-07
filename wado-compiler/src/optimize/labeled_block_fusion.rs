@@ -123,12 +123,7 @@ impl Rule for LabeledBlockFusionRule {
 /// above does not take. The consumer is the next statement, its whole value is
 /// the match, and the match evaluates `t` first, so `LB` runs where the `let`
 /// did.
-fn thread_bound_block(
-    engine: &mut Engine,
-    block: BlockId,
-    stmts: &[StmtId],
-    i: usize,
-) -> bool {
+fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: usize) -> bool {
     let StmtKind::Let {
         local_index: temp,
         value: Operand::Expr(lb),

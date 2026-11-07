@@ -10,8 +10,8 @@ use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::optimize::pass_dump;
 use crate::tir::{
-    BuiltinDeclarations, FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    BuiltinDeclarations, FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -533,7 +533,7 @@ pub fn source_root(
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
-            if type_table.is_reference_shaped(inner.type_id) {
+            if type_table.is_reference(inner.type_id) {
                 return ref_targets.referent_root(inner);
             }
             source_root(inner, type_table, ref_targets)

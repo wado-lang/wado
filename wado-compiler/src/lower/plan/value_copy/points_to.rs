@@ -254,9 +254,8 @@ impl<'a> HoldsHandle<'a> {
     }
 
     fn of(&self, ty: TypeId) -> bool {
-        self.known.get_or_compute(ty, || {
-            self.walk(ty, None, &mut UnderWay::new(false), 0)
-        })
+        self.known
+            .get_or_compute(ty, || self.walk(ty, None, &mut UnderWay::new(false), 0))
     }
 
     /// `env` is what the template parameters `ty` is written in take.
@@ -1155,7 +1154,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
             .params
             .iter()
             .map(|p| Slot {
-                by_ref: type_table.is_reference_shaped(p.type_id),
+                by_ref: type_table.is_reference(p.type_id),
                 writes: type_table.is_mut_ref(p.type_id),
             })
             .collect();
@@ -1333,7 +1332,7 @@ impl Builder<'_> {
     /// The storage a projection over `base` names: `base`'s own, or what it
     /// refers to where it is a reference read through.
     fn projected(&mut self, base: &TirExpr) -> Option<u32> {
-        if self.type_table.is_reference_shaped(base.type_id) {
+        if self.type_table.is_reference(base.type_id) {
             Some(self.referent(base))
         } else {
             self.place(base)
@@ -1382,7 +1381,7 @@ impl Builder<'_> {
     /// value where its type holds a writable handle, and its own storage where
     /// the slot is a `&mut`.
     fn hand(&mut self, arg: &TirExpr, slot: Slot) -> Option<u32> {
-        let (value, own) = if slot.by_ref && !self.type_table.is_reference_shaped(arg.type_id) {
+        let (value, own) = if slot.by_ref && !self.type_table.is_reference(arg.type_id) {
             self.operand(arg)
         } else {
             (self.eval(arg), None)
@@ -1441,7 +1440,7 @@ impl Builder<'_> {
         params
             .iter()
             .map(|&p| Slot {
-                by_ref: tt.is_reference_shaped(p),
+                by_ref: tt.is_reference(p),
                 writes: tt.is_mut_ref(p),
             })
             .collect()
@@ -1499,7 +1498,7 @@ impl Builder<'_> {
         if let Some(ReturnConvention::PartOf(params)) = &decl.returns {
             for &p in params {
                 let Some(h) = handed[p] else { continue };
-                if self.type_table.is_reference_shaped(args[p].type_id) && !returns_reference {
+                if self.type_table.is_reference(args[p].type_id) && !returns_reference {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);
@@ -1563,7 +1562,7 @@ impl Builder<'_> {
         }
         // A binding takes part of the value, or what it refers to, or — lifted
         // to a reference to the scrutinee — the scrutinee's own storage.
-        let referent = if self.type_table.is_reference_shaped(scrutinee.type_id) {
+        let referent = if self.type_table.is_reference(scrutinee.type_id) {
             self.deref(value)
         } else {
             None
@@ -1670,7 +1669,7 @@ impl Builder<'_> {
     /// is a reference read through, what the storage it names holds.
     fn part_of(&mut self, whole: &TirExpr) -> Option<u32> {
         let v = self.eval(whole);
-        if self.type_table.is_reference_shaped(whole.type_id) {
+        if self.type_table.is_reference(whole.type_id) {
             self.deref(v)
         } else {
             v
@@ -1710,8 +1709,8 @@ impl Builder<'_> {
             | TirExprKind::VariantPayload { expr: inner, .. } => self.part_of(inner),
             TirExprKind::Cast { expr: inner, .. } => {
                 let v = self.eval(inner);
-                if self.type_table.is_reference_shaped(inner.type_id)
-                    && !self.type_table.is_reference_shaped(expr.type_id)
+                if self.type_table.is_reference(inner.type_id)
+                    && !self.type_table.is_reference(expr.type_id)
                 {
                     self.deref(v)
                 } else {
@@ -1731,7 +1730,7 @@ impl Builder<'_> {
                 let mut args = args.iter().map(|a| &a.expr);
                 if let Some(decl) = self.builtins.get(&**func) {
                     let args: Vec<&TirExpr> = args.collect();
-                    let returns_reference = self.type_table.is_reference_shaped(expr.type_id);
+                    let returns_reference = self.type_table.is_reference(expr.type_id);
                     return self.builtin_call(decl, returns_reference, &args);
                 }
                 match self.functions.id(&func.module_source, &func.name) {
@@ -1830,7 +1829,7 @@ impl Builder<'_> {
                         CaptureSource::Local(index) => {
                             let node = self.local(self.frame, index);
                             // A capture by reference holds the local's storage.
-                            if self.type_table.is_reference_shaped(capture.type_id) {
+                            if self.type_table.is_reference(capture.type_id) {
                                 held.push(self.naming(node));
                             }
                             held.push(node);

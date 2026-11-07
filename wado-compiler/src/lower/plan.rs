@@ -74,12 +74,7 @@ pub fn plan(
     let box_plan = in_span(profiler, "lower/boxing", || boxing::prepare(flat));
     globals::build_initialize_modules(flat);
     lift_mut::lift_mut_match_bindings(flat);
-    let value_copy = value_copy::plan(
-        flat,
-        builtins,
-        confined_params,
-        profiler,
-    );
+    let value_copy = value_copy::plan(flat, builtins, confined_params, profiler);
     Ok(LowerPlan {
         box_plan,
         closure,

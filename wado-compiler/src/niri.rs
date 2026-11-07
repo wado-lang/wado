@@ -1088,7 +1088,7 @@ fn place_roots_at_reference(body: &Body, place: Operand, type_table: &TypeTable)
                 None => return false,
             },
             _ => {
-                return type_table.is_reference_shaped(body.exprs[e].type_id);
+                return type_table.is_reference(body.exprs[e].type_id);
             }
         }
     }

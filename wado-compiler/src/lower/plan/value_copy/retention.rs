@@ -1133,8 +1133,8 @@ impl RefCarrying<'_> {
                 let carries = match slot {
                     Some(slot)
                         if nested
-                            && !tt.is_reference_shaped(slot)
-                            && tt.is_reference_shaped(*type_id)
+                            && !tt.is_reference(slot)
+                            && tt.is_reference(*type_id)
                             && slot_ref_copies(slot, tt) =>
                     {
                         slot
@@ -1395,7 +1395,7 @@ fn facts_of_body(
         // A reference parameter is only what it points at. What its referent's
         // elements hold is the caller's to account for, not this body's — see
         // `retain_elements_of_a_local_view.wado`.
-        if type_table.is_reference_shaped(*type_id) {
+        if type_table.is_reference(*type_id) {
             entry.is.insert(position);
         } else if carrying.holds(*type_id) {
             entry.holds.insert(position);
@@ -1473,7 +1473,9 @@ impl StoresWalker<'_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
-            } if copies_into_cell(place, self.type_table) => Carried::held(self.carried(place).all()),
+            } if copies_into_cell(place, self.type_table) => {
+                Carried::held(self.carried(place).all())
+            }
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
@@ -1578,7 +1580,7 @@ impl StoresWalker<'_> {
         if positions.is_empty() {
             return out;
         }
-        if self.type_table.is_reference_shaped(type_id) {
+        if self.type_table.is_reference(type_id) {
             out.is = positions;
         } else if self.carrying.holds(type_id) {
             out.holds = positions;
@@ -1874,7 +1876,7 @@ impl StoresWalker<'_> {
     fn lands_in_place(&mut self, place: &TirExpr, carried: &IndexSet<u32>, value_type: TypeId) {
         let escaping = IndexSet::from_iter([value_type]);
         match Self::place_root(place) {
-            Some((root, ty)) if !self.type_table.is_reference_shaped(ty) => {
+            Some((root, ty)) if !self.type_table.is_reference(ty) => {
                 self.hold_into(root, carried);
             }
             Some((root, _)) => {

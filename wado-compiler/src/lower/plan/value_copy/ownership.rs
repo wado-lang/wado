@@ -593,7 +593,7 @@ fn compute_fresh_locals(
     // A by-value parameter is owned, the caller having copied or moved it in,
     // unless the caller passes it uncopied.
     for p in params {
-        if !type_table.is_reference_shaped(p.type_id) && !shared.contains(&p.local_index) {
+        if !type_table.is_reference(p.type_id) && !shared.contains(&p.local_index) {
             fresh.insert(p.local_index);
         }
     }
