@@ -1,4 +1,15 @@
-use { Document, Number, Schema, SchemaObject, ValidationError, Validator } from "../src/lib.wado";
+use { Uri } from "core:uri";
+use {
+    CompileError,
+    Document,
+    Number,
+    Schema,
+    SchemaError,
+    SchemaObject,
+    SchemaSet,
+    ValidationError,
+    Validator,
+} from "../src/lib.wado";
 
 fn errors(schema: String, data: String) -> List<ValidationError> {
     let validator = Validator::compile(&Schema::parse(schema).unwrap()).unwrap();
@@ -106,22 +117,72 @@ test "a shared target is evaluated apart under each binding of a dynamic anchor"
     assert found[0].keyword == "/anyOf";
 }
 
-test "a reference the schema does not hold is an error at compile" {
-    let e = Validator::compile(&Schema::parse(#"{"items": {"$ref": "other.json"}}"#).unwrap()).unwrap_err();
-    assert e.pointer == "/items/$ref";
-    assert e.message == "refers to no schema this document holds";
+test "a reference to a document nobody supplied is unresolved at compile" {
+    let e = Validator::compile(&Schema::parse(#"{"items": {"$ref": "https://x.test/other.json#/a"}}"#).unwrap()).unwrap_err();
+    let Unresolved(u) = e else {
+        panic(`${e}`);
+    };
+    assert u.uri matches { None };
+    assert u.pointer == "/items/$ref";
+    assert `${u.target}` == "https://x.test/other.json#/a";
+}
+
+test "a reference into a held document at a place it lacks is an error at compile" {
+    let mut set = SchemaSet::new();
+    set.insert(uri("https://x.test/root.json"), Schema::parse(##"{"$ref": "int.json#/nope"}"##).unwrap());
+    set.insert(uri("https://x.test/int.json"), Schema::parse(#"{"type": "integer"}"#).unwrap());
+    let s = invalid(Validator::compile_in(&set, &uri("https://x.test/root.json")));
+    assert s.uri matches { Some(u) && `${u}` == "https://x.test/root.json" };
+    assert s.pointer == "/$ref";
+}
+
+test "a set names the documents its references still need, then compiles" {
+    let root = uri("https://x.test/root.json");
+    let mut set = SchemaSet::new();
+    set.insert(root, Schema::parse(#"{"items": {"$ref": "int.json"}, "$defs": {"m": {"$ref": "moved.json"}}}"#).unwrap());
+    assert set.missing().unwrap() matches { Some(u) && `${u}` == "https://x.test/int.json" };
+    set.insert(uri("https://x.test/int.json"), Schema::parse(#"{"type": "integer"}"#).unwrap());
+    assert set.missing().unwrap() matches { Some(u) && `${u}` == "https://x.test/moved.json" };
+    // The URI a document was retrieved from names it, whatever its `$id` says.
+    set.insert(uri("https://x.test/moved.json"), Schema::parse(#"{"$id": "https://y.test/s"}"#).unwrap());
+    assert set.missing().unwrap() matches { None };
+    let validator = Validator::compile_in(&set, &root).unwrap();
+    assert validator.validate(&Document::parse("[1, 2]").unwrap().root()) matches { Ok(_) };
+    let found = validator.validate(&Document::parse(#"[1, "x"]"#).unwrap().root()).unwrap_err();
+    assert found.len() == 1;
+    assert found[0].uri matches { Some(u) && `${u}` == "https://x.test/int.json" };
+    assert found[0].keyword == "/type";
+    assert found[0].instance == "/1";
+}
+
+test "Draft 2020-12's meta-schemas are held without being supplied" {
+    let schema = ##"{"$ref": "https://json-schema.org/draft/2020-12/schema"}"##;
+    assert errors(schema, #"{"type": "string", "properties": {"a": {"minimum": 1}}}"#).is_empty();
+    assert !errors(schema, #"{"properties": {"a": {"minimum": "1"}}}"#).is_empty();
+}
+
+fn uri(text: String) -> Uri {
+    return Uri::from_str(text).unwrap();
 }
 
 test "a schema built breaking a keyword's rule is an error at compile" {
     let schema = Schema::Object(SchemaObject {
         items: Option::Some(Schema::Object(SchemaObject { multiple_of: Option::Some(Number::from(0.0)) })),
     });
-    let e = Validator::compile(&schema).unwrap_err();
+    let e = invalid(Validator::compile(&schema));
     assert e.pointer == "/items/multipleOf";
     assert e.message == "must be greater than 0";
 }
 
 test "a pattern outside the supported syntax is an error at compile" {
-    let e = Validator::compile(&Schema::parse(#"{"pattern": "(?<=a)b"}"#).unwrap()).unwrap_err();
+    let e = invalid(Validator::compile(&Schema::parse(#"{"pattern": "(?<=a)b"}"#).unwrap()));
+    assert e.uri matches { None };
     assert e.pointer == "/pattern";
+}
+
+fn invalid(compiled: Result<Validator, CompileError>) -> SchemaError {
+    let Err(Invalid(e)) = compiled else {
+        panic("compiled, or failed otherwise");
+    };
+    return e;
 }

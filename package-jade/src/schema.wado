@@ -3,6 +3,7 @@
 
 use { Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
 use { HashMap, HashSet } from "core:collections";
+use { Uri } from "core:uri";
 use { Document, Node } from "./document.wado";
 use { Number } from "./number.wado";
 
@@ -515,17 +516,26 @@ impl Serialize for TypeKeyword {
 /// A schema that breaks Draft 2020-12's rules for a keyword's value, at the
 /// JSON Pointer `pointer` into the schema document.
 pub struct SchemaError {
+    /// The URI the document was supplied under, or none for one supplied alone.
+    pub uri: Option<Uri> = null,
     pub pointer: String,
     pub message: String,
 }
 
 impl Display for SchemaError {
     fn fmt(&self, f: &mut Formatter) {
-        if !self.pointer.is_empty() {
-            f.write_str(&self.pointer);
-            f.write_str(": ");
-        }
+        write_location(f, &self.uri, &self.pointer);
         f.write_str(&self.message);
+    }
+}
+
+/// `uri#pointer: `, leaving out what is absent.
+internal fn write_location(f: &mut Formatter, uri: &Option<Uri>, pointer: &String) {
+    if let Some(u) = uri {
+        f.write_str(`${u}#`);
+    }
+    if uri matches { Some(_) } || !pointer.is_empty() {
+        f.write_str(`${*pointer}: `);
     }
 }
 
