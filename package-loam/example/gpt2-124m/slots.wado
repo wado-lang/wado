@@ -80,17 +80,25 @@ fn prompt(i: i32) -> List<i64> {
     return Tokenizer::encode(&PROMPTS[i]).into_iter().map(|id| id as i64).collect();
 }
 
-/// The `1 + STEPS` tokens `prompt` picks alone: its prompt through `compute`,
+/// The `1 + STEPS` tokens `prompted` picks alone: it through `compute`,
 /// the rest in one call of `decode`. A pass with no past owes the mask the
 /// prompt's length, so the prompt leaves no room, and `decode` grows the cache.
-fn alone<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, prompt: List<i64>) -> List<i64> with _ {
+fn alone<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, prompted: List<i64>) -> List<i64> with _ {
     let sampling = Sampling {};
-    let first = gpt2::compute(g, &ids(prompt), &mask(prompt.len()), &branch(false), &gpt2::Cache::empty(g, 1), 0, model);
-    let mut tokens = sampling.first_tokens(&first.logits, prompt.len() as i64);
+    let first = gpt2::compute(
+        g,
+        &ids(prompted),
+        &mask(prompted.len()),
+        &branch(false),
+        &gpt2::Cache::empty(g, 1),
+        0,
+        model,
+    );
+    let mut tokens = sampling.first_tokens(&first.logits, prompted.len() as i64);
     let next = gpt2::decode(
         g,
         &ids(tokens),
-        &mask(prompt.len() + 1),
+        &mask(prompted.len() + 1),
         &branch(true),
         &first.cache,
         STEPS,

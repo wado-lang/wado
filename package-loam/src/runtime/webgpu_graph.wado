@@ -483,7 +483,7 @@ impl Graph for WebGpuBackend {
         let extents = self.extents_of(data);
         if let Device(by) = indices
             && E::exact_in_f32()
-            && let Some(axis) = taken_axis(&extents, by.extents.len(), dims)
+            && let Some(axis) = taken_axis(&extents, &by.extents, dims)
             && let Some(out) = self.gathered_by(
                 &self.device_view(data),
                 by,
@@ -493,14 +493,28 @@ impl Graph for WebGpuBackend {
             return Placed::Device(out);
         }
         let index = self.host(indices);
-        if E::exact_in_f32() && let Some(axis) = taken_axis(&extents, index.extents.len(), dims) {
-            let last = extents[axis] as i64 - 1;
-            let mut starts = List::<i64>::with_capacity(index.data.len());
-            for let i of index.data {
-                starts.push(i64::clamp(i, 0, last));
+        if E::exact_in_f32()
+            && let Some(TakenAxes { first, count, batch }) = taken_axes(&extents, &index.extents, dims) {
+            // The axes taken merge into one, which each index's flat position
+            // along them takes.
+            let mut starts = List::<i64>::with_capacity(index.data.len() / count);
+            for let at of 0..<index.data.len() / count {
+                let mut flat: i64 = 0;
+                for let k of 0..<count {
+                    let along = extents[first + k] as i64;
+                    flat = flat * along + i64::clamp(index.data[at * count + k], 0, along - 1);
+                }
+                starts.push(flat);
             }
-            let clamped = Tensor::<i64, I> { data: starts, extents: index.extents };
-            if let Some(out) = self.gathered(&self.device_view(data), &clamped, axis) {
+            let clamped = Tensor::<i64, I> {
+                data: starts,
+                extents: index.extents[0..<batch].to_list(),
+            };
+            let mut merged = extents[0..<first].to_list();
+            merged.push(element_count(&extents[first..<first + count].to_list()));
+            merged.extend(&extents[first + count..<extents.len()].to_list());
+            let view = self.device_view(data);
+            if let Some(out) = self.gathered(&self.reshaped(&view, &merged), &clamped, first) {
                 assert out.extents == gathered_extents(&index.extents, dims);
                 return Placed::Device(out);
             }
@@ -757,7 +771,7 @@ fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {
                 && dims.rhs_contracting.len() == 1
                 && dims.rhs_batch.is_empty() => dims.rhs_contracting[0],
             Gather(dims) && node.operands[0] == weight
-                && taken_axis(extents, recorded.nodes[node.operands[1]].extents.len(), &dims) == Option::Some(0) => 1,
+                && taken_axis(extents, &recorded.nodes[node.operands[1]].extents, &dims) == Option::Some(0) => 1,
             _ => {
                 return null;
             },
@@ -1470,8 +1484,8 @@ global INDEX_BOUND: i64 = 8388608;
 /// and `b`: an `E` it holds, or an i64 one of them already holds as an f32, a
 /// token a kernel ranked, where the other's values stay within [`INDEX_BOUND`].
 fn held_as_f32<E: Element, A, B>(a: &Placed<E, A>, b: &Placed<E, B>) -> bool {
-    let on_device = a matches { Device(_) } || b matches { Device(_) };
-    return E::exact_in_f32() || on_device && within_index_bound(a) && within_index_bound(b);
+    let either_held = a matches { Device(_) } || b matches { Device(_) };
+    return E::exact_in_f32() || either_held && within_index_bound(a) && within_index_bound(b);
 }
 
 fn within_index_bound<E: Element, Axes>(t: &Placed<E, Axes>) -> bool {
@@ -1495,19 +1509,51 @@ fn product_of(extents: &List<i32>, axes: &List<i32>) -> i32 {
     return element_count(&picked(extents, axes));
 }
 
-/// The axis a gather takes whole slices along, an index each, where `dims`
-/// says that and nothing else: the indices' axes stand where that axis was.
-fn taken_axis(extents: &List<i32>, index_rank: i32, dims: &GatherDims) -> Option<i32> {
+/// The axis a gather takes whole slices along, a position an index, where
+/// `dims` says that and nothing else.
+fn taken_axis(extents: &List<i32>, index_extents: &List<i32>, dims: &GatherDims) -> Option<i32> {
+    let Some(taken) = taken_axes(extents, index_extents, dims) else {
+        return null;
+    };
+    return if taken.count == 1 && taken.batch == index_extents.len() { Option::Some(taken.first) } else { null };
+}
+
+/// The adjacent axes a gather takes whole slices across, one position along
+/// each, where `dims` says that and nothing else: the index's positions stand
+/// where those axes were.
+fn taken_axes(extents: &List<i32>, index_extents: &List<i32>, dims: &GatherDims) -> Option<TakenAxes> {
     let [collapsed, mapped] = [dims.collapsed_slice_dims, dims.start_index_map];
-    if collapsed.len() != 1 || mapped != collapsed || dims.index_vector_dim != index_rank {
+    let count = collapsed.len();
+    let rank = index_extents.len();
+    let implicit = dims.index_vector_dim == rank;
+    let vectored = rank > 0 && dims.index_vector_dim == rank - 1 && index_extents[rank - 1] == count;
+    if count == 0 || mapped != collapsed || !(implicit && count == 1 || vectored) {
         return null;
     }
-    let axis = collapsed[0];
+    let first = collapsed[0];
     let mut whole = *extents;
-    whole[axis] = 1;
-    let mut offsets: List<i32> = (0..<axis).collect();
-    offsets.extend(&(axis + index_rank..<extents.len() - 1 + index_rank).collect());
-    return if dims.slice_sizes == whole && dims.offset_dims == offsets { Option::Some(axis) } else { null };
+    for let k of 0..<count {
+        if collapsed[k] != first + k {
+            return null;
+        }
+        whole[first + k] = 1;
+    }
+    let batch = if implicit { rank } else { rank - 1 };
+    let mut offsets: List<i32> = (0..<first).collect();
+    offsets.extend(&(first + batch..<extents.len() - count + batch).collect());
+    if dims.slice_sizes != whole || dims.offset_dims != offsets {
+        return null;
+    }
+    return Option::Some(TakenAxes { first, count, batch });
+}
+
+/// The run of adjacent axes a gather takes one position along each of, and
+/// keeps every other axis whole: its first axis, how many, and the rank of the
+/// index's positions, past which it holds one coordinate per axis.
+struct TakenAxes {
+    first: i32,
+    count: i32,
+    batch: i32,
 }
 
 /// Each update window a scatter writes: the part of `update` at each index,
