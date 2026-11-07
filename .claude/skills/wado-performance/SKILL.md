@@ -560,9 +560,7 @@ regressed, turning 3.6% down on cbor-catalog into 2.1% up. Delete the overrides 
 committing: read per node visit, `std::env::var` is itself a compile-time cost.
 
 A runtime setting one benchmark wants becomes a CLI option with a conservative
-default, and that benchmark gets a second row at its own value, as
-`GALE_GEN_BIG_HEAP` in `benchmark/wado.sh` does. Sweep a candidate below the
-default as well as above it.
+default. Sweep a candidate below the default as well as above it.
 
 **What decides adoption**, in priority order:
 

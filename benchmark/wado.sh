@@ -9,6 +9,11 @@ wado() {
     fi
 }
 
-# Every row runs at the CLI's 256 MiB default. gale_gen runs again with
-# collections rare, as a second row, to show how far its time falls.
-GALE_GEN_BIG_HEAP="--gc-heap-initial 1g"
+# One benchmark's two Wado rows: `$1` with its recorded profile, and again
+# without one, which is how the C and Rust rows beside it are built.
+wado_rows() {
+    echo "=== $1 ==="
+    wado run -O2 $WADO_BENCH_FLAGS "$2"
+    echo "=== $1 (no-pgo) ==="
+    wado run -O2 $WADO_BENCH_FLAGS -f no-pgo "$2"
+}

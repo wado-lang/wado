@@ -19,8 +19,9 @@
 #   WADO_BENCH_FLAGS="--optimize-inline-threshold 20" mise run all
 #   WADO_BIN="$(mise run benchmark-baseline)" mise run all
 #
-# Every row runs at the 256 MiB default GC heap. gale_gen runs again at
-# `GALE_GEN_BIG_HEAP` from `wado.sh`, as a row of its own.
+# Every row runs at the 256 MiB default GC heap. `all` and the task of each
+# benchmark in it time Wado twice, with and without the recorded profile
+# (`wado_rows` in `wado.sh`).
 
 [settings]
 lockfile = true
@@ -47,8 +48,7 @@ echo "=== Rust ==="
 echo "=== JavaScript ==="
 node microgpt/microgpt.js
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS microgpt/microgpt.wado
+wado_rows Wado microgpt/microgpt.wado
 """
 
 [tasks.mandelbrot]
@@ -70,8 +70,7 @@ echo "=== C ==="
 echo "=== JavaScript ==="
 node mandelbrot/mandelbrot.js
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS mandelbrot/mandelbrot.wado
+wado_rows Wado mandelbrot/mandelbrot.wado
 """
 
 [tasks.sieve]
@@ -93,8 +92,7 @@ echo "=== C ==="
 echo "=== JavaScript ==="
 node sieve/sieve.js
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS sieve/sieve.wado
+wado_rows Wado sieve/sieve.wado
 """
 
 [tasks.zlib]
@@ -152,8 +150,7 @@ fi
 echo "=== JavaScript (Node) ==="
 node zlib/zlib.js
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS zlib/zlib_bench.wado
+wado_rows Wado zlib/zlib_bench.wado
 """
 
 [tasks.fts]
@@ -175,8 +172,7 @@ echo "=== C ==="
 echo "=== Rust ==="
 ./fts/fts_rs
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS fts/fts.wado
+wado_rows Wado fts/fts.wado
 """
 
 [tasks.json-twitter]
@@ -195,8 +191,7 @@ echo "=== Rust serde_json ==="
 echo "=== JavaScript ==="
 node json_twitter/json_twitter.js
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS json_twitter/json_twitter.wado
+wado_rows Wado json_twitter/json_twitter.wado
 """
 
 [tasks.cbor]
@@ -213,8 +208,7 @@ for ds in twitter canada catalog; do
     echo "=== Rust serde_cbor ($ds) ==="
     ./cbor/target/release/cbor_${ds}_bench
 
-    echo "=== Wado core:cbor ($ds) ==="
-    wado run -O2 $WADO_BENCH_FLAGS cbor/cbor_${ds}.wado
+    wado_rows "Wado core:cbor ($ds)" cbor/cbor_${ds}.wado
 done
 """
 
@@ -234,8 +228,7 @@ echo "=== Rust serde_json ==="
 echo "=== JavaScript ==="
 node json_canada/json_canada.js
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS json_canada/json_canada.wado
+wado_rows Wado json_canada/json_canada.wado
 """
 
 [tasks.json-catalog]
@@ -254,8 +247,7 @@ echo "=== Rust serde_json ==="
 echo "=== JavaScript ==="
 node json_catalog/json_catalog.js
 
-echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS json_catalog/json_catalog.wado
+wado_rows Wado json_catalog/json_catalog.wado
 """
 
 [tasks.sqlite-parse]
@@ -274,8 +266,7 @@ echo "=== Rust sqlparser-rs ==="
 echo "=== ANTLR4 (Java, generated from the same SQLite.g4) ==="
 node sqlite_parse/antlr4_java_bench.mjs
 
-echo "=== Wado (Gale) ==="
-wado run -O2 $WADO_BENCH_FLAGS sqlite_parse/sqlite_parse.wado
+wado_rows "Wado (Gale)" sqlite_parse/sqlite_parse.wado
 """
 
 [tasks.syntax-highlight]
@@ -297,8 +288,7 @@ echo "=== tree-sitter (Rust native) ==="
 echo "=== JavaScript highlighters (Node.js) ==="
 node syntax_highlight/syntax_highlight.js
 
-echo "=== Wado (Gale) ==="
-wado run -O2 $WADO_BENCH_FLAGS syntax_highlight/syntax_highlight.wado
+wado_rows "Wado (Gale)" syntax_highlight/syntax_highlight.wado
 """
 
 [tasks.gale-highlight-html]
@@ -335,11 +325,7 @@ source ./wado.sh
 echo "=== ANTLR4 (generate, same RustLexer.g4 + RustParser.g4) ==="
 node gale_gen/antlr4_gen.mjs
 
-echo "=== Wado (Gale generator, Rust grammar) ==="
-wado run -O2 $WADO_BENCH_FLAGS gale_gen/gale_gen.wado
-
-echo "=== Wado (Gale generator, Rust grammar, 1 GiB heap) ==="
-wado run -O2 $WADO_BENCH_FLAGS $GALE_GEN_BIG_HEAP gale_gen/gale_gen.wado
+wado_rows "Wado (Gale generator, Rust grammar)" gale_gen/gale_gen.wado
 """
 
 [tasks.http-routing]
@@ -404,12 +390,6 @@ for f in $FILES; do
     echo "[${name%.wado}] \\$ wado run -O2 $f"
     echo "=== Wado ==="
     wado run -O2 $WADO_BENCH_FLAGS "$f"
-    case "$f" in
-        *gale_gen*)
-            echo "=== Wado (1 GiB heap) ==="
-            wado run -O2 $WADO_BENCH_FLAGS $GALE_GEN_BIG_HEAP "$f"
-            ;;
-    esac
 done
 """
 

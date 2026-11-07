@@ -57,23 +57,25 @@ mise run on-task-started
 
 ## PGO
 
-Every Wado row in the procedure is a PGO build: `wado run` and `wado compile`
-apply the profile in the benchmark's `pgo/` by default. wasm-size has no
-profile, so a size change is the compiler's or the program's.
+A Wado row in the procedure is a PGO build: `wado run` and `wado compile` apply
+the profile in the benchmark's `pgo/` by default. `benchmark-all` runs each one
+again as its `(no-pgo)` row, which `wado_rows` in `benchmark/wado.sh` prints, and
+the tables list both. http-routing has no such row, and the README says so.
+wasm-size has no profile, so a size change is the compiler's or the program's.
 
 The README's PGO section compares three builds, and its commands stand beside
-its tables. Take the wall clock from three rounds that change the order of the
-builds. `all-wado` leaves out the table's `gale_html` row, so run
-`mise run -C benchmark gale-highlight-html` the same way.
+its tables. The `no-cold-paths` wall clock comes from three more runs, alternated
+with the three of the procedure. `all-wado` leaves out the table's `gale_html`
+row, so run `gale_html.wado` the same way under each flag.
 
 Compare two builds with
 `mise exec -- node benchmark/ab.ts --base <no-pgo logs> --head <PGO logs>`. Its
-verdict gives the table's `noise`.
+verdict gives the table's `noise`. It keys rows by implementation, so split a
+`benchmark-all` log into one log per build first.
 
 A profile can move a row through what the program allocates, because a change of
 allocation moves where collections land. `wado run --gc-log` shows that, and
-`microgpt` needs a new heap sweep when it happens. A size that beats the default
-gets a second row, as `GALE_GEN_BIG_HEAP` does.
+`microgpt` needs a new heap sweep when it happens.
 
 A Wado row that moved may have moved through the profile and not the compiler.
 Before naming a cause, compare the row's `-f no-pgo` figure with the README's
