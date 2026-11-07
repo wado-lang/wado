@@ -21,8 +21,9 @@ use crate::attribute;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::normalize_line_breaks;
 use crate::module_source::ModuleSource;
-use crate::name::COLD_PATH_INTRINSIC;
+use crate::name::{self, COLD_PATH_INTRINSIC};
 use crate::token::Span;
+use crate::unparse::unparse_impl_head;
 
 /// Name of the custom section embedded in instrumented test-world components.
 pub const SECTION_NAME: &str = "org.wado-lang.coverage";
@@ -584,6 +585,7 @@ pub(crate) fn plan_module(
         function: 0,
         region: None,
         owner: None,
+        declared_in: None,
         last_choice: Vec::new(),
         for_of_bodies: Vec::new(),
         texts: Vec::new(),
@@ -607,7 +609,14 @@ pub(crate) fn plan_module(
     } = planner;
     for (index, ids) in plan.regions_by_function().iter().enumerate() {
         let regions = ids.iter().map(|&id| &plan.regions[id as usize]);
-        plan.functions[index].hash = function_hash(module.source(), &texts[index], regions);
+        let hashed = |function: u32| {
+            assert!(
+                (function as usize) < index,
+                "a closure is planned after the function it is written in"
+            );
+            plan.functions[function as usize].hash
+        };
+        plan.functions[index].hash = function_hash(module.source(), &texts[index], hashed, regions);
     }
     PlannedModule {
         plan,
@@ -629,8 +638,11 @@ struct Planner<'a> {
     function: u32,
     /// The innermost region the walk is in, `None` outside a function.
     region: Option<u32>,
-    /// The type or trait a method is declared under.
+    /// The type or trait a method is declared under, as its name shows it.
     owner: Option<String>,
+    /// The `impl` head, or the trait, interface or resource, a method is
+    /// declared in, as its hash covers it.
+    declared_in: Option<String>,
     /// The sides of the choice the walk finished last.
     last_choice: Vec<u32>,
     for_of_bodies: ForOfBodies,
@@ -641,19 +653,61 @@ struct Planner<'a> {
 struct FunctionText {
     bytes: Range<usize>,
     start: Pos,
+    declared: Declared,
 }
 
-/// What a profile's counts for a function were recorded against: its text,
-/// and each of its `regions`' kind and span relative to where the text starts.
-/// The text catches an edit that changes which region runs, the regions what
+/// Where a function is declared, beyond what its own text says: what keeps
+/// one text apart in two places it may run apart from.
+enum Declared {
+    /// At a module's top level, or in a function there.
+    Free,
+    /// In an `impl`, by its head as [`unparse_impl_head`] writes it, or in a
+    /// trait, interface or resource.
+    In(String),
+    /// In the function planned at `function`, starting at `line`, relative to
+    /// that function's start, and `column`.
+    Closure {
+        function: u32,
+        line: u32,
+        column: u32,
+    },
+}
+
+/// What a profile's counts for a function were recorded against, and all a
+/// compile finds them by: its text, where it is declared, and each of its
+/// `regions`' kind and span relative to where the text starts. The text
+/// catches an edit that changes which region runs, the declaration keeps one
+/// text apart in two places it may run apart from, and the regions catch what
 /// decides them from outside the text, such as a `#[coverage(off)]` on the
-/// enclosing `impl`. See WEP 2026-10-25 (Profile-Guided Optimization).
+/// enclosing `impl`. A closure is declared in its function's hash, as `hashed`
+/// answers it. See WEP 2026-10-25 (Profile-Guided Optimization).
 fn function_hash<'r>(
     source: &str,
     text: &FunctionText,
+    hashed: impl Fn(u32) -> u64,
     regions: impl Iterator<Item = &'r Region>,
 ) -> u64 {
     let mut h = Sha256::new();
+    // Text starts at a name or a closure's `|`, never at a control byte, so a
+    // tag cannot read as the start of a free function's text.
+    match &text.declared {
+        Declared::Free => {}
+        Declared::In(owner) => {
+            h.update([1]);
+            h.update((owner.len() as u32).to_le_bytes());
+            h.update(owner.as_bytes());
+        }
+        &Declared::Closure {
+            function,
+            line,
+            column,
+        } => {
+            h.update([2]);
+            h.update(hashed(function).to_le_bytes());
+            h.update(line.to_le_bytes());
+            h.update(column.to_le_bytes());
+        }
+    }
     h.update(normalize_line_breaks(&source[text.bytes.clone()]).as_bytes());
     for region in regions {
         h.update([region.kind.code()]);
@@ -675,21 +729,28 @@ impl Planner<'_> {
         match item {
             Item::Function(f) => self.function(f),
             Item::Impl(i) if !attribute::coverage_off(&i.attrs) => {
-                self.methods(ast::type_head_name(&i.ty), &i.methods);
+                self.methods(ast::type_head_name(&i.ty), unparse_impl_head(i), &i.methods);
             }
-            Item::Trait(t) => self.methods(Some(&t.name), &t.methods),
-            Item::Interface(e) => self.methods(Some(&e.name), &e.methods),
-            Item::Resource(r) => self.methods(Some(&r.name), &r.methods),
+            Item::Trait(t) => self.methods(Some(&t.name), format!("trait {}", t.name), &t.methods),
+            Item::Interface(e) => {
+                self.methods(Some(&e.name), format!("interface {}", e.name), &e.methods);
+            }
+            Item::Resource(r) => {
+                self.methods(Some(&r.name), format!("resource {}", r.name), &r.methods);
+            }
             _ => {}
         }
     }
 
-    fn methods(&mut self, owner: Option<&str>, methods: &[Function]) {
-        let saved = std::mem::replace(&mut self.owner, owner.map(str::to_string));
+    fn methods(&mut self, owner: Option<&str>, declared_in: String, methods: &[Function]) {
+        let saved = (
+            std::mem::replace(&mut self.owner, owner.map(str::to_string)),
+            self.declared_in.replace(declared_in),
+        );
         for m in methods {
             self.function(m);
         }
-        self.owner = saved;
+        (self.owner, self.declared_in) = saved;
     }
 
     fn function(&mut self, f: &Function) {
@@ -701,20 +762,29 @@ impl Planner<'_> {
         {
             return;
         }
-        let name = match &self.owner {
-            Some(owner) => format!("{owner}::{}", f.name),
-            None => f.name.clone(),
-        };
+        let name = name::coverage_function_name(self.owner.as_deref(), &f.name);
         // A local item nests a function in another, so the walk's position is
         // saved around it.
         let saved = (self.function, self.region);
-        let region = self.new_function(name, f.name_span, RegionKind::Function, body.span);
+        let declared = self
+            .declared_in
+            .clone()
+            .map_or(Declared::Free, Declared::In);
+        let region =
+            self.new_function(name, f.name_span, declared, RegionKind::Function, body.span);
         self.sites.push((ProbeSite::BlockStart, body.id, region));
         self.block_of(region, body, false);
         (self.function, self.region) = saved;
     }
 
-    fn new_function(&mut self, name: String, at: Span, kind: RegionKind, body: Span) -> u32 {
+    fn new_function(
+        &mut self,
+        name: String,
+        at: Span,
+        declared: Declared,
+        kind: RegionKind,
+        body: Span,
+    ) -> u32 {
         self.function = self.plan.functions.len() as u32;
         self.plan.functions.push(PlannedFunction {
             name,
@@ -725,6 +795,7 @@ impl Planner<'_> {
         self.texts.push(FunctionText {
             bytes: at.start..body.end,
             start: Pos::start(at),
+            declared,
         });
         self.names.push(at);
         let region = self.new_region(kind, Pos::start(body), Pos::end(body), None);
@@ -1084,9 +1155,15 @@ impl AstVisitor<'_> for Planner<'_> {
             Expr::Closure(c) if self.expr_reaches_only_unreachable(&c.body, false) => {}
             Expr::Closure(c) => {
                 let outer_name = &self.plan.functions[self.function as usize].name;
-                let name = format!("{outer_name}::{{closure:{}}}", c.span.line);
+                let name = name::coverage_closure_name(outer_name, c.span.line);
+                let declared = Declared::Closure {
+                    function: self.function,
+                    line: c.span.line as u32 - self.texts[self.function as usize].start.line,
+                    column: c.span.column as u32,
+                };
                 let saved = (self.function, self.region);
-                let region = self.new_function(name, c.span, RegionKind::Closure, c.body.span());
+                let region =
+                    self.new_function(name, c.span, declared, RegionKind::Closure, c.body.span());
                 self.sites.push((ProbeSite::Around, c.body.id(), region));
                 self.expr_body(region, &c.body, false);
                 (self.function, self.region) = saved;
@@ -1675,6 +1752,41 @@ mod tests {
         assert_eq!(base, moved);
         let crlf = hashes(&format!("{f}{g}").replace('\n', "\r\n"));
         assert_eq!(base, crlf);
+    }
+
+    /// A profile finds a function by its hash alone, so one text must hash
+    /// apart in two impls, of one type or none, and in two functions.
+    #[test]
+    fn a_hash_follows_where_its_text_is_declared() {
+        let impls = |a: &str, b: &str| {
+            let method = "{ fn get(&self) -> i32 { return 1; } }";
+            let module = parse(&format!("{a} {method}\n{b} {method}\n"));
+            let functions = plan_module(&ModuleSource::builtin(), &module, &IndexSet::default())
+                .plan
+                .functions;
+            assert_ne!(functions[0].hash, functions[1].hash, "{a} / {b}");
+        };
+        impls("impl A", "impl B");
+        impls("impl P for A", "impl Q for A");
+        impls("impl<T> P for &T", "impl<T> P for &mut T");
+        let closures = hashes(
+            "fn f() -> i32 { let c = |x: i32| x + 1; return c(1); }\n\
+             fn g() -> i32 { let c = |x: i32| x + 1; return c(1); }\n\
+             fn h() -> i32 {\n    let c = |x: i32| x + 1;\n    let d = |x: i32| x + 1;\n    \
+             return c(d(1));\n}\n",
+        );
+        assert_ne!(closures["f::{closure:1}"], closures["g::{closure:2}"]);
+        assert_ne!(closures["h::{closure:4}"], closures["h::{closure:5}"]);
+        // Two modules' functions of one name, each with the closure in one place.
+        let parse = |n: i32| {
+            hashes(&format!(
+                "fn parse() -> i32 {{ let c = |x: i32| x + 1; return c({n}); }}\n"
+            ))
+        };
+        assert_ne!(
+            parse(1)["parse::{closure:1}"],
+            parse(2)["parse::{closure:1}"]
+        );
     }
 
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee

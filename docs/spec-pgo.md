@@ -26,10 +26,12 @@ workloads that are gone.
 
 ## The Profile Format
 
-A profile is text, one record per line:
+A profile is text, one record per line, after a header naming the format's
+version. A compile refuses a profile of another version, and says to record
+the workloads again:
 
 ```text
-wado-pgo 1
+wado-pgo 2
 module acme:app@0.1.0/src/lib.wado
 fn 3f2a9c0d1e2b4a59 12 pick
 0 5
@@ -47,23 +49,34 @@ of one package:
 - A `core:` module is its import path, and a remote module its URL.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers
-the function's source text, a CRLF read as LF, and its regions' kinds and
-positions relative to it. The lines after it give how often each of the
-function's regions ran, the regions numbered from zero within the function. A
-region not listed never ran.
+the function's source text from its name to the end of its body, a CRLF read as
+LF, and its regions' kinds and positions relative to it. It also covers where
+the function is declared. For a method, that is the head of its `impl`, written
+out as `impl<T: Eq> Eq for &T`, or the trait, interface or resource it is
+declared in. For a closure, it is the hash of the function the closure is
+written in, the line the closure starts at relative to that function's start,
+and its column. The lines after it give how often each of the function's
+regions ran, the regions numbered from zero within the function. A region not
+listed never ran.
+
+Functions of one hash share one set of counts, the sum of what each of them
+ran, as a generic function's instances do. Each module lists such a function
+under its own `fn` line, with the summed counts.
 
 A count of zero and no profile are different things. Every function of a
 module the profile lists has a `fn` line, one the workloads never ran
 included, and each of its regions has a count, zero where no line gives one.
-A function with no `fn` line has no profile at all, and neither does one whose
-hash differs from its current source's: nothing measured it as it stands, so
-no count applies to it.
+A function whose hash no `fn` line gives has no profile at all: nothing
+measured it as it stands, so no count applies to it.
 
 ## Applying a Profile
 
 A build applies its entry's profile, the one `wado test --pgo` records the
-entry's workloads into. `-f pgo` turns this on and `-f no-pgo` off. It is on
-by default in every world, the test world included, so a test runs the code a
+entry's workloads into. It finds each function's counts by the function's hash
+alone. A `module` line and a function's name and line are for a reader, so a
+profile still applies after the function's module moves, or its package takes
+another version. `-f pgo` turns this on and `-f no-pgo` off. It is on by
+default in every world, the test world included, so a test runs the code a
 build ships. A build that finds no profile compiles without one, and under
 `-f pgo` says so at `--log-level info`.
 
@@ -84,8 +97,11 @@ entered, and whose hash matches, on two questions:
 
 A function the workloads never entered is not judged: workloads are tests, so a
 build's own entry, and whatever only it reaches, never runs under them. Nor is
-one whose hash differs, and the compile says so at `--log-level info`. Each is
-compiled as without a profile, with the markers its source states.
+one whose hash the profile does not give. Where the profile lists a function of
+the same name in the same module, under any version of its package, the
+function is new or changed since the recording, and the compile says so at
+`--log-level info`. Each is compiled as without a profile, with the markers its
+source states.
 
 ### Markers
 

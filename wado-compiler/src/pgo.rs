@@ -7,7 +7,8 @@
 //! [The Profile Format](../../docs/spec-pgo.md#the-profile-format). A `module`
 //! line is a [`Coverage::files`] key, which `--pgo` makes the module's name.
 
-use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Write as _};
 
 use crate::ast::{self, AstId, AstIdSpace};
@@ -16,31 +17,53 @@ use crate::coverage::{
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::unversioned_module_name;
 use crate::rarity::Mark;
 use crate::stdlib::core_module_file;
 use crate::token::Span;
 
-/// The first line of every profile, naming its format.
-pub const HEADER: &str = "wado-pgo 1";
+/// The first line of every profile, naming its format and the format's
+/// version.
+pub const HEADER: &str = "wado-pgo 2";
+
+/// The runs of each region of a function that ran, by its number within the
+/// function.
+type Counts = BTreeMap<u32, i64>;
 
 /// `coverage` as a profile, with its files keyed by the names a profile gives
-/// modules.
+/// modules, and each function's counts summed with every other function's of
+/// its hash.
 #[must_use]
 pub fn to_text(coverage: &Coverage) -> String {
+    let mut summed: BTreeMap<u64, Vec<i64>> = BTreeMap::new();
+    for file in coverage.files.values() {
+        for (function, ids) in file
+            .plan
+            .functions
+            .iter()
+            .zip(file.plan.regions_by_function())
+        {
+            let runs = summed
+                .entry(function.hash)
+                .or_insert_with(|| vec![0; ids.len()]);
+            assert_eq!(runs.len(), ids.len(), "a hash covers the region plan");
+            for (sum, id) in runs.iter_mut().zip(ids) {
+                *sum = sum.saturating_add(file.count(id));
+            }
+        }
+    }
     let mut out = format!("{HEADER}\n");
     for (module, file) in &coverage.files {
         let _ = writeln!(out, "module {module}");
-        let regions = file.plan.regions_by_function();
-        for (function, ids) in file.plan.functions.iter().zip(&regions) {
+        for function in &file.plan.functions {
             let _ = writeln!(
                 out,
                 "fn {:016x} {} {}",
                 function.hash, function.line, function.name
             );
-            for (index, &id) in ids.iter().enumerate() {
-                let count = file.count(id);
-                if count > 0 {
-                    let _ = writeln!(out, "{index} {count}");
+            for (index, &runs) in summed[&function.hash].iter().enumerate() {
+                if runs > 0 {
+                    let _ = writeln!(out, "{index} {runs}");
                 }
             }
         }
@@ -48,39 +71,50 @@ pub fn to_text(coverage: &Coverage) -> String {
     out
 }
 
-/// A profile read back: each module's functions, by the name [`to_text`]
-/// gives the module.
+/// A profile read back: the counts of each function by its hash, which is all
+/// a compile matches a function by.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Profile {
-    modules: BTreeMap<String, Vec<ProfiledFunction>>,
-}
-
-/// What a profile holds for one function.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ProfiledFunction {
-    name: String,
-    hash: u64,
-    /// The runs of each region that ran, by its number within the function.
-    counts: BTreeMap<u32, i64>,
+    counts: BTreeMap<u64, Counts>,
+    /// The functions each module lists, by their names and by the module's
+    /// [`unversioned_module_name`]. They tell a function new or changed since
+    /// the recording from one the profile never listed, and the stdlib's from
+    /// the rest.
+    listed: BTreeMap<String, Vec<(String, u64)>>,
 }
 
 impl Profile {
-    /// The part naming `core:` modules: what the stdlib snapshot applies.
+    /// The part listed under `core:` modules: what the stdlib snapshot applies.
     #[must_use]
     pub(crate) fn stdlib_part(&self) -> Self {
-        Self {
-            modules: self
-                .modules
-                .iter()
-                .filter(|(name, _)| core_module_file(name).is_some())
-                .map(|(name, functions)| (name.clone(), functions.clone()))
-                .collect(),
-        }
+        let listed: BTreeMap<_, _> = self
+            .listed
+            .iter()
+            .filter(|(name, _)| core_module_file(name).is_some())
+            .map(|(name, functions)| (name.clone(), functions.clone()))
+            .collect();
+        let counts = listed
+            .values()
+            .flatten()
+            .map(|&(_, hash)| (hash, self.counts[&hash].clone()))
+            .collect();
+        Self { counts, listed }
     }
 
     #[must_use]
     pub(crate) fn is_empty(&self) -> bool {
-        self.modules.is_empty()
+        self.counts.is_empty()
+    }
+
+    /// The names of the functions the profile lists in `module`, under any
+    /// version of its package.
+    fn names_in(&self, module: &str) -> BTreeSet<&str> {
+        self.listed
+            .get(&unversioned_module_name(module))
+            .into_iter()
+            .flatten()
+            .map(|(name, _)| name.as_str())
+            .collect()
     }
 
     /// This profile read under `thresholds`, against its own hot line.
@@ -104,10 +138,10 @@ impl Profile {
     /// where the share holds no count.
     fn count_line(&self, cutoff: Cutoff) -> Option<i64> {
         let mut counts: Vec<i64> = self
-            .modules
+            .counts
             .values()
-            .flatten()
-            .flat_map(|function| function.counts.values().copied())
+            .flat_map(Counts::values)
+            .copied()
             .collect();
         counts.sort_unstable_by(|a, b| b.cmp(a));
         let total: u128 = counts.iter().map(|&count| count as u128).sum();
@@ -283,51 +317,88 @@ pub fn parse(text: &str) -> Result<Profile, ParseError> {
         .lines()
         .enumerate()
         .map(|(index, line)| (index + 1, line));
-    if lines.next().map(|(_, line)| line) != Some(HEADER) {
-        return Err(error(1, &format!("a profile starts with `{HEADER}`")));
+    fn format(header: &str) -> Option<&str> {
+        header.split_once(' ').map(|(format, _)| format)
     }
-    let mut modules: Vec<(String, Vec<ProfiledFunction>)> = Vec::new();
+    match lines.next().map(|(_, line)| line) {
+        Some(HEADER) => {}
+        // Another version hashes its functions otherwise, so none of its
+        // counts would apply.
+        Some(other) if format(other) == format(HEADER) => {
+            return Err(error(
+                1,
+                &format!(
+                    "`{other}` is a format this compiler does not read: record the workloads \
+                     again with `wado test --pgo`"
+                ),
+            ));
+        }
+        _ => return Err(error(1, &format!("a profile starts with `{HEADER}`"))),
+    }
+    let mut profile = Profile::default();
+    let mut modules = BTreeSet::new();
+    let mut module: Option<String> = None;
+    // The function the count lines belong to: its `fn` line's number, its
+    // hash, and the counts read so far.
+    let mut function: Option<(usize, u64, Counts)> = None;
+    let close = |profile: &mut Profile, function: Option<(usize, u64, Counts)>| {
+        let Some((number, hash, counts)) = function else {
+            return Ok(());
+        };
+        match profile.counts.entry(hash) {
+            Entry::Vacant(entry) => {
+                entry.insert(counts);
+                Ok(())
+            }
+            Entry::Occupied(listed) if *listed.get() == counts => Ok(()),
+            Entry::Occupied(_) => Err(error(
+                number,
+                "a function's counts are the same wherever its hash is listed",
+            )),
+        }
+    };
     for (number, line) in lines {
         if let Some(name) = line.strip_prefix("module ") {
-            if modules.iter().any(|(listed, _)| listed == name) {
+            close(&mut profile, function.take())?;
+            if !modules.insert(name.to_string()) {
                 return Err(error(number, "a module is listed once"));
             }
-            modules.push((name.to_string(), Vec::new()));
+            module = Some(unversioned_module_name(name));
         } else if let Some(rest) = line.strip_prefix("fn ") {
-            let function = parse_function(rest)
+            close(&mut profile, function.take())?;
+            let (hash, name) = parse_function(rest)
                 .ok_or_else(|| error(number, "a function is `fn <hash> <line> <name>`"))?;
-            modules
-                .last_mut()
-                .ok_or_else(|| error(number, "a function follows a `module` line"))?
-                .1
-                .push(function);
+            let module = module
+                .clone()
+                .ok_or_else(|| error(number, "a function follows a `module` line"))?;
+            profile
+                .listed
+                .entry(module)
+                .or_default()
+                .push((name.to_string(), hash));
+            function = Some((number, hash, Counts::new()));
         } else {
             let (region, runs) = parse_count(line)
                 .ok_or_else(|| error(number, "a count is `<region> <runs>`, runs above zero"))?;
-            let function = modules
-                .last_mut()
-                .and_then(|(_, functions)| functions.last_mut())
+            let (_, _, counts) = function
+                .as_mut()
                 .ok_or_else(|| error(number, "a count follows a `fn` line"))?;
-            if function.counts.insert(region, runs).is_some() {
+            if counts.insert(region, runs).is_some() {
                 return Err(error(number, "a region is counted once"));
             }
         }
     }
-    Ok(Profile {
-        modules: modules.into_iter().collect(),
-    })
+    close(&mut profile, function)?;
+    Ok(profile)
 }
 
-fn parse_function(rest: &str) -> Option<ProfiledFunction> {
+/// A `fn` line's hash and name.
+fn parse_function(rest: &str) -> Option<(u64, &str)> {
     let mut parts = rest.splitn(3, ' ');
     let hash = parts.next().filter(|hash| hash.len() == 16)?;
     parts.next()?.parse::<u32>().ok()?;
     let name = parts.next().filter(|name| !name.is_empty())?;
-    Some(ProfiledFunction {
-        name: name.to_string(),
-        hash: u64::from_str_radix(hash, 16).ok()?,
-        counts: BTreeMap::new(),
-    })
+    Some((u64::from_str_radix(hash, 16).ok()?, name))
 }
 
 fn parse_count(line: &str) -> Option<(u32, i64)> {
@@ -352,8 +423,6 @@ pub(crate) struct MarkMap {
     /// The nodes of the author's `cold_path()` calls and the `?`s whose
     /// markers reify leaves out, the profile having measured their regions.
     overridden: IndexSet<AstId>,
-    /// The modules applied, which a compile seeded with this map leaves alone.
-    sources: IndexSet<ModuleSource>,
     /// Each region marked, as `module:line:column kind mark`.
     marked: Vec<String>,
     remarks: Vec<(Span, String)>,
@@ -430,9 +499,8 @@ impl HeatMap {
 }
 
 impl MarkMap {
-    /// Apply the profile to the modules it names. The modules `seed` applied
-    /// keep what it found: they come from the stdlib snapshot with their
-    /// markers already in place.
+    /// Apply the profile to `modules`, on top of what `seed`, the stdlib
+    /// snapshot's map, found in the modules it serves.
     pub(crate) fn build<'a>(
         seed: Option<&MarkMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
@@ -441,34 +509,19 @@ impl MarkMap {
     ) -> Self {
         let mut map = seed.cloned().unwrap_or_default();
         for (source, module) in modules {
-            if map.sources.contains(source) {
-                continue;
-            }
-            let Some(functions) = applied.profile.modules.get(&source.to_string()) else {
-                continue;
-            };
             map.apply(
                 plan_module(source, module, rt_unreachable_calls),
                 module.ast_id_space(),
-                functions,
-                applied.reading,
+                applied,
             );
-            map.sources.insert(source.clone());
         }
         map
     }
 
-    /// Mark each region of `planned` by what `functions` recorded of it, read
-    /// as `reading` says. A function is matched by its name, the `n`th of a
-    /// name to the `n`th recorded, and its counts apply only where its hash is
-    /// the recorded one.
-    fn apply(
-        &mut self,
-        planned: PlannedModule,
-        space: AstIdSpace,
-        functions: &[ProfiledFunction],
-        reading: Reading,
-    ) {
+    /// Mark each region of `planned` by what the profile recorded of the
+    /// function of its hash, read as `applied` says.
+    fn apply(&mut self, planned: PlannedModule, space: AstIdSpace, applied: Applied<'_>) {
+        let Applied { profile, reading } = applied;
         let thresholds = reading.thresholds;
         let PlannedModule {
             plan,
@@ -478,47 +531,38 @@ impl MarkMap {
             markers,
             ..
         } = planned;
-        let mut by_name: IndexMap<&str, Vec<&ProfiledFunction>> = IndexMap::default();
-        for function in functions {
-            by_name.entry(&function.name).or_default().push(function);
-        }
-        let mut recorded: IndexMap<&str, std::vec::IntoIter<&ProfiledFunction>> = by_name
-            .into_iter()
-            .map(|(name, functions)| (name, functions.into_iter()))
-            .collect();
         let mut counts: Vec<Option<i64>> = vec![None; plan.regions.len()];
+        let listed = profile.names_in(&plan.name);
         for ((function, ids), &name) in plan
             .functions
             .iter()
             .zip(plan.regions_by_function())
             .zip(&names)
         {
-            let Some(profiled) = recorded
-                .get_mut(function.name.as_str())
-                .and_then(Iterator::next)
-            else {
+            let Some(recorded) = profile.counts.get(&function.hash) else {
+                // A name may stand for more than one function, so a listed
+                // one says only that the profile is behind this module.
+                if listed.contains(function.name.as_str()) {
+                    self.remarks.push((
+                        name,
+                        format!(
+                            "the profile has no counts for `{}` as it stands, though it measured \
+                             a function of that name here: it is new or changed since the \
+                             recording, so record the workloads again",
+                            function.name
+                        ),
+                    ));
+                }
                 continue;
             };
-            if profiled.hash != function.hash {
-                self.remarks.push((
-                    name,
-                    format!(
-                        "the profile's counts for `{}` are discarded: its source or region plan \
-                         changed since they were recorded",
-                        function.name
-                    ),
-                ));
-                continue;
-            }
             // Workloads are tests, so a build's own entry, and whatever only
             // it reaches, never runs under them: a function they never entered
             // says nothing about how often it runs.
-            if !profiled.counts.contains_key(&0) {
+            if !recorded.contains_key(&0) {
                 continue;
             }
             for (index, id) in ids.into_iter().enumerate() {
-                counts[id as usize] =
-                    Some(profiled.counts.get(&(index as u32)).copied().unwrap_or(0));
+                counts[id as usize] = Some(recorded.get(&(index as u32)).copied().unwrap_or(0));
             }
         }
         let site_of: IndexMap<u32, (ProbeSite, AstId)> = sites
@@ -719,7 +763,7 @@ mod tests {
     fn a_profile_lists_every_function_and_the_regions_that_ran() {
         assert_eq!(
             to_text(&recorded()),
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module src/a.wado\n\
              fn 00000000000000ab 1 f\n\
              0 5\n\
@@ -731,28 +775,80 @@ mod tests {
     #[test]
     fn a_profile_reads_back_what_was_written() {
         let profile = parse(&to_text(&recorded())).expect("it parses");
-        let functions = &profile.modules["src/a.wado"];
         assert_eq!(
-            functions,
-            &[
-                ProfiledFunction {
-                    name: "f".to_string(),
-                    hash: 0xab,
-                    counts: BTreeMap::from([(0, 5), (1, 2)]),
-                },
-                ProfiledFunction {
-                    name: "g".to_string(),
-                    hash: 0xcd,
-                    counts: BTreeMap::new(),
-                },
-            ]
+            profile.counts,
+            BTreeMap::from([
+                (0xab, BTreeMap::from([(0, 5), (1, 2)])),
+                (0xcd, BTreeMap::new()),
+            ])
         );
     }
 
+<<<<<<< HEAD
     #[test]
     fn a_tenth_of_the_code_around_a_path_refutes_its_marker() {
         assert!(Thresholds::refutes_marker(100, 1000));
         assert!(!Thresholds::refutes_marker(99, 1000));
+||||||| 648fe5563d1
+=======
+    /// Functions of one hash share their counts, as a generic function's
+    /// instances do, and each module lists them under its own name.
+    #[test]
+    fn a_profile_sums_the_functions_of_one_hash() {
+        let plan = |name: &str| ModulePlan {
+            name: name.to_string(),
+            path: format!("./{name}"),
+            functions: vec![PlannedFunction {
+                name: "f".to_string(),
+                line: 1,
+                region: 0,
+                hash: 0xab,
+            }],
+            regions: vec![
+                region(RegionKind::Function, 0, 1),
+                region(RegionKind::Then, 0, 2),
+            ],
+            lines: Vec::new(),
+        };
+        let mut coverage = Coverage::default();
+        let registered = coverage
+            .register(&vec![(plan("a.wado"), 0), (plan("b.wado"), 2)], |plan| {
+                format!("src/{}", plan.name)
+            })
+            .expect("two plans");
+        coverage.record(&registered, &BTreeMap::from([(0, 3), (2, 2), (3, 2)]), None);
+        assert_eq!(
+            to_text(&coverage),
+            "wado-pgo 2\n\
+             module src/a.wado\n\
+             fn 00000000000000ab 1 f\n\
+             0 5\n\
+             1 2\n\
+             module src/b.wado\n\
+             fn 00000000000000ab 1 f\n\
+             0 5\n\
+             1 2\n"
+        );
+    }
+
+    /// A module's name without its package's version tells a function new or
+    /// changed since the recording from one the profile never listed, across
+    /// an upgrade too.
+    #[test]
+    fn a_profile_lists_a_function_under_any_version_of_its_package() {
+        let profile = parse(
+            "wado-pgo 2\n\
+             module acme:app@0.1.0/src/lib.wado\n\
+             fn 00000000000000ab 1 f\n\
+             0 1\n",
+        )
+        .expect("it parses");
+        assert_eq!(
+            profile.names_in("acme:app@0.2.0/src/lib.wado"),
+            BTreeSet::from(["f"])
+        );
+        assert!(profile.names_in("acme:app@0.2.0/src/main.wado").is_empty());
+>>>>>>> origin/main
     }
 
     /// LLVM's default: a branch is predictable when one side takes 99% of its
@@ -771,7 +867,7 @@ mod tests {
     #[test]
     fn a_count_line_is_the_smallest_count_inside_the_cutoff() {
         let profile = parse(
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module src/a.wado\n\
              fn 0000000000000001 1 f\n\
              0 900\n\
@@ -794,7 +890,7 @@ mod tests {
     #[test]
     fn an_empty_hot_share_heats_nothing() {
         let profile = parse(
-            "wado-pgo 1\n\
+            "wado-pgo 2\n\
              module src/a.wado\n\
              fn 0000000000000001 1 f\n\
              0 900\n\
@@ -858,19 +954,27 @@ mod tests {
     #[test]
     fn a_malformed_profile_names_its_line() {
         let cases = [
-            ("wado-pgo 2\n", 1),
-            ("wado-pgo 1\nfn 00000000000000ab 1 f\n", 2),
-            ("wado-pgo 1\nmodule a\n0 5\n", 3),
-            ("wado-pgo 1\nmodule a\nfn ab 1 f\n", 3),
-            ("wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 0\n", 4),
+            ("wado-pgo 1\n", 1),
+            ("wado-cov 2\n", 1),
+            ("wado-pgo 2\nfn 00000000000000ab 1 f\n", 2),
+            ("wado-pgo 2\nmodule a\n0 5\n", 3),
+            ("wado-pgo 2\nmodule a\nfn ab 1 f\n", 3),
+            ("wado-pgo 2\nmodule a\nfn 00000000000000ab 1 f\n0 0\n", 4),
             (
-                "wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 1\n0 2\n",
+                "wado-pgo 2\nmodule a\nfn 00000000000000ab 1 f\n0 1\n0 2\n",
                 5,
             ),
-            ("wado-pgo 1\nmodule a\nmodule a\n", 3),
+            ("wado-pgo 2\nmodule a\nmodule a\n", 3),
+            (
+                "wado-pgo 2\nmodule a\nfn 00000000000000ab 1 f\n0 1\n\
+                 module b\nfn 00000000000000ab 1 f\n0 2\n",
+                6,
+            ),
         ];
         for (text, line) in cases {
             assert_eq!(parse(text).map_err(|e| e.line), Err(line), "{text}");
         }
+        let older = parse("wado-pgo 1\n").expect_err("an older format");
+        assert!(older.reason.contains("wado test --pgo"), "{}", older.reason);
     }
 }

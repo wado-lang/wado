@@ -1,0 +1,385 @@
+#![stdlib("core:uri")]
+//! URI references (RFC 3986) as identifiers: read one, resolve one against a
+//! base, and write one back. Every scheme is read by the generic syntax, and
+//! only ASCII is admitted. A URI to fetch over HTTP is `core:url`'s.
+
+use { Deserialize, DeserializeError, Deserializer, Serialize, SerializeError, Serializer } from "core:serde";
+
+/// A URI reference (RFC 3986 §4.1): a URI, or a relative reference to resolve
+/// against one. Every component is valid by construction. Two references are
+/// equal when their components are equal as written, the scheme's case aside.
+pub struct Uri {
+    /// Lowercase, as §3.1 says a reader should produce it.
+    scheme: Option<String>,
+    authority: Option<String>,
+    path: String,
+    query: Option<String>,
+    fragment: Option<String>,
+}
+
+/// Text outside the grammar of RFC 3986 Appendix A, at its byte offset.
+pub struct UriError {
+    pub offset: i32,
+    pub message: String,
+}
+
+impl Display for UriError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+        f.write_str(` at offset ${self.offset}`);
+    }
+}
+
+impl Error for UriError {
+}
+
+impl FromStr for Uri {
+    type Err = UriError;
+
+    fn from_str<S: AsStrSlice>(input: S) -> Result<Uri, UriError> {
+        let text = input.to_string();
+        return Reader { text, pos: 0 }.reference();
+    }
+}
+
+impl Uri {
+    /// `reference` resolved against this URI as its base (§5.2.2).
+    pub fn resolve(&self, reference: &Uri) -> Uri
+        contract self.scheme matches { Some(_) }, "the base must have a scheme"
+    {
+        let r = reference;
+        let mut t = *r;
+        if r.scheme matches { Some(_) } || r.authority matches { Some(_) } {
+            t.path = remove_dot_segments(&r.path);
+        } else if r.path.is_empty() {
+            t.path = self.path;
+            if r.query matches { None } {
+                t.query = self.query;
+            }
+        } else if r.path.starts_with("/") {
+            t.path = remove_dot_segments(&r.path);
+        } else {
+            t.path = remove_dot_segments(&self.merge(&r.path));
+        }
+        if r.scheme matches { None } {
+            t.scheme = self.scheme;
+            if r.authority matches { None } {
+                t.authority = self.authority;
+            }
+        }
+        // Without an authority, a path starting `//` would read back as one
+        // (§3.3); `/.` keeps it a path.
+        if t.authority matches { None } && t.path.starts_with("//") {
+            t.path = `/.${t.path}`;
+        }
+        return t;
+    }
+
+    /// The reference as `Display` writes it.
+    pub fn to_string(&self) -> String {
+        return `${self}`;
+    }
+
+    /// The fragment, without its `#`.
+    pub fn fragment(&self) -> Option<StrSlice> {
+        if let Some(f) = &self.fragment {
+            return Option::Some(f.as_str_slice());
+        }
+        return null;
+    }
+
+    /// This reference with no fragment: the resource it names.
+    pub fn without_fragment(&self) -> Uri {
+        return Uri { ..*self, fragment: null };
+    }
+
+    /// `path` appended to this base's path after its last segment (§5.2.3).
+    fn merge(&self, path: &String) -> String {
+        if self.authority matches { Some(_) } && self.path.is_empty() {
+            return `/${*path}`;
+        }
+        if let Some(slash) = self.path.rfind("/") {
+            return `${self.path.substr_bytes(0, slash + 1)}${*path}`;
+        }
+        return *path;
+    }
+}
+
+impl Serialize for Uri {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(&self.to_string());
+    }
+}
+
+impl Deserialize for Uri {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uri, DeserializeError> {
+        return match Uri::from_str(d.deserialize_string()?) {
+            Ok(uri) => Result::Ok(uri),
+            Err(e) => Result::Err(DeserializeError::invalid_value(
+                `invalid URI reference: ${e}`,
+            )),
+        };
+    }
+}
+
+/// The reference as §5.3 recomposes it.
+impl Display for Uri {
+    fn fmt(&self, f: &mut Formatter) {
+        if let Some(scheme) = &self.scheme {
+            f.write_str(scheme);
+            f.write_str(":");
+        }
+        if let Some(authority) = &self.authority {
+            f.write_str("//");
+            f.write_str(authority);
+        }
+        f.write_str(&self.path);
+        if let Some(query) = &self.query {
+            f.write_str("?");
+            f.write_str(query);
+        }
+        if let Some(fragment) = &self.fragment {
+            f.write_str("#");
+            f.write_str(fragment);
+        }
+    }
+}
+
+/// `path` without its `.` and `..` segments (§5.2.4).
+fn remove_dot_segments(path: &String) -> String {
+    let mut input = path.as_str_slice();
+    let mut out = String::with_capacity(path.len());
+    while !input.is_empty() {
+        if input.starts_with("../") {
+            input = input.slice(3, input.len());
+        } else if input.starts_with("./") || input.starts_with("/./") {
+            input = input.slice(2, input.len());
+        } else if input == "/." {
+            input = "/".as_str_slice();
+        } else if input.starts_with("/../") || input == "/.." {
+            input = if input == "/.." { "/".as_str_slice() } else { input.slice(3, input.len()) };
+            out.truncate(out.rfind("/").unwrap_or(0));
+        } else if input == "." || input == ".." {
+            break;
+        } else {
+            let from = if input.starts_with("/") { 1 } else { 0 };
+            let end = from + input.slice(from, input.len()).find("/").unwrap_or(input.len() - from);
+            out.push_str(input.slice(0, end));
+            input = input.slice(end, input.len());
+        }
+    }
+    return out;
+}
+
+/// The characters a component admits besides the unreserved ones, the
+/// sub-delimiters and percent-encodings. A fragment admits what a query does.
+global PATH_EXTRA: String = ":@/";
+global QUERY_EXTRA: String = ":@/?";
+
+struct Reader {
+    text: String,
+    pos: i32,
+}
+
+impl Reader {
+    fn reference(&mut self) -> Result<Uri, UriError> {
+        let mut uri = Uri { scheme: null, authority: null, path: "", query: null, fragment: null };
+        let first = self.find_any(0, ":/?#");
+        if first < self.text.len() && self.text.byte_at(first) == b':' {
+            self.check_scheme(first)?;
+            uri.scheme = Option::Some(self.text.substr_bytes(0, first).to_ascii_lowercase());
+            self.pos = first + 1;
+        }
+        if self.text.substr_bytes(self.pos, self.text.len()).starts_with("//") {
+            let start = self.pos + 2;
+            let end = self.find_any(start, "/?#");
+            self.check_authority(start, end)?;
+            uri.authority = Option::Some(self.text.substr_bytes(start, end));
+            self.pos = end;
+        }
+        let path_end = self.find_any(self.pos, "?#");
+        self.check(self.pos, path_end, &PATH_EXTRA, "path")?;
+        uri.path = self.text.substr_bytes(self.pos, path_end);
+        self.pos = path_end;
+        if self.at(b'?') {
+            let end = self.find_any(self.pos + 1, "#");
+            self.check(self.pos + 1, end, &QUERY_EXTRA, "query")?;
+            uri.query = Option::Some(self.text.substr_bytes(self.pos + 1, end));
+            self.pos = end;
+        }
+        if self.at(b'#') {
+            let end = self.text.len();
+            self.check(self.pos + 1, end, &QUERY_EXTRA, "fragment")?;
+            uri.fragment = Option::Some(self.text.substr_bytes(self.pos + 1, end));
+        }
+        return Result::Ok(uri);
+    }
+
+    fn at(&self, c: u8) -> bool {
+        return self.pos < self.text.len() && self.text.byte_at(self.pos) == c;
+    }
+
+    /// The offset of the first byte at or after `from` that is one of `stops`,
+    /// or the length of the text.
+    fn find_any(&self, from: i32, stops: String) -> i32 {
+        for let i of from..<self.text.len() {
+            if stops.as_bytes().contains(&self.text.byte_at(i)) {
+                return i;
+            }
+        }
+        return self.text.len();
+    }
+
+    /// `scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`, ending at `end`.
+    fn check_scheme(&self, end: i32) -> Result<(), UriError> {
+        if end == 0 {
+            return fail(0, "invalid scheme");
+        }
+        for let i of 0..<end {
+            let c = self.text.byte_at(i);
+            let ok = c.is_ascii_alphabetic() || i > 0 && (c.is_ascii_digit() || c == b'+' || c == b'-' || c == b'.');
+            if !ok {
+                return fail(i, "invalid scheme");
+            }
+        }
+        return Result::Ok(());
+    }
+
+    /// `authority = [ userinfo "@" ] host [ ":" port ]`, from `start` to `end`.
+    fn check_authority(&self, start: i32, end: i32) -> Result<(), UriError> {
+        let mut host = start;
+        let at = self.find_any(start, "@");
+        if at < end {
+            self.check(start, at, &":", "userinfo")?;
+            host = at + 1;
+        }
+        let mut host_end = self.find_any(host, ":");
+        if host < end && self.text.byte_at(host) == b'[' {
+            let close = self.find_any(host, "]");
+            if close >= end {
+                return fail(host, "unclosed IP literal");
+            }
+            let literal = self.text.as_str_slice().slice(host + 1, close);
+            if !(is_ipv6(literal) || is_ip_future(literal)) {
+                return fail(host, "invalid IP literal");
+            }
+            host_end = close + 1;
+            if host_end < end && self.text.byte_at(host_end) != b':' {
+                return fail(host_end, "invalid character in host");
+            }
+        } else {
+            if host_end > end {
+                host_end = end;
+            }
+            self.check(host, host_end, &"", "host")?;
+        }
+        for let i of host_end + 1..<end {
+            if !self.text.byte_at(i).is_ascii_digit() {
+                return fail(i, "invalid character in port");
+            }
+        }
+        return Result::Ok(());
+    }
+
+    /// Every byte from `start` to `end` is unreserved, a sub-delimiter, part of
+    /// a percent-encoding or one of `extra`.
+    fn check(&self, start: i32, end: i32, extra: &String, component: String) -> Result<(), UriError> {
+        let mut i = start;
+        while i < end {
+            let c = self.text.byte_at(i);
+            if c == b'%' {
+                if i + 2 >= end || !self.text.byte_at(i + 1).is_hexdigit() || !self.text.byte_at(i + 2).is_hexdigit() {
+                    return fail(i, "invalid percent-encoding");
+                }
+                i += 3;
+                continue;
+            }
+            if !(is_unreserved(c) || is_sub_delim(c) || extra.as_bytes().contains(&c)) {
+                return fail(i, `invalid character in ${component}`);
+            }
+            i += 1;
+        }
+        return Result::Ok(());
+    }
+}
+
+fn fail<T>(offset: i32, message: String) -> Result<T, UriError> {
+    return Result::Err(UriError { offset, message });
+}
+
+fn is_unreserved(c: u8) -> bool {
+    return c.is_ascii_alphanumeric() || c == b'-' || c == b'.' || c == b'_' || c == b'~';
+}
+
+fn is_sub_delim(c: u8) -> bool {
+    return "!$&'()*+,;=".as_bytes().contains(&c);
+}
+
+/// `IPv6address`: eight 16-bit pieces, or fewer around one `::` that stands
+/// for at least one more.
+fn is_ipv6(s: StrSlice) -> bool {
+    let Some(gap) = s.find("::") else {
+        return ipv6_pieces(s, true) == 8;
+    };
+    let before = ipv6_pieces(s.slice(0, gap), false);
+    let after = ipv6_pieces(s.slice(gap + 2, s.len()), true);
+    return before >= 0 && after >= 0 && before + after <= 7;
+}
+
+/// The 16-bit pieces `part` holds as `h16 *( ":" h16 )`, an IPv4 address in
+/// the last place counting two where `v4_last` admits one, or -1 when it holds
+/// anything else. An empty part holds none.
+fn ipv6_pieces(part: StrSlice, v4_last: bool) -> i32 {
+    if part.is_empty() {
+        return 0;
+    }
+    let pieces: List<String> = part.split(":").collect();
+    let last = pieces.len() - 1;
+    for let [i, p] of pieces.iter_ref().enumerate() {
+        if i == last && v4_last && p.find(".") matches { Some(_) } {
+            return if is_ipv4(p) { last + 2 } else { -1 };
+        }
+        if p.is_empty() || p.len() > 4 || !p.bytes().all(|c| c.is_hexdigit()) {
+            return -1;
+        }
+    }
+    return pieces.len();
+}
+
+/// `IPv4address`: four decimal octets, none above 255 or with a leading zero.
+fn is_ipv4(s: &String) -> bool {
+    let octets: List<String> = s.split(".").collect();
+    if octets.len() != 4 {
+        return false;
+    }
+    for let o of octets {
+        if o.is_empty()
+            || o.len() > 3
+            || o.len() > 1 && o.byte_at(0) == b'0'
+            || !o.bytes().all(|c| c.is_ascii_digit())
+            || i32::from_str(o).unwrap() > 255 {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `IPvFuture = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )`.
+fn is_ip_future(s: StrSlice) -> bool {
+    let Some(dot) = s.find(".") else {
+        return false;
+    };
+    return dot >= 2
+        && dot + 1 < s.len()
+        && (s.byte_at(0) == b'v' || s.byte_at(0) == b'V')
+        && s.slice(1, dot).bytes().all(|c| c.is_hexdigit())
+        && s.slice(dot + 1, s.len()).bytes().all(|c| is_unreserved(c) || is_sub_delim(c) || c == b':');
+}
+
+#[synopsis]
+test {
+    let base = Uri::from_str("https://example.com/schemas/root.json").unwrap();
+    let r = base.resolve(&Uri::from_str("item.json#/$defs/id").unwrap());
+    assert r.to_string() == "https://example.com/schemas/item.json#/$defs/id";
+    assert r.fragment() matches { Some("/$defs/id") };
+}

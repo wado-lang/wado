@@ -1,0 +1,762 @@
+//! Validation: a schema compiled once into a table of its subschemas, with
+//! every reference resolved, then held against any number of instances.
+
+use { HashMap, HashSet } from "core:collections";
+use { Uri } from "core:uri";
+use { percent_decode } from "core:url";
+use { Regex } from "lib:re";
+use { Document, Node } from "./document.wado";
+use { JsonTypes, Schema, SchemaError, pointer_token, type_names } from "./schema.wado";
+
+/// The base URI of a schema that declares no `$id`.
+internal global DEFAULT_BASE: String = "jade:root";
+
+/// A schema compiled for validation.
+pub struct Validator {
+    nodes: List<Compiled>,
+    resources: List<Resource>,
+}
+
+/// An instance failing one keyword.
+pub struct ValidationError {
+    /// JSON Pointer to the failing value in the instance.
+    pub instance: String,
+    /// JSON Pointer to the keyword in the schema.
+    pub keyword: String,
+    pub message: String,
+}
+
+impl Display for ValidationError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.instance}: ${self.message} (${self.keyword})`);
+    }
+}
+
+impl Error for ValidationError {
+}
+
+impl Validator {
+    /// `schema` compiled, its references resolved. A reference to a schema
+    /// that `schema` does not hold is an error.
+    pub fn compile(schema: &Schema) -> Result<Validator, SchemaError> {
+        let mut c = Compiler {};
+        c.add(schema, "", &Uri::from_str(&DEFAULT_BASE).unwrap(), null)?;
+        c.link()?;
+        return Result::Ok(Validator { nodes: c.nodes, resources: c.resources });
+    }
+
+    /// Every keyword `instance` fails, or `Ok` when it fails none.
+    pub fn validate(&self, instance: &Node) -> Result<(), List<ValidationError>> {
+        let mut run = Run {};
+        self.eval(0, instance, &"", &mut run);
+        if run.errors.is_empty() {
+            return Result::Ok(());
+        }
+        return Result::Err(run.errors);
+    }
+
+    fn eval(&self, i: i32, inst: &Node, ip: &String, run: &mut Run) -> Evaluated {
+        let n = &self.nodes[i];
+        let mut out = Evaluated {};
+        if let Some(admits) = n.always {
+            if !admits {
+                run.fail(ip, &n.at, "", "no value is valid against `false`");
+            }
+            return out;
+        }
+        let entered = run.scope.is_empty() || run.scope[run.scope.len() - 1] != n.owner;
+        if entered {
+            run.scope.push(n.owner);
+        }
+        if let Some(t) = n.reference {
+            self.follow(n, "$ref", t, inst, ip, run, &mut out);
+        }
+        if let Some(d) = &n.dynamic_ref {
+            self.follow(n, "$dynamicRef", self.dynamic_target(d, &run.scope), inst, ip, run, &mut out);
+        }
+        self.assert_value(n, inst, ip, run);
+        self.apply_logic(n, inst, ip, run, &mut out);
+        match inst.kind() {
+            Array => self.eval_array(n, inst, ip, run, &mut out),
+            Object => self.eval_object(n, inst, ip, run, &mut out),
+            Null | Bool | Number | String => {
+            },
+        }
+        if entered {
+            run.scope.pop();
+        }
+        return out;
+    }
+
+    /// `d`'s target: the outermost schema in the dynamic scope that declares
+    /// the anchor, when `d` names one, or else the target its URI names.
+    fn dynamic_target(&self, d: &DynamicRef, scope: &List<i32>) -> i32 {
+        if let Some(name) = &d.anchor {
+            for let r of *scope {
+                if let Some(t) = self.resources[r].dynamic_anchors.get_str(name) {
+                    return t;
+                }
+            }
+        }
+        return d.target;
+    }
+
+    /// Follows `n`'s reference `keyword` to `t`. Reaching `t` again at the same
+    /// instance, with no step into the instance between, would loop forever.
+    fn follow(
+        &self,
+        n: &Compiled,
+        keyword: String,
+        t: i32,
+        inst: &Node,
+        ip: &String,
+        run: &mut Run,
+        out: &mut Evaluated,
+    ) {
+        for let [held, at] of run.following {
+            if held == t && Document::same_node(&at, inst) {
+                run.fail(ip, &n.at, keyword, "refers back to itself without moving into the instance");
+                return;
+            }
+        }
+        run.following.push([t, *inst]);
+        self.apply(t, inst, ip, run, out);
+        run.following.pop();
+    }
+
+    /// Evaluates subschema `t` in place, keeping what it evaluated when it
+    /// passes.
+    fn apply(&self, t: i32, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
+        let before = run.errors.len();
+        let ev = self.eval(t, inst, ip, run);
+        if run.errors.len() == before {
+            out.merge(&ev);
+        }
+    }
+
+    /// Evaluates subschema `t` against a child of the instance.
+    fn check(&self, t: i32, inst: &Node, ip: &String, run: &mut Run) {
+        self.eval(t, inst, ip, run);
+    }
+
+    /// Evaluates subschema `t` without reporting what it fails.
+    fn passes(&self, t: i32, inst: &Node, ip: &String, run: &mut Run) -> [bool, Evaluated] {
+        let mut quiet = Run { scope: run.scope, following: run.following };
+        let ev = self.eval(t, inst, ip, &mut quiet);
+        return [quiet.errors.is_empty(), ev];
+    }
+
+    /// The keywords that assert on the instance's value: `type`, `const`,
+    /// `enum`, and those on a number or a string.
+    fn assert_value(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run) {
+        if let Some(types) = n.type && !has_type(inst, types) {
+            let message = if types == JsonTypes::none() {
+                "no value is valid against an empty `type`";
+            } else {
+                `must be ${type_names(types).join(" or ")}`;
+            };
+            run.fail(ip, &n.at, "type", message);
+        }
+        if let Some(c) = &n.const && *inst != c.root() {
+            run.fail(ip, &n.at, "const", "must equal the constant");
+        }
+        if let Some(values) = &n.enum && !values.iter_ref().any(|v| *inst == v.root()) {
+            run.fail(ip, &n.at, "enum", "must equal one of the values");
+        }
+        if let Some(x) = inst.as_f64() {
+            if let Some(m) = &n.multiple_of && !is_multiple(&decimal(x), m) {
+                run.fail(ip, &n.at, "multipleOf", "must be a multiple");
+            }
+            if let Some(m) = n.minimum && x < m {
+                run.fail(ip, &n.at, "minimum", `must be at least ${m}`);
+            }
+            if let Some(m) = n.exclusive_minimum && x <= m {
+                run.fail(ip, &n.at, "exclusiveMinimum", `must be greater than ${m}`);
+            }
+            if let Some(m) = n.maximum && x > m {
+                run.fail(ip, &n.at, "maximum", `must be at most ${m}`);
+            }
+            if let Some(m) = n.exclusive_maximum && x >= m {
+                run.fail(ip, &n.at, "exclusiveMaximum", `must be less than ${m}`);
+            }
+        }
+        if let Some(s) = inst.as_str() {
+            if n.min_length matches { Some(_) } || n.max_length matches { Some(_) } {
+                let len = s.chars().count();
+                if let Some(m) = n.min_length && len < m {
+                    run.fail(ip, &n.at, "minLength", `must have at least ${m} characters`);
+                }
+                if let Some(m) = n.max_length && len > m {
+                    run.fail(ip, &n.at, "maxLength", `must have at most ${m} characters`);
+                }
+            }
+            if let Some(re) = &n.pattern && !re.is_match(s) {
+                run.fail(ip, &n.at, "pattern", `must match ${re}`);
+            }
+        }
+    }
+
+    /// `allOf`, `anyOf`, `oneOf`, `not`, and `if` with `then` and `else`.
+    fn apply_logic(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
+        for let t of n.all_of {
+            self.apply(t, inst, ip, run, out);
+        }
+        if !n.any_of.is_empty() {
+            let mut any = false;
+            for let t of n.any_of {
+                let [ok, ev] = self.passes(t, inst, ip, run);
+                if ok {
+                    any = true;
+                    out.merge(&ev);
+                }
+            }
+            if !any {
+                run.fail(ip, &n.at, "anyOf", "must be valid against at least one schema");
+            }
+        }
+        if !n.one_of.is_empty() {
+            let mut valid = 0;
+            for let t of n.one_of {
+                let [ok, ev] = self.passes(t, inst, ip, run);
+                if ok {
+                    valid += 1;
+                    out.merge(&ev);
+                }
+            }
+            if valid != 1 {
+                run.fail(ip, &n.at, "oneOf", `must be valid against exactly one schema, not ${valid}`);
+            }
+        }
+        if let Some(t) = n.not && self.passes(t, inst, ip, run).0 {
+            run.fail(ip, &n.at, "not", "must not be valid against the schema");
+        }
+        if let Some(t) = n.if {
+            let [ok, ev] = self.passes(t, inst, ip, run);
+            if ok {
+                out.merge(&ev);
+                if let Some(then) = n.then {
+                    self.apply(then, inst, ip, run, out);
+                }
+            } else if let Some(otherwise) = n.else {
+                self.apply(otherwise, inst, ip, run, out);
+            }
+        }
+    }
+
+    fn eval_array(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
+        let items: List<Node> = inst.items().collect();
+        let len = items.len();
+        if let Some(m) = n.min_items && len < m {
+            run.fail(ip, &n.at, "minItems", `must have at least ${m} items`);
+        }
+        if let Some(m) = n.max_items && len > m {
+            run.fail(ip, &n.at, "maxItems", `must have at most ${m} items`);
+        }
+        if n.unique_items {
+            duplicates: {
+                for let a of 0..<len {
+                    for let b of a + 1..<len {
+                        if items[a] == items[b] {
+                            run.fail(ip, &n.at, "uniqueItems", `has equal items at ${a} and ${b}`);
+                            break duplicates;
+                        }
+                    }
+                }
+            }
+        }
+        let prefix = i32::min(len, n.prefix_items.len());
+        for let k of 0..<prefix {
+            self.check(n.prefix_items[k], &items[k], &`${*ip}/${k}`, run);
+            out.items.push(k);
+        }
+        if let Some(t) = n.items {
+            for let k of prefix..<len {
+                self.check(t, &items[k], &`${*ip}/${k}`, run);
+            }
+            out.all_items = true;
+        }
+        if let Some(t) = n.contains {
+            let mut count = 0;
+            for let k of 0..<len {
+                if self.passes(t, &items[k], &`${*ip}/${k}`, run).0 {
+                    count += 1;
+                    out.items.push(k);
+                }
+            }
+            if count < n.min_contains {
+                let keyword = if n.min_contains == 1 { "contains" } else { "minContains" };
+                run.fail(ip, &n.at, keyword, `must contain at least ${n.min_contains} matching items`);
+            }
+            if let Some(m) = n.max_contains && count > m {
+                run.fail(ip, &n.at, "maxContains", `must contain at most ${m} matching items`);
+            }
+        }
+        if let Some(t) = n.unevaluated_items && !out.all_items {
+            let mut seen = HashSet::<i32>::new();
+            for let k of out.items {
+                seen.insert(k);
+            }
+            for let k of 0..<len {
+                if !seen.contains(k) {
+                    self.check(t, &items[k], &`${*ip}/${k}`, run);
+                }
+            }
+            out.all_items = true;
+        }
+    }
+
+    fn eval_object(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
+        let len = inst.len();
+        if let Some(m) = n.min_properties && len < m {
+            run.fail(ip, &n.at, "minProperties", `must have at least ${m} properties`);
+        }
+        if let Some(m) = n.max_properties && len > m {
+            run.fail(ip, &n.at, "maxProperties", `must have at most ${m} properties`);
+        }
+        for let name of n.required {
+            if inst.get(&name) matches { None } {
+                run.fail(ip, &n.at, "required", `must have the property ${name:?}`);
+            }
+        }
+        for let [key, names] of n.dependent_required.entries() {
+            if inst.get(key) matches { Some(_) } {
+                for let name of *names {
+                    if inst.get(&name) matches { None } {
+                        run.fail(
+                            ip,
+                            &n.at,
+                            `dependentRequired/${pointer_token(key)}`,
+                            `must have the property ${name:?}`,
+                        );
+                    }
+                }
+            }
+        }
+        for let [key, value] of inst.entries() {
+            let kp = `${*ip}/${pointer_token(key)}`;
+            let mut matched = false;
+            if let Some(t) = n.properties.get_str(key) {
+                self.check(t, &value, &kp, run);
+                matched = true;
+            }
+            for let [re, t] of n.pattern_properties {
+                if re.is_match(key) {
+                    self.check(t, &value, &kp, run);
+                    matched = true;
+                }
+            }
+            if !matched && let Some(t) = n.additional_properties {
+                self.check(t, &value, &kp, run);
+                matched = true;
+            }
+            if matched {
+                out.props.push(key.to_string());
+            }
+            if let Some(t) = n.property_names {
+                self.check(t, &Document::string(key).root(), &kp, run);
+            }
+        }
+        for let [key, t] of n.dependent_schemas.entries() {
+            if inst.get(key) matches { Some(_) } {
+                self.apply(*t, inst, ip, run, out);
+            }
+        }
+        if let Some(t) = n.unevaluated_properties {
+            let mut seen = HashSet::<String>::new();
+            for let p of out.props {
+                seen.insert(p);
+            }
+            for let [key, value] of inst.entries() {
+                if !seen.contains_str(key) {
+                    self.check(t, &value, &`${*ip}/${pointer_token(key)}`, run);
+                    out.props.push(key.to_string());
+                }
+            }
+        }
+    }
+}
+
+/// One subschema, its subschemas named by their index in the table.
+struct Compiled {
+    /// JSON Pointer to this subschema in the schema document.
+    at: String,
+    /// The schema resource holding this subschema.
+    owner: i32,
+    /// `true` or `false`, for a boolean schema.
+    always: Option<bool> = null,
+    reference: Option<i32> = null,
+    dynamic_ref: Option<DynamicRef> = null,
+    type: Option<JsonTypes> = null,
+    const: Option<Document> = null,
+    enum: Option<List<Document>> = null,
+    all_of: List<i32> = [],
+    any_of: List<i32> = [],
+    one_of: List<i32> = [],
+    not: Option<i32> = null,
+    if: Option<i32> = null,
+    then: Option<i32> = null,
+    else: Option<i32> = null,
+    multiple_of: Option<Decimal> = null,
+    minimum: Option<f64> = null,
+    exclusive_minimum: Option<f64> = null,
+    maximum: Option<f64> = null,
+    exclusive_maximum: Option<f64> = null,
+    min_length: Option<i32> = null,
+    max_length: Option<i32> = null,
+    pattern: Option<Regex> = null,
+    items: Option<i32> = null,
+    prefix_items: List<i32> = [],
+    contains: Option<i32> = null,
+    min_contains: i32 = 1,
+    max_contains: Option<i32> = null,
+    min_items: Option<i32> = null,
+    max_items: Option<i32> = null,
+    unique_items: bool = false,
+    unevaluated_items: Option<i32> = null,
+    properties: HashMap<String, i32> = HashMap::new(),
+    pattern_properties: List<[Regex, i32]> = [],
+    required: List<String> = [],
+    dependent_required: HashMap<String, List<String>> = HashMap::new(),
+    dependent_schemas: HashMap<String, i32> = HashMap::new(),
+    additional_properties: Option<i32> = null,
+    property_names: Option<i32> = null,
+    min_properties: Option<i32> = null,
+    max_properties: Option<i32> = null,
+    unevaluated_properties: Option<i32> = null,
+}
+
+/// A `$dynamicRef`: the target its URI names, and the anchor the dynamic scope
+/// may override it by. The anchor is set only when that target declares it as
+/// a `$dynamicAnchor`.
+struct DynamicRef {
+    target: i32,
+    anchor: Option<String>,
+}
+
+/// A schema resource: a subschema with an `$id`, or the root.
+struct Resource {
+    uri: Uri,
+    /// JSON Pointer to its root in the schema document.
+    at: String,
+    parent: Option<i32>,
+    dynamic_anchors: HashMap<String, i32> = HashMap::new(),
+}
+
+/// What evaluating an instance against a subschema evaluated of it, which
+/// `unevaluatedItems` and `unevaluatedProperties` read.
+struct Evaluated {
+    props: List<String> = [],
+    items: List<i32> = [],
+    all_items: bool = false,
+}
+
+impl Evaluated {
+    fn merge(&mut self, other: &Evaluated) {
+        self.props.extend(&other.props);
+        self.items.extend(&other.items);
+        self.all_items = self.all_items || other.all_items;
+    }
+}
+
+/// The state of one validation: the errors so far, the dynamic scope as the
+/// resources entered, outermost first, and the references being followed, each
+/// as its target and the instance it was followed at.
+struct Run {
+    errors: List<ValidationError> = [],
+    scope: List<i32> = [],
+    following: List<[i32, Node]> = [],
+}
+
+impl Run {
+    fn fail(&mut self, ip: &String, at: &String, keyword: String, message: String) {
+        let pointer = if keyword.is_empty() { *at } else { `${*at}/${keyword}` };
+        self.errors.push(ValidationError { instance: *ip, keyword: pointer, message });
+    }
+}
+
+struct Compiler {
+    nodes: List<Compiled> = [],
+    resources: List<Resource> = [],
+    /// Every subschema by `uri#pointer`, under each resource that holds it, and
+    /// by `uri#anchor`.
+    targets: HashMap<String, i32> = HashMap::new(),
+    refs: List<PendingRef> = [],
+}
+
+/// A reference, resolved against its base, to look up once every target is
+/// known.
+struct PendingRef {
+    node: i32,
+    uri: Uri,
+    dynamic: bool,
+}
+
+impl Compiler {
+    fn add(&mut self, schema: &Schema, at: String, base: &Uri, parent: Option<i32>) -> Result<i32, SchemaError> {
+        let i = self.nodes.len();
+        let mut uri = *base;
+        let mut owner = parent;
+        let id = if let Object(o) = schema {
+            o.id;
+        } else {
+            null;
+        };
+        if parent matches { None } || id matches { Some(_) } {
+            if let Some(id) = &id {
+                uri = base.resolve(&parse_uri(id, `${at}/$id`)?).without_fragment();
+            }
+            owner = Option::Some(self.resources.len());
+            self.resources.push(Resource { uri, at, parent });
+        }
+        let r = owner.unwrap();
+        let mut holder = owner;
+        while let Some(h) = holder {
+            let res = &self.resources[h];
+            self.targets[`${res.uri}#${at.substr_bytes(res.at.len(), at.len())}`] = i;
+            holder = res.parent;
+        }
+        let mut node = Compiled { at, owner: r };
+        self.nodes.push(node);
+        let o = match schema {
+            Bool(b) => {
+                node.always = Option::Some(*b);
+                self.nodes[i] = node;
+                return Result::Ok(i);
+            },
+            Object(o) => o,
+        };
+        o.check(&at)?;
+        if let Some(a) = &o.anchor {
+            self.targets[`${uri}#${*a}`] = i;
+        }
+        if let Some(a) = &o.dynamic_anchor {
+            self.targets[`${uri}#${*a}`] = i;
+            self.resources[r].dynamic_anchors[*a] = i;
+        }
+        if let Some(reference) = &o.reference {
+            self.refs.push(PendingRef {
+                node: i,
+                uri: uri.resolve(&parse_uri(reference, `${at}/$ref`)?),
+                dynamic: false,
+            });
+        }
+        if let Some(reference) = &o.dynamic_ref {
+            self.refs.push(PendingRef {
+                node: i,
+                uri: uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?),
+                dynamic: true,
+            });
+        }
+        node.type = o.type;
+        node.const = o.const;
+        node.enum = o.enum;
+        node.all_of = self.add_list(&o.all_of, `${at}/allOf`, &uri, r)?;
+        node.any_of = self.add_list(&o.any_of, `${at}/anyOf`, &uri, r)?;
+        node.one_of = self.add_list(&o.one_of, `${at}/oneOf`, &uri, r)?;
+        node.not = self.add_some(&o.not, `${at}/not`, &uri, r)?;
+        node.if = self.add_some(&o.if, `${at}/if`, &uri, r)?;
+        node.then = self.add_some(&o.then, `${at}/then`, &uri, r)?;
+        node.else = self.add_some(&o.else, `${at}/else`, &uri, r)?;
+        if let Some(m) = o.multiple_of {
+            node.multiple_of = Option::Some(decimal(m));
+        }
+        node.minimum = o.minimum;
+        node.exclusive_minimum = o.exclusive_minimum;
+        node.maximum = o.maximum;
+        node.exclusive_maximum = o.exclusive_maximum;
+        node.min_length = o.min_length;
+        node.max_length = o.max_length;
+        if let Some(p) = &o.pattern {
+            node.pattern = Option::Some(regex(p, `${at}/pattern`)?);
+        }
+        node.items = self.add_some(&o.items, `${at}/items`, &uri, r)?;
+        node.prefix_items = self.add_list(&o.prefix_items, `${at}/prefixItems`, &uri, r)?;
+        node.contains = self.add_some(&o.contains, `${at}/contains`, &uri, r)?;
+        if let Some(m) = o.min_contains {
+            node.min_contains = m;
+        }
+        node.max_contains = o.max_contains;
+        node.min_items = o.min_items;
+        node.max_items = o.max_items;
+        node.unique_items = o.unique_items;
+        node.unevaluated_items = self.add_some(&o.unevaluated_items, `${at}/unevaluatedItems`, &uri, r)?;
+        node.properties = self.add_map(&o.properties, `${at}/properties`, &uri, r)?;
+        for let [p, s] of o.pattern_properties.entries() {
+            let here = `${at}/patternProperties/${pointer_token(p)}`;
+            node.pattern_properties.push([
+                regex(p, here)?,
+                self.add(s, here, &uri, owner)?,
+            ]);
+        }
+        node.required = o.required;
+        node.dependent_required = o.dependent_required;
+        node.dependent_schemas = self.add_map(&o.dependent_schemas, `${at}/dependentSchemas`, &uri, r)?;
+        node.additional_properties = self.add_some(&o.additional_properties, `${at}/additionalProperties`, &uri, r)?;
+        node.property_names = self.add_some(&o.property_names, `${at}/propertyNames`, &uri, r)?;
+        node.min_properties = o.min_properties;
+        node.max_properties = o.max_properties;
+        node.unevaluated_properties = self.add_some(&o.unevaluated_properties, `${at}/unevaluatedProperties`, &uri, r)?;
+        self.add_map(&o.defs, `${at}/$defs`, &uri, r)?;
+        self.nodes[i] = node;
+        return Result::Ok(i);
+    }
+
+    fn add_some(&mut self, s: &Option<Schema>, at: String, base: &Uri, r: i32) -> Result<Option<i32>, SchemaError> {
+        if let Some(s) = s {
+            return Result::Ok(Option::Some(self.add(s, at, base, Option::Some(r))?));
+        }
+        return Result::Ok(null);
+    }
+
+    fn add_list(&mut self, list: &List<Schema>, at: String, base: &Uri, r: i32) -> Result<List<i32>, SchemaError> {
+        let mut out: List<i32> = [];
+        for let k of 0..<list.len() {
+            out.push(self.add(&list[k], `${at}/${k}`, base, Option::Some(r))?);
+        }
+        return Result::Ok(out);
+    }
+
+    fn add_map(
+        &mut self,
+        map: &HashMap<String, Schema>,
+        at: String,
+        base: &Uri,
+        r: i32,
+    ) -> Result<HashMap<String, i32>, SchemaError> {
+        let mut out = HashMap::<String, i32>::new();
+        for let [k, s] of map.entries() {
+            out[*k] = self.add(s, `${at}/${pointer_token(k)}`, base, Option::Some(r))?;
+        }
+        return Result::Ok(out);
+    }
+
+    /// Points every reference at its target.
+    fn link(&mut self) -> Result<(), SchemaError> {
+        for let r of self.refs {
+            let keyword = if r.dynamic { "$dynamicRef" } else { "$ref" };
+            let Some([target, fragment]) = self.lookup(&r.uri) else {
+                return Result::Err(SchemaError {
+                    pointer: `${self.nodes[r.node].at}/${keyword}`,
+                    message: "refers to no schema this document holds",
+                });
+            };
+            if !r.dynamic {
+                self.nodes[r.node].reference = Option::Some(target);
+                continue;
+            }
+            let mut anchor: Option<String> = null;
+            if !fragment.starts_with("/") {
+                let declared = self.resources[self.nodes[target].owner].dynamic_anchors.get_str(&fragment);
+                if declared matches { Some(t) && t == target } {
+                    anchor = Option::Some(fragment);
+                }
+            }
+            self.nodes[r.node].dynamic_ref = Option::Some(DynamicRef { target, anchor });
+        }
+        return Result::Ok(());
+    }
+
+    /// The subschema `uri` names, and its fragment percent-decoded.
+    fn lookup(&self, uri: &Uri) -> Option<[i32, String]> {
+        let mut fragment = "";
+        if let Some(f) = uri.fragment() {
+            let Ok(decoded) = percent_decode(f) else {
+                return null;
+            };
+            fragment = decoded;
+        }
+        let Some(target) = self.targets.get(`${uri.without_fragment()}#${fragment}`) else {
+            return null;
+        };
+        return Option::Some([target, fragment]);
+    }
+}
+
+fn parse_uri(text: &String, at: String) -> Result<Uri, SchemaError> {
+    return match Uri::from_str(text) {
+        Ok(uri) => Result::Ok(uri),
+        Err(e) => Result::Err(SchemaError { pointer: at, message: `${e}` }),
+    };
+}
+
+fn regex(pattern: &String, at: String) -> Result<Regex, SchemaError> {
+    return match Regex::new(pattern) {
+        Ok(re) => Result::Ok(re),
+        Err(e) => Result::Err(SchemaError { pointer: at, message: `${e}` }),
+    };
+}
+
+fn has_type(inst: &Node, types: JsonTypes) -> bool {
+    let t = match inst.kind() {
+        Null => JsonTypes::Null,
+        Bool => JsonTypes::Boolean,
+        Object => JsonTypes::Object,
+        Array => JsonTypes::Array,
+        String => JsonTypes::String,
+        Number => {
+            let x = inst.as_f64().unwrap();
+            if x == f64::trunc(x) {
+                JsonTypes::Number | JsonTypes::Integer;
+            } else {
+                JsonTypes::Number;
+            }
+        },
+    };
+    return types & t != JsonTypes::none();
+}
+
+/// A number as `digits × 10^exp`, from the shortest decimal that reads back as
+/// it, so `multipleOf` divides the numbers as written. `digits` has no
+/// trailing zero unless it is zero.
+struct Decimal {
+    digits: u64,
+    exp: i32,
+}
+
+fn decimal(x: f64) -> Decimal {
+    let text = `${f64::abs(x):e}`;
+    let e = text.find("e").unwrap();
+    let mut exp = i32::from_str(text.substr_bytes(e + 1, text.len())).unwrap();
+    let mut digits: u64 = 0;
+    let mut fraction = false;
+    for let c of text.substr_bytes(0, e).bytes() {
+        if c == b'.' {
+            fraction = true;
+            continue;
+        }
+        digits = digits * 10 + (c - b'0') as u64;
+        if fraction {
+            exp -= 1;
+        }
+    }
+    while digits != 0 && digits % 10 == 0 {
+        digits /= 10;
+        exp += 1;
+    }
+    return Decimal { digits, exp };
+}
+
+/// Whether `x` is an integer multiple of `m`. When `x.exp < m.exp`, the
+/// quotient would need `x.digits` to end in a zero, which it does not.
+fn is_multiple(x: &Decimal, m: &Decimal) -> bool
+    contract m.digits > 0
+{
+    if x.digits == 0 {
+        return true;
+    }
+    if x.exp < m.exp {
+        return false;
+    }
+    let b = m.digits as u128;
+    let mut r = x.digits as u128 % b;
+    let mut power = 10 as u128 % b;
+    let mut e = x.exp - m.exp;
+    while e > 0 {
+        if e & 1 == 1 {
+            r = r * power % b;
+        }
+        power = power * power % b;
+        e >>= 1;
+    }
+    return r == 0;
+}

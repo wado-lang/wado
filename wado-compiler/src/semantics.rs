@@ -2114,7 +2114,7 @@ mod tests {
         // `ran`'s body and its `then` ran, its omitted `else` and the rest
         // never did.
         let profile = pgo::parse(&format!(
-            "wado-pgo 1\nmodule entry.wado\nfn {:016x} 1 ran\n0 1\n1 1\nfn {:016x} 2 never\n",
+            "wado-pgo 2\nmodule entry.wado\nfn {:016x} 1 ran\n0 1\n1 1\nfn {:016x} 2 never\n",
             hash("ran"),
             hash("never")
         ))
@@ -2156,7 +2156,7 @@ mod tests {
         };
         // `f` ran 1000 times, took `rare` once, and looped 1000 times there.
         let profile = pgo::parse(&format!(
-            "wado-pgo 1\nmodule entry.wado\nfn {:016x} 1 g\n0 1000\n\
+            "wado-pgo 2\nmodule entry.wado\nfn {:016x} 1 g\n0 1000\n\
              fn {:016x} 2 f\n0 1000\n1 1\n2 1000\n3 999\n",
             hash("g"),
             hash("f")
@@ -2199,7 +2199,7 @@ mod tests {
         // Region 1 of each caller is its `?`'s failure path, which never ran
         // in `rarely` and took 0.1% of its runs in `often`.
         let profile = pgo::parse(&format!(
-            "wado-pgo 1\nmodule entry.wado\n\
+            "wado-pgo 2\nmodule entry.wado\n\
              fn {:016x} 1 rarely\n0 1000000\n\
              fn {:016x} 2 often\n0 1000000\n1 1000\n\
              fn {:016x} 3 half\n0 2000000\n1 1999000\n2 1000\n3 1000\n\
@@ -2243,7 +2243,7 @@ mod tests {
             })
             .expect("the stdlib has a function with one branch");
         let profile = pgo::parse(&format!(
-            "wado-pgo 1\nmodule {}\nfn {:016x} {} {}\n0 1\n",
+            "wado-pgo 2\nmodule {}\nfn {:016x} {} {}\n0 1\n",
             plan.path, function.hash, function.line, function.name
         ))
         .expect("it parses");

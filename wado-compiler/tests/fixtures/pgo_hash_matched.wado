@@ -1,0 +1,24 @@
+// A profile finds a function by its hash alone. The module it lists the
+// function under is for a reader: this profile recorded `step` in another
+// package's module, at another version.
+use { println, Stdout } from "core:cli";
+
+fn step(x: i32) -> i32 {
+    if x < 0 {
+        return 0;
+    }
+    return x + 1;
+}
+
+export fn run() with Stdout {
+    println(`${step(builtin::black_box(4))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_hash_matched.pgo",
+  "marked_regions": [
+    "pgo_hash_matched.wado:7:14 then unlikely cold"
+  ],
+  "stdout": "5\n"
+}

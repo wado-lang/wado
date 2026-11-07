@@ -1,0 +1,11 @@
+//! The harness the generated JSON Schema Test Suite tests call.
+
+use { Document, Schema, Validator } from "../src/lib.wado";
+
+/// Holds `data` to the validity `valid` against `schema`, both JSON text.
+pub fn check(schema: String, data: String, valid: bool) {
+    let validator = Validator::compile(&Schema::parse(schema).unwrap()).unwrap();
+    let doc = Document::parse(data).unwrap();
+    let result = validator.validate(&doc.root());
+    assert result matches { Ok(_) } == valid, `${result:?}`;
+}

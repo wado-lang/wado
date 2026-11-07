@@ -1,0 +1,128 @@
+use { Document, NodeKind } from "../src/document.wado";
+use { to_string } from "core:json";
+use { DeserializeError, Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
+
+fn round_trip(text: String) -> String {
+    return to_string(&Document::parse(text).unwrap()).unwrap();
+}
+
+test "a document reads and writes back" {
+    assert round_trip(`null`) == `null`;
+    assert round_trip(` [true, false, 1.5, -0, "aé"] `) == `[true,false,1.5,-0,"aé"]`;
+    assert round_trip(`{"a": {"b": [1, {}], "c": []}, "d": "x"}`) == `{"a":{"b":[1,{}],"c":[]},"d":"x"}`;
+}
+
+test "a node answers its kind, its value and its members" {
+    let doc = Document::parse(`{"n": 2, "s": "hi", "l": [null, [3]], "b": true}`).unwrap();
+    let root = doc.root();
+    assert root.kind() == NodeKind::Object;
+    assert root.len() == 4;
+    assert root.get("n").unwrap().as_f64() == Option::Some(2.0);
+    assert root.get("s").unwrap().as_str().unwrap() == "hi";
+    assert root.get("b").unwrap().as_bool() == Option::Some(true);
+    assert root.get("missing") matches { None };
+    let l = root.get("l").unwrap();
+    assert l.len() == 2;
+    let mut kinds: List<NodeKind> = [];
+    for let item of l.items() {
+        kinds.push(item.kind());
+    }
+    assert kinds == [NodeKind::Null, NodeKind::Array];
+    let mut keys: List<String> = [];
+    for let [k, _] of root.entries() {
+        keys.push(k.to_string());
+    }
+    assert keys == ["n", "s", "l", "b"];
+}
+
+test "a subtree becomes a document of its own" {
+    let doc = Document::parse(`[1, {"a": ["x", 2]}, 3]`).unwrap();
+    let mut items = doc.root().items();
+    items.next();
+    let sub = items.next().unwrap().to_document();
+    assert to_string(&sub).unwrap() == `{"a":["x",2]}`;
+    assert items.next().unwrap().as_f64() == Option::Some(3.0);
+}
+
+test "equality compares numbers by value and objects by members" {
+    assert Document::parse(`1`).unwrap() == Document::parse(`1.0`).unwrap();
+    assert Document::parse(`{"a": 1, "b": [2]}`).unwrap() == Document::parse(`{"b": [2.0], "a": 1}`).unwrap();
+    assert Document::parse(`{"a": 1}`).unwrap() != Document::parse(`{"a": 1, "b": 2}`).unwrap();
+    assert Document::parse(`[1, 2]`).unwrap() != Document::parse(`[2, 1]`).unwrap();
+    assert Document::parse(`false`).unwrap() != Document::parse(`0`).unwrap();
+    assert Document::parse(`null`).unwrap() == Document::of(&()).unwrap();
+}
+
+test "a large object equals one holding its members in another order" {
+    let a = `{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10}`;
+    let b = `{"j":10,"i":9,"h":8,"g":7,"f":6,"e":5,"d":4,"c":3,"b":2,"a":1}`;
+    let c = `{"j":10,"i":9,"h":8,"g":7,"f":6,"e":5,"d":4,"c":3,"b":2,"z":1}`;
+    assert Document::parse(a).unwrap() == Document::parse(b).unwrap();
+    assert Document::parse(a).unwrap() != Document::parse(c).unwrap();
+}
+
+struct Chain {
+    next: Option<Chain>,
+}
+
+test "a document is built from a string or from what core:json writes" {
+    assert to_string(&Document::string("a")).unwrap() == `"a"`;
+    assert to_string(&Document::of(&[1, 2]).unwrap()).unwrap() == `[1,2]`;
+    assert Document::of(&2.5).unwrap().root().as_f64() == Option::Some(2.5);
+    let mut chain = Chain { next: null };
+    for let _ of 0..<200 {
+        chain = Chain { next: Option::Some(chain) };
+    }
+    assert Document::of(&chain) matches { Ok(_) };
+}
+
+struct Twice {
+}
+
+impl Serialize for Twice {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(2)?;
+        m.key(&"a")?;
+        m.value(&1)?;
+        m.key(&"a")?;
+        m.value(&2)?;
+        return m.end();
+    }
+}
+
+test "a value written with a repeated key is an error" {
+    assert Document::of(&Twice {}).is_err();
+}
+
+test "malformed text is an error" {
+    assert Document::parse(``).is_err();
+    assert Document::parse(`[1,]`).is_err();
+    assert Document::parse(`[1 2]`).is_err();
+    assert Document::parse(`{"a" 1}`).is_err();
+    assert Document::parse(`{1: 2}`).is_err();
+    assert Document::parse(`nul`).is_err();
+    assert Document::parse(`1 2`).is_err();
+    assert Document::parse(#`"\uD800"`#).is_err();
+    assert Document::parse(`1e400`).is_err();
+}
+
+test "text ending inside a container is an error where it ends" {
+    assert Document::parse(`[1`).unwrap_err() == DeserializeError::eof(2);
+    assert Document::parse(`{"a": 1`).unwrap_err() == DeserializeError::eof(7);
+    assert Document::parse(`{`).unwrap_err() == DeserializeError::eof(1);
+}
+
+test "a repeated key is an error, in a small object and a large one" {
+    assert Document::parse(`{"a": 1, "a": 2}`).is_err();
+    let mut text = "{";
+    for let i of 0..<20 {
+        text.push_str(`"k${i}": ${i},`);
+    }
+    assert Document::parse(`${text}"k3": 0}`).is_err();
+    assert Document::parse(`${text}"k20": 0}`).unwrap().root().len() == 21;
+}
+
+test "nesting past max_depth is an error" {
+    assert Document::parse(`[[[1]]]`, 3).is_ok();
+    assert Document::parse(`[[[[1]]]]`, 3).is_err();
+}
