@@ -22,6 +22,7 @@ use {
     body_names_unwired_base,
     body_needs_no_translator,
     gate_condition_for,
+    invoked_left_edge_predicates,
     join_gate_conds,
     pred_fn_name,
     scan_gate_condition_for,
@@ -542,7 +543,7 @@ pub fn atn_decision_gates(
         for let a of &alts[*idx].left_edge_predicates() {
             visible.push([*a, own]);
         }
-        invoked_left_edge_predicates(&alts[*idx], ctx, &mut visited, &mut visible);
+        invoked_left_edge_predicates(&alts[*idx], &ctx.analysis, &mut visited, &mut visible);
     }
     for let [a, site] of &visible {
         let cond = if in_scan {
@@ -558,37 +559,6 @@ pub fn atn_decision_gates(
         }
     }
     return gates;
-}
-
-/// `Alternative::left_edge_predicates` of every alternative of the rule `alt` opens with,
-/// and so on down the rules those open with, each beside the site it renders
-/// in. A callee's value channel is not in scope at the decision.
-fn invoked_left_edge_predicates(
-    alt: &Alternative,
-    ctx: &EmitContext,
-    visited: &mut List<String>,
-    out: &mut List<[AltAction, PredicateSite]>,
-) {
-    if alt.opens_with_action() {
-        return;
-    }
-    let Some(RuleRef(r)) = alt.elements.first() else {
-        return;
-    };
-    if visited.contains_str(&r.name) {
-        return;
-    }
-    visited.push(r.name);
-    let Some(callee) = ctx.analysis.find_rule(&r.name) else {
-        return;
-    };
-    let site = PredicateSite { rule_index: ctx.analysis.rule_index_of(&r.name), vals_in_scope: false };
-    for let calt of &callee.alternatives {
-        for let a of &calt.left_edge_predicates() {
-            out.push([*a, site]);
-        }
-        invoked_left_edge_predicates(calt, ctx, visited, out);
-    }
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar

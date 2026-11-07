@@ -3,7 +3,7 @@
 //! its decision; emit renders the same conditions into the dispatch. Both read
 //! one answer here, each from the site it stands at.
 
-use { AltAction, Alternative } from "./ir.wado";
+use { AltAction, Alternative, Element } from "./ir.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { AltBinding } from "./attr_resolve.wado";
@@ -88,6 +88,73 @@ pub fn gate_condition_for(
 pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
     return settings.emit_actions
         && alt.actions.iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
+}
+
+/// `Alternative::left_edge_predicates` of every alternative of the rule `alt`
+/// opens with, and so on down the rules those open with, each beside the site
+/// it renders in.
+pub fn invoked_left_edge_predicates(
+    alt: &Alternative,
+    analysis: &GrammarAnalysis,
+    visited: &mut List<String>,
+    out: &mut List<[AltAction, PredicateSite]>,
+) {
+    if alt.opens_with_action() {
+        return;
+    }
+    let Some(RuleRef(r)) = alt.elements.first() else {
+        return;
+    };
+    rule_left_edge_predicates(&r.name, analysis, visited, out);
+}
+
+/// Whether prediction entering `alt` at element `index` meets a predicate: one
+/// placed there, or one at the left edge of what that element opens. The
+/// simulator is handed no predicate's verdict, so `atn: "verify"` leaves a
+/// decision that meets one unchecked.
+pub fn alt_meets_predicate_at(alt: &Alternative, index: i32, analysis: &GrammarAnalysis) -> bool {
+    return alt.actions.iter_ref().any(|a| a.before_index == index && a.kind matches { Predicate })
+        || index < alt.elements.len() && element_meets_predicate(&alt.elements[index], analysis);
+}
+
+/// `alt_meets_predicate_at` for the left edge of `elem`.
+pub fn element_meets_predicate(elem: &Element, analysis: &GrammarAnalysis) -> bool {
+    return match *elem {
+        RuleRef(r) => {
+            let mut visible: List<[AltAction, PredicateSite]> = [];
+            rule_left_edge_predicates(&r.name, analysis, &mut [], &mut visible);
+            !visible.is_empty();
+        },
+        Group(g) => g.alternatives.iter_ref().any(|a| alt_meets_predicate_at(a, 0, analysis)),
+        Label(l) => element_meets_predicate(&l.element, analysis),
+        Repeat(r) => element_meets_predicate(&r.element, analysis),
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
+    };
+}
+
+/// The predicates prediction meets entering rule `name`: those at the left
+/// edge of its alternatives, and of the rules those open with. A callee's value
+/// channel is not in scope at the decision.
+pub fn rule_left_edge_predicates<S: AsStrSlice>(
+    name: S,
+    analysis: &GrammarAnalysis,
+    visited: &mut List<String>,
+    out: &mut List<[AltAction, PredicateSite]>,
+) {
+    if visited.contains_str(&name) {
+        return;
+    }
+    visited.push(name.to_string());
+    let Some(callee) = analysis.find_rule(&name) else {
+        return;
+    };
+    let site = PredicateSite { rule_index: analysis.rule_index_of(&name), vals_in_scope: false };
+    for let calt of &callee.alternatives {
+        for let a of &calt.left_edge_predicates() {
+            out.push([*a, site]);
+        }
+        invoked_left_edge_predicates(calt, analysis, visited, out);
+    }
 }
 
 /// An alt's gate conditions rendered against the scan's copy of the members,

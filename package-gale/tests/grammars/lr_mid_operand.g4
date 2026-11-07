@@ -6,8 +6,8 @@
 // left-recursive alternative, not in an atom alt. ANTLR4 rewrites a mid-alt
 // self-reference as `e[0]` — a full sub-expression — so it climbs the shared
 // `and` delimiter as long as the enclosing alternative can still find its own
-// `and`. Gale matches it by stamping the operand `e[0]` too and gating each
-// loop iteration on the alternative's remaining continuation.
+// `and`. Gale matches it by stamping the operand `e[0]` too and stopping its
+// loop at the last boundary where the alternative's rest still scans.
 grammar LrMidOperand;
 
 s : e EOF ;

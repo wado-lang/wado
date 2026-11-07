@@ -361,6 +361,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             highlight: emit_highlight,
             superclass: ctx.settings.has_superclass(),
             scan_memo: ctx.plan.scan_memo,
+            lr_frames: ctx.plan.lr_frames,
         },
     );
     let mut head = CodeWriter::new();
@@ -673,6 +674,7 @@ struct RuntimeFeatures {
     highlight: bool,
     superclass: bool,
     scan_memo: bool,
+    lr_frames: bool,
 }
 
 /// The inlined runtime: its standard-library imports, hoisted to the top of
@@ -698,6 +700,9 @@ fn gen_runtime(f: &RuntimeFeatures) -> InlinedRuntime {
     }
     if f.scan_memo {
         gen_runtime_fragment(&mut rt, &#include_str("./runtime/scan_memo.wado"));
+    }
+    if f.lr_frames {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/lr_frame.wado"));
     }
     if f.atn_decode {
         gen_runtime_fragment(&mut rt, &#include_str("./runtime/atn.wado"));

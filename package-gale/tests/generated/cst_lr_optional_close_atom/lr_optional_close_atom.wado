@@ -1180,6 +1180,39 @@ impl<G: Eq> ScanMemo<G> {
         self.heads[pos] = self.entries.len() - 1;
     }
 }
+internal struct LrFrame {
+    internal rest: i32,
+    internal min_prec: i32,
+    internal follow: i64,
+    internal cont: i64,
+}
+
+internal global LR_LOOP_REST: i32 = -1;
+
+global mut LR_FRAMES: List<LrFrame> = [];
+
+internal fn lr_frames_reset() {
+    LR_FRAMES = [];
+}
+
+internal fn lr_loop_frame(min_prec: i32, follow: i64, cont: i64) -> i64 {
+    return if cont == 0 { 0 } else { lr_frame(LR_LOOP_REST, min_prec, follow, cont) };
+}
+
+internal fn lr_frame(rest: i32, min_prec: i32, follow: i64, cont: i64) -> i64 {
+    let frame = LrFrame { rest, min_prec, follow, cont };
+    for let mut i = LR_FRAMES.len() - 1; i >= 0; i -= 1 {
+        if LR_FRAMES[i] == frame {
+            return (i + 1) as i64;
+        }
+    }
+    LR_FRAMES.push(frame);
+    return LR_FRAMES.len() as i64;
+}
+
+internal fn lr_frame_at(cont: i64) -> LrFrame {
+    return LR_FRAMES[(cont - 1) as i32];
+}
 pub global TK_Identifier: i32 = 0;
 pub global TK_Ws: i32 = 1;
 pub global TK_EOF: i32 = 2;
@@ -1716,7 +1749,7 @@ impl Parser {
     }
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1726,7 +1759,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
     } else if kind == TK_LIT_LPAREN {
         pos = start + 1;
         try_1: {
-            pos = scan_expr(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)), 0);
+            pos = scan_expr(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)), 0, lr_frame(0, 0, follow, lr_cont));
             if pos < 0 { break try_1; }
             if pos < tokens.len() && tokens[pos] == TK_LIT_RPAREN && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF })) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
                 pos += 1;
@@ -1738,7 +1771,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
     return -1;
 }
 
-fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -1747,44 +1780,91 @@ fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
     return pos;
 }
 
-fn scan_expr_lr_3(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_lr_3(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_EQEQ { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, memo, follow, 2);
+    pos = scan_expr(tokens, pos, memo, follow, 2, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let memo_at = memo.find(1, pos, min_prec, follow, 0, &());
+fn scan_expr__rest_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos] == TK_LIT_RPAREN && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF })) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_expr__cont_holds(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, lr_cont: i64) -> bool {
+    let frame = lr_frame_at(lr_cont);
+    let holds = if frame.rest == LR_LOOP_REST {
+        (frame.cont == 0 || scan_expr__cont_holds(tokens, pos, memo, frame.cont)) || scan_expr__loop(tokens, pos, memo, frame.follow, frame.min_prec, frame.cont) >= 0
+    } else {
+        let end = match frame.rest {
+            _ => scan_expr__rest_0(tokens, pos, memo, frame.follow, frame.cont),
+        };
+        end >= 0 && (frame.cont == 0 || scan_expr__cont_holds(tokens, end, memo, frame.cont))
+    };
+    return holds;
+}
+
+fn scan_expr(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let memo_at = memo.find(1, pos, min_prec, follow, lr_cont, &());
     if memo_at >= 0 {
         return memo.end_of(memo_at);
     }
     let memo_gate = ();
-    let memo_end = scan_expr__walk(tokens, pos, memo, follow, min_prec);
-    memo.put(1, pos, min_prec, follow, 0, memo_gate, memo_end, ());
+    let memo_end = scan_expr__walk(tokens, pos, memo, follow, min_prec, lr_cont);
+    memo.put(1, pos, min_prec, follow, lr_cont, memo_gate, memo_end, ());
     return memo_end;
 }
 
-fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos, memo, follow);
+fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let pos = scan_expr_atom(tokens, pos, memo, follow, lr_loop_frame(min_prec, follow, lr_cont));
     if pos < 0 { return -1; }
+    let cut = if lr_cont == 0 { scan_expr__loop_walk(tokens, pos, memo, follow, min_prec, 0) } else { scan_expr__loop(tokens, pos, memo, follow, min_prec, lr_cont) };
+    return if cut >= 0 { cut } else { pos };
+}
+
+fn scan_expr__loop(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let memo_at = memo.find(-2, pos, min_prec, follow, lr_cont, &());
+    if memo_at >= 0 {
+        return memo.end_of(memo_at);
+    }
+    let memo_gate = ();
+    let memo_end = scan_expr__loop_walk(tokens, pos, memo, follow, min_prec, lr_cont);
+    memo.put(-2, pos, min_prec, follow, lr_cont, memo_gate, memo_end, ());
+    return memo_end;
+}
+
+fn scan_expr__loop_walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    let mut lr_bounds: List<i32> = [];
+    let lr_outer = lr_cont;
+    let lr_cont = lr_loop_frame(min_prec, follow, lr_cont);
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_DOT {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expr_lr_2(tokens, pos, memo, follow);
+                pos = scan_expr_lr_2(tokens, pos, memo, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
+                }
             } else {
                 break;
             }
         } else if suffix_kind == TK_LIT_EQEQ {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expr_lr_3(tokens, pos, memo, follow);
+                pos = scan_expr_lr_3(tokens, pos, memo, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if lr_outer != 0 {
+                    lr_bounds.push(pos);
+                }
             } else {
                 break;
             }
@@ -1792,7 +1872,11 @@ fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follo
             break;
         }
     }
-    return pos;
+    if lr_outer == 0 { return pos; }
+    for let mut i = lr_bounds.len() - 1; i >= 0; i -= 1 {
+        if (lr_outer == 0 || scan_expr__cont_holds(tokens, lr_bounds[i], memo, lr_outer)) { return lr_bounds[i]; }
+    }
+    return -1;
 }
 
 fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -1818,7 +1902,7 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_Identifier {
@@ -1827,7 +1911,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
     } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 1;
-        _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)));
+        _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)), 0, lr_frame(0, 0, follow, lr_cont));
         if p.peek_kind() == TK_LIT_RPAREN && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
             p.take();
         }
@@ -1841,20 +1925,23 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
     return;
 }
 
-fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p, follow, min_prec);
+    let lr_outer = lr_cont;
+    let lr_cont = lr_loop_frame(min_prec, follow, lr_cont);
+    _parse_expr__inner_atom(p, follow, min_prec, lr_cont);
     p.b.finish_node(p.last_end());
+    let _lr_cut = if lr_outer == 0 || p.recovering { i32::MAX } else { scan_expr__loop(&p.kinds, p.pos, &mut p.memo, follow, min_prec, lr_outer) };
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_LIT_DOT {
             if 2 >= min_prec {
-                if scan_expr_lr_2(&p.kinds, p.pos, &mut p.memo, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_2(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
+                if _lr_end < 0 { break; }
+                if _lr_end > _lr_cut { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.take();
                 p.expect(TK_Identifier, &SYNC_2, true);
@@ -1864,13 +1951,13 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
             }
         } else if _sk == TK_LIT_EQEQ {
             if 1 >= min_prec {
-                if scan_expr_lr_3(&p.kinds, p.pos, &mut p.memo, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_3(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
+                if _lr_end < 0 { break; }
+                if _lr_end > _lr_cut { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.take();
                 p.site = 4;
-                _parse_expr(p, follow, 2);
+                _parse_expr(p, follow, 2, lr_cont);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1882,17 +1969,18 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
     return;
 }
 
-fn _parse_expr(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
+fn _parse_expr(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _row = p.b.checkpoint();
-    _parse_expr__inner(p, follow, min_prec);
+    _parse_expr__inner(p, follow, min_prec, lr_cont);
     if p.recovering && p.recover_rule(RK_EXPR, "expr", _row) { p.b.finish_node(p.last_end()); }
     p.sites.pop();
 }
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
+    lr_frames_reset();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;

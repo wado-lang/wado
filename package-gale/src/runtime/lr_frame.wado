@@ -1,0 +1,35 @@
+#![allow(dead_code)]
+
+internal struct LrFrame {
+    internal rest: i32,
+    internal min_prec: i32,
+    internal follow: i64,
+    internal cont: i64,
+}
+
+internal global LR_LOOP_REST: i32 = -1;
+
+global mut LR_FRAMES: List<LrFrame> = [];
+
+internal fn lr_frames_reset() {
+    LR_FRAMES = [];
+}
+
+internal fn lr_loop_frame(min_prec: i32, follow: i64, cont: i64) -> i64 {
+    return if cont == 0 { 0 } else { lr_frame(LR_LOOP_REST, min_prec, follow, cont) };
+}
+
+internal fn lr_frame(rest: i32, min_prec: i32, follow: i64, cont: i64) -> i64 {
+    let frame = LrFrame { rest, min_prec, follow, cont };
+    for let mut i = LR_FRAMES.len() - 1; i >= 0; i -= 1 {
+        if LR_FRAMES[i] == frame {
+            return (i + 1) as i64;
+        }
+    }
+    LR_FRAMES.push(frame);
+    return LR_FRAMES.len() as i64;
+}
+
+internal fn lr_frame_at(cont: i64) -> LrFrame {
+    return LR_FRAMES[(cont - 1) as i32];
+}
