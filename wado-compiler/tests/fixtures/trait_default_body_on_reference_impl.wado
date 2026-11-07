@@ -1,0 +1,44 @@
+// A trait's default body and its contract call a sibling method through
+// `self`. Where the impl is written for a reference, `Self` is that reference,
+// and the call reaches the impl written for it.
+struct Plain {
+    n: i32,
+}
+
+trait Counted with () {
+    fn count(&self) -> i32;
+
+    fn twice(&self) -> i32 {
+        return self.count() * 2;
+    }
+
+    fn nth(&self, index: i32) -> i32
+        contract index < self.count();
+}
+
+impl Counted for &Plain {
+    fn count(&self) -> i32 {
+        return self.n;
+    }
+
+    fn nth(&self, index: i32) -> i32 {
+        return index;
+    }
+}
+
+test "a default body reads the reference's impl" {
+    let p = Plain { n: 3 };
+    let r = &p;
+    assert r.twice() == 6;
+    assert r.nth(2) == 2;
+}
+
+#[expect_trap]
+test "a contract reads the reference's impl" {
+    let p = Plain { n: 3 };
+    let r = &p;
+    let _ = r.nth(3);
+}
+
+__DATA__
+{"test": {}}
