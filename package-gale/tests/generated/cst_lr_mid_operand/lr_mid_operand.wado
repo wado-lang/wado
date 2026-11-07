@@ -1187,11 +1187,13 @@ internal struct LrFrame {
     internal cont: i64,
 }
 
-global LR_FRAME_TAG: i64 = 0x4000_0000_0000_0000;
-
 internal global LR_LOOP_REST: i32 = -1;
 
 global mut LR_FRAMES: List<LrFrame> = [];
+
+internal fn lr_frames_reset() {
+    LR_FRAMES = [];
+}
 
 internal fn lr_loop_frame(min_prec: i32, follow: i64, cont: i64) -> i64 {
     return if cont == 0 { 0 } else { lr_frame(LR_LOOP_REST, min_prec, follow, cont) };
@@ -1199,20 +1201,17 @@ internal fn lr_loop_frame(min_prec: i32, follow: i64, cont: i64) -> i64 {
 
 internal fn lr_frame(rest: i32, min_prec: i32, follow: i64, cont: i64) -> i64 {
     let frame = LrFrame { rest, min_prec, follow, cont };
-    for let mut i = 0; i < LR_FRAMES.len(); i += 1 {
+    for let mut i = LR_FRAMES.len() - 1; i >= 0; i -= 1 {
         if LR_FRAMES[i] == frame {
-            return LR_FRAME_TAG | i as i64;
+            return (i + 1) as i64;
         }
     }
     LR_FRAMES.push(frame);
-    return LR_FRAME_TAG | (LR_FRAMES.len() - 1) as i64;
+    return LR_FRAMES.len() as i64;
 }
 
-internal fn lr_frame_of(cont: i64) -> Option<LrFrame> {
-    if cont & LR_FRAME_TAG == 0 {
-        return null;
-    }
-    return Option::Some(LR_FRAMES[(cont & ~LR_FRAME_TAG) as i32]);
+internal fn lr_frame_at(cont: i64) -> LrFrame {
+    return LR_FRAMES[(cont - 1) as i32];
 }
 pub global TK_ID: i32 = 0;
 pub global TK_WS: i32 = 1;
@@ -1798,15 +1797,16 @@ fn scan_e__rest_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
 }
 
 fn scan_e__cont_holds(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, lr_cont: i64) -> bool {
-    if let Some(frame) = lr_frame_of(lr_cont) {
-        if frame.rest == LR_LOOP_REST {
-            let cut = scan_e__loop(tokens, pos, memo, frame.follow, frame.min_prec, frame.cont);
-            return cut >= 0;
-        }
-        let end = scan_e__rest_0(tokens, pos, memo, frame.follow, frame.cont);
-        return end >= 0 && (frame.cont == 0 || scan_e__cont_holds(tokens, end, memo, frame.cont));
-    }
-    return follow_yields(tokens, pos, lr_cont, &FOLLOW_SETS, TK_EOF);
+    let frame = lr_frame_at(lr_cont);
+    let holds = if frame.rest == LR_LOOP_REST {
+        scan_e__loop(tokens, pos, memo, frame.follow, frame.min_prec, frame.cont) >= 0
+    } else {
+        let end = match frame.rest {
+            _ => scan_e__rest_0(tokens, pos, memo, frame.follow, frame.cont),
+        };
+        end >= 0 && (frame.cont == 0 || scan_e__cont_holds(tokens, end, memo, frame.cont))
+    };
+    return holds;
 }
 
 fn scan_e(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
@@ -1925,7 +1925,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: 
     let lr_cont = lr_loop_frame(min_prec, follow, lr_cont);
     _parse_e__inner_atom(p, follow, min_prec, lr_cont);
     p.b.finish_node(p.last_end());
-    let _lr_cut = if lr_outer == 0 { i32::MAX } else { scan_e__loop(&p.kinds, p.pos, &mut p.memo, follow, min_prec, lr_outer) };
+    let _lr_cut = if lr_outer == 0 || p.recovering { i32::MAX } else { scan_e__loop(&p.kinds, p.pos, &mut p.memo, follow, min_prec, lr_outer) };
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
@@ -1989,6 +1989,7 @@ fn _parse_e(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
+    lr_frames_reset();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
