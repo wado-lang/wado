@@ -1,0 +1,28 @@
+// `borrow` is read only in the value stored to it, a loop carrying it to the
+// next round. Peephole folds the store of `v` into that value, which then has
+// an effect, so eliding the store keeps the value and its read of `borrow`:
+// the store is not write-only, or every round reads the first `borrow`.
+use { println, Stdout } from "core:cli";
+
+fn subtract_three(digits: &mut List<i32>) {
+    let mut borrow = 0;
+    for let mut i = digits.len() - 1; i >= 0; i -= 1 {
+        let mut v = digits[i] - borrow - 3;
+        borrow = if v < 0 { 1 } else { 0 };
+        if v < 0 {
+            v += 10;
+        }
+        digits[i] = v;
+    }
+}
+
+export fn run() with Stdout {
+    let mut digits: List<i32> = [3, 1];
+    subtract_three(&mut digits);
+    println(`${digits:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[9, 8]\n"
+}
