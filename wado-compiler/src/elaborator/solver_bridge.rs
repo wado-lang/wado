@@ -711,7 +711,7 @@ impl Lowering {
                 said(elems.iter().map(|&a| tuple_elem(a))).map(SolverType::Tuple)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
-                is_mut: matches!(table.get(id), ResolvedType::MutRef(_)),
+                is_mut: table.is_mut_ref(id),
                 inner: Box::new(self.type_id(table, *inner, param)?),
             }),
             ResolvedType::TypeParam { name, index } => placed(name, *index).map(SolverType::Param),

@@ -360,10 +360,9 @@ pub(super) struct CallImmutability<'a> {
     /// type, so the order changes nothing.
     memo: Mutex<IndexMap<TypeId, bool>>,
     /// Per-[`FuncId`]: the function's body provably writes through its receiver
-    /// (param 0). Boxing erases the `&self` / `&mut self` distinction — both
-    /// become a `Box<T>` param (see `lower/plan/boxing`) — so a receiver's
-    /// mutability cannot be read off its type; only the callee body distinguishes
-    /// `bump(&mut self) { *self = … }` from `fmt(&self)`. Computed by fixpoint.
+    /// (param 0). Sharper than the receiver's type: a `&mut self` method whose
+    /// body writes nothing through it leaves the receiver alone. Computed by
+    /// fixpoint.
     receiver_mutating: SecondaryMap<FuncId, bool>,
     /// Per-[`FuncId`]: the function has a body (so a not-mutating verdict is
     /// *proven*, not unknown). A callee that does not resolve here (extern /
@@ -546,21 +545,16 @@ pub(super) fn method_mutates_receiver(
     conservative_on_unknown: bool,
     call_immutability: Option<&CallImmutability>,
 ) -> bool {
-    let receiver_is_mut_ref = matches!(
-        type_table.get(body.exprs[receiver].type_id),
-        ResolvedType::MutRef(_)
-    );
-    // The receiver type alone cannot tell `&self` from `&mut self` once boxing
-    // has made both a `Box<T>` param, so consult the body-derived verdict: a
-    // method that writes through its receiver mutates it, one that does not is
-    // proven safe. A bodyless callee (`None` verdict) falls back to the legacy
-    // `MutRef`-param check (still valid for a genuine `&mut Struct` receiver) or
+    let receiver_is_mut_ref = type_table.is_mut_ref(body.exprs[receiver].type_id);
+    // The body-derived verdict is sharper than the receiver type: a method that
+    // writes through its receiver mutates it, one that does not is proven safe.
+    // A bodyless callee (`None` verdict) falls back to its `&mut` parameter or
     // the conservative default. `call_immutability` is `None` for the
     // copy-propagation caller, which keeps its own type-based receiver guard.
     let callee_mutates = match call_immutability.and_then(|ci| ci.method_writes_receiver(func_id)) {
         Some(writes) => writes,
         None => match first_param_types[func_id] {
-            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+            Some(tp) => type_table.is_mut_ref(tp),
             None => conservative_on_unknown,
         },
     };
@@ -594,10 +588,8 @@ fn compute_receiver_mutating(
             // a by-value `self` writes the callee's own copy, so it neither
             // counts as mutating nor propagates through the fixpoint
             // (`outer(&mut self) { self.helper() }` with a by-value helper
-            // leaves outer's receiver untouched). The pre-boxing
-            // `is_mut_ref` bit stays precise after boxing erases `&mut`
-            // from the parameter type.
-            p0_of[id] = p0.is_mut_ref.then_some(p0.local_index);
+            // leaves outer's receiver untouched).
+            p0_of[id] = p0.writes_caller(type_table).then_some(p0.local_index);
         }
     }
     // Walk each body once to extract a fixpoint-invariant summary: whether it
@@ -815,7 +807,7 @@ fn summarize_receiver_writes(
                         pending.push(*func_id);
                     } else {
                         let inner_mut = match first_param_types[*func_id] {
-                            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+                            Some(tp) => type_table.is_mut_ref(tp),
                             None => true,
                         };
                         if inner_mut {
@@ -837,10 +829,9 @@ fn summarize_receiver_writes(
 }
 
 /// Flag the root of a call argument that hands the callee shared mutable state
-/// by value — a `Box`, `List`, `&mut T` or resource handle — which it can mutate
-/// exactly like a `&mut` place. Boxing lowers `&mut x` to a by-value `Box<x>`,
-/// clearing `is_mut`, so keying on that flag alone would miscompile
-/// `step(&mut pos)`. Keyed on the type, which survives `field_scalarize`.
+/// by value — a cell, `List`, `&mut T` or resource handle — which it can mutate
+/// exactly like a `&mut` place. Keyed on the type, which survives
+/// `field_scalarize`.
 fn collect_ref_arg_escapes(
     body: &Body,
     node: NodeRef,

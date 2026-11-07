@@ -981,13 +981,24 @@ pub struct NirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` — the only kind that can mutate the
-    /// caller's argument storage. Captured pre-boxing (see [`crate::tir::TirParam::is_mut_ref`]).
+    /// The parameter was declared `&mut T`, the only kind that can mutate the
+    /// caller's argument storage. It outlives `sroa_param`, which can narrow
+    /// such a parameter to a field whose type no longer says so.
     pub is_mut_ref: bool,
     pub span: Span,
     /// How this parameter arrives at the Wasm level. Set by
     /// `optimize::multi_value_param`; `Single` everywhere else.
     pub param_abi: ParamAbi,
+}
+
+impl NirParam {
+    /// Whether a write through this parameter reaches the caller's argument
+    /// storage: it is a `&mut`, or was declared one before `sroa_param` narrowed
+    /// it to a field that still references what the caller passed.
+    #[must_use]
+    pub fn writes_caller(&self, type_table: &TypeTable) -> bool {
+        self.is_mut_ref || type_table.is_mut_ref(self.type_id)
+    }
 }
 
 #[derive(Debug, Clone)]

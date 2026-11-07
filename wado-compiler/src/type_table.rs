@@ -2949,6 +2949,11 @@ impl TypeTable {
         }
     }
 
+    /// Whether `type_id` is a `&mut`, the one handle a holder can write through.
+    pub fn is_mut_ref(&self, type_id: TypeId) -> bool {
+        matches!(self.get(type_id), ResolvedType::MutRef(_))
+    }
+
     /// The type the reference `type_id` points at.
     pub fn ref_pointee(&self, type_id: TypeId) -> Option<TypeId> {
         match self.get(type_id) {

@@ -28,9 +28,7 @@ use loc_set::{Loc, LocSet};
 
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
-use super::is_reference_type;
 use super::last_use::collect_child_exprs;
-use super::place::could_write_through;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
 use crate::cut_memo::CutWalk;
 use crate::defs::DefId;
@@ -1158,7 +1156,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
             .iter()
             .map(|p| Slot {
                 by_ref: type_table.is_reference_shaped(p.type_id),
-                writes: p.is_mut_ref || could_write_through(p.type_id, &type_table),
+                writes: type_table.is_mut_ref(p.type_id),
             })
             .collect();
         let dispatches = matches!(func.kind, FunctionKind::FnCanonicalDispatch { .. });
@@ -1444,7 +1442,7 @@ impl Builder<'_> {
             .iter()
             .map(|&p| Slot {
                 by_ref: tt.is_reference_shaped(p),
-                writes: could_write_through(p, tt),
+                writes: tt.is_mut_ref(p),
             })
             .collect()
     }
@@ -1713,7 +1711,7 @@ impl Builder<'_> {
             TirExprKind::Cast { expr: inner, .. } => {
                 let v = self.eval(inner);
                 if self.type_table.is_reference_shaped(inner.type_id)
-                    && !is_reference_type(expr.type_id, self.type_table)
+                    && !self.type_table.is_reference_shaped(expr.type_id)
                 {
                     self.deref(v)
                 } else {

@@ -3070,7 +3070,7 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
         } => true,
         ExprKind::Local { .. } => {
             matches!(type_table.get(body.exprs[e].type_id), ResolvedType::Ref(inner)
-                if !matches!(type_table.get(*inner), ResolvedType::MutRef(_)))
+                if !type_table.is_mut_ref(*inner))
         }
         _ => false,
     }

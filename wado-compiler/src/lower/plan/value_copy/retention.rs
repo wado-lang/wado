@@ -17,7 +17,6 @@
 
 use super::callgraph::{CallGraph, body_ids};
 use super::funcset::FuncKeyMap;
-use super::is_reference_type;
 use super::place::unwrap_ref;
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
@@ -1314,7 +1313,7 @@ fn facts_of_body(
         // A reference parameter is only what it points at. What its referent's
         // elements hold is the caller's to account for, not this body's — see
         // `retain_elements_of_a_local_view.wado`.
-        if is_reference_type(*type_id, type_table) {
+        if type_table.is_reference_shaped(*type_id) {
             entry.is.insert(position);
         } else if carrying.holds(*type_id) {
             entry.holds.insert(position);
@@ -1493,7 +1492,7 @@ impl StoresWalker<'_> {
         if positions.is_empty() {
             return out;
         }
-        if is_reference_type(type_id, self.type_table) {
+        if self.type_table.is_reference_shaped(type_id) {
             out.is = positions;
         } else if self.carrying.holds(type_id) {
             out.holds = positions;
@@ -1789,7 +1788,7 @@ impl StoresWalker<'_> {
     fn lands_in_place(&mut self, place: &TirExpr, carried: &IndexSet<u32>, value_type: TypeId) {
         let escaping = IndexSet::from_iter([value_type]);
         match Self::place_root(place) {
-            Some((root, ty)) if !is_reference_type(ty, self.type_table) => {
+            Some((root, ty)) if !self.type_table.is_reference_shaped(ty) => {
                 self.hold_into(root, carried);
             }
             Some((root, _)) => {

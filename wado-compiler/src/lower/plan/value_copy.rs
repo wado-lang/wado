@@ -178,7 +178,6 @@ pub fn plan(
     flat: &mut FlatPackage,
     builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
-    ref_receiver_methods: FuncKeySet,
     profiler: &dyn SpanEmitter,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
@@ -244,12 +243,18 @@ pub fn plan(
         _ => None,
     };
     let mut mut_receiver_methods = FuncKeySet::default();
+    let mut ref_receiver_methods = FuncKeySet::default();
     let mut list_element_assigns = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
+    let type_table = flat.type_table.borrow();
     for f in &flat.functions {
         let f = f.borrow();
-        if f.params.first().is_some_and(|p| p.is_mut_ref) {
+        let receiver = f.params.first().map(|p| p.type_id);
+        if receiver.is_some_and(|ty| type_table.is_mut_ref(ty)) {
             mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
+        }
+        if receiver.is_some_and(|ty| type_table.is_reference_shaped(ty)) {
+            ref_receiver_methods.insert(f.module_source.clone(), f.name.clone());
         }
         if f.def_id.is_some() && f.def_id == list_index_assign {
             list_element_assigns.insert(f.module_source.clone(), f.name.clone());
@@ -257,9 +262,10 @@ pub fn plan(
         mut_ref_params.insert(
             f.module_source.clone(),
             f.name.clone(),
-            f.params.iter().map(|p| p.is_mut_ref).collect(),
+            f.params.iter().map(|p| type_table.is_mut_ref(p.type_id)).collect(),
         );
     }
+    drop(type_table);
     let returns_receiver_alias = in_span(profiler, "lower/value_copy/receiver_alias", || {
         ownership::compute_receiver_alias(
             flat,
@@ -337,15 +343,6 @@ pub fn hands_out_payload(func: &TirFunction, return_paths: &place::ReturnPaths) 
     return_paths
         .get(&func.module_source, &func.name)
         .is_some_and(|path| !path.through_ref)
-}
-
-/// Whether `type_id` is spelled `&T` / `&mut T`. Narrower than
-/// [`TypeTable::is_reference_shaped`], which also answers for a boxed reference.
-pub fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    )
 }
 
 /// Whether a value of `type_id` copies on every read and so carries no

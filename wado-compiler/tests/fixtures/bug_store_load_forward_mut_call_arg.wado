@@ -1,7 +1,7 @@
 // Regression: a mutable local passed by `&mut` to a *free* function (not a
-// method receiver) must not keep its pre-call field value. `&mut i32` lowers to
-// a by-value `Box<i32>` whose `is_mut` arg flag is false, so store→load
-// forwarding must recognise the box argument as a mutable escape from its type,
+// method receiver) must not keep its pre-call field value. `&mut i32` points at
+// a cell, passed as the cell local itself, so store→load forwarding must
+// recognise the cell argument as a mutable escape from its type,
 // or it forwards the initial `pos = 0` across `step`/`bump` and `run` returns 0.
 
 fn bump(pos: &mut i32) {

@@ -2264,7 +2264,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_id,
                     local_index: next_local,
                     is_mut: p.is_mut,
-                    is_mut_ref: false,
                     span: p.span,
                 });
                 next_local += 1;

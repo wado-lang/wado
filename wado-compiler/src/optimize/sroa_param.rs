@@ -374,7 +374,7 @@ fn candidate_info_for(
     let &(field_name, field_type) = fields.first()?;
     Some(SroaInfo {
         struct_type,
-        struct_key: type_table.type_key(struct_type),
+        struct_key: wrapper_key(struct_type, type_table),
         inner_type_id: field_type,
         field_name: field_name.to_string(),
         field_index: if fields.len() == 1 { 0 } else { u32::MAX },
@@ -404,7 +404,14 @@ fn is_wrapper(type_id: TypeId, type_table: &TypeTable) -> bool {
 }
 
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
-    is_wrapper(type_id, type_table).then(|| type_table.type_key(type_id))
+    is_wrapper(type_id, type_table).then(|| wrapper_key(type_id, type_table))
+}
+
+/// The key one kind of wrapper is matched by. A cell is keyed by what it holds,
+/// so a `&mut T` argument matches the `&T` parameter it coerces to; no struct
+/// shares a key with a cell's payload, which is never a struct.
+fn wrapper_key(wrapper: TypeId, type_table: &TypeTable) -> TypeKey {
+    type_table.type_key(type_table.cell_payload(wrapper).unwrap_or(wrapper))
 }
 
 /// The struct a reference `type_id` points to.
@@ -529,7 +536,7 @@ fn struct_contents<'a>(
 /// handle — but its interior may still hand out a mutable reference, which
 /// [`mut_reachable_contains`] picks up.
 fn param_root_writable(param_type: TypeId, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(param_type), ResolvedType::MutRef(_))
+    type_table.is_mut_ref(param_type)
 }
 
 /// Whether a write can land on a location reachable from `ty` whose heap
@@ -561,7 +568,7 @@ fn mut_reachable_contains(
         });
     }
     if let Some(payload) = type_table.cell_payload(ty) {
-        let cell_writable = matches!(type_table.get(ty), ResolvedType::MutRef(_));
+        let cell_writable = type_table.is_mut_ref(ty);
         if cell_writable && type_table.cell_key(ty) == target {
             return true;
         }
@@ -1568,7 +1575,7 @@ fn peel_one_ref(body: &Body, arg: ExprId) -> ExprId {
 
 /// Whether `ty` names the wrapper, directly or behind a reference.
 fn denotes_struct(ty: TypeId, key: TypeKey, type_table: &TypeTable) -> bool {
-    struct_behind_ref(ty, type_table).map(|s| type_table.type_key(s)) == Some(key)
+    struct_behind_ref(ty, type_table).map(|s| wrapper_key(s, type_table)) == Some(key)
 }
 
 /// The argument operand at a scalarized parameter position. The position exists

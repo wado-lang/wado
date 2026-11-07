@@ -4,12 +4,11 @@
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
-use super::value_copy::is_reference_type;
 use super::value_copy::retention::RefCarrying;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    CaptureSource, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt,
+    CaptureSource, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt,
     TirStmtKind, TirUnaryOp, capture_at,
 };
 use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
@@ -236,7 +235,7 @@ impl<'a> WriteWalker<'a> {
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. } => {
-                if is_reference_type(expr.type_id, self.carrying.type_table()) {
+                if self.carrying.type_table().is_reference_shaped(expr.type_id) {
                     self.carried(inner)
                 } else {
                     IndexSet::default()
@@ -346,11 +345,11 @@ impl TirRefVisitor for WriteWalker<'_> {
             ..
         } = &stmt.kind
         {
-            let alias = matches!(
-                self.carrying.type_table().get(*type_id),
-                ResolvedType::MutRef(_)
-            )
-            .then(|| self.root_of(value))
+            let alias = self
+                .carrying
+                .type_table()
+                .is_mut_ref(*type_id)
+                .then(|| self.root_of(value))
             .flatten();
             match alias {
                 Some(root) => {

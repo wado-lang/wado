@@ -232,10 +232,9 @@ impl LoopSnapshot {
 /// Whether a `&mut` argument's storage is also named by another argument. Each
 /// parameter binds its own snapshot and each write-back replays whole, so a
 /// second handle either reads a value the program never had or loses its own
-/// write. Whether it could actually observe the write is not asked: after
-/// `prepare_types` a `&` reference to a primitive is the same `Box<T>` a
-/// by-value parameter carries. Wado has no borrow checker, so this is ordinary
-/// source — the frame declines the call rather than mis-running it.
+/// write. Whether it could actually observe the write is not asked. Wado has no
+/// borrow checker, so this is ordinary source — the frame declines the call
+/// rather than mis-running it.
 fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
@@ -1278,8 +1277,8 @@ impl Interpreter<'_> {
                 return None;
             };
             // A scalar under a writable reference would be a value where the
-            // program holds an alias: boxing collapses `&mut x` into a bare
-            // read, so no write position is left for `region_needs` to see.
+            // program holds an alias: a write through the cell leaves no
+            // write position on the local for `region_needs` to see.
             if read.writable_reference && value.is_scalar() {
                 compiler_trace!(
                     "region_seed",

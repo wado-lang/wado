@@ -509,7 +509,6 @@ fn report_function(
             type_id: local.type_id,
             local_index: i as u32,
             is_mut: false,
-            is_mut_ref: false,
             span,
         }
     });
@@ -518,7 +517,6 @@ fn report_function(
         type_id: site_type,
         local_index: site,
         is_mut: false,
-        is_mut_ref: false,
         span,
     };
     let params: Vec<TirParam> = params.chain([site_param]).collect();

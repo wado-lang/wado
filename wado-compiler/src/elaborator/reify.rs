@@ -1463,7 +1463,6 @@ impl<'a> Reify<'a> {
                 type_id,
                 local_index,
                 is_mut: param.is_mut,
-                is_mut_ref: false,
                 span: param.span,
             });
         }

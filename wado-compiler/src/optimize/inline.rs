@@ -3824,8 +3824,7 @@ fn try_inline_call_expr(
         // no wrap is needed, since the wrap is what would retype it.
         let recv_type = caller.operand_type(receiver_op);
         let (self_type_id, self_value): (TypeId, Operand) =
-            if matches!(type_table.get(self_param.type_id), ResolvedType::MutRef(_))
-                && !matches!(type_table.get(recv_type), ResolvedType::MutRef(_))
+            if type_table.is_mut_ref(self_param.type_id) && !type_table.is_mut_ref(recv_type)
             {
                 let mr = caller.exprs.push(ExprNode {
                     kind: ExprKind::Unary {

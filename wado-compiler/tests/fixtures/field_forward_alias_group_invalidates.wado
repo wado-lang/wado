@@ -1,11 +1,11 @@
 // Regression test: a chain of `let r = source` Local→Local copies of
-// a reference-typed local (e.g. `Box<i32>`, `&mut T`) forms an alias
+// a reference-typed local (e.g. a cell, `&mut T`) forms an alias
 // group. Writing through any member must invalidate the same field
 // across every alias.
 //
 // Pattern:
 //
-//   let mut x = 0;       // boxed → x: Box<i32>
+//   let mut x = 0;       // boxed → x: &mut i32, a cell
 //   let r1 = &mut x;     // r1, x in same alias group
 //   let r2 = r1;         // r2 joins the group
 //   *r2 = 7;             // observable as `*r1 == 7` and `x == 7`

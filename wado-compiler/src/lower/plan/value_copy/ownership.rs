@@ -11,7 +11,7 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{arg_at, carries_storage, is_reference, param_position, unwrap_ref};
+use super::place::{arg_at, carries_storage, param_position, unwrap_ref};
 use super::retention::CallRetention;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -593,7 +593,7 @@ fn compute_fresh_locals(
     // A by-value parameter is owned, the caller having copied or moved it in,
     // unless the caller passes it uncopied.
     for p in params {
-        if !is_reference(p.type_id, type_table) && !shared.contains(&p.local_index) {
+        if !type_table.is_reference_shaped(p.type_id) && !shared.contains(&p.local_index) {
             fresh.insert(p.local_index);
         }
     }

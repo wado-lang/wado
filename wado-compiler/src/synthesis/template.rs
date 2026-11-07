@@ -279,7 +279,6 @@ fn build_hole_fmt_helper(
         type_id,
         local_index,
         is_mut: false,
-        is_mut_ref: false,
         span,
     };
     let params = vec![

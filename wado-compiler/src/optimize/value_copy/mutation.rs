@@ -1,17 +1,16 @@
 //! The mutation-witness recognizer behind copy propagation's mutation analyses,
 //! plus the callee oracle it consults. The verdict is the callee's declared
-//! `&mut` parameter bit, captured before boxing erases the `&mut` / `&`
-//! distinction — never a body-derived "does not write" proof, which misses the
-//! mutations boxing hides and would strip a copy the callee corrupts (#1544).
+//! `&mut` parameter bit — never a body-derived "does not write" proof, which
+//! misses the mutations through a cell and would strip a copy the callee
+//! corrupts (#1544).
 
 use crate::hashmap::IndexMap;
 use crate::nir::{FuncId, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
 use crate::nir_package::NirPackage;
 
-/// Per-callee declared `&mut` parameter bits, captured before boxing erases the
-/// `&mut` / `&` distinction. Bodyless callees stay absent (their metadata is not
-/// trustworthy here). Consumed by [`MutationOracle`] and the copy-propagation
+/// Per-callee declared `&mut` parameter bits. Bodyless callees stay absent
+/// (their metadata is not trustworthy here). Consumed by [`MutationOracle`] and the copy-propagation
 /// alias analysis.
 pub(in crate::optimize) fn build_param_mut(project: &NirPackage) -> IndexMap<FuncId, Vec<bool>> {
     let mut map = IndexMap::default();

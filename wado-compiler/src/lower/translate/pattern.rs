@@ -1717,7 +1717,7 @@ impl<'a> PatternLowerer<'a> {
                 writable
             }
             _ => place::projection_base(expr).is_some_and(|inner| {
-                place::is_reference(inner.type_id, type_table)
+                type_table.is_reference_shaped(inner.type_id)
                     || self.place_is_writable(inner, type_table)
             }),
         }

@@ -1,11 +1,11 @@
-// Soundness (P0) for `sroa_param`: a *boxed* reference parameter is not a copy.
+// Soundness (P0) for `sroa_param`: a cell parameter is not a copy.
 //
-// `boxing::prepare_types` collapses `&i32` and `&mut i32` onto one by-value
-// `Box<i32>`, so `sroa_param` sees a single-field struct passed by value and
-// used to assume "a by-value struct candidate is already a copy". It is not:
-// the box IS the caller's storage, and `&x` of an address-taken local lowers to
-// a read of that one box. Scalarizing a handle some other access path can write
-// turns it into a call-time snapshot, and the write is lost.
+// `&i32` and `&mut i32` both point at a cell, an object of one field, so
+// `sroa_param` sees a single-field object and could assume "a candidate is
+// already a copy". It is not: the cell IS the caller's storage, and `&x` of an
+// address-taken local lowers to a read of that one cell. Scalarizing a handle
+// some other access path can write turns it into a call-time snapshot, and the
+// write is lost.
 //
 // Each case hides the aliasing handle one level further from the candidate; it
 // only has to be *reachable* from something the callee holds, not be the

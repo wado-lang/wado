@@ -1,6 +1,6 @@
-// `&self` of an impl for `&Text` is a `&&Text`, a box holding the reference.
-// `part` retains `self`, but what it retains is the `Text` the box's payload
-// refers to, so the box scalarizes to the payload and no call allocates one.
+// `&self` of an impl for `&Text` is a `&&Text`, a cell holding the reference.
+// `part` retains `self`, but what it retains is the `Text` the cell's payload
+// refers to, so the cell scalarizes to the payload and no call allocates one.
 use { println, Stdout } from "core:cli";
 
 struct Text {
@@ -31,5 +31,5 @@ __DATA__
 {
     "stdout": "5\n",
     "wir_pass": {"O2": ["nir/sroa_param"]},
-    "wir_not_expect:O2": ["struct.new \"core:prelude/types.wado//Box<&"]
+    "wir_not_expect:O2": ["struct.new \"core:prelude//$Cell<wado-compiler@0.1.0/tests/fixtures/sroa_param_boxed_reference_retained.wado/Text>\""]
 }

@@ -38,7 +38,7 @@ pub(super) fn relink_recorded_captures(
         .map(|(linked, recorded)| {
             assert!(
                 !closure_ctx.outer_box_types.contains_key(&linked.name)
-                    || matches!(type_table.get(recorded.type_id), ResolvedType::MutRef(_)),
+                    || type_table.is_mut_ref(recorded.type_id),
                 "in {}: reify reads `{}` through its box, so annotate must have recorded the box",
                 closure_ctx.function_name,
                 linked.name

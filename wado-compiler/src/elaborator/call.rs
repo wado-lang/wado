@@ -554,11 +554,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if binding.is_mut {
             return;
         }
-        let is_mut_ref = matches!(
-            self.tysys.type_table.borrow().get(binding.type_id),
-            ResolvedType::MutRef(_)
-        );
-        if is_mut_ref {
+        if self.tysys.type_table.borrow().is_mut_ref(binding.type_id) {
             return;
         }
         let _ = self.emit(TypeError::ClosureMutBindingRequired {

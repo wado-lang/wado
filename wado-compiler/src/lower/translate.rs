@@ -979,10 +979,11 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } = &inner.kind
         {
-            let is_reference = matches!(
-                self.base.type_table.borrow().get(receiver.type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            );
+            let is_reference = self
+                .base
+                .type_table
+                .borrow()
+                .is_reference_shaped(receiver.type_id);
             let holder = if is_reference {
                 (**receiver).clone()
             } else {
@@ -2080,14 +2081,18 @@ impl FunctionTranslator<'_, '_> {
             let nir_receiver = self.specialized_local(*index, name, spec, callee.span);
             let call_method_borrow = functor.call_method.borrow();
             // `ArenaCallArg::is_mut` means "the callee may write the caller's
-            // storage through this slot", which is `is_mut_ref` — the same
-            // source `call_args_in_param_order` reads. A declared-`mut` binding
-            // is the callee's own local and says nothing about the caller's.
-            let params_is_mut: Vec<bool> = call_method_borrow
-                .params
-                .iter()
-                .map(|p| p.is_mut_ref)
-                .collect();
+            // storage through this slot", which is a `&mut` parameter — the
+            // same source `call_args_in_param_order` reads. A declared-`mut`
+            // binding is the callee's own local and says nothing about the
+            // caller's.
+            let params_is_mut: Vec<bool> = {
+                let type_table = self.base.type_table.borrow();
+                call_method_borrow
+                    .params
+                    .iter()
+                    .map(|p| type_table.is_mut_ref(p.type_id))
+                    .collect()
+            };
             // The receiver is the functor; it heads `args` so the list lines up
             // with `call_method`'s full parameter list including `self`.
             let receiver = ArenaCallArg {
@@ -2984,7 +2989,7 @@ impl FunctionTranslator<'_, '_> {
             type_id: param.type_id,
             local_index: param.local_index,
             is_mut: param.is_mut,
-            is_mut_ref: param.is_mut_ref,
+            is_mut_ref: self.base.type_table.borrow().is_mut_ref(param.type_id),
             span: param.span,
             param_abi: ParamAbi::default(),
         }

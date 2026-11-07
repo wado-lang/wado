@@ -136,8 +136,8 @@ fn check_at(
     }
     // Both refs: check inner compatibility
     if actual_is_ref && expected_is_ref {
-        let actual_is_mut = matches!(type_table.get(actual), ResolvedType::MutRef(_));
-        let expected_is_mut = matches!(type_table.get(expected), ResolvedType::MutRef(_));
+        let actual_is_mut = type_table.is_mut_ref(actual);
+        let expected_is_mut = type_table.is_mut_ref(expected);
         // &mut T -> &T is ok; &T -> &mut T is not
         if !actual_is_mut && expected_is_mut {
             return TypeCheckResult::Incompatible;

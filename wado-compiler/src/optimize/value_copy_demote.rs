@@ -598,10 +598,7 @@ impl Analyzer<'_> {
     fn callee_mutates_self(&self, key: FuncKey) -> Option<bool> {
         let f = self.funcs.get(key.index())?.borrow();
         let p0 = f.params.first()?;
-        Some(matches!(
-            self.type_table.get(p0.type_id),
-            ResolvedType::MutRef(_)
-        ))
+        Some(self.type_table.is_mut_ref(p0.type_id))
     }
 
     /// True when calling `key` (a `&mut self` method) cannot mutate any
@@ -773,10 +770,8 @@ impl ElementClean<'_, '_> {
                             // caller write an element whatever its own body
                             // writes, so what it returns decides too.
                             Some(true) => {
-                                !matches!(
-                                    self.analyzer.type_table.get(body.exprs[id].type_id),
-                                    ResolvedType::MutRef(_)
-                                ) && self.analyzer.is_method_element_immutable(callee)
+                                !self.analyzer.type_table.is_mut_ref(body.exprs[id].type_id)
+                                    && self.analyzer.is_method_element_immutable(callee)
                             }
                             None => false,
                         };
@@ -1356,10 +1351,7 @@ fn is_self_derived(
             // builtins (`array_clone`, `array_new`) and every by-value return
             // (`$value_copy$T`) produce fresh storage.
             let hands_back_ref = element_accessors.contains(func_id)
-                || matches!(
-                    tt.get(body.exprs[id].type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                );
+                || tt.is_reference_shaped(body.exprs[id].type_id);
             hands_back_ref
                 && args
                     .iter()

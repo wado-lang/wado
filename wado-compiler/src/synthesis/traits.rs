@@ -159,7 +159,6 @@ fn self_param(ref_type: TypeId, span: Span) -> TirParam {
         type_id: ref_type,
         local_index: 0,
         is_mut: false,
-        is_mut_ref: false,
         span,
     }
 }
@@ -173,7 +172,6 @@ fn binary_method_params(ref_type: TypeId, span: Span) -> Vec<TirParam> {
             type_id: ref_type,
             local_index: 1,
             is_mut: false,
-            is_mut_ref: false,
             span,
         },
     ]
@@ -196,7 +194,6 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             type_id: fmt_type,
             local_index: 1,
             is_mut: false,
-            is_mut_ref: false,
             span,
         },
     ]
@@ -1073,7 +1070,6 @@ fn generate_struct_default_slot_fn(
         type_id: TypeTable::I32,
         local_index: 0,
         is_mut: false,
-        is_mut_ref: false,
         span,
     }];
     let mut locals = locals_from_params(&params);
@@ -1203,7 +1199,6 @@ fn generate_struct_from_fields_fn(
         type_id,
         local_index: 0,
         is_mut: false,
-        is_mut_ref: false,
         span,
     };
     if let Openness::Closed = openness {
@@ -1526,7 +1521,6 @@ fn generate_read_helper(
             type_id: ref_struct_type,
             local_index: 0,
             is_mut: false,
-            is_mut_ref: false,
             span,
         },
         TirParam {
@@ -1534,7 +1528,6 @@ fn generate_read_helper(
             type_id: TypeTable::I32,
             local_index: 1,
             is_mut: false,
-            is_mut_ref: false,
             span,
         },
     ];
@@ -1812,7 +1805,6 @@ fn generate_template_tail_fn(
         type_id: ref_struct_type,
         local_index: 0,
         is_mut: false,
-        is_mut_ref: false,
         span,
     }];
     let locals = locals_from_params(&params);
@@ -2482,7 +2474,6 @@ fn generate_case_extract_helper(
                 type_id: ref_variant_type,
                 local_index: 0,
                 is_mut: false,
-                is_mut_ref: false,
                 span,
             },
             TirParam {
@@ -2490,7 +2481,6 @@ fn generate_case_extract_helper(
                 type_id: TypeTable::I32,
                 local_index: 1,
                 is_mut: false,
-                is_mut_ref: false,
                 span,
             },
         ],
@@ -2548,7 +2538,6 @@ fn generate_case_construct_helper(
                 type_id: payload_type,
                 local_index: 0,
                 is_mut: false,
-                is_mut_ref: false,
                 span,
             },
             TirParam {
@@ -2556,7 +2545,6 @@ fn generate_case_construct_helper(
                 type_id: TypeTable::I32,
                 local_index: 1,
                 is_mut: false,
-                is_mut_ref: false,
                 span,
             },
         ],
@@ -3046,7 +3034,6 @@ fn generate_enum_from_discriminant_fn(
         type_id: TypeTable::I32,
         local_index: 0,
         is_mut: false,
-        is_mut_ref: false,
         span,
     };
     make_synthetic_method(
@@ -3483,7 +3470,6 @@ fn generate_flags_from_bits_fn(
         type_id: TypeTable::U64,
         local_index: 0,
         is_mut: false,
-        is_mut_ref: false,
         span,
     };
     make_synthetic_method(

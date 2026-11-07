@@ -471,10 +471,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
         // `Receiver::Ref` without re-inspecting the string.
         let mut matched_ref_kind: Option<RefKind> = None;
-        let is_ref = matches!(
-            self.tysys.type_table.borrow().get(receiver),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        );
+        let is_ref = self.tysys.type_table.borrow().is_reference_shaped(receiver);
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.

@@ -1274,7 +1274,7 @@ impl MutRefAliases {
     ) -> Self {
         let mut map = Self::default();
         for (i, l) in locals.iter().enumerate().skip(param_count) {
-            if matches!(type_table.get(l.type_id), ResolvedType::MutRef(_)) {
+            if type_table.is_mut_ref(l.type_id) {
                 map.entries.entry(i as u32).or_default();
             }
         }
@@ -1457,10 +1457,7 @@ impl RootMutation {
 }
 
 fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(body.exprs[e].type_id),
-        ResolvedType::MutRef(_)
-    )
+    type_table.is_mut_ref(body.exprs[e].type_id)
 }
 
 /// Report every local root the node `id` itself may mutate, the caller's walk

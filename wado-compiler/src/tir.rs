@@ -584,7 +584,7 @@ pub fn to_layers_of(expr: TirExpr, target: TypeId, type_table: &TypeTable) -> Ti
         .take(want - have)
         .collect();
     missing.into_iter().rev().fold(expr, |expr, layer| {
-        let op = if matches!(type_table.get(layer), ResolvedType::MutRef(_)) {
+        let op = if type_table.is_mut_ref(layer) {
             TirUnaryOp::MutRef
         } else {
             TirUnaryOp::Ref
@@ -3563,14 +3563,6 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` (captured here before the boxing
-    /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
-    /// distinction). A `&T` cannot be written through, so only a `&mut`
-    /// parameter can mutate the caller's argument storage.
-    ///
-    /// `lower::plan` fills it, so anything running before that — `link` among
-    /// them — reads `false` here whatever the type says, and must ask the type.
-    pub is_mut_ref: bool,
     pub span: Span,
 }
 

@@ -372,7 +372,7 @@ impl<'a> Checker<'a> {
     fn is_mut_ref_local(&self, id: AstId) -> bool {
         self.sem
             .local_type(id)
-            .is_some_and(|ty| matches!(self.sem.types.get(ty), ResolvedType::MutRef(_)))
+            .is_some_and(|ty| self.sem.types.is_mut_ref(ty))
     }
 
     /// `outside` holds the `&mut` parameters, which outlive the body.
@@ -810,12 +810,9 @@ impl MoveWalker<'_, '_> {
     /// Whether `expr` is a reference, so a field read through it reads the
     /// referent.
     fn is_reference(&self, expr: &Expr) -> bool {
-        self.sem().expression_type(expr.id()).is_some_and(|ty| {
-            matches!(
-                self.sem().types.get(ty),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
-        })
+        self.sem()
+            .expression_type(expr.id())
+            .is_some_and(|ty| self.sem().types.is_reference_shaped(ty))
     }
 
     /// Whether a field path passes through a reference or a dereference.
