@@ -318,7 +318,7 @@ impl TypeTable {
             let id = self.types.next_id();
             self.index_type(id, &ty);
             self.push_type(ty.clone());
-            let shared = shared_counterpart(&ty);
+            let shared = self.shared_spelling(&ty);
             self.intern_map.insert(ty, id);
             if let Some(shared) = shared {
                 self.intern(shared);
@@ -415,7 +415,7 @@ impl TypeTable {
         }
         let id = self.types.next_id();
         self.push_type(spelling.clone());
-        let shared = shared_counterpart(&spelling);
+        let shared = self.shared_spelling(&spelling);
         self.intern_map.insert(spelling, id);
         self.erasures.set_growing(id, id);
         if let Some(shared) = shared {
@@ -471,15 +471,36 @@ impl TypeTable {
         }
     }
 
-    /// The type a cell `cell` names its object by: the shared reference to its
-    /// innermost pointee, so a `&X` and a `&mut X`, at any depth, name one
-    /// cell, as a reference coerces under a shared one. No struct, variant or
-    /// function object is named by a reference, so none shares it.
+    /// The type a cell `cell` names its object by: `cell` with every layer
+    /// shared, so a `&X` and a `&mut X` name one cell at each depth, as a
+    /// reference coerces under a shared one, while cells of two depths, whose
+    /// payloads lower apart, stay apart. No struct, variant or function object
+    /// is named by a reference, so none shares it.
     #[must_use]
     pub fn cell_key(&self, cell: TypeId) -> TypeId {
         assert!(self.cell_payload(cell).is_some(), "a cell reference");
-        self.find_ref(RefKind::Shared, self.peel_refs(cell))
-            .expect("interning `&mut X` interns `&X`")
+        self.shared_form(cell)
+    }
+
+    /// `ty` with every reference layer shared, interned beside `ty`.
+    fn shared_form(&self, ty: TypeId) -> TypeId {
+        match self.get(ty) {
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => self
+                .find_ref(RefKind::Shared, self.shared_form(*pointee))
+                .expect("interning a reference interns its shared form"),
+            _ => ty,
+        }
+    }
+
+    /// The spelling of `ty`'s shared form, where it is another type.
+    fn shared_spelling(&self, ty: &ResolvedType) -> Option<ResolvedType> {
+        match ty {
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
+                let shared = ResolvedType::Ref(self.shared_form(*pointee));
+                (shared != *ty).then_some(shared)
+            }
+            _ => None,
+        }
     }
 
     /// The reference of `kind` to `pointee`, if the table holds it. It holds
@@ -1745,15 +1766,10 @@ impl TypeTable {
                         components.extend(type_args.iter().copied());
                         components.push(*base_type);
                     }
-                    ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => {
+                    ResolvedType::BuiltinArray(inner) => components.push(*inner),
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                         components.push(*inner);
-                    }
-                    ResolvedType::MutRef(inner) => {
-                        components.push(*inner);
-                        components.push(
-                            self.find_ref(RefKind::Shared, *inner)
-                                .expect("interning `&mut X` interns `&X`"),
-                        );
+                        components.push(self.shared_form(id));
                     }
                     ResolvedType::Function {
                         params,
@@ -7137,15 +7153,6 @@ impl AssocAnswers {
     }
 }
 
-/// `&X` for a `&mut X`: interned beside it, because `TypeTable::cell_key` keys
-/// every cell by the shared reference to its pointee.
-fn shared_counterpart(ty: &ResolvedType) -> Option<ResolvedType> {
-    match ty {
-        ResolvedType::MutRef(pointee) => Some(ResolvedType::Ref(*pointee)),
-        _ => None,
-    }
-}
-
 /// The Component Model coordinate `module` is addressed by, or `None` where it
 /// declares nothing at that boundary. A `core:` module carries no namespace.
 fn cm_module_key(
@@ -7383,6 +7390,7 @@ mod tests {
         assert_eq!(table.cell_payload(mutable), Some(TypeTable::I32));
         assert_eq!(table.cell_key(shared), table.cell_key(mutable));
         assert_eq!(table.cell_key(deep_shared), table.cell_key(deep_mutable));
+        assert_ne!(table.cell_key(shared), table.cell_key(deep_shared));
         assert_eq!(table.heap_object_key(mutable), Some(table.cell_key(shared)));
         assert_ne!(table.cell_key(shared), TypeTable::I32);
         assert_eq!(table.heap_object_key(TypeTable::I32), None);

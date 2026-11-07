@@ -408,7 +408,7 @@ fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
 }
 
 /// The key one kind of wrapper is matched by: a cell's [`TypeTable::cell_key`],
-/// so a `&mut T` argument at any depth matches the `&T` parameter it coerces
+/// so a `&mut T` argument at any layer matches the `&T` parameter it coerces
 /// to.
 fn wrapper_key(wrapper: TypeId, type_table: &TypeTable) -> TypeId {
     if type_table.cell_payload(wrapper).is_some() {
