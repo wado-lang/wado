@@ -318,13 +318,9 @@ impl TypeTable {
             let id = self.types.next_id();
             self.index_type(id, &ty);
             self.push_type(ty.clone());
-            let shared_counterpart = match ty {
-                ResolvedType::MutRef(pointee) => Some(ResolvedType::Ref(pointee)),
-                _ => None,
-            };
+            let shared = shared_counterpart(&ty);
             self.intern_map.insert(ty, id);
-            // `cell_key` keys every cell by the shared reference to its pointee.
-            if let Some(shared) = shared_counterpart {
+            if let Some(shared) = shared {
                 self.intern(shared);
             }
             id
@@ -419,8 +415,12 @@ impl TypeTable {
         }
         let id = self.types.next_id();
         self.push_type(spelling.clone());
+        let shared = shared_counterpart(&spelling);
         self.intern_map.insert(spelling, id);
         self.erasures.set_growing(id, id);
+        if let Some(shared) = shared {
+            self.intern_erased(shared);
+        }
         id
     }
 
@@ -1771,9 +1771,16 @@ impl TypeTable {
                         components.extend(type_args.iter().copied());
                         components.push(*base_type);
                     }
-                    ResolvedType::Ref(inner)
-                    | ResolvedType::MutRef(inner)
-                    | ResolvedType::BuiltinArray(inner) => components.push(*inner),
+                    ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => {
+                        components.push(*inner);
+                    }
+                    ResolvedType::MutRef(inner) => {
+                        components.push(*inner);
+                        components.push(
+                            self.shared_ref_to(*inner)
+                                .expect("interning `&mut X` interns `&X`"),
+                        );
+                    }
                     ResolvedType::Function {
                         params,
                         return_type,
@@ -7248,6 +7255,15 @@ impl AssocAnswers {
                 .copied()
                 .chain([entry.answer])
         })
+    }
+}
+
+/// `&X` for a `&mut X`: interned beside it, because `TypeTable::cell_key` keys
+/// every cell by the shared reference to its pointee.
+fn shared_counterpart(ty: &ResolvedType) -> Option<ResolvedType> {
+    match ty {
+        ResolvedType::MutRef(pointee) => Some(ResolvedType::Ref(*pointee)),
+        _ => None,
     }
 }
 
