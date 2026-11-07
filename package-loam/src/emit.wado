@@ -196,7 +196,7 @@ pub fn emit(
     decode: Option<Decode> = null,
 ) -> Result<String, EmitError> {
     let prepared = Prepared::of(graph, checked, &placement)?;
-    let built = match row_axis(graph, checked) {
+    let built = match prepared.row_axis(graph, checked) {
         Ok(Some(rows)) => match prepared.built(graph, checked, Option::Some(rows)) {
             Err(Shared(_)) => prepared.built(graph, checked, null)?,
             each_row => each_row?,
@@ -210,40 +210,12 @@ pub fn emit(
 /// own in what `emit` writes, `null` where the inputs pad no length, and the
 /// refusal where the rows share their lengths.
 pub fn rows_judged(graph: &Graph, checked: &Checked) -> Result<Option<String>, EmitError> {
-    let Some(rows) = row_axis(graph, checked).map_err(|r| EmitError::Shared(r))? else {
+    let prepared = Prepared::of(graph, checked, &Placement::File)?;
+    let Some(rows) = prepared.row_axis(graph, checked).map_err(|r| EmitError::Shared(r))? else {
         return Result::Ok(null);
     };
-    Prepared::of(graph, checked, &Placement::File)?.built(graph, checked, Option::Some(rows))?;
+    prepared.built(graph, checked, Option::Some(rows))?;
     return Result::Ok(Option::Some(rows.name));
-}
-
-/// The axis the rows of a batch run along: the first of every input padding a
-/// length behind it. `null` where no input pads one, or that axis holds one
-/// row and no more.
-fn row_axis(graph: &Graph, checked: &Checked) -> Result<Option<Axis>, RowRefusal> {
-    let padded = padded_symbols(graph, checked, &symbol_carriers(graph, &checked.shapes, &Crossing::of(
-        graph,
-        cache_pairs(graph),
-    ).cached));
-    let pads = |axis: &Axis| axis.extent.poly().symbols().into_iter().any(|s| padded.contains(&s));
-    let mut rows: Option<Axis> = null;
-    for let vi of &graph.inputs {
-        let axes = checked.shapes[vi.name].axes;
-        if !axes.into_iter().skip(1).any(|a| pads(&a)) {
-            continue;
-        }
-        let first = axes[0];
-        if let Some(r) = rows && r.name != first.name {
-            return Result::Err(
-                RowRefusal { why: `the inputs padding a length lead with two axes, ${r.name} and ${first.name}` },
-            );
-        }
-        rows = Option::Some(first);
-        if first.extent matches { Static(1) } {
-            return Result::Ok(null);
-        }
-    }
-    return Result::Ok(rows);
 }
 
 /// The lengths `build` pads to a capacity: each one no node refuses and an
@@ -308,6 +280,31 @@ impl Prepared {
         return Result::Ok(
             Prepared { held, imports_map, axes, literals, crossing, carriers, names, kept, grown, padded, conditions },
         );
+    }
+
+    /// The axis the rows of a batch run along: the first of every input
+    /// padding a length behind it. `null` where no input pads one, or that axis
+    /// holds one row and no more.
+    fn row_axis(&self, graph: &Graph, checked: &Checked) -> Result<Option<Axis>, RowRefusal> {
+        let pads = |axis: &Axis| axis.extent.poly().symbols().into_iter().any(|s| self.padded.contains(&s));
+        let mut rows: Option<Axis> = null;
+        for let vi of &graph.inputs {
+            let axes = checked.shapes[vi.name].axes;
+            if !axes.into_iter().skip(1).any(|a| pads(&a)) {
+                continue;
+            }
+            let first = axes[0];
+            if let Some(r) = rows && r.name != first.name {
+                return Result::Err(
+                    RowRefusal { why: `the inputs padding a length lead with two axes, ${r.name} and ${first.name}` },
+                );
+            }
+            rows = Option::Some(first);
+            if first.extent matches { Static(1) } {
+                return Result::Ok(null);
+            }
+        }
+        return Result::Ok(rows);
     }
 
     /// `build`, each row's lengths its own along `rows` where it is an axis.
