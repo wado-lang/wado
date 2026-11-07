@@ -12,8 +12,8 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { HashSet } from "core:collections";
 use { to_string } from "core:json";
-use { Url } from "core:url";
-use { Document, Node, NodeKind } from "../src/lib.wado";
+use { Uri } from "core:uri";
+use { Document, Node } from "../src/lib.wado";
 
 global SUITE: String = "vendor/JSON-Schema-Test-Suite/tests/draft2020-12";
 global OUT: String = "package-jade/tests/generated";
@@ -123,20 +123,21 @@ fn raw(text: &String) -> String {
 
 /// The `$ref` and `$dynamicRef` targets of `schema` that no `$id` in it names.
 fn outside(schema: &Node) -> List<String> {
-    let mut ids = HashSet::<String>::new();
-    ids.insert(ROOT_BASE);
-    let mut refs: List<String> = [];
-    collect(schema, &ROOT_BASE, &mut ids, &mut refs);
+    let root = Uri::from_str(&ROOT_BASE).unwrap();
+    let mut ids = HashSet::<Uri>::new();
+    ids.insert(root);
+    let mut refs: List<Uri> = [];
+    collect(schema, &root, &mut ids, &mut refs);
     let mut out: List<String> = [];
     for let r of refs {
-        if !ids.contains(without_fragment(&r)) {
-            out.push(r);
+        if !ids.contains(r.without_fragment()) {
+            out.push(r.to_string());
         }
     }
     return out;
 }
 
-fn collect(s: &Node, base: &String, ids: &mut HashSet<String>, refs: &mut List<String>) {
+fn collect(s: &Node, base: &Uri, ids: &mut HashSet<Uri>, refs: &mut List<Uri>) {
     match s.kind() {
         Array => {
             for let item of s.items() {
@@ -146,12 +147,12 @@ fn collect(s: &Node, base: &String, ids: &mut HashSet<String>, refs: &mut List<S
         Object => {
             let mut here = *base;
             if let Some(id) = s.get("$id") && let Some(id) = id.as_str() {
-                here = resolve(id.to_string(), base);
-                ids.insert(without_fragment(&here));
+                here = base.resolve(&Uri::from_str(id).unwrap());
+                ids.insert(here.without_fragment());
             }
             for let keyword of ["$ref", "$dynamicRef"] as List<String> {
                 if let Some(r) = s.get(keyword) && let Some(r) = r.as_str() {
-                    refs.push(resolve(r.to_string(), &here));
+                    refs.push(here.resolve(&Uri::from_str(r).unwrap()));
                 }
             }
             for let [k, v] of s.entries() {
@@ -163,23 +164,4 @@ fn collect(s: &Node, base: &String, ids: &mut HashSet<String>, refs: &mut List<S
         Null | Bool | Number | String => {
         },
     }
-}
-
-/// `reference` resolved against `base`. A base that takes no relative
-/// reference, such as `jade:root`, has the reference appended to it.
-fn resolve(reference: String, base: &String) -> String {
-    if let Ok(url) = Url::from_str(*base) && let Ok(resolved) = url.resolve(&reference) {
-        return resolved.to_string();
-    }
-    if let Ok(url) = Url::from_str(&reference) {
-        return url.to_string();
-    }
-    return `${without_fragment(base)}${reference}`;
-}
-
-fn without_fragment(uri: &String) -> String {
-    if let Some(i) = uri.find("#") {
-        return uri.substr_bytes(0, i);
-    }
-    return *uri;
 }
