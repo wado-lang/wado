@@ -1,0 +1,23 @@
+// `&n` of an `i32` payload is a new cell holding a copy of it, so `payload`
+// retains nothing of `o`, and `o` scalarizes to the variant it refers to.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn payload(o: &Option<i32>) -> &i32 {
+    return match o {
+        Some(n) => n,
+        None => &0,
+    };
+}
+
+export fn run() with Stdout {
+    let o = Option::<i32>::Some(builtin::black_box(7));
+    println(`${*payload(&o)}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "wir_pass": {"O2": ["nir/sroa_param"]},
+    "wir_expect:O2": ["payload$sroa[o.value]"]
+}

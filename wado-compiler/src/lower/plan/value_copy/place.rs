@@ -640,6 +640,30 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
     }
 }
 
+/// Whether `&place` lowers to a new cell holding a copy of the place's value,
+/// so the reference names nothing the place's root owns. A local's cell and
+/// the cell `*r` reads are the place itself; any other place is a slot, which
+/// [`slot_ref_copies`] decides.
+#[must_use]
+pub fn copies_into_cell(place: &TirExpr, type_table: &TypeTable) -> bool {
+    match &place.kind {
+        TirExprKind::Local { .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            ..
+        } => false,
+        _ => slot_ref_copies(place.type_id, type_table),
+    }
+}
+
+/// Whether a reference to a slot (a field, a tuple element or a payload)
+/// holding a `slot` is a new cell holding a copy of it: a cell target is,
+/// unless the slot holds it in a cell already.
+#[must_use]
+pub fn slot_ref_copies(slot: TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_boxed_reference_target(slot) && !type_table.boxes_slot(slot)
+}
+
 /// The type a [`Selector::Field`] is keyed by. Minted here alone, so a callee
 /// recording a write and a caller looking it up cannot spell the key apart. A
 /// newtype peels to its representation head, since it names its base's storage:

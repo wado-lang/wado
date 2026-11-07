@@ -17,7 +17,7 @@
 
 use super::callgraph::{CallGraph, body_ids};
 use super::funcset::FuncKeyMap;
-use super::place::unwrap_ref;
+use super::place::{copies_into_cell, field_owner, slot_ref_copies, unwrap_ref};
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
 use crate::cut_memo::CutWalk;
@@ -1052,14 +1052,8 @@ impl RefCarrying<'_> {
                 let base = *base_type;
                 self.walk(base, walk)
             }
-            ResolvedType::Struct { def, type_args } => {
-                let (def, type_args) = (*def, type_args.clone());
-                let fields = self
-                    .structs
-                    .iter()
-                    .find(|s| s.represents(self.type_table, def, &type_args))
-                    .map(|s| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>());
-                match fields {
+            ResolvedType::Struct { .. } => {
+                match self.field_types(type_id) {
                     Some(fields) => self.any(fields, walk),
                     // A declaration the plan phase cannot see is read as
                     // holding one, which only widens the carrier set.
@@ -1104,6 +1098,95 @@ impl RefCarrying<'_> {
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. } => false,
+        }
+    }
+
+    /// The field types of the struct `ty`, where the plan phase sees its
+    /// declaration.
+    fn field_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let ResolvedType::Struct { def, type_args } = self.type_table.get(ty) else {
+            unreachable!("a struct type")
+        };
+        self.structs
+            .iter()
+            .find(|s| s.represents(self.type_table, *def, type_args))
+            .map(|s| s.fields.iter().map(|f| f.type_id).collect())
+    }
+
+    /// Each binding of `pattern` over a value of type `slot` (`None`: a type
+    /// this walk cannot follow), with the type of what it carries. That is the
+    /// binding's own, except where match ergonomics binds `&` of a nested slot
+    /// the reference copies into a new cell: it carries what the slot holds.
+    fn binding_types(
+        &self,
+        pattern: &TirPattern,
+        slot: Option<TypeId>,
+        nested: bool,
+        out: &mut Vec<(u32, TypeId)>,
+    ) {
+        let tt = self.type_table;
+        match pattern {
+            TirPattern::Binding {
+                local_index,
+                type_id,
+                ..
+            } => {
+                let carries = match slot {
+                    Some(slot)
+                        if nested
+                            && !tt.is_reference_shaped(slot)
+                            && tt.is_reference_shaped(*type_id)
+                            && slot_ref_copies(slot, tt) =>
+                    {
+                        slot
+                    }
+                    _ => *type_id,
+                };
+                out.push((*local_index, carries));
+            }
+            TirPattern::Narrow {
+                local_index,
+                type_id,
+                ..
+            } => out.push((*local_index, *type_id)),
+            TirPattern::Struct {
+                struct_type,
+                fields,
+                ..
+            } => {
+                let types = self.field_types(field_owner(*struct_type, tt));
+                for field in fields {
+                    let field_type = types.as_ref().map(|t| t[field.field_index as usize]);
+                    self.binding_types(&field.pattern, field_type, true, out);
+                }
+            }
+            TirPattern::Tuple(elements, _) => {
+                let types = slot.and_then(|s| tt.as_tuple(field_owner(s, tt)));
+                for (index, element) in elements.iter().enumerate() {
+                    let element_type = types.as_ref().map(|t| t[index]);
+                    self.binding_types(element, element_type, true, out);
+                }
+            }
+            TirPattern::Variant {
+                bindings,
+                payload_type,
+                ..
+            } => {
+                for binding in bindings {
+                    self.binding_types(binding, Some(*payload_type), true, out);
+                }
+            }
+            TirPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.binding_types(alternative, slot, nested, out);
+                }
+            }
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Enum { .. }
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => {}
         }
     }
 }
@@ -1388,6 +1471,10 @@ impl StoresWalker<'_> {
             TirExprKind::Local { index, .. } => {
                 self.carries.get(index).cloned().unwrap_or_default()
             }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } if copies_into_cell(place, self.type_table) => Carried::held(self.carried(place).all()),
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
@@ -1871,10 +1958,13 @@ impl StoresWalker<'_> {
         if carried.is_empty() {
             return;
         }
-        analyze::for_each_pattern_binding(pattern, &mut |local_index, type_id| {
+        let mut bound = Vec::new();
+        self.carrying
+            .binding_types(pattern, Some(source.type_id), false, &mut bound);
+        for (local_index, type_id) in bound {
             let placed = self.placed(type_id, carried.clone());
             self.rebind(local_index, &placed);
-        });
+        }
     }
 
     /// A pattern names a part of its scrutinee, which this walk does not follow
