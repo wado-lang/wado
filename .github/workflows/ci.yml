@@ -293,6 +293,26 @@ jobs:
               echo
             done
 
+  # The release builds `wado` for Windows, where every `cfg(not(unix))` branch
+  # compiles; no other job compiles one.
+  check-windows:
+    name: Check (Windows)
+    needs: build-wado
+    if: needs.build-wado.outputs.code == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: check-windows
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy --locked -p wado-host -p wado-cli --all-targets -- -D warnings
+
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
   # tests it. The corpus checks and benchmark/ ride here because this job
   # finishes early. Each step after the runner's build leaves cores idle on its
@@ -354,7 +374,7 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [build-wado, test-core, test-wado, test-gale-o2, test-level, test-webgpu, test-sandbox]
+    needs: [build-wado, test-core, test-wado, test-gale-o2, test-level, test-webgpu, test-sandbox, check-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
