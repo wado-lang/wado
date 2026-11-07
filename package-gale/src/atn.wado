@@ -529,6 +529,8 @@ fn build_sequence(
         };
         if i == 0 {
             entry = seg.0;
+        } else if preds.is_empty() {
+            b.add_eps(cursor, seg.0);
         } else {
             b.add_eps(cursor, guard_with(b, &predicates_before(preds, i), rule, seg.0));
         }

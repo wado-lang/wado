@@ -1232,20 +1232,27 @@ a * b + c => (s (e (e a) * (e b)) + c)
 }
 
 test "prediction answers a predicate inside a group" {
-    for let atn of [AtnMode::Never, AtnMode::Verify] {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
         assert parses(
             "grammar G;
-s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF ;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF | 'G' r7 EOF | 'H' r8 EOF ;
 r1 : ({false}? 'a' | 'b')+ 'x' | 'a' 'x' ;
 r2 : ({false}? 'a' 'x' | 'b')? 'z' | 'a' 'x' 'z' ;
 r3 : ('a' {false}? 'b' | 'c') 'x' | 'a' 'b' 'x' 'y' ;
 r4 : (('-'? {false}? 'a' | 'b') | 'c') 'x' | 'a' 'x' ;
 r5 : u 'd' | 'a' 'c' 'd' 'e'? ;
 u : ({false}? 'a' 'b'? 'c')? ;
+r6 : ('-'? {false}? 'a' | 'a') 'x' ;
+r7 : ({false}? 'a')? 'x' | 'a' 'x' ;
+r8 : v 'd' | 'a' 'z' 'c' 'd' 'e'? ;
+v : (({false}? 'a' 'z')? 'b'? 'c')? ;
 WS : ' ' -> skip ;
 ",
             "s",
-            ["A a x", "A b a x", "B a x z", "B b z", "C a b x", "C a b x y", "D a x", "D - a x", "E a c d", "E d"],
+            [
+                "A a x", "A b a x", "B a x z", "B b z", "C a b x", "C a b x y", "D a x", "D - a x", "E a c d", "E d",
+                "F a x", "F - a x", "G a x", "G x", "H a z c d", "H b c d",
+            ],
             &GenerateOptions { atn },
         ) == "A a x => (s A (r1 a x))
 A b a x => error
@@ -1257,6 +1264,12 @@ D a x => (s D (r4 a x))
 D - a x => error
 E a c d => (s E (r5 a c d))
 E d => (s E (r5 u d))
+F a x => (s F (r6 a x))
+F - a x => error
+G a x => (s G (r7 a x))
+G x => (s G (r7 x))
+H a z c d => (s H (r8 a z c d))
+H b c d => (s H (r8 (v b c) d))
 ";
     }
 }
@@ -6507,8 +6520,8 @@ test "scan_gate_fields: a write through a receiver disqualifies the field" {
     assert f.is_empty();
 }
 
-// The scans of a group's own decision run no gate, so a scan cannot follow the
-// group's actions however simply they are written.
+// The shapes an optional group is predicted by run no gate, so a scan cannot
+// follow the group's actions however simply they are written.
 test "scan_gate_fields: a write inside a group disqualifies the field" {
     let f = gate_fields_of(&gate_source(
         "other = 1;",

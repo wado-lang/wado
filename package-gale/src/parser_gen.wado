@@ -7770,7 +7770,8 @@ fn gen_group_branch_body(
     let sorted_group = branch_emit_order(group, alts, ctx);
     if let Decides(dec) = atn {
         let var = dedup_name("gd_atn", name_counts);
-        w.line(`let ${var} = ${atn_predict_call(dec, "&p.kinds", "p.pos", ctx)};`);
+        let gates = atn_decision_gates(&sorted_group, alts, ctx, false);
+        gen_atn_pick(w, &var, dec, &gates, "&p.kinds", "p.pos", ctx);
         gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
             var,
         ));
@@ -7786,9 +7787,8 @@ fn gen_group_branch_body(
     ));
 }
 
-/// `let _atn_alt`: the simulator's pick at rule-body decision `dec`, with the
-/// edge of each predicate whose gate is false closed (`atn_decision_gates`).
-/// The parse and a scan both pick here.
+/// `let _atn_alt`: the simulator's pick at rule-body decision `dec`. The parse
+/// and a scan both pick here.
 fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     dec: i32,
@@ -7797,15 +7797,30 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
     pos: S1,
     ctx: &mut EmitContext,
 ) {
+    gen_atn_pick(w, "_atn_alt", dec, gates, tokens, pos, ctx);
+}
+
+/// `let <var>`: the simulator's pick at decision `dec`, with the edge of each
+/// predicate whose gate is false closed (`atn_decision_gates`).
+fn gen_atn_pick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    w: &mut CodeWriter,
+    var: S,
+    dec: i32,
+    gates: &List<[i32, String]>,
+    tokens: S1,
+    pos: S2,
+    ctx: &mut EmitContext,
+) {
     if gates.is_empty() {
-        w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx)};`);
+        w.line(`let ${var} = ${atn_predict_call(dec, tokens, pos, ctx)};`);
         return;
     }
-    w.line("let mut _atn_false: List<i32> = [];");
+    let false_preds = `${var}_false`;
+    w.line(`let mut ${false_preds}: List<i32> = [];`);
     for let g of gates {
-        w.line(`if ${negate_cond(&g.1)} { _atn_false.push(${g.0}); }`);
+        w.line(`if ${negate_cond(&g.1)} { ${false_preds}.push(${g.0}); }`);
     }
-    w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx, "_atn_false")};`);
+    w.line(`let ${var} = ${atn_predict_call(dec, tokens, pos, ctx, false_preds)};`);
 }
 
 /// The LR loop's pick at decision `decision`, over `tokens` at `pos`, through

@@ -3,7 +3,7 @@
 //! its gates name, the diagnostics its decisions raise, and the marks
 //! (`LowerMarks`) the parser plan is decided from.
 
-use { Alternative, ParserRule } from "./ir.wado";
+use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, Diagnostics, Rule } from "./gir.wado";
 use { RuleOverlap, overlap_groups_of, overlap_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
@@ -13,9 +13,9 @@ use { TableRegistry } from "./table_registry.wado";
 use {
     PredicateSite,
     alt_has_gate,
-    alt_meets_predicate_at,
     alt_scan_checks,
     alt_scan_gate_conditions,
+    meets_predicate_at,
 } from "./gate_conditions.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 
@@ -211,9 +211,17 @@ impl LowerContext {
         return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
-    /// `gate_conditions::alt_meets_predicate_at`, where predicates run at all.
+    /// `gate_conditions::meets_predicate_at` for `alt`, where predicates run at
+    /// all.
     pub fn meets_predicate_at(&mut self, alt: &Alternative, index: i32) -> bool {
-        return self.settings.emit_actions && alt_meets_predicate_at(alt, index, &mut self.analysis);
+        return self.meets_predicate_in(&alt.elements, &alt.actions, index);
+    }
+
+    /// `gate_conditions::meets_predicate_at` for a sequence of the rule being
+    /// lowered, where predicates run at all.
+    pub fn meets_predicate_in(&mut self, elements: &List<Element>, actions: &List<AltAction>, index: i32) -> bool {
+        let site = self.predicate_site();
+        return self.settings.emit_actions && meets_predicate_at(elements, actions, index, &site, &mut self.analysis);
     }
 
     /// `meets_predicate_at` at the left edge of any of `alts`.
@@ -249,9 +257,13 @@ impl LowerContext {
     /// Under `atn: "verify"` the simulator never does: the tournament makes
     /// it, and the simulator checks what `auto` would hand it.
     pub fn choice_route(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> ChoiceRoute {
-        let meets_predicate = self.any_meets_predicate(
-            &alt_indices.iter_ref().map(|i| rule.alternatives[*i]).collect(),
-        );
+        let mut meets_predicate = false;
+        for let i of &alt_indices {
+            if self.meets_predicate_at(&rule.alternatives[*i], 0) {
+                meets_predicate = true;
+                break;
+            }
+        }
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
         let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
         let mode = if self.settings.atn.verifies() { AtnMode::Auto } else { self.settings.atn };

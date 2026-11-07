@@ -24,7 +24,7 @@ use {
     join_gate_conds,
     pred_fn_name,
     predicate_condition_for,
-    predicates_met_entering,
+    predicates_met_at,
     scan_answered_at_edge,
     scan_gate_condition_for,
 } from "./gate_conditions.wado";
@@ -541,7 +541,8 @@ pub fn atn_decision_gates(
     let mut visible: List<[AltAction, PredicateSite]> = [];
     let mut visited: List<String> = [];
     for let idx of amb_alts {
-        predicates_met_entering(&alts[*idx], &own, &mut ctx.analysis, &mut visited, &mut visible);
+        let alt = &alts[*idx];
+        predicates_met_at(&alt.elements, &alt.actions, 0, &own, &mut ctx.analysis, &mut visited, &mut visible);
     }
     for let [a, site] of &visible {
         if in_scan {

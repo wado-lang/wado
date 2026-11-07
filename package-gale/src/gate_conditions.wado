@@ -102,36 +102,60 @@ pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &Gramma
         && alt.actions.iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
-/// The predicates the simulator may reach entering `alt` (rendered at `site`)
-/// before consuming a token, each beside the site it renders in: those ahead
-/// of its first action, and those of what each element opens while the
-/// elements ahead of it can match nothing and no action runs. A callee's value
-/// channel is not in scope at the decision. The simulator consults a verdict
-/// only where it reaches the predicate, so one past a token costs nothing.
-pub fn predicates_met_entering(
-    alt: &Alternative,
+/// The predicates prediction meets entering the sequence `elements` (its
+/// `actions` placed among them, rendered at `site`) at element `index`, before
+/// consuming a token, each beside the site it renders in. That is one placed
+/// there or behind elements that matched nothing, and one at the left edge of
+/// what such an element opens, up to the first action, which hides the rest.
+/// A callee's value channel is not in scope at the decision.
+pub fn predicates_met_at(
+    elements: &List<Element>,
+    actions: &List<AltAction>,
+    index: i32,
     site: &PredicateSite,
     analysis: &mut GrammarAnalysis,
     visited: &mut List<String>,
     out: &mut List<[AltAction, PredicateSite]>,
 ) {
-    for let a of &alt.predicates_before_actions() {
-        out.push([*a, *site]);
-    }
-    for let mut i = 0; i < alt.elements.len(); i += 1 {
-        if alt.actions.iter_ref().any(|a| a.before_index <= i && a.kind matches { Action }) {
+    let mut k = 0;
+    for let mut i = index; i <= elements.len(); i += 1 {
+        while k < actions.len() && actions[k].before_index <= i {
+            let a = &actions[k];
+            k += 1;
+            if a.before_index < index {
+                continue;
+            }
+            if a.kind matches { Action } {
+                return;
+            }
+            out.push([*a, *site]);
+        }
+        if i == elements.len() {
             return;
         }
-        let elem = &alt.elements[i];
-        element_predicates_met(elem, site, analysis, visited, out);
-        if !analysis.element_is_nullable_deep(elem, &mut []) {
+        element_predicates_met(&elements[i], site, analysis, visited, out);
+        if !analysis.element_is_nullable_deep(&elements[i], &mut []) {
             return;
         }
     }
 }
 
-/// `predicates_met_entering` for what `elem` opens, past the rules in
-/// `visited`.
+/// Whether prediction entering `elements` at `index` meets a predicate, as
+/// `predicates_met_at` collects them. The simulator is handed no predicate's
+/// verdict, so `atn: "verify"` leaves a decision that meets one unchecked.
+pub fn meets_predicate_at(
+    elements: &List<Element>,
+    actions: &List<AltAction>,
+    index: i32,
+    site: &PredicateSite,
+    analysis: &mut GrammarAnalysis,
+) -> bool {
+    let mut met: List<[AltAction, PredicateSite]> = [];
+    predicates_met_at(elements, actions, index, site, analysis, &mut [], &mut met);
+    return !met.is_empty();
+}
+
+/// `predicates_met_at` for what `elem` opens, past the rules in `visited`.
 fn element_predicates_met(
     elem: &Element,
     site: &PredicateSite,
@@ -150,12 +174,12 @@ fn element_predicates_met(
             };
             let callee_site = PredicateSite { rule_index: analysis.rule_index_of(&r.name), vals_in_scope: false };
             for let calt of &callee.alternatives {
-                predicates_met_entering(calt, &callee_site, analysis, visited, out);
+                predicates_met_at(&calt.elements, &calt.actions, 0, &callee_site, analysis, visited, out);
             }
         },
         Group(g) => {
             for let galt of &g.alternatives {
-                predicates_met_entering(galt, site, analysis, visited, out);
+                predicates_met_at(&galt.elements, &galt.actions, 0, site, analysis, visited, out);
             }
         },
         Label(l) => element_predicates_met(&l.element, site, analysis, visited, out),
@@ -163,70 +187,6 @@ fn element_predicates_met(
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
     }
-}
-
-/// Whether prediction entering `alt` at element `index` meets a predicate
-/// before consuming a token: one placed there or behind elements that matched
-/// nothing, or one at the left edge of what such an element opens. The
-/// simulator is handed no predicate's verdict, so `atn: "verify"` leaves a
-/// decision that meets one unchecked.
-pub fn alt_meets_predicate_at(alt: &Alternative, index: i32, analysis: &mut GrammarAnalysis) -> bool {
-    return alt_meets_predicate_from(alt, index, analysis, &mut []);
-}
-
-/// `alt_meets_predicate_at`, past the rules in `visited`.
-fn alt_meets_predicate_from(
-    alt: &Alternative,
-    index: i32,
-    analysis: &mut GrammarAnalysis,
-    visited: &mut List<String>,
-) -> bool {
-    for let mut i = index; i <= alt.elements.len(); i += 1 {
-        if alt.actions.iter_ref().any(|a| a.before_index == i && a.kind matches { Predicate }) {
-            return true;
-        }
-        if i == alt.elements.len() {
-            break;
-        }
-        let elem = &alt.elements[i];
-        if element_meets_predicate(elem, analysis, visited) {
-            return true;
-        }
-        if !analysis.element_is_nullable_deep(elem, &mut []) {
-            break;
-        }
-    }
-    return false;
-}
-
-fn any_alt_meets_predicate(alts: &List<Alternative>, analysis: &mut GrammarAnalysis, visited: &mut List<String>) -> bool {
-    for let a of alts {
-        if alt_meets_predicate_from(a, 0, analysis, visited) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/// `alt_meets_predicate_at` for the left edge of `elem`, past the rules in
-/// `visited`.
-fn element_meets_predicate(elem: &Element, analysis: &mut GrammarAnalysis, visited: &mut List<String>) -> bool {
-    return match *elem {
-        RuleRef(r) => {
-            if visited.contains_str(&r.name) {
-                return false;
-            }
-            visited.push(r.name);
-            let Some(callee) = analysis.find_rule(&r.name) else {
-                return false;
-            };
-            any_alt_meets_predicate(&callee.alternatives, analysis, visited);
-        },
-        Group(g) => any_alt_meets_predicate(&g.alternatives, analysis, visited),
-        Label(l) => element_meets_predicate(&l.element, analysis, visited),
-        Repeat(r) => element_meets_predicate(&r.element, analysis, visited),
-        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
-    };
 }
 
 /// An alt's gate conditions rendered against the scan's copy of the members,

@@ -70,7 +70,7 @@ fn empty_alt_body(idx: i32) -> AltBody {
 }
 
 fn empty_scan_body() -> ScanBody {
-    return ScanBody { elements: [] };
+    return ScanBody { elements: [], gates: [], gate_cond: "" };
 }
 
 fn empty_header<S: AsStrSlice>(name: S) -> RuleHeader {
@@ -270,12 +270,14 @@ test "RepeatStrategy variants round-trip" {
                     [1],
                     [2],
                 ],
+                scan_body: empty_scan_body(),
             },
             OptionalLookaheadShape {
                 positions: [0],
                 sig: [
                     [1],
                 ],
+                scan_body: empty_scan_body(),
             },
         ],
     };
