@@ -170,8 +170,9 @@ stays, and every comparison moves to `TypeKey`.
 
 Each step leaves the compiler green and is a commit series of its own.
 
-- [ ] Before erasure, replace `type_key` and `same_type` with `==`. Done when
-  no caller before erasure remains.
+- [x] In the modules that run only before erasure, replace `type_key` and
+  `same_type` with `==`. `TypeTable`'s own helpers, which later phases share,
+  wait for the step that removes the aliasing.
 - [ ] Add `lower_type` and map every type the TIR → NIR fold writes through it,
   with the debug assertion. Done when erasure runs inside lowering and
   `erase_newtypes_and_flags`, `redirects` and `settled_spellings` are gone.

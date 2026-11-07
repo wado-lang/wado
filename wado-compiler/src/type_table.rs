@@ -7623,8 +7623,9 @@ impl PartialOrd for TypeKey {
     }
 }
 
-/// An answer about each type, computed once per [`TypeKey`] so every id naming
-/// one type shares it. Valid while the facts the answer reads stay fixed.
+/// An answer about each type, computed once per key: a [`TypeKey`] once erasure
+/// leaves many ids naming one type, the id before it. Valid while the facts the
+/// answer reads stay fixed.
 pub struct TypeMemo<V, K = TypeKey> {
     answers: RefCell<IndexMap<K, V>>,
 }
