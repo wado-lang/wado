@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -147,7 +147,7 @@ type "functype//closure_mut_capture_autoref_receiver.wado/$cm_export__$test_0_a_
 
 type "functype//closure_mut_capture_autoref_receiver.wado/$test_0_a_method_call_through_a_mut_capture_writes_the_captured_binding$cold0" = fn(i32);  // TypeId(24)
 
-type "functype//closure_mut_capture_autoref_receiver.wado/$test_0_a_method_call_through_a_mut_capture_writes_the_captured_binding$cold1" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(25)
+type "functype//closure_mut_capture_autoref_receiver.wado/$test_0_a_method_call_through_a_mut_capture_writes_the_captured_binding$cold1" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(25)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(26)
 
@@ -384,7 +384,7 @@ fn "closure_mut_capture_autoref_receiver.wado/$cm_export__$test_0_a_method_call_
     }
     if @unlikely($sroa_n_value_25 != 2) {
         cold_path;
-        "closure_mut_capture_autoref_receiver.wado/$test_0_a_method_call_through_a_mut_capture_writes_the_captured_binding$cold1"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_n_value_25 });
+        "closure_mut_capture_autoref_receiver.wado/$test_0_a_method_call_through_a_mut_capture_writes_the_captured_binding$cold1"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_n_value_25 });
         unreachable;
     }
     $write_back_before_1_12 = local.tee $sroa_$write_back_0_value_6_16($sroa_n_value_25);

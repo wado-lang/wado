@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -36,7 +36,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
 }
 
 struct assert_inspect_mut_ref.wado//$tmpl$0c006ff4d19c76a3 {  // TypeId(7)
-    mut h0: ref "core:prelude/types.wado//Box<i32>",
+    mut h0: ref "core:prelude//$Cell<i32>",
     mut h1: i32,
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -64,7 +64,7 @@ type "functype//assert_inspect_mut_ref.wado/$template_segment$assert_inspect_mut
 
 type "functype//assert_inspect_mut_ref.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//assert_inspect_mut_ref.wado/run$cold0$dae[$v1]" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(17)
+type "functype//assert_inspect_mut_ref.wado/run$cold0$dae[$v1]" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
 
@@ -176,7 +176,7 @@ fn "assert_inspect_mut_ref.wado/$template_segment$assert_inspect_mut_ref.wado/$t
 
 fn "assert_inspect_mut_ref.wado/$cm_export__run"() {
     cold_path;
-    "assert_inspect_mut_ref.wado/run$cold0$dae[$v1]"(struct.new "core:prelude/types.wado//Box<i32>" { value: 100 });
+    "assert_inspect_mut_ref.wado/run$cold0$dae[$v1]"(struct.new "core:prelude//$Cell<i32>" { value: 100 });
     unreachable;
     "wasi/task-return"(0);
 }

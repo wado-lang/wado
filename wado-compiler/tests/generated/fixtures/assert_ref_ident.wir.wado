@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -62,7 +62,7 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//assert_ref_ident.wado/$cm_export__run" = fn();  // TypeId(15)
 
-type "functype//assert_ref_ident.wado/run$cold0$dae[$v1]" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(16)
+type "functype//assert_ref_ident.wado/run$cold0$dae[$v1]" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(16)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(17)
 
@@ -147,7 +147,7 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "assert_ref_ident.wado/$cm_export__run"() {
     cold_path;
-    "assert_ref_ident.wado/run$cold0$dae[$v1]"(struct.new "core:prelude/types.wado//Box<i32>" { value: 7 });
+    "assert_ref_ident.wado/run$cold0$dae[$v1]"(struct.new "core:prelude//$Cell<i32>" { value: 7 });
     unreachable;
     "wasi/task-return"(0);
 }

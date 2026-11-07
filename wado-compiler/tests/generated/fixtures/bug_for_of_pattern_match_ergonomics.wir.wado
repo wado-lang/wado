@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -140,9 +140,9 @@ struct tuple//[i32, bug_for_of_pattern_match_ergonomics.wado/P] {  // TypeId(17)
 }
 
 struct bug_for_of_pattern_match_ergonomics.wado//$tmpl$02d986218b10d9d9 {  // TypeId(18)
-    mut h0: ref "core:prelude/types.wado//Box<i32>",
+    mut h0: ref "core:prelude//$Cell<i32>",
     mut h1: i32,
-    mut h2: ref "core:prelude/types.wado//Box<i32>",
+    mut h2: ref "core:prelude//$Cell<i32>",
     mut h3: i32,
     mut h4: i32,
     mut s0: ref "core:prelude/string.wado//String",
@@ -803,8 +803,8 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_7_enumerate_over__list"() {
 
 fn "bug_for_of_pattern_match_ergonomics.wado/$test_8_match_and_if_let_through_a_reference"() {
     let s: i32;
-    let n: ref "core:prelude/types.wado//Box<i32>";
-    let x_10: ref "core:prelude/types.wado//Box<i32>";
+    let n: ref "core:prelude//$Cell<i32>";
+    let x_10: ref "core:prelude//$Cell<i32>";
     let $v3: i32;
     let $v4: i32;
     if @unlikely(local.tee s(1 + 2) != 3) {
@@ -815,8 +815,8 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_8_match_and_if_let_through_a_
     let $match_scrut_1: ref null "tuple//[i32, bug_for_of_pattern_match_ergonomics.wado/P]";
     if @likely(ref.is_null(local.tee $match_scrut_1(struct.new "tuple//[i32, bug_for_of_pattern_match_ergonomics.wado/P]" { 0: 10, 1: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 1, y: 2 } })) == 0) {
         let $variant_payload_1: ref "tuple//[i32, bug_for_of_pattern_match_ergonomics.wado/P]";
-        n = struct.new "core:prelude/types.wado//Box<i32>" { value: local.tee $variant_payload_1(ref.as_non_null($match_scrut_1)).0 };
-        x_10 = struct.new "core:prelude/types.wado//Box<i32>" { value: $variant_payload_1.1.x };
+        n = struct.new "core:prelude//$Cell<i32>" { value: local.tee $variant_payload_1(ref.as_non_null($match_scrut_1)).0 };
+        x_10 = struct.new "core:prelude//$Cell<i32>" { value: $variant_payload_1.1.x };
         s = n.value;
         $v3 = x_10.value;
         if @unlikely(local.tee $v4(s + $v3) != 11) {

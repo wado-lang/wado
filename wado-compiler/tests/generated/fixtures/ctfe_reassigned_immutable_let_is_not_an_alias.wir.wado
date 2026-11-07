@@ -4,7 +4,7 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
+struct core:prelude//$Cell<i32> {  // TypeId(1)
     mut value: i32,
 }
 
@@ -81,10 +81,10 @@ global mut global:ctfe_reassigned_immutable_let_is_not_an_alias.wado::$modules_i
 global global:ctfe_reassigned_immutable_let_is_not_an_alias.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "ctfe_reassigned_immutable_let_is_not_an_alias.wado/make"() {
-    let x: ref "core:prelude/types.wado//Box<i32>";
-    let y: ref "core:prelude/types.wado//Box<i32>";
-    x = struct.new "core:prelude/types.wado//Box<i32>" { value: 41 };
-    y = struct.new "core:prelude/types.wado//Box<i32>" { value: 7 };
+    let x: ref "core:prelude//$Cell<i32>";
+    let y: ref "core:prelude//$Cell<i32>";
+    x = struct.new "core:prelude//$Cell<i32>" { value: 41 };
+    y = struct.new "core:prelude//$Cell<i32>" { value: 7 };
     x.value = 42;
     return 4200 + y.value;
 }
@@ -92,8 +92,8 @@ fn "ctfe_reassigned_immutable_let_is_not_an_alias.wado/make"() {
 fn "ctfe_reassigned_immutable_let_is_not_an_alias.wado/run"() with Stdout {
     let $load_1: ref Array<u8>;
     let $hole_0_0: i32;
-    let x_10: ref "core:prelude/types.wado//Box<i32>";
-    let y: ref "core:prelude/types.wado//Box<i32>";
+    let x_10: ref "core:prelude//$Cell<i32>";
+    let y: ref "core:prelude//$Cell<i32>";
     let out_41: ref "core:prelude/string.wado//String";
     let is_negative_108: bool;
     let x_112: i64;
@@ -105,8 +105,8 @@ fn "ctfe_reassigned_immutable_let_is_not_an_alias.wado/run"() with Stdout {
         "ctfe_reassigned_immutable_let_is_not_an_alias.wado/$initialize_modules$cold0"();
     };
     $hole_0_0 = global:ctfe_reassigned_immutable_let_is_not_an_alias.wado::FOLDED;
-    x_10 = struct.new "core:prelude/types.wado//Box<i32>" { value: 41 };
-    y = struct.new "core:prelude/types.wado//Box<i32>" { value: 7 };
+    x_10 = struct.new "core:prelude//$Cell<i32>" { value: 41 };
+    y = struct.new "core:prelude//$Cell<i32>" { value: 7 };
     x_10.value = 42;
     $sroa_t_h1_263 = 4200 + y.value;
     out_41 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };

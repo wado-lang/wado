@@ -10,7 +10,7 @@ struct core:prelude//$Resource {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<bool> {  // TypeId(3)
+struct core:prelude//$Cell<bool> {  // TypeId(3)
     mut value: bool,
 }
 
@@ -25,7 +25,7 @@ struct core:prelude/types.wado//CopyBuffer {  // TypeId(4)
 struct core:prelude/types.wado//ReadInto {  // TypeId(5)
     mut ptr: i32,
     mut room: i32,
-    mut lending: ref null "core:prelude/types.wado//Box<bool>",
+    mut lending: ref null "core:prelude//$Cell<bool>",
 }
 
 struct core:prelude/string.wado//StrSlice {  // TypeId(6)
@@ -49,7 +49,7 @@ struct core:prelude/string.wado//String {  // TypeId(9)
 
 struct core:prelude/types.wado//$tmpl$b7f89f2160c441f4 {  // TypeId(10)
     mut h0: ref "core:prelude/string.wado//String",
-    mut h1: ref "core:prelude/types.wado//Box<bool>",
+    mut h1: ref "core:prelude//$Cell<bool>",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
@@ -981,7 +981,7 @@ fn "affine_handler_by_value_drops_after_restore.wado/$effect_dispatch__core:prel
     let $local_4: ref "affine_handler_by_value_drops_after_restore.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_5: ref null "core:prelude/types.wado//StartedRead<u8>";
     let handle: i32;
-    let lending: ref "core:prelude/types.wado//Box<bool>";
+    let lending: ref "core:prelude//$Cell<bool>";
     let b_27: i32;
     let $sroa_slot_30: i32;
     if ref.is_null(local.tee $saved(global:affine_handler_by_value_drops_after_restore.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
@@ -1001,12 +1001,12 @@ fn "affine_handler_by_value_drops_after_restore.wado/$effect_dispatch__core:prel
                 "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
                 unreachable;
             }
-            let $match_scrut_1: ref null "core:prelude/types.wado//Box<bool>";
+            let $match_scrut_1: ref null "core:prelude//$Cell<bool>";
             if ref.is_null(local.tee $match_scrut_1(into.lending)) == 0 {
                 if @unlikely(local.tee lending(ref.as_non_null($match_scrut_1)).value == 0) {
                     cold_path;
                     let $mv_arg_3: ref "core:prelude/string.wado//String";
-                    "core:rt/panic"(local.tee $mv_arg_3("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,[core:prelude/string.wado/String,&mut bool]>"(struct.new "core:prelude/types.wado//$tmpl$b7f89f2160c441f4" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a lent destination is written only while it is lent"), used: 51 }, h1: lending, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:472: "), used: 70 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:472: "), used: 70 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+                    "core:rt/panic"(local.tee $mv_arg_3("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,[core:prelude/string.wado/String,&mut bool]>"(struct.new "core:prelude/types.wado//$tmpl$b7f89f2160c441f4" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a lent destination is written only while it is lent"), used: 51 }, h1: lending, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:467: "), used: 70 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:467: "), used: 70 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: *lending
 lending: "), used: 30 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: *lending

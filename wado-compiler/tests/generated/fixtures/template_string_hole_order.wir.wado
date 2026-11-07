@@ -4,7 +4,7 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
+struct core:prelude//$Cell<i32> {  // TypeId(1)
     mut value: i32,
 }
 
@@ -47,7 +47,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<template_string_hole_order.wado/$tmpl$625c7a44810704f2,[&i32,i32]>$spec0$spec0" = fn(ref "core:prelude/types.wado//Box<i32>", i32) -> ref "core:prelude/string.wado//String";  // TypeId(20)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<template_string_hole_order.wado/$tmpl$625c7a44810704f2,[&i32,i32]>$spec0$spec0" = fn(ref "core:prelude//$Cell<i32>", i32) -> ref "core:prelude/string.wado//String";  // TypeId(20)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
@@ -77,12 +77,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "template_string_hole_order.wado/run"() with Stdout {
-    let a_0: ref "core:prelude/types.wado//Box<i32>";
+    let a_0: ref "core:prelude//$Cell<i32>";
     let message_6: ref "core:prelude/string.wado//String";
     let $cm_pair_7_13: i64;
     let $sroa_$pattern_temp_0_0_13_19: i32;
     let $sroa_$pattern_temp_0_1_14_20: i32;
-    a_0 = struct.new "core:prelude/types.wado//Box<i32>" { value: 1 };
+    a_0 = struct.new "core:prelude//$Cell<i32>" { value: 1 };
     message_6 = block -> ref "core:prelude/string.wado//String" {
         a_0.value = 2;
         "core:prelude/string.wado/core:prelude/string.wado/String::format<template_string_hole_order.wado/$tmpl$625c7a44810704f2,[&i32,i32]>$spec0$spec0"(a_0, 2);

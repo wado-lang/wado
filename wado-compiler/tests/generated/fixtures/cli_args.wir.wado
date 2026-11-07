@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>> {  // TypeId(2)
+struct core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>> {  // TypeId(2)
     mut value: ref null "core:prelude/string.wado//String",
 }
 
@@ -91,7 +91,7 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/format.wado/$tmpl$47518b5dd822a983,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(31)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/string.wado//String");  // TypeId(32)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/string.wado//String");  // TypeId(32)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
@@ -172,7 +172,7 @@ fn "cli_args.wado/run"() with Stdout, Environment {
     $inline_core_prelude_string_wado_String__format_cli_args_wado__tmpl_bcb2c6c4ae88b7ca__core_prelude_types_wado_Option_core_prelude_string_wado_String__core_prelude_list_wado_List_core_prelude_string_wado_String____spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_cli_args_wado__tmpl_bcb2c6c4ae88b7ca__core_prelude_types_wado_Option_core_prelude_string_wado_String__core_prelude_list_wado_List_core_prelude_string_wado_String____spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: $sroa_t_h0_235 }, v_16);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: $sroa_t_h0_235 }, v_16);
     $array_clone_src_1 = global:cli_args.wado::$const_obj_0;
     if @unlikely(local.tee end_15(v_16.used + 1) > builtin::array_len(v_16.repr)) {
         cold_path;
@@ -801,10 +801,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"(self, f) {
     let $load_4: ref Array<u8>;
+    let $load_22: ref null "core:prelude/string.wado//String";
     let new_used_23: i32;
     let start_24: i32;
     let payload_273: ref "core:prelude/string.wado//String";
-    let v_276: ref null "core:prelude/string.wado//String";
     if ref.is_null(self.value) {
         if @unlikely(local.tee new_used_23(f.used + 6) > builtin::array_len(f.repr)) {
             cold_path;
@@ -850,10 +850,10 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.
         start_24 = f.used;
         f.used = new_used_23;
         builtin::array_copy<u8>(local.tee $load_4(f.repr), start_24, global:core:prelude/traits.wado::$const_obj_53, 0, 4);
-        if @unlikely((ref.is_null(local.tee v_276(self.value)) == 0) != 1) {
+        if @unlikely((ref.is_null(local.tee $load_22(self.value)) == 0) != 1) {
             unreachable;
         }
-        payload_273 = ref.as_non_null(v_276);
+        payload_273 = ref.as_non_null($load_22);
         if @unlikely(local.tee new_used_23(f.used + 1) > builtin::array_len($load_4)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_23);

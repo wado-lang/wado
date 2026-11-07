@@ -4,7 +4,7 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload> {  // TypeId(1)
+struct core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload> {  // TypeId(1)
     mut value: ref null "core:prelude/string.wado//String",
 }
 
@@ -29,13 +29,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//mut_ref_write_back_held_reference.wado/replace_through_a_field" = fn(ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(11)
+type "functype//mut_ref_write_back_held_reference.wado/replace_through_a_field" = fn(ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(11)
 
-type "functype//mut_ref_write_back_held_reference.wado/replace_through_a_rebound_field" = fn(ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(12)
+type "functype//mut_ref_write_back_held_reference.wado/replace_through_a_rebound_field" = fn(ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(12)
 
-type "functype//mut_ref_write_back_held_reference.wado/replace_through_the_second_of_a_pair$dae[a]" = fn(ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(13)
+type "functype//mut_ref_write_back_held_reference.wado/replace_through_the_second_of_a_pair$dae[a]" = fn(ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(13)
 
-type "functype//mut_ref_write_back_held_reference.wado/replace_through_a_list" = fn(ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(14)
+type "functype//mut_ref_write_back_held_reference.wado/replace_through_a_list" = fn(ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>");  // TypeId(14)
 
 type "functype//mut_ref_write_back_held_reference.wado/$test_0_a_whole_value_write_through_a_held_reference_writes_back" = fn();  // TypeId(15)
 
@@ -132,12 +132,12 @@ fn "mut_ref_write_back_held_reference.wado/replace_through_a_list"(p) {
 fn "mut_ref_write_back_held_reference.wado/$test_0_a_whole_value_write_through_a_held_reference_writes_back"() {
     let $load_0: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
-    let $write_back_3: ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>";
+    let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>";
     let a_end: i32;
     let i: i32;
     let $sroa_b_item_18: ref null "core:prelude/string.wado//String";
     let $licm_repr_19: ref Array<u8>;
-    "mut_ref_write_back_held_reference.wado/replace_through_a_field"(local.tee $write_back_3(struct.new "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_b_item_18(ref.null none) }));
+    "mut_ref_write_back_held_reference.wado/replace_through_a_field"(local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_b_item_18(ref.null none) }));
     if ref.eq(local.tee $load_0($write_back_3.value), $sroa_b_item_18) == 0 {
         $sroa_b_item_18 = $load_0;
     }
@@ -195,12 +195,12 @@ fn "mut_ref_write_back_held_reference.wado/$test_0_a_whole_value_write_through_a
 fn "mut_ref_write_back_held_reference.wado/$test_1_a_reference_rebound_into_the_aggregate_writes_back_too"() {
     let $load_0: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
-    let $write_back_3: ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>";
+    let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>";
     let a_end: i32;
     let i: i32;
     let $sroa_b_item_18: ref null "core:prelude/string.wado//String";
     let $licm_repr_19: ref Array<u8>;
-    "mut_ref_write_back_held_reference.wado/replace_through_a_rebound_field"(local.tee $write_back_3(struct.new "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_b_item_18(ref.null none) }));
+    "mut_ref_write_back_held_reference.wado/replace_through_a_rebound_field"(local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_b_item_18(ref.null none) }));
     if ref.eq(local.tee $load_0($write_back_3.value), $sroa_b_item_18) == 0 {
         $sroa_b_item_18 = $load_0;
     }
@@ -258,14 +258,14 @@ fn "mut_ref_write_back_held_reference.wado/$test_1_a_reference_rebound_into_the_
 fn "mut_ref_write_back_held_reference.wado/$test_2_only_the_position_actually_written_is_replaced"() {
     let $load_0: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
-    let $write_back_8: ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>";
+    let $write_back_8: ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>";
     let a_end: i32;
     let i: i32;
     let $sroa_left_item_23: ref null "core:prelude/string.wado//String";
     let $sroa_right_item_24: ref null "core:prelude/string.wado//String";
     let $licm_repr_25: ref Array<u8>;
     $sroa_left_item_23 = ref.null none;
-    "mut_ref_write_back_held_reference.wado/replace_through_the_second_of_a_pair$dae[a]"(local.tee $write_back_8(struct.new "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_right_item_24(ref.null none) }));
+    "mut_ref_write_back_held_reference.wado/replace_through_the_second_of_a_pair$dae[a]"(local.tee $write_back_8(struct.new "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_right_item_24(ref.null none) }));
     if ref.eq($sroa_left_item_23, $sroa_left_item_23) == 0 {
     }
     if ref.eq(local.tee $load_0($write_back_8.value), $sroa_right_item_24) == 0 {
@@ -330,12 +330,12 @@ fn "mut_ref_write_back_held_reference.wado/$test_2_only_the_position_actually_wr
 fn "mut_ref_write_back_held_reference.wado/$test_3_a_write_through_a_held_reference_in_a_list_writes_back"() {
     let $load_0: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
-    let $write_back_3: ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>";
+    let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>";
     let a_end: i32;
     let i: i32;
     let $sroa_b_item_18: ref null "core:prelude/string.wado//String";
     let $licm_repr_19: ref Array<u8>;
-    "mut_ref_write_back_held_reference.wado/replace_through_a_list"(local.tee $write_back_3(struct.new "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_b_item_18(ref.null none) }));
+    "mut_ref_write_back_held_reference.wado/replace_through_a_list"(local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_held_reference.wado/Payload>" { value: local.tee $sroa_b_item_18(ref.null none) }));
     if ref.eq(local.tee $load_0($write_back_3.value), $sroa_b_item_18) == 0 {
         $sroa_b_item_18 = $load_0;
     }

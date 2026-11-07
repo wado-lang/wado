@@ -6,11 +6,11 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<fn()->i32> {  // TypeId(3)
+struct core:prelude//$Cell<fn> {  // TypeId(3)
     mut value: ref struct,
 }
 
@@ -148,7 +148,7 @@ struct spec_memory_ref_identity.wado//$tmpl$53397d2e96a23ee1 {  // TypeId(17)
 }
 
 struct spec_memory_ref_identity.wado//$tmpl$dcf8ce8e1a8c84e0 {  // TypeId(18)
-    mut h0: ref "core:prelude/types.wado//Box<i32>",
+    mut h0: ref "core:prelude//$Cell<i32>",
     mut h1: i32,
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -227,11 +227,11 @@ type "functype//spec_memory_ref_identity.wado/$cm_export__$test_1_a_reference_to
 
 type "functype//spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold1$dae[$contract_arg_1]" = fn(i32);  // TypeId(40)
 
-type "functype//spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold2" = fn(ref "core:prelude/types.wado//Box<i32>", i32);  // TypeId(41)
+type "functype//spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold2" = fn(ref "core:prelude//$Cell<i32>", i32);  // TypeId(41)
 
 type "functype//spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold3$dae[$contract_arg_0]" = fn(i32);  // TypeId(42)
 
-type "functype//spec_memory_ref_identity.wado/$test_1_a_reference_to_a_closure_points_to_the_place_holding_it$cold0" = fn(ref "core:prelude/types.wado//Box<fn()->i32>");  // TypeId(43)
+type "functype//spec_memory_ref_identity.wado/$test_1_a_reference_to_a_closure_points_to_the_place_holding_it$cold0" = fn(ref "core:prelude//$Cell<fn>");  // TypeId(43)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(44)
 
@@ -421,7 +421,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$afdf3efc359fee73") -> ref "core:prelude/string.wado//String";  // TypeId(137)
 
-type "functype//spec_memory_ref_identity.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn()->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(138)
+type "functype//spec_memory_ref_identity.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(138)
 
 type "functype//spec_memory_ref_identity.wado/spec_memory_ref_identity.wado/$Closure_0::$call$dae[self]" = fn() -> i32;  // TypeId(139)
 
@@ -588,7 +588,7 @@ xs: "), used: 149 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
     builtin::array_set<i32>($licm_repr_75, 0, 9);
     if @unlikely($sroa_r_value_74 != 1) {
         cold_path;
-        "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold2"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_r_value_74 }, $sroa_r_value_74);
+        "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold2"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_r_value_74 }, $sroa_r_value_74);
         unreachable;
     }
     if @unlikely(0 >= i) {
@@ -652,8 +652,8 @@ fn "spec_memory_ref_identity.wado/$cm_export__$test_0_references_compare_values_
 }
 
 fn "spec_memory_ref_identity.wado/$cm_export__$test_1_a_reference_to_a_closure_points_to_the_place_holding_it"() {
-    let f: ref "core:prelude/types.wado//Box<fn()->i32>";
-    if @unlikely(ref.eq(local.tee f(struct.new "core:prelude/types.wado//Box<fn()->i32>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_memory_ref_identity.wado//$Closure_0" {}, inspect: ref.func "closure/spec_memory_ref_identity.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_memory_ref_identity.wado/$closure_wrapper_0" } }), f) == 0) {
+    let f: ref "core:prelude//$Cell<fn>";
+    if @unlikely(ref.eq(local.tee f(struct.new "core:prelude//$Cell<fn>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_memory_ref_identity.wado//$Closure_0" {}, inspect: ref.func "closure/spec_memory_ref_identity.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_memory_ref_identity.wado/$closure_wrapper_0" } }), f) == 0) {
         cold_path;
         "spec_memory_ref_identity.wado/$test_1_a_reference_to_a_closure_points_to_the_place_holding_it$cold0"(f);
         unreachable;
@@ -1970,7 +1970,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<spec_memory
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_memory_ref_identity.wado/$tmpl$53397d2e96a23ee1,fn()->i32>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_spec_memory_ref_identity_wado__tmpl_53397d2e96a23ee1_fn____i32___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "spec_memory_ref_identity.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn()->i32>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_memory_ref_identity_wado__tmpl_53397d2e96a23ee1_fn____i32___fmt_5_0);
+    "spec_memory_ref_identity.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_memory_ref_identity_wado__tmpl_53397d2e96a23ee1_fn____i32___fmt_5_0);
     self_9 = "spec_memory_ref_identity.wado/spec_memory_ref_identity.wado/$tmpl$53397d2e96a23ee1^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     return out_3;

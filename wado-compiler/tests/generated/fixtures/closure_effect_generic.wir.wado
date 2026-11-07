@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -67,7 +67,7 @@ type "functype//closure_effect_generic.wado/$template_segment$closure_effect_gen
 
 type "functype//closure_effect_generic.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//closure_effect_generic.wado/run$cold0" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(20)
+type "functype//closure_effect_generic.wado/run$cold0" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(20)
 
 type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(21)
 
@@ -154,7 +154,7 @@ fn "closure_effect_generic.wado/run"() with Stdout {
     };
     if @unlikely($sroa_total_value_63 != 6) {
         cold_path;
-        "closure_effect_generic.wado/run$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_total_value_63 });
+        "closure_effect_generic.wado/run$cold0"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_total_value_63 });
         unreachable;
     }
     $sroa_$iter_0_repr_54 = global:closure_effect_generic.wado::$const_obj_0;

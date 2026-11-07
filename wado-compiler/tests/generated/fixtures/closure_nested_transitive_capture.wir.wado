@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -189,7 +189,7 @@ type "functype//closure_nested_transitive_capture.wado/$cm_export__$test_16_an_i
 
 type "functype//closure_nested_transitive_capture.wado/$cm_export__$test_17_a_shadowing_binder_s_scope_ends_with_its_block" = fn();  // TypeId(42)
 
-type "functype//closure_nested_transitive_capture.wado/$test_15_an_if_let_binding_does_not_reach_the_else_branch$cold0" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(43)
+type "functype//closure_nested_transitive_capture.wado/$test_15_an_if_let_binding_does_not_reach_the_else_branch$cold0" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(43)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(44)
 
@@ -434,9 +434,6 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_3_capture_crosses_t
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_4_an_inner_closure_writes_the_enclosing_function_s_local"() {
-    let count: ref "core:prelude/types.wado//Box<i32>";
-    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
-    count.value = 11;
     "wasi/task-return"(0);
 }
 
@@ -491,7 +488,7 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_15_an_if_let_bindin
     }
     if @unlikely($sroa_n_value_11 != 7) {
         cold_path;
-        "closure_nested_transitive_capture.wado/$test_15_an_if_let_binding_does_not_reach_the_else_branch$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_n_value_11 });
+        "closure_nested_transitive_capture.wado/$test_15_an_if_let_binding_does_not_reach_the_else_branch$cold0"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_n_value_11 });
         unreachable;
     }
     "wasi/task-return"(0);

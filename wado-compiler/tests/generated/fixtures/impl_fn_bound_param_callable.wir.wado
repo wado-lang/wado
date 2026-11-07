@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -149,7 +149,7 @@ type "functype//impl_fn_bound_param_callable.wado/$cm_export__$test_1_a_closure_
 
 type "functype//impl_fn_bound_param_callable.wado/$test_0_an_impl_calls_the_closure_its_fn_bound_parameter_types_a_field_as$cold0" = fn(i32);  // TypeId(25)
 
-type "functype//impl_fn_bound_param_callable.wado/$test_1_a_closure_writing_its_captures_through_the_field_still_counts$cold0" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(26)
+type "functype//impl_fn_bound_param_callable.wado/$test_1_a_closure_writing_its_captures_through_the_field_still_counts$cold0" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(26)
 
 type "functype//impl_fn_bound_param_callable.wado/$test_1_a_closure_writing_its_captures_through_the_field_still_counts$cold1" = fn(i32);  // TypeId(27)
 
@@ -422,7 +422,7 @@ fn "impl_fn_bound_param_callable.wado/$cm_export__$test_1_a_closure_writing_its_
     }
     if @unlikely($sroa_seen_value_25 != 3) {
         cold_path;
-        "impl_fn_bound_param_callable.wado/$test_1_a_closure_writing_its_captures_through_the_field_still_counts$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_seen_value_25 });
+        "impl_fn_bound_param_callable.wado/$test_1_a_closure_writing_its_captures_through_the_field_still_counts$cold0"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_seen_value_25 });
         unreachable;
     }
     "wasi/task-return"(0);

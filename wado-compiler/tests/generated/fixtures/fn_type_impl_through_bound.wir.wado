@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<fn(i32)->i32> {  // TypeId(2)
+struct core:prelude//$Cell<fn> {  // TypeId(2)
     mut value: ref struct,
 }
 
@@ -171,7 +171,7 @@ type "functype//fn_type_impl_through_bound.wado/$cm_export__$test_1_a_fn_value_t
 
 type "functype//fn_type_impl_through_bound.wado/$cm_export__$test_2_a_fn_type_s_effects_are_part_of_its_signature" = fn();  // TypeId(31)
 
-type "functype//fn_type_impl_through_bound.wado/$test_2_a_fn_type_s_effects_are_part_of_its_signature$cold0" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", i32);  // TypeId(32)
+type "functype//fn_type_impl_through_bound.wado/$test_2_a_fn_type_s_effects_are_part_of_its_signature$cold0" = fn(ref "core:prelude//$Cell<fn>", i32);  // TypeId(32)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(33)
 
@@ -307,7 +307,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$afdf3efc359fee73") -> ref "core:prelude/string.wado//String";  // TypeId(99)
 
-type "functype//fn_type_impl_through_bound.wado/fn(i32)->i32with(wasi:cli/stdout.wado/Stdout)^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(100)
+type "functype//fn_type_impl_through_bound.wado/fn(i32)->i32with(wasi:cli/stdout.wado/Stdout)^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(100)
 
 type "functype//fn_type_impl_through_bound.wado/fn_type_impl_through_bound.wado/$Closure_3::$call$dae[self]" = fn(i32) -> i32;  // TypeId(101)
 
@@ -412,7 +412,7 @@ fn "fn_type_impl_through_bound.wado/$cm_export__$test_2_a_fn_type_s_effects_are_
     $sroa_loud_value_5 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "fn_type_impl_through_bound.wado//$Closure_3" {}, inspect: ref.func "closure/fn_type_impl_through_bound.wado/$closure_inspect_wrapper_0", func: ref.func "closure/fn_type_impl_through_bound.wado/$closure_wrapper_0" };
     if @unlikely(local.tee $v1("fn_type_impl_through_bound.wado/fn_type_impl_through_bound.wado/$Closure_3::$call$dae[self]"(3)) != 21) {
         cold_path;
-        "fn_type_impl_through_bound.wado/$test_2_a_fn_type_s_effects_are_part_of_its_signature$cold0"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: $sroa_loud_value_5 }, $v1);
+        "fn_type_impl_through_bound.wado/$test_2_a_fn_type_s_effects_are_part_of_its_signature$cold0"(struct.new "core:prelude//$Cell<fn>" { value: $sroa_loud_value_5 }, $v1);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -1444,7 +1444,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<fn_type_imp
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(((local.tee self_11("fn_type_impl_through_bound.wado/fn_type_impl_through_bound.wado/$tmpl$db7b22729ec4df1b_^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_11.start) + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<fn_type_impl_through_bound.wado/$tmpl$db7b22729ec4df1b_,fn(i32)->i32>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1), local.tee $load_6(t.s2), local.tee $load_7(t.r2))).end - self_11.start + 16)) + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<fn_type_impl_through_bound.wado/$tmpl$db7b22729ec4df1b_,i32>::lit$sroa[self.index]"(1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7)).end - self_11.start + 16)), used: 0 };
     "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<fn_type_impl_through_bound.wado/$tmpl$db7b22729ec4df1b_,fn(i32)->i32>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7), out);
     $temp_inline_core_prelude_traits_wado_TemplateHole_fn_type_impl_through_bound_wado__tmpl_db7b22729ec4df1b__fn_i32___i32___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out);
-    "fn_type_impl_through_bound.wado/fn(i32)->i32with(wasi:cli/stdout.wado/Stdout)^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_fn_type_impl_through_bound_wado__tmpl_db7b22729ec4df1b__fn_i32___i32___fmt_5_0);
+    "fn_type_impl_through_bound.wado/fn(i32)->i32with(wasi:cli/stdout.wado/Stdout)^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_fn_type_impl_through_bound_wado__tmpl_db7b22729ec4df1b__fn_i32___i32___fmt_5_0);
     "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<fn_type_impl_through_bound.wado/$tmpl$db7b22729ec4df1b_,i32>::lit$sroa[self.index]"(1, t.s0, t.r0, t.s1, t.r1, t.s2, t.r2), out);
     $temp_inline_core_prelude_traits_wado_TemplateHole_fn_type_impl_through_bound_wado__tmpl_db7b22729ec4df1b__fn_i32___i32___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_fn_type_impl_through_bound_wado__tmpl_db7b22729ec4df1b__fn_i32___i32___fmt_5_0);

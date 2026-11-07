@@ -232,7 +232,7 @@ fn "core:prelude/traits.wado/inspect_unit_ref_field.wado/Holder<&()>^core:prelud
     let new_used_25: i32;
     let start_26: i32;
     let x: i64;
-    let start_346: i32;
+    let start_345: i32;
     let q: u64;
     let tens: i32;
     if @unlikely(local.tee new_used_25(f.used + 6) > builtin::array_len(f.repr)) {
@@ -373,22 +373,22 @@ fn "core:prelude/traits.wado/inspect_unit_ref_field.wado/Holder<&()>^core:prelud
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_26);
         }
-        start_346 = f.used;
+        start_345 = f.used;
         f.used = start_26;
-        builtin::array_set_u8(f.repr, start_346, 45);
+        builtin::array_set_u8(f.repr, start_345, 45);
     } else {
     }
     if @unlikely(local.tee start_26(f.used + new_used_25) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_26);
     }
-    start_346 = f.used;
+    start_345 = f.used;
     f.used = start_26;
     $load_3 = f.repr;
-    new_used_25 = start_346 + new_used_25;
+    new_used_25 = start_345 + new_used_25;
     b50: block {
         l51: loop {
-            break_if b50 (new_used_25 - start_346) < 2;
+            break_if b50 (new_used_25 - start_345) < 2;
             q = x /u 100_i64;
             tens = local.tee start_26(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_3, new_used_25 - 1, (48 + start_26) - (tens * 10));
@@ -398,8 +398,8 @@ fn "core:prelude/traits.wado/inspect_unit_ref_field.wado/Holder<&()>^core:prelud
             continue l51;
         };
     };
-    if new_used_25 > start_346 {
-        builtin::array_set_u8($load_3, start_346, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if new_used_25 > start_345 {
+        builtin::array_set_u8($load_3, start_345, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     if @unlikely(local.tee new_used_25(f.used + 2) > builtin::array_len($load_3)) {
         cold_path;

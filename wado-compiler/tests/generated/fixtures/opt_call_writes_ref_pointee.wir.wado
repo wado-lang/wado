@@ -4,7 +4,7 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
+struct core:prelude//$Cell<i32> {  // TypeId(1)
     mut value: i32,
 }
 
@@ -47,7 +47,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//opt_call_writes_ref_pointee.wado/bump_global" = fn();  // TypeId(15)
 
-type "functype//opt_call_writes_ref_pointee.wado/bump_global_and" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(16)
+type "functype//opt_call_writes_ref_pointee.wado/bump_global_and" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(16)
 
 type "functype//opt_call_writes_ref_pointee.wado/through_ref" = fn(ref "opt_call_writes_ref_pointee.wado//P", bool) -> i32;  // TypeId(17)
 
@@ -167,9 +167,9 @@ fn "opt_call_writes_ref_pointee.wado/through_mut_ref"(r, c) {
 
 fn "opt_call_writes_ref_pointee.wado/across_call_with_mut_arg"(r, c) {
     let s: i32;
-    let n: ref "core:prelude/types.wado//Box<i32>";
+    let n: ref "core:prelude//$Cell<i32>";
     s = 0;
-    n = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
+    n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     if c {
         s = r.x * 100;
     }

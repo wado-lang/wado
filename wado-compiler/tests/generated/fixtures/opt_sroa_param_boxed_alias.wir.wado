@@ -4,7 +4,7 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
+struct core:prelude//$Cell<i32> {  // TypeId(1)
     mut value: i32,
 }
 
@@ -16,11 +16,11 @@ struct core:prelude/string.wado//String {  // TypeId(3)
 }
 
 struct opt_sroa_param_boxed_alias.wado//$Closure_0 {  // TypeId(4)
-    mut $capture_0: ref "core:prelude/types.wado//Box<i32>",
+    mut $capture_0: ref "core:prelude//$Cell<i32>",
 }
 
 struct opt_sroa_param_boxed_alias.wado//Holder {  // TypeId(5)
-    mut r: ref "core:prelude/types.wado//Box<i32>",
+    mut r: ref "core:prelude//$Cell<i32>",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct);  // TypeId(6)
@@ -46,17 +46,17 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//opt_sroa_param_boxed_alias.wado/touch" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> i32;  // TypeId(16)
+type "functype//opt_sroa_param_boxed_alias.wado/touch" = fn(ref "core:prelude//$Cell<i32>", ref "core:prelude//$Cell<i32>") -> i32;  // TypeId(16)
 
-type "functype//opt_sroa_param_boxed_alias.wado/bump_both" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> i32;  // TypeId(17)
+type "functype//opt_sroa_param_boxed_alias.wado/bump_both" = fn(ref "core:prelude//$Cell<i32>", ref "core:prelude//$Cell<i32>") -> i32;  // TypeId(17)
 
-type "functype//opt_sroa_param_boxed_alias.wado/by_value" = fn(ref "core:prelude/types.wado//Box<i32>", ref "opt_sroa_param_boxed_alias.wado//Holder") -> i32;  // TypeId(18)
+type "functype//opt_sroa_param_boxed_alias.wado/by_value" = fn(ref "core:prelude//$Cell<i32>", ref "opt_sroa_param_boxed_alias.wado//Holder") -> i32;  // TypeId(18)
 
-type "functype//opt_sroa_param_boxed_alias.wado/shared_holder" = fn(ref "core:prelude/types.wado//Box<i32>", ref "opt_sroa_param_boxed_alias.wado//Holder") -> i32;  // TypeId(19)
+type "functype//opt_sroa_param_boxed_alias.wado/shared_holder" = fn(ref "core:prelude//$Cell<i32>", ref "opt_sroa_param_boxed_alias.wado//Holder") -> i32;  // TypeId(19)
 
-type "functype//opt_sroa_param_boxed_alias.wado/via_global" = fn(ref "core:prelude/types.wado//Box<i32>") -> i32;  // TypeId(20)
+type "functype//opt_sroa_param_boxed_alias.wado/via_global" = fn(ref "core:prelude//$Cell<i32>") -> i32;  // TypeId(20)
 
-type "functype//opt_sroa_param_boxed_alias.wado/via_closure" = fn(ref "core:prelude/types.wado//Box<i32>", ref struct) -> i32;  // TypeId(21)
+type "functype//opt_sroa_param_boxed_alias.wado/via_closure" = fn(ref "core:prelude//$Cell<i32>", ref struct) -> i32;  // TypeId(21)
 
 type "functype//opt_sroa_param_boxed_alias.wado/next" = fn() -> i32;  // TypeId(22)
 
@@ -185,9 +185,9 @@ fn "opt_sroa_param_boxed_alias.wado/next"() {
 }
 
 fn "opt_sroa_param_boxed_alias.wado/run"() with Stdout {
-    let x: ref "core:prelude/types.wado//Box<i32>";
+    let x: ref "core:prelude//$Cell<i32>";
     let sibling: i32;
-    let y: ref "core:prelude/types.wado//Box<i32>";
+    let y: ref "core:prelude//$Cell<i32>";
     let hb: ref "opt_sroa_param_boxed_alias.wado//Holder";
     let set_d: ref struct;
     let message_18: ref "core:prelude/string.wado//String";
@@ -198,34 +198,34 @@ fn "opt_sroa_param_boxed_alias.wado/run"() with Stdout {
         cold_path;
         "opt_sroa_param_boxed_alias.wado/$initialize_modules$cold0"();
     };
-    if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/touch"(local.tee x(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }), x)) != 1) {
+    if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/touch"(local.tee x(struct.new "core:prelude//$Cell<i32>" { value: 0 }), x)) != 1) {
         cold_path;
         "opt_sroa_param_boxed_alias.wado/run$cold6"(sibling);
         unreachable;
     }
-    if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/bump_both"(local.tee y(struct.new "core:prelude/types.wado//Box<i32>" { value: 5 }), y)) != 15) {
+    if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/bump_both"(local.tee y(struct.new "core:prelude//$Cell<i32>" { value: 5 }), y)) != 15) {
         cold_path;
         "opt_sroa_param_boxed_alias.wado/run$cold5"(sibling);
         unreachable;
     }
-    if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/by_value"(local.tee y(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }), struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: y })) != 7) {
+    if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/by_value"(local.tee y(struct.new "core:prelude//$Cell<i32>" { value: 0 }), struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: y })) != 7) {
         cold_path;
         "opt_sroa_param_boxed_alias.wado/run$cold4"(sibling);
         unreachable;
     }
-    hb = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: local.tee y(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }) };
+    hb = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: local.tee y(struct.new "core:prelude//$Cell<i32>" { value: 0 }) };
     if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/shared_holder"(y, hb)) != 8) {
         cold_path;
         "opt_sroa_param_boxed_alias.wado/run$cold3"(sibling);
         unreachable;
     }
-    global:opt_sroa_param_boxed_alias.wado::G = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: local.tee y(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }) };
+    global:opt_sroa_param_boxed_alias.wado::G = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: local.tee y(struct.new "core:prelude//$Cell<i32>" { value: 0 }) };
     if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/via_global"(y)) != 9) {
         cold_path;
         "opt_sroa_param_boxed_alias.wado/run$cold2"(sibling);
         unreachable;
     }
-    set_d = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_sroa_param_boxed_alias.wado//$Closure_0" { $capture_0: local.tee y(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }) }, func: ref.func "closure/opt_sroa_param_boxed_alias.wado/$closure_wrapper_0" };
+    set_d = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_sroa_param_boxed_alias.wado//$Closure_0" { $capture_0: local.tee y(struct.new "core:prelude//$Cell<i32>" { value: 0 }) }, func: ref.func "closure/opt_sroa_param_boxed_alias.wado/$closure_wrapper_0" };
     if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/via_closure"(y, set_d)) != 11) {
         cold_path;
         "opt_sroa_param_boxed_alias.wado/run$cold1"(sibling);
@@ -261,7 +261,7 @@ fn "opt_sroa_param_boxed_alias.wado/$cm_export__run"() {
 }
 
 fn "opt_sroa_param_boxed_alias.wado/$initialize_module"() {
-    global:opt_sroa_param_boxed_alias.wado::G = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: struct.new "core:prelude/types.wado//Box<i32>" { value: global:opt_sroa_param_boxed_alias.wado::ZERO } };
+    global:opt_sroa_param_boxed_alias.wado::G = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: struct.new "core:prelude//$Cell<i32>" { value: global:opt_sroa_param_boxed_alias.wado::ZERO } };
 }
 
 fn "opt_sroa_param_boxed_alias.wado/run$cold0"(apart) with Stdout {

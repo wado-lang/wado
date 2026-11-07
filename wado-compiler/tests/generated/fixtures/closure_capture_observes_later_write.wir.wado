@@ -6,11 +6,11 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<fn()->i32> {  // TypeId(3)
+struct core:prelude//$Cell<fn> {  // TypeId(3)
     mut value: ref struct,
 }
 
@@ -64,7 +64,7 @@ struct closure_capture_observes_later_write.wado//$Closure_13 {  // TypeId(10)
 }
 
 struct closure_capture_observes_later_write.wado//$Closure_1 {  // TypeId(11)
-    mut $capture_0: ref "core:prelude/types.wado//Box<i32>",
+    mut $capture_0: ref "core:prelude//$Cell<i32>",
 }
 
 struct closure_capture_observes_later_write.wado//$tmpl$4908b29d2f3a525f {  // TypeId(12)
@@ -247,7 +247,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(87)
 
-type "functype//closure_capture_observes_later_write.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn()->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(88)
+type "functype//closure_capture_observes_later_write.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(88)
 
 type "functype//closure_capture_observes_later_write.wado/closure_capture_observes_later_write.wado/$Closure_1::$call" = fn(ref "closure_capture_observes_later_write.wado//$Closure_1") -> i32;  // TypeId(89)
 
@@ -302,7 +302,7 @@ global global:closure_capture_observes_later_write.wado::$const_obj_3: ref Array
 global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "closure_capture_observes_later_write.wado/run"() {
-    let n: ref "core:prelude/types.wado//Box<i32>";
+    let n: ref "core:prelude//$Cell<i32>";
     let get_n: ref struct;
     let $v1_6: i32;
     let l: ref "core:prelude/list.wado//List<i32>";
@@ -310,7 +310,7 @@ fn "closure_capture_observes_later_write.wado/run"() {
     let value_87: ref "closure_capture_observes_later_write.wado//$Closure_13";
     let $functor_112: ref "closure_capture_observes_later_write.wado//$Closure_1";
     let $sroa_i_value_150: i32;
-    get_n = struct.new "canonical//CanonicalClosure_0" { env: local.tee $functor_112(struct.new "closure_capture_observes_later_write.wado//$Closure_1" { $capture_0: local.tee n(struct.new "core:prelude/types.wado//Box<i32>" { value: 1 }) }), inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_0" };
+    get_n = struct.new "canonical//CanonicalClosure_0" { env: local.tee $functor_112(struct.new "closure_capture_observes_later_write.wado//$Closure_1" { $capture_0: local.tee n(struct.new "core:prelude//$Cell<i32>" { value: 1 }) }), inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_0" };
     n.value = 2;
     if @unlikely(local.tee $v1_6($functor_112.$capture_0.value * 2) != 4) {
         cold_path;
@@ -1072,7 +1072,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<closure_cap
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<closure_capture_observes_later_write.wado/$tmpl$4908b29d2f3a525f,fn()->i32>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_closure_capture_observes_later_write_wado__tmpl_4908b29d2f3a525f_fn____i32___fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "closure_capture_observes_later_write.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn()->i32>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_closure_capture_observes_later_write_wado__tmpl_4908b29d2f3a525f_fn____i32___fmt_6_0);
+    "closure_capture_observes_later_write.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_closure_capture_observes_later_write_wado__tmpl_4908b29d2f3a525f_fn____i32___fmt_6_0);
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<closure_capture_observes_later_write.wado/$tmpl$4908b29d2f3a525f,i32>::lit$sroa[self.index]"(1, t.s0, t.r0, t.s1, t.r1, t.s2, t.r2);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_closure_capture_observes_later_write_wado__tmpl_4908b29d2f3a525f_fn____i32___fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);

@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<fn(i32)->i32> {  // TypeId(2)
+struct core:prelude//$Cell<fn> {  // TypeId(2)
     mut value: ref struct,
 }
 
@@ -136,7 +136,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
 
-type "functype//assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(48)
 
 type "functype//assert_closure_operand.wado/assert_closure_operand.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(49)
 
@@ -579,7 +579,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_clos
     self_13 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_closure_operand.wado/$tmpl$053cee3811ed67a3,fn(i32)->i32>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_13.repr, self_13.start, self_13.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0);
+    "assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0);
     self_13 = block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $load_2(t.s1).repr, $load_2.used);
     };

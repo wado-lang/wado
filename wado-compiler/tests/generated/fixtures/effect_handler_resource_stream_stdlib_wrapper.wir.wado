@@ -10,7 +10,7 @@ struct core:prelude//$Resource {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<bool> {  // TypeId(3)
+struct core:prelude//$Cell<bool> {  // TypeId(3)
     mut value: bool,
 }
 
@@ -30,7 +30,7 @@ struct core:prelude/types.wado//CopySettlement {  // TypeId(5)
 struct core:prelude/types.wado//ReadInto {  // TypeId(6)
     mut ptr: i32,
     mut room: i32,
-    mut lending: ref null "core:prelude/types.wado//Box<bool>",
+    mut lending: ref null "core:prelude//$Cell<bool>",
 }
 
 struct core:prelude/string.wado//StrSlice {  // TypeId(7)
@@ -54,7 +54,7 @@ struct core:prelude/string.wado//String {  // TypeId(10)
 
 struct core:prelude/types.wado//$tmpl$b7f89f2160c441f4 {  // TypeId(11)
     mut h0: ref "core:prelude/string.wado//String",
-    mut h1: ref "core:prelude/types.wado//Box<bool>",
+    mut h1: ref "core:prelude//$Cell<bool>",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
@@ -765,7 +765,7 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/$effect_dispatch__core:pr
     let $local_4: ref "effect_handler_resource_stream_stdlib_wrapper.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_5: ref null "core:prelude/types.wado//StartedRead<u8>";
     let handle: i32;
-    let lending: ref "core:prelude/types.wado//Box<bool>";
+    let lending: ref "core:prelude//$Cell<bool>";
     let b_27: i32;
     let $sroa_slot_30: i32;
     if ref.is_null(local.tee $saved(global:effect_handler_resource_stream_stdlib_wrapper.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
@@ -785,12 +785,12 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/$effect_dispatch__core:pr
                 "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
                 unreachable;
             }
-            let $match_scrut_1: ref null "core:prelude/types.wado//Box<bool>";
+            let $match_scrut_1: ref null "core:prelude//$Cell<bool>";
             if ref.is_null(local.tee $match_scrut_1(into.lending)) == 0 {
                 if @unlikely(local.tee lending(ref.as_non_null($match_scrut_1)).value == 0) {
                     cold_path;
                     let $mv_arg_3: ref "core:prelude/string.wado//String";
-                    "core:rt/panic"(local.tee $mv_arg_3("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,[core:prelude/string.wado/String,&mut bool]>"(struct.new "core:prelude/types.wado//$tmpl$b7f89f2160c441f4" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a lent destination is written only while it is lent"), used: 51 }, h1: lending, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:472: "), used: 70 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:472: "), used: 70 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+                    "core:rt/panic"(local.tee $mv_arg_3("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,[core:prelude/string.wado/String,&mut bool]>"(struct.new "core:prelude/types.wado//$tmpl$b7f89f2160c441f4" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a lent destination is written only while it is lent"), used: 51 }, h1: lending, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:467: "), used: 70 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in ReadInto::landing at core:prelude/types.wado:467: "), used: 70 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: *lending
 lending: "), used: 30 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: *lending
@@ -965,7 +965,7 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
             }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_23.repr, packed).handle == handle {
                 return "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$unchecked"(global:core:prelude/types.wado::SETTLED_COPIES, handle = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(packed >= handle) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0"(packed, handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:809"), used: 27 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0"(packed, handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:804"), used: 27 });
                     unreachable;
                 }; packed).packed;
             }
@@ -1169,7 +1169,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(buffer, da
     $contract_arg_0 = packed_2 >>u 4;
     if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 <= $load_4)) == 0) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"($contract_arg_0, $load_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:651"), used: 27 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"($contract_arg_0, $load_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:646"), used: 27 });
         unreachable;
     }
     builtin::array_copy<u8>(local.tee elements(builtin::array_new<u8>(local.tee $load_4($load_4 - $contract_arg_0))), 0, $array_clone_dst_2, $contract_arg_0, $load_4);
@@ -1270,7 +1270,7 @@ fn "core:prelude/types.wado/$initialize_module"() {
 }
 
 fn "core:prelude/types.wado/settled_copy_at$cold0$dae[handle]"(at, $v1) {
-    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(at, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:732"), used: 27 });
+    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(at, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:727"), used: 27 });
     unreachable;
 }
 

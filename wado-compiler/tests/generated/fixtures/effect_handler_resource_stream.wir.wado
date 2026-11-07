@@ -10,7 +10,7 @@ struct core:prelude//$Resource {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<bool> {  // TypeId(3)
+struct core:prelude//$Cell<bool> {  // TypeId(3)
     mut value: bool,
 }
 
@@ -25,7 +25,7 @@ struct core:prelude/types.wado//CopyBuffer {  // TypeId(4)
 struct core:prelude/types.wado//ReadInto {  // TypeId(5)
     mut ptr: i32,
     mut room: i32,
-    mut lending: ref null "core:prelude/types.wado//Box<bool>",
+    mut lending: ref null "core:prelude//$Cell<bool>",
 }
 
 struct core:prelude/string.wado//StrSlice {  // TypeId(6)
@@ -264,9 +264,9 @@ type "functype//effect_handler_resource_stream.wado/effect_handler_resource_stre
 
 type "functype//effect_handler_resource_stream.wado/effect_handler_resource_stream.wado/$Closure_7::$call$dae[self#1]" = fn(ref "effect_handler_resource_stream.wado//$Closure_7");  // TypeId(80)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(81)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(82)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<effect_handler_resource_stream.wado/$tmpl$cdb440ff7333898b,core:prelude/slice.wado/Slice<u8>>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> [ref Array<u8>, i32, i32];  // TypeId(83)
 
@@ -1058,24 +1058,6 @@ fn "effect_handler_resource_stream.wado/effect_handler_resource_stream.wado/$Clo
     local.tee self_2(self.$capture_0).drops = self_2.drops + 1;
 }
 
-fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    if self == 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, global:core:prelude/traits.wado::$const_obj_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"(f, global:core:prelude/traits.wado::$const_obj_15);
-    }
-    if self == 1 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, global:core:prelude/traits.wado::$const_obj_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec6"(f, global:core:prelude/traits.wado::$const_obj_12);
-    }
-    if self == 2 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, global:core:prelude/traits.wado::$const_obj_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"(f, global:core:prelude/traits.wado::$const_obj_9);
-    }
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -1149,20 +1131,38 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
     arr = f.buf.repr;
     self = is_negative + self;
-    b116: block {
-        l117: loop {
-            break_if b116 (self - is_negative) < 2;
+    b113: block {
+        l114: loop {
+            break_if b113 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
-            continue l117;
+            continue l114;
         };
     };
     if self > is_negative {
         builtin::array_set_u8(arr, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    }
+}
+
+fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
+    if self == 0 {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, global:core:prelude/traits.wado::$const_obj_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"(f, global:core:prelude/traits.wado::$const_obj_15);
+    }
+    if self == 1 {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, global:core:prelude/traits.wado::$const_obj_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec6"(f, global:core:prelude/traits.wado::$const_obj_12);
+    }
+    if self == 2 {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, global:core:prelude/traits.wado::$const_obj_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"(f, global:core:prelude/traits.wado::$const_obj_9);
     }
 }
 

@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -153,11 +153,11 @@ type "functype//closure_iterator_fn_mut.wado/$cm_export__$test_1_for_each_method
 
 type "functype//closure_iterator_fn_mut.wado/$cm_export__$test_2_pure_fn_still_accepted_via_sub_typing" = fn();  // TypeId(27)
 
-type "functype//closure_iterator_fn_mut.wado/$test_0_fold_can_accumulate_via_outer_mut$cold0" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(28)
+type "functype//closure_iterator_fn_mut.wado/$test_0_fold_can_accumulate_via_outer_mut$cold0" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(28)
 
 type "functype//closure_iterator_fn_mut.wado/$test_0_fold_can_accumulate_via_outer_mut$cold1" = fn(i32);  // TypeId(29)
 
-type "functype//closure_iterator_fn_mut.wado/$test_1_for_each_method_runs_side_effects$cold0" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(30)
+type "functype//closure_iterator_fn_mut.wado/$test_1_for_each_method_runs_side_effects$cold0" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(30)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(31)
 
@@ -418,7 +418,7 @@ fn "closure_iterator_fn_mut.wado/$test_0_fold_can_accumulate_via_outer_mut"() {
     }
     if @unlikely($sroa_side_total_value_39 != 15) {
         cold_path;
-        "closure_iterator_fn_mut.wado/$test_0_fold_can_accumulate_via_outer_mut$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_side_total_value_39 });
+        "closure_iterator_fn_mut.wado/$test_0_fold_can_accumulate_via_outer_mut$cold0"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_side_total_value_39 });
         unreachable;
     }
 }
@@ -461,7 +461,7 @@ fn "closure_iterator_fn_mut.wado/$cm_export__$test_1_for_each_method_runs_side_e
     };
     if @unlikely($sroa_total_value_34 != 60) {
         cold_path;
-        "closure_iterator_fn_mut.wado/$test_1_for_each_method_runs_side_effects$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_total_value_34 });
+        "closure_iterator_fn_mut.wado/$test_1_for_each_method_runs_side_effects$cold0"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_total_value_34 });
         unreachable;
     }
     "wasi/task-return"(0);

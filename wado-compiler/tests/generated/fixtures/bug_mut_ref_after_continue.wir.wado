@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -100,15 +100,15 @@ type "functype//bug_mut_ref_after_continue.wado/$template_segment$bug_mut_ref_af
 
 type "functype//bug_mut_ref_after_continue.wado/$cm_export__run" = fn();  // TypeId(23)
 
-type "functype//bug_mut_ref_after_continue.wado/run$cold0" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(24)
+type "functype//bug_mut_ref_after_continue.wado/run$cold0" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(24)
 
 type "functype//bug_mut_ref_after_continue.wado/run$cold1" = fn(i32);  // TypeId(25)
 
-type "functype//bug_mut_ref_after_continue.wado/run$cold2" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(26)
+type "functype//bug_mut_ref_after_continue.wado/run$cold2" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(26)
 
 type "functype//bug_mut_ref_after_continue.wado/run$cold3" = fn(i32);  // TypeId(27)
 
-type "functype//bug_mut_ref_after_continue.wado/run$cold4$dae[$v1]" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(28)
+type "functype//bug_mut_ref_after_continue.wado/run$cold4$dae[$v1]" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(28)
 
 type "functype//bug_mut_ref_after_continue.wado/advance$cold0$sroa[pos.value]$dae[items]" = fn(i32, i32);  // TypeId(29)
 
@@ -251,7 +251,7 @@ fn "bug_mut_ref_after_continue.wado/run"() with Stdout {
             break_if b0 $sroa_pos_value_63 >= 5;
             if if @unlikely($sroa_pos_value_63 >=u 5) {
                 cold_path;
-                "bug_mut_ref_after_continue.wado/run$cold4$dae[$v1]"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_pos_value_63 });
+                "bug_mut_ref_after_continue.wado/run$cold4$dae[$v1]"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_pos_value_63 });
                 unreachable;
             }; builtin::array_get_value<i32>(global:bug_mut_ref_after_continue.wado::$const_obj_1, $sroa_pos_value_63) < 20 {
                 $sroa_pos_value_63 = $sroa_pos_value_63 + 1;
@@ -271,7 +271,7 @@ fn "bug_mut_ref_after_continue.wado/run"() with Stdout {
             }
             if @unlikely($sroa_pos_value_63 != 2) {
                 cold_path;
-                "bug_mut_ref_after_continue.wado/run$cold2"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_pos_value_63 });
+                "bug_mut_ref_after_continue.wado/run$cold2"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_pos_value_63 });
                 unreachable;
             }
             if @unlikely($sroa_pos_value_63 >=u 5) {
@@ -288,7 +288,7 @@ fn "bug_mut_ref_after_continue.wado/run"() with Stdout {
             }
             if @unlikely($sroa_pos_value_63 != 3) {
                 cold_path;
-                "bug_mut_ref_after_continue.wado/run$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_pos_value_63 });
+                "bug_mut_ref_after_continue.wado/run$cold0"(struct.new "core:prelude//$Cell<i32>" { value: $sroa_pos_value_63 });
                 unreachable;
             }
             break b0;

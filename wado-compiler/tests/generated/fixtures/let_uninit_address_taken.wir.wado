@@ -4,7 +4,7 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
+struct core:prelude//$Cell<i32> {  // TypeId(1)
     mut value: i32,
 }
 
@@ -80,8 +80,8 @@ fn "let_uninit_address_taken.wado/run"() with Stdout {
     let $cm_pair_7_106: i64;
     let $sroa_$pattern_temp_0_0_13_112: i32;
     let $sroa_$pattern_temp_0_1_14_113: i32;
-    let x_130: ref null "core:prelude/types.wado//Box<i32>";
-    let r_131: ref "core:prelude/types.wado//Box<i32>";
+    let x_130: ref null "core:prelude//$Cell<i32>";
+    let r_131: ref "core:prelude//$Cell<i32>";
     let is_negative_239: bool;
     let $sroa_view_repr_203: ref Array<u8>;
     $sroa_$pattern_temp_0_0_13_112 = builtin::i32_wrap_i64(local.tee $cm_pair_7_106("wasi/stream-new"()));
@@ -92,10 +92,10 @@ fn "let_uninit_address_taken.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_113, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_112);
     if black_box(1) {
-        x_130 = struct.new "core:prelude/types.wado//Box<i32>" { value: 1 };
+        x_130 = struct.new "core:prelude//$Cell<i32>" { value: 1 };
         $sroa_$pattern_temp_0_0_13_112 = 1;
     } else {
-        x_130 = struct.new "core:prelude/types.wado//Box<i32>" { value: 2 };
+        x_130 = struct.new "core:prelude//$Cell<i32>" { value: 2 };
         $sroa_$pattern_temp_0_0_13_112 = 1;
     }
     r_131 = ref.as_non_null(x_130);
@@ -105,10 +105,10 @@ fn "let_uninit_address_taken.wado/run"() with Stdout {
     }
     $sroa_$pattern_temp_0_0_13_112 = r_131.value;
     if black_box(0) {
-        x_130 = struct.new "core:prelude/types.wado//Box<i32>" { value: 1 };
+        x_130 = struct.new "core:prelude//$Cell<i32>" { value: 1 };
         $sroa_$pattern_temp_0_1_14_113 = 1;
     } else {
-        x_130 = struct.new "core:prelude/types.wado//Box<i32>" { value: 2 };
+        x_130 = struct.new "core:prelude//$Cell<i32>" { value: 2 };
         $sroa_$pattern_temp_0_1_14_113 = 1;
     }
     r_131 = ref.as_non_null(x_130);

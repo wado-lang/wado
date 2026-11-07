@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
@@ -64,7 +64,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//assert_eval_order_place_before_write.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//assert_eval_order_place_before_write.wado/run$cold0$dae[$v1]" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(17)
+type "functype//assert_eval_order_place_before_write.wado/run$cold0$dae[$v1]" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
 
@@ -151,7 +151,7 @@ fn "assert_eval_order_place_before_write.wado/$cm_export__run"() {
     let new_repr: ref Array<u8>;
     let $sroa_message_repr_34: ref Array<u8>;
     cold_path;
-    "assert_eval_order_place_before_write.wado/run$cold0$dae[$v1]"(struct.new "core:prelude/types.wado//Box<i32>" { value: 105 });
+    "assert_eval_order_place_before_write.wado/run$cold0$dae[$v1]"(struct.new "core:prelude//$Cell<i32>" { value: 105 });
     unreachable;
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);

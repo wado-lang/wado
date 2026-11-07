@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>> {  // TypeId(2)
+struct core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>> {  // TypeId(2)
     mut value: ref null "core:prelude/string.wado//String",
 }
 
@@ -290,7 +290,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/inspect_text<c
 
 type "functype//core:rt/gc_array_to_memory$spec0$dae[src_start]" = fn(ref Array<u8>, i32, i32);  // TypeId(65)
 
-type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]" = fn(ref null "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(66)
+type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$spec0$dae[index]" = fn(ref "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>") -> ref "core:prelude/string.wado//String";  // TypeId(66)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(67)
 
@@ -328,7 +328,7 @@ type "functype//spec_worlds_http_error.wado/spec_worlds_http_error.wado/$tmpl$39
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<spec_worlds_http_error.wado/$tmpl$39ae8441669c9864,[core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:prelude/types.wado/Option<core:prelude/string.wado/String>]>" = fn(ref "spec_worlds_http_error.wado//$tmpl$39ae8441669c9864") -> ref "core:prelude/string.wado//String";  // TypeId(84)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/format.wado//Formatter");  // TypeId(85)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>", ref "core:prelude/format.wado//Formatter");  // TypeId(85)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$dae[is_negative]" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(86)
 
@@ -1244,11 +1244,12 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]"(arr, ptr, len) {
     };
 }
 
-fn "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]"(v) {
-    if @unlikely((ref.is_null(v) == 0) != 1) {
+fn "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$spec0$dae[index]"(v) {
+    let $load_0: ref null "core:prelude/string.wado//String";
+    if @unlikely((ref.is_null(local.tee $load_0(v.value)) == 0) != 1) {
         unreachable;
     }
-    return ref.as_non_null(v);
+    return ref.as_non_null($load_0);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
@@ -1401,13 +1402,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<spec_worlds
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_spec_worlds_http_error_wado__tmpl_39ae8441669c9864_core_prelude_types_wado_Option_core_prelude_string_wado_String____fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_worlds_http_error_wado__tmpl_39ae8441669c9864_core_prelude_types_wado_Option_core_prelude_string_wado_String____fmt_6_0);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_worlds_http_error_wado__tmpl_39ae8441669c9864_core_prelude_types_wado_Option_core_prelude_string_wado_String____fmt_6_0);
     self_11 = block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_3(t.s1).repr, $mv_arg_3.used);
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_spec_worlds_http_error_wado__tmpl_39ae8441669c9864_core_prelude_types_wado_Option_core_prelude_string_wado_String____fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: t.h1 }, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_worlds_http_error_wado__tmpl_39ae8441669c9864_core_prelude_types_wado_Option_core_prelude_string_wado_String____fmt_6_0);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: t.h1 }, $temp_inline_core_prelude_traits_wado_TemplateHole_spec_worlds_http_error_wado__tmpl_39ae8441669c9864_core_prelude_types_wado_Option_core_prelude_string_wado_String____fmt_6_0);
     self_11 = "spec_worlds_http_error.wado/spec_worlds_http_error.wado/$tmpl$39ae8441669c9864^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
     return $mv_arg_1;
@@ -1425,7 +1426,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee $load_1(f.buf), global:core:prelude/traits.wado::$const_obj_3);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_2);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"($load_1, global:core:prelude/traits.wado::$const_obj_1);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]"($load_0), f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String$spec0$dae[index]"(self), f);
     }
 }
 

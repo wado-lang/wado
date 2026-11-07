@@ -6,11 +6,11 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
+struct core:prelude//$Cell<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<fn(i32)->i32> {  // TypeId(3)
+struct core:prelude//$Cell<fn> {  // TypeId(3)
     mut value: ref struct,
 }
 
@@ -132,15 +132,15 @@ struct core:prelude/format.wado//Formatter {  // TypeId(15)
 }
 
 struct inspect_closure_capture_address_taken.wado//$Closure_2 {  // TypeId(16)
-    mut $capture_0: ref "core:prelude/types.wado//Box<i32>",
+    mut $capture_0: ref "core:prelude//$Cell<i32>",
 }
 
 struct inspect_closure_capture_address_taken.wado//$Closure_1 {  // TypeId(17)
-    mut $capture_0: ref "core:prelude/types.wado//Box<i32>",
+    mut $capture_0: ref "core:prelude//$Cell<i32>",
 }
 
 struct inspect_closure_capture_address_taken.wado//$Closure_0 {  // TypeId(18)
-    mut $capture_0: ref "core:prelude/types.wado//Box<i32>",
+    mut $capture_0: ref "core:prelude//$Cell<i32>",
 }
 
 struct inspect_closure_capture_address_taken.wado//$tmpl$d48748ffcad618c0 {  // TypeId(19)
@@ -368,7 +368,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$afdf3efc359fee73") -> ref "core:prelude/string.wado//String";  // TypeId(124)
 
-type "functype//inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(125)
+type "functype//inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(125)
 
 type "functype//inspect_closure_capture_address_taken.wado/inspect_closure_capture_address_taken.wado/$Closure_0::$call" = fn(ref "inspect_closure_capture_address_taken.wado//$Closure_0", i32) -> i32;  // TypeId(126)
 
@@ -455,19 +455,19 @@ global global:core:prelude/primitive.wado::$const_obj_11: ref "core:prelude/stri
 global global:core:prelude/primitive.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "inspect_closure_capture_address_taken.wado/$test_0_a_captured_parameter_whose_address_is_taken_prints_bare"() {
-    let $boxed_param_0: ref "core:prelude/types.wado//Box<i32>";
+    let $boxed_param_0: ref "core:prelude//$Cell<i32>";
     let a_end: i32;
     let i: i32;
     let $licm_repr_15: ref Array<u8>;
     let t_16: ref struct;
     let out_19: ref "core:prelude/string.wado//String";
-    drop(black_box(local.tee $boxed_param_0(struct.new "core:prelude/types.wado//Box<i32>" { value: 42 })));
+    drop(black_box(local.tee $boxed_param_0(struct.new "core:prelude//$Cell<i32>" { value: 42 })));
     t_16 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_capture_address_taken.wado//$Closure_0" { $capture_0: $boxed_param_0 }, inspect: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_inspect_wrapper_0", func: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_wrapper_0" };
     out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: t_16 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_19 });
+    "inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t_16 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_19 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
@@ -522,19 +522,19 @@ condition: `${make_adder(42):#?}` == \"|z: i32| captures[n] (z + n)\"
 }
 
 fn "inspect_closure_capture_address_taken.wado/$test_1_a_captured_local_whose_address_is_taken_prints_bare"() {
-    let m: ref "core:prelude/types.wado//Box<i32>";
+    let m: ref "core:prelude//$Cell<i32>";
     let f_1: ref struct;
     let a_end: i32;
     let i: i32;
     let $licm_repr_15: ref Array<u8>;
     let out_19: ref "core:prelude/string.wado//String";
-    drop(black_box(local.tee m(struct.new "core:prelude/types.wado//Box<i32>" { value: 7 })));
+    drop(black_box(local.tee m(struct.new "core:prelude//$Cell<i32>" { value: 7 })));
     f_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_capture_address_taken.wado//$Closure_1" { $capture_0: m }, inspect: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_inspect_wrapper_1", func: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_wrapper_1" };
     out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f_1 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_19 });
+    "inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: f_1 }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_19 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
@@ -594,12 +594,12 @@ fn "inspect_closure_capture_address_taken.wado/$test_2_a_dereference_the_source_
     let i: i32;
     let $licm_repr_15: ref Array<u8>;
     let out_19: ref "core:prelude/string.wado//String";
-    g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_capture_address_taken.wado//$Closure_2" { $capture_0: struct.new "core:prelude/types.wado//Box<i32>" { value: 5 } }, inspect: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_inspect_wrapper_2", func: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_wrapper_2" };
+    g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_capture_address_taken.wado//$Closure_2" { $capture_0: struct.new "core:prelude//$Cell<i32>" { value: 5 } }, inspect: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_inspect_wrapper_2", func: ref.func "closure/inspect_closure_capture_address_taken.wado/$closure_wrapper_2" };
     out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: g }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_19 });
+    "inspect_closure_capture_address_taken.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: g }, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_19 });
     $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_inspect_closure_capture_address_taken_wado__tmpl_99d0bd09e20123ef__fn_i32___i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };

@@ -8,7 +8,7 @@ enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(3)
+struct core:prelude//$Cell<i32> {  // TypeId(3)
     mut value: i32,
 }
 
@@ -64,9 +64,9 @@ struct tuple//[core:prelude/string.wado/String, i32] {  // TypeId(11)
     mut 1: i32,
 }
 
-struct tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<i32>] {  // TypeId(12)
+struct tuple//[&core:prelude/string.wado/String, &i32] {  // TypeId(12)
     mut 0: ref "core:prelude/string.wado//String",
-    mut 1: ref "core:prelude/types.wado//Box<i32>",
+    mut 1: ref "core:prelude//$Cell<i32>",
 }
 
 struct kv_spread.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(13)
@@ -234,7 +234,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/LiteralSpread::spread_literal" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>", ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>", ref Array<i32>, ref "Array<core:prelude/string.wado/String>", ref Array<i32>, ref Array<i32>, i32, i32, i32);  // TypeId(82)
 
-type "functype//core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>") -> ref null "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<i32>]";  // TypeId(83)
+type "functype//core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>") -> ref null "tuple//[&core:prelude/string.wado/String, &i32]";  // TypeId(83)
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index" = fn(ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>", ref Array<i32>, ref "Array<core:prelude/string.wado/String>", ref Array<i32>, ref Array<i32>, i32, i32, ref Array<u8>, i32) -> i32;  // TypeId(84)
 
@@ -1468,8 +1468,8 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     let $load_6: i32;
     let $iter_0: ref "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>";
     let k: ref "core:prelude/string.wado//String";
-    let v_4: ref "core:prelude/types.wado//Box<i32>";
-    let $match_5: ref null "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<i32>]";
+    let v_4: ref "core:prelude//$Cell<i32>";
+    let $match_5: ref null "tuple//[&core:prelude/string.wado/String, &i32]";
     let existing: i32;
     let $av_34: i32;
     $iter_0 = struct.new "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>" { log: $mv$base$log, index: 0 };
@@ -1477,7 +1477,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     b156: block {
         l157: loop {
             if ref.is_null(local.tee $match_5("core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next"($iter_0))) == 0 {
-                let $variant_payload_1: ref "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<i32>]";
+                let $variant_payload_1: ref "tuple//[&core:prelude/string.wado/String, &i32]";
                 k = local.tee $variant_payload_1(ref.as_non_null($match_5)).0;
                 v_4 = $variant_payload_1.1;
                 $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_3: block {
@@ -1533,7 +1533,7 @@ fn "core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIte
         return ref.null none;
     }
     self.index = i_4 + 1;
-    return struct.new "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<i32>]" { 0: builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0.keys, i_4), 1: struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($load_0.values, i_4) } };
+    return struct.new "tuple//[&core:prelude/string.wado/String, &i32]" { 0: builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0.keys, i_4), 1: struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>($load_0.values, i_4) } };
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($mv$self$log, $mv$self$slots, $mv$self$nkeys, $mv$self$kids, $mv$self$lens, $mv$self$root, $mv$self$height, $mv$key$repr, $mv$key$used) {
