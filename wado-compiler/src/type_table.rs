@@ -82,25 +82,17 @@ pub struct TypeTable {
     /// What [`Self::projection_bounds`] answered for each projection, which
     /// depends on nothing but the interned projection.
     projection_bounds_cache: IndexMap<TypeKey, Arc<[TraitRef]>>,
-    /// Erasure redirects: set by `erase_newtypes_and_flags()`.
-    /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
-    /// Newtype → ultimate base type; Flags → u32.
+    /// Each reference [`Self::redefine_to`] pointed at its `Box<T>`, which
+    /// `get` reads in its place.
     ///
-    /// A sparse [`TypeMap`] (most types are not erased): `Some(target)` is a
-    /// live redirect, an absent slot means "no redirect". `get` consults it
-    /// on every call, so the hash-free index matters here too.
+    /// A sparse [`TypeMap`]: `get` consults it on every call, so the hash-free
+    /// index matters here.
     redirects: TypeMap<TypeId>,
-    /// Each type whose spelling names an erased type among its arguments,
-    /// mapped to the spelling naming what erasure redirects it to: two
-    /// spellings of one type, which [`Self::type_key`] answers alike. Sparse,
-    /// as `redirects` is.
-    settled_spellings: TypeMap<TypeId>,
-    /// Whether erasure is done, so a type interned from here on is settled as
-    /// it arrives.
-    instances_settled: bool,
-    /// The settled spellings minted as keys that nothing has interned as a
-    /// type yet, which `newtype_decls` leaves out until something does.
-    unindexed: IndexSet<TypeId>,
+    /// What each type erases to, from erasure on: [`Self::erase_type`]'s
+    /// answers.
+    erasures: TypeMap<TypeId>,
+    /// Whether erasure is done, so [`Self::intern`] answers erased ids.
+    erased: bool,
     /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
     /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
     /// `&mut T` into `Box<T>` wrapper structs for primitives, variants and
@@ -298,9 +290,8 @@ impl TypeTable {
             trait_frames: IndexMap::default(),
             projection_bounds_cache: IndexMap::default(),
             redirects: TypeMap::default(),
-            settled_spellings: TypeMap::default(),
-            instances_settled: false,
-            unindexed: IndexSet::default(),
+            erasures: TypeMap::default(),
+            erased: false,
             box_payload_types: TypeMap::default(),
             slot_boxes: IndexMap::default(),
             newtype_decls: IndexMap::default(),
@@ -340,9 +331,6 @@ impl TypeTable {
     /// the only one the IR holds.
     pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
         let id = if let Some(&id) = self.intern_map.get(&ty) {
-            if self.unindexed.swap_remove(&id) {
-                self.index_type(id, &ty);
-            }
             id
         } else {
             let id = self.types.next_id();
@@ -351,8 +339,8 @@ impl TypeTable {
             self.intern_map.insert(ty, id);
             id
         };
-        if self.instances_settled {
-            self.settle_spelling(id)
+        if self.erased {
+            self.erase_type(id)
         } else {
             id
         }
@@ -371,39 +359,37 @@ impl TypeTable {
         }
     }
 
-    /// The spelling of `id` with each erased type in it named as what erasure
-    /// redirects it to.
-    fn settle_spelling(&mut self, id: TypeId) -> TypeId {
-        if let Some(&settled) = self.settled_spellings.get(id) {
-            return settled;
-        }
-        // An erased newtype among an instance's arguments is its base, as it
-        // is everywhere else once erasure redirects it.
-        let resolved = self.resolved_id(id);
-        if resolved != id {
-            let settled = self.settle_spelling(resolved);
-            self.settled_spellings.set_growing(id, settled);
-            return settled;
+    /// The type `id` names once newtypes and `flags` are erased, spelled with
+    /// erased arguments: the one id every spelling of that type shares.
+    pub fn erase_type(&mut self, id: TypeId) -> TypeId {
+        assert!(self.erased, "erasure has run");
+        if let Some(&erased) = self.erasures.get(id) {
+            return erased;
         }
         let spelling = self.types.get(id).expect("an interned type").clone();
         let rebuilt = match &spelling {
-            ResolvedType::Tuple(elems) => ResolvedType::Tuple(self.settle_spellings(elems)),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
+                let erased = self.erase_type(self.representation_head(id));
+                self.erasures.set_growing(id, erased);
+                return erased;
+            }
+            ResolvedType::Tuple(elems) => ResolvedType::Tuple(self.erase_types(elems)),
             ResolvedType::Resource { def, type_args } => ResolvedType::Resource {
                 def: *def,
-                type_args: self.settle_spellings(type_args),
+                type_args: self.erase_types(type_args),
             },
             ResolvedType::Variant { def, type_args } => ResolvedType::Variant {
                 def: *def,
-                type_args: self.settle_spellings(type_args),
+                type_args: self.erase_types(type_args),
             },
             ResolvedType::Struct { def, type_args } => ResolvedType::Struct {
                 def: *def,
-                type_args: self.settle_spellings(type_args),
+                type_args: self.erase_types(type_args),
             },
-            ResolvedType::Ref(inner) => ResolvedType::Ref(self.settle_spelling(*inner)),
-            ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.settle_spelling(*inner)),
+            ResolvedType::Ref(inner) => ResolvedType::Ref(self.erase_type(*inner)),
+            ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.erase_type(*inner)),
             ResolvedType::BuiltinArray(elem) => {
-                ResolvedType::BuiltinArray(self.settle_spelling(*elem))
+                ResolvedType::BuiltinArray(self.erase_type(*elem))
             }
             ResolvedType::Function {
                 is_mut,
@@ -412,18 +398,15 @@ impl TypeTable {
                 effects,
             } => ResolvedType::Function {
                 is_mut: *is_mut,
-                params: self.settle_spellings(params),
-                return_type: self.settle_spelling(*return_type),
+                params: self.erase_types(params),
+                return_type: self.erase_type(*return_type),
                 effects: effects.clone(),
             },
-            // A newtype keeps its identity until erasure redirects it, and the
-            // rest name no other type.
-            ResolvedType::Newtype { .. }
-            | ResolvedType::Primitive(_)
+            // These name no other type.
+            ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
-            | ResolvedType::Flags { .. }
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
@@ -433,32 +416,29 @@ impl TypeTable {
             | ResolvedType::Unknown
             | ResolvedType::Error => spelling.clone(),
         };
-        let settled = if rebuilt == spelling {
+        let erased = if rebuilt == spelling {
             id
         } else {
-            self.intern_settled(rebuilt)
+            self.intern_erased(rebuilt)
         };
-        self.settled_spellings.set_growing(id, settled);
-        settled
+        self.erasures.set_growing(id, erased);
+        erased
     }
 
-    /// The id `spelling` interns to, minted where no type spells it yet. A
-    /// minted one is a declaration's type only once something interns it as a
-    /// type: until then the type it settles is there under its own spelling.
-    fn intern_settled(&mut self, spelling: ResolvedType) -> TypeId {
+    /// The id the erased `spelling` interns to, which is its own erasure.
+    fn intern_erased(&mut self, spelling: ResolvedType) -> TypeId {
         if let Some(&id) = self.intern_map.get(&spelling) {
             return id;
         }
         let id = self.types.next_id();
         self.push_type(spelling.clone());
         self.intern_map.insert(spelling, id);
-        self.unindexed.insert(id);
-        self.settled_spellings.set_growing(id, id);
+        self.erasures.set_growing(id, id);
         id
     }
 
-    fn settle_spellings(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
-        ids.iter().map(|&id| self.settle_spelling(id)).collect()
+    fn erase_types(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
+        ids.iter().map(|&id| self.erase_type(id)).collect()
     }
 
     /// The slot holding `id`'s value: itself, or what a redirect points it at.
@@ -481,32 +461,14 @@ impl TypeTable {
     }
 
     /// Where [`Self::redefine_to`] pointed `id`, when `id` is a reference it
-    /// redefined. Erasure's redirect is not one, and the spelling tells them
-    /// apart: only a reference is ever redefined.
+    /// redefined.
     fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
-        let target = self.redirects.get(id).copied()?;
-        self.spelled_ref(id).map(|_| target)
+        self.redirects.get(id).copied()
     }
 
-    /// [`Self::get`] before the newtype / flags erasure, which runs once
-    /// monomorphize is done. A boxing redefinition is no part of that, so a
-    /// redefined reference reads as the `Box<T>` here too.
-    ///
-    /// Erasure is a representation choice — a `flags` value is a `u32` at
-    /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
-    /// name that has to match an impl must read the identity; only code that
-    /// cares how the value is stored should read [`Self::get`].
-    #[must_use]
-    pub fn get_unerased(&self, id: TypeId) -> &ResolvedType {
-        let id = self.box_redefinition(id).unwrap_or(id);
-        self.types
-            .get(id)
-            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
-    }
-
-    /// Whether `id` names a newtype, erased or not.
+    /// Whether `id` names a newtype.
     pub fn is_newtype(&self, id: TypeId) -> bool {
-        matches!(self.get_unerased(id), ResolvedType::Newtype { .. })
+        matches!(self.get(id), ResolvedType::Newtype { .. })
     }
 
     /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
@@ -527,7 +489,7 @@ impl TypeTable {
             .and_then(|ty| self.intern_map.get(ty).copied())
             .unwrap_or(resolved);
         TypeKey(
-            self.settled_spellings
+            self.erasures
                 .get(interned)
                 .copied()
                 .unwrap_or(interned),
@@ -677,7 +639,7 @@ impl TypeTable {
     /// own erasure, since the IR holds no other.
     pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
         self.types.ids().filter(|&id| {
-            !self.instances_settled || self.settled_spellings.get(id) == Some(&id)
+            !self.erased || self.erasures.get(id) == Some(&id)
         })
     }
 
@@ -1813,8 +1775,8 @@ impl TypeTable {
             if let Some(wrapper) = self.slot_box(id) {
                 components.push(wrapper);
             }
-            if let Some(&settled) = self.settled_spellings.get(id) {
-                components.push(settled);
+            if let Some(&erased) = self.erasures.get(id) {
+                components.push(erased);
             }
             if let Some(ty) = self.types.get(id) {
                 match ty {
@@ -1911,9 +1873,8 @@ impl TypeTable {
         });
         self.slot_boxes
             .retain(|_, wrapper| effective_keep.contains(wrapper));
-        self.settled_spellings
+        self.erasures
             .retain(|id, _| effective_keep.contains(&id));
-        self.unindexed.retain(|id| effective_keep.contains(id));
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -1933,7 +1894,6 @@ impl TypeTable {
         let indexed: Vec<(TypeId, ResolvedType)> = self
             .types
             .iter()
-            .filter(|(id, _)| !self.unindexed.contains(id))
             .map(|(id, ty)| (id, ty.clone()))
             .collect();
         for (id, ty) in indexed {
@@ -3023,20 +2983,6 @@ impl TypeTable {
         self.redirects.set_growing(id, target);
     }
 
-    /// Point each erasure redirect aimed at a reference [`Self::redefine_to`]
-    /// moved on at where it went, so `get` keeps its one hop: an erased
-    /// `type R = &i32` resolves to the `Box<i32>` its reference became.
-    pub fn follow_redefinitions(&mut self) {
-        let moved: Vec<(TypeId, TypeId)> = self
-            .redirects
-            .iter()
-            .filter_map(|(id, &to)| Some((id, *self.redirects.get(to)?)))
-            .collect();
-        for (id, to) in moved {
-            self.redirects.set_growing(id, to);
-        }
-    }
-
     /// Whether `id` bottoms out in a primitive, through any newtype chain.
     pub fn is_primitive_like(&self, id: TypeId) -> bool {
         self.primitive_head(id).is_some()
@@ -3220,9 +3166,9 @@ impl TypeTable {
             && !matches!(self.spelled_ref(wrapper), Some((_, RefKind::Shared)))
     }
 
-    /// How `id`'s own slot spells a reference, or `None` when it is not one: an
-    /// erased newtype redirected onto a reference is not. The sole reader of a
-    /// redefined reference; every other view answers `Box<T>`.
+    /// How `id`'s own slot spells a reference, or `None` when it is not one.
+    /// The sole reader of a redefined reference; every other view answers
+    /// `Box<T>`.
     pub fn spelled_ref(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
         match *self.types.get(id)? {
             ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
@@ -3741,7 +3687,7 @@ impl TypeTable {
             if assoc_name == "Output" && self.is_scalar_primitive_like(receiver) {
                 return Some(receiver);
             }
-            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(receiver) else {
+            let ResolvedType::Newtype { base_type, .. } = self.get(receiver) else {
                 return None;
             };
             receiver = *base_type;
@@ -3870,7 +3816,7 @@ impl TypeTable {
     /// The [`InstanceKey`] of `id`.
     pub fn instance_key(&self, id: TypeId) -> InstanceKey {
         let args = |type_args: &[TypeId]| type_args.iter().map(|a| self.instance_key(*a)).collect();
-        match self.get_unerased(id) {
+        match self.get(id) {
             ResolvedType::Resource { def, type_args }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Struct {
@@ -3941,7 +3887,7 @@ impl TypeTable {
             if let Some(found) = lookup(current) {
                 return Some(found);
             }
-            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(current) else {
+            let ResolvedType::Newtype { base_type, .. } = self.get(current) else {
                 return None;
             };
             current = *base_type;
@@ -4171,7 +4117,7 @@ impl TypeTable {
     /// [`Self::nominal_type_args`] leaves a newtype out, since a newtype's
     /// representation is its base's.
     pub fn declared_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
-        match self.get_unerased(type_id) {
+        match self.get(type_id) {
             ResolvedType::Newtype { type_args, .. } => Some(type_args.clone()),
             _ => self.nominal_type_args(type_id),
         }
@@ -5157,25 +5103,17 @@ impl TypeTable {
         self.intern(ResolvedType::Flags { def })
     }
 
-    /// Erase all `Newtype` and `Flags` entries from the type table by populating
-    /// the redirect map. After this call, `get(id)` for any erased `TypeId` returns
-    /// its ultimate base type (`Newtype` chains) or `u32` (`Flags`).
+    /// Map every type, and the members of every declaration and shape, to what
+    /// it erases to: from here on the IR holds no newtype and no `flags`.
     ///
     /// Must be called after monomorphize, whose dispatch reads the identities
     /// this replaces.
     pub fn erase_newtypes_and_flags(&mut self) {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
+        self.erased = true;
         for id in ids {
-            let redirect = match self.types.get(id).unwrap() {
-                ResolvedType::Newtype { .. } => Some(self.representation_head(id)),
-                ResolvedType::Flags { .. } => Some(TypeTable::U32),
-                _ => None,
-            };
-            if let Some(target) = redirect {
-                self.redirects.set_growing(id, target);
-            }
+            self.erase_type(id);
         }
-        self.settle_instance_spellings();
         self.erase_member_tables();
     }
 
@@ -5219,24 +5157,6 @@ impl TypeTable {
                 .or_insert(id);
         }
         self.anon_structs = shapes;
-    }
-
-    /// The type `id` names once newtypes and `flags` are erased, spelled with
-    /// erased arguments: the one id every spelling of that type shares.
-    pub fn erase_type(&mut self, id: TypeId) -> TypeId {
-        assert!(self.instances_settled, "erasure has run");
-        self.settle_spelling(id)
-    }
-
-    /// Settle every spelling, and each one interned from here on, now that
-    /// erasure redirects: a type argument naming an erased type would
-    /// otherwise key apart from the same type naming what it erases to.
-    fn settle_instance_spellings(&mut self) {
-        let ids: Vec<TypeId> = self.iter_type_ids().collect();
-        self.instances_settled = true;
-        for id in ids {
-            self.settle_spelling(id);
-        }
     }
 
     /// What each effect variable stands for once the effect check has solved
@@ -5346,13 +5266,10 @@ impl TypeTable {
     /// first: a link's impl serves every level above it, so the chain — not the
     /// receiver alone — says which type a call dispatches to (WEP 2026-01-29).
     /// References are stepped over. `None` when no link owns.
-    ///
-    /// Reads the unerased view: erasure redirects a link to its base, and the
-    /// erased view would report no chain at all.
     pub fn newtype_link_owning(&self, id: TypeId, owns: impl Fn(TypeId) -> bool) -> Option<TypeId> {
         let mut current = id;
         loop {
-            match self.get_unerased(current) {
+            match self.get(current) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = *inner,
                 ResolvedType::Newtype { base_type, .. } => {
                     if owns(current) {
@@ -5379,10 +5296,8 @@ impl TypeTable {
     ///
     /// Unlike [`Self::representation_head`] the walk stops at a `flags`
     /// type, which is a declaration carrying its own impls rather than a
-    /// stand-in for `u32`, and it reads the identity ([`Self::get_unerased`]):
-    /// erasure redirects a link to its base, and the erased view shows no chain
-    /// to walk. Identity is *not* inherited — a newtype names itself through
-    /// `Reflect` — so this never answers for a type's name.
+    /// stand-in for `u32`. Identity is *not* inherited — a newtype names itself
+    /// through `Reflect` — so this never answers for a type's name.
     pub fn reflect_structure_head(&self, id: TypeId) -> TypeId {
         self.newtype_chain(id)
             .last()
@@ -5404,7 +5319,7 @@ impl TypeTable {
 
     /// `id` and every type its newtype chain wraps, nearest first.
     fn newtype_chain(&self, id: TypeId) -> impl Iterator<Item = TypeId> {
-        std::iter::successors(Some(id), |&current| match self.get_unerased(current) {
+        std::iter::successors(Some(id), |&current| match self.get(current) {
             ResolvedType::Newtype { base_type, .. } => Some(*base_type),
             _ => None,
         })
@@ -5455,14 +5370,7 @@ impl TypeTable {
     /// and a `flags` type answered as `u32`, anything else unchanged.
     /// [`Self::reflect_structure_head`] answers the other question — where a
     /// declaration's impls live — and so stops at `flags`, which writes its own.
-    ///
-    /// Works before and after `erase_newtypes_and_flags()`: the redirect map is
-    /// consulted first, so `FieldName` answers `String` either way.
     pub fn representation_head(&self, id: TypeId) -> TypeId {
-        // Fast path: after erasure, redirects always point directly to the base.
-        if let Some(&redirect) = self.redirects.get(id) {
-            return redirect;
-        }
         let mut current = id;
         loop {
             match self
@@ -5470,14 +5378,7 @@ impl TypeTable {
                 .get(current)
                 .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
             {
-                ResolvedType::Newtype { base_type, .. } => {
-                    // Use redirect if already computed; otherwise follow the raw chain.
-                    current = self
-                        .redirects
-                        .get(*base_type)
-                        .copied()
-                        .unwrap_or(*base_type);
-                }
+                ResolvedType::Newtype { base_type, .. } => current = *base_type,
                 ResolvedType::Flags { .. } => return TypeTable::U32,
                 _ => return current,
             }
@@ -6270,8 +6171,8 @@ impl TypeTable {
     /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
     /// ultimate base and every `Flags` to `u32`, recursively through composite
     /// types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
-    /// name that matches the post-erasure call site, whose `field_ty` reads
-    /// through the erasure redirect map.
+    /// name that matches the post-erasure call site, whose `field_ty` is
+    /// erased.
     pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
@@ -6373,16 +6274,10 @@ impl TypeTable {
     pub fn impl_receiver_key(&self, id: TypeId) -> Receiver {
         let declared = |def: DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
-        // Unerased: which impls a type has is a fact about its identity, and
-        // erasure rewrites a newtype / flags id to the representation it is
-        // stored as, whose impls are a different set.
-        match self.get_unerased(id) {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
-                    "a reference unerased is a reference erased: `get_unerased` resolves the \
-                     box redefinition, the one rewrite that makes the two views differ",
-                ))
-            }
+        match self.get(id) {
+            resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => Receiver::Ref(
+                RefKind::from_resolved(resolved).expect("a reference has a reference kind"),
+            ),
             ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
             // The head is the declaration, arguments never spelled into it — an
             // `impl` header writes `MyArray`, not `MyArray<i32>`, and
@@ -6432,13 +6327,11 @@ impl TypeTable {
         self.fq_fn_name(resolved, |t| self.fq_type_name(t))
     }
 
-    /// The declaration a type's head names, with any arguments dropped. Read
-    /// off the identity ([`Self::get_unerased`]): this is the head an `impl`
-    /// header writes, and erasure would answer `u32` for a `flags` type and the
-    /// base's name for a newtype — templates no impl declares.
+    /// The declaration a type's head names, with any arguments dropped: the
+    /// head an `impl` header writes.
     #[must_use]
     pub fn fq_base_type_name(&self, id: TypeId) -> FqTypeName {
-        match self.get_unerased(id) {
+        match self.get(id) {
             ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
             ResolvedType::Enum { def }
             | ResolvedType::Variant { def, .. }
@@ -6769,7 +6662,7 @@ impl TypeTable {
     /// Impl block `def`'s target head at `head_args`; `None` where the target
     /// is no generic head of that arity.
     pub fn impl_target_at(&mut self, def: DefId, head_args: &[TypeId]) -> Option<TypeId> {
-        match self.get_unerased(self.impl_target(def).whole) {
+        match self.get(self.impl_target(def).whole) {
             ResolvedType::Struct {
                 def: StructDef::Decl(head),
                 type_args,
@@ -6837,7 +6730,7 @@ impl TypeTable {
             if self.nominal_def(link) == Some(decl) {
                 return self.declared_type_args(link);
             }
-            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+            let ResolvedType::Newtype { base_type, .. } = self.get(link) else {
                 return None;
             };
             link = *base_type;
@@ -6919,14 +6812,14 @@ impl TypeTable {
     pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
         let target = self.impl_target(def);
         if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) =
-            self.get_unerased(target.whole)
+            self.get(target.whole)
             && let ResolvedType::Ref(asked) | ResolvedType::MutRef(asked) = self.get(instance)
             && self.param_slot(*written).is_none()
         {
             let head = self.impl_receiver_key(*written);
             let mut link = self.peel_refs(*asked);
             while self.impl_receiver_key(link) != head {
-                let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+                let ResolvedType::Newtype { base_type, .. } = self.get(link) else {
                     return false;
                 };
                 link = *base_type;
@@ -6934,7 +6827,7 @@ impl TypeTable {
         }
         let written = &target.args;
         let instance = self.peel_refs(instance);
-        let args = match self.get_unerased(instance) {
+        let args = match self.get(instance) {
             ResolvedType::Struct { type_args, .. } => type_args.clone(),
             _ => self.declared_type_args(instance).unwrap_or_default(),
         };
@@ -6945,7 +6838,7 @@ impl TypeTable {
     /// names a head, not a shape, over distinct binders.
     pub fn impl_covers_every_instance(&self, def: DefId) -> bool {
         let target = self.impl_target(def);
-        let names_a_head = match self.get_unerased(target.whole) {
+        let names_a_head = match self.get(target.whole) {
             ResolvedType::Ref(_)
             | ResolvedType::MutRef(_)
             | ResolvedType::Unit
@@ -7242,7 +7135,7 @@ type Term = (Side, TypeId);
 const TEMPLATE_NAME_MAX_CHARS: usize = 50;
 
 /// An interned shape with the mangle it was minted under. The mangle renders
-/// the shape's field types, and erasure later redirects a newtype among them
+/// the shape's field types, and erasure later rewrites a newtype among them
 /// to its base: rendering again would spell a different name from the one the
 /// `TirStruct` was registered under, so the name is fixed at interning.
 #[derive(Debug, Clone)]
@@ -7292,7 +7185,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Set `id`'s value, growing the backing storage with empty slots as
-    /// needed. Used for sparse maps such as erasure redirects.
+    /// needed. Used for sparse maps such as `redirects`.
     pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
         let idx = id.0 as usize;
         if idx >= self.slots.len() {
@@ -7759,21 +7652,17 @@ mod tests {
         assert_ne!(table.type_key(shared), table.type_key(TypeTable::I32));
     }
 
-    /// A redefinition reaches every view of the type: only `is_mut_box` reads
-    /// the reference left in the slot. The spelling also leaves `intern`, so a
-    /// later ask for it mints a live reference.
+    /// A redefinition reaches `get`: only `is_mut_box` reads the reference left
+    /// in the slot. The spelling also leaves `intern`, so a later ask for it
+    /// mints a live reference.
     #[test]
-    fn a_redefinition_reaches_every_view_of_the_type() {
+    fn a_redefinition_reaches_get() {
         let mut table = TypeTable::new();
         let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
         let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
         table.redefine_to(redefined, shared);
 
         assert_matches!(table.get(redefined), ResolvedType::Ref(TypeTable::I32));
-        assert_matches!(
-            table.get_unerased(redefined),
-            ResolvedType::Ref(TypeTable::I32)
-        );
         let minted = table.intern(ResolvedType::MutRef(TypeTable::I32));
         assert_ne!(minted, redefined);
         assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));

@@ -682,7 +682,7 @@ fn instance_template(
 /// `receiver` is named by. A call through a reference is named by the
 /// reference, whichever level of its pointee's chain answers.
 fn chain_link(receiver: TypeId, depth: u32, tt: &TypeTable) -> TypeId {
-    let (steps, mut level) = match tt.get_unerased(receiver) {
+    let (steps, mut level) = match tt.get(receiver) {
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) if depth.is_multiple_of(2) => {
             return receiver;
         }
@@ -690,7 +690,7 @@ fn chain_link(receiver: TypeId, depth: u32, tt: &TypeTable) -> TypeId {
         _ => (depth, receiver),
     };
     for _ in 0..steps {
-        level = match tt.get_unerased(level) {
+        level = match tt.get(level) {
             ResolvedType::Newtype { base_type, .. } => *base_type,
             ResolvedType::Flags { .. } => TypeTable::U32,
             // Only a newtype over a reference goes on through one.
@@ -961,7 +961,7 @@ pub(crate) fn written_newtype_link(
 ) -> Option<TypeId> {
     written_impl_link(trait_env, trait_name, tt.peel_refs(receiver), tt)
         .map(|(link, _)| link)
-        .filter(|&link| matches!(tt.get_unerased(link), ResolvedType::Newtype { .. }))
+        .filter(|&link| matches!(tt.get(link), ResolvedType::Newtype { .. }))
 }
 
 /// The reflection trait `bound` names, or `None` for any other bound.

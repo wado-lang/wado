@@ -2832,7 +2832,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declares `method`: that declaration shadows the one its base supplies.
     fn own_newtype_static(&self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
         let ResolvedType::Newtype { def, .. } =
-            *self.tysys.type_table.borrow().get_unerased(target)
+            *self.tysys.type_table.borrow().get(target)
         else {
             return None;
         };

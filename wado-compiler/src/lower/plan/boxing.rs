@@ -390,7 +390,6 @@ impl TypeBuilder {
             self.box_type_ids.insert(r.type_id);
             type_table.register_box_payload(r.type_id, r.payload);
         }
-        type_table.follow_redefinitions();
         for (&inner, &wrapper) in &self.box_struct_types {
             type_table.register_box_payload(wrapper, inner);
         }

@@ -130,8 +130,9 @@ reference that should be a `Box`.
 
 ### 4. Source questions are answered before erasure
 
-After erasure, nothing asks for a type's source identity: `get_unerased` and
-`is_newtype` are read only by the elaborator, the effect check and synthesis.
+After erasure, nothing asks for a type's source identity: the newtype chain
+walks and `is_newtype` are read only by the elaborator, the effect check and
+synthesis.
 What still reads a source spelling after erasure, the names lowering mints
 (`name_unboxed`, `mangle_type_arg_unboxed`) and the reflect bridges that name a
 call from the erased mangle, reads it from what the rewrite leaves: the erased
@@ -173,15 +174,17 @@ Each step leaves the compiler green and is a commit series of its own.
 - [x] In the modules that run only before erasure, replace `type_key` and
   `same_type` with `==`. `TypeTable`'s own helpers, which later phases share,
   wait for the step that removes the aliasing.
-- [ ] Add `erase_type` and rewrite the `FlatPackage` through it where erasure
-  runs, with the debug assertion. Done when `erase_newtypes_and_flags`,
-  `redirects` and `settled_spellings` are gone.
+- [x] Add `erase_type` and rewrite the `FlatPackage` through it where erasure
+  runs: functions, globals, struct and variant declarations, and the
+  declared members and anonymous shapes the table keeps. From erasure on,
+  `intern` answers the erased id and `iter_type_ids` yields only erased ids.
+  Erasure no longer touches `redirects`, and `get_unerased` is `get`.
 - [ ] Add `box_type` and rewrite the `FlatPackage` through it where boxing
-  runs. Done when `redefine_to`, `follow_redefinitions` and
-  `box_payload_types` are gone.
+  runs. Done when `redefine_to`, `redirects` and `box_payload_types` are
+  gone.
 - [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`,
-  `get_unerased`, the `_unboxed` and `_resolving_newtypes` renderers, and
-  the rule in `wado-compiler/AGENTS.md`.
+  the `_unboxed` and `_resolving_newtypes` renderers, and the rule in
+  `wado-compiler/AGENTS.md`.
 
 ## Known gaps
 

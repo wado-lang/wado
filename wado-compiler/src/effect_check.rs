@@ -2250,7 +2250,7 @@ impl EffectIndex<'_> {
         let mut out = Vec::new();
         let mut current = id;
         loop {
-            match self.types.get_unerased(current) {
+            match self.types.get(current) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = *inner,
                 ResolvedType::Newtype { base_type, .. } => {
                     out.push(self.spelled_solved(current, rows));

@@ -1129,7 +1129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             let ResolvedType::Newtype { base_type, .. } =
-                self.tysys.type_table.borrow().get_unerased(link).clone()
+                self.tysys.type_table.borrow().get(link).clone()
             else {
                 return false;
             };

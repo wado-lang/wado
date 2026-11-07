@@ -1146,14 +1146,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let (newtype_def, base) = {
             let table = self.tysys.type_table.borrow();
-            let ResolvedType::Newtype { def, .. } = table.get_unerased(named) else {
+            let ResolvedType::Newtype { def, .. } = table.get(named) else {
                 unreachable!("`named` is a newtype");
             };
             (*def, table.reflect_structure_head(named))
         };
         let expected = expected.map(|ty| {
             let table = self.tysys.type_table.borrow();
-            match table.get_unerased(ty) {
+            match table.get(ty) {
                 ResolvedType::Newtype { def, .. } if *def == newtype_def => {
                     table.reflect_structure_head(ty)
                 }

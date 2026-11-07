@@ -2297,9 +2297,9 @@ pub(super) fn generate_case_bridge_helpers(
     ref_variant_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    // Both mangles must match the post-erasure call site: lowering reads the
-    // subject and payload through the erasure redirect map, so a `flags` or
-    // newtype spelled here would mint a name nothing calls.
+    // Both mangles must match the post-erasure call site, whose subject and
+    // payload are erased, so a `flags` or newtype spelled here would mint a
+    // name nothing calls.
     let mangled_variant = type_table.borrow().mangle_type_arg_erased(variant_type);
 
     let mut by_payload: hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
