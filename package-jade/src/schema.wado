@@ -2,7 +2,7 @@
 //! read from it.
 
 use { Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Document, Node } from "./document.wado";
 
 /// A JSON Schema: `true` admits every instance, `false` none, and an object
@@ -35,7 +35,7 @@ pub struct SchemaObject {
     /// `$id`
     pub id: Option<String> = null,
     /// `$vocabulary`
-    pub vocabulary: TreeMap<String, bool> = TreeMap::new(),
+    pub vocabulary: HashMap<String, bool> = HashMap::new(),
     /// `$anchor`
     pub anchor: Option<String> = null,
     /// `$dynamicAnchor`
@@ -79,11 +79,11 @@ pub struct SchemaObject {
     pub max_items: Option<i32> = null,
     pub unique_items: bool = false,
     pub unevaluated_items: Option<Schema> = null,
-    pub properties: TreeMap<String, Schema> = TreeMap::new(),
-    pub pattern_properties: TreeMap<String, Schema> = TreeMap::new(),
+    pub properties: HashMap<String, Schema> = HashMap::new(),
+    pub pattern_properties: HashMap<String, Schema> = HashMap::new(),
     pub required: List<String> = [],
-    pub dependent_required: TreeMap<String, List<String>> = TreeMap::new(),
-    pub dependent_schemas: TreeMap<String, Schema> = TreeMap::new(),
+    pub dependent_required: HashMap<String, List<String>> = HashMap::new(),
+    pub dependent_schemas: HashMap<String, Schema> = HashMap::new(),
     pub additional_properties: Option<Schema> = null,
     pub property_names: Option<Schema> = null,
     pub min_properties: Option<i32> = null,
@@ -95,8 +95,8 @@ pub struct SchemaObject {
     pub read_only: bool = false,
     pub write_only: bool = false,
     /// `$defs`
-    pub defs: TreeMap<String, Schema> = TreeMap::new(),
-    pub extra: TreeMap<String, Document> = TreeMap::new(),
+    pub defs: HashMap<String, Schema> = HashMap::new(),
+    pub extra: HashMap<String, Document> = HashMap::new(),
 }
 
 impl Schema {
@@ -228,7 +228,7 @@ trait KeywordSink with () {
         return self.put(key, value);
     }
 
-    fn map<V: Serialize>(&mut self, key: String, value: &TreeMap<String, V>) -> Result<(), SerializeError> {
+    fn map<V: Serialize>(&mut self, key: String, value: &HashMap<String, V>) -> Result<(), SerializeError> {
         if value.is_empty() {
             return Result::Ok(());
         }
@@ -537,11 +537,11 @@ fn read_map<T>(
     at: &String,
     of: String,
     read: fn(&Node, &String) -> Result<T, SchemaError>,
-) -> Result<TreeMap<String, T>, SchemaError> {
+) -> Result<HashMap<String, T>, SchemaError> {
     if !v.kind() matches { Object } {
         return fail(at, `must be an object of ${of}`);
     }
-    let mut out = TreeMap::<String, T>::new();
+    let mut out = HashMap::<String, T>::new();
     for let [key, value] of v.entries() {
         out[key.to_string()] = read(&value, &`${*at}/${pointer_token(key)}`)?;
     }

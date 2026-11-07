@@ -1,5 +1,5 @@
 use { JsonSchema, SchemaGenerator, schema_for } from "../src/lib.wado";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 use { to_string } from "core:json";
 
 fn inline<T: JsonSchema>() -> String {
@@ -78,6 +78,11 @@ test "List, TreeSet and TreeMap" {
     assert inline::<List<bool>>() == `{"type":"array","items":{"type":"boolean"}}`;
     assert inline::<TreeSet<String>>() == `{"type":"array","items":{"type":"string"},"uniqueItems":true}`;
     assert inline::<TreeMap<String, bool>>() == `{"type":"object","additionalProperties":{"type":"boolean"}}`;
+}
+
+test "HashSet and HashMap take TreeSet's and TreeMap's schemas" {
+    assert inline::<HashSet<String>>() == `{"type":"array","items":{"type":"string"},"uniqueItems":true}`;
+    assert inline::<HashMap<String, bool>>() == `{"type":"object","additionalProperties":{"type":"boolean"}}`;
 }
 
 test "a tuple is an array of exactly its arity" {

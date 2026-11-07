@@ -2,7 +2,7 @@
 //! writes for the type, and what the derived `Deserialize` reads.
 
 use { Serialize, wire_name } from "core:serde";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 use { Document } from "./document.wado";
 use { JsonTypes, Schema, SchemaObject } from "./schema.wado";
 
@@ -18,22 +18,22 @@ pub trait JsonSchema with () {
 /// `$ref` at every use, which is also how a recursive type ends.
 pub struct SchemaGenerator {
     prefix: String,
-    definitions: TreeMap<String, Schema>,
+    definitions: HashMap<String, Schema>,
 }
 
 impl SchemaGenerator {
     /// Refers to definitions under the root schema's `$defs`.
     pub fn new() -> SchemaGenerator {
-        return SchemaGenerator { prefix: "#/$defs/", definitions: TreeMap::new() };
+        return SchemaGenerator { prefix: "#/$defs/", definitions: HashMap::new() };
     }
 
     /// Refers to definitions under an OpenAPI document's `components/schemas`.
     pub fn openapi() -> SchemaGenerator {
-        return SchemaGenerator { prefix: "#/components/schemas/", definitions: TreeMap::new() };
+        return SchemaGenerator { prefix: "#/components/schemas/", definitions: HashMap::new() };
     }
 
     /// The definitions built so far, by name.
-    pub fn definitions(&self) -> TreeMap<String, Schema> {
+    pub fn definitions(&self) -> HashMap<String, Schema> {
         return self.definitions;
     }
 
@@ -437,18 +437,35 @@ impl<T: JsonSchema> JsonSchema for List<T> {
     }
 }
 
+fn set_of(items: Schema) -> Schema {
+    return Schema::Object(SchemaObject { ..array_of(items), unique_items: true });
+}
+
+fn string_keyed(values: Schema) -> Schema {
+    return Schema::Object(SchemaObject { type: JsonTypes::Object, additional_properties: Option::Some(values) });
+}
+
 impl<T: Ord + JsonSchema> JsonSchema for TreeSet<T> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return Schema::Object(SchemaObject { ..array_of(T::json_schema(gen)), unique_items: true });
+        return set_of(T::json_schema(gen));
+    }
+}
+
+impl<T: Hash + JsonSchema> JsonSchema for HashSet<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return set_of(T::json_schema(gen));
     }
 }
 
 impl<V: JsonSchema> JsonSchema for TreeMap<String, V> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return Schema::Object(SchemaObject {
-            type: JsonTypes::Object,
-            additional_properties: Option::Some(V::json_schema(gen)),
-        });
+        return string_keyed(V::json_schema(gen));
+    }
+}
+
+impl<V: JsonSchema> JsonSchema for HashMap<String, V> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return string_keyed(V::json_schema(gen));
     }
 }
 
