@@ -193,10 +193,10 @@ test "arguments are evaluated left to right" {
 An argument meeting a `&ListView<T>` parameter converts to it from any type
 implementing `ListArg<T>`, both from `core:linear`. A `List<T>`, or a newtype
 over one such as `ByteList`, copies its elements into a block of the view's
-own. A `&LinearArray<T>` lends its own block. A reference to any of these
-converts as what it points at, and a `&mut` as the `&` it passes for. A list
-literal is a `List<T>` first. A
-`&ListView<T>` passes as it is.
+own. A `&LinearArray<T>` lends its own block. A reference converts by its own
+`ListArg<T>` implementation where it has one. Otherwise a `&mut` converts as the
+`&` it passes for, and a reference as what it points at. A list literal is a
+`List<T>` first. A `&ListView<T>` passes as it is.
 
 <!-- {"fixture":"list_view_arg.wado"} -->
 

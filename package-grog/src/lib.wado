@@ -231,27 +231,21 @@ impl<M: Message + Default> Messages<M> {
             let tag_end = held_or_all(input, varint_held(input, 0));
             let mut tag = reader_of(input, tag_end);
             tag.next_field(0)?;
-            let found = tag.wire_type;
-            let wanted = tag.number == number && found == wire_type;
-            if found == WireType::Len && !wanted {
-                drop_length_delimited(input, tag_end)?;
+            if tag.number != number || tag.wire_type != wire_type {
+                drop_field(input, 0)?;
                 continue;
             }
-            hold_value(input, found, tag_end, 0);
+            hold_value(input, number, wire_type, tag_end, 0);
             let mut r = reader_of(input, input.len());
             r.next_field(0)?;
-            if wanted {
-                let mut m = M::default();
-                if wire_type == WireType::Len {
-                    r.merge_nested(&mut m)?;
-                } else {
-                    r.merge_group(&mut m)?;
-                }
-                input.consume(r.pos - input.start());
-                return Result::Ok(Option::Some(m));
+            let mut m = M::default();
+            if wire_type == WireType::Len {
+                r.merge_nested(&mut m)?;
+            } else {
+                r.merge_group(&mut m)?;
             }
-            r.skip_value()?;
             input.consume(r.pos - input.start());
+            return Result::Ok(Option::Some(m));
         }
         return Result::Ok(null);
     }
@@ -310,10 +304,10 @@ fn held_or_all(input: &LinearBuffer, varint: Option<[u64, i32]>) -> i32 {
     };
 }
 
-/// Read until the value behind a tag of `wire_type`, from `at` on, is held:
-/// its end, or `None` where the stream ends first or the value is malformed. A
-/// group `depth` groups deep holds its fields to its end-group tag.
-fn hold_value(input: &mut LinearBuffer, wire_type: WireType, at: i32, depth: i32) -> Option<i32> {
+/// Read until the value behind a tag of `number` and `wire_type`, from `at` on,
+/// is held: its end, or `None` where the stream ends first or the value is
+/// malformed. A group `depth` groups deep holds its fields to its end-group tag.
+fn hold_value(input: &mut LinearBuffer, number: i32, wire_type: WireType, at: i32, depth: i32) -> Option<i32> {
     return match wire_type {
         Varint => {
             let [_, end] = varint_held(input, at)?;
@@ -328,14 +322,14 @@ fn hold_value(input: &mut LinearBuffer, wire_type: WireType, at: i32, depth: i32
             }
             held_to(input, start + n as i32);
         },
-        SGroup => group_held(input, at, depth),
+        SGroup => group_held(input, at, number, depth),
         EGroup => null,
     };
 }
 
-/// Read until the fields of a group `depth` groups deep, from `at` on, are held
-/// through the end-group tag that follows them, which the reader then checks.
-fn group_held(input: &mut LinearBuffer, at: i32, depth: i32) -> Option<i32> {
+/// Read until the fields of the group numbered `number`, `depth` groups deep,
+/// from `at` on, are held through its end-group tag.
+fn group_held(input: &mut LinearBuffer, at: i32, number: i32, depth: i32) -> Option<i32> {
     // Past the limit a reader refuses the group at its tag.
     if depth == DEPTH_LIMIT {
         return null;
@@ -345,9 +339,10 @@ fn group_held(input: &mut LinearBuffer, at: i32, depth: i32) -> Option<i32> {
         let [tag, value_start] = varint_held(input, end)?;
         let wire_type = wire_type_of(tag & 7)?;
         if wire_type == WireType::EGroup {
-            return Option::Some(value_start);
+            // An end-group tag for another number is the reader's to refuse.
+            return if tag >> 3 == number as u64 { Option::Some(value_start) } else { null };
         }
-        end = hold_value(input, wire_type, value_start, depth + 1)?;
+        end = hold_value(input, (tag >> 3) as i32, wire_type, value_start, depth + 1)?;
     }
 }
 
@@ -355,9 +350,48 @@ fn held_to(input: &mut LinearBuffer, end: i32) -> Option<i32> {
     return if input.fill(end) { Option::Some(end) } else { null };
 }
 
+/// Drop the field `input` starts with, `depth` groups deep, a part at a time: a
+/// value no caller decodes is never held whole. What is malformed or cut short
+/// is refused where a decode refuses it.
+fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> {
+    let tag_end = held_or_all(input, varint_held(input, 0));
+    let mut header = reader_of(input, tag_end);
+    header.next_field(0)?;
+    return match header.wire_type {
+        Len => drop_length_delimited(input, tag_end),
+        SGroup => {
+            header.depth = depth;
+            header.enter()?;
+            input.consume(tag_end);
+            drop_group(input, header.number, depth + 1);
+        },
+        Varint | I64 | I32 => {
+            hold_value(input, header.number, header.wire_type, tag_end, depth);
+            let mut r = reader_of(input, input.len());
+            r.next_field(0)?;
+            r.skip_value()?;
+            input.consume(r.pos - input.start());
+            Result::Ok(());
+        },
+        EGroup => unreachable(),
+    };
+}
+
+/// Drop the fields of the group numbered `number`, `depth` groups deep, through
+/// its end-group tag.
+fn drop_group(input: &mut LinearBuffer, number: i32, depth: i32) -> Result<(), DecodeError> {
+    loop {
+        let mut r = reader_of(input, held_or_all(input, varint_held(input, 0)));
+        if !r.next_field(number)? {
+            input.consume(r.pos - input.start());
+            return Result::Ok(());
+        }
+        drop_field(input, depth)?;
+    }
+}
+
 /// Drop the length-delimited field `input` starts with, its tag held to
-/// `tag_end`, a part at a time: a value no caller decodes is never held whole.
-/// One the stream cuts short is refused where a decode refuses it.
+/// `tag_end`.
 fn drop_length_delimited(input: &mut LinearBuffer, tag_end: i32) -> Result<(), DecodeError> {
     let mut r = reader_of(input, held_or_all(input, varint_held(input, tag_end)));
     r.next_field(0)?;

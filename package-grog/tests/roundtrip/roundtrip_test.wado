@@ -254,6 +254,47 @@ test "a group closed by another number's end tag is refused without reading on" 
     assert first matches { Some(Err(_)) };
 }
 
+test "a nested group closed by another number's end tag is refused without reading on" {
+    // Group 8 opens, group 10 opens inside it, and an end-group tag for 9 follows.
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: unhex("43534c"), at: 0, open: true };
+    let first = with &mut source do {
+        legacy::Record::tag_of(LinearBuffer::of_stream(rx)).next();
+    };
+    assert first matches { Some(Err(e)) && e.offset == 3 };
+}
+
+test "a group of another field is dropped as it is read, never held whole" {
+    let record = legacy::Record {
+        id: Option::Some(1),
+        note: Option::Some(legacy::RecordNote { text: Option::Some("a".repeat(1 << 20)) }),
+        tag: [
+            legacy::RecordTag { name: Option::Some("x") },
+        ],
+    };
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: grog::encode(&record), at: 0, step: i32::MAX };
+    let read: List<Result<legacy::RecordTag, grog::DecodeError>> = with &mut source do {
+        legacy::Record::tag_of(LinearBuffer::of_stream(rx)).collect();
+    };
+    assert read.len() == 1;
+    assert read[0].unwrap() == record.tag[0];
+    assert source.largest < 1 << 18;
+}
+
+test "a group of another field nesting too deep is refused where a decode refuses it" {
+    // Group 6, then unknown groups numbered 10 nested inside it past the limit.
+    let input = unhex(`33${"53".repeat(100)}`);
+    let Err(whole) = grog::decode::<legacy::Record, ByteList>(input) else {
+        unreachable();
+    };
+    let read: List<Result<legacy::RecordTag, grog::DecodeError>> = legacy::Record::tag_of(held(&input)).collect();
+    assert read.len() == 1;
+    assert read[0] matches { Err(e) && e.offset == whole.offset && e.reason == whole.reason };
+}
+
 test "a value of another field is dropped as it is read, never held whole" {
     let account = Account {
         name: "a".repeat(1 << 20),
