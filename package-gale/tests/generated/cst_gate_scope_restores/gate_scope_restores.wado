@@ -3413,9 +3413,9 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_ID {
-        let mut _atn_false: List<i32> = [];
-        if !(gate._scan_edge != pos || gate.no_brace == 0) { _atn_false.push(4); }
-        let _atn_alt = atn.predict(&ATN_SIM, 2, tokens, pos, TK_EOF, min_prec, &_atn_false);
+        let mut _atn_alt_false: List<i32> = [];
+        if !(gate._scan_edge != pos || gate.no_brace == 0) { _atn_alt_false.push(4); }
+        let _atn_alt = atn.predict(&ATN_SIM, 2, tokens, pos, TK_EOF, min_prec, &_atn_alt_false);
         if _atn_alt < 0 {
             return -1;
         }
@@ -3663,9 +3663,9 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let mut _atn_false: List<i32> = [];
-        if p.no_brace != 0 { _atn_false.push(4); }
-        let _atn_alt = p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, min_prec, &_atn_false);
+        let mut _atn_alt_false: List<i32> = [];
+        if p.no_brace != 0 { _atn_alt_false.push(4); }
+        let _atn_alt = p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, min_prec, &_atn_alt_false);
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return;

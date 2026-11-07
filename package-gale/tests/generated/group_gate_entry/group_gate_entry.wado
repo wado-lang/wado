@@ -1621,6 +1621,7 @@ fn _parse_star__inner(p: &mut Parser) -> () {
                 p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
+                if !(p.scan_gate._scan_edge != pos || ( false )) { break gd_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
                 pos += 1;
                 gd_best = pos;
@@ -1718,6 +1719,7 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
                 p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
+                if !(p.scan_gate._scan_edge != pos || ( false )) { break gd_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
                 pos += 1;
                 gd_best = pos;
@@ -1870,8 +1872,15 @@ fn _parse_solo_opt__inner(p: &mut Parser) -> () {
             p.scan_gate._scan_edge = p.pos;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
-            pos += 1;
+            sg_2_done: {
+                sg_2: {
+                    if !(p.scan_gate._scan_edge != pos || ( false )) { break sg_2; }
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_2; }
+                    pos += 1;
+                    break sg_2_done;
+                }
+                break opt_enter_scan;
+            }
             if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
             pos += 1;
             opt_enter = true;
