@@ -2,7 +2,7 @@
 //! read from it.
 
 use { Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { Document, Node } from "./document.wado";
 
 /// A JSON Schema: `true` admits every instance, `false` none, and an object
@@ -51,10 +51,6 @@ pub struct SchemaObject {
     /// Empty when `type` is the empty array, which admits nothing.
     pub type: Option<JsonTypes> = null,
     pub format: Option<String> = null,
-    /// `x-wado-format`: the Wado type whose text the value is, in symbol
-    /// notation (`core:temporal#Instant`). An annotation, which no validator
-    /// asserts.
-    pub wado_format: Option<String> = null,
     pub content_encoding: Option<String> = null,
     pub content_media_type: Option<String> = null,
     pub content_schema: Option<Schema> = null,
@@ -157,11 +153,8 @@ impl SchemaObject {
         k.some("$comment", &self.comment)?;
         k.some("title", &self.title)?;
         k.some("description", &self.description)?;
-        if let Some(types) = self.type {
-            k.put("type", &TypeKeyword { types })?;
-        }
+        k.some("type", &self.type.map(|types| TypeKeyword { types }))?;
         k.some("format", &self.format)?;
-        k.some("x-wado-format", &self.wado_format)?;
         k.some("contentEncoding", &self.content_encoding)?;
         k.some("contentMediaType", &self.content_media_type)?;
         k.some("contentSchema", &self.content_schema)?;
@@ -207,16 +200,93 @@ impl SchemaObject {
         k.flag("readOnly", self.read_only)?;
         k.flag("writeOnly", self.write_only)?;
         k.map("$defs", &self.defs)?;
-        for let [key, value] of self.extra.entries() {
-            k.put(*key, value)?;
+        return Result::Ok(());
+    }
+
+    /// Breaks none of the rules Draft 2020-12's meta-schema states on this
+    /// object's own keywords, at the JSON Pointer `at` to it. Each subschema is
+    /// checked where it is read, written or compiled.
+    internal fn check(&self, at: &String) -> Result<(), SchemaError> {
+        if let Some(id) = &self.id && let Some(hash) = id.find("#") && hash != id.len() - 1 {
+            return fail(&`${*at}/$id`, "must have an empty fragment or none");
+        }
+        let anchors: List<[String, Option<String>]> = [["$anchor", self.anchor], ["$dynamicAnchor", self.dynamic_anchor]];
+        for let [keyword, anchor] of anchors {
+            if let Some(a) = &anchor && !is_anchor(a) {
+                return fail(
+                    &`${*at}/${keyword}`,
+                    "must be a letter or `_`, then letters, digits, `-`, `.` or `_`",
+                );
+            }
+        }
+        if let Some(m) = self.multiple_of && !(m > 0.0) {
+            return fail(&`${*at}/multipleOf`, "must be greater than 0");
+        }
+        let counts: List<[String, Option<i32>]> = [
+            ["minLength", self.min_length],
+            ["maxLength", self.max_length],
+            ["minContains", self.min_contains],
+            ["maxContains", self.max_contains],
+            ["minItems", self.min_items],
+            ["maxItems", self.max_items],
+            ["minProperties", self.min_properties],
+            ["maxProperties", self.max_properties],
+        ];
+        for let [keyword, count] of counts {
+            if let Some(n) = count && n < 0 {
+                return fail(&`${*at}/${keyword}`, "must be a non-negative integer");
+            }
+        }
+        check_names(&self.required, `${*at}/required`)?;
+        for let [key, names] of self.dependent_required.entries() {
+            check_names(names, `${*at}/dependentRequired/${pointer_token(key)}`)?;
+        }
+        for let key of self.extra.keys() {
+            if KEYWORDS.contains(*key) {
+                return fail(&`${*at}/${pointer_token(key)}`, "is a keyword Draft 2020-12 defines");
+            }
         }
         return Result::Ok(());
     }
 }
 
-/// Where `SchemaObject::each_keyword` sends each keyword it writes: once to
-/// count them, as a map must know its length before its first entry, and once
-/// to write them.
+/// Whether `a` is an anchor name: `^[A-Za-z_][-A-Za-z0-9._]*$`.
+fn is_anchor(a: &String) -> bool {
+    if a.is_empty() {
+        return false;
+    }
+    for let [i, c] of a.bytes().enumerate() {
+        let start = c.is_ascii_alphabetic() || c == b'_';
+        if !start && (i == 0 || !(c.is_ascii_digit() || c == b'-' || c == b'.')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `required` and `dependentRequired` hold distinct names.
+fn check_names(names: &List<String>, at: String) -> Result<(), SchemaError> {
+    let mut seen = HashSet::<String>::new();
+    for let [i, name] of names.iter_ref().enumerate() {
+        if !seen.insert(*name) {
+            return fail(&`${at}/${i}`, "repeats a name");
+        }
+    }
+    return Result::Ok(());
+}
+
+/// Every keyword Draft 2020-12 defines, which `extra` may not hold.
+global KEYWORDS: HashSet<String> = keyword_names();
+
+fn keyword_names() -> HashSet<String> {
+    let mut names = KeywordNames { names: HashSet::new() };
+    SchemaObject {}.each_keyword(&mut names).unwrap();
+    return names.names;
+}
+
+/// Where `SchemaObject::each_keyword` sends each keyword: to count them, as a
+/// map must know its length before its first entry, to write them, or to name
+/// them all.
 trait KeywordSink with () {
     fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError>;
 
@@ -260,6 +330,38 @@ impl KeywordSink for KeywordCount {
     }
 }
 
+/// Takes every keyword, present or not.
+struct KeywordNames {
+    names: HashSet<String>,
+}
+
+impl KeywordSink for KeywordNames {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
+        self.names.insert(key);
+        return Result::Ok(());
+    }
+
+    fn some<V: Serialize>(&mut self, key: String, value: &Option<V>) -> Result<(), SerializeError> {
+        self.names.insert(key);
+        return Result::Ok(());
+    }
+
+    fn list<V: Serialize>(&mut self, key: String, value: &List<V>) -> Result<(), SerializeError> {
+        self.names.insert(key);
+        return Result::Ok(());
+    }
+
+    fn map<V: Serialize>(&mut self, key: String, value: &HashMap<String, V>) -> Result<(), SerializeError> {
+        self.names.insert(key);
+        return Result::Ok(());
+    }
+
+    fn flag(&mut self, key: String, value: bool) -> Result<(), SerializeError> {
+        self.names.insert(key);
+        return Result::Ok(());
+    }
+}
+
 struct KeywordWriter<M> {
     map: M,
 }
@@ -273,10 +375,16 @@ impl<M: SerializeMap> KeywordSink for KeywordWriter<M> {
 
 impl Serialize for SchemaObject {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut count = KeywordCount { n: 0 };
+        if let Err(e) = self.check(&"") {
+            return Result::Err(SerializeError::unsupported_value(`${e}`));
+        }
+        let mut count = KeywordCount { n: self.extra.len() };
         self.each_keyword(&mut count)?;
         let mut writer = KeywordWriter { map: s.begin_map(count.n)? };
         self.each_keyword(&mut writer)?;
+        for let [key, value] of self.extra.entries() {
+            writer.put(*key, value)?;
+        }
         return writer.map.end();
     }
 }
@@ -382,7 +490,6 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "description" => s.description = Option::Some(read_string(v, &here)?),
             "type" => s.type = Option::Some(read_types(v, &here)?),
             "format" => s.format = Option::Some(read_string(v, &here)?),
-            "x-wado-format" => s.wado_format = Option::Some(read_string(v, &here)?),
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
             "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
             "contentSchema" => s.content_schema = Option::Some(read_schema(v, &here)?),
@@ -395,13 +502,7 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "if" => s.if = Option::Some(read_schema(v, &here)?),
             "then" => s.then = Option::Some(read_schema(v, &here)?),
             "else" => s.else = Option::Some(read_schema(v, &here)?),
-            "multipleOf" => {
-                let m = read_number(v, &here)?;
-                if m <= 0.0 {
-                    return fail(&here, "must be greater than 0");
-                }
-                s.multiple_of = Option::Some(m);
-            },
+            "multipleOf" => s.multiple_of = Option::Some(read_number(v, &here)?),
             "minimum" => s.minimum = Option::Some(read_number(v, &here)?),
             "exclusiveMinimum" => s.exclusive_minimum = Option::Some(read_number(v, &here)?),
             "maximum" => s.maximum = Option::Some(read_number(v, &here)?),
@@ -436,6 +537,7 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             _ => s.extra[key.to_string()] = value.to_document(),
         }
     }
+    s.check(at)?;
     return Result::Ok(s);
 }
 
@@ -460,17 +562,14 @@ fn read_number(v: &Node, at: &String) -> Result<f64, SchemaError> {
     return fail(at, "must be a number");
 }
 
-/// A non-negative integer, which may be spelled with a fraction of zero. A
-/// count past `i32::MAX` is held at `i32::MAX`, which no list or string length
-/// reaches either.
+/// An integer, which may be spelled with a fraction of zero. A count past
+/// `i32::MAX` is held at `i32::MAX`, which no list or string length reaches
+/// either; `SchemaObject::check` rejects a negative one.
 fn read_count(v: &Node, at: &String) -> Result<i32, SchemaError> {
-    let Some(n) = v.as_f64() else {
-        return fail(at, "must be a non-negative integer");
-    };
-    if n < 0.0 || n != f64::trunc(n) {
-        return fail(at, "must be a non-negative integer");
+    if let Some(n) = v.as_f64() && n == f64::trunc(n) {
+        return Result::Ok(if n > i32::MAX as f64 { i32::MAX } else { n as i32 });
     }
-    return Result::Ok(if n > i32::MAX as f64 { i32::MAX } else { n as i32 });
+    return fail(at, "must be a non-negative integer");
 }
 
 fn read_values(v: &Node, at: &String) -> Result<List<Document>, SchemaError> {
@@ -515,19 +614,14 @@ fn type_named(name: StrSlice, at: &String) -> Result<JsonTypes, SchemaError> {
     return fail(at, `names no type: ${name:?}`);
 }
 
-/// An array of distinct strings, as `required` and `dependentRequired` hold.
+/// An array of strings, as `required` and `dependentRequired` hold.
 fn read_names(v: &Node, at: &String) -> Result<List<String>, SchemaError> {
     if !v.kind() matches { Array } {
         return fail(at, "must be an array of strings");
     }
     let mut names: List<String> = [];
     for let [i, item] of v.items().enumerate() {
-        let item_at = `${*at}/${i}`;
-        let name = read_string(&item, &item_at)?;
-        if names.contains(&name) {
-            return fail(&item_at, "repeats a name");
-        }
-        names.push(name);
+        names.push(read_string(&item, &`${*at}/${i}`)?);
     }
     return Result::Ok(names);
 }

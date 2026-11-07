@@ -409,14 +409,13 @@ impl JsonSchema for String {
     }
 }
 
-/// The text of the Wado type `wado_format` names, in symbol notation, with the
-/// standard `format` only when every text the type writes meets it.
+/// The text of the Wado type `wado_format` names in symbol notation, which
+/// `x-wado-format` holds, with the standard `format` only when every text the
+/// type writes meets it.
 fn text_of(wado_format: String, format: Option<String> = null) -> Schema {
-    return Schema::Object(SchemaObject {
-        type: Option::Some(JsonTypes::String),
-        format,
-        wado_format: Option::Some(wado_format),
-    });
+    let mut s = SchemaObject { type: Option::Some(JsonTypes::String), format };
+    s.extra["x-wado-format"] = Document::string(wado_format);
+    return Schema::Object(s);
 }
 
 // A Temporal type takes no `format`: each writes some text its RFC 3339 format

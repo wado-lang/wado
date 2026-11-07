@@ -1,5 +1,6 @@
 use { Document, JsonTypes, Schema, SchemaObject, pointer_token } from "../src/lib.wado";
 use { to_string } from "core:json";
+use { HashMap } from "core:collections";
 
 fn reread(text: String) -> String {
     return to_string(&Schema::parse(text).unwrap()).unwrap();
@@ -36,7 +37,7 @@ test "an empty type array is kept, as it admits nothing" {
 }
 
 test "every keyword reads and writes back" {
-    let text = `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://x.test/s","$vocabulary":{"https://v.test":true},"$anchor":"a","$dynamicAnchor":"d","$ref":"#/$defs/n","$dynamicRef":"#d","$comment":"c","title":"t","description":"d","type":"object","format":"f","x-wado-format":"core:temporal#Instant","contentEncoding":"base64","contentMediaType":"application/json","contentSchema":true,"const":[1,{"a":null}],"enum":[1,"x"],"allOf":[true],"anyOf":[false],"oneOf":[{}],"not":false,"if":true,"then":true,"else":false,"multipleOf":0.5,"minimum":1,"exclusiveMinimum":0,"maximum":9,"exclusiveMaximum":10,"minLength":1,"maxLength":2,"pattern":"^a","items":true,"prefixItems":[true],"contains":true,"minContains":1,"maxContains":2,"minItems":1,"maxItems":3,"uniqueItems":true,"unevaluatedItems":false,"properties":{"p":true},"patternProperties":{"^q":true},"required":["p"],"dependentRequired":{"p":["q"]},"dependentSchemas":{"p":true},"additionalProperties":false,"propertyNames":true,"minProperties":1,"maxProperties":4,"unevaluatedProperties":false,"default":{"p":1},"examples":[{"p":2}],"deprecated":true,"readOnly":true,"writeOnly":true,"$defs":{"n":true},"x-extension":[1]}`;
+    let text = `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://x.test/s","$vocabulary":{"https://v.test":true},"$anchor":"a","$dynamicAnchor":"d","$ref":"#/$defs/n","$dynamicRef":"#d","$comment":"c","title":"t","description":"d","type":"object","format":"f","contentEncoding":"base64","contentMediaType":"application/json","contentSchema":true,"const":[1,{"a":null}],"enum":[1,"x"],"allOf":[true],"anyOf":[false],"oneOf":[{}],"not":false,"if":true,"then":true,"else":false,"multipleOf":0.5,"minimum":1,"exclusiveMinimum":0,"maximum":9,"exclusiveMaximum":10,"minLength":1,"maxLength":2,"pattern":"^a","items":true,"prefixItems":[true],"contains":true,"minContains":1,"maxContains":2,"minItems":1,"maxItems":3,"uniqueItems":true,"unevaluatedItems":false,"properties":{"p":true},"patternProperties":{"^q":true},"required":["p"],"dependentRequired":{"p":["q"]},"dependentSchemas":{"p":true},"additionalProperties":false,"propertyNames":true,"minProperties":1,"maxProperties":4,"unevaluatedProperties":false,"default":{"p":1},"examples":[{"p":2}],"deprecated":true,"readOnly":true,"writeOnly":true,"$defs":{"n":true},"x-wado-format":"core:temporal#Instant","x-extension":[1]}`;
     assert reread(text) == text;
 }
 
@@ -59,8 +60,31 @@ test "a keyword's value breaking its rule is an error at its pointer" {
     assert error_of(`{"required": ["a", "a"]}`) == "/required/1: repeats a name";
     assert error_of(`{"multipleOf": 0}`) == "/multipleOf: must be greater than 0";
     assert error_of(`{"$ref": 1}`) == "/$ref: must be a string";
-    assert error_of(`{"x-wado-format": 1}`) == "/x-wado-format: must be a string";
     assert error_of(`{`).starts_with("unexpected end of input");
+}
+
+test "a value the meta-schema rejects is an error at its pointer" {
+    assert error_of(`{"$id": "https://x.test/s#a"}`) == "/$id: must have an empty fragment or none";
+    assert reread(`{"$id": "https://x.test/s#"}`) == `{"$id":"https://x.test/s#"}`;
+    let anchor = "must be a letter or `_`, then letters, digits, `-`, `.` or `_`";
+    assert error_of(`{"$anchor": "1a"}`) == `/$anchor: ${anchor}`;
+    assert error_of(`{"$dynamicAnchor": "a b"}`) == `/$dynamicAnchor: ${anchor}`;
+    assert error_of(`{"dependentRequired": {"p": ["q", "q"]}}`) == "/dependentRequired/p/1: repeats a name";
+}
+
+test "x-wado-format is an annotation, read as any other" {
+    assert reread(`{"x-wado-format": 1}`) == `{"x-wado-format":1}`;
+}
+
+test "a schema built breaking a keyword's rule is not written" {
+    let mut extra = HashMap::<String, Document>::new();
+    extra["type"] = Document::string("integer");
+    let collides = to_string(&SchemaObject { extra }).unwrap_err();
+    assert `${collides}` == "/type: is a keyword Draft 2020-12 defines";
+    let zero = to_string(&SchemaObject { multiple_of: Option::Some(0.0) }).unwrap_err();
+    assert `${zero}` == "/multipleOf: must be greater than 0";
+    let negative = to_string(&SchemaObject { min_length: Option::Some(-1) }).unwrap_err();
+    assert `${negative}` == "/minLength: must be a non-negative integer";
 }
 
 test "a pointer token escapes ~ and /" {

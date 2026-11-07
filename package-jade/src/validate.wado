@@ -525,6 +525,7 @@ impl Compiler {
             },
             Object(o) => o,
         };
+        o.check(&at)?;
         if let Some(a) = &o.anchor {
             self.targets[`${uri}#${*a}`] = i;
         }
