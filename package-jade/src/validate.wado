@@ -661,7 +661,7 @@ impl Run {
     /// failing at the value `ip` points to.
     fn fail(&mut self, ip: &String, n: &Compiled, keyword: String, message: String) {
         self.failures += 1;
-        if self.sinks[self.sinks.len() - 1].quiet {
+        if self.top().quiet {
             return;
         }
         let pointer = if keyword.is_empty() { n.at } else { `${n.at}/${keyword}` };
@@ -669,10 +669,15 @@ impl Run {
     }
 
     fn keep(&mut self, e: ValidationError) {
-        let top = self.sinks.len() - 1;
-        if self.sinks[top].seen.insert(`${e}`) {
-            self.sinks[top].errors.push(e);
+        let top = self.top();
+        if top.seen.insert(`${e}`) {
+            top.errors.push(e);
         }
+    }
+
+    /// The sink errors go to now.
+    fn top(&mut self) -> &mut Sink {
+        return &mut self.sinks[self.sinks.len() - 1];
     }
 
     /// Reports outcome `k` here, as though its subschema were evaluated again.
@@ -683,7 +688,7 @@ impl Run {
             return;
         }
         self.failures += outcome.errors.len();
-        if !self.sinks[self.sinks.len() - 1].quiet {
+        if !self.top().quiet {
             for let e of &outcome.errors {
                 self.keep(*e);
             }
