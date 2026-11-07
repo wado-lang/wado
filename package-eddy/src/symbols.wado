@@ -68,7 +68,7 @@ pub fn load(paths: &List<String>) -> Result<SymbolIndex, String> with Preopens {
     let mut index = empty_index();
     for let path of paths {
         let bytes = fs::read(path).map_err(|e| `${e}`)?;
-        index.add(&grog::decode::<scip::Index, ByteList>(bytes).map_err(|e| `${path}: ${e}`)?);
+        index.add(&bytes).map_err(|e| `${path}: ${e}`)?;
     }
     return Ok(index);
 }
@@ -84,43 +84,11 @@ pub fn empty_index() -> SymbolIndex {
 }
 
 impl SymbolIndex {
-    pub fn add(&mut self, index: &scip::Index) {
-        for let doc of &index.documents {
-            let file = self.files.len();
-            self.files.push(doc.relative_path);
-            self.scopes.push([]);
-            for let info of &doc.symbols {
-                if is_local(&info.symbol) {
-                    continue;
-                }
-                let id = self.id(&info.symbol);
-                self.syms[id].name = info.display_name;
-                self.syms[id].kind = kind_name(&info.kind);
-                self.syms[id].enclosing = info.enclosing_symbol;
-                if let Some(s) = &info.signature_documentation {
-                    self.syms[id].signature = s.text;
-                }
-            }
-            for let o of &doc.occurrences {
-                if is_local(&o.symbol) {
-                    continue;
-                }
-                let id = self.id(&o.symbol);
-                let [start, extent] = place_of(o);
-                let end = match &extent {
-                    Some([_, last]) => last.line,
-                    None => start.line,
-                };
-                let site = Site { file, line: start.line, column: start.column, end };
-                if o.symbol_roles & 1 != 0 {
-                    self.syms[id].definitions.push(site);
-                    if let Some([first, last]) = extent {
-                        self.scopes[file].push(Scope { start: first, end: last, sym: id });
-                    }
-                } else {
-                    self.syms[id].references.push(site);
-                }
-            }
+    /// Add the encoded SCIP index `bytes`. It is read a document at a time: a
+    /// tree's index decoded whole is a live set the GC copies on every cycle.
+    pub fn add(&mut self, bytes: &ByteList) -> Result<(), grog::DecodeError> {
+        for let doc of scip::Index::documents_of(bytes) {
+            self.add_document(&doc?);
         }
         // Names are read once every document has given its symbols theirs.
         self.by_name = HashMap::<String, List<i32>>::new();
@@ -132,6 +100,45 @@ impl SymbolIndex {
             let mut ids = self.by_name.get(name).unwrap_or([]);
             ids.push(i);
             self.by_name[name] = ids;
+        }
+        return Ok(());
+    }
+
+    fn add_document(&mut self, doc: &scip::Document) {
+        let file = self.files.len();
+        self.files.push(doc.relative_path);
+        self.scopes.push([]);
+        for let info of &doc.symbols {
+            if is_local(&info.symbol) {
+                continue;
+            }
+            let id = self.id(&info.symbol);
+            self.syms[id].name = info.display_name;
+            self.syms[id].kind = kind_name(&info.kind);
+            self.syms[id].enclosing = info.enclosing_symbol;
+            if let Some(s) = &info.signature_documentation {
+                self.syms[id].signature = s.text;
+            }
+        }
+        for let o of &doc.occurrences {
+            if is_local(&o.symbol) {
+                continue;
+            }
+            let id = self.id(&o.symbol);
+            let [start, extent] = place_of(o);
+            let end = match &extent {
+                Some([_, last]) => last.line,
+                None => start.line,
+            };
+            let site = Site { file, line: start.line, column: start.column, end };
+            if o.symbol_roles & 1 != 0 {
+                self.syms[id].definitions.push(site);
+                if let Some([first, last]) = extent {
+                    self.scopes[file].push(Scope { start: first, end: last, sym: id });
+                }
+            } else {
+                self.syms[id].references.push(site);
+            }
         }
     }
 
