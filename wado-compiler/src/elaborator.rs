@@ -632,11 +632,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let node = match self.tysys.resolutions.get(site) {
             Resolution::Def(def) => self.tysys.resolutions.defs().ast_id(def),
             Resolution::Binder(binder) => {
-                let defs = self.tysys.resolutions.defs();
+                let resolutions = &self.tysys.resolutions;
+                let defs = resolutions.defs();
                 match defs.of_ast_id(binder) {
                     Some(impl_) if defs.kind(impl_) == DefKind::Impl => {
-                        let Some(target) = self.tysys.type_table.borrow().impl_target_decl(impl_)
-                        else {
+                        let Some(target) = resolutions.impl_self_decl(binder) else {
                             return;
                         };
                         defs.ast_id(target)

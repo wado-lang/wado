@@ -639,6 +639,21 @@ fn imported_item_use_definition() {
 }
 
 #[test]
+fn self_in_an_impl_for_a_reference_is_the_pointee_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Point {}\n",
+            "trait Make { fn make() -> Self; }\n",
+            "impl Make for &Point {\n",
+            "    fn make() -> Self { return &Point {}; }\n",
+            "}\n",
+        );
+        let result = def_at(source, 3, 18).await.expect("cursor on `Self`");
+        assert_range(&result, 0, 7, 12);
+    });
+}
+
+#[test]
 fn namespaced_type_and_bound_definitions() {
     futures::executor::block_on(async {
         let lib = "pub struct Point {}\npub trait Show {}\n";

@@ -110,6 +110,9 @@ pub struct Resolutions {
     effect_binders: hashmap::IndexSet<AstId>,
     /// The binders written `<F: fn(...)>`, each the signature it names.
     fn_bound_binders: IndexMap<AstId, ast::FunctionType>,
+    /// Each `impl` block's reference site for the head of the type it is for,
+    /// keyed by the block, where that type has a head.
+    impl_heads: IndexMap<AstId, AstId>,
 }
 
 /// What every module can see, by layer.
@@ -289,6 +292,7 @@ impl Resolutions {
         let mut redeclarations = Vec::new();
         let mut effect_binders = hashmap::IndexSet::default();
         let mut fn_bound_binders = IndexMap::default();
+        let mut impl_heads = IndexMap::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
                 module: module_source,
@@ -305,6 +309,7 @@ impl Resolutions {
                 redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
                 fn_bound_binders: &mut fn_bound_binders,
+                impl_heads: &mut impl_heads,
                 derived_names: Vec::new(),
                 pattern_site: PatternSite::Test,
                 pattern_names: None,
@@ -328,6 +333,17 @@ impl Resolutions {
             redeclarations,
             effect_binders,
             fn_bound_binders,
+            impl_heads,
+        }
+    }
+
+    /// The declaration `Self` stands for inside the `impl` block `impl_`: the
+    /// one the head of the type it is for names, past any reference.
+    #[must_use]
+    pub fn impl_self_decl(&self, impl_: AstId) -> Option<DefId> {
+        match self.get(*self.impl_heads.get(&impl_)?) {
+            Resolution::Def(def) => Some(def),
+            Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
         }
     }
 
@@ -703,6 +719,7 @@ struct Resolver<'a> {
     binders: Vec<IndexMap<String, AstId>>,
     effect_binders: &'a mut hashmap::IndexSet<AstId>,
     fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
+    impl_heads: &'a mut IndexMap<AstId, AstId>,
     /// Items declared inside the function body being walked, innermost block
     /// last. Filled as the walk passes each declaration, because a local item
     /// is visible only after it — like a `let`, and unlike a module-level
@@ -1145,7 +1162,12 @@ impl AstVisitor<'_> for Resolver<'_> {
             Item::Newtype(n) => (&n.type_params, None),
             Item::BuiltinTypeDecl(d) => (&d.type_params, None),
             Item::Resource(r) => (&r.type_params, Some(r.id)),
-            Item::Impl(i) => (&i.type_params, Some(i.id)),
+            Item::Impl(i) => {
+                if let Some(head) = head_site(&i.ty) {
+                    self.impl_heads.insert(i.id, head);
+                }
+                (&i.type_params, Some(i.id))
+            }
             Item::Trait(t) => {
                 // Inside a trait, `Self` is bounded by that trait. The
                 // elaborator mints that bound rather than the programmer, and a
