@@ -13,16 +13,15 @@ rewrite leaves many ids naming one type.
 | Newtype and `flags` erasure | `TypeTable::erase_newtypes_and_flags`, after monomorphize   | `redirects`: a `Meters` slot reads as `f64`, and `List<Meters>` stays a slot apart from `List<f64>`              |
 | Settled spellings           | `settle_spelling`, run by erasure and by every later intern | `settled_spellings`: maps `List<Meters>` to `List<f64>` so the two key alike                                     |
 | Boxing                      | `lower::plan::boxing`, `TypeTable::redefine_to`             | a `&i32` slot and a `&mut i32` slot both read as `Box<i32>`, and the spelling they lost is kept for `is_mut_box` |
-| Dead type pruning           | `TypeTable::retain`, from NIR DCE                           | holes in the table, closed over the three maps above                                                             |
 
-Effect rows add aliasing of their own, without any rewrite. `fn(i32) -> i32`
-and `fn(i32) -> i32 with($e)` intern apart. Once the effect check is done, no
-phase after lowering treats them as different types.
+Effect rows alias without any rewrite. `fn(i32) -> i32` and
+`fn(i32) -> i32 with($e)` intern apart, yet every identity read after lowering
+drops the row.
 
 ### One identity became five
 
-Each fix since then has added a way to ask "are these one type?" that
-tolerates the aliasing:
+Fixes to the aliasing have each added a way to ask "are these one type?" that
+tolerates it:
 
 - `TypeKey`, from `TypeTable::type_key`: the id with `redirects`, the intern
   map and `settled_spellings` applied in turn. `same_type` compares two keys.
@@ -68,21 +67,18 @@ call hashes a whole `ResolvedType` to look up the intern map.
 
 ### The cause
 
-One table serves three universes of types, and moves between them in place.
+One table serves two universes of types, and moves from the first to the second
+in place.
 
-1. Source types, from elaboration through monomorphization. Newtypes, `flags`,
-   references and effect rows are all part of a type's identity, because trait
-   dispatch and type checking read them.
-2. Monomorphic nominal types, after monomorphization and before erasure. They
-   still need newtype identity, since impls are keyed under `Perms` and not
-   under `u32`.
-3. Representation types, from lowering on. A newtype is its base, `flags` is
+1. Source types, from elaboration until erasure. Newtypes, `flags`, references
+   and effect rows are part of a type's identity, because type checking and
+   trait dispatch read them: an impl is keyed under `Perms`, not `u32`.
+2. Representation types, from erasure on. A newtype is its base, `flags` is
    `u32`, a reference to a primitive, a variant or a function is a `Box`, and
    rows mean nothing.
 
-Universes 1 and 2 are one universe whose ids are already identities. Universe 3
-is a different set of types: a many-to-one image of the first. Storing the image
-in the same table, under the same id type, is what makes an id stop being an
+The second universe is a many-to-one image of the first. Storing the image in
+the same table, under the same id type, is what makes an id stop being an
 identity.
 
 ## Decision
@@ -98,7 +94,7 @@ and `Hash` on ids is the identity key. `TypeKey`, `same_type`, `TypeMemo` and
 ### 2. Two universes, two id types
 
 - `TypeId` and `TypeTable` hold source types, from elaboration through
-  monomorphization and synthesis. Nothing in them changes.
+  lowering, as they do before erasure today.
 - `ReprId` and `ReprTable` hold representation types, from lowering on. NIR,
   the optimizer, `niri` and WIR build read only these.
 
@@ -135,9 +131,11 @@ A struct declaration in NIR is keyed by its `ReprId`. Two TIR instances that
 ### 5. What NIR asks of a source type is answered at lowering
 
 After lowering, nothing asks for a type's source identity: `get_unerased` and
-`is_newtype` are read only by the elaborator, the effect check and synthesis. Impl dispatch and
-the names that must match an impl are resolved before lowering and recorded on
-the node that needs them. A `ReprId` answers no source question.
+`is_newtype` are read only by the elaborator, the effect check and synthesis.
+Lowering does read source spellings to mint names (`name_unboxed`,
+`mangle_type_arg_unboxed`), and it holds both ids, so it reads the `TypeId`.
+Impl dispatch and the names that must match an impl are resolved by then and
+recorded on the node that needs them. A `ReprId` answers no source question.
 
 ### 6. One name per universe
 
@@ -145,23 +143,23 @@ A source type renders one name, and a representation type renders one name.
 WIR build maps a `ReprId` to a `WirTypeId` one to one and dedups by id, not by
 string.
 
-## Alternatives considered
+### 7. Rejected alternatives
 
-### Canonicalize the aliases with union-find
+#### Canonicalize the aliases with union-find
 
 `redefine_to` becomes a union, and `find` answers the canonical id. This makes
 `type_key` cheaper, but keeps the table changing under the IR. A key taken
 before a union still differs from one taken after it, and `TypeId`'s `==` still
 compiles.
 
-### Remove `Eq` and `Hash` from `TypeId`
+#### Remove `Eq` and `Hash` from `TypeId`
 
 This turns the wrong comparison into a compile error. Interning needs both,
 though: `ResolvedType` contains `TypeId`s and is the intern map's key. Constant
 patterns such as `TypeTable::BOOL =>` need the derived `Eq` too.
 The aliasing stays, and every comparison moves to `TypeKey`.
 
-### Rebuild one table at each phase boundary, keeping one id type
+#### Rebuild one table at each phase boundary, keeping one id type
 
 Erasure and boxing build a fresh `TypeTable` and rewrite the IR's ids through a
 map. This restores section 1 with a smaller change than section 2. It does not
@@ -180,6 +178,8 @@ Each step leaves the compiler green and is a commit series of its own.
   longer reads `mangle_type_arg_rowless_resolving_newtypes`.
 - [ ] Switch NIR to `ReprId`, moving erasure into `repr`. Done when
   `erase_newtypes_and_flags`, `redirects` and `settled_spellings` are gone.
+  NIR cannot carry both id types, so this step touches every optimizer pass
+  at once.
 - [ ] Move the boxing type rewrite into `repr`. Done when `redefine_to`,
   `follow_redefinitions` and `box_payload_types` are gone.
 - [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`, the
@@ -197,14 +197,8 @@ analysis read it. Section 1 leaves no slot to read. Whether writability is part
 of a representation type or of the place that holds one is undecided, and the
 boxing step of the roadmap waits on it.
 
-### Diagnostics after lowering print source types
+### A remark after lowering has no source name to print
 
-Remarks and the NIR dump name types as the user wrote them. A `ReprId` no longer
-knows that `f64` was `Meters`. What a remark should name, and where it gets that
-name, is undecided.
-
-### The size of the NIR switch
-
-NIR and the optimizer read `TypeId` and `TypeTable` throughout. The switch is
-mechanical but touches most optimizer passes at once, and it cannot be split by
-pass without a period where both id types flow through NIR.
+Remarks run on NIR and name a type through `TypeTable::name`. A `ReprId` does
+not know that `f64` was `Meters`. What a remark should name, and where it gets
+that name, is undecided.
