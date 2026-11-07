@@ -7787,21 +7787,9 @@ fn gen_group_branch_body(
     ));
 }
 
-/// `let _atn_alt`: the simulator's pick at rule-body decision `dec`. The parse
-/// and a scan both pick here.
-fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
-    w: &mut CodeWriter,
-    dec: i32,
-    gates: &List<[i32, String]>,
-    tokens: S,
-    pos: S1,
-    ctx: &mut EmitContext,
-) {
-    gen_atn_pick(w, "_atn_alt", dec, gates, tokens, pos, ctx);
-}
-
 /// `let <var>`: the simulator's pick at decision `dec`, with the edge of each
-/// predicate whose gate is false closed (`atn_decision_gates`).
+/// predicate whose gate is false closed (`atn_decision_gates`). A rule body's
+/// and a group's decision, parse or scan, all pick here.
 fn gen_atn_pick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     var: S,
@@ -8550,9 +8538,9 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 let gates = atn_decision_gates(&a.alts, alts, ctx, in_scan);
                 let dec = ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index());
                 if in_scan {
-                    gen_atn_body_pick(w, dec, &gates, "tokens", "pos", ctx);
+                    gen_atn_pick(w, "_atn_alt", dec, &gates, "tokens", "pos", ctx);
                 } else {
-                    gen_atn_body_pick(w, dec, &gates, "&p.kinds", "p.pos", ctx);
+                    gen_atn_pick(w, "_atn_alt", dec, &gates, "&p.kinds", "p.pos", ctx);
                 }
                 // A seed can exclude every alt (`_atn_alt == -1`), which the
                 // index dispatch would otherwise route to its last alt.
