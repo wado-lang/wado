@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794044058032,
+  "lastUpdate": 1794049925740,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75385,6 +75385,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/062cbb92809154bd4a2bfbb9728cd81f8b17c13f"
         },
         "date": 1794044056964,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 385142,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "93a3162b2ab7ffcca3c29f62a72180a8b2408203",
+          "message": "Merge pull request #2575 from wado-lang/ccr-a7390310-f47sn8\n\nfeat(jade): validate numbers exactly, at any size and precision",
+          "timestamp": "2026-11-07T19:53:07+09:00",
+          "tree_id": "44061cace9cdefada20184d2e5fbdd79e1df8917",
+          "url": "https://github.com/wado-lang/wado/commit/93a3162b2ab7ffcca3c29f62a72180a8b2408203"
+        },
+        "date": 1794049924677,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
