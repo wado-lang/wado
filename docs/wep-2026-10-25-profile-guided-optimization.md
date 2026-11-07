@@ -493,9 +493,10 @@ output at every level. It is a nightly campaign, not a gate.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
-- [ ] On the `benchmark/` pilot `syntax_highlight` runs longer by the wall clock
-  than `-f no-pgo` for slightly less fuel. Its native instructions grow across
-  every function, and no one function accounts for it. The tables are in
+- [ ] On the `benchmark/` pilot `fts` and `json_canada` ser run longer by the
+  wall clock than `-f no-pgo`, for less fuel. In `fts` a hot site splices
+  `f64::fmt_fixed` into a loop: native instructions fall and cycles rise, and
+  what the splice costs is not known. The tables are in
   [the benchmark README](../benchmark/README.md#profile-guided-optimization).
   `http_routing` records a profile but is in neither table: its `oha` run was
   not repeated under the three builds.
@@ -536,6 +537,25 @@ with `+` meaning less fuel, measured by
 | Table per heat, hot threshold 96    |           -1.26% |          -0.43% |             +0.84% |
 | Table per heat, hot threshold 128   |          -10.49% |          -0.45% |             +0.22% |
 | Table per heat, hot price cold-free |           +0.00% |          -1.68% |             +0.87% |
+
+### Holding a hot site to the safepoint rule
+
+A plain site keeps a callee that reaches a safepoint out of a loop. A hot site
+admits one on its price alone, which is how `f64::fmt_fixed`, priced 62 against
+the hot threshold of 64, reaches the loop in `fts_run`. Every way of refusing
+that splice cost more elsewhere than it gained. Against the build with the
+splice, with `+` meaning faster and `-` where a row was not measured:
+
+| Variant                                | `fts` | `json_canada` ser | `json_canada` de | `cbor_twitter` ser | `cbor_catalog` ser | `zlib` compress | Mean over the rows |
+| -------------------------------------- | ----: | ----------------: | ---------------: | -----------------: | -----------------: | --------------: | -----------------: |
+| Refuse any callee over the plain price |  3.8% |              0.3% |             -24% |                  - |                  - |               - |                  - |
+| Only one returning a scalar or nothing |  3.8% |              4.5% |             -16% |                  - |                  - |               - |                  - |
+| Only one returning nothing             |  3.6% |              0.9% |            -0.5% |             -16.0% |             -23.6% |           -3.3% |             -1.89% |
+| Hot threshold 48                       |  2.2% |              0.3% |            -5.5% |               0.0% |              -0.7% |           -4.5% |             -1.30% |
+| Hot threshold 60                       |  0.2% |              0.0% |            -5.5% |               0.4% |               0.5% |           -1.0% |              0.06% |
+
+The first two rows are three or four alternating `wado run`s of those benchmarks
+alone. The others are the best of two `mise run benchmark-all`.
 
 ### Training on little of the program
 
