@@ -217,6 +217,7 @@
 - [Linear Arrays — Arrays Outside the GC Heap](./wep-2026-10-26-linear-arrays.md)
 - [Re — Linear-Time Regular Expressions for Wado](./wep-2026-11-02-re.md)
 - [URI References as Identifiers (`core:uri`)](./wep-2026-11-07-core-uri.md)
+- [Type Identity — Equal Ids Mean One Type](./wep-2026-11-07-type-identity.md)
 
 ## Standard Library
 
