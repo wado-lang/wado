@@ -18,7 +18,6 @@ use crate::tir::{
 use crate::type_table::TypeTable;
 
 use super::callee::{CalleeRef, StaticMethodRef};
-use super::{Elaborator, InstanceImpl, InstanceOrder};
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
@@ -38,6 +37,7 @@ use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
 use super::util::{integer_digits, parse_i128_literal};
+use super::{Elaborator, InstanceImpl, InstanceOrder};
 use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};

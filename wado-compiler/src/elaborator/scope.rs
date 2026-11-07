@@ -36,10 +36,10 @@ pub(super) struct BinderInScope {
     /// Slot in the enclosing item's parameter list.
     pub(super) index: u32,
     pub(super) type_id: TypeId,
-    /// Where the parameter is written, for jump-to-def on a use. `None` for a
-    /// name no parameter declares: `Self`, or one already bound to a concrete
-    /// type. Not what names a binder in a mangle — see
-    /// [`TraitContext::impl_owner`].
+    /// Where the parameter is written, which tells a method's parameter from
+    /// the impl receiver's binder of the same letter. `None` for a name no
+    /// parameter declares: `Self`, or one already bound to a concrete type.
+    /// Not what names a binder in a mangle — see [`TraitContext::impl_owner`].
     pub(super) decl: Option<ast::AstId>,
     /// Declared `affine T`: an argument for it may be move-only.
     pub(super) is_affine: bool,
@@ -779,10 +779,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             space: space.clone(),
         };
         if !bound.names_a_trait() {
-            if !out
-                .iter()
-                .any(|(b, _)| b.bound.id == bound.id)
-            {
+            if !out.iter().any(|(b, _)| b.bound.id == bound.id) {
                 out.push((entry(), None));
             }
             return;
@@ -799,11 +796,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Some(decl) => out
                 .iter_mut()
                 .find(|(b, d)| *d == Some(decl) && mergeable(&b.bound)),
-            None => out
-                .iter_mut()
-                .find(|(b, d)| {
-                    d.is_none() && b.bound.written_name() == bound.written_name() && mergeable(&b.bound)
-                }),
+            None => out.iter_mut().find(|(b, d)| {
+                d.is_none() && b.bound.written_name() == bound.written_name() && mergeable(&b.bound)
+            }),
         };
         if let Some((existing, _)) = duplicate {
             if existing.bound.assoc_types.is_empty() {

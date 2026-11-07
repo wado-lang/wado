@@ -228,7 +228,7 @@ impl<M: Message + Default> Messages<M> {
     fn next_value(&mut self, number: i32, wire_type: WireType) -> Result<Option<M>, DecodeError> {
         let input = &mut self.input;
         while input.fill(1) {
-            let tag_end = held_or_all(input, varint_held(input, 0));
+            let tag_end = varint_end(input, 0);
             let mut tag = reader_of(input, tag_end);
             tag.next_field(0)?;
             if tag.number != number || tag.wire_type != wire_type {
@@ -255,7 +255,7 @@ impl<M: Message + Default> Messages<M> {
         if !input.fill(1) {
             return Result::Ok(null);
         }
-        let mut prefix = reader_of(input, held_or_all(input, varint_held(input, 0)));
+        let mut prefix = reader_of(input, varint_end(input, 0));
         let size = prefix.size_through_length_prefixed(input.start())?;
         input.fill(size);
         let mut r = reader_of(input, i32::min(size, input.len()));
@@ -295,10 +295,10 @@ fn varint_held(input: &mut LinearBuffer, at: i32) -> Option<[u64, i32]> {
     return null;
 }
 
-/// The end of a varint `varint_held` read, or of all that is held where it read
-/// none.
-fn held_or_all(input: &LinearBuffer, varint: Option<[u64, i32]>) -> i32 {
-    return match varint {
+/// The end of the varint `input` holds from `at` on, or of all that is held
+/// where it holds none: a reader over that much reports what went wrong.
+fn varint_end(input: &mut LinearBuffer, at: i32) -> i32 {
+    return match varint_held(input, at) {
         Some([_, end]) => end,
         None => input.len(),
     };
@@ -354,7 +354,7 @@ fn held_to(input: &mut LinearBuffer, end: i32) -> Option<i32> {
 /// value no caller decodes is never held whole. What is malformed or cut short
 /// is refused where a decode refuses it.
 fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> {
-    let tag_end = held_or_all(input, varint_held(input, 0));
+    let tag_end = varint_end(input, 0);
     let mut header = reader_of(input, tag_end);
     header.next_field(0)?;
     return match header.wire_type {
@@ -381,7 +381,7 @@ fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> {
 /// its end-group tag.
 fn drop_group(input: &mut LinearBuffer, number: i32, depth: i32) -> Result<(), DecodeError> {
     loop {
-        let mut r = reader_of(input, held_or_all(input, varint_held(input, 0)));
+        let mut r = reader_of(input, varint_end(input, 0));
         if !r.next_field(number)? {
             input.consume(r.pos - input.start());
             return Result::Ok(());
@@ -393,7 +393,7 @@ fn drop_group(input: &mut LinearBuffer, number: i32, depth: i32) -> Result<(), D
 /// Drop the length-delimited field `input` starts with, its tag held to
 /// `tag_end`.
 fn drop_length_delimited(input: &mut LinearBuffer, tag_end: i32) -> Result<(), DecodeError> {
-    let mut r = reader_of(input, held_or_all(input, varint_held(input, tag_end)));
+    let mut r = reader_of(input, varint_end(input, tag_end));
     r.next_field(0)?;
     let mut left = r.size_through_length_prefixed(r.tag_start)?;
     let cut_short = DecodeError { offset: r.offset(), reason: LENGTH_PAST_END };

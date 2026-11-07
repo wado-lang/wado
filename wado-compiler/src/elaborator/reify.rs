@@ -61,9 +61,9 @@ use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts,
-    ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee, LiteralFromCall,
-    MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch,
-    impl_self_layers, with_body_facts,
+    ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee,
+    LiteralFromCall, MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts,
+    StaticMethodDispatch, impl_self_layers, with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -2504,9 +2504,13 @@ impl<'a> Reify<'a> {
         let tir = self.reify_unmoved(
             expr,
             ctx,
-            if conversion.is_some() { None } else { expected_type },
+            if conversion.is_some() {
+                None
+            } else {
+                expected_type
+            },
         );
-        let mut tir = if self.moves(expr) { tir.moved() } else { tir };
+        let tir = if self.moves(expr) { tir.moved() } else { tir };
         let span = tir.span;
         if let Some(ListViewConversion {
             view,
@@ -2514,22 +2518,9 @@ impl<'a> Reify<'a> {
             answering,
         }) = conversion
         {
-            for _ in 0..depth {
-                let pointee = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .ref_pointee(tir.type_id)
-                    .expect("a conversion's layer lies under a reference");
-                tir = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Deref,
-                        expr: Box::new(tir),
-                    },
-                    pointee,
-                    span,
-                );
-            }
+            let tt = self.tysys.type_table.borrow();
+            let layers = tt.ref_depth(tir.type_id) - depth;
+            let tir = deref_to_layers(tir, layers, &tt);
             return TirExpr::new(
                 TirExprKind::ListViewOf {
                     value: Box::new(tir),
