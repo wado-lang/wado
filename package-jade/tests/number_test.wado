@@ -1,0 +1,93 @@
+use { Document, Number, Schema, SchemaObject, Validator } from "../src/lib.wado";
+use { to_string } from "core:json";
+
+fn number(text: String) -> Number {
+    return Document::parse(text).unwrap().root().as_number().unwrap();
+}
+
+fn valid(schema: String, data: String) -> bool {
+    let validator = Validator::compile(&Schema::parse(schema).unwrap()).unwrap();
+    return validator.validate(&Document::parse(data).unwrap().root()) matches { Ok(_) };
+}
+
+test "a number past f64's range is read and kept" {
+    assert `${number("1e400")}` == "1e400";
+    assert `${number("-1.5e-400")}` == "-1.5e-400";
+    assert number("1e400").to_f64() == f64::INFINITY;
+    assert number("1e-400").to_f64() == 0.0;
+}
+
+test "numbers compare by their mathematical value" {
+    assert number("1e-400") != number("0");
+    assert number("12345678901234567890") != number("12345678901234567891");
+    assert number("12345678901234567890") < number("12345678901234567891");
+    assert number("1e400") == number("10e399");
+    assert number("1e400") > number("1.7976931348623157e308");
+    assert number("-1e400") < number("-1.7976931348623157e308");
+    assert number("0.1") == Number::from(0.1);
+    assert number("-0") == number("0");
+    assert number("1.0") == number("1");
+}
+
+test "an integer is a number with no fraction, at any size" {
+    assert number("1e400").is_integer();
+    assert number("12345678901234567890.0").is_integer();
+    assert !number("12345678901234567890.5").is_integer();
+    assert !number("1e-400").is_integer();
+}
+
+test "a number is written as it reads" {
+    assert `${number("123456789012345678901")}` == "123456789012345678901";
+    assert `${number("1234567890123456789012")}` == "1.234567890123456789012e21";
+    assert `${number("0.000000000000000000001")}` == "1e-21";
+    assert `${number("1234567890.12345678901")}` == "1234567890.12345678901";
+    assert `${number("0.0000012345678901234567")}` == "0.0000012345678901234567";
+    assert `${number("-2.5")}` == "-2.5";
+}
+
+test "an exponent past 18 digits is an error" {
+    let e = Document::parse("1e1000000000000000000").unwrap_err();
+    assert `${e}`.contains("exponent has more than 18 digits");
+    assert Document::parse("1e100000000000000000") matches { Ok(_) };
+    assert Document::parse("1e-0000000000000000000001") matches { Ok(_) };
+}
+
+test "a number no f64 holds is not written" {
+    assert to_string(&Document::parse("[0.1, -0]").unwrap()).unwrap() == "[0.1,-0]";
+    let sum = Document::of(&(0.1 + 0.2)).unwrap();
+    assert to_string(&sum).unwrap() == "0.30000000000000004";
+    assert to_string(&Document::parse("1e400").unwrap()) matches { Err(_) };
+}
+
+test "multipleOf divides exactly, at any size" {
+    assert valid(`{"multipleOf": 3}`, "300000000000000000000");
+    assert !valid(`{"multipleOf": 3}`, "100000000000000000000");
+    assert valid(`{"multipleOf": 0.01}`, "1234567890123456789012.34");
+    assert !valid(`{"multipleOf": 0.01}`, "1234567890123456789012.345");
+    assert valid(`{"multipleOf": 0.5}`, "1e400");
+    assert !valid(`{"multipleOf": 7}`, "1e400");
+    assert valid(`{"multipleOf": 1e-400}`, "3e-399");
+    let big = "3333333333333333333333";
+    assert valid(`{"multipleOf": ${big}}`, "23333333333333333333331");
+    assert !valid(`{"multipleOf": ${big}}`, "23333333333333333333332");
+    assert valid(`{"multipleOf": 1600000000000000000000}`, "3200000000000000000000");
+    assert !valid(`{"multipleOf": 1600000000000000000000}`, "2400000000000000000000");
+}
+
+test "the bounds compare exactly" {
+    assert !valid(`{"maximum": 12345678901234567890}`, "12345678901234567891");
+    assert valid(`{"exclusiveMinimum": 0}`, "1e-400");
+    assert !valid(`{"minimum": 1e400}`, "1.7976931348623157e308");
+    assert valid(`{"type": "integer"}`, "1e400");
+    assert !valid(`{"type": "integer"}`, "1.000000000000000000001");
+    assert !valid(`{"const": 12345678901234567890}`, "12345678901234567891");
+}
+
+test "a schema's number keyword holds any number" {
+    let Schema::Object(o) = Schema::parse(`{"maximum": 1e400}`).unwrap() else {
+        unreachable();
+    };
+    assert o.maximum == Option::Some(number("1e400"));
+    let built = SchemaObject { minimum: Option::Some(Number::from(0.5)) };
+    assert to_string(&built).unwrap() == `{"minimum":0.5}`;
+}

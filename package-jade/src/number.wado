@@ -1,0 +1,405 @@
+//! `Number`, a JSON number held exactly: JSON Schema reads one at any size and
+//! precision (Validation §4.2), and two are equal when their mathematical values
+//! are (Core §4.2.2).
+
+use { DeserializeError, Serialize, SerializeError, Serializer } from "core:serde";
+use { JsonDeserializer } from "core:json";
+
+/// An exponent of more digits than this is an error. Nobody writes one, and the
+/// bound keeps every exponent Jade computes within an i64.
+global MAX_EXPONENT_DIGITS: i32 = 18;
+
+/// f64 tells apart every decimal of at most 15 significant digits whose leading
+/// digit's exponent is within ±307, and orders them as they are ordered.
+global F64_DIGITS: i32 = 15;
+global F64_EXPONENT: i64 = 307;
+
+/// A JSON number. Most are held as the f64 whose shortest decimal they are, so
+/// comparing two of them compares f64s; only a number no f64 holds that way
+/// carries its digits.
+pub struct Number {
+    /// The value rounded to f64.
+    nearest: f64,
+    /// The value, where it is not the shortest decimal that reads back as
+    /// `nearest`.
+    decimal: Option<Decimal>,
+}
+
+impl Number {
+    /// The value rounded to f64: ±infinity past its range, ±0 below it.
+    pub fn to_f64(&self) -> f64 {
+        return self.nearest;
+    }
+
+    pub fn is_integer(&self) -> bool {
+        return match &self.decimal {
+            None => self.nearest == f64::trunc(self.nearest),
+            Some(d) => d.exp >= 0,
+        };
+    }
+
+    /// Whether the f64 `to_f64` answers is the number itself.
+    internal fn is_f64(&self) -> bool {
+        return self.decimal matches { None };
+    }
+
+    fn to_decimal(&self) -> Decimal {
+        return match &self.decimal {
+            None => Decimal::of_f64(self.nearest),
+            Some(d) => *d,
+        };
+    }
+
+    /// Reads the number at the cursor of `de`.
+    internal fn read(de: &mut JsonDeserializer) -> Result<Number, DeserializeError> {
+        let start = de.pos;
+        let rounded = de.parse_f64_direct();
+        if let Err(e) = &rounded && !e.kind matches { Overflow } {
+            return Result::Err(*e);
+        }
+        let token = Token::scan(&de.input, start)?;
+        de.pos = token.end;
+        if let Ok(x) = rounded && token.fits_f64() {
+            return Result::Ok(Number { nearest: x, decimal: null });
+        }
+        let d = Decimal::of_token(&de.input, &token);
+        let nearest = if let Ok(x) = rounded { x } else { f64::from_str(d.scientific()).unwrap() };
+        if nearest.is_finite() && Decimal::of_f64(nearest) == d {
+            return Result::Ok(Number { nearest, decimal: null });
+        }
+        return Result::Ok(Number { nearest, decimal: Option::Some(d) });
+    }
+}
+
+/// The number `core:json` writes for `x`.
+impl From<f64> for Number {
+    fn from(x: f64) -> Number
+        contract x.is_finite()
+    {
+        return Number { nearest: x, decimal: null };
+    }
+}
+
+impl Eq for Number {
+    fn eq(&self, other: &Number) -> bool {
+        if self.is_f64() && other.is_f64() {
+            return self.nearest == other.nearest;
+        }
+        return self.to_decimal() == other.to_decimal();
+    }
+}
+
+impl Ord for Number {
+    fn cmp(&self, other: &Number) -> Ordering {
+        if self.is_f64() && other.is_f64() {
+            return self.nearest.cmp(&other.nearest);
+        }
+        return self.to_decimal().cmp(&other.to_decimal());
+    }
+}
+
+/// Plain digits while the number's point is within 21 digits of its first
+/// digit, and within 6 of the units, as JavaScript writes a number; scientific
+/// notation past either.
+impl Display for Number {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(self.to_decimal().plain_or_scientific());
+    }
+}
+
+/// Only a number an f64 holds is written: `core:serde` writes no other.
+impl Serialize for Number {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        if !self.is_f64() {
+            return Result::Err(SerializeError::unsupported_value(`${self}: no f64 holds this number`));
+        }
+        return s.serialize_f64(self.nearest);
+    }
+}
+
+/// A `multipleOf` value, split so that `divides` needs no power of 10: its
+/// digits are `odd × 2^s × 5^t`, `odd` prime to 10.
+internal struct Divisor {
+    whole: Decimal,
+    odd: String,
+    /// The larger of `s` and `t`.
+    shift: i64,
+}
+
+impl Divisor {
+    internal fn of(m: &Number) -> Divisor
+        contract *m > Number::from(0.0)
+    {
+        let whole = m.to_decimal();
+        let mut odd = whole.digits;
+        let mut twos: i64 = 0;
+        while let Some(q) = divide_small(&odd, 2) {
+            odd = q;
+            twos += 1;
+        }
+        let mut fives: i64 = 0;
+        while let Some(q) = divide_small(&odd, 5) {
+            odd = q;
+            fives += 1;
+        }
+        return Divisor { whole, odd, shift: i64::max(twos, fives) };
+    }
+
+    /// Whether `x` is an integer multiple. With `x = a × 10^p` and the divisor
+    /// `b × 10^q`, it is when `b` divides `a × 10^(p − q)`. Past a shift of
+    /// `self.shift`, the power of 10 holds every 2 and 5 of `b`, and `a` must
+    /// hold the rest.
+    internal fn divides(&self, x: &Number) -> bool {
+        let a = x.to_decimal();
+        if a.digits.is_empty() {
+            return true;
+        }
+        let k = a.exp - self.whole.exp;
+        // `b` would then divide `a` by 10, which ends in no 0.
+        if k < 0 {
+            return false;
+        }
+        if k >= self.shift {
+            return is_divisible(&a.digits, 0, &self.odd);
+        }
+        return is_divisible(&a.digits, k as i32, &self.whole.digits);
+    }
+}
+
+/// `digits` divided by `n`, when it divides them.
+fn divide_small(digits: &String, n: i32) -> Option<String> {
+    let mut q = "";
+    let mut r = 0;
+    for let c of digits.bytes() {
+        r = r * 10 + (c - b'0') as i32;
+        if !q.is_empty() || r >= n {
+            q.push((b'0' + (r / n) as u8) as char);
+        }
+        r %= n;
+    }
+    return if r == 0 { Option::Some(q); } else { null; };
+}
+
+/// Whether `divisor` divides `digits` followed by `zeros` zeros, by long
+/// division: the remainder stays below `divisor`, so each digit takes at most
+/// nine subtractions.
+fn is_divisible(digits: &String, zeros: i32, divisor: &String) -> bool {
+    let d: List<i32> = divisor.bytes().map(|c| (c - b'0') as i32).collect();
+    let mut r: List<i32> = [];
+    let n = digits.len() + zeros;
+    for let i of 0..<n {
+        let next = if i < digits.len() { (digits.byte_at(i) - b'0') as i32 } else { 0 };
+        if !r.is_empty() || next != 0 {
+            r.push(next);
+        }
+        while !below(&r, &d) {
+            subtract(&mut r, &d);
+        }
+    }
+    return r.is_empty();
+}
+
+/// Whether `a < b`, both digits from the most significant, with no leading 0.
+fn below(a: &List<i32>, b: &List<i32>) -> bool {
+    if a.len() != b.len() {
+        return a.len() < b.len();
+    }
+    return *a < *b;
+}
+
+/// `a -= b`, where `a >= b`; the result keeps no leading 0.
+fn subtract(a: &mut List<i32>, b: &List<i32>) {
+    let shift = a.len() - b.len();
+    let mut borrow = 0;
+    for let mut i = a.len() - 1; i >= 0; i -= 1 {
+        let digit = if i >= shift { b[i - shift] } else { 0 };
+        let mut v = a[i] - borrow - digit;
+        borrow = if v < 0 { 1 } else { 0 };
+        if v < 0 {
+            v += 10;
+        }
+        a[i] = v;
+    }
+    while !a.is_empty() && a[0] == 0 {
+        a.remove(0);
+    }
+}
+
+/// `±digits × 10^exp` in lowest terms: `digits` has no leading or trailing 0,
+/// and is empty, with `negative` false, for zero.
+struct Decimal {
+    negative: bool,
+    digits: String,
+    exp: i64,
+}
+
+impl Decimal {
+    /// The shortest decimal that reads back as `x`.
+    fn of_f64(x: f64) -> Decimal {
+        let text = `${x:e}`;
+        let bytes = text.as_byte_slice();
+        return Decimal::of_token(&bytes, &Token::scan(&bytes, 0).unwrap());
+    }
+
+    fn of_token(text: &ByteSlice, t: &Token) -> Decimal {
+        let mut digits = "";
+        if t.first >= 0 {
+            for let i of t.first..=t.last {
+                if text[i] != b'.' {
+                    digits.push(text[i] as char);
+                }
+            }
+        }
+        return Decimal { negative: t.negative && !digits.is_empty(), digits, exp: t.exp };
+    }
+
+    /// The position of the point, counted in digits from the first.
+    fn point(&self) -> i64 {
+        return self.digits.len() as i64 + self.exp;
+    }
+
+    fn scientific(&self) -> String {
+        if self.digits.is_empty() {
+            return "0";
+        }
+        let sign = if self.negative { "-" } else { "" };
+        let rest = self.digits.substr_bytes(1, self.digits.len());
+        let fraction = if rest.is_empty() { "" } else { `.${rest}` };
+        return `${sign}${self.digits.substr_bytes(0, 1)}${fraction}e${self.point() - 1}`;
+    }
+
+    fn plain_or_scientific(&self) -> String {
+        let p = self.point();
+        if self.digits.is_empty() || p > 21 || p <= -6 {
+            return self.scientific();
+        }
+        let sign = if self.negative { "-" } else { "" };
+        if self.exp >= 0 {
+            return `${sign}${self.digits}${"0".repeat(self.exp as i32)}`;
+        }
+        if p > 0 {
+            let at = p as i32;
+            return `${sign}${self.digits.substr_bytes(0, at)}.${self.digits.substr_bytes(at, self.digits.len())}`;
+        }
+        return `${sign}0.${"0".repeat(-p as i32)}${self.digits}`;
+    }
+
+    /// -1, 0 or 1 as the number is negative, zero or positive.
+    fn signum(&self) -> i32 {
+        return if self.digits.is_empty() { 0 } else if self.negative { -1 } else { 1 };
+    }
+}
+
+impl Ord for Decimal {
+    fn cmp(&self, other: &Decimal) -> Ordering {
+        let sign = self.signum();
+        if sign != other.signum() {
+            return sign.cmp(&other.signum());
+        }
+        let mut magnitude = self.point().cmp(&other.point());
+        if magnitude matches { Equal } {
+            magnitude = self.digits.cmp(&other.digits);
+        }
+        return if sign < 0 { other_way(magnitude) } else { magnitude };
+    }
+}
+
+fn other_way(o: Ordering) -> Ordering {
+    return match o {
+        Less => Ordering::Greater,
+        Equal => Ordering::Equal,
+        Greater => Ordering::Less,
+    };
+}
+
+/// A number token `core:json` has read, located in its text: the number is
+/// `±` the digits from `first` to `last`, a `.` among them skipped, `× 10^exp`.
+/// `first` is -1 for zero.
+struct Token {
+    negative: bool,
+    first: i32,
+    last: i32,
+    /// The digits from `first` to `last`.
+    count: i32,
+    exp: i64,
+    /// One past the token.
+    end: i32,
+}
+
+impl Token {
+    fn scan(text: &ByteSlice, start: i32) -> Result<Token, DeserializeError> {
+        let len = text.len();
+        let mut i = start;
+        let negative = text[i] == b'-';
+        if negative {
+            i += 1;
+        }
+        let mut first = -1;
+        let mut last = -1;
+        let mut point = -1;
+        while i < len && (is_digit(text[i]) || text[i] == b'.') {
+            if text[i] == b'.' {
+                point = i;
+            } else if text[i] != b'0' {
+                if first < 0 {
+                    first = i;
+                }
+                last = i;
+            }
+            i += 1;
+        }
+        if point < 0 {
+            point = i;
+        }
+        let mut written: i64 = 0;
+        if i < len && (text[i] == b'e' || text[i] == b'E') {
+            i += 1;
+            let negative_exp = text[i] == b'-';
+            if text[i] == b'+' || text[i] == b'-' {
+                i += 1;
+            }
+            while i < len && text[i] == b'0' {
+                i += 1;
+            }
+            let digits = i;
+            while i < len && is_digit(text[i]) {
+                if i - digits == MAX_EXPONENT_DIGITS {
+                    return Result::Err(DeserializeError::overflow(
+                        `exponent has more than ${MAX_EXPONENT_DIGITS} digits`,
+                        start as i64,
+                    ));
+                }
+                written = written * 10 + (text[i] - b'0') as i64;
+                i += 1;
+            }
+            if negative_exp {
+                written = -written;
+            }
+        }
+        if first < 0 {
+            return Result::Ok(Token { negative, first, last, count: 0, exp: 0, end: i });
+        }
+        let crosses = if first < point && point < last { 1 } else { 0 };
+        let place = if last < point { point - 1 - last } else { point - last };
+        return Result::Ok(Token {
+            negative,
+            first,
+            last,
+            count: last - first + 1 - crosses,
+            exp: written + place as i64,
+            end: i,
+        });
+    }
+
+    /// Whether the f64 the token rounds to has it as its shortest decimal, as
+    /// every token this short has. A longer one may too, which only formatting
+    /// that f64 tells.
+    fn fits_f64(&self) -> bool {
+        let lead = self.exp + (self.count - 1) as i64;
+        return self.count == 0 || (self.count <= F64_DIGITS && -F64_EXPONENT <= lead && lead <= F64_EXPONENT);
+    }
+}
+
+fn is_digit(b: u8) -> bool {
+    return b'0' <= b && b <= b'9';
+}

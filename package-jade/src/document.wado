@@ -16,6 +16,7 @@ use {
 } from "core:serde";
 use { JsonDeserializer, to_bytes } from "core:json";
 use { HashMap, HashSet } from "core:collections";
+use { Number } from "./number.wado";
 
 /// What a JSON value is.
 pub enum NodeKind {
@@ -32,12 +33,16 @@ pub enum NodeKind {
 /// in turn, and `ends` says where its subtree stops. Node 0 is the root.
 pub struct Document {
     kinds: List<NodeKind> = [],
-    /// A bool's value as 0 or 1, the index of a number in `numbers` or of a
-    /// string in `strings`, or a container's member count.
+    /// A bool's value as 0 or 1, the index of a number in `numbers` (or, as
+    /// `-1 - i`, in `decimals`) or of a string in `strings`, or a container's
+    /// member count.
     slots: List<i32> = [],
     /// The index one past the node's subtree.
     ends: List<i32> = [],
+    /// The numbers an f64 holds.
     numbers: List<f64> = [],
+    /// The numbers no f64 holds.
+    decimals: List<Number> = [],
     strings: List<String> = [],
 }
 
@@ -48,8 +53,8 @@ global LINEAR_KEY_CHECK: i32 = 8;
 
 impl Document {
     /// Reads the JSON text `text`. A repeated key is an error, as in
-    /// `core:json`, and so are a lone surrogate and a number that rounds to
-    /// infinity. `max_depth` bounds nesting.
+    /// `core:json`, and so is a lone surrogate. A number is read exactly,
+    /// whatever its size. `max_depth` bounds nesting.
     pub fn parse<S: AsByteSlice>(text: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<Document, DeserializeError> {
         let mut r = Reader {
             doc: Document {},
@@ -99,9 +104,14 @@ impl Document {
         return at;
     }
 
-    fn push_number(&mut self, value: f64) {
-        self.push(NodeKind::Number, self.numbers.len());
-        self.numbers.push(value);
+    fn push_number(&mut self, value: Number) {
+        if value.is_f64() {
+            self.push(NodeKind::Number, self.numbers.len());
+            self.numbers.push(value.to_f64());
+        } else {
+            self.push(NodeKind::Number, -1 - self.decimals.len());
+            self.decimals.push(value);
+        }
     }
 
     fn push_string(&mut self, value: String) {
@@ -117,8 +127,14 @@ impl Document {
             let kind = src.kinds[i];
             let slot = match kind {
                 Number => {
-                    self.numbers.push(src.numbers[src.slots[i]]);
-                    self.numbers.len() - 1;
+                    let s = src.slots[i];
+                    if s >= 0 {
+                        self.numbers.push(src.numbers[s]);
+                        self.numbers.len() - 1;
+                    } else {
+                        self.decimals.push(src.decimals[-1 - s]);
+                        -self.decimals.len();
+                    }
                 },
                 String => {
                     self.strings.push(src.strings[src.slots[i]]);
@@ -164,11 +180,15 @@ impl Node {
         return null;
     }
 
-    pub fn as_f64(&self) -> Option<f64> {
-        if self.kind() matches { Number } {
-            return Option::Some(self.doc.numbers[self.doc.slots[self.at]]);
+    pub fn as_number(&self) -> Option<Number> {
+        if !self.kind() matches { Number } {
+            return null;
         }
-        return null;
+        let s = self.doc.slots[self.at];
+        if s >= 0 {
+            return Option::Some(Number::from(self.doc.numbers[s]));
+        }
+        return Option::Some(self.doc.decimals[-1 - s]);
     }
 
     pub fn as_str(&self) -> Option<StrSlice> {
@@ -230,7 +250,7 @@ impl Eq for Node {
         return match kind {
             Null => true,
             Bool => self.as_bool() == other.as_bool(),
-            Number => self.as_f64().unwrap() == other.as_f64().unwrap(),
+            Number => self.as_number().unwrap() == other.as_number().unwrap(),
             String => self.as_str().unwrap() == other.as_str().unwrap(),
             Array => {
                 if self.len() != other.len() {
@@ -276,7 +296,7 @@ impl Serialize for Node {
         return match self.kind() {
             Null => s.serialize_null(),
             Bool => s.serialize_bool(self.as_bool().unwrap()),
-            Number => s.serialize_f64(self.as_f64().unwrap()),
+            Number => self.as_number().unwrap().serialize(s),
             String => s.serialize_string(self.as_str().unwrap()),
             Array => {
                 let mut seq = s.begin_seq(self.len())?;
@@ -374,7 +394,7 @@ impl Reader {
         if b < 0 {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        let n = self.de.parse_f64_direct()?;
+        let n = Number::read(&mut self.de)?;
         self.doc.push_number(n);
         return Result::Ok(());
     }

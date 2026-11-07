@@ -4,6 +4,7 @@
 use { Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
 use { HashMap, HashSet } from "core:collections";
 use { Document, Node } from "./document.wado";
+use { Number } from "./number.wado";
 
 /// A JSON Schema: `true` admits every instance, `false` none, and an object
 /// asserts its keywords.
@@ -64,11 +65,11 @@ pub struct SchemaObject {
     pub if: Option<Schema> = null,
     pub then: Option<Schema> = null,
     pub else: Option<Schema> = null,
-    pub multiple_of: Option<f64> = null,
-    pub minimum: Option<f64> = null,
-    pub exclusive_minimum: Option<f64> = null,
-    pub maximum: Option<f64> = null,
-    pub exclusive_maximum: Option<f64> = null,
+    pub multiple_of: Option<Number> = null,
+    pub minimum: Option<Number> = null,
+    pub exclusive_minimum: Option<Number> = null,
+    pub maximum: Option<Number> = null,
+    pub exclusive_maximum: Option<Number> = null,
     pub min_length: Option<i32> = null,
     pub max_length: Option<i32> = null,
     pub pattern: Option<String> = null,
@@ -241,7 +242,7 @@ impl SchemaObject {
                 );
             }
         }
-        if let Some(m) = self.multiple_of && !(m > 0.0) {
+        if let Some(m) = &self.multiple_of && *m <= Number::from(0.0) {
             return fail(&`${*at}/multipleOf`, "must be greater than 0");
         }
         let counts: List<[String, Option<i32>]> = [
@@ -577,8 +578,8 @@ fn read_bool(v: &Node, at: &String) -> Result<bool, SchemaError> {
     return fail(at, "must be a boolean");
 }
 
-fn read_number(v: &Node, at: &String) -> Result<f64, SchemaError> {
-    if let Some(n) = v.as_f64() {
+fn read_number(v: &Node, at: &String) -> Result<Number, SchemaError> {
+    if let Some(n) = v.as_number() {
         return Result::Ok(n);
     }
     return fail(at, "must be a number");
@@ -586,10 +587,11 @@ fn read_number(v: &Node, at: &String) -> Result<f64, SchemaError> {
 
 /// An integer, which may be spelled with a fraction of zero. A count past
 /// `i32::MAX` is held at `i32::MAX`, which no list or string length reaches
-/// either; `SchemaObject::check` rejects a negative one.
+/// either, and one below `i32::MIN` at `i32::MIN`; `SchemaObject::check`
+/// rejects a negative one.
 fn read_count(v: &Node, at: &String) -> Result<i32, SchemaError> {
-    if let Some(n) = v.as_f64() && n == f64::trunc(n) {
-        return Result::Ok(if n > i32::MAX as f64 { i32::MAX } else { n as i32 });
+    if let Some(n) = v.as_number() && n.is_integer() {
+        return Result::Ok(n.to_f64() as i32);
     }
     return fail(at, "must be a non-negative integer");
 }

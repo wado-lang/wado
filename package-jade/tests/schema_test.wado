@@ -1,4 +1,4 @@
-use { Document, JsonTypes, Schema, SchemaObject, pointer_token } from "../src/lib.wado";
+use { Document, JsonTypes, Number, Schema, SchemaObject, pointer_token } from "../src/lib.wado";
 use { to_string } from "core:json";
 use { HashMap } from "core:collections";
 
@@ -90,7 +90,7 @@ test "a schema built breaking a keyword's rule is not written" {
     extra["type"] = Document::string("integer");
     let collides = to_string(&SchemaObject { extra }).unwrap_err();
     assert `${collides}` == "/type: is a keyword Draft 2020-12 defines";
-    let zero = to_string(&SchemaObject { multiple_of: Option::Some(0.0) }).unwrap_err();
+    let zero = to_string(&SchemaObject { multiple_of: Option::Some(Number::from(0.0)) }).unwrap_err();
     assert `${zero}` == "/multipleOf: must be greater than 0";
     let negative = to_string(&SchemaObject { min_length: Option::Some(-1) }).unwrap_err();
     assert `${negative}` == "/minLength: must be a non-negative integer";

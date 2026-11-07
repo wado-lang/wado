@@ -17,6 +17,7 @@ use { Uri } from "core:uri";
 use { Url, percent_encode } from "core:url";
 use { Uuid } from "core:uuid";
 use { Document } from "./document.wado";
+use { Number } from "./number.wado";
 use { JsonTypes, Schema, SchemaObject, pointer_token } from "./schema.wado";
 
 /// A type whose JSON form a schema describes. Every value `core:json` writes
@@ -224,8 +225,8 @@ impl JsonSchema for bool {
 fn integer(minimum: f64, maximum: f64) -> Schema {
     return Schema::Object(SchemaObject {
         type: JsonTypes::Integer,
-        minimum: Option::Some(minimum),
-        maximum: Option::Some(maximum),
+        minimum: Option::Some(Number::from(minimum)),
+        maximum: Option::Some(Number::from(maximum)),
     });
 }
 
