@@ -1,0 +1,39 @@
+// A temporary a `let` borrows, directly or through a literal, a cast, a field
+// or a dereference, drops when the `let`'s block ends rather than when its
+// statement does, as Rust's temporary lifetime extension does. The borrow would
+// otherwise read a dropped value.
+
+global mut DROPPED: List<i32> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPPED.push(self.n);
+    }
+}
+
+struct Pair {
+    a: &Tok,
+    b: &Tok,
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+test {
+    blk: {
+        let a = &make(1);
+        let b = &mut make(2);
+        b.n += 10;
+        let [c, d] = [&make(3), &make(4)];
+        let p = Pair { a: &make(5), b: &make(6) };
+        let n = &make(7).n;
+        assert DROPPED.is_empty();
+        assert [a.n, b.n, c.n, d.n, p.a.n, p.b.n, *n] == [1, 12, 3, 4, 5, 6, 7];
+    }
+    assert DROPPED == [7, 6, 5, 4, 3, 12, 1] as List<i32>;
+}

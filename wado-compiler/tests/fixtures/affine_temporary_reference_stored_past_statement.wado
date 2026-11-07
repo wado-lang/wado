@@ -1,0 +1,24 @@
+// A call taking `&mut` may store into it a borrow of a temporary, which drops
+// when the call's statement ends, so the list cannot be read after it.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+test {
+    let mut seen: List<&Tok> = [];
+    seen.push(&make(1));
+    assert seen[0].n == 1;
+}
+
+__DATA__
+{"compile_error": ":20:12: analysis error: `seen` refers into the temporary at 19:16, which dropped as its statement ended"}

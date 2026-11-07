@@ -166,37 +166,38 @@ impl From<AffineMoveError> for Diagnostic {
                 Code::TypeMismatch,
                 match gone {
                     Gone::Moved(at) => format!(
-                        "`{holder}` refers into `{owner}`, which moved at {}:{}",
+                        "`{holder}` refers into {owner}, which moved at {}:{}",
                         at.line, at.column,
                     ),
-                    Gone::Ended => format!(
-                        "`{holder}` refers into `{owner}`, which dropped as its scope ended"
+                    Gone::Ended => {
+                        format!("`{holder}` refers into {owner}, which dropped as its scope ended")
+                    }
+                    Gone::StatementEnded => format!(
+                        "`{holder}` refers into {owner}, which dropped as its statement ended"
                     ),
                     Gone::Disturbed(at) => format!(
-                        "`{holder}` refers into `{owner}`, which a `&mut` use at {}:{} may have moved out of",
+                        "`{holder}` refers into {owner}, which a `&mut` use at {}:{} may have moved out of",
                         at.line, at.column,
                     ),
                     Gone::Replaced(at) => format!(
-                        "`{holder}` refers into `{owner}`, which the assignment at {}:{} replaced",
+                        "`{holder}` refers into {owner}, which the assignment at {}:{} replaced",
                         at.line, at.column,
                     ),
                 },
             ),
             MoveError::ReturnsLocalReference { owner } => (
                 Code::TypeMismatch,
-                format!(
-                    "cannot return a reference into `{owner}`, which drops as the body returns"
-                ),
+                format!("cannot return a reference into {owner}, which drops as the body returns"),
             ),
             MoveError::ReferenceEscapes { holder, owner } => (
                 Code::TypeMismatch,
                 format!(
-                    "`{holder}` keeps a reference into `{owner}` past the body, where `{owner}` drops"
+                    "`{holder}` keeps a reference into {owner} past the body, where {owner} drops"
                 ),
             ),
             MoveError::GlobalHoldsReference { global, owner } => (
                 Code::TypeMismatch,
-                format!("global `{global}` cannot keep a reference into `{owner}`, which drops"),
+                format!("global `{global}` cannot keep a reference into {owner}, which drops"),
             ),
         };
         let message = match e.note {
@@ -228,6 +229,8 @@ pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
             out: &mut out,
             fallbacks: &fallbacks,
             in_fallback: None,
+            extended: IndexSet::default(),
+            regions_opened: 0,
         };
         for item in &module.items {
             checker.check_item(item);
@@ -283,6 +286,10 @@ struct Checker<'a> {
     /// The falling-back destructuring assignment whose right side is being
     /// walked, where it has a cause to note.
     in_fallback: Option<NotedFallback>,
+    /// The temporaries a `let` keeps borrowed (see [`extended_temporaries`]).
+    extended: IndexSet<AstId>,
+    /// The regions opened so far, which number the next.
+    regions_opened: u32,
 }
 
 struct NotedFallback {
@@ -512,6 +519,8 @@ type Moves = IndexMap<(AstId, Vec<String>), Span>;
 enum Gone {
     Moved(Span),
     Ended,
+    /// A temporary no `let` keeps borrowed, whose statement ended.
+    StatementEnded,
     /// A `&mut` use of the local, not through the value, which may have moved
     /// a part of it out.
     Disturbed(Span),
@@ -521,7 +530,8 @@ enum Gone {
 
 /// A local a reference reaches into: the binding, the field path into it,
 /// which binding of it, since a loop binds its locals afresh each iteration,
-/// and how many `&mut` uses of it came before.
+/// and how many `&mut` uses of it came before. A temporary is one too: the
+/// expression, and the region it lives as long as for its instance.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Owner {
     def: AstId,
@@ -530,9 +540,20 @@ struct Owner {
     disturbed: usize,
 }
 
+/// A statement, or a scope, that a temporary borrowed in it lives as long as:
+/// the statement, or the scope where a `let` keeps the borrow.
+#[derive(Clone, Copy)]
+struct Region {
+    serial: u32,
+    scope: bool,
+}
+
 #[derive(Clone)]
 struct OwnerSite {
+    /// How a message names the owner.
     name: String,
+    /// The region a temporary lives as long as; `None` for a local.
+    region: Option<Region>,
     /// Where the reference was taken.
     span: Span,
     /// Only an affine local moves, and only dropping one ends what a reference
@@ -655,6 +676,10 @@ struct MoveWalker<'a, 'c> {
     ended: IndexMap<AstId, u32>,
     /// The bindings each open scope declares, innermost last.
     scopes: Vec<Vec<AstId>>,
+    /// The open statements and scopes, innermost last.
+    regions: Vec<Region>,
+    /// The first region of this body: one before it is the enclosing body's.
+    own_regions_from: u32,
     /// The `&mut` uses of each local, in order.
     disturbances: IndexMap<AstId, Vec<Disturbance>>,
     /// Inside a closure body, the captures it makes a `&mut` use of.
@@ -716,6 +741,8 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             instances: IndexMap::default(),
             ended: IndexMap::default(),
             scopes: Vec::new(),
+            regions: Vec::new(),
+            own_regions_from: 0,
             disturbances: IndexMap::default(),
             disturbed_captures: IndexSet::default(),
             closure_owners: IndexMap::default(),
@@ -738,6 +765,8 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
         inner.guard_bindings.clone_from(&self.guard_bindings);
         inner.instances.clone_from(&self.instances);
         inner.ended.clone_from(&self.ended);
+        inner.regions.clone_from(&self.regions);
+        inner.own_regions_from = self.own_regions_from;
         inner.disturbances.clone_from(&self.disturbances);
         inner.suppress = self.suppress;
         inner
@@ -868,8 +897,12 @@ impl MoveWalker<'_, '_> {
             return;
         };
         let gone = owners.iter().find_map(|(owner, site)| {
+            let gone = || match site.region {
+                Some(region) => self.temporary_gone(region),
+                None => self.owner_gone(holder, owner),
+            };
             site.affine
-                .then(|| site.gone.or_else(|| self.owner_gone(holder, owner)))
+                .then(|| site.gone.or_else(gone))
                 .flatten()
                 .map(|gone| (site.name.clone(), gone))
         });
@@ -1294,7 +1327,8 @@ impl MoveWalker<'_, '_> {
             .collect();
         let mut inner = self.sub_walker();
         inner.closure_locals = Some(locals);
-        inner.visit_at(&closure.body);
+        inner.own_regions_from = inner.checker.regions_opened;
+        inner.in_region(false, |inner| inner.visit_at(&closure.body));
         if !matches!(closure.body, Expr::Block(_)) {
             inner.refuse_returned(&closure.body);
         }
@@ -1333,7 +1367,8 @@ impl MoveWalker<'_, '_> {
             let writes = disturbed_captures.contains(&def);
             let site = OwnerSite {
                 affine: self.is_affine_local(def),
-                name: name.clone(),
+                name: format!("`{name}`"),
+                region: None,
                 span: closure.span,
                 writes,
                 gone: None,
@@ -1679,7 +1714,15 @@ impl MoveWalker<'_, '_> {
             }
             _ => {
                 let Some(place) = self.place_path(expr) else {
-                    return self.owners_of(expr);
+                    let mut owners = self.owners_of(expr);
+                    if let Some(writes) = borrow
+                        && is_temporary(expr)
+                        && self.expr_is_affine(expr.id())
+                    {
+                        let (owner, site) = self.temporary_owner(expr, writes);
+                        owners.insert(owner, site);
+                    }
+                    return owners;
                 };
                 let Some(def) = self.sem().referenced_symbol(place.root.id) else {
                     return Owners::default();
@@ -1689,7 +1732,8 @@ impl MoveWalker<'_, '_> {
                     && self.sem().local_type(def).is_some()
                 {
                     let site = OwnerSite {
-                        name: place.root.name.clone(),
+                        name: format!("`{}`", place.root.name),
+                        region: None,
                         span: expr.span(),
                         affine: self.is_affine_local(def),
                         writes,
@@ -1701,6 +1745,46 @@ impl MoveWalker<'_, '_> {
                 }
                 owners
             }
+        }
+    }
+
+    /// The temporary `expr` as the owner of a borrow of it, living as long as
+    /// the innermost statement, or the innermost scope where a `let` keeps the
+    /// borrow.
+    fn temporary_owner(&self, expr: &Expr, writes: bool) -> (Owner, OwnerSite) {
+        let scope = self.checker.extended.contains(&expr.id());
+        let region = *self
+            .regions
+            .iter()
+            .rev()
+            .find(|region| region.scope == scope)
+            .expect("a temporary is borrowed inside a statement of a scope");
+        let span = expr.span();
+        let owner = Owner {
+            def: expr.id(),
+            path: Vec::new(),
+            instance: region.serial,
+            disturbed: 0,
+        };
+        let site = OwnerSite {
+            name: format!("the temporary at {}:{}", span.line, span.column),
+            region: Some(region),
+            span,
+            affine: true,
+            writes,
+            gone: None,
+        };
+        (owner, site)
+    }
+
+    /// Why a temporary living as long as `region` no longer holds what a value
+    /// reads through it, if it does not.
+    fn temporary_gone(&self, region: Region) -> Option<Gone> {
+        let open = self.regions.iter().any(|r| r.serial == region.serial);
+        match (open, region.scope) {
+            (true, _) => None,
+            (false, true) => Some(Gone::Ended),
+            (false, false) => Some(Gone::StatementEnded),
         }
     }
 
@@ -1782,11 +1866,18 @@ impl MoveWalker<'_, '_> {
         }
     }
 
-    /// The site of an affine local of this body among `owners`, if any.
+    /// The site of an affine local or temporary of this body among `owners`,
+    /// if any.
     fn affine_own_local(&self, owners: &Owners) -> Option<OwnerSite> {
         owners
             .iter()
-            .find(|(owner, site)| site.affine && self.is_own_local(owner.def))
+            .find(|(owner, site)| {
+                let own = match site.region {
+                    Some(region) => region.serial >= self.own_regions_from,
+                    None => self.is_own_local(owner.def),
+                };
+                site.affine && own
+            })
             .map(|(_, site)| site.clone())
     }
 
@@ -1809,10 +1900,21 @@ impl MoveWalker<'_, '_> {
         }
     }
 
+    /// Runs `walk` in a statement, or a scope, that the temporaries it borrows
+    /// live as long as.
+    fn in_region<R>(&mut self, scope: bool, walk: impl FnOnce(&mut Self) -> R) -> R {
+        let serial = self.checker.regions_opened;
+        self.checker.regions_opened += 1;
+        self.regions.push(Region { serial, scope });
+        let result = walk(self);
+        self.regions.pop();
+        result
+    }
+
     /// Runs `walk` in a scope of its own: the bindings it makes end with it.
     fn in_scope<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
         self.scopes.push(Vec::new());
-        let result = walk(self);
+        let result = self.in_region(true, walk);
         for id in self.scopes.pop().expect("the scope pushed above") {
             let instance = self.instance(id);
             self.ended.insert(id, instance);
@@ -1855,7 +1957,7 @@ impl MoveWalker<'_, '_> {
 
     /// Walks `stmt`, answering whether control never reaches past it.
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
-        let walked = self.walk_stmt(stmt);
+        let walked = self.in_region(false, |walker| walker.walk_stmt(stmt));
         walked || divergence::stmt_head_always_exits(self, stmt)
     }
 
@@ -1866,6 +1968,7 @@ impl MoveWalker<'_, '_> {
             Stmt::Let(l) => {
                 let before = self.flow.clone();
                 if let Some(value) = &l.value {
+                    extended_temporaries(value, Extension::Value, &mut self.checker.extended);
                     self.note_decomposed(value, [&l.pattern]);
                     self.visit_at(value);
                 }
@@ -2199,6 +2302,66 @@ fn keeps_whole(pattern: &Pattern) -> bool {
         | Pattern::Range { .. }
         | Pattern::Error(_) => false,
     }
+}
+
+/// How a `let` keeps what its initializer holds: the value itself, or a borrow
+/// of the place. Drop elaboration extends the same temporaries.
+#[derive(Clone, Copy)]
+enum Extension {
+    Value,
+    Place,
+}
+
+/// Add to `out` the temporaries `expr` borrows where a `let` keeps the borrow,
+/// Rust's temporary lifetime extension: the operand of a borrow the `let`
+/// keeps, through a literal's operands, a cast, a field read or a dereference.
+fn extended_temporaries(expr: &Expr, extension: Extension, out: &mut IndexSet<AstId>) {
+    if matches!(extension, Extension::Place) && is_temporary(expr) {
+        out.insert(expr.id());
+    }
+    match expr {
+        Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
+            extended_temporaries(&u.expr, Extension::Place, out);
+        }
+        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+            if matches!(extension, Extension::Place) {
+                extended_temporaries(&u.expr, Extension::Place, out);
+            }
+        }
+        Expr::FieldAccess(fa) => {
+            if matches!(extension, Extension::Place) {
+                extended_temporaries(&fa.expr, Extension::Place, out);
+            }
+        }
+        Expr::Cast(c) => extended_temporaries(&c.expr, extension, out),
+        Expr::StructLiteral(s) => {
+            for field in &s.fields {
+                extended_temporaries(&field.value, Extension::Value, out);
+            }
+        }
+        Expr::TupleLiteral(t) => {
+            for element in &t.elements {
+                extended_temporaries(element, Extension::Value, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Whether evaluating `expr` makes a value no place holds, so a borrow of it
+/// borrows a temporary.
+fn is_temporary(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Call(_)
+            | Expr::MethodCall(_)
+            | Expr::StaticMethodCall(_)
+            | Expr::StructLiteral(_)
+            | Expr::TupleLiteral(_)
+            | Expr::If(_)
+            | Expr::Match(_)
+            | Expr::LabeledBlock(_)
+    )
 }
 
 /// The binding a place of `expr` is rooted in, through fields and elements.

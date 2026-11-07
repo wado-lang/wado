@@ -245,7 +245,8 @@ An owner stops holding a value at the first of these:
   outermost locals of its body.
 - It is a temporary or a value its statement discards (`make();`,
   `let _ = make();`), and its statement ends. A `with` owns a handler it is
-  given by value the same way.
+  given by value the same way. A temporary a `let` keeps borrowed is the
+  exception, below.
 - An assignment replaces it: `x = value` drops what `x` held, and a store into a
   field or an element drops what the slot held.
 - It is the part of a by-value pattern that no binding takes. It drops as the
@@ -254,6 +255,32 @@ An owner stops holding a value at the first of these:
 
 The owners that stop together drop in the reverse of the order they began
 holding. A trap does not unwind, so it runs no drops.
+
+A temporary a `let` keeps borrowed stops holding its value when the `let`'s
+scope ends, as a local declared there would, after the `let`'s own bindings.
+The `let` keeps the borrow written as its initializer, or as an operand of a
+struct or tuple literal or of a cast that it keeps, and the temporary borrowed
+is the operand of that `&` or `&mut`, or what a field read or a dereference of
+the operand reads from. This is Rust's temporary lifetime extension. A
+temporary only a call's operand borrows is not kept, whatever the call returns.
+
+<!-- {"fixture":"affine_temporary_extended_by_let.wado"} -->
+
+```wado
+test {
+    blk: {
+        let a = &make(1);
+        let b = &mut make(2);
+        b.n += 10;
+        let [c, d] = [&make(3), &make(4)];
+        let p = Pair { a: &make(5), b: &make(6) };
+        let n = &make(7).n;
+        assert DROPPED.is_empty();
+        assert [a.n, b.n, c.n, d.n, p.a.n, p.b.n, *n] == [1, 12, 3, 4, 5, 6, 7];
+    }
+    assert DROPPED == [7, 6, 5, 4, 3, 12, 1] as List<i32>;
+}
+```
 
 <!-- {"fixture":"affine_pattern_drops_unbound_parts_on_arm_entry.wado"} -->
 
@@ -352,5 +379,18 @@ test {
     let r = &t;
     builtin::drop(t);
     assert r.id == 7;
+}
+```
+
+A borrow of an affine temporary refers into it as into a local whose scope is
+the temporary's statement, or the `let`'s scope where a `let` keeps the borrow,
+and the same rules hold.
+
+<!-- {"fixture":"affine_temporary_reference_read_after_statement.wado"} -->
+
+```wado
+test {
+    let r = id(&make(1));
+    assert r.n == 1;
 }
 ```
