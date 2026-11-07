@@ -37,7 +37,7 @@ Train — 32 steps, one per document, of forward, backward and Adam:
 | Rust              | 2.45 k tokens/s |  92.545 ms | 1.00x   |
 | **Wado**          | 2.40 k tokens/s |  94.396 ms | 1.02x   |
 | **Wado** (no-pgo) | 2.36 k tokens/s |  96.216 ms | 1.04x   |
-| JavaScript        | 1.22 k tokens/s | 185.399 ms | 2.00x   |
+| JavaScript        | 1.72 k tokens/s | 131.868 ms | 1.42x   |
 
 Infer — 24 samples of the forward path alone, no gradients:
 
@@ -45,7 +45,7 @@ Infer — 24 samples of the forward path alone, no gradients:
 | ----------------- | --------------: | ---------: | ------- |
 | **Wado**          | 6.23 k tokens/s |  61.628 ms | 1.00x   |
 | **Wado** (no-pgo) | 5.45 k tokens/s |  70.413 ms | 1.14x   |
-| JavaScript        | 3.06 k tokens/s | 125.572 ms | 2.04x   |
+| JavaScript        | 3.85 k tokens/s |  99.794 ms | 1.62x   |
 | Rust              | 2.98 k tokens/s | 128.937 ms | 2.09x   |
 
 Training spends most of its time in the backward pass, which
@@ -64,6 +64,9 @@ shape the Python original has. The training gap is what that costs.
 
 All three arms print the same final loss and generate the same sample, so they
 are the same computation.
+
+The JavaScript rows run at the best semi-space size found, as
+[GC heap size](#gc-heap-size) shows.
 
 ### Mandelbrot
 
@@ -517,6 +520,20 @@ each new page costs a fault.
 
 At 512 MiB json-catalog, zlib and sqlite-parse are all slower and the rest are
 flat, and `wado serve` measures the same at either size.
+
+Left to resize its new space, V8 swings microgpt's JavaScript rows between runs.
+That benchmark fixes it with `--min-semi-space-size` and `--max-semi-space-size`
+at `MICROGPT_NODE_SEMI_SPACE`, the size that does best across both rows. The
+other JavaScript rows run at V8's default. Five runs per size, in ms/iter:
+
+| Semi-space size | Train fastest | Train slowest | Infer fastest | Infer slowest |
+| --------------- | ------------: | ------------: | ------------: | ------------: |
+| V8's default    |         172.7 |         202.6 |         109.2 |         329.7 |
+| 64 MiB          |         159.2 |         168.4 |          98.8 |         107.2 |
+| 96 MiB          |         140.5 |         149.1 |          94.6 |         101.9 |
+| 128 MiB         |         131.5 |         134.4 |          99.5 |         101.1 |
+| 192 MiB         |         128.7 |         131.8 |         108.0 |         109.6 |
+| 256 MiB         |         150.7 |         153.0 |         104.3 |         105.8 |
 
 ## Profiling
 
