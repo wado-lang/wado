@@ -1235,7 +1235,8 @@ test "prediction answers a predicate inside a group" {
     for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
         assert parses(
             "grammar G;
-s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF | 'G' r7 EOF | 'H' r8 EOF ;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF | 'G' r7 EOF | 'H' r8 EOF
+  | 'I' r9 EOF | 'J' r10 EOF ;
 r1 : ({false}? 'a' | 'b')+ 'x' | 'a' 'x' ;
 r2 : ({false}? 'a' 'x' | 'b')? 'z' | 'a' 'x' 'z' ;
 r3 : ('a' {false}? 'b' | 'c') 'x' | 'a' 'b' 'x' 'y' ;
@@ -1246,12 +1247,14 @@ r6 : ('-'? {false}? 'a' | 'a') 'x' ;
 r7 : ({false}? 'a')? 'x' | 'a' 'x' ;
 r8 : v 'd' | 'a' 'z' 'c' 'd' 'e'? ;
 v : (({false}? 'a' 'z')? 'b'? 'c')? ;
+r9 : ('-'? {false}? 'a' | 'a') 'x' | 'a' 'x' 'y' ;
+r10 : ('-'? {false}? 'a')* 'a'? 'b' ;
 WS : ' ' -> skip ;
 ",
             "s",
             [
                 "A a x", "A b a x", "B a x z", "B b z", "C a b x", "C a b x y", "D a x", "D - a x", "E a c d", "E d",
-                "F a x", "F - a x", "G a x", "G x", "H a z c d", "H b c d",
+                "F a x", "F - a x", "G a x", "G x", "H a z c d", "H b c d", "I a x", "I a x y", "J a b", "J b",
             ],
             &GenerateOptions { atn },
         ) == "A a x => (s A (r1 a x))
@@ -1270,6 +1273,48 @@ G a x => (s G (r7 a x))
 G x => (s G (r7 x))
 H a z c d => (s H (r8 a z c d))
 H b c d => (s H (r8 (v b c) d))
+I a x => (s I (r9 a x))
+I a x y => (s I (r9 a x y))
+J a b => (s J (r10 a b))
+J b => (s J (r10 b))
+";
+    }
+}
+
+test "prediction walks past a call to a rule that matches nothing" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(
+            "grammar G;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF ;
+r1 : w 'a' 'b' | 'a' 'c' ;
+r2 : w 'a' | 'b' ;
+r3 : w 'a' | 'a' ;
+r4 : (w | 'b') 'a' 'b' | 'a' 'c' ;
+w : ;
+WS : ' ' -> skip ;
+",
+            "s",
+            ["A a b", "A a c", "B a", "C a", "D a b", "D b a b", "D a c"],
+            &GenerateOptions { atn },
+        ) == "A a b => (s A (r1 w a b))
+A a c => (s A (r1 a c))
+B a => (s B (r2 w a))
+C a => (s C (r3 w a))
+D a b => (s D (r4 w a b))
+D b a b => (s D (r4 b a b))
+D a c => (s D (r4 a c))
+";
+    }
+}
+
+test "prediction leaves a predicate behind a called rule's action to the parse" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar G;
+s : r EOF ;
+r : u {false}? 'a' | 'a' ;
+u : {} ;
+WS : ' ' -> skip ;
+", "s", ["a"], &GenerateOptions { atn }) == "a => error
 ";
     }
 }

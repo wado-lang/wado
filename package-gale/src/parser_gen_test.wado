@@ -9,6 +9,7 @@ use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry } from "./table_registry.wado";
 use { ParserPlan } from "./parser_plan.wado";
+use { decision_predicates } from "./gate_conditions.wado";
 use { Alternative, ParserRule, Visibility } from "./ir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { Diagnostics, ScanBody, ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
@@ -25,13 +26,16 @@ fn lr_ctx() -> EmitContext {
     ];
     let mut plan = ParserPlan::unmarked(rules.len());
     plan.lr_rule_snakes.insert("r");
+    let mut analysis = GrammarAnalysis::new(&rules);
+    let decisions = decision_predicates(&GenSettings {}, &mut analysis);
     let mut ctx = EmitContext::new(
-        GrammarAnalysis::new(&rules),
+        analysis,
         GenSettings {},
         RuleFollow::unknown(),
         TableRegistry::new(),
         Diagnostics {},
         plan,
+        decisions,
     );
     ctx.cursor.set_current_rule_index(0);
     return ctx;

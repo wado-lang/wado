@@ -11,7 +11,13 @@ use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry, follow_mask_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { ParserPlan } from "./parser_plan.wado";
-use { PredicateSite, alt_has_gate, alt_scan_gate_conditions, gate_condition_for } from "./gate_conditions.wado";
+use {
+    DecisionPredicates,
+    PredicateSite,
+    alt_has_gate,
+    alt_scan_gate_conditions,
+    gate_condition_for,
+} from "./gate_conditions.wado";
 use { AmbiguousNode } from "./prediction.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { rule_returns_vals } from "./action_translate.wado";
@@ -307,6 +313,7 @@ pub struct EmitContext {
     pub tables: TableRegistry,
     pub diagnostics: Diagnostics,
     pub plan: ParserPlan,
+    pub decisions: DecisionPredicates,
     pub cursor: EmitCursor,
 }
 
@@ -319,9 +326,10 @@ impl EmitContext {
         tables: TableRegistry,
         diagnostics: Diagnostics,
         plan: ParserPlan,
+        decisions: DecisionPredicates,
     ) -> EmitContext {
         let cursor = EmitCursor::new(analysis.parser_rules().len());
-        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, cursor };
+        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, decisions, cursor };
     }
 
     /// The rule being emitted.

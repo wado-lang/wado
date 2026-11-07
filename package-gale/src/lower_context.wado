@@ -3,7 +3,7 @@
 //! its gates name, the diagnostics its decisions raise, and the marks
 //! (`LowerMarks`) the parser plan is decided from.
 
-use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
+use { Alternative, ParserRule } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, Diagnostics, Rule } from "./gir.wado";
 use { RuleOverlap, overlap_groups_of, overlap_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
@@ -11,11 +11,14 @@ use { AtnMode, GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry } from "./table_registry.wado";
 use {
+    DecisionPredicates,
+    MetPredicate,
     PredicateSite,
     alt_has_gate,
     alt_scan_checks,
     alt_scan_gate_conditions,
-    meets_predicate_at,
+    decision_predicates,
+    predicates_met_at,
 } from "./gate_conditions.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 
@@ -82,6 +85,7 @@ pub struct LowerContext {
     pub tables: TableRegistry,
     pub diagnostics: Diagnostics,
     pub marks: LowerMarks,
+    pub decisions: DecisionPredicates,
     /// Index of the rule being lowered, or -1 between rules.
     current_rule_index: i32,
 }
@@ -94,7 +98,9 @@ impl LowerContext {
         follow: RuleFollow = RuleFollow::unknown(),
         diagnostics: Diagnostics = Diagnostics {},
     ) -> LowerContext {
+        let mut analysis = analysis;
         let marks = LowerMarks::new(analysis.parser_rules().len());
+        let decisions = decision_predicates(&settings, &mut analysis);
         return LowerContext {
             analysis,
             settings,
@@ -102,6 +108,7 @@ impl LowerContext {
             tables: TableRegistry::new(),
             diagnostics,
             marks,
+            decisions,
             current_rule_index: -1,
         };
     }
@@ -211,27 +218,21 @@ impl LowerContext {
         return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
-    /// `gate_conditions::meets_predicate_at` for `alt`, where predicates run at
-    /// all.
+    /// Whether prediction entering `alt` of the rule being lowered at element
+    /// `index` meets a predicate (`gate_conditions::predicates_met_at`).
     pub fn meets_predicate_at(&mut self, alt: &Alternative, index: i32) -> bool {
-        return self.meets_predicate_in(&alt.elements, &alt.actions, index);
-    }
-
-    /// `gate_conditions::meets_predicate_at` for a sequence of the rule being
-    /// lowered, where predicates run at all.
-    pub fn meets_predicate_in(&mut self, elements: &List<Element>, actions: &List<AltAction>, index: i32) -> bool {
-        let site = self.predicate_site();
-        return self.settings.emit_actions && meets_predicate_at(elements, actions, index, &site, &mut self.analysis);
-    }
-
-    /// `meets_predicate_at` at the left edge of any of `alts`.
-    pub fn any_meets_predicate(&mut self, alts: &List<Alternative>) -> bool {
-        for let a of alts {
-            if self.meets_predicate_at(a, 0) {
-                return true;
-            }
+        if !self.settings.emit_actions {
+            return false;
         }
-        return false;
+        let site = self.predicate_site();
+        let mut met: List<MetPredicate> = [];
+        let _ = predicates_met_at(&alt.elements, &alt.actions, index, &site, &mut self.analysis, &mut [], &mut met);
+        return !met.is_empty();
+    }
+
+    /// Whether the decision at site `site` meets a predicate.
+    pub fn site_meets_predicate(&self, site: i32) -> bool {
+        return !self.decisions.at_site(site).is_empty();
     }
 
     /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
@@ -242,8 +243,9 @@ impl LowerContext {
 
     /// `gate_conditions::alt_scan_checks` for an alternative of the rule being
     /// lowered.
-    pub fn alt_scan_checks(&self, alt: &Alternative, from: i32) -> List<[i32, String]> {
-        return alt_scan_checks(alt, &self.settings, &self.analysis, &self.predicate_site(), from);
+    pub fn alt_scan_checks(&mut self, alt: &Alternative, from: i32) -> List<[i32, String]> {
+        let site = self.predicate_site();
+        return alt_scan_checks(alt, &self.settings, &mut self.analysis, &site, from);
     }
 
     /// `rule_overlap::rule_overlap_groups` for the rule being lowered.
@@ -257,13 +259,7 @@ impl LowerContext {
     /// Under `atn: "verify"` the simulator never does: the tournament makes
     /// it, and the simulator checks what `auto` would hand it.
     pub fn choice_route(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> ChoiceRoute {
-        let mut meets_predicate = false;
-        for let i of &alt_indices {
-            if self.meets_predicate_at(&rule.alternatives[*i], 0) {
-                meets_predicate = true;
-                break;
-            }
-        }
+        let meets_predicate = !self.decisions.at_rule(self.current_rule_index()).is_empty();
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
         let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
         let mode = if self.settings.atn.verifies() { AtnMode::Auto } else { self.settings.atn };

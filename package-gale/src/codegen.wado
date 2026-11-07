@@ -221,7 +221,7 @@ fn lower_context(
     analysis.precompute_scannability();
     let follow = settle_rule_follow(&grammar.parser_rules, &mut analysis);
     let mut settings = settings;
-    settings.scan_answers_predicates = scan_answers_predicates(&grammar.parser_rules, &settings, &analysis);
+    settings.scan_answers_predicates = scan_answers_predicates(&grammar.parser_rules, &settings, &mut analysis);
     return LowerContext::new(analysis, settings, follow, diagnostics);
 }
 
@@ -240,10 +240,10 @@ pub fn lower_for_analysis(grammar: &mut Grammar, token_kinds: TokenKinds) -> [Lo
 /// The context the parser emits in: what lowering settled, planned against the
 /// lowered grammar and its ATN.
 fn emit_context(grammar: &Grammar, lowered: &LoweredGrammar, lctx: LowerContext, atn: &Atn) -> EmitContext {
-    let LowerContext { analysis, settings, follow, tables, diagnostics, marks, .. } = lctx;
+    let LowerContext { analysis, settings, follow, tables, diagnostics, marks, decisions, .. } = lctx;
     let mut analysis = analysis;
     let plan = plan_parser(grammar, lowered, &mut analysis, &settings, &marks, atn);
-    return EmitContext::new(analysis, settings, follow, tables, diagnostics, plan);
+    return EmitContext::new(analysis, settings, follow, tables, diagnostics, plan, decisions);
 }
 
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {

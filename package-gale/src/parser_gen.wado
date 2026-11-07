@@ -48,6 +48,7 @@ use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GateScope, SCAN_EDGE_FIELD, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
+use { MetPredicate } from "./gate_conditions.wado";
 use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
@@ -2224,7 +2225,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
 
     if re.kind matches { Optional }
         && optional_asks_simulator(re.non_greedy, re.atn_decides, re.gate_caller_follow, ctx) {
-        w.begin(`if ${atn_enters_cond(ctx, re.atn_decision, re.non_greedy, "tokens", "pos")}`);
+        w.begin(`if ${atn_enters_cond(ctx, re.atn_decision, re.non_greedy, PickSide::Scan)}`);
         gen_scan_iteration(w, re, &loop_admits, ctx, false);
         w.end();
         return;
@@ -2293,8 +2294,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
             re.non_greedy,
             &re.atn_asked_kinds,
             `(${kind_at("tokens", "pos")})`,
-            "tokens",
-            "pos",
+            PickSide::Scan,
         );
     } else if re.non_greedy {
         non_greedy_static_enters(
@@ -2509,7 +2509,8 @@ fn gen_scan_op_group<S: AsStrSlice>(
         let branch_known = branch_proves(&branches, i);
         let simulated = atn_dec >= 0 && branches[i].alts.len() > 1;
         if simulated {
-            body.line(`let ${atn_var} = ${atn_predict_call(atn_dec, "tokens", "pos", ctx)};`);
+            let met = *ctx.decisions.at_site(ge.atn_site);
+            body.line(`let ${atn_var} = ${atn_predict_call(atn_dec, &met, PickSide::Scan, ctx)};`);
         }
         for let ai of &branches[i].alts {
             if simulated {
@@ -4635,7 +4636,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
             w.end();
             gen_loop_back_sync(w, ctx, r);
         }
-        w.begin(`while !p.recovering && ${atn_enters_cond(ctx, r.atn_decision, false, "&p.kinds", "p.pos")}`);
+        w.begin(`while !p.recovering && ${atn_enters_cond(ctx, r.atn_decision, false, PickSide::Parse)}`);
         gen_op(w, &r.body, ctx, nc);
         gen_loop_back_sync(w, ctx, r);
         w.end();
@@ -4726,7 +4727,7 @@ fn gen_op_optional(
     follow_gate: bool,
 ) {
     if optional_asks_simulator(r.non_greedy, r.atn_decides, r.gate_caller_follow, ctx) {
-        w.begin(`if ${atn_enters_cond(ctx, r.atn_decision, r.non_greedy, "&p.kinds", "p.pos")}`);
+        w.begin(`if ${atn_enters_cond(ctx, r.atn_decision, r.non_greedy, PickSide::Parse)}`);
         gen_op(w, &r.body, ctx, nc);
         w.end();
         return;
@@ -4995,7 +4996,7 @@ fn gen_op_repeat_optional_group(
     let opt = OptionalGroup { rep_op, g_op, g_elem, inner: &rep.element };
 
     if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx) {
-        opt.gen_present(w, ctx, &atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, "&p.kinds", "p.pos"));
+        opt.gen_present(w, ctx, &atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, PickSide::Parse));
         return;
     }
     if optional_probe_decides(rep_op, ctx) {
@@ -5098,31 +5099,25 @@ fn optional_asks_simulator(non_greedy: bool, atn_decides: bool, gate_caller_foll
 /// `Atn.decision_sites`), so each repeat predicts its own decision, however
 /// many one rule holds. `build_repeat` orders a greedy repeat's edges
 /// `[enter=0, exit=1]` and a non-greedy one's `[exit=0, enter=1]`.
-fn atn_enters_cond<S: AsStrSlice, S1: AsStrSlice>(
-    ctx: &mut EmitContext,
-    site: i32,
-    non_greedy: bool,
-    tokens: S,
-    pos: S1,
-) -> String {
+fn atn_enters_cond(ctx: &mut EmitContext, site: i32, non_greedy: bool, side: PickSide) -> String {
     let decision = ctx.plan.atn_decision_site(site);
     assert decision >= 0, "a repeat the simulator decides marked the grammar as needing the ATN, which numbers every repeat's decision";
     let enter = if non_greedy { 1 } else { 0 };
-    return `${atn_predict_call(decision, tokens, pos, ctx)} == ${enter}`;
+    let met = *ctx.decisions.at_site(site);
+    return `${atn_predict_call(decision, &met, side, ctx)} == ${enter}`;
 }
 
 /// `atn_enters_cond` for a loop, asking the simulator only about `asked`
 /// (`RepeatOp.atn_asked_kinds`), the kind at `lookahead`.
-fn atn_loop_enters_cond<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+fn atn_loop_enters_cond<S: AsStrSlice>(
     ctx: &mut EmitContext,
     site: i32,
     non_greedy: bool,
     asked: &List<i32>,
     lookahead: S,
-    tokens: S1,
-    pos: S2,
+    side: PickSide,
 ) -> String {
-    let predicts = atn_enters_cond(ctx, site, non_greedy, tokens, pos);
+    let predicts = atn_enters_cond(ctx, site, non_greedy, side);
     if asked.is_empty() {
         return predicts;
     }
@@ -5613,8 +5608,8 @@ fn gen_op_group(
 /// first token, which the tournament settles otherwise.
 variant GroupAtn {
     Unasked,
-    /// It decides, at this decision.
-    Decides(i32),
+    /// It decides, at this decision number and surface site.
+    Decides([i32, i32]),
     /// It checks the tournament's pick, at this decision.
     Checks(i32),
 }
@@ -5622,7 +5617,7 @@ variant GroupAtn {
 fn group_atn(g_op: &GroupOp, ctx: &EmitContext) -> GroupAtn {
     let decides = ctx.plan.atn_decision_site(g_op.atn_site);
     if decides >= 0 {
-        return GroupAtn::Decides(decides);
+        return GroupAtn::Decides([decides, g_op.atn_site]);
     }
     let checks = ctx.plan.atn_decision_site(g_op.atn_check_site);
     if checks >= 0 {
@@ -5802,7 +5797,7 @@ fn gen_op_repeat_with_follow_override(
         if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx)
             && rep_op.body_shape matches { LeafRuleCall | LeafOther } {
             let _ = dedup_name(&rep_op.field, name_counts);
-            let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, "&p.kinds", "p.pos");
+            let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, PickSide::Parse);
             gen_optional_present(w, &rep_op.body, "", &enters, ctx, &NO_KINDS);
         } else {
             let at = begin_iteration_check(w, rep_op, ctx, name_counts, "");
@@ -6265,7 +6260,7 @@ fn gen_op_repeat_star_plus_greedy(
             w.end();
             gen_loop_back_sync(w, ctx, rep_op);
         }
-        w.begin(`while !p.recovering && ${atn_enters_cond(ctx, rep_op.atn_decision, false, "&p.kinds", "p.pos")}`);
+        w.begin(`while !p.recovering && ${atn_enters_cond(ctx, rep_op.atn_decision, false, PickSide::Parse)}`);
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, looped());
     } else if repeat_is_scan_guarded(rep_op, ctx) {
         let plus_flag = if is_plus { begin_plus_flag(w, name_counts) } else { String::new() };
@@ -6996,8 +6991,7 @@ fn compute_non_greedy_condition(
             true,
             &rep_op.atn_asked_kinds,
             &PEEK_KIND,
-            "&p.kinds",
-            "p.pos",
+            PickSide::Parse,
         );
     }
     return non_greedy_static_enters(
@@ -7768,10 +7762,10 @@ fn gen_group_branch_body(
     // Alternatives sharing a first token are decided by the longest-match
     // tournament, mandatory-heavy first.
     let sorted_group = branch_emit_order(group, alts, ctx);
-    if let Decides(dec) = atn {
+    if let Decides([dec, site]) = atn {
         let var = dedup_name("gd_atn", name_counts);
-        let gates = atn_decision_gates(&sorted_group, alts, ctx, false);
-        gen_atn_pick(w, &var, dec, &gates, "&p.kinds", "p.pos", ctx);
+        let met = *ctx.decisions.at_site(site);
+        w.line(`let ${var} = ${atn_predict_call(dec, &met, PickSide::Parse, ctx)};`);
         gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
             var,
         ));
@@ -7785,30 +7779,6 @@ fn gen_group_branch_body(
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
         winner,
     ));
-}
-
-/// `let <var>`: the simulator's pick at decision `dec`, with the edge of each
-/// predicate whose gate is false closed (`atn_decision_gates`). A rule body's
-/// and a group's decision, parse or scan, all pick here.
-fn gen_atn_pick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
-    w: &mut CodeWriter,
-    var: S,
-    dec: i32,
-    gates: &List<[i32, String]>,
-    tokens: S1,
-    pos: S2,
-    ctx: &mut EmitContext,
-) {
-    if gates.is_empty() {
-        w.line(`let ${var} = ${atn_predict_call(dec, tokens, pos, ctx)};`);
-        return;
-    }
-    let false_preds = `${var}_false`;
-    w.line(`let mut ${false_preds}: List<i32> = [];`);
-    for let g of gates {
-        w.line(`if ${negate_cond(&g.1)} { ${false_preds}.push(${g.0}); }`);
-    }
-    w.line(`let ${var} = ${atn_predict_call(dec, tokens, pos, ctx, false_preds)};`);
 }
 
 /// The LR loop's pick at decision `decision`, over `tokens` at `pos`, through
@@ -7826,26 +7796,27 @@ fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decisi
     return atn_verified_call(decision, AtnPicker::LrTable, ctx.atn_arg(), tokens, pos, "min_prec", call);
 }
 
-/// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the
-/// edges of the predicates the list `false_preds` names closed. Only a verdict
-/// no predicate decided is kept for the parse. Without predicates the pick goes
-/// through the decision's lookahead DFA first (`atn_sll.wado`).
-fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(
-    atn_dec: i32,
-    tokens: S,
-    pos: S1,
-    ctx: &mut EmitContext,
-    false_preds: String = "",
-) -> String
+/// The simulator's pick at decision `atn_dec`, from where `side` reads, with
+/// the edge of each predicate in `met` whose condition is false there closed
+/// (`atn_decision_gates`). Only a verdict no predicate decided is kept for the
+/// parse. Without predicates the pick goes through the decision's lookahead
+/// DFA first (`atn_sll.wado`).
+fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx: &mut EmitContext) -> String
     contract ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator"
 {
+    let [tokens, pos] = match side {
+        Parse => ["&p.kinds", "p.pos"],
+        Scan => ["tokens", "pos"],
+    };
     let prec = atn_prec_arg(ctx);
-    if false_preds.is_empty() {
+    let gates = atn_decision_gates(met, ctx, side matches { Scan });
+    if gates.is_empty() {
         let decide = sll_decide_fn_name(atn_dec);
         ctx.cursor.note_ref(&decide);
         return `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, ${prec})`;
     }
-    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &${false_preds})`;
+    let verdicts = gates.iter_ref().map(|g| `if ${g.1} { -1 } else { ${g.0} }`).collect().join(", ");
+    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &[${verdicts}])`;
 }
 
 /// A group deciding between alternatives. Under `SimpleCst` each alternative is
@@ -8350,10 +8321,10 @@ struct AtnCheck {
 global NO_TOURNAMENT_CHECK: Option<AtnCheck> = null;
 
 /// The check for the current rule's body decision among `sorted_indices`, or
-/// `null` where a predicate gates one of them: the simulator would need the
-/// gates' verdicts to answer as the parse does.
-fn atn_tournament_check(sorted_indices: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> Option<AtnCheck> {
-    if !atn_decision_gates(sorted_indices, alts, ctx, false).is_empty() {
+/// `null` where the decision meets a predicate (`DecisionPredicates`).
+fn atn_tournament_check(sorted_indices: &List<i32>, ctx: &mut EmitContext) -> Option<AtnCheck> {
+    let rule = ctx.cursor.current_rule_index();
+    if !ctx.decisions.at_rule(rule).is_empty() {
         return null;
     }
     let Some(numbers) = ctx.atn_body_alt_numbers(sorted_indices) else {
@@ -8535,16 +8506,13 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 let Some(numbers) = ctx.atn_body_alt_numbers(&sorted_indices) else {
                     unreachable();
                 };
-                let gates = atn_decision_gates(&a.alts, alts, ctx, in_scan);
-                let dec = ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index());
-                if in_scan {
-                    gen_atn_pick(w, "_atn_alt", dec, &gates, "tokens", "pos", ctx);
-                } else {
-                    gen_atn_pick(w, "_atn_alt", dec, &gates, "&p.kinds", "p.pos", ctx);
-                }
-                // A seed can exclude every alt (`_atn_alt == -1`), which the
-                // index dispatch would otherwise route to its last alt.
-                if !gates.is_empty() {
+                let rule = ctx.cursor.current_rule_index();
+                let met = *ctx.decisions.at_rule(rule);
+                let dec = ctx.plan.atn_rule_body_decision(rule);
+                w.line(`let _atn_alt = ${atn_predict_call(dec, &met, side, ctx)};`);
+                // A predicate can exclude every alt (`_atn_alt == -1`), which
+                // the index dispatch would otherwise route to its last alt.
+                if !met.is_empty() {
                     w.begin("if _atn_alt < 0");
                     emit_no_viable_pick(w, side, ctx);
                     w.end();
@@ -8563,11 +8531,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             match side {
                 Parse => {
                     let checked = ctx.ambiguous_checked_by_atn(a, rule_display);
-                    let check = if checked {
-                        atn_tournament_check(&sorted_indices, alts, ctx);
-                    } else {
-                        NO_TOURNAMENT_CHECK;
-                    };
+                    let check = if checked { atn_tournament_check(&sorted_indices, ctx) } else { NO_TOURNAMENT_CHECK };
                     emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx, false, &check);
                 },
                 Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),

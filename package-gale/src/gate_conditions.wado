@@ -102,12 +102,138 @@ pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &Gramma
         && alt.actions.iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
+/// A predicate prediction meets at a decision, beside the site it renders in.
+pub type MetPredicate = [AltAction, PredicateSite];
+
+/// The predicates prediction meets at each decision, as `predicates_met_at`
+/// collects them: at a rule's body decision by rule index, and at a group's or
+/// a repeat's by its `atn_decision` site. The simulator closes the edge of each
+/// one whose verdict is false, and `atn: "verify"` checks no decision that meets
+/// one, since the static path answers it where the simulator could not.
+pub struct DecisionPredicates {
+    by_rule: List<List<MetPredicate>>,
+    by_site: List<List<MetPredicate>>,
+}
+
+impl DecisionPredicates {
+    pub fn at_rule(&self, rule: i32) -> &List<MetPredicate> {
+        return &self.by_rule[rule];
+    }
+
+    pub fn at_site(&self, site: i32) -> &List<MetPredicate>
+        contract site >= 0, "every group and repeat is assigned a decision site before lowering"
+    {
+        if site >= self.by_site.len() {
+            return &NO_MET;
+        }
+        return &self.by_site[site];
+    }
+
+    fn record(&mut self, site: i32, met: List<MetPredicate>) {
+        while self.by_site.len() <= site {
+            self.by_site.push([]);
+        }
+        self.by_site[site] = met;
+    }
+}
+
+global NO_MET: List<MetPredicate> = [];
+
+/// Every decision's `DecisionPredicates` entry, empty where predicates do not
+/// run.
+pub fn decision_predicates(settings: &GenSettings, analysis: &mut GrammarAnalysis) -> DecisionPredicates {
+    let rules = analysis.parser_rules();
+    let mut out = DecisionPredicates { by_rule: List::filled(rules.len(), []), by_site: [] };
+    if !settings.emit_actions {
+        return out;
+    }
+    for let mut r = 0; r < rules.len(); r += 1 {
+        let rule = &rules[r];
+        let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(rule) };
+        let mut body: List<MetPredicate> = [];
+        for let alt of &rule.alternatives {
+            let _ = predicates_met_at(&alt.elements, &alt.actions, 0, &site, analysis, &mut [], &mut body);
+        }
+        out.by_rule[r] = body;
+        for let alt of &rule.alternatives {
+            walk_sequence_decisions(&alt.elements, &alt.actions, &site, &NO_MET, analysis, &mut out);
+        }
+    }
+    return out;
+}
+
+/// Record the decisions inside `elements`, where `cont` is what prediction
+/// meets once the sequence matched nothing.
+fn walk_sequence_decisions(
+    elements: &List<Element>,
+    actions: &List<AltAction>,
+    site: &PredicateSite,
+    cont: &List<MetPredicate>,
+    analysis: &mut GrammarAnalysis,
+    out: &mut DecisionPredicates,
+) {
+    for let mut i = 0; i < elements.len(); i += 1 {
+        let mut after: List<MetPredicate> = [];
+        if predicates_met_at(elements, actions, i + 1, site, analysis, &mut [], &mut after) {
+            extend_met(&mut after, cont);
+        }
+        walk_element_decisions(&elements[i], site, &after, analysis, out);
+    }
+}
+
+fn walk_element_decisions(
+    elem: &Element,
+    site: &PredicateSite,
+    cont: &List<MetPredicate>,
+    analysis: &mut GrammarAnalysis,
+    out: &mut DecisionPredicates,
+) {
+    match *elem {
+        Label(l) => walk_element_decisions(&l.element, site, cont, analysis, out),
+        Group(g) => {
+            let mut met: List<MetPredicate> = [];
+            for let galt of &g.alternatives {
+                if predicates_met_at(&galt.elements, &galt.actions, 0, site, analysis, &mut [], &mut met) {
+                    extend_met(&mut met, cont);
+                }
+            }
+            out.record(g.atn_decision, met);
+            for let galt of &g.alternatives {
+                walk_sequence_decisions(&galt.elements, &galt.actions, site, cont, analysis, out);
+            }
+        },
+        Repeat(rep) => {
+            let body: List<Element> = [rep.element];
+            let mut met: List<MetPredicate> = [];
+            let _ = predicates_met_at(&body, &[], 0, site, analysis, &mut [], &mut met);
+            extend_met(&mut met, cont);
+            out.record(rep.atn_decision, met);
+            walk_element_decisions(&rep.element, site, cont, analysis, out);
+        },
+        RuleRef(_) | TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+        },
+    }
+}
+
+fn extend_met(met: &mut List<MetPredicate>, more: &List<MetPredicate>) {
+    for let m of more {
+        push_met(met, &m.0, &m.1);
+    }
+}
+
+fn push_met(met: &mut List<MetPredicate>, a: &AltAction, site: &PredicateSite) {
+    if !met.iter_ref().any(|m| m.0.source.action_id == a.source.action_id) {
+        met.push([*a, *site]);
+    }
+}
+
 /// The predicates prediction meets entering the sequence `elements` (its
 /// `actions` placed among them, rendered at `site`) at element `index`, before
 /// consuming a token, each beside the site it renders in. That is one placed
-/// there or behind elements that matched nothing, and one at the left edge of
-/// what such an element opens, up to the first action, which hides the rest.
-/// A callee's value channel is not in scope at the decision.
+/// there or behind elements that matched nothing without running an action,
+/// and one at the left edge of what such an element opens, up to the first
+/// action, which hides the rest. A callee's value channel is not in scope at
+/// the decision. Returns whether the walk reached the end of `elements`.
 pub fn predicates_met_at(
     elements: &List<Element>,
     actions: &List<AltAction>,
@@ -115,8 +241,8 @@ pub fn predicates_met_at(
     site: &PredicateSite,
     analysis: &mut GrammarAnalysis,
     visited: &mut List<String>,
-    out: &mut List<[AltAction, PredicateSite]>,
-) {
+    out: &mut List<MetPredicate>,
+) -> bool {
     let mut k = 0;
     for let mut i = index; i <= elements.len(); i += 1 {
         while k < actions.len() && actions[k].before_index <= i {
@@ -126,33 +252,19 @@ pub fn predicates_met_at(
                 continue;
             }
             if a.kind matches { Action } {
-                return;
+                return false;
             }
-            out.push([*a, *site]);
+            push_met(out, a, site);
         }
         if i == elements.len() {
-            return;
+            return true;
         }
         element_predicates_met(&elements[i], site, analysis, visited, out);
-        if !analysis.element_is_nullable_deep(&elements[i], &mut []) {
-            return;
+        if !empties_freely(&elements[i], analysis, &mut []) {
+            return false;
         }
     }
-}
-
-/// Whether prediction entering `elements` at `index` meets a predicate, as
-/// `predicates_met_at` collects them. The simulator is handed no predicate's
-/// verdict, so `atn: "verify"` leaves a decision that meets one unchecked.
-pub fn meets_predicate_at(
-    elements: &List<Element>,
-    actions: &List<AltAction>,
-    index: i32,
-    site: &PredicateSite,
-    analysis: &mut GrammarAnalysis,
-) -> bool {
-    let mut met: List<[AltAction, PredicateSite]> = [];
-    predicates_met_at(elements, actions, index, site, analysis, &mut [], &mut met);
-    return !met.is_empty();
+    unreachable();
 }
 
 /// `predicates_met_at` for what `elem` opens, past the rules in `visited`.
@@ -161,7 +273,7 @@ fn element_predicates_met(
     site: &PredicateSite,
     analysis: &mut GrammarAnalysis,
     visited: &mut List<String>,
-    out: &mut List<[AltAction, PredicateSite]>,
+    out: &mut List<MetPredicate>,
 ) {
     match *elem {
         RuleRef(r) => {
@@ -169,17 +281,14 @@ fn element_predicates_met(
                 return;
             }
             visited.push(r.name);
-            let Some(callee) = analysis.find_rule(&r.name) else {
-                return;
-            };
             let callee_site = PredicateSite { rule_index: analysis.rule_index_of(&r.name), vals_in_scope: false };
-            for let calt of &callee.alternatives {
-                predicates_met_at(&calt.elements, &calt.actions, 0, &callee_site, analysis, visited, out);
+            for let calt of &analysis.find_rule(&r.name).unwrap().alternatives {
+                let _ = predicates_met_at(&calt.elements, &calt.actions, 0, &callee_site, analysis, visited, out);
             }
         },
         Group(g) => {
             for let galt of &g.alternatives {
-                predicates_met_at(&galt.elements, &galt.actions, 0, site, analysis, visited, out);
+                let _ = predicates_met_at(&galt.elements, &galt.actions, 0, site, analysis, visited, out);
             }
         },
         Label(l) => element_predicates_met(&l.element, site, analysis, visited, out),
@@ -187,6 +296,46 @@ fn element_predicates_met(
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
     }
+}
+
+/// Whether `elem` can match nothing without running an action, past the rules
+/// in `visited`.
+fn empties_freely(elem: &Element, analysis: &mut GrammarAnalysis, visited: &mut List<String>) -> bool {
+    if !analysis.element_is_nullable_deep(elem, &mut []) {
+        return false;
+    }
+    return match *elem {
+        Label(l) => empties_freely(&l.element, analysis, visited),
+        Repeat(r) => r.kind matches { Optional | Star } || empties_freely(&r.element, analysis, visited),
+        Group(g) => any_alt_empties_freely(&g.alternatives, analysis, visited),
+        RuleRef(r) => {
+            if visited.contains_str(&r.name) {
+                return false;
+            }
+            visited.push(r.name);
+            any_alt_empties_freely(&analysis.find_rule(&r.name).unwrap().alternatives, analysis, visited);
+        },
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
+    };
+}
+
+fn any_alt_empties_freely(alts: &List<Alternative>, analysis: &mut GrammarAnalysis, visited: &mut List<String>) -> bool {
+    for let alt of alts {
+        if alt.actions.iter_ref().any(|a| a.kind matches { Action }) {
+            continue;
+        }
+        let mut all = true;
+        for let e of &alt.elements {
+            if !empties_freely(e, analysis, visited) {
+                all = false;
+                break;
+            }
+        }
+        if all {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// An alt's gate conditions rendered against the scan's copy of the members,
@@ -221,14 +370,14 @@ pub fn scan_answered_at_edge<S: AsStrSlice>(cond: S) -> String {
 }
 
 /// The predicates past the left edge of `alt`, from element `from` on, that a
-/// scan answers, each beside the element it sits before: those ahead of the
-/// first action, which prediction meets behind a prefix that matched nothing.
-/// Each is answered at the edge alone (`scan_answered_at_edge`). One the scan
-/// cannot answer holds there, as a gate it cannot answer does.
+/// scan answers, each beside the element it sits before: those prediction
+/// meets behind a prefix that matched nothing (`predicates_met_at`). Each is
+/// answered at the edge alone (`scan_answered_at_edge`). One the scan cannot
+/// answer holds there, as a gate it cannot answer does.
 pub fn alt_scan_checks(
     alt: &Alternative,
     settings: &GenSettings,
-    analysis: &GrammarAnalysis,
+    analysis: &mut GrammarAnalysis,
     site: &PredicateSite,
     from: i32,
 ) -> List<[i32, String]> {
@@ -236,8 +385,12 @@ pub fn alt_scan_checks(
     if !settings.emit_actions {
         return out;
     }
-    for let a of &alt.predicates_before_actions() {
-        if a.before_index == 0 || a.before_index < from {
+    let mut met: List<MetPredicate> = [];
+    let _ = predicates_met_at(&alt.elements, &alt.actions, 0, site, analysis, &mut [], &mut met);
+    for let [a, _] of &met {
+        if a.before_index == 0
+            || a.before_index < from
+            || !alt.actions.iter_ref().any(|own| own.source.action_id == a.source.action_id) {
             continue;
         }
         if let Some(code) = scan_gate_condition_for(a, settings, analysis, site) {
@@ -249,7 +402,7 @@ pub fn alt_scan_checks(
 
 /// Whether a scan of some alternative of `rules`, or of a group inside one,
 /// answers a predicate.
-pub fn scan_answers_predicates(rules: &List<ParserRule>, settings: &GenSettings, analysis: &GrammarAnalysis) -> bool {
+pub fn scan_answers_predicates(rules: &List<ParserRule>, settings: &GenSettings, analysis: &mut GrammarAnalysis) -> bool {
     for let mut r = 0; r < rules.len(); r += 1 {
         let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(&rules[r]) };
         if any_alt_scan_answers(&rules[r].alternatives, settings, analysis, &site) {
@@ -262,20 +415,27 @@ pub fn scan_answers_predicates(rules: &List<ParserRule>, settings: &GenSettings,
 fn any_alt_scan_answers(
     alts: &List<Alternative>,
     settings: &GenSettings,
-    analysis: &GrammarAnalysis,
+    analysis: &mut GrammarAnalysis,
     site: &PredicateSite,
 ) -> bool {
-    return alts.iter_ref().any(
-        |alt| !alt_scan_gate_conjunction(alt, settings, analysis, site).is_empty()
-            || !alt_scan_checks(alt, settings, analysis, site, 0).is_empty()
-            || alt.elements.iter_ref().any(|e| element_scan_answers(e, settings, analysis, site)),
-    );
+    for let alt of alts {
+        if !alt_scan_gate_conjunction(alt, settings, analysis, site).is_empty()
+            || !alt_scan_checks(alt, settings, analysis, site, 0).is_empty() {
+            return true;
+        }
+        for let e of &alt.elements {
+            if element_scan_answers(e, settings, analysis, site) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 fn element_scan_answers(
     elem: &Element,
     settings: &GenSettings,
-    analysis: &GrammarAnalysis,
+    analysis: &mut GrammarAnalysis,
     site: &PredicateSite,
 ) -> bool {
     return match *elem {

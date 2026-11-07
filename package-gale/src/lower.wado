@@ -1817,15 +1817,15 @@ fn lower_scan_body<S: AsStrSlice>(
 /// with the leading self-ref, and `emit_lr_branch_body` interleaves the
 /// alternative's actions from `before == 1`. The parse never runs it, so
 /// simulating it leaves the scan holding a value no parse produces.
-fn scan_gates_for(alt: &Alternative, ctx: &LowerContext, from: i32 = 0) -> List<ScanGate> {
-    let settings = &ctx.settings;
-    if !settings.emit_scan_gate() {
+fn scan_gates_for(alt: &Alternative, ctx: &mut LowerContext, from: i32 = 0) -> List<ScanGate> {
+    if !ctx.settings.emit_scan_gate() {
         return [];
     }
     let mut gates: List<ScanGate> = [];
     for let [before_index, cond] of ctx.alt_scan_checks(alt, from) {
         gates.push(ScanGate { step: ScanGateStep::Check(cond), before_index: before_index - from });
     }
+    let settings = &ctx.settings;
     for let a of &alt.actions {
         if a.kind matches { Predicate } || a.before_index < from {
             continue;
@@ -2052,7 +2052,7 @@ fn lower_general_scan_group(
 /// The scan body of `alt`, walking `elements` and clearing the alternative's
 /// gates. A group's alternative clears them as a rule's does, since prediction
 /// meets a predicate inside a group as it does in a rule.
-fn alt_scan_body(alt: &Alternative, elements: List<ScanElement>, ctx: &LowerContext) -> ScanBody {
+fn alt_scan_body(alt: &Alternative, elements: List<ScanElement>, ctx: &mut LowerContext) -> ScanBody {
     return ScanBody {
         elements,
         gates: scan_gates_for(alt, ctx),
@@ -2999,7 +2999,7 @@ fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut LowerContext) -> Op {
 fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut LowerContext) -> i32 {
     if !ctx.settings.atn.verifies()
         || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1)
-        || ctx.any_meets_predicate(&g.alternatives) {
+        || ctx.site_meets_predicate(g.atn_decision) {
         return -1;
     }
     ctx.mark_checks_with_simulator();
@@ -4295,6 +4295,13 @@ fn atn_asked_kinds(
     return asked;
 }
 
+fn repeat_decision_site(repeat: &Element) -> i32 {
+    let Repeat(rep) = repeat else {
+        panic("a loop's exit stamps are read at the loop");
+    };
+    return rep.atn_decision;
+}
+
 fn lower_repeat_exit_stamps<S: AsStrSlice>(
     non_greedy: bool,
     kind: RepeatKind,
@@ -4317,7 +4324,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     let checked = contested_somewhere
         && !non_greedy
         && ctx.settings.atn.verifies()
-        && !ctx.meets_predicate_in(alt_elements, &[], index);
+        && !ctx.site_meets_predicate(repeat_decision_site(&alt_elements[index]));
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {
