@@ -85,10 +85,7 @@ fn answering_layer(
     trait_env: &TraitEnv,
     tt: &mut TypeTable,
 ) -> (TirExpr, TypeId) {
-    loop {
-        let Some(pointee) = tt.ref_pointee(value.type_id) else {
-            break;
-        };
+    while let Some(pointee) = tt.ref_pointee(value.type_id) {
         let shared = tt.make_ref(pointee);
         if written_impl_at(trait_env, list_arg, shared, tt) {
             return (value, shared);
