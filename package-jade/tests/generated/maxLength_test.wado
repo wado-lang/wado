@@ -9,6 +9,7 @@ test "maxLength validation: shorter is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxLength":2}"#,
         #""f""#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "maxLength validation: exact length is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxLength":2}"#,
         #""fo""#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "maxLength validation: too long is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxLength":2}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "maxLength validation: ignores non-strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxLength":2}"#,
         #"100"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "maxLength validation: two graphemes is long enough" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxLength":2}"#,
         #""💩💩""#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "maxLength validation with a decimal: shorter is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxLength":2}"#,
         #""f""#,
         true,
+        [],
     );
 }
 
@@ -57,5 +63,6 @@ test "maxLength validation with a decimal: too long is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxLength":2}"#,
         #""foo""#,
         false,
+        [],
     );
 }

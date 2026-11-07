@@ -9,6 +9,7 @@ test "single dependency: neither" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":["foo"]}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "single dependency: nondependant" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":["foo"]}}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "single dependency: with dependency" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":["foo"]}}"#,
         #"{"foo":1,"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "single dependency: missing dependency" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":["foo"]}}"#,
         #"{"bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "single dependency: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":["foo"]}}"#,
         #"["bar"]"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "single dependency: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":["foo"]}}"#,
         #""foobar""#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "single dependency: ignores other non-objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":["foo"]}}"#,
         #"12"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "empty dependents: empty object" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":[]}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "empty dependents: object with one property" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":[]}}"#,
         #"{"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "empty dependents: non-object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"bar":[]}}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "multiple dependents required: neither" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"quux":["foo","bar"]}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "multiple dependents required: nondependants" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"quux":["foo","bar"]}}"#,
         #"{"foo":1,"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "multiple dependents required: with dependencies" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"quux":["foo","bar"]}}"#,
         #"{"foo":1,"bar":2,"quux":3}"#,
         true,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "multiple dependents required: missing dependency" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"quux":["foo","bar"]}}"#,
         #"{"foo":1,"quux":2}"#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "multiple dependents required: missing other dependency" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"quux":["foo","bar"]}}"#,
         #"{"bar":1,"quux":2}"#,
         false,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "multiple dependents required: missing both dependencies" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"quux":["foo","bar"]}}"#,
         #"{"quux":1}"#,
         false,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "dependencies with escaped characters: CRLF" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"foo\nbar":["foo\rbar"],"foo\"bar":["foo'bar"]}}"#,
         #"{"foo\nbar":1,"foo\rbar":2}"#,
         true,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "dependencies with escaped characters: quoted quotes" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"foo\nbar":["foo\rbar"],"foo\"bar":["foo'bar"]}}"#,
         #"{"foo'bar":1,"foo\"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "dependencies with escaped characters: CRLF missing dependent" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"foo\nbar":["foo\rbar"],"foo\"bar":["foo'bar"]}}"#,
         #"{"foo\nbar":1,"foo":2}"#,
         false,
+        [],
     );
 }
 
@@ -161,5 +180,6 @@ test "dependencies with escaped characters: quoted quotes missing dependent" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentRequired":{"foo\nbar":["foo\rbar"],"foo\"bar":["foo'bar"]}}"#,
         #"{"foo\"bar":2}"#,
         false,
+        [],
     );
 }

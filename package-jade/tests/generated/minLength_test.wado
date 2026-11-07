@@ -9,6 +9,7 @@ test "minLength validation: longer is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minLength":2}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "minLength validation: exact length is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minLength":2}"#,
         #""fo""#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "minLength validation: too short is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minLength":2}"#,
         #""f""#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "minLength validation: ignores non-strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minLength":2}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "minLength validation: one grapheme is not long enough" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minLength":2}"#,
         #""💩""#,
         false,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "minLength validation with a decimal: longer is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minLength":2}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -57,5 +63,6 @@ test "minLength validation with a decimal: too short is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minLength":2}"#,
         #""f""#,
         false,
+        [],
     );
 }

@@ -9,6 +9,7 @@ test "unevaluatedProperties true: with no unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":true}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "unevaluatedProperties true: with unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":true}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "unevaluatedProperties schema: with no unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":{"type":"string","minLength":3}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "unevaluatedProperties schema: with valid unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":{"type":"string","minLength":3}}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "unevaluatedProperties schema: with invalid unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":{"type":"string","minLength":3}}"#,
         #"{"foo":"fo"}"#,
         false,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "unevaluatedProperties false: with no unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "unevaluatedProperties false: with unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "unevaluatedProperties with adjacent properties: with no unevaluated proper
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "unevaluatedProperties with adjacent properties: with unevaluated propertie
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "unevaluatedProperties with adjacent patternProperties: with no unevaluated
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","patternProperties":{"^foo":{"type":"string"}},"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "unevaluatedProperties with adjacent patternProperties: with unevaluated pr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","patternProperties":{"^foo":{"type":"string"}},"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "unevaluatedProperties with adjacent bool additionalProperties: with no add
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"type":"string"}},"additionalProperties":true,"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "unevaluatedProperties with adjacent bool additionalProperties: with additi
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"type":"string"}},"additionalProperties":true,"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "unevaluatedProperties with adjacent non-bool additionalProperties: with no
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"type":"string"}},"additionalProperties":{"type":"string"},"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "unevaluatedProperties with adjacent non-bool additionalProperties: with ad
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"type":"string"}},"additionalProperties":{"type":"string"},"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "unevaluatedProperties with nested properties: with no additional propertie
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"properties":{"bar":{"type":"string"}}}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "unevaluatedProperties with nested properties: with additional properties" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"properties":{"bar":{"type":"string"}}}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "unevaluatedProperties with nested patternProperties: with no additional pr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"patternProperties":{"^bar":{"type":"string"}}}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "unevaluatedProperties with nested patternProperties: with additional prope
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"patternProperties":{"^bar":{"type":"string"}}}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "unevaluatedProperties with nested additionalProperties: with no additional
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"additionalProperties":true}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "unevaluatedProperties with nested additionalProperties: with additional pr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"additionalProperties":true}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "unevaluatedProperties with nested unevaluatedProperties: with no nested un
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"unevaluatedProperties":true}],"unevaluatedProperties":{"type":"string","maxLength":2}}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "unevaluatedProperties with nested unevaluatedProperties: with nested uneva
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"unevaluatedProperties":true}],"unevaluatedProperties":{"type":"string","maxLength":2}}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "unevaluatedProperties with anyOf: when one matches and has no unevaluated 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"anyOf":[{"properties":{"bar":{"const":"bar"}},"required":["bar"]},{"properties":{"baz":{"const":"baz"}},"required":["baz"]},{"properties":{"quux":{"const":"quux"}},"required":["quux"]}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "unevaluatedProperties with anyOf: when one matches and has unevaluated pro
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"anyOf":[{"properties":{"bar":{"const":"bar"}},"required":["bar"]},{"properties":{"baz":{"const":"baz"}},"required":["baz"]},{"properties":{"quux":{"const":"quux"}},"required":["quux"]}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar","baz":"not-baz"}"#,
         false,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "unevaluatedProperties with anyOf: when two match and has no unevaluated pr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"anyOf":[{"properties":{"bar":{"const":"bar"}},"required":["bar"]},{"properties":{"baz":{"const":"baz"}},"required":["baz"]},{"properties":{"quux":{"const":"quux"}},"required":["quux"]}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar","baz":"baz"}"#,
         true,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "unevaluatedProperties with anyOf: when two match and has unevaluated prope
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"anyOf":[{"properties":{"bar":{"const":"bar"}},"required":["bar"]},{"properties":{"baz":{"const":"baz"}},"required":["baz"]},{"properties":{"quux":{"const":"quux"}},"required":["quux"]}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar","baz":"baz","quux":"not-quux"}"#,
         false,
+        [],
     );
 }
 
@@ -225,6 +252,7 @@ test "unevaluatedProperties with oneOf: with no unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"oneOf":[{"properties":{"bar":{"const":"bar"}},"required":["bar"]},{"properties":{"baz":{"const":"baz"}},"required":["baz"]}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -233,6 +261,7 @@ test "unevaluatedProperties with oneOf: with unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"oneOf":[{"properties":{"bar":{"const":"bar"}},"required":["bar"]},{"properties":{"baz":{"const":"baz"}},"required":["baz"]}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar","quux":"quux"}"#,
         false,
+        [],
     );
 }
 
@@ -241,6 +270,7 @@ test "unevaluatedProperties with not: with unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"not":{"not":{"properties":{"bar":{"const":"bar"}},"required":["bar"]}},"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -249,6 +279,7 @@ test "unevaluatedProperties with if/then/else: when if is true and has no uneval
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"foo":"then","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -257,6 +288,7 @@ test "unevaluatedProperties with if/then/else: when if is true and has unevaluat
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"foo":"then","bar":"bar","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -265,6 +297,7 @@ test "unevaluatedProperties with if/then/else: when if is false and has no uneva
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"baz":"baz"}"#,
         true,
+        [],
     );
 }
 
@@ -273,6 +306,7 @@ test "unevaluatedProperties with if/then/else: when if is false and has unevalua
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"foo":"else","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -281,6 +315,7 @@ test "unevaluatedProperties with if/then/else, then not defined: when if is true
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"foo":"then"}"#,
         true,
+        [],
     );
 }
 
@@ -289,6 +324,7 @@ test "unevaluatedProperties with if/then/else, then not defined: when if is true
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"foo":"then","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -297,6 +333,7 @@ test "unevaluatedProperties with if/then/else, then not defined: when if is fals
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"baz":"baz"}"#,
         true,
+        [],
     );
 }
 
@@ -305,6 +342,7 @@ test "unevaluatedProperties with if/then/else, then not defined: when if is fals
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"else":{"properties":{"baz":{"type":"string"}},"required":["baz"]},"unevaluatedProperties":false}"#,
         #"{"foo":"else","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -313,6 +351,7 @@ test "unevaluatedProperties with if/then/else, else not defined: when if is true
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"unevaluatedProperties":false}"#,
         #"{"foo":"then","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -321,6 +360,7 @@ test "unevaluatedProperties with if/then/else, else not defined: when if is true
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"unevaluatedProperties":false}"#,
         #"{"foo":"then","bar":"bar","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -329,6 +369,7 @@ test "unevaluatedProperties with if/then/else, else not defined: when if is fals
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"unevaluatedProperties":false}"#,
         #"{"baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -337,6 +378,7 @@ test "unevaluatedProperties with if/then/else, else not defined: when if is fals
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"properties":{"foo":{"const":"then"}},"required":["foo"]},"then":{"properties":{"bar":{"type":"string"}},"required":["bar"]},"unevaluatedProperties":false}"#,
         #"{"foo":"else","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -345,6 +387,7 @@ test "unevaluatedProperties with dependentSchemas: with no unevaluated propertie
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"dependentSchemas":{"foo":{"properties":{"bar":{"const":"bar"}},"required":["bar"]}},"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -353,6 +396,7 @@ test "unevaluatedProperties with dependentSchemas: with unevaluated properties" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"dependentSchemas":{"foo":{"properties":{"bar":{"const":"bar"}},"required":["bar"]}},"unevaluatedProperties":false}"#,
         #"{"bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -361,6 +405,7 @@ test "unevaluatedProperties with boolean schemas: with no unevaluated properties
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[true],"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -369,6 +414,7 @@ test "unevaluatedProperties with boolean schemas: with unevaluated properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[true],"unevaluatedProperties":false}"#,
         #"{"bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -377,6 +423,7 @@ test "unevaluatedProperties with $ref: with no unevaluated properties" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/bar","properties":{"foo":{"type":"string"}},"unevaluatedProperties":false,"$defs":{"bar":{"properties":{"bar":{"type":"string"}}}}}"##,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -385,6 +432,7 @@ test "unevaluatedProperties with $ref: with unevaluated properties" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/bar","properties":{"foo":{"type":"string"}},"unevaluatedProperties":false,"$defs":{"bar":{"properties":{"bar":{"type":"string"}}}}}"##,
         #"{"foo":"foo","bar":"bar","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -393,6 +441,7 @@ test "unevaluatedProperties before $ref: with no unevaluated properties" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false,"properties":{"foo":{"type":"string"}},"$ref":"#/$defs/bar","$defs":{"bar":{"properties":{"bar":{"type":"string"}}}}}"##,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -401,6 +450,7 @@ test "unevaluatedProperties before $ref: with unevaluated properties" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false,"properties":{"foo":{"type":"string"}},"$ref":"#/$defs/bar","$defs":{"bar":{"properties":{"bar":{"type":"string"}}}}}"##,
         #"{"foo":"foo","bar":"bar","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -409,6 +459,7 @@ test "unevaluatedProperties with $dynamicRef: with no unevaluated properties" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://example.com/unevaluated-properties-with-dynamic-ref/derived","$ref":"./baseSchema","$defs":{"derived":{"$dynamicAnchor":"addons","properties":{"bar":{"type":"string"}}},"baseSchema":{"$id":"./baseSchema","$comment":"unevaluatedProperties comes first so it's more likely to catch bugs with implementations that are sensitive to keyword ordering","unevaluatedProperties":false,"properties":{"foo":{"type":"string"}},"$dynamicRef":"#addons","$defs":{"defaultAddons":{"$comment":"Needed to satisfy the bookending requirement","$dynamicAnchor":"addons"}}}}}"##,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -417,6 +468,7 @@ test "unevaluatedProperties with $dynamicRef: with unevaluated properties" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://example.com/unevaluated-properties-with-dynamic-ref/derived","$ref":"./baseSchema","$defs":{"derived":{"$dynamicAnchor":"addons","properties":{"bar":{"type":"string"}}},"baseSchema":{"$id":"./baseSchema","$comment":"unevaluatedProperties comes first so it's more likely to catch bugs with implementations that are sensitive to keyword ordering","unevaluatedProperties":false,"properties":{"foo":{"type":"string"}},"$dynamicRef":"#addons","$defs":{"defaultAddons":{"$comment":"Needed to satisfy the bookending requirement","$dynamicAnchor":"addons"}}}}}"##,
         #"{"foo":"foo","bar":"bar","baz":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -425,6 +477,7 @@ test "unevaluatedProperties can't see inside cousins: always fails" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":true}},{"unevaluatedProperties":false}]}"#,
         #"{"foo":1}"#,
         false,
+        [],
     );
 }
 
@@ -433,6 +486,7 @@ test "unevaluatedProperties can't see inside cousins (reverse order): always fai
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"unevaluatedProperties":false},{"properties":{"foo":true}}]}"#,
         #"{"foo":1}"#,
         false,
+        [],
     );
 }
 
@@ -441,6 +495,7 @@ test "nested unevaluatedProperties, outer false, inner true, properties outside:
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"unevaluatedProperties":true}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -449,6 +504,7 @@ test "nested unevaluatedProperties, outer false, inner true, properties outside:
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"unevaluatedProperties":true}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -457,6 +513,7 @@ test "nested unevaluatedProperties, outer false, inner true, properties inside: 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":true}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -465,6 +522,7 @@ test "nested unevaluatedProperties, outer false, inner true, properties inside: 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":true}],"unevaluatedProperties":false}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -473,6 +531,7 @@ test "nested unevaluatedProperties, outer true, inner false, properties outside:
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"unevaluatedProperties":false}],"unevaluatedProperties":true}"#,
         #"{"foo":"foo"}"#,
         false,
+        [],
     );
 }
 
@@ -481,6 +540,7 @@ test "nested unevaluatedProperties, outer true, inner false, properties outside:
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"string"}},"allOf":[{"unevaluatedProperties":false}],"unevaluatedProperties":true}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -489,6 +549,7 @@ test "nested unevaluatedProperties, outer true, inner false, properties inside: 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":false}],"unevaluatedProperties":true}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -497,6 +558,7 @@ test "nested unevaluatedProperties, outer true, inner false, properties inside: 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":false}],"unevaluatedProperties":true}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -505,6 +567,7 @@ test "cousin unevaluatedProperties, true and false, true with properties: with n
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":true},{"unevaluatedProperties":false}]}"#,
         #"{"foo":"foo"}"#,
         false,
+        [],
     );
 }
 
@@ -513,6 +576,7 @@ test "cousin unevaluatedProperties, true and false, true with properties: with n
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":true},{"unevaluatedProperties":false}]}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -521,6 +585,7 @@ test "cousin unevaluatedProperties, true and false, false with properties: with 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"unevaluatedProperties":true},{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":false}]}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -529,6 +594,7 @@ test "cousin unevaluatedProperties, true and false, false with properties: with 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"unevaluatedProperties":true},{"properties":{"foo":{"type":"string"}},"unevaluatedProperties":false}]}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -537,6 +603,7 @@ test "property is evaluated in an uncle schema to unevaluatedProperties: no extr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"properties":{"bar":{"type":"string"}},"unevaluatedProperties":false}},"anyOf":[{"properties":{"foo":{"properties":{"faz":{"type":"string"}}}}}]}"#,
         #"{"foo":{"bar":"test"}}"#,
         true,
+        [],
     );
 }
 
@@ -545,6 +612,7 @@ test "property is evaluated in an uncle schema to unevaluatedProperties: uncle k
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"properties":{"bar":{"type":"string"}},"unevaluatedProperties":false}},"anyOf":[{"properties":{"foo":{"properties":{"faz":{"type":"string"}}}}}]}"#,
         #"{"foo":{"bar":"test","faz":"test"}}"#,
         false,
+        [],
     );
 }
 
@@ -553,6 +621,7 @@ test "in-place applicator siblings, allOf has unevaluated: base case: both prope
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":true},"unevaluatedProperties":false}],"anyOf":[{"properties":{"bar":true}}]}"#,
         #"{"foo":1,"bar":1}"#,
         false,
+        [],
     );
 }
 
@@ -561,6 +630,7 @@ test "in-place applicator siblings, allOf has unevaluated: in place applicator s
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":true},"unevaluatedProperties":false}],"anyOf":[{"properties":{"bar":true}}]}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -569,6 +639,7 @@ test "in-place applicator siblings, allOf has unevaluated: in place applicator s
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":true},"unevaluatedProperties":false}],"anyOf":[{"properties":{"bar":true}}]}"#,
         #"{"bar":1}"#,
         false,
+        [],
     );
 }
 
@@ -577,6 +648,7 @@ test "in-place applicator siblings, anyOf has unevaluated: base case: both prope
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":true}}],"anyOf":[{"properties":{"bar":true},"unevaluatedProperties":false}]}"#,
         #"{"foo":1,"bar":1}"#,
         false,
+        [],
     );
 }
 
@@ -585,6 +657,7 @@ test "in-place applicator siblings, anyOf has unevaluated: in place applicator s
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":true}}],"anyOf":[{"properties":{"bar":true},"unevaluatedProperties":false}]}"#,
         #"{"foo":1}"#,
         false,
+        [],
     );
 }
 
@@ -593,6 +666,7 @@ test "in-place applicator siblings, anyOf has unevaluated: in place applicator s
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"foo":true}}],"anyOf":[{"properties":{"bar":true},"unevaluatedProperties":false}]}"#,
         #"{"bar":1}"#,
         true,
+        [],
     );
 }
 
@@ -601,6 +675,7 @@ test "unevaluatedProperties + single cyclic ref: Empty is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"x":{"$ref":"#"}},"unevaluatedProperties":false}"##,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -609,6 +684,7 @@ test "unevaluatedProperties + single cyclic ref: Single is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"x":{"$ref":"#"}},"unevaluatedProperties":false}"##,
         #"{"x":{}}"#,
         true,
+        [],
     );
 }
 
@@ -617,6 +693,7 @@ test "unevaluatedProperties + single cyclic ref: Unevaluated on 1st level is inv
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"x":{"$ref":"#"}},"unevaluatedProperties":false}"##,
         #"{"x":{},"y":{}}"#,
         false,
+        [],
     );
 }
 
@@ -625,6 +702,7 @@ test "unevaluatedProperties + single cyclic ref: Nested is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"x":{"$ref":"#"}},"unevaluatedProperties":false}"##,
         #"{"x":{"x":{}}}"#,
         true,
+        [],
     );
 }
 
@@ -633,6 +711,7 @@ test "unevaluatedProperties + single cyclic ref: Unevaluated on 2nd level is inv
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"x":{"$ref":"#"}},"unevaluatedProperties":false}"##,
         #"{"x":{"x":{},"y":{}}}"#,
         false,
+        [],
     );
 }
 
@@ -641,6 +720,7 @@ test "unevaluatedProperties + single cyclic ref: Deep nested is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"x":{"$ref":"#"}},"unevaluatedProperties":false}"##,
         #"{"x":{"x":{"x":{}}}}"#,
         true,
+        [],
     );
 }
 
@@ -649,6 +729,7 @@ test "unevaluatedProperties + single cyclic ref: Unevaluated on 3rd level is inv
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"x":{"$ref":"#"}},"unevaluatedProperties":false}"##,
         #"{"x":{"x":{"x":{},"y":{}}}}"#,
         false,
+        [],
     );
 }
 
@@ -657,6 +738,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: Empty is invalid (no x o
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -665,6 +747,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: a and b are invalid (no 
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{"a":1,"b":1}"#,
         false,
+        [],
     );
 }
 
@@ -673,6 +756,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: x and y are invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{"x":1,"y":1}"#,
         false,
+        [],
     );
 }
 
@@ -681,6 +765,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: a and x are valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{"a":1,"x":1}"#,
         true,
+        [],
     );
 }
 
@@ -689,6 +774,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: a and y are valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{"a":1,"y":1}"#,
         true,
+        [],
     );
 }
 
@@ -697,6 +783,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: a and b and x are valid"
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{"a":1,"b":1,"x":1}"#,
         true,
+        [],
     );
 }
 
@@ -705,6 +792,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: a and b and y are valid"
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{"a":1,"b":1,"y":1}"#,
         true,
+        [],
     );
 }
 
@@ -713,6 +801,7 @@ test "unevaluatedProperties + ref inside allOf / oneOf: a and b and x and y are 
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"properties":{"a":true}},"two":{"required":["x"],"properties":{"x":true}}},"allOf":[{"$ref":"#/$defs/one"},{"properties":{"b":true}},{"oneOf":[{"$ref":"#/$defs/two"},{"required":["y"],"properties":{"y":true}}]}],"unevaluatedProperties":false}"##,
         #"{"a":1,"b":1,"x":1,"y":1}"#,
         false,
+        [],
     );
 }
 
@@ -721,6 +810,7 @@ test "dynamic evaluation inside nested refs: Empty is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -729,6 +819,7 @@ test "dynamic evaluation inside nested refs: a is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"a":1}"#,
         true,
+        [],
     );
 }
 
@@ -737,6 +828,7 @@ test "dynamic evaluation inside nested refs: b is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"b":1}"#,
         true,
+        [],
     );
 }
 
@@ -745,6 +837,7 @@ test "dynamic evaluation inside nested refs: c is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"c":1}"#,
         true,
+        [],
     );
 }
 
@@ -753,6 +846,7 @@ test "dynamic evaluation inside nested refs: d is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"d":1}"#,
         true,
+        [],
     );
 }
 
@@ -761,6 +855,7 @@ test "dynamic evaluation inside nested refs: a + b is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"a":1,"b":1}"#,
         false,
+        [],
     );
 }
 
@@ -769,6 +864,7 @@ test "dynamic evaluation inside nested refs: a + c is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"a":1,"c":1}"#,
         false,
+        [],
     );
 }
 
@@ -777,6 +873,7 @@ test "dynamic evaluation inside nested refs: a + d is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"a":1,"d":1}"#,
         false,
+        [],
     );
 }
 
@@ -785,6 +882,7 @@ test "dynamic evaluation inside nested refs: b + c is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"b":1,"c":1}"#,
         false,
+        [],
     );
 }
 
@@ -793,6 +891,7 @@ test "dynamic evaluation inside nested refs: b + d is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"b":1,"d":1}"#,
         false,
+        [],
     );
 }
 
@@ -801,6 +900,7 @@ test "dynamic evaluation inside nested refs: c + d is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"c":1,"d":1}"#,
         false,
+        [],
     );
 }
 
@@ -809,6 +909,7 @@ test "dynamic evaluation inside nested refs: xx is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"xx":1}"#,
         true,
+        [],
     );
 }
 
@@ -817,6 +918,7 @@ test "dynamic evaluation inside nested refs: xx + foox is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"xx":1,"foox":1}"#,
         true,
+        [],
     );
 }
 
@@ -825,6 +927,7 @@ test "dynamic evaluation inside nested refs: xx + foo is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"xx":1,"foo":1}"#,
         false,
+        [],
     );
 }
 
@@ -833,6 +936,7 @@ test "dynamic evaluation inside nested refs: xx + a is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"xx":1,"a":1}"#,
         false,
+        [],
     );
 }
 
@@ -841,6 +945,7 @@ test "dynamic evaluation inside nested refs: xx + b is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"xx":1,"b":1}"#,
         false,
+        [],
     );
 }
 
@@ -849,6 +954,7 @@ test "dynamic evaluation inside nested refs: xx + c is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"xx":1,"c":1}"#,
         false,
+        [],
     );
 }
 
@@ -857,6 +963,7 @@ test "dynamic evaluation inside nested refs: xx + d is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"xx":1,"d":1}"#,
         false,
+        [],
     );
 }
 
@@ -865,6 +972,7 @@ test "dynamic evaluation inside nested refs: all is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"all":1}"#,
         true,
+        [],
     );
 }
 
@@ -873,6 +981,7 @@ test "dynamic evaluation inside nested refs: all + foo is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"all":1,"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -881,6 +990,7 @@ test "dynamic evaluation inside nested refs: all + a is invalid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"one":{"oneOf":[{"$ref":"#/$defs/two"},{"required":["b"],"properties":{"b":true}},{"required":["xx"],"patternProperties":{"x":true}},{"required":["all"],"unevaluatedProperties":true}]},"two":{"oneOf":[{"required":["c"],"properties":{"c":true}},{"required":["d"],"properties":{"d":true}}]}},"oneOf":[{"$ref":"#/$defs/one"},{"required":["a"],"properties":{"a":true}}],"unevaluatedProperties":false}"##,
         #"{"all":1,"a":1}"#,
         false,
+        [],
     );
 }
 
@@ -889,6 +999,7 @@ test "non-object instances are valid: ignores booleans" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #"true"#,
         true,
+        [],
     );
 }
 
@@ -897,6 +1008,7 @@ test "non-object instances are valid: ignores integers" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #"123"#,
         true,
+        [],
     );
 }
 
@@ -905,6 +1017,7 @@ test "non-object instances are valid: ignores floats" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -913,6 +1026,7 @@ test "non-object instances are valid: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -921,6 +1035,7 @@ test "non-object instances are valid: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -929,6 +1044,7 @@ test "non-object instances are valid: ignores null" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":false}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -937,6 +1053,7 @@ test "unevaluatedProperties with null valued instance properties: allows null va
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedProperties":{"type":"null"}}"#,
         #"{"foo":null}"#,
         true,
+        [],
     );
 }
 
@@ -945,6 +1062,7 @@ test "unevaluatedProperties not affected by propertyNames: allows only number pr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":1},"unevaluatedProperties":{"type":"number"}}"#,
         #"{"a":1}"#,
         true,
+        [],
     );
 }
 
@@ -953,6 +1071,7 @@ test "unevaluatedProperties not affected by propertyNames: string property is in
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":1},"unevaluatedProperties":{"type":"number"}}"#,
         #"{"a":"b"}"#,
         false,
+        [],
     );
 }
 
@@ -961,6 +1080,7 @@ test "unevaluatedProperties can see annotations from if without then and else: v
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"patternProperties":{"foo":{"type":"string"}}},"unevaluatedProperties":false}"#,
         #"{"foo":"a"}"#,
         true,
+        [],
     );
 }
 
@@ -969,6 +1089,7 @@ test "unevaluatedProperties can see annotations from if without then and else: i
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"patternProperties":{"foo":{"type":"string"}}},"unevaluatedProperties":false}"#,
         #"{"bar":"a"}"#,
         false,
+        [],
     );
 }
 
@@ -977,6 +1098,7 @@ test "dependentSchemas with unevaluatedProperties: unevaluatedProperties doesn't
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo2":{}},"dependentSchemas":{"foo":{},"foo2":{"properties":{"bar":{}}}},"unevaluatedProperties":false}"#,
         #"{"foo":""}"#,
         false,
+        [],
     );
 }
 
@@ -985,6 +1107,7 @@ test "dependentSchemas with unevaluatedProperties: unevaluatedProperties doesn't
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo2":{}},"dependentSchemas":{"foo":{},"foo2":{"properties":{"bar":{}}}},"unevaluatedProperties":false}"#,
         #"{"bar":""}"#,
         false,
+        [],
     );
 }
 
@@ -993,6 +1116,7 @@ test "dependentSchemas with unevaluatedProperties: unevaluatedProperties sees ba
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo2":{}},"dependentSchemas":{"foo":{},"foo2":{"properties":{"bar":{}}}},"unevaluatedProperties":false}"#,
         #"{"foo2":"","bar":""}"#,
         true,
+        [],
     );
 }
 
@@ -1001,6 +1125,7 @@ test "Evaluated properties collection needs to consider instance location: with 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"properties":{"bar":{"type":"string"}}}},"unevaluatedProperties":false}"#,
         #"{"foo":{"bar":"foo"},"bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -1009,6 +1134,7 @@ test "Evaluated properties collection needs to consider instance location with p
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"patternProperties":{"^bar$":{"type":"string"}}}},"unevaluatedProperties":false}"#,
         #"{"foo":{"bar":"foo"}}"#,
         true,
+        [],
     );
 }
 
@@ -1017,6 +1143,7 @@ test "Evaluated properties collection needs to consider instance location with p
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"patternProperties":{"^bar$":{"type":"string"}}}},"unevaluatedProperties":false}"#,
         #"{"foo":{"bar":"foo"},"bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -1025,6 +1152,7 @@ test "Evaluated properties collection needs to consider instance location with a
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"additionalProperties":{"type":"string"}}},"unevaluatedProperties":false}"#,
         #"{"foo":{"bar":"foo"}}"#,
         true,
+        [],
     );
 }
 
@@ -1033,5 +1161,6 @@ test "Evaluated properties collection needs to consider instance location with a
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"additionalProperties":{"type":"string"}}},"unevaluatedProperties":false}"#,
         #"{"foo":{"bar":"foo"},"bar":"bar"}"#,
         false,
+        [],
     );
 }
