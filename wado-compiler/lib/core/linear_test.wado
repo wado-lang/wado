@@ -104,11 +104,29 @@ test "a fill takes memory for what the stream delivers, not for what it asks" {
     }
 }
 
+/// Forwards each read, noting whether the reader lent it memory of its own.
+struct Lender {
+    lent: bool,
+}
+
+impl Stream<u8> for Lender {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+        self.lent = into.landing(max)[2] == 0;
+        resume this.begin_read(max, into);
+    }
+
+    ..forward
+}
+
 test "a buffer lends its own memory to a stream copy" {
     let [rx, tx] = Stream::<u8>::new();
     let writing = tx.start_write([1, 2, 3, 4, 5]);
     let mut buffer = LinearBuffer::of_stream(rx);
-    assert buffer.fill(2);
+    let mut lender = Lender { lent: false };
+    with &mut lender do {
+        assert buffer.fill(2);
+    };
+    assert lender.lent;
     assert buffer.len() == 5;
     let [writer, _] = writing.finish();
     writer.drop();

@@ -33,6 +33,36 @@ test "a default body reads the reference's impl" {
     assert r.nth(2) == 2;
 }
 
+struct Both {
+    n: i32,
+}
+
+impl Counted for &mut Both {
+    fn count(&self) -> i32 {
+        return self.n;
+    }
+
+    fn nth(&self, index: i32) -> i32 {
+        return index;
+    }
+}
+
+impl Counted for Both {
+    fn count(&self) -> i32 {
+        return self.n + 100;
+    }
+
+    fn nth(&self, index: i32) -> i32 {
+        return index + 100;
+    }
+}
+
+test "a default body reads the mutable reference's impl over its pointee's" {
+    let mut b = Both { n: 3 };
+    let m = &mut b;
+    assert m.twice() == 6;
+}
+
 #[expect_trap]
 test "a contract reads the reference's impl" {
     let p = Plain { n: 3 };
