@@ -85,12 +85,12 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
     if mono.impl_type_args.len() != 1 {
         return None;
     }
-    let elem_key = mono.impl_type_args[0];
+    let elem = mono.impl_type_args[0];
 
     let params: Vec<TypeId> = func.params.iter().map(|p| p.type_id).collect();
     let ret = func.return_type;
 
-    let is_t = |ty: TypeId| ty == elem_key;
+    let is_t = |ty: TypeId| ty == elem;
     let is_list_of_t = |ty: TypeId| type_table.as_list(ty).is_some_and(is_t);
     let is_ref_list_of_t =
         |ty: TypeId| matches!(type_table.get(ty), ResolvedType::Ref(inner) if is_list_of_t(*inner));
@@ -1128,7 +1128,6 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
                     name,
                     list_type,
                     elem_type: elem_ty,
-                    elem_key: elem_ty,
                 },
             );
         }
@@ -1185,10 +1184,8 @@ struct FieldList {
     name: String,
     /// `List<T_k>` — the new local's own type.
     list_type: TypeId,
-    /// `T_k` — the per-field element type.
+    /// `T_k` — the per-field element type, the catalog's lookup key.
     elem_type: TypeId,
-    /// `T_k`'s key, the catalog's lookup key.
-    elem_key: TypeId,
 }
 
 struct RewriteCtx<'a> {
@@ -2338,7 +2335,7 @@ impl Rewriter<'_, '_> {
             let field = ctx.field_map[&(rec_local, 0)].clone();
             let (_, new_func_id) = ctx
                 .catalog
-                .get(&(field.elem_key, sig))
+                .get(&(field.elem_type, sig))
                 .cloned()
                 .expect("Query monomorphization must exist for decomposed element type");
             let span = engine.body.exprs[e].span;
@@ -2447,7 +2444,7 @@ fn build_receiver(engine: &mut Engine, field: &FieldList, mut_ref: bool, span: S
 /// The `func_id` of `List<field.elem_type>`'s method with signature `sig`.
 fn field_method(field: &FieldList, sig: &SigKey, ctx: &RewriteCtx) -> FuncId {
     ctx.catalog
-        .get(&(field.elem_key, sig.clone()))
+        .get(&(field.elem_type, sig.clone()))
         .expect("method entry checked by required_methods_available")
         .1
 }
@@ -2460,7 +2457,7 @@ fn build_constructor_call(
     cap: Operand,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let sig = field_constructor(&info.init, field.elem_key, ctx.sig)
+    let sig = field_constructor(&info.init, field.elem_type, ctx.sig)
         .expect("Constructor checked by required_methods_available");
     let func_id = field_method(field, &sig, ctx);
     engine.alloc_expr(

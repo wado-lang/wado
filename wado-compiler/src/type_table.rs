@@ -6946,7 +6946,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Set `id`'s value, growing the backing storage with empty slots as
-    /// needed. Used for sparse maps such as `redirects`.
+    /// needed, for a sparse map such as `erasures`.
     pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
         let idx = id.0 as usize;
         if idx >= self.slots.len() {

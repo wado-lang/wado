@@ -29,7 +29,7 @@ pub fn insert_write_backs(
 ) -> Result<(), Bail> {
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
-    let carrying = RefCarrying::new(&flat.structs, &type_table, closure_captures);
+    let carrying = RefCarrying::new(flat, &type_table, closure_captures);
     let replaced = whole_value_writes::compute(flat, call_graph, &carrying);
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();

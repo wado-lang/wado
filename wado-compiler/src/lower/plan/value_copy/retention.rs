@@ -27,7 +27,7 @@ use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
     RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, capture_source_locals,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -818,7 +818,7 @@ pub fn compute_retention(
         }
     }
 
-    let carrying = RefCarrying::new(&project.structs, &type_table, closure_captures);
+    let carrying = RefCarrying::new(project, &type_table, closure_captures);
     let functor_params: Vec<FunctorParams> = project
         .functions
         .iter()
@@ -986,7 +986,7 @@ fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
 /// `List::push` takes `Sink { r: &Item }` by value: a parameter carries a
 /// reference when its type holds one, not only when it is one.
 pub struct RefCarrying<'a> {
-    structs: &'a [TirStruct],
+    flat: &'a FlatPackage,
     type_table: &'a TypeTable,
     captures: &'a ClosureCaptures,
     memo: RefCell<IndexMap<TypeId, bool>>,
@@ -995,12 +995,12 @@ pub struct RefCarrying<'a> {
 impl<'a> RefCarrying<'a> {
     #[must_use]
     pub fn new(
-        structs: &'a [TirStruct],
+        flat: &'a FlatPackage,
         type_table: &'a TypeTable,
         captures: &'a ClosureCaptures,
     ) -> Self {
         Self {
-            structs,
+            flat,
             type_table,
             captures,
             memo: RefCell::new(IndexMap::default()),
@@ -1107,9 +1107,8 @@ impl RefCarrying<'_> {
         let ResolvedType::Struct { def, type_args } = self.type_table.get(ty) else {
             unreachable!("a struct type")
         };
-        self.structs
-            .iter()
-            .find(|s| s.represents(*def, type_args))
+        self.flat
+            .listed_struct(*def, type_args)
             .map(|s| s.fields.iter().map(|f| f.type_id).collect())
     }
 
