@@ -157,10 +157,10 @@ impl Validator {
             };
             run.fail(ip, &n.at, "type", message);
         }
-        if let Some(c) = &n.const_ && *inst != c.root() {
+        if let Some(c) = &n.const && *inst != c.root() {
             run.fail(ip, &n.at, "const", "must equal the constant");
         }
-        if let Some(values) = &n.enum_ && !values.iter_ref().any(|v| *inst == v.root()) {
+        if let Some(values) = &n.enum && !values.iter_ref().any(|v| *inst == v.root()) {
             run.fail(ip, &n.at, "enum", "must equal one of the values");
         }
         if let Some(x) = inst.as_f64() {
@@ -230,14 +230,14 @@ impl Validator {
         if let Some(t) = n.not && self.passes(t, inst, ip, run).0 {
             run.fail(ip, &n.at, "not", "must not be valid against the schema");
         }
-        if let Some(t) = n.if_ {
+        if let Some(t) = n.if {
             let [ok, ev] = self.passes(t, inst, ip, run);
             if ok {
                 out.merge(&ev);
                 if let Some(then) = n.then {
                     self.apply(then, inst, ip, run, out);
                 }
-            } else if let Some(otherwise) = n.else_ {
+            } else if let Some(otherwise) = n.else {
                 self.apply(otherwise, inst, ip, run, out);
             }
         }
@@ -387,15 +387,15 @@ struct Compiled {
     reference: Option<i32> = null,
     dynamic_ref: Option<DynamicRef> = null,
     type: Option<JsonTypes> = null,
-    const_: Option<Document> = null,
-    enum_: Option<List<Document>> = null,
+    const: Option<Document> = null,
+    enum: Option<List<Document>> = null,
     all_of: List<i32> = [],
     any_of: List<i32> = [],
     one_of: List<i32> = [],
     not: Option<i32> = null,
-    if_: Option<i32> = null,
+    if: Option<i32> = null,
     then: Option<i32> = null,
-    else_: Option<i32> = null,
+    else: Option<i32> = null,
     multiple_of: Option<Decimal> = null,
     minimum: Option<f64> = null,
     exclusive_minimum: Option<f64> = null,
@@ -547,15 +547,15 @@ impl Compiler {
             });
         }
         node.type = o.type;
-        node.const_ = o.const_;
-        node.enum_ = o.enum_;
+        node.const = o.const;
+        node.enum = o.enum;
         node.all_of = self.add_list(&o.all_of, `${at}/allOf`, &uri, r)?;
         node.any_of = self.add_list(&o.any_of, `${at}/anyOf`, &uri, r)?;
         node.one_of = self.add_list(&o.one_of, `${at}/oneOf`, &uri, r)?;
         node.not = self.add_some(&o.not, `${at}/not`, &uri, r)?;
-        node.if_ = self.add_some(&o.if_, `${at}/if`, &uri, r)?;
+        node.if = self.add_some(&o.if, `${at}/if`, &uri, r)?;
         node.then = self.add_some(&o.then, `${at}/then`, &uri, r)?;
-        node.else_ = self.add_some(&o.else_, `${at}/else`, &uri, r)?;
+        node.else = self.add_some(&o.else, `${at}/else`, &uri, r)?;
         if let Some(m) = o.multiple_of {
             node.multiple_of = Option::Some(decimal(m));
         }

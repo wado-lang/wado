@@ -58,15 +58,15 @@ pub struct SchemaObject {
     pub content_encoding: Option<String> = null,
     pub content_media_type: Option<String> = null,
     pub content_schema: Option<Schema> = null,
-    pub const_: Option<Document> = null,
-    pub enum_: Option<List<Document>> = null,
+    pub const: Option<Document> = null,
+    pub enum: Option<List<Document>> = null,
     pub all_of: List<Schema> = [],
     pub any_of: List<Schema> = [],
     pub one_of: List<Schema> = [],
     pub not: Option<Schema> = null,
-    pub if_: Option<Schema> = null,
+    pub if: Option<Schema> = null,
     pub then: Option<Schema> = null,
-    pub else_: Option<Schema> = null,
+    pub else: Option<Schema> = null,
     pub multiple_of: Option<f64> = null,
     pub minimum: Option<f64> = null,
     pub exclusive_minimum: Option<f64> = null,
@@ -94,7 +94,7 @@ pub struct SchemaObject {
     pub min_properties: Option<i32> = null,
     pub max_properties: Option<i32> = null,
     pub unevaluated_properties: Option<Schema> = null,
-    pub default_: Option<Document> = null,
+    pub default: Option<Document> = null,
     pub examples: List<Document> = [],
     pub deprecated: bool = false,
     pub read_only: bool = false,
@@ -143,7 +143,7 @@ impl SchemaObject {
 
     /// A schema admitting the single value `value`.
     pub fn constant(value: Document) -> SchemaObject {
-        return SchemaObject { const_: Option::Some(value) };
+        return SchemaObject { const: Option::Some(value) };
     }
 
     fn each_keyword<K: KeywordSink>(&self, k: &mut K) -> Result<(), SerializeError> {
@@ -165,15 +165,15 @@ impl SchemaObject {
         k.some("contentEncoding", &self.content_encoding)?;
         k.some("contentMediaType", &self.content_media_type)?;
         k.some("contentSchema", &self.content_schema)?;
-        k.some("const", &self.const_)?;
-        k.some("enum", &self.enum_)?;
+        k.some("const", &self.const)?;
+        k.some("enum", &self.enum)?;
         k.list("allOf", &self.all_of)?;
         k.list("anyOf", &self.any_of)?;
         k.list("oneOf", &self.one_of)?;
         k.some("not", &self.not)?;
-        k.some("if", &self.if_)?;
+        k.some("if", &self.if)?;
         k.some("then", &self.then)?;
-        k.some("else", &self.else_)?;
+        k.some("else", &self.else)?;
         k.some("multipleOf", &self.multiple_of)?;
         k.some("minimum", &self.minimum)?;
         k.some("exclusiveMinimum", &self.exclusive_minimum)?;
@@ -201,7 +201,7 @@ impl SchemaObject {
         k.some("minProperties", &self.min_properties)?;
         k.some("maxProperties", &self.max_properties)?;
         k.some("unevaluatedProperties", &self.unevaluated_properties)?;
-        k.some("default", &self.default_)?;
+        k.some("default", &self.default)?;
         k.list("examples", &self.examples)?;
         k.flag("deprecated", self.deprecated)?;
         k.flag("readOnly", self.read_only)?;
@@ -386,15 +386,15 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
             "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
             "contentSchema" => s.content_schema = Option::Some(read_schema(v, &here)?),
-            "const" => s.const_ = Option::Some(value.to_document()),
-            "enum" => s.enum_ = Option::Some(read_values(v, &here)?),
+            "const" => s.const = Option::Some(value.to_document()),
+            "enum" => s.enum = Option::Some(read_values(v, &here)?),
             "allOf" => s.all_of = read_schema_list(v, &here)?,
             "anyOf" => s.any_of = read_schema_list(v, &here)?,
             "oneOf" => s.one_of = read_schema_list(v, &here)?,
             "not" => s.not = Option::Some(read_schema(v, &here)?),
-            "if" => s.if_ = Option::Some(read_schema(v, &here)?),
+            "if" => s.if = Option::Some(read_schema(v, &here)?),
             "then" => s.then = Option::Some(read_schema(v, &here)?),
-            "else" => s.else_ = Option::Some(read_schema(v, &here)?),
+            "else" => s.else = Option::Some(read_schema(v, &here)?),
             "multipleOf" => {
                 let m = read_number(v, &here)?;
                 if m <= 0.0 {
@@ -428,7 +428,7 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "minProperties" => s.min_properties = Option::Some(read_count(v, &here)?),
             "maxProperties" => s.max_properties = Option::Some(read_count(v, &here)?),
             "unevaluatedProperties" => s.unevaluated_properties = Option::Some(read_schema(v, &here)?),
-            "default" => s.default_ = Option::Some(value.to_document()),
+            "default" => s.default = Option::Some(value.to_document()),
             "examples" => s.examples = read_values(v, &here)?,
             "deprecated" => s.deprecated = read_bool(v, &here)?,
             "readOnly" => s.read_only = read_bool(v, &here)?,

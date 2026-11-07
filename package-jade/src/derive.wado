@@ -94,7 +94,7 @@ fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Seriali
         if let Some(fallback) = ReflectStruct::<T>::default_slot(i)[i] {
             // A default JSON cannot hold, such as NaN, has no `default` to write.
             if let Ok(doc) = Document::of(&fallback) {
-                field.default_ = Option::Some(doc);
+                field.default = Option::Some(doc);
             }
         } else {
             s.required.push(name);
@@ -174,7 +174,7 @@ fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
     }
     return Schema::Object(SchemaObject {
         type: Option::Some(JsonTypes::String),
-        enum_: Option::Some(names),
+        enum: Option::Some(names),
     });
 }
 
@@ -192,7 +192,7 @@ fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
     }
     let member = SchemaObject {
         type: Option::Some(JsonTypes::String),
-        enum_: Option::Some(names),
+        enum: Option::Some(names),
     };
     return set_of(Schema::Object(member));
 }
