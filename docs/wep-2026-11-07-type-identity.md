@@ -77,128 +77,123 @@ in place.
    `u32`, a reference to a primitive, a variant or a function is a `Box`, and
    rows mean nothing.
 
-The second universe is a many-to-one image of the first. Storing the image in
-the same table, under the same id type, is what makes an id stop being an
-identity.
+The second universe is a many-to-one image of the first. Today the table moves
+its slots from one universe to the other, and that is what makes an id stop
+being an identity. The second universe needs no slots of its own: `f64` and
+`List<f64>` are ordinary types the table already interns.
 
 ## Decision
 
-### 1. An id is the type
+The table never changes what a slot means. Lowering rewrites the IR's types
+instead.
 
-Within a table, a type has one id, and an id names one type for the table's
-whole life. `intern` is the only way to add a slot, and nothing redirects,
-redefines or settles a slot afterwards. `==` on ids is the identity question,
-and `Hash` on ids is the identity key. `TypeKey`, `same_type`, `TypeMemo` and
-`InstanceArg` have no work left and go.
+### 1. The table is append-only
 
-### 2. Two universes, two id types
+`intern` is the only way to add a slot, and nothing redirects, redefines or
+settles one afterwards. An id names one type for the table's whole life, so
+`==` on ids is the identity question and `Hash` on ids is the identity key.
+`TypeKey`, `same_type`, `TypeMemo` and `InstanceArg` have no work left and go.
 
-- `TypeId` and `TypeTable` hold source types, from elaboration through
-  lowering, as they do before erasure today.
-- `ReprId` and `ReprTable` hold representation types, from lowering on. NIR,
-  the optimizer, `niri` and WIR build read only these.
+`Meters` keeps its id after lowering and still means `Meters`. Nothing after
+lowering holds that id, so nothing asks.
 
-The two ids are distinct Rust types with private fields, and neither converts to
-the other. A source id used where a representation is expected is a type error.
+### 2. One function says what a type lowers to
 
-### 3. One function says what representation means
+`lower_type(TypeId) -> TypeId`, memoized, is the only place that states
+erasure, dropping rows and boxing:
 
-`repr(TypeId) -> ReprId`, memoized, is the only place that states erasure,
-dropping rows and boxing:
+- a newtype lowers to what its base lowers to, and `flags` to `u32`;
+- a function type keeps its lowered parameters and return type, and drops its
+  row;
+- a reference whose target `is_boxed_reference_target` names lowers to
+  `Box<T>` of the lowered target, and any other reference to a reference to it;
+- every other spelling is rebuilt from what its parts lower to, and interned.
 
-- a newtype is the representation of its base, and `flags` is `u32`;
-- a function type keeps its parameters and return type, and drops its row;
-- a reference whose target `is_boxed_reference_target` names is a `Box` of the
-  target's representation, and any other reference is a reference to it;
-- every other spelling is rebuilt from the representations of its parts.
+Because it rebuilds structurally, `List<Meters>` lowers to the id `List<f64>`
+already has, with no settling step.
 
-Because `repr` rebuilds structurally, `List<Meters>` and `List<f64>` reach one
-`ReprId` with no settling step. `ReprTable`'s constructors apply the same rules,
-so a type an optimizer pass mints after lowering is boxed exactly as `repr`
-would box it.
-
-### 4. Lowering translates every type once
+### 3. Lowering rewrites every type once
 
 The TIR → NIR fold already visits every node, and already performs the boxing
-rewrite of bodies. It maps each type through `repr` as it goes. The `BoxPlan`
-type facts become `ReprTable` facts, and the boxing pass touches no table that
-TIR reads.
+rewrite of bodies. It maps each type it writes into NIR through `lower_type`.
+Erasure stops being a phase, and the boxing pass touches no slot.
 
-A struct declaration in NIR is keyed by its `ReprId`. Two TIR instances that
-`repr` maps to one id become one NIR declaration, so `List<Meters>` and
-`List<f64>` need no deduplication further down.
+NIR declares one struct per lowered id. Two TIR instances that lower to one id
+become one NIR declaration, so `List<Meters>` and `List<f64>` need no
+deduplication further down.
 
-### 5. What NIR asks of a source type is answered at lowering
+A pass that mints a type after lowering, such as `sroa_param`'s `make_ref` or
+`sroa_variant_return`'s `make_option`, maps it through `lower_type` as well. A
+debug assertion at the end of lowering, and in WIR build, checks that NIR holds
+only lowered types: no newtype, no `flags`, no row, no reference that should be
+a `Box`.
+
+### 4. Source questions are answered before or during lowering
 
 After lowering, nothing asks for a type's source identity: `get_unerased` and
 `is_newtype` are read only by the elaborator, the effect check and synthesis.
-Lowering does read source spellings to mint names (`name_unboxed`,
-`mangle_type_arg_unboxed`), and it holds both ids, so it reads the `TypeId`.
-Impl dispatch and the names that must match an impl are resolved by then and
-recorded on the node that needs them. A `ReprId` answers no source question.
+Lowering reads source spellings to mint names (`name_unboxed`,
+`mangle_type_arg_unboxed`), and it still holds the TIR id when it does. The
+synthesis that runs after monomorphization today, reflect bridges and widening,
+names a call from the lowered type by calling `lower_type`.
 
-### 6. One name per universe
+### 5. One name per type
 
-A source type renders one name, and a representation type renders one name.
-WIR build maps a `ReprId` to a `WirTypeId` one to one and dedups by id, not by
-string.
+`get` and the name renderers lose their erased, unerased, boxed and unboxed
+variants, since a slot no longer has two readings. WIR build dedups its types
+by id, not by mangled string.
 
-### 7. Rejected alternatives
+### 6. Rejected alternatives
+
+#### A separate id type for lowered types
+
+`ReprId` and a `ReprTable` beside `TypeId` would make mixing the universes a
+compile error. They add a third identity to a codebase that already has too
+many, and duplicate the table's constructors. The append-only table already
+makes every id honest. What a separate type would add, the debug assertion in
+section 3 checks.
 
 #### Canonicalize the aliases with union-find
 
 `redefine_to` becomes a union, and `find` answers the canonical id. This makes
 `type_key` cheaper, but keeps the table changing under the IR. A key taken
-before a union still differs from one taken after it, and `TypeId`'s `==` still
-compiles.
+before a union still differs from one taken after it.
 
 #### Remove `Eq` and `Hash` from `TypeId`
 
 This turns the wrong comparison into a compile error. Interning needs both,
 though: `ResolvedType` contains `TypeId`s and is the intern map's key. Constant
-patterns such as `TypeTable::BOOL =>` need the derived `Eq` too.
-The aliasing stays, and every comparison moves to `TypeKey`.
-
-#### Rebuild one table at each phase boundary, keeping one id type
-
-Erasure and boxing build a fresh `TypeTable` and rewrite the IR's ids through a
-map. This restores section 1 with a smaller change than section 2. It does not
-stop a TIR id from being read against the NIR table, which compiles and answers
-whatever type occupies that slot.
+patterns such as `TypeTable::BOOL =>` need the derived `Eq` too. The aliasing
+stays, and every comparison moves to `TypeKey`.
 
 ## Roadmap
 
 Each step leaves the compiler green and is a commit series of its own.
 
-- [ ] Before erasure, replace `type_key` and `same_type` with `==`, and assert in
-  `type_key` that erasure has run. Done when no caller before erasure
-  remains.
-- [ ] Introduce `ReprId`, `ReprTable` and `repr`, and switch WIR build's type
-  registration to them. Done when WIR build dedups by `ReprId` and no
-  longer reads `mangle_type_arg_rowless_resolving_newtypes`.
-- [ ] Switch NIR to `ReprId`, moving erasure into `repr`. Done when
+- [ ] Before erasure, replace `type_key` and `same_type` with `==`. Done when
+  no caller before erasure remains.
+- [ ] Add `lower_type` and map every type the TIR → NIR fold writes through it,
+  with the debug assertion. Done when erasure runs inside lowering and
   `erase_newtypes_and_flags`, `redirects` and `settled_spellings` are gone.
-  NIR cannot carry both id types, so this step touches every optimizer pass
-  at once.
-- [ ] Move the boxing type rewrite into `repr`. Done when `redefine_to`,
+- [ ] Move the boxing type rewrite into `lower_type`. Done when `redefine_to`,
   `follow_redefinitions` and `box_payload_types` are gone.
-- [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`, the
-  `mangle_*` and `fq_type_name_*` variants that only one universe uses, and
+- [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`,
+  `get_unerased`, the `_unboxed` and `_resolving_newtypes` renderers, and
   the rule in `wado-compiler/AGENTS.md`.
 
 ## Known gaps
 
-### `&T` and `&mut T` share a `Box` but not a meaning
+### `&T` and `&mut T` lower to one `Box`
 
-Today both redefine to one `Box<T>` struct, which is what lets a `&mut`
-argument reach a `&` parameter. `is_mut_box` tells them apart by the spelling
-left in the slot, and `sroa_param`, `niri::region` and value-copy's points-to
-analysis read it. Section 1 leaves no slot to read. Whether writability is part
-of a representation type or of the place that holds one is undecided, and the
-boxing step of the roadmap waits on it.
+Both lower to one `Box<T>` struct, which is what lets a `&mut` argument reach a
+`&` parameter. `is_mut_box` tells them apart today by the spelling left in the
+redefined slot, and `sroa_param`, `niri::region` and value-copy's points-to
+analysis read it. Section 1 leaves no such slot. Where those analyses learn
+whether a box is writable is undecided, and the boxing step of the roadmap
+waits on it.
 
 ### A remark after lowering has no source name to print
 
-Remarks run on NIR and name a type through `TypeTable::name`. A `ReprId` does
+Remarks run on NIR and name a type through `TypeTable::name`. A lowered id does
 not know that `f64` was `Meters`. What a remark should name, and where it gets
 that name, is undecided.
