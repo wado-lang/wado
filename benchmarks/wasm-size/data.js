@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794051054917,
+  "lastUpdate": 1794065075262,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75493,6 +75493,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 385142,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "43e4ebb4a34d6253c1cb9d4da20a99655e5a5a0c",
+          "message": "Merge pull request #2577 from wado-lang/ccr-f765b823-1j102r\n\nfix(gale): parse nested mid operands as ANTLR4 does",
+          "timestamp": "2026-11-08T00:05:59+09:00",
+          "tree_id": "cfdcb13f1b347e27c195901090875dd51642e756",
+          "url": "https://github.com/wado-lang/wado/commit/43e4ebb4a34d6253c1cb9d4da20a99655e5a5a0c"
+        },
+        "date": 1794065074126,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404793,
             "unit": "bytes"
           }
         ]
