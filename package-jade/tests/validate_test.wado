@@ -139,7 +139,10 @@ test "a reference into a held document at a place it lacks is an error at compil
 test "a set names the documents its references still need, then compiles" {
     let root = uri("https://x.test/root.json");
     let mut set = SchemaSet::new();
-    set.insert(root, Schema::parse(#"{"items": {"$ref": "int.json"}, "$defs": {"m": {"$ref": "moved.json"}}}"#).unwrap());
+    set.insert(
+        root,
+        Schema::parse(#"{"items": {"$ref": "int.json"}, "$defs": {"m": {"$ref": "moved.json"}}}"#).unwrap(),
+    );
     assert set.missing().unwrap() matches { Some(u) && `${u}` == "https://x.test/int.json" };
     set.insert(uri("https://x.test/int.json"), Schema::parse(#"{"type": "integer"}"#).unwrap());
     assert set.missing().unwrap() matches { Some(u) && `${u}` == "https://x.test/moved.json" };

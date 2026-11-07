@@ -261,7 +261,7 @@ impl Validator {
         for let [held, at] of run.following {
             if held == t && Document::same_node(&at, inst) {
                 run.cycles += 1;
-                run.fail(ip, n,keyword, "refers back to itself without moving into the instance");
+                run.fail(ip, n, keyword, "refers back to itself without moving into the instance");
                 return;
             }
         }
@@ -328,43 +328,43 @@ impl Validator {
     /// `enum`, and those on a number or a string.
     fn assert_value(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run) {
         if n.type != JsonTypes::none() && !has_type(inst, n.type) {
-            run.fail(ip, n,"type", `must be ${type_names(n.type).join(" or ")}`);
+            run.fail(ip, n, "type", `must be ${type_names(n.type).join(" or ")}`);
         }
         if let Some(c) = &n.const && *inst != c.root() {
-            run.fail(ip, n,"const", "must equal the constant");
+            run.fail(ip, n, "const", "must equal the constant");
         }
         if let Some(values) = &n.enum && !values.iter_ref().any(|v| *inst == v.root()) {
-            run.fail(ip, n,"enum", "must equal one of the values");
+            run.fail(ip, n, "enum", "must equal one of the values");
         }
         if let Some(x) = inst.as_number() {
             if let Some(m) = &n.multiple_of && !m.divides(&x) {
-                run.fail(ip, n,"multipleOf", "must be a multiple");
+                run.fail(ip, n, "multipleOf", "must be a multiple");
             }
             if let Some(m) = &n.minimum && x < *m {
-                run.fail(ip, n,"minimum", `must be at least ${m}`);
+                run.fail(ip, n, "minimum", `must be at least ${m}`);
             }
             if let Some(m) = &n.exclusive_minimum && x <= *m {
-                run.fail(ip, n,"exclusiveMinimum", `must be greater than ${m}`);
+                run.fail(ip, n, "exclusiveMinimum", `must be greater than ${m}`);
             }
             if let Some(m) = &n.maximum && x > *m {
-                run.fail(ip, n,"maximum", `must be at most ${m}`);
+                run.fail(ip, n, "maximum", `must be at most ${m}`);
             }
             if let Some(m) = &n.exclusive_maximum && x >= *m {
-                run.fail(ip, n,"exclusiveMaximum", `must be less than ${m}`);
+                run.fail(ip, n, "exclusiveMaximum", `must be less than ${m}`);
             }
         }
         if let Some(s) = inst.as_str() {
             if n.min_length matches { Some(_) } || n.max_length matches { Some(_) } {
                 let len = s.chars().count();
                 if let Some(m) = n.min_length && len < m {
-                    run.fail(ip, n,"minLength", `must have at least ${m} characters`);
+                    run.fail(ip, n, "minLength", `must have at least ${m} characters`);
                 }
                 if let Some(m) = n.max_length && len > m {
-                    run.fail(ip, n,"maxLength", `must have at most ${m} characters`);
+                    run.fail(ip, n, "maxLength", `must have at most ${m} characters`);
                 }
             }
             if let Some(re) = &n.pattern && !re.is_match(s) {
-                run.fail(ip, n,"pattern", `must match ${re}`);
+                run.fail(ip, n, "pattern", `must match ${re}`);
             }
         }
     }
@@ -384,7 +384,7 @@ impl Validator {
                 }
             }
             if !any {
-                run.fail(ip, n,"anyOf", "must be valid against at least one schema");
+                run.fail(ip, n, "anyOf", "must be valid against at least one schema");
             }
         }
         if !n.one_of.is_empty() {
@@ -397,11 +397,11 @@ impl Validator {
                 }
             }
             if valid != 1 {
-                run.fail(ip, n,"oneOf", `must be valid against exactly one schema, not ${valid}`);
+                run.fail(ip, n, "oneOf", `must be valid against exactly one schema, not ${valid}`);
             }
         }
         if let Some(t) = n.not && self.passes(t, inst, ip, run).0 {
-            run.fail(ip, n,"not", "must not be valid against the schema");
+            run.fail(ip, n, "not", "must not be valid against the schema");
         }
         if let Some(t) = n.if {
             let [ok, ev] = self.passes(t, inst, ip, run);
@@ -420,17 +420,17 @@ impl Validator {
         let items: List<Node> = inst.items().collect();
         let len = items.len();
         if let Some(m) = n.min_items && len < m {
-            run.fail(ip, n,"minItems", `must have at least ${m} items`);
+            run.fail(ip, n, "minItems", `must have at least ${m} items`);
         }
         if let Some(m) = n.max_items && len > m {
-            run.fail(ip, n,"maxItems", `must have at most ${m} items`);
+            run.fail(ip, n, "maxItems", `must have at most ${m} items`);
         }
         if n.unique_items {
             duplicates: {
                 for let a of 0..<len {
                     for let b of a + 1..<len {
                         if items[a] == items[b] {
-                            run.fail(ip, n,"uniqueItems", `has equal items at ${a} and ${b}`);
+                            run.fail(ip, n, "uniqueItems", `has equal items at ${a} and ${b}`);
                             break duplicates;
                         }
                     }
@@ -458,10 +458,10 @@ impl Validator {
             }
             if count < n.min_contains {
                 let keyword = if n.min_contains == 1 { "contains" } else { "minContains" };
-                run.fail(ip, n,keyword, `must contain at least ${n.min_contains} matching items`);
+                run.fail(ip, n, keyword, `must contain at least ${n.min_contains} matching items`);
             }
             if let Some(m) = n.max_contains && count > m {
-                run.fail(ip, n,"maxContains", `must contain at most ${m} matching items`);
+                run.fail(ip, n, "maxContains", `must contain at most ${m} matching items`);
             }
         }
         if let Some(t) = n.unevaluated_items && !out.all_items {
@@ -481,14 +481,14 @@ impl Validator {
     fn eval_object(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
         let len = inst.len();
         if let Some(m) = n.min_properties && len < m {
-            run.fail(ip, n,"minProperties", `must have at least ${m} properties`);
+            run.fail(ip, n, "minProperties", `must have at least ${m} properties`);
         }
         if let Some(m) = n.max_properties && len > m {
-            run.fail(ip, n,"maxProperties", `must have at most ${m} properties`);
+            run.fail(ip, n, "maxProperties", `must have at most ${m} properties`);
         }
         for let name of n.required {
             if inst.get(&name) matches { None } {
-                run.fail(ip, n,"required", `must have the property ${name:?}`);
+                run.fail(ip, n, "required", `must have the property ${name:?}`);
             }
         }
         for let [key, names] of n.dependent_required.entries() {

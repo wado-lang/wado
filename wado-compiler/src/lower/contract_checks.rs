@@ -953,8 +953,11 @@ impl Expander<'_> {
                 read.clone()
             }
             Sink::InPlace => {
-                self.declared
-                    .push(binding(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span)));
+                self.declared.push(binding(TirExpr::new(
+                    TirExprKind::Unit,
+                    TypeTable::UNIT,
+                    span,
+                )));
                 TirExpr::new(
                     TirExprKind::Block(TirBlock::new(
                         vec![
