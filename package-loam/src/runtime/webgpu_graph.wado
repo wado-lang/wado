@@ -598,9 +598,9 @@ impl Graph for WebGpuBackend {
     }
 
     /// The backend's attention kernels, and the decomposition where they
-    /// cannot run it, rows of different lengths among those. A shared past
-    /// holds `past_length` valid positions, the kernels attend over those and
-    /// the new ones, or the first `reach` of them, as many columns of the bias,
+    /// cannot run it. Each row of a shared past holds its `past_length` valid
+    /// positions, the kernels attend over those and the new ones, or the first
+    /// of its `reach` of them, as many columns of the bias,
     /// and the present is the past's buffer with the new ones written after the
     /// valid ones. Past the valid ones a causal attention reads none, so the
     /// kernels compute what the decomposition does.
@@ -624,14 +624,15 @@ impl Graph for WebGpuBackend {
                 break kernels;
             }
             let positions = self.extents_of(past_k)[2];
-            let fresh = self.extents_of(q)[1];
-            let Some(valid) = one_length(self, past_length, positions) else {
-                break kernels;
-            };
-            let Some(attended) = one_length(self, reach, valid + fresh) else {
-                break kernels;
-            };
-            assert !shared || valid + fresh <= positions, "a shared past holds the new positions after its valid ones";
+            let [rows, fresh] = [
+                self.extents_of(q)[0],
+                self.extents_of(q)[1],
+            ];
+            let valid = row_lengths(self, past_length, rows, |_| positions);
+            let attended = row_lengths(self, reach, rows, |row| valid[row] + fresh);
+            for let row of 0..<rows {
+                assert !shared || valid[row] + fresh <= positions, "a shared past holds the new positions after its valid ones";
+            }
             let rotary = match [cos, sin] {
                 [Some(c), Some(s)] => Option::Some([
                     self.device_view(c),
@@ -654,8 +655,8 @@ impl Graph for WebGpuBackend {
                 &self.device_view(v),
                 &held_k,
                 &held_v,
-                valid,
-                attended,
+                &valid,
+                &attended,
                 shared,
                 &rotary,
                 &biased,
@@ -686,23 +687,26 @@ impl Graph for WebGpuBackend {
     }
 }
 
-/// The length every row of `length` holds, where they hold one, or `absent`
-/// where there is none.
-fn one_length(
+/// The length each of `rows` rows holds in `length`, one for every row or one
+/// they share, or `absent` of the row where there is none.
+fn row_lengths(
     g: &mut WebGpuBackend,
     length: Option<&Placed<i64, [Slots]>>,
-    absent: i32,
-) -> Option<i32> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let Some(l) = length else {
-        return Option::Some(absent);
+    rows: i32,
+    absent: fn(i32) -> i32,
+) -> List<i32> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let mut lengths = List::<i32>::with_capacity(rows);
+    let held = match length {
+        Some(l) => Option::Some(g.host(l).data),
+        None => null,
     };
-    let rows = g.host(l).data;
-    for let row of &rows {
-        if *row != rows[0] {
-            return null;
-        }
+    for let row of 0..<rows {
+        lengths.push(match &held {
+            Some(data) => data[if data.len() == 1 { 0 } else { row }] as i32,
+            None => absent(row),
+        });
     }
-    return Option::Some(rows[0] as i32);
+    return lengths;
 }
 
 /// For each of the `count` weights `recorded` takes from its parameter

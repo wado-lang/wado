@@ -235,6 +235,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         &ragged.bias,
         &ragged.options,
     );
+    let ragged_from = gpu.dispatches();
     let ragged_got = cases::attending(
         &mut gpu,
         &[
@@ -254,6 +255,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         &gpu.upload(&ragged.bias),
         &ragged.options,
     );
+    assert gpu.dispatches() - ragged_from == 5, "rows of different pasts attend in the kernels";
     for let [name, got, want] of [
         ["out", ragged_got.0, ragged_want.0],
         ["present_k", ragged_got.1, ragged_want.1],
