@@ -243,7 +243,7 @@ which leaves what `opaque` admits open (see
 ### Symbol notation names a reference and a function type
 
 [Symbol Notation](./wep-2026-06-14-symbol-notation.md) is `MODULE#SYMBOL`, and
-`canonical_name()` renders in its canonical register. Most cases already have a
+`canonical_name()` renders in it. Most cases already have a
 module. A primitive, `()` and `!` are `internal type` declarations in
 `core:prelude` and resolve like any other name (`prelude/primitive.wado`,
 `trait_env.rs`'s `ImplTargetKey`); `Array<T>` is the prelude's
@@ -585,6 +585,6 @@ and nothing checks the list against what the module exports.
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — the packs an arm binds, and `VariadicForOf`
 - [Trait Resolution](./wep-2026-09-01-trait-resolution.md) — why a root-bounded blanket beside the kind ones is rank 3, and why `()` is not a tuple
 - [Struct Walkability](./wep-2026-07-10-struct-walkability.md) — the visibility gate an arm inherits
-- [Symbol Notation](./wep-2026-06-14-symbol-notation.md) — the register `canonical_name()` renders, widened here to a reference and a function type
+- [Symbol Notation](./wep-2026-06-14-symbol-notation.md) — the notation `canonical_name()` renders, widened here to a reference and a function type
 - [Jade](./wep-2026-06-13-jade.md) — where the `Shape` tree is written
 - [Elaborator Architecture](./wep-2026-05-26-elaborator-rearchitecture.md) — where an arm's hypothesis and its expansion live

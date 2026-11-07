@@ -42,3 +42,11 @@ of its own: it writes no format name the specification does not define, such as
 OpenAPI's `date-time-local`. A derived schema takes a `format` only when every
 text its type writes meets it, so `Uuid` takes `uuid`, while `Instant` takes
 none, as an expanded year falls outside RFC 3339.
+
+A derived schema names the Wado type a string is the text of in
+`x-wado-format`, written in symbol notation. It is an annotation: validators,
+Jade's included, ignore it, and a tool that generates Wado types reads it.
+
+```json
+{"type": "string", "x-wado-format": "core:temporal#Instant"}
+```

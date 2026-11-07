@@ -50,6 +50,10 @@ pub struct SchemaObject {
     pub description: Option<String> = null,
     pub type: JsonTypes = JsonTypes::none(),
     pub format: Option<String> = null,
+    /// `x-wado-format`: the Wado type whose text the value is, in symbol
+    /// notation (`core:temporal#Instant`). An annotation, which no validator
+    /// asserts.
+    pub wado_format: Option<String> = null,
     pub content_encoding: Option<String> = null,
     pub content_media_type: Option<String> = null,
     pub content_schema: Option<Schema> = null,
@@ -156,6 +160,7 @@ impl SchemaObject {
             k.put("type", &TypeKeyword { types: self.type })?;
         }
         k.some("format", &self.format)?;
+        k.some("x-wado-format", &self.wado_format)?;
         k.some("contentEncoding", &self.content_encoding)?;
         k.some("contentMediaType", &self.content_media_type)?;
         k.some("contentSchema", &self.content_schema)?;
@@ -370,6 +375,7 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "description" => s.description = Option::Some(read_string(v, &here)?),
             "type" => s.type = read_types(v, &here)?,
             "format" => s.format = Option::Some(read_string(v, &here)?),
+            "x-wado-format" => s.wado_format = Option::Some(read_string(v, &here)?),
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
             "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
             "contentSchema" => s.content_schema = Option::Some(read_schema(v, &here)?),

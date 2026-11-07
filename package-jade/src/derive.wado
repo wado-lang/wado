@@ -393,9 +393,10 @@ impl JsonSchema for String {
     }
 }
 
-/// A string in the `format` named, for a type whose text always meets it.
-fn formatted(format: String) -> Schema {
-    return Schema::Object(SchemaObject { type: JsonTypes::String, format: Option::Some(format) });
+/// The text of the Wado type `wado_format` names, in symbol notation, with the
+/// standard `format` only when every text the type writes meets it.
+fn text_of(wado_format: String, format: Option<String> = null) -> Schema {
+    return Schema::Object(SchemaObject { type: JsonTypes::String, format, wado_format: Option::Some(wado_format) });
 }
 
 // A Temporal type takes no `format`: each writes some text its RFC 3339 format
@@ -404,61 +405,61 @@ fn formatted(format: String) -> Schema {
 
 impl JsonSchema for Instant {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#Instant");
     }
 }
 
 impl JsonSchema for PlainDate {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#PlainDate");
     }
 }
 
 impl JsonSchema for Duration {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#Duration");
     }
 }
 
 impl JsonSchema for PlainTime {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#PlainTime");
     }
 }
 
 impl JsonSchema for PlainDateTime {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#PlainDateTime");
     }
 }
 
 impl JsonSchema for PlainYearMonth {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#PlainYearMonth");
     }
 }
 
 impl JsonSchema for PlainMonthDay {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#PlainMonthDay");
     }
 }
 
 impl JsonSchema for ZonedDateTime {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:temporal#ZonedDateTime");
     }
 }
 
 impl JsonSchema for Uri {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return formatted("uri-reference");
+        return text_of("core:uri#Uri", Option::Some("uri-reference"));
     }
 }
 
 impl JsonSchema for Uuid {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return formatted("uuid");
+        return text_of("core:uuid#Uuid", Option::Some("uuid"));
     }
 }
 
@@ -466,7 +467,7 @@ impl JsonSchema for Uuid {
 /// characters RFC 3986 excludes, and `core:url` reads only the special schemes.
 impl JsonSchema for Url {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return of_type(JsonTypes::String);
+        return text_of("core:url#Url");
     }
 }
 

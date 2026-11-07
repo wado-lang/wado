@@ -262,13 +262,13 @@ core:collections#TreeMap::new              # associated const / static fn
 core:collections#TreeMap.get               # instance method
 core:collections#TreeMap<String, i32>.get  # generics use Wado angle brackets
 core:url#Url^Display::fmt                  # trait-impl member
-"./utils.wado"#Helper::new                 # relative path — must be quoted
+./utils.wado#Helper::new                   # relative path
+"https://x/lib.wado#v2"#foo                # a module containing `#`
 ```
 
-`MODULE` is quoted as in `use`. The canonical form, which `wado query` and doc
-anchors use, always quotes it. In prose the quotes may be dropped for a scheme or
-a bare name with no whitespace. A relative path is always quoted,
-because it can contain `#`, `/`, and `.`.
+`MODULE` is quoted exactly when it contains `#`, which would otherwise end it.
+An unquoted `MODULE` runs up to the first `#`; a quoted one runs up to its
+closing quote. There is one form, which machines and prose both use.
 
 Rationale: [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
 

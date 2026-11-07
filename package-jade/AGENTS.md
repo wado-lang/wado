@@ -20,6 +20,10 @@ defines no format of its own and writes no format name the specification does
 not define, whatever another tool or registry uses. A derived schema takes a
 `format` only when every text its type writes meets it.
 
+`x-wado-format` names the Wado type a string is the text of, in symbol notation
+(`core:temporal#Instant`). It is an annotation, which no validator asserts:
+JSON Schema forbids an `x-` keyword from affecting evaluation.
+
 ## Layout
 
 - `src/document.wado` — `Document`, the JSON tape every schema and instance is

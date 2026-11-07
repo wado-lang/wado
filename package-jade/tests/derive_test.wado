@@ -75,20 +75,20 @@ test "a byte type is unpadded base64url" {
 }
 
 test "a Temporal type is a string with no format, as some of its text meets none" {
-    assert inline::<Instant>() == `{"type":"string"}`;
-    assert inline::<PlainDate>() == `{"type":"string"}`;
-    assert inline::<Duration>() == `{"type":"string"}`;
-    assert inline::<PlainTime>() == `{"type":"string"}`;
-    assert inline::<PlainDateTime>() == `{"type":"string"}`;
-    assert inline::<PlainYearMonth>() == `{"type":"string"}`;
-    assert inline::<PlainMonthDay>() == `{"type":"string"}`;
-    assert inline::<ZonedDateTime>() == `{"type":"string"}`;
+    assert inline::<Instant>() == `{"type":"string","x-wado-format":"core:temporal#Instant"}`;
+    assert inline::<PlainDate>() == `{"type":"string","x-wado-format":"core:temporal#PlainDate"}`;
+    assert inline::<Duration>() == `{"type":"string","x-wado-format":"core:temporal#Duration"}`;
+    assert inline::<PlainTime>() == `{"type":"string","x-wado-format":"core:temporal#PlainTime"}`;
+    assert inline::<PlainDateTime>() == `{"type":"string","x-wado-format":"core:temporal#PlainDateTime"}`;
+    assert inline::<PlainYearMonth>() == `{"type":"string","x-wado-format":"core:temporal#PlainYearMonth"}`;
+    assert inline::<PlainMonthDay>() == `{"type":"string","x-wado-format":"core:temporal#PlainMonthDay"}`;
+    assert inline::<ZonedDateTime>() == `{"type":"string","x-wado-format":"core:temporal#ZonedDateTime"}`;
 }
 
 test "an identifier is a string in its format" {
-    assert inline::<Uri>() == `{"type":"string","format":"uri-reference"}`;
-    assert inline::<Uuid>() == `{"type":"string","format":"uuid"}`;
-    assert inline::<Url>() == `{"type":"string"}`;
+    assert inline::<Uri>() == `{"type":"string","format":"uri-reference","x-wado-format":"core:uri#Uri"}`;
+    assert inline::<Uuid>() == `{"type":"string","format":"uuid","x-wado-format":"core:uuid#Uuid"}`;
+    assert inline::<Url>() == `{"type":"string","x-wado-format":"core:url#Url"}`;
 }
 
 test "unit is null" {

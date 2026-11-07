@@ -17,7 +17,7 @@ A symbol is written `MODULE # SYMBOL`.
   - static-scoped (associated const/fn, static method, nested item) → `Type::name` (`::`, as in `f64::PI`)
   - method (instance) → `Type.name` (`.`, as in `point.x`)
 
-Quoting: `MODULE` is quoted as in `import`, but **the quotes may be omitted when unambiguous** — i.e. for schemes and bare dependency names with no whitespace. Relative paths and URLs must be quoted, since they contain `#`, `/`, and `.`.
+Quoting: `MODULE` is quoted exactly when it contains `#`, which would otherwise end it. An unquoted `MODULE` runs up to the first `#`; a quoted one runs up to its closing quote. The rule is mechanical, so a writer never weighs whether a module is ambiguous, and `/`, `.` and `:` need no quoting because only `#` ends a module.
 
 ```
 core:json#to_string                      # free function (unquoted scheme)
@@ -25,14 +25,17 @@ core:collections#TreeMap::new            # associated/static function
 core:collections#TreeMap.insert          # instance method
 core:collections#TreeMap<String, i32>.get  # generics, Wado angle brackets
 core:url#Url^Display::fmt                # trait-impl member (^ as internally)
-"./utils.wado"#Helper::new               # relative path, quoted
-"https://x/lib.wado"#foo                  # URL, quoted
+./utils.wado#Helper::new                 # relative path
+https://x/lib.wado#foo                   # URL
+"https://x/lib.wado#v2"#foo              # a module containing `#`, quoted
 ```
 
-Two registers, one grammar:
-
-- Canonical form (machine: `wado query`, doc anchors) — always quote `MODULE`.
-- Shorthand (prose) — drop quotes when unambiguous.
+There is one form, which `wado query`, doc anchors, diagnostics and prose all
+use. An earlier draft had two registers, a canonical form that always quoted
+`MODULE` and a prose shorthand that dropped the quotes when unambiguous. The
+parser and the renderer never followed it: they quoted on `#` alone. "Unambiguous"
+needed judgement, and an always-quoted form needed escaping wherever the
+notation sits inside a JSON string, as in Jade's `x-wado-format`.
 
 ## Consequences
 

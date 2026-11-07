@@ -31,7 +31,7 @@ test "one type is a string, more an array" {
 }
 
 test "every keyword reads and writes back" {
-    let text = `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://x.test/s","$vocabulary":{"https://v.test":true},"$anchor":"a","$dynamicAnchor":"d","$ref":"#/$defs/n","$dynamicRef":"#d","$comment":"c","title":"t","description":"d","type":"object","format":"f","contentEncoding":"base64","contentMediaType":"application/json","contentSchema":true,"const":[1,{"a":null}],"enum":[1,"x"],"allOf":[true],"anyOf":[false],"oneOf":[{}],"not":false,"if":true,"then":true,"else":false,"multipleOf":0.5,"minimum":1,"exclusiveMinimum":0,"maximum":9,"exclusiveMaximum":10,"minLength":1,"maxLength":2,"pattern":"^a","items":true,"prefixItems":[true],"contains":true,"minContains":1,"maxContains":2,"minItems":1,"maxItems":3,"uniqueItems":true,"unevaluatedItems":false,"properties":{"p":true},"patternProperties":{"^q":true},"required":["p"],"dependentRequired":{"p":["q"]},"dependentSchemas":{"p":true},"additionalProperties":false,"propertyNames":true,"minProperties":1,"maxProperties":4,"unevaluatedProperties":false,"default":{"p":1},"examples":[{"p":2}],"deprecated":true,"readOnly":true,"writeOnly":true,"$defs":{"n":true},"x-extension":[1]}`;
+    let text = `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://x.test/s","$vocabulary":{"https://v.test":true},"$anchor":"a","$dynamicAnchor":"d","$ref":"#/$defs/n","$dynamicRef":"#d","$comment":"c","title":"t","description":"d","type":"object","format":"f","x-wado-format":"core:temporal#Instant","contentEncoding":"base64","contentMediaType":"application/json","contentSchema":true,"const":[1,{"a":null}],"enum":[1,"x"],"allOf":[true],"anyOf":[false],"oneOf":[{}],"not":false,"if":true,"then":true,"else":false,"multipleOf":0.5,"minimum":1,"exclusiveMinimum":0,"maximum":9,"exclusiveMaximum":10,"minLength":1,"maxLength":2,"pattern":"^a","items":true,"prefixItems":[true],"contains":true,"minContains":1,"maxContains":2,"minItems":1,"maxItems":3,"uniqueItems":true,"unevaluatedItems":false,"properties":{"p":true},"patternProperties":{"^q":true},"required":["p"],"dependentRequired":{"p":["q"]},"dependentSchemas":{"p":true},"additionalProperties":false,"propertyNames":true,"minProperties":1,"maxProperties":4,"unevaluatedProperties":false,"default":{"p":1},"examples":[{"p":2}],"deprecated":true,"readOnly":true,"writeOnly":true,"$defs":{"n":true},"x-extension":[1]}`;
     assert reread(text) == text;
 }
 
@@ -54,6 +54,7 @@ test "a keyword's value breaking its rule is an error at its pointer" {
     assert error_of(`{"required": ["a", "a"]}`) == "/required/1: repeats a name";
     assert error_of(`{"multipleOf": 0}`) == "/multipleOf: must be greater than 0";
     assert error_of(`{"$ref": 1}`) == "/$ref: must be a string";
+    assert error_of(`{"x-wado-format": 1}`) == "/x-wado-format: must be a string";
     assert error_of(`{`).starts_with("unexpected end of input");
 }
 

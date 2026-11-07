@@ -246,8 +246,8 @@ shorthand serde's `begin_struct` calls, answering the declaration name
 `type_info()` carries.
 
 The parts are the identity; `canonical_name()` renders them in the canonical
-register of [Symbol Notation](./wep-2026-06-14-symbol-notation.md) (`MODULE`
-always quoted), the notation the compiler's diagnostics and dumps read back.
+form of [Symbol Notation](./wep-2026-06-14-symbol-notation.md), the notation
+the compiler's diagnostics and dumps read back.
 Rendering runs one way, and no single rendering serves every consumer — a
 `$defs` key comes back through a `$ref`'s URI reference, where `<` and `>` must
 be escaped — so a schema library builds its key from the parts. In
