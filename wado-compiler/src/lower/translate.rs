@@ -1026,11 +1026,11 @@ impl FunctionTranslator<'_, '_> {
         }
         // `&value` of a cell target is a fresh cell holding the value.
         let inner_nir = self.convert_operand(inner);
-        Some(self.wrap_in_box(inner_nir, ref_type, inner.span))
+        Some(self.new_cell(inner_nir, ref_type, inner.span))
     }
 
     /// A new cell of type `cell` holding `value`.
-    fn wrap_in_box(&self, value: Operand, cell: tir::TypeId, span: Span) -> ExprId {
+    fn new_cell(&self, value: Operand, cell: tir::TypeId, span: Span) -> ExprId {
         self.alloc_expr(
             ExprKind::StructLiteral {
                 struct_type: cell,
@@ -1627,7 +1627,7 @@ impl FunctionTranslator<'_, '_> {
         // writes through it, where a reference taken since may read it.
         let first_write = match boxed {
             Some(box_type) => {
-                let boxed_value = self.wrap_in_box(self.convert_operand(value), box_type, span);
+                let boxed_value = self.new_cell(self.convert_operand(value), box_type, span);
                 let local = self.alloc_expr(
                     ExprKind::Local {
                         index: *index,
@@ -1714,7 +1714,7 @@ impl FunctionTranslator<'_, '_> {
                     value_op
                 };
                 let value_op = if let Some(box_type) = box_wrap_type {
-                    self.wrap_in_box(value_op, box_type, value.span).into()
+                    self.new_cell(value_op, box_type, value.span).into()
                 } else {
                     value_op
                 };
@@ -2876,7 +2876,7 @@ impl FunctionTranslator<'_, '_> {
                     .borrow()
                     .is_boxed_reference_target(value.type_id);
                 let reference = if cell_target {
-                    self.wrap_in_box(copied, receiver.type_id, value.span)
+                    self.new_cell(copied, receiver.type_id, value.span)
                 } else {
                     self.alloc_expr(
                         ExprKind::Unary {

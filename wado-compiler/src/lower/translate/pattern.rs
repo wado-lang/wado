@@ -53,7 +53,7 @@ fn coerce_value_to_binding(
 
 /// `expr` dereferenced through every reference its type `type_id` spells, and
 /// the type it ends at.
-fn peel_refs_and_box(
+fn deref_through_refs(
     mut expr: TirExpr,
     mut type_id: TypeId,
     type_table: &TypeTable,
@@ -729,7 +729,7 @@ impl<'a> PatternLowerer<'a> {
                         elem_type,
                         span,
                     );
-                    peel_refs_and_box(local, elem_type, type_table, span).0
+                    deref_through_refs(local, elem_type, type_table, span).0
                 };
 
                 let cond = TirExpr::new(
@@ -787,7 +787,7 @@ impl<'a> PatternLowerer<'a> {
                         elem_type,
                         span,
                     );
-                    peel_refs_and_box(local, elem_type, type_table, span).0
+                    deref_through_refs(local, elem_type, type_table, span).0
                 };
 
                 // Generate enum discriminant comparison
@@ -1061,7 +1061,7 @@ impl<'a> PatternLowerer<'a> {
                     pattern_type,
                     span,
                 );
-                let (enum_expr, _) = peel_refs_and_box(enum_local, pattern_type, type_table, span);
+                let (enum_expr, _) = deref_through_refs(enum_local, pattern_type, type_table, span);
                 let eq_cond = TirExpr::new(
                     TirExprKind::Binary {
                         op: TirBinaryOp::Eq,
@@ -1104,7 +1104,7 @@ impl<'a> PatternLowerer<'a> {
                 let case_index = *case_index;
                 let mut stmts = Vec::new();
                 let base = self.pattern_base(value, span, &mut stmts, type_table);
-                let (variant_expr, _) = peel_refs_and_box(base, pattern_type, type_table, span);
+                let (variant_expr, _) = deref_through_refs(base, pattern_type, type_table, span);
 
                 let variant_test = TirExpr::new(
                     TirExprKind::VariantTest {
@@ -1163,7 +1163,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Tuple(sub_patterns, _) => {
                 let mut stmts = Vec::new();
                 let base = self.pattern_base(value, span, &mut stmts, type_table);
-                let (tuple, tuple_type) = peel_refs_and_box(base, pattern_type, type_table, span);
+                let (tuple, tuple_type) = deref_through_refs(base, pattern_type, type_table, span);
                 let elem_types = type_table
                     .as_tuple(tuple_type)
                     .expect("a tuple pattern reads a tuple");
@@ -1196,7 +1196,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Struct { fields, .. } => {
                 let mut stmts = Vec::new();
                 let base = self.pattern_base(value, span, &mut stmts, type_table);
-                let (read, struct_type) = peel_refs_and_box(base, pattern_type, type_table, span);
+                let (read, struct_type) = deref_through_refs(base, pattern_type, type_table, span);
                 let struct_fields = self.struct_fields_of(struct_type, type_table);
 
                 let mut current = continuation;
@@ -2002,7 +2002,7 @@ impl<'a> PatternLowerer<'a> {
                     scrutinee.as_mut(),
                     TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrut_span),
                 );
-                let (peeled, _) = peel_refs_and_box(old, scrut_type, type_table, scrut_span);
+                let (peeled, _) = deref_through_refs(old, scrut_type, type_table, scrut_span);
                 *scrutinee.as_mut() = peeled;
                 let scrutinee_type_id = scrutinee.type_id;
 
