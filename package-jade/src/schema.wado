@@ -48,7 +48,8 @@ pub struct SchemaObject {
     pub comment: Option<String> = null,
     pub title: Option<String> = null,
     pub description: Option<String> = null,
-    pub type: JsonTypes = JsonTypes::none(),
+    /// Empty when `type` is the empty array, which admits nothing.
+    pub type: Option<JsonTypes> = null,
     pub format: Option<String> = null,
     /// `x-wado-format`: the Wado type whose text the value is, in symbol
     /// notation (`core:temporal#Instant`). An annotation, which no validator
@@ -137,7 +138,7 @@ impl Schema {
 impl SchemaObject {
     /// A schema admitting one JSON type.
     pub fn of_type(t: JsonTypes) -> SchemaObject {
-        return SchemaObject { type: t };
+        return SchemaObject { type: Option::Some(t) };
     }
 
     /// A schema admitting the single value `value`.
@@ -156,8 +157,8 @@ impl SchemaObject {
         k.some("$comment", &self.comment)?;
         k.some("title", &self.title)?;
         k.some("description", &self.description)?;
-        if self.type != JsonTypes::none() {
-            k.put("type", &TypeKeyword { types: self.type })?;
+        if let Some(types) = self.type {
+            k.put("type", &TypeKeyword { types })?;
         }
         k.some("format", &self.format)?;
         k.some("x-wado-format", &self.wado_format)?;
@@ -306,7 +307,7 @@ internal fn type_names(types: JsonTypes) -> List<String> {
     return names;
 }
 
-/// `type`'s value: one name as a string, more as an array of them.
+/// `type`'s value: one name as a string, any other number as an array of them.
 struct TypeKeyword {
     types: JsonTypes,
 }
@@ -379,7 +380,7 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "$defs" => s.defs = read_map(v, &here, "schemas", read_schema)?,
             "title" => s.title = Option::Some(read_string(v, &here)?),
             "description" => s.description = Option::Some(read_string(v, &here)?),
-            "type" => s.type = read_types(v, &here)?,
+            "type" => s.type = Option::Some(read_types(v, &here)?),
             "format" => s.format = Option::Some(read_string(v, &here)?),
             "x-wado-format" => s.wado_format = Option::Some(read_string(v, &here)?),
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
@@ -487,8 +488,8 @@ fn read_types(v: &Node, at: &String) -> Result<JsonTypes, SchemaError> {
     if let Some(name) = v.as_str() {
         return type_named(name, at);
     }
-    if !v.kind() matches { Array } || v.len() == 0 {
-        return fail(at, "must be a type name or a non-empty array of them");
+    if !v.kind() matches { Array } {
+        return fail(at, "must be a type name or an array of them");
     }
     let mut types = JsonTypes::none();
     for let [i, item] of v.items().enumerate() {

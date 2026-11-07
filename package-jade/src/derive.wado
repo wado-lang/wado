@@ -172,7 +172,10 @@ fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
     for let case of ReflectEnum::<E>::members() {
         names.push(Document::string(wire_name(&case, policy)));
     }
-    return Schema::Object(SchemaObject { type: JsonTypes::String, enum_: Option::Some(names) });
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        enum_: Option::Some(names),
+    });
 }
 
 impl<L: ReflectFlags<Members = [..M]>, ..M> JsonSchema for L {
@@ -187,12 +190,18 @@ fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
     for let bit of ReflectFlags::<L>::members() {
         names.push(Document::string(wire_name(&bit, policy)));
     }
-    let member = SchemaObject { type: JsonTypes::String, enum_: Option::Some(names) };
+    let member = SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        enum_: Option::Some(names),
+    };
     return set_of(Schema::Object(member));
 }
 
 fn array_of(items: Schema) -> SchemaObject {
-    return SchemaObject { type: JsonTypes::Array, items: Option::Some(items) };
+    return SchemaObject {
+        type: Option::Some(JsonTypes::Array),
+        items: Option::Some(items),
+    };
 }
 
 fn of_type(t: JsonTypes) -> Schema {
@@ -209,7 +218,7 @@ impl JsonSchema for bool {
 
 fn integer(minimum: f64, maximum: f64) -> Schema {
     return Schema::Object(SchemaObject {
-        type: JsonTypes::Integer,
+        type: Option::Some(JsonTypes::Integer),
         minimum: Option::Some(minimum),
         maximum: Option::Some(maximum),
     });
@@ -289,7 +298,10 @@ impl JsonSchema for u128 {
 }
 
 fn decimal_string(pattern: String) -> Schema {
-    return Schema::Object(SchemaObject { type: JsonTypes::String, pattern: Option::Some(pattern) });
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        pattern: Option::Some(pattern),
+    });
 }
 
 /// A decimal string in `0..=max`, spelled as `core:json` spells it.
@@ -384,7 +396,7 @@ impl JsonSchema for bf16 {
 impl JsonSchema for char {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return Schema::Object(SchemaObject {
-            type: JsonTypes::String,
+            type: Option::Some(JsonTypes::String),
             min_length: Option::Some(1),
             max_length: Option::Some(1),
         });
@@ -400,7 +412,11 @@ impl JsonSchema for String {
 /// The text of the Wado type `wado_format` names, in symbol notation, with the
 /// standard `format` only when every text the type writes meets it.
 fn text_of(wado_format: String, format: Option<String> = null) -> Schema {
-    return Schema::Object(SchemaObject { type: JsonTypes::String, format, wado_format: Option::Some(wado_format) });
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        format,
+        wado_format: Option::Some(wado_format),
+    });
 }
 
 // A Temporal type takes no `format`: each writes some text its RFC 3339 format
@@ -476,7 +492,10 @@ impl JsonSchema for Url {
 }
 
 fn base64url() -> Schema {
-    return Schema::Object(SchemaObject { type: JsonTypes::String, content_encoding: Option::Some("base64url") });
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        content_encoding: Option::Some("base64url"),
+    });
 }
 
 impl JsonSchema for ByteList {
@@ -537,7 +556,10 @@ fn set_of(items: Schema) -> Schema {
 }
 
 fn string_keyed(values: Schema) -> Schema {
-    return Schema::Object(SchemaObject { type: JsonTypes::Object, additional_properties: Option::Some(values) });
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::Object),
+        additional_properties: Option::Some(values),
+    });
 }
 
 impl<T: Ord + JsonSchema> JsonSchema for TreeSet<T> {
