@@ -3044,9 +3044,7 @@ fn _parse_pick__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let mut _atn_alt_false: List<i32> = [];
-        if p.no_brace != 0 { _atn_alt_false.push(1); }
-        let _atn_alt = p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &_atn_alt_false);
+        let _atn_alt = p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[if p.no_brace == 0 { -1 } else { 1 }]);
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return;
