@@ -1108,9 +1108,10 @@ the compiled fast path:**
    admits. The simulator disables an alternative whose predicate is false
    where prediction reaches it before consuming a token: at the
    alternative's left edge, behind elements that matched nothing, or at the
-   left edge of a rule it opens with. ANTLR4 finds those visible at the
-   decision (`doc/predicates.md`). A scan answers a predicate under the
-   same rule: only at the position its decision started from.
+   left edge of a rule or group it opens with. ANTLR4 finds those visible at
+   the decision (`doc/predicates.md`). A scan answers a predicate under the
+   same rule, a group alternative's included: only at the position its
+   decision started from.
    A left-recursive rule whose atom choice reaches the simulator is routed as
    in 1, in any grammar: its static loop would take a suffix the full context
    gives the caller (TypeScript's `new Map<T>()`, where `()` is the `new`'s).

@@ -1932,9 +1932,7 @@ fn lower_scan_group(
                 ));
             }
             return ScanElement::Group(ScanGroupElement {
-                alts: [
-                    ScanBody { elements },
-                ],
+                alts: [group_alt_scan_body(alt, elements, ctx)],
                 lenient: false,
                 alt_classes: [alt_class_of(alt, &mut ctx.analysis)],
             });
@@ -1944,9 +1942,8 @@ fn lower_scan_group(
             let mut classes: List<AltClass> = [];
             for let alt of alts {
                 let elem = &alt.elements[0];
-                bodies.push(ScanBody {
-                    elements: [lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false)],
-                });
+                let token = lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false);
+                bodies.push(group_alt_scan_body(alt, [token], ctx));
                 classes.push(AltClass::Selects([ctx.analysis.terminal_kind(elem)]));
             }
             return ScanElement::Group(ScanGroupElement {
@@ -2036,9 +2033,16 @@ fn lower_general_scan_group(
                 outer_suffix,
             ));
         }
-        bodies.push(ScanBody { elements });
+        bodies.push(group_alt_scan_body(alt, elements, ctx));
     }
     return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);
+}
+
+/// The scan body of the group alternative `alt`, walking `elements`. It clears
+/// the alternative's predicates where a rule alternative's scan does, since
+/// prediction meets one inside a group as it does in a rule.
+fn group_alt_scan_body(alt: &Alternative, elements: List<ScanElement>, ctx: &LowerContext) -> ScanBody {
+    return ScanBody { elements, gates: scan_gates_for(alt, ctx), gate_cond: ctx.alt_scan_gate_conditions(alt) };
 }
 
 /// A standalone scan group over `bodies` — the leniency its alternatives call
@@ -2480,7 +2484,7 @@ fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut LowerContext
             continue;
         }
         sigs.push(sig);
-        bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx));
+        bodies.push(lower_scan_shape_body(shape, alt, ctx));
     }
     let scan_guarded = shape_signatures_collide(&sigs);
     return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
@@ -2495,10 +2499,22 @@ fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut LowerContext
 /// each selected position, unwrap the optional, and if the unwrapped
 /// is a single-alt Group, flatten its inner elements into the scan
 /// body directly. Otherwise lower the unwrapped element.
-fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut LowerContext) -> ScanBody {
+///
+/// The shape clears `alt`'s predicates as `group_alt_scan_body` does. One
+/// placed before an element the shape leaves out runs before the next element
+/// it keeps.
+fn lower_scan_shape_body(shape: &List<i32>, alt: &Alternative, ctx: &mut LowerContext) -> ScanBody {
+    let elements = &alt.elements;
     let mut body_elems: List<ScanElement> = [];
+    let mut gates = scan_gates_for(alt, ctx);
+    assert gates.iter_ref().all(|g| g.step matches { Check(_) }), "a write inside a group is never simulated";
+    let mut placed = 0;
     for let mut k = 0; k < shape.len(); k += 1 {
         let idx = shape[k];
+        while placed < gates.len() && gates[placed].before_index <= idx {
+            gates[placed].before_index = body_elems.len();
+            placed += 1;
+        }
         let actual = surface_unwrap_optional(&elements[idx]);
         // Empty follow at lower time — the shape body is consumed
         // as a labeled block, and emit handles per-position fail via
@@ -2529,7 +2545,11 @@ fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut 
             false,
         ));
     }
-    return ScanBody { elements: body_elems };
+    while placed < gates.len() {
+        gates[placed].before_index = body_elems.len();
+        placed += 1;
+    }
+    return ScanBody { elements: body_elems, gates, gate_cond: ctx.alt_scan_gate_conditions(alt) };
 }
 
 fn surface_unwrap_optional(elem: &Element) -> &Element {
@@ -3386,17 +3406,8 @@ fn lower_simple_cst_scan_group(
 ) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     for let alt of alts {
-        bodies.push(ScanBody {
-            elements: [
-                lower_scan_element(
-                    &alt.elements[0],
-                    ctx,
-                    &SIMPLE_CST_NO_FOLLOW,
-                    FollowArg::NoFollow,
-                    false,
-                ),
-            ],
-        });
+        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_NO_FOLLOW, FollowArg::NoFollow, false);
+        bodies.push(group_alt_scan_body(alt, [call], ctx));
     }
     return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);
 }
@@ -4036,7 +4047,7 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut LowerContext) -> Opti
             shape_entries.push(OptionalLookaheadShape {
                 positions: *shape,
                 sig: sig,
-                scan_body: lower_scan_shape_body(shape, elements, ctx),
+                scan_body: lower_scan_shape_body(shape, &g.alternatives[0], ctx),
             });
         }
         if shape_entries.is_empty() {

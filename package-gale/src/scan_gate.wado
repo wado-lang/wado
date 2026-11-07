@@ -269,7 +269,8 @@ fn statements<S: AsStrSlice>(text: S) -> List<String> {
 ///
 /// "Every body" is the whole grammar: a rule's `@init` / `@after` reach a gate
 /// field as much as an alternative's action does, and a group's alternatives
-/// carry actions the parse runs where lowering puts no gate on the scan.
+/// carry actions the parse runs where the scans of the group's own decision
+/// run no gate.
 pub fn scan_gate_fields(grammar: &Grammar, bodies: &HashMap<i32, String>) -> List<String> {
     let mut simulable: List<String> = [];
     let mut refused = Refusals {};
@@ -294,10 +295,6 @@ pub fn scan_gate_fields(grammar: &Grammar, bodies: &HashMap<i32, String>) -> Lis
                     },
                 }
             }
-            // An inline group's own alternatives carry actions too, and the
-            // parse runs them. Lowering puts no gates on a group alternative's
-            // scan body, so the scan cannot — a field written in there is one
-            // the two sides would disagree about however it is written.
             reject_nested_writes(&alt.elements, &mut refused);
         }
     }
@@ -326,8 +323,9 @@ impl Refusals {
 }
 
 /// Every name an action inside a nested group mentions, added to the refused
-/// set: lowering puts no gate on a group alternative's scan body, so the scan
-/// cannot run any of them.
+/// set. The parse runs those actions, but the scans of a group's own decision
+/// run no gate, so a field written there is one the two sides would disagree
+/// about however it is written.
 fn reject_nested_writes(elements: &List<Element>, refused: &mut Refusals) {
     for let e of elements {
         reject_element_writes(e, refused);

@@ -1231,6 +1231,42 @@ a * b + c => (s (e (e a) * (e b)) + c)
     }
 }
 
+test "prediction answers a predicate inside a group" {
+    for let atn of [AtnMode::Never, AtnMode::Verify] {
+        assert parses("grammar G;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF ;
+r1 : ({false}? 'a' | 'b')+ 'x' | 'a' 'x' ;
+r2 : ({false}? 'a' 'x' | 'b')? 'z' | 'a' 'x' 'z' ;
+r3 : ('a' {false}? 'b' | 'c') 'x' | 'a' 'b' 'x' 'y' ;
+r4 : (('-'? {false}? 'a' | 'b') | 'c') 'x' | 'a' 'x' ;
+r5 : u 'd' | 'a' 'c' 'd' 'e'? ;
+u : ({false}? 'a' 'b'? 'c')? ;
+WS : ' ' -> skip ;
+", "s", [
+            "A a x",
+            "A b a x",
+            "B a x z",
+            "B b z",
+            "C a b x",
+            "C a b x y",
+            "D a x",
+            "D - a x",
+            "E a c d",
+            "E d",
+        ], &GenerateOptions { atn }) == "A a x => (s A (r1 a x))
+A b a x => error
+B a x z => (s B (r2 a x z))
+B b z => (s B (r2 b z))
+C a b x => error
+C a b x y => (s C (r3 a b x y))
+D a x => (s D (r4 a x))
+D - a x => error
+E a c d => (s E (r5 a c d))
+E d => (s E (r5 u d))
+";
+    }
+}
+
 test "the simulator answers a called rule's predicate behind a nullable prefix" {
     for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
         assert parses("grammar Q;
@@ -6477,8 +6513,8 @@ test "scan_gate_fields: a write through a receiver disqualifies the field" {
     assert f.is_empty();
 }
 
-// Lowering puts no gates on a group alternative's scan body, so the scan cannot
-// run its actions however simply they are written.
+// The scans of a group's own decision run no gate, so a scan cannot follow the
+// group's actions however simply they are written.
 test "scan_gate_fields: a write inside a group disqualifies the field" {
     let f = gate_fields_of(&gate_source(
         "other = 1;",

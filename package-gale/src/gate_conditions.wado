@@ -286,18 +286,39 @@ pub fn alt_scan_checks(
     return out;
 }
 
-/// Whether a scan of some alternative of `rules` answers a predicate.
+/// Whether a scan of some alternative of `rules`, or of a group inside one,
+/// answers a predicate.
 pub fn scan_answers_predicates(rules: &List<ParserRule>, settings: &GenSettings, analysis: &GrammarAnalysis) -> bool {
     for let mut r = 0; r < rules.len(); r += 1 {
         let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(&rules[r]) };
-        for let alt of &rules[r].alternatives {
-            if !alt_scan_gate_conjunction(alt, settings, analysis, &site).is_empty()
-                || !alt_scan_checks(alt, settings, analysis, &site, 0).is_empty() {
-                return true;
-            }
+        if any_alt_scan_answers(&rules[r].alternatives, settings, analysis, &site) {
+            return true;
         }
     }
     return false;
+}
+
+fn any_alt_scan_answers(
+    alts: &List<Alternative>,
+    settings: &GenSettings,
+    analysis: &GrammarAnalysis,
+    site: &PredicateSite,
+) -> bool {
+    return alts.iter_ref().any(
+        |alt| !alt_scan_gate_conjunction(alt, settings, analysis, site).is_empty()
+            || !alt_scan_checks(alt, settings, analysis, site, 0).is_empty()
+            || alt.elements.iter_ref().any(|e| element_scan_answers(e, settings, analysis, site)),
+    );
+}
+
+fn element_scan_answers(elem: &Element, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
+    return match *elem {
+        Group(g) => any_alt_scan_answers(&g.alternatives, settings, analysis, site),
+        Label(l) => element_scan_answers(&l.element, settings, analysis, site),
+        Repeat(r) => element_scan_answers(&r.element, settings, analysis, site),
+        Not(n) => element_scan_answers(&n.element, settings, analysis, site),
+        RuleRef(_) | TokenRef(_) | Literal(_) | Wildcard(_) => false,
+    };
 }
 
 fn alt_scan_gate_conjunction(

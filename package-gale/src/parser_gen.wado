@@ -2442,8 +2442,9 @@ fn gen_scan_op_group<S: AsStrSlice>(
         return;
     }
     if ge.alts.len() == 1 {
-        let elements = &ge.alts[0].elements;
-        if !scan_elements_can_fail(elements, 0, known, ctx) {
+        let alt = &ge.alts[0];
+        let elements = &alt.elements;
+        if !scan_group_can_fail(ge, known, ctx) {
             gen_scan_op_elements(
                 w,
                 elements,
@@ -2470,17 +2471,7 @@ fn gen_scan_op_group<S: AsStrSlice>(
         }
         w.begin(`${done}:`);
         w.begin(`${body}:`);
-        gen_scan_op_elements_in_block(
-            w,
-            elements,
-            0,
-            elements.len(),
-            ctx,
-            &body,
-            &NO_SCAN_GATES,
-            &NO_SCAN_GATE_COND,
-            known,
-        );
+        gen_scan_op_elements_in_block(w, elements, 0, elements.len(), ctx, &body, &alt.gates, &alt.gate_cond, known);
         w.line(`break ${done};`);
         w.end();
         if lenient {
@@ -2526,14 +2517,17 @@ fn gen_scan_op_group<S: AsStrSlice>(
             }
             gen_scan_rewind(&mut body, ctx, &gp_var);
             let commit = scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos");
+            let alt = &ge.alts[*ai];
             let _ = gen_scan_labeled_walk(
                 &mut body,
                 `sg_${gc}_${*ai}`,
-                &ge.alts[*ai].elements,
+                &alt.elements,
                 0,
                 &branch_known,
                 ctx,
                 &commit,
+                &alt.gates,
+                &alt.gate_cond,
             );
             if simulated {
                 body.end();
@@ -2590,15 +2584,17 @@ fn gen_scan_group_decided<S: AsStrSlice>(
     let mut bodies: List<CodeWriter> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         let mut body = CodeWriter::with_capacity(256);
-        let ai = branches[i].alts[0];
+        let alt = &ge.alts[branches[i].alts[0]];
         let _ = gen_scan_labeled_walk(
             &mut body,
-            `sg_${gc}_${ai}`,
-            &ge.alts[ai].elements,
+            `sg_${gc}_${branches[i].alts[0]}`,
+            &alt.elements,
             0,
             &branch_proves(branches, i),
             ctx,
             `break ${done};`,
+            &alt.gates,
+            &alt.gate_cond,
         );
         bodies.push(body);
     }
@@ -2611,12 +2607,12 @@ fn gen_scan_group_decided<S: AsStrSlice>(
     w.end();
 }
 
-/// The kinds a group of single-token alternatives matches, or `null` for any
-/// other group.
+/// The kinds a group of single-token, ungated alternatives matches, or `null`
+/// for any other group.
 fn scan_group_token_kinds(ge: &ScanGroupElement, ctx: &EmitContext) -> Option<List<i32>> {
     let mut kinds: List<i32> = [];
     for let alt of &ge.alts {
-        if alt.elements.len() != 1 {
+        if alt.elements.len() != 1 || scan_body_is_gated(alt) {
             return null;
         }
         let Some(alt_kinds) = scan_one_token_kinds(&alt.elements[0], ctx) else {
@@ -2692,9 +2688,13 @@ fn scan_group_can_fail(ge: &ScanGroupElement, known: &List<List<i32>>, ctx: &Emi
         return !known_within(known, &kinds, ctx);
     }
     if ge.alts.len() == 1 {
-        return scan_elements_can_fail(&ge.alts[0].elements, 0, known, ctx);
+        return scan_body_is_gated(&ge.alts[0]) || scan_elements_can_fail(&ge.alts[0].elements, 0, known, ctx);
     }
     return true;
+}
+
+fn scan_body_is_gated(body: &ScanBody) -> bool {
+    return !body.gates.is_empty() || !body.gate_cond.is_empty();
 }
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
@@ -2717,8 +2717,9 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         // the elements after it and traps their `pos < tokens.len()` guard.
         let gc = ctx.cursor.next_scan_group();
         let body = `sol_${gc}`;
-        let elements = &ole.bodies[si].elements;
-        if !scan_elements_can_fail(elements, 0, sig, ctx) {
+        let shape = &ole.bodies[si];
+        let elements = &shape.elements;
+        if !scan_body_is_gated(shape) && !scan_elements_can_fail(elements, 0, sig, ctx) {
             gen_scan_op_elements(w, elements, 0, elements.len(), ctx, "", &NO_SCAN_GATES, &NO_SCAN_GATE_COND, sig);
             w.line(`break ${chain_done};`);
             w.end();
@@ -2734,8 +2735,8 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
             elements.len(),
             ctx,
             &body,
-            &NO_SCAN_GATES,
-            &NO_SCAN_GATE_COND,
+            &shape.gates,
+            &shape.gate_cond,
             sig,
         );
         w.line(`break ${chain_done};`);
