@@ -191,9 +191,15 @@ impl Walk {
         let present = self.checked.shapes[present_value];
         let total = present.axes[2].extent.poly();
         let new = self.checked.shapes[query].axes[1].extent.poly();
-        // Keys of another sequence than the queries' are a cross-attention.
-        let attends_itself = self.checked.shapes[key].axes[1].extent.poly() == new
-            && self.checked.shapes[value].axes[1].extent.poly() == new;
+        let polys = |tensor: &String| -> List<Poly> {
+            return self.checked.shapes[*tensor].extents().into_iter().map(|e| e.poly()).collect();
+        };
+        let batch = polys(&query)[0];
+        // Keys of another sequence than the queries' are a cross-attention, and
+        // a broadcast that widens the scores computes more than the composite.
+        let attends_itself = polys(&key)[0..<2].to_list() == [batch, new] as List<Poly>
+            && polys(&value)[0..<2].to_list() == [batch, new] as List<Poly>
+            && polys(&self.node(softmax).outputs[0]) == [batch, Poly::constant(heads as i64), new, total] as List<Poly>;
         if !attends_itself {
             return null;
         }
@@ -212,6 +218,16 @@ impl Walk {
             [Some(k), Some(v)] => Option::Some([k, v]),
             _ => null,
         };
+        let mut operands = [query, key, value] as List<String>;
+        if let Some([k, v]) = &past {
+            operands.extend(&[*k, *v]);
+        }
+        if let Some(b) = &bias {
+            operands.push(*b);
+        }
+        if operands.into_iter().any(|t| self.made.get(t) matches { Some(at) && self.taken.contains(&at) }) {
+            return null;
+        }
         return Option::Some([
             merged,
             SpelledAttention {

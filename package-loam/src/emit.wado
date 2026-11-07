@@ -2648,8 +2648,18 @@ fn spelled_attention_call(
     let positions = match &a.past {
         Some([past_k, past_v]) => {
             let positions = shapes[*past_k].axes[2];
-            operands.push(as_axes(past_k, &held_axes(&positions.name)));
-            operands.push(as_axes(past_v, &held_axes(&positions.name)));
+            let held = held_axes(&positions.name);
+            // The present is the past's buffer, written after its valid
+            // positions, so a padded past takes the present's extent first: a
+            // cache arrives at it, and anything else at its own capacity.
+            let padded = symbols.reads_lengths(&positions.extent.poly());
+            let room = symbols.spell_extent(&present.axes[2].extent.poly())?;
+            for let past of [past_k, past_v] {
+                let operand = as_axes(past, &held);
+                operands.push(
+                    if padded { `&fitted::<${BACKEND_PARAM}, f32, [${held}]>(backend, ${operand}, 2, ${room})` } else { operand },
+                );
+            }
             operands.push(symbols.length_operand(&positions.extent.poly())?);
             positions.name;
         },

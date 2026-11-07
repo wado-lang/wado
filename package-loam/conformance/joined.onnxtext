@@ -1,0 +1,29 @@
+# GPT-2's attention over keys and values held outside the cache: the inputs
+# name no past, so nothing pairs them with the presents the step returns.
+<ir_version: 8, opset_import: [ "" : 17 ]>
+joined (float[1, 1, 4] Q, float[1, 1, 4] K, float[1, 1, 4] V, float[1, 2, P, 2] held_key, float[1, 2, P, 2] held_value) => (float[1, 1, 4] Out, float[1, 2, ?, 2] joined_key, float[1, 2, ?, 2] joined_value)
+<bool[1, 1, 8, 8] Table = {1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1}, int64[4] Heads = {1, 1, 2, 2}, int64[3] Merged = {1, 1, 4}, int64[1] RowAxis = {2}, int64[1] ColAxis = {3}, int64[1] Zero = {0}>
+{
+    Scale = Constant<value = float {2}>()
+    Lowest = Constant<value = float {-1000}>()
+    QH = Reshape(Q, Heads)
+    QT = Transpose<perm = [0, 2, 1, 3]>(QH)
+    KH = Reshape(K, Heads)
+    NewK = Transpose<perm = [0, 2, 1, 3]>(KH)
+    VH = Reshape(V, Heads)
+    NewV = Transpose<perm = [0, 2, 1, 3]>(VH)
+    joined_key = Concat<axis = 2>(held_key, NewK)
+    joined_value = Concat<axis = 2>(held_value, NewV)
+    KT = Transpose<perm = [0, 1, 3, 2]>(joined_key)
+    Raw = MatMul(QT, KT)
+    Scaled = Div(Raw, Scale)
+    Held = Shape<start = 2, end = 3>(held_key)
+    Total = Shape<start = 2, end = 3>(joined_key)
+    Rows = Slice(Table, Held, Total, RowAxis)
+    Mask = Slice(Rows, Zero, Total, ColAxis)
+    Hidden = Where(Mask, Scaled, Lowest)
+    Weights = Softmax<axis = -1>(Hidden)
+    Attended = MatMul(Weights, joined_value)
+    Back = Transpose<perm = [0, 2, 1, 3]>(Attended)
+    Out = Reshape(Back, Merged)
+}

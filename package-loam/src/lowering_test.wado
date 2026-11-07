@@ -57,24 +57,29 @@ struct Spelling {
     outputs: String = "",
     after: String = "",
     merged: String = "1, 1, 4",
+    /// The keys' and values' batch, which the queries' broadcasts to.
+    key_batch: i32 = 1,
+    bias: String = "Bias",
+    bias_extents: String = "1, 1, 1, 3",
 }
 
 /// One token attending two heads of two elements over a past of two positions,
 /// as GPT-2 spells it.
 fn spelled(s: Spelling) -> List<Lowering> {
+    let b = s.key_batch;
     return lowerings_of(
         `
-attention (float[1, 1, 4] Q, float[1, 1, 4] K, float[1, 1, 4] V, float[1, 2, 2, 2] PastK, float[1, 2, 2, 2] PastV, float[1, 1, 1, 3] Bias)
-    => (float[${s.merged}] Out, float[1, 2, 3, 2] PresentK, float[1, 2, 3, 2] PresentV${s.outputs})
-<bool[1, 1, 4, 4] Table = {${s.table}}, int64[4] Heads = {1, 1, 2, 2}, int64[3] Merged = {${s.merged}}, int64[1] RowStart = {${s.row_start}}, int64[1] RowEnd = {${s.row_start + 1}}, int64[1] RowAxis = {2}, int64[1] ColStart = {0}, int64[1] ColEnd = {3}, int64[1] ColAxis = {3}>
+attention (float[1, 1, 4] Q, float[${b}, 1, 4] K, float[${b}, 1, 4] V, float[${b}, 2, 2, 2] PastK, float[${b}, 2, 2, 2] PastV, float[${s.bias_extents}] Bias)
+    => (float[${s.merged}] Out, float[${b}, 2, 3, 2] PresentK, float[${b}, 2, 3, 2] PresentV${s.outputs})
+<bool[1, 1, 4, 4] Table = {${s.table}}, int64[4] Heads = {1, 1, 2, 2}, int64[4] KeyHeads = {${b}, 1, 2, 2}, int64[3] Merged = {${s.merged}}, int64[1] RowStart = {${s.row_start}}, int64[1] RowEnd = {${s.row_start + 1}}, int64[1] RowAxis = {2}, int64[1] ColStart = {0}, int64[1] ColEnd = {3}, int64[1] ColAxis = {3}>
 {
     Scale = Constant<value = float {2}>()
     Lowest = Constant<value = float {-1000}>()
     QH = Reshape(Q, Heads)
     QT = Transpose<perm = [0, 2, 1, 3]>(QH)
-    KH = Reshape(K, Heads)
+    KH = Reshape(K, KeyHeads)
     NewK = Transpose<perm = [0, 2, 1, 3]>(KH)
-    VH = Reshape(V, Heads)
+    VH = Reshape(V, KeyHeads)
     NewV = Transpose<perm = [0, 2, 1, 3]>(VH)
     PresentK = Concat<axis = 2>(PastK, NewK)
     PresentV = Concat<axis = 2>(PastV, NewV)
@@ -84,7 +89,7 @@ attention (float[1, 1, 4] Q, float[1, 1, 4] K, float[1, 1, 4] V, float[1, 2, 2, 
     Rows = Slice(Table, RowStart, RowEnd, RowAxis)
     Mask = Slice(Rows, ColStart, ColEnd, ColAxis)
     Hidden = Where(Mask, Scaled, Lowest)
-    Biased = Add(Hidden, Bias)
+    Biased = Add(Hidden, ${s.bias})
     Weights = Softmax<axis = -1>(Biased)
     Attended = MatMul(Weights, PresentV)
     Back = Transpose<perm = [0, 2, 1, 3]>(Attended)
@@ -186,6 +191,21 @@ test "a score another node reads stays operations" {
 
 test "heads merged into another shape than the queries' stay operations" {
     let lowered = spelled(Spelling { merged: "1, 2, 2" });
+    assert !lowered.into_iter().any(|l| l matches { Attended });
+}
+
+test "a bias of more rows than the queries stays operations" {
+    let lowered = spelled(Spelling { bias_extents: "1, 1, 2, 3", merged: "1, 2, 4" });
+    assert !lowered.into_iter().any(|l| l matches { Attended });
+}
+
+test "queries a batch of keys broadcasts stay operations" {
+    let lowered = spelled(Spelling { key_batch: 2, merged: "2, 1, 4" });
+    assert !lowered.into_iter().any(|l| l matches { Attended });
+}
+
+test "a bias the attention itself computes stays operations" {
+    let lowered = spelled(Spelling { bias: "Raw" });
     assert !lowered.into_iter().any(|l| l matches { Attended });
 }
 
