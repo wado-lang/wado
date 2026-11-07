@@ -1138,6 +1138,7 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
+    scan_gate: ScanGate = ScanGate {},
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1558,10 +1559,23 @@ fn _parse_opt__inner(p: &mut Parser) -> () {
     let mut opt_enter: bool = false;
     if _kind_set_0(p.peek_kind()) {
         opt_enter_scan: {
+            p.scan_gate._scan_edge = p.pos;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break opt_enter_scan; }
-            pos += 1;
+            sg_0_done: {
+                let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if sgk_0 == TK_A {
+                    sg_0_0: {
+                        if !(p.scan_gate._scan_edge != pos || ( false )) { break sg_0_0; }
+                        pos += 1;
+                        break sg_0_done;
+                    }
+                } else if sgk_0 == TK_B {
+                    pos += 1;
+                    break sg_0_done;
+                }
+                break opt_enter_scan;
+            }
             if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1599,24 +1613,29 @@ fn _parse_star__inner(p: &mut Parser) -> () {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_gate = p.scan_gate;
         let gd_kind = p.peek_kind();
         if gd_kind == TK_A && pred_0(p) {
             gd_winner = 0;
             gd_scan: {
+                p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
                 pos += 1;
                 gd_best = pos;
+                gd_best_gate = p.scan_gate;
             }
         } else if gd_kind == TK_B {
             gd_winner = 1;
             gd_scan_2: {
+                p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
                 pos += 1;
                 gd_best = pos;
+                gd_best_gate = p.scan_gate;
             }
         }
         if gd_best <= p.pos { break; }
@@ -1625,6 +1644,7 @@ fn _parse_star__inner(p: &mut Parser) -> () {
             if !_kind_set_0(rep_reserve_kind) {
                 let mut rep_reserve_ok = false;
                 rep_reserve: {
+                    p.scan_gate = gd_best_gate;
                     let tokens = &p.kinds;
                     let mut pos: i32 = gd_best;
                     if pos >= tokens.len() || tokens[pos] != TK_A { break rep_reserve; }
@@ -1690,24 +1710,29 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_gate = p.scan_gate;
         let gd_kind = p.peek_kind();
         if gd_kind == TK_A && pred_0(p) {
             gd_winner = 0;
             gd_scan: {
+                p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
                 pos += 1;
                 gd_best = pos;
+                gd_best_gate = p.scan_gate;
             }
         } else if gd_kind == TK_B {
             gd_winner = 1;
             gd_scan_2: {
+                p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
                 pos += 1;
                 gd_best = pos;
+                gd_best_gate = p.scan_gate;
             }
         }
         if gd_best <= p.pos { break; }
@@ -1716,6 +1741,7 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
             if !_kind_set_0(rep_reserve_kind) {
                 let mut rep_reserve_ok = false;
                 rep_reserve: {
+                    p.scan_gate = gd_best_gate;
                     let tokens = &p.kinds;
                     let mut pos: i32 = gd_best;
                     if pos >= tokens.len() || tokens[pos] != TK_A { break rep_reserve; }
@@ -1784,15 +1810,17 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
+            p.scan_gate._scan_edge = p.pos;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_0_done: {
-                sg_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_0; }
+            sg_1_done: {
+                sg_1: {
+                    if !(p.scan_gate._scan_edge != pos || ( false )) { break sg_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_1; }
                     pos += 1;
-                    break sg_0_done;
+                    break sg_1_done;
                 }
                 break rep_scan;
             }
@@ -1800,6 +1828,7 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             if rep_body_end_kind != TK_A {
                 let rep_body_end = pos;
+                let rep_body_end_gate = p.scan_gate;
                 let mut rep_body_end_ok = false;
                 rep_body_end_scan: {
                     if pos >= tokens.len() || tokens[pos] != TK_A { break rep_body_end_scan; }
@@ -1807,6 +1836,7 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
                     rep_body_end_ok = true;
                 }
                 pos = rep_body_end;
+                p.scan_gate = rep_body_end_gate;
                 if !rep_body_end_ok { break rep_scan; }
             }
             rep_scan_pos = pos;
@@ -1837,6 +1867,7 @@ fn _parse_solo_opt__inner(p: &mut Parser) -> () {
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_A {
         opt_enter_scan: {
+            p.scan_gate._scan_edge = p.pos;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
@@ -2017,4 +2048,8 @@ global SYNC_2: List<i32> = [5];
 global EXPECTED_2: List<i32> = [TK_A, TK_C];
 global SYNC_3: List<i32> = [2];
 global SYNC_4: List<i32> = [16];
+
+struct ScanGate {
+    _scan_edge: i32 = -1,
+}
 

@@ -1118,6 +1118,7 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
+    scan_gate: ScanGate = ScanGate {},
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1636,4 +1637,8 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [2];
+
+struct ScanGate {
+    _scan_edge: i32 = -1,
+}
 

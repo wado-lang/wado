@@ -3414,7 +3414,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_ID {
         let mut _atn_false: List<i32> = [];
-        if gate.no_brace != 0 { _atn_false.push(4); }
+        if !(gate._scan_edge != pos || gate.no_brace == 0) { _atn_false.push(4); }
         let _atn_alt = atn.predict(&ATN_SIM, 2, tokens, pos, TK_EOF, min_prec, &_atn_false);
         if _atn_alt < 0 {
             return -1;
@@ -3442,12 +3442,14 @@ fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
 }
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
-    let memo_at = memo.find(4, pos, min_prec, 0, 0, &*gate);
+    let memo_gate = if gate._scan_edge == pos { *gate } else { ScanGate { ..*gate, _scan_edge: -1 } };
+    let memo_at = memo.find(4, pos, min_prec, 0, 0, &memo_gate);
     if memo_at >= 0 {
+        let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
+        gate._scan_edge = memo_edge;
         return memo.end_of(memo_at);
     }
-    let memo_gate = *gate;
     let memo_callers = atn.hide_callers();
     let memo_end = scan_expr__walk(tokens, pos, gate, atn, memo, min_prec);
     if !atn.reveal_callers(memo_callers) { memo.put(4, pos, min_prec, 0, 0, memo_gate, memo_end, *gate); }
@@ -3633,7 +3635,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, min_prec: i32) -> () {
 
 fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32) -> i32 {
     let mut pos = pos;
-    if gate.no_brace != 0 { return -1; }
+    if !(gate._scan_edge != pos || gate.no_brace == 0) { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
@@ -3820,6 +3822,7 @@ fn atn_lr_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pr
 }
 
 struct ScanGate {
+    _scan_edge: i32 = -1,
     no_brace: i32 = 0,
 }
 

@@ -1169,7 +1169,8 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
-    memo: ScanMemo<()>,
+    scan_gate: ScanGate = ScanGate {},
+    memo: ScanMemo<ScanGate>,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1585,41 +1586,50 @@ impl Parser {
     }
 }
 
-fn scan_a_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_a_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_a_lr_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_a_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
+    if !(gate._scan_edge != pos || false) { return -1; }
     return pos;
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, min_prec: i32 = 0) -> i32 {
-    let memo_at = memo.find(1, pos, min_prec, 0, 0, &());
+fn scan_a(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let memo_gate = if gate._scan_edge == pos { *gate } else { ScanGate { ..*gate, _scan_edge: -1 } };
+    let memo_at = memo.find(1, pos, min_prec, 0, 0, &memo_gate);
     if memo_at >= 0 {
+        let memo_edge = gate._scan_edge;
+        *gate = memo.gate_of(memo_at);
+        gate._scan_edge = memo_edge;
         return memo.end_of(memo_at);
     }
-    let memo_gate = ();
-    let memo_end = scan_a__walk(tokens, pos, memo, min_prec);
-    memo.put(1, pos, min_prec, 0, 0, memo_gate, memo_end, ());
+    let memo_end = scan_a__walk(tokens, pos, gate, memo, min_prec);
+    memo.put(1, pos, min_prec, 0, 0, memo_gate, memo_end, *gate);
     return memo_end;
 }
 
-fn scan_a__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_a_atom(tokens, pos, memo);
+fn scan_a__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_a_atom(tokens, pos, gate, memo);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_ID {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_a_lr_0(tokens, pos, memo);
-                if pos < 0 { pos = lr_saved_pos; break; }
+                let lr_saved_pos_gate = *gate;
+                pos = scan_a_lr_0(tokens, pos, gate, memo);
+                if pos < 0 {
+                    pos = lr_saved_pos;
+                    *gate = lr_saved_pos_gate;
+                    break;
+                }
             } else {
                 break;
             }
@@ -1675,7 +1685,8 @@ fn _parse_a__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _sk = p.peek_kind();
         if _sk == TK_ID {
             if 1 >= min_prec {
-                if scan_a_lr_0(&p.kinds, p.pos, &mut p.memo) < 0 {
+                p.scan_gate._scan_edge = p.pos;
+                if scan_a_lr_0(&p.kinds, p.pos, &mut p.scan_gate, &mut p.memo) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_A, _start);
@@ -1760,4 +1771,8 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 
 global EMPTY_SYNC: List<i32> = [];
 global EXPECTED_0: List<i32> = [TK_ID];
+
+struct ScanGate {
+    _scan_edge: i32 = -1,
+}
 

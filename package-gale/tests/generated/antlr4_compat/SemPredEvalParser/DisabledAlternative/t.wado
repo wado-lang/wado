@@ -2359,6 +2359,7 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
+    scan_gate: ScanGate = ScanGate {},
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -2774,29 +2775,37 @@ impl Parser {
     }
 }
 
-fn scan_content(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
+fn scan_content(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor) -> i32 {
     let start = pos;
+    let start_gate = *gate;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if true {
         if kind == TK_ANY_CHAR {
             let mut _atn_false: List<i32> = [];
-            if !false { _atn_false.push(0); }
+            if !(gate._scan_edge != pos || false) { _atn_false.push(0); }
             let _atn_alt = atn.predict(&ATN_SIM, 1, tokens, pos, TK_EOF, 0, &_atn_false);
             if _atn_alt < 0 {
                 return -1;
             }
             if _atn_alt == 0 {
-                return scan_content__alt_0(tokens, start, atn);
+                return scan_content__alt_0(tokens, start, gate, atn);
             }
-            return scan_content__alt_1(tokens, start, atn);
+            return scan_content__alt_1(tokens, start, gate, atn);
         } else {
             let mut best: i32 = -1;
-            let try_0_end = scan_content__alt_0(tokens, start, atn);
-            if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_content__alt_1(tokens, start, atn);
-            if try_1_end > best { best = try_1_end; }
-            if best >= 0 { pos = best; return pos; }
+            let mut best_gate = *gate;
+            let try_0_end = scan_content__alt_0(tokens, start, gate, atn);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_content__alt_1(tokens, start, gate, atn);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
+            }
+            *gate = start_gate;
         }
     }
     return -1;
@@ -2810,16 +2819,18 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
         if !_plus_first {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
+                p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 p.atn.stack.push(9);
-                pos = scan_content(tokens, pos, &mut p.atn);
+                pos = scan_content(tokens, pos, &mut p.scan_gate, &mut p.atn);
                 p.atn.stack.pop();
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if rep_body_end_kind == TK_EOF {
                     let rep_body_end = pos;
+                    let rep_body_end_gate = p.scan_gate;
                     let mut rep_body_end_ok = false;
                     rep_body_end_scan: {
                         if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
@@ -2827,6 +2838,7 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
                         rep_body_end_ok = true;
                     }
                     pos = rep_body_end;
+                    p.scan_gate = rep_body_end_gate;
                     if !rep_body_end_ok { break rep_scan; }
                 }
                 rep_scan_pos = pos;
@@ -2873,7 +2885,7 @@ fn _parse_cpp_compilation_unit(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn scan_content__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
+fn scan_content__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ANY_CHAR { return -1; }
     pos += 1;
@@ -2885,9 +2897,9 @@ fn _parse_content__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_content__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
+fn scan_content__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor) -> i32 {
     let mut pos = pos;
-    if !false { return -1; }
+    if !(gate._scan_edge != pos || false) { return -1; }
     if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
     pos += 1;
     return pos;
@@ -2914,8 +2926,10 @@ fn _parse_content__inner(p: &mut Parser) -> () {
         } else {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_content__alt_0(_sd_tokens, _sd_pos, &mut p.atn);
-            let _sd_p_1 = scan_content__alt_1(_sd_tokens, _sd_pos, &mut p.atn);
+            p.scan_gate._scan_edge = p.pos;
+            let _sd_p_0 = scan_content__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn);
+            p.scan_gate._scan_edge = p.pos;
+            let _sd_p_1 = scan_content__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -3038,4 +3052,8 @@ global EXPECTED_1: List<i32> = [TK_ANY_CHAR, TK_EOF, TK_ERROR];
 global EXPECTED_2: List<i32> = [TK_ANY_CHAR];
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x03\x00\x02\x00\x19\x00\x03\x00\x00\x00\x02\x00\x04\x00\x0a\x00\x0e\x00\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x08\x09\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x04\x00\x03\x00\x00\x00\x00\x01\x00\x07\x00\x0f\x00\x16\x00\x09\x00\x02\x00\x03\x00\x0b\x00\x09\x00\x0c\x00\x0d\x00\x0e\x00\x08\x00\x11\x00\x15\x00\x04\x00\x05\x00\x10\x00\x14\x00\x10\x00\x13\x00\x18\x00\x06\x00\x19\x00\x17\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+
+struct ScanGate {
+    _scan_edge: i32 = -1,
+}
 
