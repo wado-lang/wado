@@ -1798,14 +1798,13 @@ fn scan_e__rest_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
 }
 
 fn scan_e__cont_holds(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, lr_cont: i64) -> bool {
-    if lr_cont == 0 { return true; }
     if let Some(frame) = lr_frame_of(lr_cont) {
         if frame.rest == LR_LOOP_REST {
             let cut = scan_e__loop(tokens, pos, memo, frame.follow, frame.min_prec, frame.cont);
             return cut >= 0;
         }
         let end = scan_e__rest_0(tokens, pos, memo, frame.follow, frame.cont);
-        return end >= 0 && scan_e__cont_holds(tokens, end, memo, frame.cont);
+        return end >= 0 && (frame.cont == 0 || scan_e__cont_holds(tokens, end, memo, frame.cont));
     }
     return follow_yields(tokens, pos, lr_cont, &FOLLOW_SETS, TK_EOF);
 }
@@ -1841,7 +1840,7 @@ fn scan_e__loop(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: 
 
 fn scan_e__loop_walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
-    let mut good = if scan_e__cont_holds(tokens, pos, memo, lr_cont) { pos } else { -1 };
+    let mut good = if (lr_cont == 0 || scan_e__cont_holds(tokens, pos, memo, lr_cont)) { pos } else { -1 };
     let lr_outer = lr_cont;
     let lr_cont = lr_loop_frame(min_prec, follow, lr_cont);
     loop {
@@ -1851,7 +1850,7 @@ fn scan_e__loop_walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fol
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_1(tokens, pos, memo, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if scan_e__cont_holds(tokens, pos, memo, lr_outer) {
+                if (lr_outer == 0 || scan_e__cont_holds(tokens, pos, memo, lr_outer)) {
                     good = pos;
                 }
             } else {
@@ -1862,7 +1861,7 @@ fn scan_e__loop_walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fol
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_2(tokens, pos, memo, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if scan_e__cont_holds(tokens, pos, memo, lr_outer) {
+                if (lr_outer == 0 || scan_e__cont_holds(tokens, pos, memo, lr_outer)) {
                     good = pos;
                 }
             } else {
@@ -1873,7 +1872,7 @@ fn scan_e__loop_walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fol
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_3(tokens, pos, memo, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
-                if scan_e__cont_holds(tokens, pos, memo, lr_outer) {
+                if (lr_outer == 0 || scan_e__cont_holds(tokens, pos, memo, lr_outer)) {
                     good = pos;
                 }
             } else {
