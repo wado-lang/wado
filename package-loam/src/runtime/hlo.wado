@@ -574,7 +574,8 @@ pub fn reduce_mean<affine G: Graph, In, Out>(
 
 /// `x` with each position along `axis` at or past its row's `length` replaced
 /// by `fill`: the padding of a valid length read as what a reduction over it
-/// leaves unchanged.
+/// leaves unchanged. The rows run along the axis `rows`, which a length every
+/// row shares does not need.
 pub fn masked<affine G: Graph, E: Element, Axes>(
     g: &mut G,
     x: &G::Tensor<E, Axes>,
@@ -589,9 +590,9 @@ pub fn masked<affine G: Graph, E: Element, Axes>(
     return g.select(&valid, x, &full::<G, E, Axes>(g, fill, extents));
 }
 
-/// `a` joined by `b` along `axis`, `b` written from `a`'s valid length
-/// `length` on: a `Concat` along a padded length, which would otherwise put
-/// `a`'s padding between the two.
+/// `a` joined by `b` along `axis`, each row of `b` written from its row's
+/// valid length in `length` on, as `written_at` writes: a `Concat` along a
+/// padded length, which would otherwise put `a`'s padding between the two.
 pub fn joined_at<affine G: Graph, E: Element, A, B, Out>(
     g: &mut G,
     a: &G::Tensor<E, A>,
@@ -622,7 +623,8 @@ pub fn branched<affine G: Graph, Axes, T>(
 }
 
 /// `a` with `b` written over it along `axis` from its row's `at` on, any part
-/// of `b` past `a`'s end dropped.
+/// of `b` past `a`'s end dropped. The rows run along the axis `rows`, as for
+/// `masked`.
 pub fn written_at<affine G: Graph, E: Element, A, B>(
     g: &mut G,
     a: &G::Tensor<E, A>,
@@ -642,10 +644,7 @@ pub fn written_at<affine G: Graph, E: Element, A, B>(
         };
         return g.scatter(a, at, b, &dims);
     }
-    let Some(r) = rows else {
-        panic("a length for each row reads a tensor along its rows");
-    };
-    assert g.extents_of(b)[r] == count, "a tensor has as many rows as there are lengths";
+    let r = rows_axis(rows, &g.extents_of(b), count);
     // Each row's index, then where its write starts along `axis`.
     let row_of: G::Tensor<i64, [Slots, One]> = g.iota([count, 1], 0);
     let start: G::Tensor<i64, [Slots, One]> = g.reshape(at, [count, 1]);
@@ -853,11 +852,17 @@ fn along_rows<affine G: Graph, Axes>(
         let one: G::Tensor<i64, []> = g.reshape(length, []);
         return g.broadcast_in_dim(&one, *extents, []);
     }
+    return g.broadcast_in_dim(length, *extents, [rows_axis(rows, extents, count)]);
+}
+
+/// The axis `rows` names, along which a tensor of `extents` holds a row for
+/// each of `count` lengths.
+fn rows_axis(rows: Option<i32>, extents: &List<i32>, count: i32) -> i32 {
     let Some(r) = rows else {
         panic("a length for each row reads a tensor along its rows");
     };
     assert extents[r] == count, "a tensor has as many rows as there are lengths";
-    return g.broadcast_in_dim(length, *extents, [r]);
+    return r;
 }
 
 /// The axes left once a reduction drops one, inside these helpers, and the

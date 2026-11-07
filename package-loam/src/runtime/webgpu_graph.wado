@@ -609,6 +609,15 @@ impl Graph for WebGpuBackend {
             if shared && !options.causal {
                 break kernels;
             }
+            let positions = self.extents_of(past_k)[2];
+            let fresh = self.extents_of(q)[1];
+            let Some(valid) = one_length(self, past_length, positions) else {
+                break kernels;
+            };
+            let Some(attended) = one_length(self, reach, valid + fresh) else {
+                break kernels;
+            };
+            assert !shared || valid + fresh <= positions, "a shared past holds the new positions after its valid ones";
             let rotary = match [cos, sin] {
                 [Some(c), Some(s)] => Option::Some([
                     self.device_view(c),
@@ -620,30 +629,10 @@ impl Graph for WebGpuBackend {
                 self.device_view(past_k),
                 self.device_view(past_v),
             ];
-            let positions = held_k.extents[2];
             let query = self.device_view(q);
-            let valid = match past_length {
-                Some(l) => {
-                    let Some(length) = one_length(&self.host(l).data) else {
-                        break kernels;
-                    };
-                    length;
-                },
-                None => positions,
-            };
-            assert !shared || valid + query.extents[1] <= positions, "a shared past holds the new positions after its valid ones";
             let biased = match bias {
                 Some(b) => Option::Some(self.device_view(b)),
                 None => null,
-            };
-            let attended = match reach {
-                Some(l) => {
-                    let Some(length) = one_length(&self.host(l).data) else {
-                        break kernels;
-                    };
-                    length;
-                },
-                None => valid + query.extents[1],
             };
             if let Some([out, present_k, present_v]) = self.attended(
                 &query,
@@ -683,9 +672,18 @@ impl Graph for WebGpuBackend {
     }
 }
 
-/// The length every row of `rows` holds, where they hold one.
-fn one_length(rows: &List<i64>) -> Option<i32> {
-    for let row of rows {
+/// The length every row of `length` holds, where they hold one, or `absent`
+/// where there is none.
+fn one_length(
+    g: &mut WebGpuBackend,
+    length: Option<&Placed<i64, [Slots]>>,
+    absent: i32,
+) -> Option<i32> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let Some(l) = length else {
+        return Option::Some(absent);
+    };
+    let rows = g.host(l).data;
+    for let row of &rows {
         if *row != rows[0] {
             return null;
         }
