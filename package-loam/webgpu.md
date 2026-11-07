@@ -44,11 +44,11 @@ runs.
   them as `u32` when it runs. The index `arg_max` ranks stays on the device as
   an f32, so a token a loop feeds back needs no read back.
 - `group_query_attention`, which Gemma 3 names and GPT-2 spells in parts, is
-  three dispatches. One appends the new keys, turned by the rotary tables, and values
-  to the attention cache. The cache holds a power of two of positions, so a step
-  writes only its own positions and binds what the step before bound. The next
-  attends each query row over each part of 4 positions in a workgroup of its
-  own, 64 lanes splitting each position's dot. The last joins a row's parts,
+  three dispatches. One appends the new keys, turned by the rotary tables, and
+  values to the attention cache. The cache holds a power of two of positions, so
+  a step writes only its own positions and binds what the step before bound. The
+  next attends each query row over each part of 4 positions in a workgroup of
+  its own, 64 lanes splitting each position's dot. The last joins a row's parts,
   rescaling each to the row's greatest score. Gemma's step over one token has 4
   query rows, so a workgroup a row left the device idle and grew slower with the
   sequence: at 600 positions a token took 1.9 times as long as with parts of 64

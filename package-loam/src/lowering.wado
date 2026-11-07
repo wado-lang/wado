@@ -53,7 +53,10 @@ pub struct SpelledAttention {
 pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
     let mut lowered: List<Lowering> = graph.nodes.into_iter().map(|n| lowering_of(&n, checked)).collect();
     let mut made = HashMap::<String, i32>::new();
-    let mut reads = Reads { by: HashMap::new(), returned: HashSet::new() };
+    let mut reads = Reads {
+        by: HashMap::new(),
+        returned: HashSet::new(),
+    };
     for let [at, node] of graph.nodes.into_iter().enumerate() {
         for let o of node.outputs {
             made[o] = at;
@@ -229,9 +232,9 @@ impl Walk {
     }
 
     /// What the `Transpose` turning the keys for the scores reads: the past the
-    /// present joins, the new positions' operand, and the present, where
-    /// something reads it. An exporter turns the present, or with no past the
-    /// split it turns into the present as well.
+    /// present joins, the new positions' operand, and the present, where the
+    /// graph computes it. An exporter turns the present, or with no past the
+    /// split it may turn into the present as well.
     fn keys(&mut self, turned: i32, heads: i32, width: i32) -> Option<[Option<String>, String, Option<String>]> {
         let operand = self.node(turned).inputs[0];
         if self.permutes(turned, [0, 1, 3, 2]) {
@@ -399,14 +402,13 @@ impl Walk {
     /// Whether `bias` adds to each score as the composite's does, a value for
     /// each position: stage 0 owes an axis other than 1 the scores' extent.
     fn bias_fits(&self, bias: &String) -> bool {
-        let Some(shape) = self.checked.shapes.get(*bias) else {
-            return false;
-        };
+        let shape = self.checked.shapes[*bias];
         return shape.rank() == 4 && !shape.axes[3].extent.is_one();
     }
 
     /// Whether every output of what is taken but `kept` is read only by what
-    /// is taken, and what reads `kept` comes after the node at `ending`.
+    /// is taken, and not returned, and what reads `kept` comes after the node
+    /// at `ending`.
     fn reads_stay_inside(&self, kept: &List<String>, ending: i32) -> bool {
         for let at of &self.taken {
             for let output of self.node(*at).outputs {

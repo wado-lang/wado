@@ -961,22 +961,28 @@ impl<affine G: Graph> Run<G> {
         };
     }
 
+    /// The length at `node`'s operand `next` where it is `given`, which then
+    /// steps past it.
+    fn length_at(
+        &self,
+        g: &mut G,
+        node: &RecordedNode,
+        given: bool,
+        next: &mut i32,
+    ) -> Option<G::Tensor<i64, []>> with _ {
+        if !given {
+            return null;
+        }
+        *next += 1;
+        return Option::Some(i64_of::<G, []>(g, self.operand(node, *next - 1)));
+    }
+
     /// An attention node's attended queries and presents, by `g`'s
     /// `group_query_attention`.
     fn attended(&self, g: &mut G, node: &RecordedNode, attention: &AttentionNode) -> [Any<G>, Any<G>, Any<G>] with _ {
         let mut next = 5;
-        let past_length: Option<G::Tensor<i64, []>> = if attention.shared {
-            next += 1;
-            Option::Some(i64_of::<G, []>(g, self.operand(node, next - 1)));
-        } else {
-            null;
-        };
-        let bound: Option<G::Tensor<i64, []>> = if attention.bounded {
-            next += 1;
-            Option::Some(i64_of::<G, []>(g, self.operand(node, next - 1)));
-        } else {
-            null;
-        };
+        let past_length = self.length_at(g, node, attention.shared, &mut next);
+        let bound = self.length_at(g, node, attention.bounded, &mut next);
         let [cos, sin]: [Option<G::Tensor<f32, [Untyped, Untyped]>>, Option<G::Tensor<f32, [Untyped, Untyped]>>] = if attention.rotary {
             next += 2;
             [

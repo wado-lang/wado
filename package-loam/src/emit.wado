@@ -2628,7 +2628,8 @@ fn spelled_attention_call(
     let present = shapes[a.present_value];
     let [batch, sequence] = [q.axes[0].name, q.axes[1].name];
     let [heads, total, width] = [present.axes[1].name, present.axes[2].name, present.axes[3].name];
-    let new_axes = ([batch, sequence, shapes[a.key].axes[2].name] as List<String>).join(", ");
+    let key_width = shapes[a.key].axes[2].name;
+    let new_axes = ([batch, sequence, key_width] as List<String>).join(", ");
     let held_axes = |positions: &String| ([batch, heads, *positions, width] as List<String>).join(", ");
     let as_axes = |tensor: &String, to: &String| -> String {
         let from = axis_list(&shapes[*tensor]);
@@ -2686,9 +2687,7 @@ fn spelled_attention_call(
             a.hidden,
         )}) }`,
     );
-    let mut turbofish = [
-        batch, sequence, q.axes[2].name, shapes[a.key].axes[2].name, heads, positions, total, width, sequence, width,
-    ] as List<String>;
+    let mut turbofish = [batch, sequence, q.axes[2].name, key_width, heads, positions, total, width, sequence, width] as List<String>;
     turbofish.extend(&bias_axes);
     let attended = names.get(&node.outputs[0]);
     let present_key = match &a.present_key {
