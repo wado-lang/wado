@@ -6594,16 +6594,26 @@ impl Parser {
 
         // Parse first type (could be trait name or target type)
         // Supports bounds on type args: impl List<T: Ord> { ... }
+        let mut target_span = self.peek().span;
         let first_type = self.parse_impl_target_type(&mut type_params)?;
 
         // Check if this is `impl Trait for Type` or just `impl Type`
         let (trait_type, ty) = if self.check(&TokenKind::For) {
             self.advance(); // consume 'for'
+            target_span = self.peek().span;
             let target_type = self.parse_impl_target_type(&mut type_params)?;
             (Some(first_type), target_type)
         } else {
             (None, first_type)
         };
+        if let Type::Reference(inner) | Type::MutReference(inner) = &ty
+            && matches!(**inner, Type::Reference(_) | Type::MutReference(_))
+        {
+            return Err(self.error_at_span(
+                target_span,
+                "an impl is written for a type or one reference to it, not a reference to a reference",
+            ));
+        }
 
         // `impl Trait for Type;` — synthesis request (compiler generates the body)
         if self.check(&TokenKind::Semicolon) {

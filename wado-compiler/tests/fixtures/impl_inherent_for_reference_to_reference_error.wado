@@ -1,0 +1,13 @@
+// The inherent form takes the same one reference at most.
+struct Plain {
+    n: i32,
+}
+
+impl &mut &Plain {
+    fn count(self) -> i32 {
+        return self.n;
+    }
+}
+
+__DATA__
+{"compile_error": ":6:6: parse error: an impl is written for a type or one reference to it, not a reference to a reference"}
