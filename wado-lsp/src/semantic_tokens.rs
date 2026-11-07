@@ -1211,18 +1211,19 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 1, "Show"), token_type::TYPE);
     }
 
-    /// The bound's reference to its trait, recorded at the bound's start,
-    /// leaves the namespace segment a type.
+    /// The bound's reference to its trait sits on the trait's name, so the
+    /// namespace keeps the class its position gives it.
     #[test]
-    fn a_resolved_namespaced_bound_is_a_type_on_both_segments() {
+    fn a_resolved_namespaced_bound_is_an_interface_after_a_type() {
         let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
         let src = "use geo from \"./lib.wado\";\nfn f<\n    T: geo::Show,\n>(t: &T) {}\n";
-        let host = in_memory_host(&[("/lib.wado", lib), ("/test.wado", src)]);
+        let host = in_memory_host(&[("./lib.wado", lib), ("/test.wado", src)]);
         let sem =
             futures::executor::block_on(wado_compiler::semantics(src, &host, Some("/test.wado")));
+        assert!(sem.is_complete());
         let tokens = compute(src, Some(&sem));
         assert_eq!(kind_of(&tokens, src, 2, "geo"), token_type::TYPE);
-        assert_eq!(kind_of(&tokens, src, 2, "Show"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 2, "Show"), token_type::INTERFACE);
     }
 
     /// `::<` is a turbofish, so the name before it is the callee, not the

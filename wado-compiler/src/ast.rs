@@ -1169,7 +1169,7 @@ pub fn walk_generic_params<'ast, V: AstVisitor<'ast>>(v: &mut V, params: &'ast [
 
 pub fn walk_trait_bounds<'ast, V: AstVisitor<'ast>>(v: &mut V, bounds: &'ast [TraitBound]) {
     for bound in bounds {
-        v.visit_id(bound.id, bound.span);
+        v.visit_id(bound.id, bound.name_span);
         for arg in &bound.type_args {
             v.visit_type(arg);
         }
