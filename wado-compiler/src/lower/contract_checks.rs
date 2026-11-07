@@ -32,7 +32,7 @@ use crate::synthesis::common::{cold_path_stmt, marker_stmt_mark};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId,
+    TypeId, assign_stmt,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_locals};
 use crate::type_table::TypeTable;
@@ -100,6 +100,7 @@ pub fn lower(flat: &mut FlatPackage) {
             site: None,
             expanding: Vec::new(),
             bound: IndexSet::default(),
+            declared: Vec::new(),
         };
         expander.visit_block(&mut body);
         Unwrap.visit_block(&mut body);
@@ -277,8 +278,8 @@ impl ReportFailures<'_> {
             unreachable!("matched by `failing_check`");
         };
         let instrumented = condition.clone();
-        // The captures the condition binds as it runs, and their seen flags.
-        let captured = captured_locals(&instrumented);
+        // The captures the condition assigns as it runs, and their seen flags.
+        let captured = assigned_locals(&instrumented);
         StripCaptures(&captured).visit_expr(condition);
         let (flags, kept): (Vec<TirStmt>, Vec<TirStmt>) =
             block.stmts.drain(..at - 1).partition(|stmt| {
@@ -342,17 +343,10 @@ impl ReportFailures<'_> {
     }
 }
 
-/// The locals `expr` binds or assigns: an assert's captures and their seen
-/// flags.
-fn captured_locals(expr: &TirExpr) -> IndexSet<u32> {
-    struct Captured(IndexSet<u32>);
-    impl TirRefVisitor for Captured {
-        fn visit_stmt(&mut self, stmt: &TirStmt) {
-            if let TirStmtKind::Let { local_index, .. } = stmt.kind {
-                self.0.insert(local_index);
-            }
-            self.walk_stmt(stmt);
-        }
+/// The locals `expr` assigns.
+fn assigned_locals(expr: &TirExpr) -> IndexSet<u32> {
+    struct Assigned(IndexSet<u32>);
+    impl TirRefVisitor for Assigned {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Assign { target, .. } = &expr.kind
                 && let TirExprKind::Local { index, .. } = target.kind
@@ -362,23 +356,31 @@ fn captured_locals(expr: &TirExpr) -> IndexSet<u32> {
             self.walk_expr(expr);
         }
     }
-    let mut captured = Captured(IndexSet::default());
-    captured.visit_expr(expr);
-    captured.0
+    let mut assigned = Assigned(IndexSet::default());
+    assigned.visit_expr(expr);
+    assigned.0
 }
 
-/// Replace each capture in a condition, `{ let $v = e; [$v_seen = true;] $v }`
+/// Replace each capture in a condition, `{ $v = e; [$v_seen = true;] $v }`
 /// over the captured locals, with `e`, leaving the bare condition.
 struct StripCaptures<'a>(&'a IndexSet<u32>);
 
 impl StripCaptures<'_> {
-    fn capture(&self, block: &TirBlock) -> bool {
-        let [
-            TirStmt {
-                kind: TirStmtKind::Let { local_index, .. },
+    fn captured(&self, stmt: &TirStmt) -> Option<u32> {
+        match &stmt.kind {
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { target, .. },
                 ..
+            }) => match target.kind {
+                TirExprKind::Local { index, .. } if self.0.contains(&index) => Some(index),
+                _ => None,
             },
-            flag @ ..,
+            _ => None,
+        }
+    }
+
+    fn capture(&self, block: &TirBlock) -> bool {
+        let Some((
             TirStmt {
                 kind:
                     TirStmtKind::Expr(TirExpr {
@@ -387,24 +389,13 @@ impl StripCaptures<'_> {
                     }),
                 ..
             },
-        ] = block.stmts.as_slice()
+            assigns,
+        )) = block.stmts.split_last()
         else {
             return false;
         };
-        local_index == read
-            && self.0.contains(read)
-            && match flag {
-                [] => true,
-                [TirStmt {
-                    kind:
-                        TirStmtKind::Expr(TirExpr {
-                            kind: TirExprKind::Assign { target, .. },
-                            ..
-                        }),
-                    ..
-                }] => matches!(target.kind, TirExprKind::Local { index, .. } if self.0.contains(&index)),
-                _ => false,
-            }
+        matches!(assigns, [value] | [value, _] if self.captured(value) == Some(*read))
+            && assigns.iter().all(|stmt| self.captured(stmt).is_some())
     }
 }
 
@@ -413,10 +404,14 @@ impl TirMutVisitor for StripCaptures<'_> {
         if let TirExprKind::Block(block) = &mut expr.kind
             && self.capture(block)
         {
-            let TirStmtKind::Let { value, .. } = block.stmts.swap_remove(0).kind else {
+            let TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { value, .. },
+                ..
+            }) = block.stmts.swap_remove(0).kind
+            else {
                 unreachable!("matched by `capture`");
             };
-            *expr = value;
+            *expr = *value;
             self.visit_expr(expr);
             return;
         }
@@ -663,9 +658,24 @@ struct Expander<'a> {
     expanding: Vec<FunctionId>,
     /// The locals [`Self::bind`] made.
     bound: IndexSet<u32>,
+    /// The declarations of the locals [`Self::bind`] assigns in place, which
+    /// go ahead of the statement being expanded.
+    declared: Vec<TirStmt>,
 }
 
 impl TirMutVisitor for Expander<'_> {
+    fn visit_block(&mut self, block: &mut TirBlock) {
+        let outer = std::mem::take(&mut self.declared);
+        let mut stmts = Vec::with_capacity(block.stmts.len());
+        for mut stmt in std::mem::take(&mut block.stmts) {
+            self.visit_stmt(&mut stmt);
+            stmts.append(&mut self.declared);
+            stmts.push(stmt);
+        }
+        block.stmts = stmts;
+        self.declared = outer;
+    }
+
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         // A closure's body is a frame of its own, whose calls keep reaching
         // the checked function.
@@ -709,7 +719,7 @@ impl Expander<'_> {
                 .last()
                 .is_some_and(|&param| RefKind::from_resolved(self.type_table.get(param)).is_none());
         // The last argument's own bindings are `let`s in its block, which the
-        // clauses after them share; an earlier argument's stand in place.
+        // clauses after them share; only an earlier argument's are assigned.
         let mut stmts = Vec::new();
         let last_index = args.len().saturating_sub(1);
         let substitutes: Vec<TirExpr> = args
@@ -897,18 +907,20 @@ impl Expander<'_> {
     }
 
     /// Bind what `slot` evaluates to a new local of the function, where `sink`
-    /// says, and answer the read of it. In place its `let` stands where it is
-    /// evaluated, as a power-assert capture's does, and the clauses after it
-    /// read the local outside that block: a local belongs to the function.
+    /// says, and answer the read of it. In place it is assigned where it is
+    /// evaluated and declared ahead of the statement, as `let x: T;` is and as
+    /// a power-assert capture is: a `let` there would scope the local to that
+    /// argument, out of reach of the clauses after it.
     fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
         // Each binding joins `bound`, so its size is the serial.
         let name = minted_name("contract_arg", self.bound.len());
         let (type_id, span) = (slot.type_id, slot.span);
+        let in_place = matches!(sink, Sink::InPlace);
         self.func.locals.push(TirLocal {
             name: name.clone(),
             type_id,
-            is_mut: false,
+            is_mut: in_place,
             span,
         });
         self.func.local_count = self.func.locals.len() as u32;
@@ -921,50 +933,64 @@ impl Expander<'_> {
             type_id,
             span,
         );
-        let binding = TirStmt::new(
-            TirStmtKind::Let {
-                name,
-                local_index: index,
-                is_mut: false,
-                type_id,
-                value: take(slot),
-                storage: LetStorage::Planned,
-            },
-            span,
-        );
+        let binding = |value: TirExpr| {
+            TirStmt::new(
+                TirStmtKind::Let {
+                    name,
+                    local_index: index,
+                    is_mut: in_place,
+                    type_id,
+                    value,
+                    storage: LetStorage::Planned,
+                },
+                span,
+            )
+        };
+        let value = take(slot);
         *slot = match sink {
             Sink::Ahead(stmts) => {
-                stmts.push(binding);
+                stmts.push(binding(value));
                 read.clone()
             }
-            Sink::InPlace => TirExpr::new(
-                TirExprKind::Block(TirBlock::new(
-                    vec![binding, TirStmt::new(TirStmtKind::Expr(read.clone()), span)],
+            Sink::InPlace => {
+                self.declared
+                    .push(binding(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span)));
+                TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(
+                        vec![
+                            assign_stmt(read.clone(), value, span),
+                            TirStmt::new(TirStmtKind::Expr(read.clone()), span),
+                        ],
+                        span,
+                    )),
+                    type_id,
                     span,
-                )),
-                type_id,
-                span,
-            ),
+                )
+            }
         };
         read
     }
 
     /// Whether `stmts` is a binding [`Self::bind`] made in place.
     fn binds(&self, stmts: &[TirStmt]) -> bool {
-        let [binding, read] = stmts else {
+        let [assign, read] = stmts else {
             return false;
         };
         let (
-            TirStmtKind::Let { local_index, .. },
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { target, .. },
+                ..
+            }),
             TirStmtKind::Expr(TirExpr {
                 kind: TirExprKind::Local { index, .. },
                 ..
             }),
-        ) = (&binding.kind, &read.kind)
+        ) = (&assign.kind, &read.kind)
         else {
             return false;
         };
-        local_index == index && self.bound.contains(index)
+        matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index)
+            && self.bound.contains(index)
     }
 
     /// `expr` read again: each binding made in place in it is its local.

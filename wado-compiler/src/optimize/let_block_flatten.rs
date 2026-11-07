@@ -14,9 +14,10 @@ use super::assign_to_let::promote_lone_assignments;
 use super::gate::{FunctionGate, GatedPass};
 
 /// Flatten every block a statement evaluates first, across the package, then
-/// turn the lone assignment of each local no `let` binds into its `let`
-/// ([`promote_lone_assignments`]): an argument's in-place binding is one, and
-/// flattening is what lays it out as a statement.
+/// turn the lone assignment of each local no `let` binds a value to into its
+/// `let` ([`promote_lone_assignments`]): an argument's in-place binding and a
+/// power-assert capture are such, and flattening is what lays them out as
+/// statements.
 ///
 /// Its own pass between the post-inline peephole and `sroa`, never a peephole
 /// rule: the session's pristine-map rules (`ref_elim`, `elide_box_local`,

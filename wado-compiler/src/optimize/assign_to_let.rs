@@ -1,15 +1,19 @@
-//! Turn the one assignment of a local no `let` binds into the `let` binding
-//! it: `x = v; …x…` becomes `let x = v; …x…` where every mention of `x`
-//! follows that statement in its block. A contract check binds a call's earlier
-//! arguments by assignment, where the call needs them in place
-//! (`lower/contract_checks.rs`), and inlining the call then leaves such a
-//! statement in the caller. Every pass that reads a local's definition off its
-//! `let` (`sroa` above all) passes the assigned local by, so a struct argument
-//! of a checked call stayed a heap object on every call.
+//! Turn the one assignment of a local no `let` binds a value to into the `let`
+//! binding it: `x = v; …x…` becomes `let x = v; …x…` where every mention of
+//! `x` follows that statement in its block, and a `let x: T;` declaring it
+//! goes. A contract check binds a call's earlier arguments by assignment, where
+//! the call needs them in place (`lower/contract_checks.rs`), and a
+//! power-assert capture binds its operand where the operand is evaluated; once
+//! the blocks around them are flattened, such a statement sits in the block
+//! that reads it. Every pass that reads a local's definition off its `let`
+//! (`sroa` above all) passes the assigned local by, so a struct argument of a
+//! checked call stayed a heap object on every call.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLocal, NirParam};
 use crate::nir_arena::{BlockId, Body, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
+use crate::nir_value_graph::ValueKind;
+use crate::type_table::TypeTable;
 
 use super::arena_query::operand_read_locals;
 
@@ -19,7 +23,7 @@ pub(super) fn promote_lone_assignments(
     locals: &[NirLocal],
     params: &[NirParam],
 ) -> bool {
-    let lone = lone_assignees(body, params);
+    let Assignees { lone, declarations } = lone_assignees(body, params);
     if lone.is_empty() {
         return false;
     }
@@ -58,6 +62,10 @@ pub(super) fn promote_lone_assignments(
             value,
             skip_value_copy: false,
         };
+        if let Some(&declaration) = declarations.get(&local) {
+            let unit = body.values.alloc_unshared(ValueKind::Unit, TypeTable::UNIT);
+            body.stmts[declaration].kind = StmtKind::Expr(Operand::Value(unit));
+        }
     }
     !promoted.is_empty()
 }
@@ -111,15 +119,34 @@ impl Census<'_> {
     }
 }
 
-/// The locals one assignment writes as a whole and nothing binds: no `let`,
-/// pattern or parameter.
-fn lone_assignees(body: &Body, params: &[NirParam]) -> IndexSet<u32> {
+struct Assignees {
+    lone: IndexSet<u32>,
+    /// The `let x: T;` declaring a lone local, where one does.
+    declarations: IndexMap<u32, StmtId>,
+}
+
+/// The locals one assignment writes as a whole and nothing binds a value to:
+/// no `let` but one declaring it without a value, no pattern or parameter.
+fn lone_assignees(body: &Body, params: &[NirParam]) -> Assignees {
     let mut bound: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
+    let mut declarations: IndexMap<u32, StmtId> = IndexMap::default();
     let mut assignments: IndexMap<u32, usize> = IndexMap::default();
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(s) => {
-            if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
-                bound.insert(*local_index);
+            if let StmtKind::Let {
+                local_index,
+                value,
+                type_id,
+                ..
+            } = &body.stmts[s].kind
+            {
+                let declares = *type_id != TypeTable::UNIT
+                    && value
+                        .as_value()
+                        .is_some_and(|v| matches!(body.values.kind(v), ValueKind::Unit));
+                if !declares || declarations.insert(*local_index, s).is_some() {
+                    bound.insert(*local_index);
+                }
             }
         }
         NodeRef::Pat(p) => {
@@ -136,11 +163,13 @@ fn lone_assignees(body: &Body, params: &[NirParam]) -> IndexSet<u32> {
         }
         NodeRef::Block(_) => {}
     });
-    assignments
+    let lone: IndexSet<u32> = assignments
         .into_iter()
         .filter(|&(local, count)| count == 1 && !bound.contains(&local))
         .map(|(local, _)| local)
-        .collect()
+        .collect();
+    declarations.retain(|local, _| lone.contains(local));
+    Assignees { lone, declarations }
 }
 
 /// The local and value of a statement assigning a local as a whole, `x = v;`.

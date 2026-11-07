@@ -2958,7 +2958,7 @@ impl<'a> Reify<'a> {
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
         let local_index =
-            (!rereads).then(|| ctx.add_local(cap_name.clone(), type_id, false, None));
+            (!rereads).then(|| ctx.add_local(cap_name.clone(), type_id, !hoisted, None));
         let local_ref = local_index.map(|index| {
             TirExpr::new(
                 TirExprKind::Local {
@@ -2972,12 +2972,12 @@ impl<'a> Reify<'a> {
         let seen_local_index = conditional
             .then(|| ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None));
 
-        let binding = |value: TirExpr| {
+        let binding = |value: TirExpr, is_mut: bool| {
             TirStmt::new(
                 TirStmtKind::Let {
                     name: cap_name.clone(),
                     local_index: local_index.expect("bound with its reference"),
-                    is_mut: false,
+                    is_mut,
                     type_id,
                     value,
                     storage: LetStorage::Planned,
@@ -2995,7 +2995,7 @@ impl<'a> Reify<'a> {
                 "a conditional slot is never hoisted"
             );
             let local_ref = local_ref.expect("a hoisted slot is never a place");
-            decls.push(binding(resolved));
+            decls.push(binding(resolved, false));
             // The capture stands where the operand did: what consumed the
             // operand moves the local.
             if self.takes(expr) {
@@ -3004,8 +3004,9 @@ impl<'a> Reify<'a> {
                 local_ref
             }
         } else {
-            // Otherwise the capture sits where the operand does, moving no
-            // evaluation; until it runs, the local holds its Wasm default.
+            // Otherwise the capture is declared ahead of the condition, as
+            // `let x: T;` is, and assigned where the operand is evaluated,
+            // moving no evaluation.
             let mut stmts = Vec::new();
             let tail = match &local_ref {
                 // The block ends in the place itself, so it yields what the
@@ -3014,7 +3015,11 @@ impl<'a> Reify<'a> {
                 // The local hands on what the operand evaluated to, which it
                 // owns if the value is affine.
                 Some(local_ref) => {
-                    stmts.push(binding(resolved));
+                    decls.push(binding(
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, cap_span),
+                        true,
+                    ));
+                    stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
                     if self.is_affine(expr) {
                         local_ref.clone().moved()
                     } else {
