@@ -47,6 +47,34 @@ test "between's trailing operand takes a looser operator" {
     );
 }
 
+// The inner middle operand must leave an `and` to each enclosing `between`.
+test "a mid operand holding another mid-operand alternative" {
+    assert_tree(
+        "a between b between c and d and e",
+        "(s (e (e a) between (e (e b) between (e c) and (e d)) and (e e)))",
+    );
+    assert_tree(
+        "a between b between c and d and e and f",
+        "(s (e (e a) between (e (e b) between (e (e c) and (e d)) and (e e)) and (e f)))",
+    );
+    assert_tree(
+        "a between b between c between d and e and f and g",
+        "(s (e (e a) between (e (e b) between (e (e c) between (e d) and (e e)) and (e f)) and (e g)))",
+    );
+    assert_tree(
+        "a between b or c between d and e and f",
+        "(s (e (e a) between (e (e (e b) or (e c)) between (e d) and (e e)) and (e f)))",
+    );
+    assert_tree(
+        "a between b and c between d and e and f",
+        "(s (e (e a) between (e (e (e b) and (e c)) between (e d) and (e e)) and (e f)))",
+    );
+    assert_tree(
+        "a between b between c and d or e and f",
+        "(s (e (e a) between (e (e b) between (e c) and (e (e d) or (e e))) and (e f)))",
+    );
+}
+
 test "binary and chains left-associatively" {
     assert_tree("a and b and c", "(s (e (e (e a) and (e b)) and (e c)))");
 }

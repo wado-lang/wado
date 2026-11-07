@@ -95,7 +95,8 @@ use {
     MultiAltRule,
     LeftRecursiveRule,
     LrAlt,
-    LR_CONT_FORWARD,
+    LrCont,
+    LrContRest,
     LrDispatchData,
     RuleHeader,
     AltBody,
@@ -749,8 +750,12 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     let lr_dispatch = compute_lr_dispatch_data(&lr_alts, &suffix_classes, atn_class);
 
     let atom_gated = !atn_class && stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx);
-    let suffix_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
-    let mid_operand_gated = atom_gated || suffix_gated;
+    let cont_rests = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, atn_class);
+    let mid_operand_gated = atom_gated || !cont_rests.is_empty();
+    let loop_checked = !atn_class && ctx.settings.atn.verifies();
+    if loop_checked {
+        ctx.mark_checks_with_simulator();
+    }
     if mid_operand_gated {
         forward_lr_cont_to_trailing_operands(&mut atom, &mut lr_alts, &rule.name, &rule.snake_name);
         ctx.mark_caller_follow_gate();
@@ -763,8 +768,9 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         lr_alts,
         lr_dispatch,
         atn_class,
-        loop_checked: !atn_class && atom_route matches { Checked },
+        loop_checked,
         mid_operand_gated,
+        cont_rests,
     };
 }
 
@@ -886,18 +892,17 @@ fn fixed_token_kind(elem: &Element, analysis: &mut GrammarAnalysis) -> Option<i3
 }
 
 /// Stamps each operand of an LR suffix, parse and scan side alike, with its
-/// precedence and continuation gate; returns whether any mid operand is gated.
-/// A self-reference nested in a subrule is not an operand but a plain call,
-/// ANTLR4's `e[0]`, so it keeps the callee's defaults.
+/// precedence and continuation gate; returns the rests the gated mid operands
+/// leave behind. A self-reference nested in a subrule is not an operand but a
+/// plain call, ANTLR4's `e[0]`, so it keeps the callee's defaults.
 fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
     lr_alts: &mut List<LrAlt>,
     rule_name: S,
     rule_snake: S1,
-    ctx: &mut LowerContext,
     atn_class: bool,
-) -> bool {
+) -> List<LrContRest> {
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
-    let mut mid_operand_gated = false;
+    let mut rests: List<LrContRest> = [];
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let suffix_len = lr_alts[i].suffix.ops.len();
         let conflict_min = lr_alts[i].conflict_min;
@@ -922,36 +927,32 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
             // A mid operand is ANTLR4's `e[0]`, a trailing one its own
             // precedence. An ATN-class loop decides its climb with full
             // context; the static dispatch hands a mid operand the
-            // continuation it has to leave behind, and its loop gate stops it.
-            let mut cont_mask = -1;
+            // rest of its alternative to leave behind, and its loop stops at
+            // the last boundary where that rest still scans.
+            let mut cont = LrCont::Unset;
             let natural_trailing = lr_trailing_prec(lr_alts[i].own_prec, lr_alts[i].right_associative);
             if atn_class {
                 prec = if k + 1 < suffix_len { 0 } else { natural_trailing };
             } else if alt_gated && k + 1 == suffix_len {
                 prec = natural_trailing;
             } else if prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
-                let cont = lr_suffix_continuation_mask(&lr_alts[i].suffix.ops, k + 1, ctx);
-                if !cont.is_empty() {
-                    if let Some(id) = ctx.intern_follow_mask(&cont) {
-                        prec = 0;
-                        cont_mask = id;
-                        mid_operand_gated = true;
-                        alt_gated = true;
-                    }
-                }
+                prec = 0;
+                cont = LrCont::Rest(rests.len());
+                rests.push(LrContRest { alt: i, from: k + 1 });
+                alt_gated = true;
             }
             lr_alts[i].suffix.ops[k] = rebind_self_ref_lr_cont(
                 rebind_self_ref_min_prec(lr_alts[i].suffix.ops[k], prec),
-                cont_mask,
+                cont,
             );
             lr_alts[i].scan_suffix.elements[k] = rebind_scan_self_ref_lr_cont(
                 rebind_scan_self_ref_min_prec(lr_alts[i].scan_suffix.elements[k], rule_snake, prec),
                 rule_snake,
-                cont_mask,
+                cont,
             );
         }
     }
-    return mid_operand_gated;
+    return rests;
 }
 
 /// Stamps an atom's mid operand the way `stamp_lr_self_ref_min_prec` stamps a
@@ -988,11 +989,14 @@ fn stamp_lr_atom_mid_operands(
             let Some(id) = ctx.intern_follow_mask(&[cont_first]) else {
                 continue;
             };
-            atom.alts[a].ops[k] = rebind_self_ref_lr_cont(rebind_self_ref_min_prec(atom.alts[a].ops[k], 0), id);
+            atom.alts[a].ops[k] = rebind_self_ref_lr_cont(
+                rebind_self_ref_min_prec(atom.alts[a].ops[k], 0),
+                LrCont::Mask(id),
+            );
             atom.scan_alts[a].elements[k] = rebind_scan_self_ref_lr_cont(
                 rebind_scan_self_ref_min_prec(atom.scan_alts[a].elements[k], &rule.snake_name, 0),
                 &rule.snake_name,
-                id,
+                LrCont::Mask(id),
             );
             gated = true;
         }
@@ -1035,74 +1039,33 @@ fn forward_lr_cont_to_trailing_operand<S: AsStrSlice, S1: AsStrSlice>(
     if last < 0 || find_self_ref_rule_call(&ops[last], rule_name) matches { None } {
         return;
     }
-    ops[last] = rebind_self_ref_lr_cont(ops[last], LR_CONT_FORWARD);
-    scan[last] = rebind_scan_self_ref_lr_cont(scan[last], rule_snake, LR_CONT_FORWARD);
+    ops[last] = rebind_self_ref_lr_cont(ops[last], LrCont::Forward);
+    scan[last] = rebind_scan_self_ref_lr_cont(scan[last], rule_snake, LrCont::Forward);
 }
 
-/// Per-depth first sets of the LR suffix ops from `start` — the caller-side
-/// continuation a climbing mid operand must leave intact. Depth `n` of the
-/// mask must be the token `n` positions ahead, so the walk only continues
-/// past an op that consumes exactly one token; a rule call contributes its
-/// own FIRST and then ends the mask, since the op after it sits an unknown
-/// number of tokens away.
-fn lr_suffix_continuation_mask(ops: &List<Op>, start: i32, ctx: &mut LowerContext) -> List<List<i32>> {
-    let mut mask: List<List<i32>> = [];
-    for let mut k = start; k < ops.len() && mask.len() < FOLLOW_MASK_MAX_K; k += 1 {
-        let depth = lr_op_first_set(&ops[k], ctx);
-        if depth.is_empty() {
-            break;
-        }
-        mask.push(depth);
-        if !op_consumes_one_token(&ops[k]) {
-            break;
-        }
-    }
-    return mask;
-}
-
-/// FIRST of a lowered op. Only the shapes an LR suffix puts after a mid
-/// operand need an answer; anything else ends the mask by returning empty.
-fn lr_op_first_set(op: &Op, ctx: &mut LowerContext) -> List<i32> {
-    return match op {
-        Token(t) => [t.kind],
-        Literal(l) => [l.kind],
-        RuleCall(rc) => {
-            let mut visiting: List<String> = [];
-            ctx.analysis.first_of_rule(&rc.target_name, &mut visiting);
-        },
-        Wildcard(_) | Excluded(_) | Repeat(_) | Group(_) | ListLabel(_) => [],
-    };
-}
-
-/// True iff the op advances the token stream by exactly one, so the next op's
-/// FIRST really is the next mask depth.
-fn op_consumes_one_token(op: &Op) -> bool {
-    return op matches { Token(_) | Literal(_) };
-}
-
-/// Set `lr_cont_mask` on a self-ref `RuleCall`, peeling the `ListLabel`
-/// wrapper `rebind_self_ref_min_prec` also handles.
-fn rebind_self_ref_lr_cont(op: Op, lr_cont_mask: i32) -> Op {
-    if lr_cont_mask == -1 {
+/// Set `lr_cont` on a self-ref `RuleCall`, peeling the `ListLabel` wrapper
+/// `rebind_self_ref_min_prec` also handles.
+fn rebind_self_ref_lr_cont(op: Op, lr_cont: LrCont) -> Op {
+    if lr_cont matches { Unset } {
         return op;
     }
     if let RuleCall(rc) = op {
-        return Op::RuleCall(RuleCallOp { ..rc, lr_cont_mask });
+        return Op::RuleCall(RuleCallOp { ..rc, lr_cont });
     }
     if let ListLabel(ll) = op {
-        return Op::ListLabel(ListLabelOp { ..ll, inner: rebind_self_ref_lr_cont(ll.inner, lr_cont_mask) });
+        return Op::ListLabel(ListLabelOp { ..ll, inner: rebind_self_ref_lr_cont(ll.inner, lr_cont) });
     }
     return op;
 }
 
 /// Scan mirror of `rebind_self_ref_lr_cont`.
-fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, lr_cont_mask: i32) -> ScanElement {
-    if lr_cont_mask == -1 {
+fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, lr_cont: LrCont) -> ScanElement {
+    if lr_cont matches { Unset } {
         return se;
     }
     if let RuleCall(rc) = se {
         if rc.target_snake == rule_snake.as_str_slice() {
-            return ScanElement::RuleCall(ScanRuleCallElement { ..rc, lr_cont_mask });
+            return ScanElement::RuleCall(ScanRuleCallElement { ..rc, lr_cont });
         }
     }
     return se;

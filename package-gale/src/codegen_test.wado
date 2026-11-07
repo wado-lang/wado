@@ -1068,6 +1068,22 @@ new a < b > ( ) . c => (s (e (e new (e a) (targs < b >) ( )) . c))
     assert out.stderr.contains(": the left-recursion loop picks "), out.stderr;
 }
 
+// The loop of a mid operand nested in another is decided statically, by the
+// continuation gate standing in for the simulator's full context. The trees
+// are the jar's.
+test "atn verify checks a mid operand's loop against the simulator" {
+    let inputs: List<[String, String]> = [
+        ["s", "a between b between c and d and e"],
+        ["s", "a between b between c and d and e and f"],
+        ["s", "a between b and c and d and e"],
+    ];
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses_each(#include_str("../tests/grammars/lr_mid_operand.g4"), inputs, &verify) == "a between b between c and d and e => (s (e (e a) between (e (e b) between (e c) and (e d)) and (e e)))
+a between b between c and d and e and f => (s (e (e a) between (e (e b) between (e (e c) and (e d)) and (e e)) and (e f)))
+a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and (e d)) and (e e)))
+";
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;
