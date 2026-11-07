@@ -326,9 +326,16 @@ impl Interpreter<'_> {
         self.step_budget -= 1;
         match &body.stmts[s].kind {
             StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                type_id,
+                ..
             } => {
                 let (index, value) = (*local_index, *value);
+                if body.declares_without_value(*type_id, value) {
+                    self.bind_local(index, Lattice::Unevaluated);
+                    return Flow::Fallthrough(Lattice::Unevaluated);
+                }
                 // A fresh binding forks the local's storage; an alias taken
                 // over the same index would keep pointing at the old one.
                 if self

@@ -12,8 +12,6 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLocal, NirParam};
 use crate::nir_arena::{BlockId, Body, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
-use crate::nir_value_graph::ValueKind;
-use crate::type_table::TypeTable;
 
 use super::arena_query::operand_read_locals;
 
@@ -63,8 +61,10 @@ pub(super) fn promote_lone_assignments(
             skip_value_copy: false,
         };
         if let Some(&declaration) = declarations.get(&local) {
-            let unit = body.values.alloc_unshared(ValueKind::Unit, TypeTable::UNIT);
-            body.stmts[declaration].kind = StmtKind::Expr(Operand::Value(unit));
+            let StmtKind::Let { value: unit, .. } = body.stmts[declaration].kind else {
+                unreachable!("a declaration is a `let`");
+            };
+            body.stmts[declaration].kind = StmtKind::Expr(unit);
         }
     }
     !promoted.is_empty()
@@ -140,11 +140,9 @@ fn lone_assignees(body: &Body, params: &[NirParam]) -> Assignees {
                 ..
             } = &body.stmts[s].kind
             {
-                let declares = *type_id != TypeTable::UNIT
-                    && value
-                        .as_value()
-                        .is_some_and(|v| matches!(body.values.kind(v), ValueKind::Unit));
-                if !declares || declarations.insert(*local_index, s).is_some() {
+                if !body.declares_without_value(*type_id, *value)
+                    || declarations.insert(*local_index, s).is_some()
+                {
                     bound.insert(*local_index);
                 }
             }

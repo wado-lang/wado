@@ -816,13 +816,20 @@ impl<'a> Interpreter<'a> {
         self.record_aggregate_locals(body);
         for stmt in lets {
             let StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                type_id,
+                ..
             } = &body.stmts[*stmt].kind
             else {
                 return;
             };
             let (local_index, value) = (*local_index, *value);
-            let lattice = self.operand_to_lattice(body, value);
+            let lattice = if body.declares_without_value(*type_id, value) {
+                Lattice::Unevaluated
+            } else {
+                self.operand_to_lattice(body, value)
+            };
             self.bind_local(local_index, lattice);
         }
     }

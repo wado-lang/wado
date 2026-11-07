@@ -973,13 +973,14 @@ impl ConstFoldVisitor<'_> {
     /// After a statement is walked, capture any introduced binding into
     /// the interpreter's env so subsequent uses can fold against it.
     fn update_env_from_stmt(&mut self, body: &Body, s: StmtId) {
-        let (local_index, is_mut, value) = match &body.stmts[s].kind {
+        let (local_index, is_mut, value, type_id) = match &body.stmts[s].kind {
             StmtKind::Let {
                 local_index,
                 is_mut,
                 value,
+                type_id,
                 ..
-            } => (*local_index, *is_mut, *value),
+            } => (*local_index, *is_mut, *value, *type_id),
             // A destructure can rebind an index a prior `let` recorded — index
             // reuse is real (`labeled_block_fusion` producing a `LetDestructure`,
             // see `const_object_globalization`'s `locals_declared_once` note). The
@@ -1000,7 +1001,11 @@ impl ConstFoldVisitor<'_> {
             }
             _ => return,
         };
-        let lat = operand_lattice(&self.interpreter, body, value);
+        let lat = if body.declares_without_value(type_id, value) {
+            Lattice::Unevaluated
+        } else {
+            operand_lattice(&self.interpreter, body, value)
+        };
         // A mutable binding carries its value forward only while that value is a
         // scalar. An aggregate is mutated in place — through an element `&mut`,
         // an iterator, a captured reference — none of which reassigns the local
