@@ -836,7 +836,7 @@ fn render_trait_bounds(bounds: &[TraitBound], out: &mut String) {
         if i > 0 {
             out.push_str(" + ");
         }
-        out.push_str(&bound.name);
+        out.push_str(&bound.written_name());
         unparse_bound_arguments_into(bound, out);
     }
 }

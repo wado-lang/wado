@@ -1,0 +1,32 @@
+// A variant constructor leaves a slot nothing binds for the type its use site
+// expects, in generic code as in concrete code: `Result::Ok(v)` takes
+// `E = String` from the closure's expected `Result<M, String>`. An enclosing
+// parameter named like the variant's own (`T` here and in `Option<T>`) is an
+// answer, not an unbound slot.
+
+fn wrap<M>(o: Option<M>) -> Option<Result<M, String>> {
+    return o.map(|v| Result::Ok(v));
+}
+
+fn constant<M>(o: Option<M>) -> Option<Result<i32, String>> {
+    return o.map(|_v| Result::Ok(1));
+}
+
+fn apply<A, B>(x: A, f: fn(A) -> B) -> B {
+    return f(x);
+}
+
+fn through_function<M>(m: M) -> Result<M, String> {
+    return apply(m, |v| Result::Ok(v));
+}
+
+fn some<T>(x: T) -> Option<T> {
+    return Option::Some(x);
+}
+
+test {
+    assert wrap(Option::Some(1)) == Option::Some(Result::Ok(1));
+    assert constant(Option::Some(true)) == Option::Some(Result::Ok(1));
+    assert through_function(2) == Result::Ok(2);
+    assert some(3) == Option::Some(3);
+}

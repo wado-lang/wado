@@ -6107,7 +6107,9 @@ impl Parser {
             let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
             return Ok(TraitBound {
                 id: self.alloc_ast_id(),
+                namespace: None,
                 name: bound_name.to_string(),
+                name_span: span,
                 type_args: Vec::new(),
                 assoc_types: Vec::new(),
                 span,
@@ -6116,7 +6118,14 @@ impl Parser {
             });
         }
 
-        let name = self.consume_ident()?;
+        let first = self.consume_ident()?;
+        let (namespace, name, name_span) = if self.check(&TokenKind::ColonColon) {
+            self.advance();
+            let name_span = self.peek().span;
+            (Some(first), self.consume_ident()?, name_span)
+        } else {
+            (None, first, span)
+        };
         let mut type_args = Vec::new();
         let mut assoc_types = Vec::new();
         if self.check(&TokenKind::Lt) {
@@ -6156,10 +6165,12 @@ impl Parser {
         }
         Ok(TraitBound {
             id: self.alloc_ast_id(),
+            namespace,
             name,
+            name_span,
             type_args,
             assoc_types,
-            span,
+            span: span.merge(&name_span),
             fn_signature: None,
             resolved: None,
         })
@@ -6583,16 +6594,26 @@ impl Parser {
 
         // Parse first type (could be trait name or target type)
         // Supports bounds on type args: impl List<T: Ord> { ... }
+        let mut target_span = self.peek().span;
         let first_type = self.parse_impl_target_type(&mut type_params)?;
 
         // Check if this is `impl Trait for Type` or just `impl Type`
         let (trait_type, ty) = if self.check(&TokenKind::For) {
             self.advance(); // consume 'for'
+            target_span = self.peek().span;
             let target_type = self.parse_impl_target_type(&mut type_params)?;
             (Some(first_type), target_type)
         } else {
             (None, first_type)
         };
+        if let Type::Reference(inner) | Type::MutReference(inner) = &ty
+            && matches!(**inner, Type::Reference(_) | Type::MutReference(_))
+        {
+            return Err(self.error_at_span(
+                target_span,
+                "an impl is written for a type or one reference to it, not a reference to a reference",
+            ));
+        }
 
         // `impl Trait for Type;` — synthesis request (compiler generates the body)
         if self.check(&TokenKind::Semicolon) {

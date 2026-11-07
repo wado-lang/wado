@@ -30,17 +30,17 @@ struct core:prelude/list.wado//List<u8> {  // TypeId(6)
     mut used: i32,
 }
 
-struct core:linear//ListView<u8> {  // TypeId(7)
+struct core:linear//LinearArray<u8> {  // TypeId(7)
+    mut block: ref null "core:linear//Block",
+    mut len: i32,
+}
+
+struct core:linear//ListView<u8> {  // TypeId(8)
     mut ptr: i32,
     mut len: i32,
     mut owned_bytes: i32,
     mut released: ref "core:prelude/types.wado//Box<bool>",
     mut owner: ref "core:prelude/types.wado//Option<&core:linear/LinearArray<u8>>",
-}
-
-struct core:linear//LinearArray<u8> {  // TypeId(8)
-    mut block: ref null "core:linear//Block",
-    mut len: i32,
 }
 
 variant core:prelude/types.wado//Option<&core:linear/LinearArray<u8>> {  // TypeId(9)

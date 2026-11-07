@@ -480,12 +480,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
         // A default body's call whose author reached the bound's subject
-        // through a reference is the exception: no `&T` impl answers what the
-        // author wrote, so every impl reads it alike.
-        if is_ref && !selection.is_some_and(|s| s.through_ref) {
-            let ref_kind =
-                RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone())
-                    .expect("ref classify");
+        // through a reference reads the subject, so the reference the author
+        // wrote selects no `&T` impl. The subject may be a reference itself,
+        // where `Self` is the `&T` an impl was written for.
+        let subject = if selection.is_some_and(|s| s.through_ref) {
+            self.tysys.type_table.borrow().ref_pointee(receiver)
+        } else {
+            Some(receiver)
+        };
+        let subject_ref_kind = subject
+            .and_then(|s| RefKind::from_resolved(&self.tysys.type_table.borrow().get(s).clone()));
+        if let Some(ref_kind) = subject_ref_kind {
             let result = self.find_trait_method_for_type(
                 &ImplTargetKey::Ref(ref_kind),
                 method_name,

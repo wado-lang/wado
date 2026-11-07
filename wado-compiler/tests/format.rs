@@ -2819,6 +2819,13 @@ impl<T: Eq> Eq for Pair<T> {
 }
 
 #[test]
+fn test_format_namespaced_trait_bound() {
+    let formatted =
+        wado_compiler::format("fn f<T:geo::Show+Eq>(t: &T) {}\n").expect("format failed");
+    assert_eq!(formatted, "fn f<T: geo::Show + Eq>(t: &T) {\n}\n");
+}
+
+#[test]
 fn test_format_idempotent_all_fixtures() {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
 

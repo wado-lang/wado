@@ -1,0 +1,27 @@
+// A bound named through a namespace is reported as written: a local trait of the
+// same name does not meet it, and the message must say which `Show` is asked for.
+use geo from "./sub/spec_modules_geo.wado";
+
+#[allow(undecided_effects)]
+trait Show {
+    fn show(&self) -> String;
+}
+
+struct Local {}
+
+impl Show for Local {
+    fn show(&self) -> String {
+        return "local";
+    }
+}
+
+fn shown<T: geo::Show>(t: &T) -> String with _ {
+    return t.show();
+}
+
+test {
+    assert shown(&Local {}) == "local";
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'geo::Show'"}
