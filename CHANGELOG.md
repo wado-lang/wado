@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.39](https://github.com/wado-lang/wado/compare/v0.0.38...v0.0.39) - 2026-11-07
+
+- feat(jade): validate documents against JSON Schema Draft 2020-12 by @gfx in https://github.com/wado-lang/wado/pull/2567
+- perf(pgo): make the profiled build faster than no-pgo on most benchmarks by @gfx in https://github.com/wado-lang/wado/pull/2569
+
 ## [v0.0.38](https://github.com/wado-lang/wado/compare/v0.0.37...v0.0.38) - 2026-11-06
 
 - perf(nir): pass a &S read past an early exit as its fields, so f64::from_str allocates no StrSlice by @gfx in https://github.com/wado-lang/wado/pull/2381
