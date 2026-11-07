@@ -93,6 +93,9 @@ test "a schema built breaking a keyword's rule is not written" {
     assert `${zero}` == "/multipleOf: must be greater than 0";
     let negative = to_string(&SchemaObject { min_length: Option::Some(-1) }).unwrap_err();
     assert `${negative}` == "/minLength: must be a non-negative integer";
+    let inner = Schema::Object(SchemaObject { dialect: Option::Some(Schema::DRAFT) });
+    let nested = to_string(&SchemaObject { items: Option::Some(inner) }).unwrap_err();
+    assert `${nested}` == "/items/$schema: may appear only at a schema resource's root";
 }
 
 test "a pointer token escapes ~ and /" {

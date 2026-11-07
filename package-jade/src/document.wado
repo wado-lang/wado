@@ -54,7 +54,8 @@ global LINEAR_KEY_CHECK: i32 = 8;
 impl Document {
     /// Reads the JSON text `text`. A repeated key is an error, as in
     /// `core:json`, and so is a lone surrogate. A number is read exactly,
-    /// whatever its size. `max_depth` bounds nesting.
+    /// whatever its size, but for an exponent of more than 18 digits, which is
+    /// an error. `max_depth` bounds nesting.
     pub fn parse<S: AsByteSlice>(text: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<Document, DeserializeError> {
         let mut r = Reader {
             doc: Document {},

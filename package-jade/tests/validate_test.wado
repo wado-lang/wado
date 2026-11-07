@@ -3,8 +3,8 @@ use { Document, Number, Schema, SchemaObject, ValidationError, Validator } from 
 fn errors(schema: String, data: String) -> List<ValidationError> {
     let validator = Validator::compile(&Schema::parse(schema).unwrap()).unwrap();
     let doc = Document::parse(data).unwrap();
-    if let Err(errors) = validator.validate(&doc.root()) {
-        return errors;
+    if let Err(found) = validator.validate(&doc.root()) {
+        return found;
     }
     return [];
 }
