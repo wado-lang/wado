@@ -22,11 +22,11 @@ The load now reads the index a document at a time. Measured later against
 `fs::read` of the Rust index, which that did not change, with a probe under
 `wado run -O2` timing each step with `wasi:clocks`:
 
-| Part                                                       | Cost    |
-| ---------------------------------------------------------- | ------- |
-| `SymbolIndex::add`, a document at a time                   | 3.3×    |
-| The same, the guest started at a 1 GiB heap                | 2.1×    |
-| `grog::decode` of the whole index, which the load replaced | 19×     |
+| Part                                                       | Cost |
+| ---------------------------------------------------------- | ---- |
+| `SymbolIndex::add`, a document at a time                   | 3.3× |
+| The same, the guest started at a 1 GiB heap                | 2.1× |
+| `grog::decode` of the whole index, which the load replaced | 19×  |
 
 - [ ] `wado query scip`: each file is an entry of its own, so each analysis
   loads and checks the standard library again. Analyses that share what they
