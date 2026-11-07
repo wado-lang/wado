@@ -606,7 +606,7 @@ fn lower_to_flat_inner(
             let name = &ctx.type_table.borrow().struct_head_mangled_name(*def);
             // Struct: concatenation of field flat types
             let struct_decl =
-                struct_decl_of(&ctx.type_table.borrow(), *def, type_args, tir_modules);
+                struct_decl_of(*def, type_args, tir_modules);
             if let Some(struct_decl) = struct_decl {
                 let mut result = Vec::new();
 
@@ -787,7 +787,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 }
                 ResolvedType::Struct { def, type_args } => {
                     let struct_decl =
-                        struct_decl_of(&type_table_cell.borrow(), def, &type_args, tir_modules)
+                        struct_decl_of(def, &type_args, tir_modules)
                             .expect("an export's record type has a declaration");
                     lift_struct_from_flat_params(
                         &struct_decl,

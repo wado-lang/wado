@@ -27,7 +27,7 @@ use crate::optimize::arena_query::{
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
 use crate::tir::{BuiltinDeclaration, TypeId};
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -267,7 +267,7 @@ struct PendingBind {
     since: u64,
     /// The kinds of object the value reads through, where it names them all:
     /// an aliased store changes it only through one of these.
-    reads: Option<Vec<TypeKey>>,
+    reads: Option<Vec<TypeId>>,
     aliased: bool,
     /// The tick up to which the aliased stores were tested against this bind,
     /// so each is tested once however often the bind is read.
@@ -292,7 +292,7 @@ struct BindWalk<'e, 'a> {
     invalid: hashmap::IndexSet<u32>,
     aliased_writes: Vec<(u64, Stored)>,
     /// Whether a type reaches an object kind, by both their keys.
-    reached: hashmap::IndexMap<(TypeKey, TypeKey), bool>,
+    reached: hashmap::IndexMap<(TypeId, TypeId), bool>,
     last_call: u64,
     pending: hashmap::IndexMap<u32, PendingBind>,
     stale: hashmap::IndexSet<u32>,
@@ -357,7 +357,7 @@ impl BindWalk<'_, '_> {
         let reads = operand_read_locals(body, value);
         let mut aliased = reachable_elsewhere(self.engine, t);
         let mut escaped = self.engine.mut_escaped().contains(&t);
-        let mut kinds: Option<hashmap::IndexSet<TypeKey>> =
+        let mut kinds: Option<hashmap::IndexSet<TypeId>> =
             read_kinds(self.engine, value).map(|k| k.into_iter().collect());
         self.carried_by.entry(t).or_default().push(t);
         for &r in &reads {
@@ -1172,8 +1172,8 @@ impl Stored {
     fn may_change(
         self,
         engine: &Engine,
-        kinds: &[TypeKey],
-        reached: &mut hashmap::IndexMap<(TypeKey, TypeKey), bool>,
+        kinds: &[TypeId],
+        reached: &mut hashmap::IndexMap<(TypeId, TypeId), bool>,
     ) -> bool {
         let types = engine
             .value_graph_type_table()
@@ -1181,7 +1181,7 @@ impl Stored {
         let mut reaches = |ty: TypeId| {
             kinds.iter().any(|&k| {
                 *reached
-                    .entry((types.type_key(ty), k))
+                    .entry((ty, k))
                     .or_insert_with(|| types.reaches_object(ty, k))
             })
         };
@@ -1221,7 +1221,7 @@ impl Stored {
 
 /// The kinds of object `op` reads a field, an element or a box of, by
 /// [`TypeTable::object_kind`]; `None` where it reads what this cannot name.
-fn read_kinds(engine: &Engine, op: Operand) -> Option<Vec<TypeKey>> {
+fn read_kinds(engine: &Engine, op: Operand) -> Option<Vec<TypeId>> {
     let types = engine.value_graph_type_table()?;
     let mut kinds = Vec::new();
     collect_read_kinds(engine, types, op, &mut kinds).then_some(kinds)
@@ -1231,14 +1231,14 @@ fn collect_read_kinds(
     engine: &Engine,
     types: &TypeTable,
     op: Operand,
-    kinds: &mut Vec<TypeKey>,
+    kinds: &mut Vec<TypeId>,
 ) -> bool {
     let body = &*engine.body;
-    let read_of = |container: Operand, kinds: &mut Vec<TypeKey>| {
+    let read_of = |container: Operand, kinds: &mut Vec<TypeId>| {
         kinds.push(types.object_kind(body.operand_type(container)));
         collect_read_kinds(engine, types, container, kinds)
     };
-    let local = |l: u32, kinds: &mut Vec<TypeKey>| {
+    let local = |l: u32, kinds: &mut Vec<TypeId>| {
         if engine.aliased().contains(&l) {
             kinds.push(types.object_kind(engine.locals()[l as usize].type_id));
         }

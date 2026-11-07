@@ -244,7 +244,7 @@ struct AffineTypes<'a> {
     /// Each type's `Drop::drop`, by the type's declaration.
     drop_impls: &'a DropImpls,
     /// What [`Self::carried_by`] has answered, by type.
-    answers: &'a TypeMemo<bool, TypeId>,
+    answers: &'a TypeMemo<bool>,
 }
 
 impl<'a> AffineTypes<'a> {

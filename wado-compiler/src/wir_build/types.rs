@@ -264,19 +264,7 @@ fn register_struct(
             .impl_type_args
             .iter()
             .any(|t| type_table.representation_head(*t) != *t);
-        if has_newtypes {
-            let resolved_args: Vec<String> = mono
-                .impl_type_args
-                .iter()
-                .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
-                .collect();
-            let resolved_name = mangle_generic_name(&mono.generic_name, &resolved_args);
-            let resolved_sn = StructName::new(effective_module.clone(), resolved_name);
-            if let Some(existing) = ctx.struct_type_map.get(&resolved_sn).cloned() {
-                ctx.struct_type_map.insert(struct_name, existing);
-                return;
-            }
-        }
+        assert!(!has_newtypes, "TEMP struct newtype");
     }
 
     let fq = wir_type_key(&effective_module, &tir_struct.name);
@@ -473,12 +461,11 @@ fn register_raw_array_type(
     }
     // Newtype dedup: both spellings are entered below, so lookup derives one
     // key and finds it.
-    let resolved_name = type_table.mangle_type_arg_rowless_resolving_newtypes(element_type_id);
-    if resolved_name != elem_name && ctx.array_type_by_name.contains_key(&resolved_name) {
-        let existing = ctx.array_type_by_name.get(&resolved_name).unwrap().clone();
-        ctx.array_type_map.insert(element_type_id, existing);
-        return;
-    }
+    assert_eq!(
+        type_table.representation_head(element_type_id),
+        element_type_id,
+        "TEMP array newtype"
+    );
 
     let fq = mangle_builtin_array_type(&elem_name);
     let elem_wir_type = ctx.boxed_slot_type(
@@ -499,14 +486,7 @@ fn register_raw_array_type(
     );
 
     ctx.array_type_map.insert(element_type_id, type_id.clone());
-    ctx.array_type_by_name
-        .insert(elem_name.clone(), type_id.clone());
-    // Also register under the newtype-resolved name so that e.g.
-    // `List<[FieldName, FieldValue]>` and `List<[String, List<u8>]>` share
-    // the same raw array type when FieldName/FieldValue are newtypes.
-    if resolved_name != elem_name {
-        ctx.array_type_by_name.insert(resolved_name, type_id);
-    }
+    ctx.array_type_by_name.insert(elem_name, type_id);
 }
 
 /// Register a cell struct for every concrete cell type, inner cells first. A
@@ -635,16 +615,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 let has_newtypes = elements
                     .iter()
                     .any(|e| type_table.representation_head(*e) != *e);
-                if has_newtypes {
-                    let resolved_elements: Vec<TypeId> = elements
-                        .iter()
-                        .map(|e| type_table.representation_head(*e))
-                        .collect();
-                    if let Some(existing) = ctx.tuple_type_map.get(&resolved_elements).cloned() {
-                        ctx.tuple_type_map.insert(elements.clone(), existing);
-                        continue;
-                    }
-                }
+                assert!(!has_newtypes, "TEMP tuple newtype");
 
                 // A tuple is a generic instance, so its elements are type
                 // arguments and take the module-qualified mangling. The
@@ -653,7 +624,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 // under two fqs and hit a `ref`/`ref null` validation mismatch.
                 let elem_names: Vec<String> = elements
                     .iter()
-                    .map(|&e| type_table.mangle_type_arg_rowless_resolving_newtypes(e))
+                    .map(|&e| type_table.mangle_type_arg_rowless(e))
                     .collect();
                 let fq = wir_tuple_type_key(&elem_names);
 

@@ -24,7 +24,7 @@ use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
 use crate::parallel::{Executor, lock};
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
 /// `aliased` are locals reachable through another handle, and `alias_groups`
@@ -375,7 +375,7 @@ pub(super) struct CallImmutability<'a> {
 
 impl<'a> CallImmutability<'a> {
     pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
-        let struct_fields = StructFieldTypes::new(&project.structs, type_table);
+        let struct_fields = StructFieldTypes::new(&project.structs);
         let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
             compute_receiver_mutating(project, type_table, &first_param_types, exec);
@@ -957,8 +957,8 @@ fn collect_mut_escaped_node(
 
 /// The key of the heap object a local's value may share: a struct handle, a
 /// cell, or an aggregate behind a reference. `None` for scalars.
-fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
-    fn key(type_id: TypeId, under_ref: bool, type_table: &TypeTable) -> Option<TypeKey> {
+fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
+    fn key(type_id: TypeId, under_ref: bool, type_table: &TypeTable) -> Option<TypeId> {
         match type_table.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 if type_table.cell_payload(type_id).is_some() =>
@@ -974,15 +974,13 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             // A value tuple, and a `List`, is copied on assignment, so only a
             // handle to one shares it.
             ResolvedType::Struct { .. } if type_table.is_list(type_id) => {
-                under_ref.then(|| type_table.type_key(type_id))
+                under_ref.then_some(type_id)
             }
-            ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
+            ResolvedType::Struct { .. } => Some(type_id),
             ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
-                under_ref.then(|| type_table.type_key(type_id))
+                under_ref.then_some(type_id)
             }
-            ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => {
-                under_ref.then(|| type_table.type_key(type_id))
-            }
+            ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => under_ref.then_some(type_id),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -1007,7 +1005,7 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
 /// Edges between locals that may share one heap object by
 /// [`shared_object_key`], a star around each key's first-seen local.
 fn same_pointee_reference_edges(locals: &[NirLocal], type_table: &TypeTable) -> Vec<(u32, u32)> {
-    let mut rep: IndexMap<TypeKey, u32> = IndexMap::default();
+    let mut rep: IndexMap<TypeId, u32> = IndexMap::default();
     let mut edges = Vec::new();
     for (i, l) in locals.iter().enumerate() {
         let Some(key) = shared_object_key(l.type_id, type_table) else {

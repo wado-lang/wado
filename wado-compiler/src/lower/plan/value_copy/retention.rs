@@ -1109,7 +1109,7 @@ impl RefCarrying<'_> {
         };
         self.structs
             .iter()
-            .find(|s| s.represents(self.type_table, *def, type_args))
+            .find(|s| s.represents(*def, type_args))
             .map(|s| s.fields.iter().map(|f| f.type_id).collect())
     }
 

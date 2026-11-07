@@ -9,7 +9,7 @@ use crate::hashmap::IndexMap;
 use crate::nir::{StructDecls, StructInstance, struct_instance};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 /// A struct field as a literal spells it.
 pub struct FieldShape {
@@ -24,11 +24,11 @@ pub struct CaseShape {
 }
 
 /// A variant type as its declaration and argument types.
-type VariantInstance = (DefId, Vec<TypeKey>);
+type VariantInstance = (DefId, Vec<TypeId>);
 
 fn variant_instance(type_id: TypeId, type_table: &TypeTable) -> Option<VariantInstance> {
     match type_table.get(type_id) {
-        ResolvedType::Variant { def, type_args } => Some((*def, type_table.type_keys(type_args))),
+        ResolvedType::Variant { def, type_args } => Some((*def, type_args.clone())),
         _ => None,
     }
 }
@@ -50,7 +50,7 @@ impl AggregateShapes {
     #[must_use]
     pub fn of(project: &NirPackage) -> Self {
         let type_table = project.type_table.borrow();
-        let structs = StructDecls::new(&project.structs, &type_table)
+        let structs = StructDecls::new(&project.structs)
             .fields()
             .map(|(instance, fields)| {
                 let shapes = fields
@@ -63,25 +63,22 @@ impl AggregateShapes {
                 (instance.clone(), shapes)
             })
             .collect();
-        let mut instances: IndexMap<VariantInstance, Vec<TypeId>> = IndexMap::default();
-        for (_, ty) in type_table.all_types() {
-            let ResolvedType::Variant { def, type_args } = ty else {
-                continue;
-            };
-            let def = *def;
-            if project.find_variant(def).is_some() {
-                instances
-                    .entry((def, type_table.type_keys(type_args)))
-                    .or_insert_with(|| type_args.clone());
-            }
-        }
+        let instances: Vec<VariantInstance> = type_table
+            .all_types()
+            .filter_map(|(_, ty)| match ty {
+                ResolvedType::Variant { def, type_args } if project.find_variant(*def).is_some() => {
+                    Some((*def, type_args.clone()))
+                }
+                _ => None,
+            })
+            .collect();
         drop(type_table);
         let cases = instances
             .into_iter()
-            .map(|(instance, type_args)| {
+            .map(|instance| {
                 let def = instance.0;
                 let payloads = project
-                    .variant_cases(def, &type_args)
+                    .variant_cases(def, &instance.1)
                     .expect("only declared variants are collected");
                 let declared = &project.find_variant(def).expect("declared").cases;
                 let shapes = payloads

@@ -42,7 +42,7 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeMemo, TypeTable};
+use crate::type_table::{TypeMemo, TypeTable};
 
 /// A frame: a function, or a global's initializer, whose locals have locations
 /// of their own.
@@ -223,11 +223,11 @@ enum Handle {
 /// The types a walk is inside of: a struct by its type, a variant by its
 /// declaration and its arguments resolved to concrete types. A cycle back to
 /// one adds no path to a handle.
-type UnderWay = CutWalk<(Option<DefId>, Vec<TypeKey>)>;
+type UnderWay = CutWalk<(Option<DefId>, Vec<TypeId>)>;
 
 /// `walk` inside `key`, or `false` where `key` is already under way.
 fn guarded(
-    key: (Option<DefId>, Vec<TypeKey>),
+    key: (Option<DefId>, Vec<TypeId>),
     under_way: &mut UnderWay,
     walk: impl FnOnce(&mut UnderWay) -> bool,
 ) -> bool {
@@ -254,7 +254,7 @@ impl<'a> HoldsHandle<'a> {
     }
 
     fn of(&self, ty: TypeId) -> bool {
-        self.known.get_or_compute(self.type_table.type_key(ty), || {
+        self.known.get_or_compute(ty, || {
             self.walk(ty, None, &mut UnderWay::new(false), 0)
         })
     }
@@ -291,7 +291,7 @@ impl<'a> HoldsHandle<'a> {
                 let Some(fields) = self.fields.get(&(*def, type_args.clone())) else {
                     return true;
                 };
-                guarded((None, vec![tt.type_key(ty)]), under_way, |under_way| {
+                guarded((None, vec![ty]), under_way, |under_way| {
                     fields
                         .iter()
                         .any(|f| self.walk(f.type_id, None, under_way, next))
@@ -314,9 +314,9 @@ impl<'a> HoldsHandle<'a> {
                 };
                 // An instance whose arguments resolve is under way once, so a
                 // variant recursing through its own instance ends there.
-                let resolved: Option<Vec<TypeKey>> = type_args
+                let resolved: Option<Vec<TypeId>> = type_args
                     .iter()
-                    .map(|&a| resolve_param_in_env(a, env, tt).map(|c| tt.type_key(c)))
+                    .map(|&a| resolve_param_in_env(a, env, tt))
                     .collect();
                 match resolved {
                     Some(args) => guarded((Some(*def), args), under_way, |u| {

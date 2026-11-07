@@ -23,7 +23,7 @@ use crate::niri::{
 };
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use super::arena_query::{MarkerBuiltins, RareRuns};
 use super::body_memo::BodyMemo;
@@ -59,8 +59,8 @@ const MAX_CLONE_EXPRS: usize = 2000;
 /// `Int` / `Float` carry their type so a width mismatch is rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum FieldConst {
-    Int(u64, ConstType),
-    Float(u64, ConstType),
+    Int(u64, TypeId),
+    Float(u64, TypeId),
     Bool(bool),
     Char(char),
     /// A literal built of constants alone, such as a `String` literal. The
@@ -72,55 +72,20 @@ enum FieldConst {
     GlobalRef {
         module_source: ModuleSource,
         name: String,
-        global_type: ConstType,
-        ref_type: ConstType,
+        global_type: TypeId,
+        ref_type: TypeId,
     },
-}
-
-/// The type of a constant: its key says which constants are one, and its id
-/// types a node rebuilt from it.
-#[derive(Debug, Clone, Copy)]
-struct ConstType {
-    key: TypeKey,
-    id: TypeId,
-}
-
-impl ConstType {
-    fn of(types: &TypeTable, id: TypeId) -> Self {
-        ConstType {
-            key: types.type_key(id),
-            id,
-        }
-    }
-
-    fn admits(&self, types: &TypeTable, at: TypeId) -> bool {
-        self.key == types.type_key(at)
-    }
-}
-
-impl PartialEq for ConstType {
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key
-    }
-}
-
-impl Eq for ConstType {}
-
-impl std::hash::Hash for ConstType {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.key.hash(state);
-    }
 }
 
 /// A closed literal tree, held outside any body so a clone can rebuild it.
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum ConstLiteral {
-    Packed(PackedData, ConstType),
+    Packed(PackedData, TypeId),
     Struct {
-        struct_type: ConstType,
+        struct_type: TypeId,
         struct_name: String,
         /// Index, name, value and type of each field.
-        fields: Vec<(u32, String, FieldConst, ConstType)>,
+        fields: Vec<(u32, String, FieldConst, TypeId)>,
     },
 }
 
@@ -133,7 +98,7 @@ impl FieldConst {
         op: Operand,
     ) -> Option<Self> {
         match op {
-            Operand::Value(_) => Self::of_scalar(body, types, op),
+            Operand::Value(_) => Self::of_scalar(body, op),
             Operand::Expr(expr) => Self::of_literal(body, types, immutable, expr),
         }
     }
@@ -141,11 +106,11 @@ impl FieldConst {
     /// The scalar constant an operand holds. Only a scalar may stand for a
     /// whole parameter: a literal there would name a new object, and the
     /// body's writes to the parameter's fields would reach none of its reads.
-    fn of_scalar(body: &Body, types: &TypeTable, op: Operand) -> Option<Self> {
+    fn of_scalar(body: &Body, op: Operand) -> Option<Self> {
         let value = op.as_value()?;
         match body.values.kind(value) {
-            ValueKind::Int(n, ty) => Some(FieldConst::Int(*n, ConstType::of(types, *ty))),
-            ValueKind::Float(bits, ty) => Some(FieldConst::Float(*bits, ConstType::of(types, *ty))),
+            ValueKind::Int(n, ty) => Some(FieldConst::Int(*n, *ty)),
+            ValueKind::Float(bits, ty) => Some(FieldConst::Float(*bits, *ty)),
             ValueKind::Bool(b) => Some(FieldConst::Bool(*b)),
             ValueKind::Char(c) => Some(FieldConst::Char(*c)),
             ValueKind::Null
@@ -170,20 +135,20 @@ impl FieldConst {
         let node = &body.exprs[expr];
         let literal = match &node.kind {
             ExprKind::PackedArray(data) if data.len() <= MAX_SEQ_ELEMENTS => {
-                ConstLiteral::Packed(data.clone(), ConstType::of(types, node.type_id))
+                ConstLiteral::Packed(data.clone(), node.type_id)
             }
             ExprKind::StructLiteral {
                 struct_type,
                 struct_name,
                 fields,
             } => ConstLiteral::Struct {
-                struct_type: ConstType::of(types, *struct_type),
+                struct_type: *struct_type,
                 struct_name: struct_name.clone(),
                 fields: fields
                     .iter()
                     .map(|f| {
                         let value = Self::of_operand(body, types, immutable, f.value)?;
-                        let ty = ConstType::of(types, body.operand_type(f.value));
+                        let ty = body.operand_type(f.value);
                         Some((f.field_index, f.name.clone(), value, ty))
                     })
                     .collect::<Option<_>>()?,
@@ -200,8 +165,8 @@ impl FieldConst {
                 return Some(FieldConst::GlobalRef {
                     module_source: module_source.clone(),
                     name: name.clone(),
-                    global_type: ConstType::of(types, body.exprs[*inner].type_id),
-                    ref_type: ConstType::of(types, node.type_id),
+                    global_type: body.exprs[*inner].type_id,
+                    ref_type: node.type_id,
                 });
             }
             _ => return None,
@@ -220,10 +185,8 @@ impl FieldConst {
         span: Span,
     ) -> Option<Operand> {
         let kind = match self {
-            FieldConst::Int(n, ty) => ty.admits(types, at).then_some(ValueKind::Int(*n, at))?,
-            FieldConst::Float(bits, ty) => ty
-                .admits(types, at)
-                .then_some(ValueKind::Float(*bits, at))?,
+            FieldConst::Int(n, ty) => (*ty == at).then_some(ValueKind::Int(*n, at))?,
+            FieldConst::Float(bits, ty) => (*ty == at).then_some(ValueKind::Float(*bits, at))?,
             FieldConst::Bool(b) => ValueKind::Bool(*b),
             FieldConst::Char(c) => ValueKind::Char(*c),
             FieldConst::Literal(literal) => {
@@ -235,7 +198,7 @@ impl FieldConst {
                 global_type,
                 ref_type,
             } => {
-                if !ref_type.admits(types, at) {
+                if *ref_type != at {
                     return None;
                 }
                 let global = engine.alloc_expr(
@@ -243,7 +206,7 @@ impl FieldConst {
                         module_source: module_source.clone(),
                         name: name.clone(),
                     },
-                    global_type.id,
+                    *global_type,
                     span,
                 );
                 let reference = ExprKind::Unary {
@@ -258,7 +221,7 @@ impl FieldConst {
 }
 
 impl ConstLiteral {
-    fn ty(&self) -> ConstType {
+    fn ty(&self) -> TypeId {
         match self {
             ConstLiteral::Packed(_, ty)
             | ConstLiteral::Struct {
@@ -274,7 +237,7 @@ impl ConstLiteral {
         at: TypeId,
         span: Span,
     ) -> Option<ExprId> {
-        if !self.ty().admits(types, at) {
+        if self.ty() != at {
             return None;
         }
         let kind = match self {
@@ -289,13 +252,13 @@ impl ConstLiteral {
                     .map(|(field_index, name, value, ty)| {
                         Some(ArenaStructField {
                             name: name.clone(),
-                            value: value.operand_at(engine, types, ty.id, span)?,
+                            value: value.operand_at(engine, types, *ty, span)?,
                             field_index: *field_index,
                         })
                     })
                     .collect::<Option<_>>()?;
                 ExprKind::StructLiteral {
-                    struct_type: struct_type.id,
+                    struct_type: *struct_type,
                     struct_name: struct_name.clone(),
                     fields,
                 }
@@ -363,7 +326,7 @@ struct ParamSeed {
     /// The struct the parameter referenced when the clone was minted,
     /// re-checked before the constants are believed — `sroa_param` reshapes
     /// parameters.
-    pointee: TypeKey,
+    pointee: TypeId,
     consts: FieldConsts,
 }
 
@@ -476,7 +439,7 @@ struct Signature {
     /// The struct type each parameter's reference points at, when it is one.
     /// `None` for a parameter the callee may store a reference to: it outlives
     /// the call, so its fields are not ours to freeze.
-    param_struct: Vec<Option<TypeKey>>,
+    param_struct: Vec<Option<TypeId>>,
     /// Whether the function has a body the summary can walk and a clone can copy.
     has_body: bool,
     /// Whether each parameter's own slot may be replaced by a constant. A
@@ -559,7 +522,7 @@ fn is_param_fixed(param: &NirParam) -> bool {
 /// The struct type a `&T` / `&mut T` points at, looking through newtypes, or
 /// the cell it is. `None` for a non-reference type or a reference to a
 /// non-struct.
-fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
+fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => struct_base(type_id, types),
         _ => None,
@@ -569,7 +532,7 @@ fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
 /// The struct a parameter holds, by value or through one reference, looking
 /// through newtypes. A by-value one is the callee's own copy, so only a slot
 /// the body never rebinds holds the caller's fields throughout.
-fn held_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
+fn held_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => reference_struct(type_id, types),
         _ => struct_base(type_id, types),
@@ -588,14 +551,14 @@ fn hands_out_object(type_id: TypeId, types: &TypeTable) -> bool {
 
 /// The struct type behind a type, looking through references and newtypes, or
 /// the cell a reference is, keyed so `&X` and `&mut X` agree.
-fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
+fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
     if types.cell_payload(type_id).is_some() {
         return Some(types.cell_key(type_id));
     }
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_base(*inner, types),
         ResolvedType::Newtype { base_type, .. } => struct_base(*base_type, types),
-        ResolvedType::Struct { .. } => Some(types.type_key(type_id)),
+        ResolvedType::Struct { .. } => Some(type_id),
         _ => None,
     }
 }
@@ -921,7 +884,7 @@ fn struct_literal_consts(
     types: &TypeTable,
     immutable: &IndexSet<GlobalKey>,
     value: Operand,
-    expected: Option<TypeKey>,
+    expected: Option<TypeId>,
 ) -> Option<FieldConsts> {
     let mut expr = body.strip_casts(value.as_expr()?);
     if let ExprKind::Unary {
@@ -1319,7 +1282,7 @@ fn select_sites(
                         && !signature.on_cycle
                         && signature.param_fixed[position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
-                        && let Some(value) = FieldConst::of_scalar(body, types, arg)
+                        && let Some(value) = FieldConst::of_scalar(body, arg)
                             .filter(|_| signature.literal_specializable)
                             .or_else(|| constant_field_read(body, roots, arg))
                     {
@@ -1406,7 +1369,7 @@ fn constant_field_read(
 /// each field the callee reads and never writes.
 fn select_field_bindings(
     caller: SelectField,
-    (callee, param_local, pointee): (FuncId, u32, TypeKey),
+    (callee, param_local, pointee): (FuncId, u32, TypeId),
     arg: Operand,
     bindings: &mut Vec<Binding>,
 ) {
@@ -1542,8 +1505,6 @@ fn collect_call_constants(
     exec: &Executor,
 ) -> CallConsts {
     let functions = &project.functions;
-    let types = project.type_table.borrow();
-    let types: &TypeTable = &types;
     let positions: Vec<usize> = reachable.iter().copied().collect();
     let per_function = exec.map(&positions, |&pos| {
         let func = functions[pos].borrow();
@@ -1551,7 +1512,7 @@ fn collect_call_constants(
         if !func.is_dead
             && let Some(body) = &func.body
         {
-            collect_body_call_constants(body, types, &mut constants);
+            collect_body_call_constants(body, &mut constants);
         }
         constants
     });
@@ -1560,7 +1521,7 @@ fn collect_call_constants(
         join_call(&mut constants, callee, here);
     }
     for global in &project.globals {
-        collect_body_call_constants(global.init.slot_expr().body(), types, &mut constants);
+        collect_body_call_constants(global.init.slot_expr().body(), &mut constants);
     }
     constants
 }
@@ -1579,7 +1540,7 @@ fn join_call(into: &mut CallConsts, callee: FuncId, here: Vec<Option<FieldConst>
     }
 }
 
-fn collect_body_call_constants(body: &Body, types: &TypeTable, constants: &mut CallConsts) {
+fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(e) = node else { return };
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
@@ -1589,7 +1550,7 @@ fn collect_body_call_constants(body: &Body, types: &TypeTable, constants: &mut C
             .iter()
             .map(|arg| {
                 (!arg.is_mut)
-                    .then(|| FieldConst::of_scalar(body, types, arg.expr))
+                    .then(|| FieldConst::of_scalar(body, arg.expr))
                     .flatten()
             })
             .collect();
@@ -2096,7 +2057,7 @@ fn redirect_const_reads(
         let (type_id, span) = (node.type_id, node.span);
         let operand = match &value {
             FieldConst::Literal(literal) => {
-                if !literal.ty().admits(types, type_id) {
+                if literal.ty() != type_id {
                     continue;
                 }
                 let key = Arc::as_ptr(literal);

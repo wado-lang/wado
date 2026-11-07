@@ -23,7 +23,7 @@ use crate::name::{
 use crate::nir_arena::{Body, ExprBody, Tracked};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
 use crate::token::Span;
-use crate::type_table::{InstanceArg, TypeTable};
+use crate::type_table::TypeTable;
 
 /// Canonical identity of a function entity. Minted in `lower` over the
 /// post-monomorphization function set and intrinsic to the entity — not its
@@ -1020,21 +1020,20 @@ pub struct NirStruct {
     pub wire_name_policy: Option<ast::NamePolicy>,
 }
 
-/// A concrete struct type as its declaration and argument types: what tells
-/// two instances apart whichever ids spell their arguments.
-pub type StructInstance = (StructDef, Vec<InstanceArg>);
+/// A concrete struct type as its declaration and argument types.
+pub type StructInstance = (StructDef, Vec<TypeId>);
 
 /// The instance `type_id` is, when it is a struct type.
 #[must_use]
 pub fn struct_instance(type_id: TypeId, type_table: &TypeTable) -> Option<StructInstance> {
     let (def, type_args) = type_table.struct_parts(type_id)?;
-    Some((def, type_table.instance_args(type_args)))
+    Some((def, type_args.to_vec()))
 }
 
 impl NirStruct {
     /// The instance this declaration reifies, when it is concrete.
     #[must_use]
-    pub fn instance(&self, type_table: &TypeTable) -> Option<StructInstance> {
+    pub fn instance(&self) -> Option<StructInstance> {
         if !self.type_params.is_empty() {
             return None;
         }
@@ -1042,7 +1041,7 @@ impl NirStruct {
             .monomorph_info
             .as_ref()
             .map_or(&[][..], |m| &m.impl_type_args);
-        Some((self.def, type_table.instance_args(args)))
+        Some((self.def, args.to_vec()))
     }
 
     /// The fields in `field_index` order, which is how a struct literal lowers.
@@ -1064,26 +1063,14 @@ pub struct StructDecls<'a>(IndexMap<StructInstance, &'a NirStruct>);
 
 impl<'a> StructDecls<'a> {
     #[must_use]
-    pub fn new(structs: &'a [NirStruct], type_table: &TypeTable) -> Self {
+    pub fn new(structs: &'a [NirStruct]) -> Self {
         let mut by_instance: IndexMap<StructInstance, &NirStruct> = IndexMap::default();
         for decl in structs {
-            let Some(instance) = decl.instance(type_table) else {
+            let Some(instance) = decl.instance() else {
                 continue;
             };
-            // Instances whose arguments differ only by a newtype or a row are
-            // declared apart and are one type.
-            let Some(first) = by_instance.get(&instance) else {
-                by_instance.insert(instance, decl);
-                continue;
-            };
-            let field_types = |s: &NirStruct| {
-                let ids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
-                type_table.instance_args(&ids)
-            };
-            assert!(
-                field_types(first) == field_types(decl),
-                "one struct type has one layout"
-            );
+            let previous = by_instance.insert(instance, decl);
+            assert!(previous.is_none(), "one struct type has one declaration");
         }
         Self(by_instance)
     }
@@ -1140,8 +1127,8 @@ pub struct StructFieldTypes(IndexMap<StructInstance, Vec<TypeId>>);
 
 impl StructFieldTypes {
     #[must_use]
-    pub fn new(structs: &[NirStruct], type_table: &TypeTable) -> Self {
-        StructDecls::new(structs, type_table).field_types()
+    pub fn new(structs: &[NirStruct]) -> Self {
+        StructDecls::new(structs).field_types()
     }
 
     /// The field types of `type_id`, when it is a concrete struct type or a

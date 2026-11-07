@@ -126,15 +126,10 @@ impl FlatPackage {
     }
 
     /// The listed struct `def` instantiated with `type_args` lowers as.
-    pub fn listed_struct(
-        &self,
-        type_table: &TypeTable,
-        def: StructDef,
-        type_args: &[TypeId],
-    ) -> Option<&TirStruct> {
+    pub fn listed_struct(&self, def: StructDef, type_args: &[TypeId]) -> Option<&TirStruct> {
         self.structs
             .iter()
-            .find(|s| s.represents(type_table, def, type_args))
+            .find(|s| s.represents(def, type_args))
     }
 
     /// Erase newtypes and `flags`, and rewrite every type the functions,

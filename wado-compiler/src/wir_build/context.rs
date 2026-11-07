@@ -779,7 +779,7 @@ impl<'a> WirContext<'a> {
     /// value, which a move empties (WEP: Affine Types).
     pub fn is_affine(&self, type_table: &TypeTable, type_id: TypeId) -> bool {
         self.affine
-            .get_or_compute(type_table.type_key(type_id), || {
+            .get_or_compute(type_id, || {
                 type_table.holds_affine_resource(type_id)
             })
     }

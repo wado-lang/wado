@@ -179,7 +179,7 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
     let type_table: &TypeTable = &types;
     let shared_escape = SharedEscape::new(project, type_table);
     let funcs = &project.functions;
-    let structs = &StructDecls::new(&project.structs, type_table);
+    let structs = &StructDecls::new(&project.structs);
     let string_inline_max_bytes = project.string_inline_max_bytes;
     // Each visit memoizes its callee verdicts afresh: a memo seeds a cycle with
     // a provisional answer, so one shared across visits would answer by which

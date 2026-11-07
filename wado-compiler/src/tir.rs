@@ -21,7 +21,7 @@ use crate::name::{DeclaredHead, FunctionId, LocalMethodName, checked_name, unche
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
 use crate::token::{Quote, Span};
-use crate::type_table::{AnonStructId, TypeKey, TypeTable};
+use crate::type_table::{AnonStructId, TypeTable};
 
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
@@ -306,7 +306,7 @@ impl SubstitutionContext {
 
 /// Type identifier for resolved types in TIR.
 /// This is a newtype wrapper to prevent misuse of raw integers as `TypeId`s.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct TypeId(pub u32);
 
 impl std::fmt::Display for TypeId {
@@ -320,7 +320,7 @@ impl std::fmt::Display for TypeId {
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub struct ObjectTypes {
     any: bool,
-    keys: IndexSet<TypeKey>,
+    keys: IndexSet<TypeId>,
 }
 
 impl ObjectTypes {
@@ -333,7 +333,7 @@ impl ObjectTypes {
     }
 
     /// The set of `key` alone.
-    pub fn one(key: TypeKey) -> Self {
+    pub fn one(key: TypeId) -> Self {
         Self {
             any: false,
             keys: std::iter::once(key).collect(),
@@ -346,13 +346,13 @@ impl ObjectTypes {
     }
 
     /// The keys of a set that is not [`Self::is_any`].
-    pub fn keys(&self) -> impl Iterator<Item = TypeKey> + '_ {
+    pub fn keys(&self) -> impl Iterator<Item = TypeId> + '_ {
         assert!(!self.any, "an `any` set has no key list");
         self.keys.iter().copied()
     }
 
     /// Whether `key` is in the set.
-    pub fn contains(&self, key: TypeKey) -> bool {
+    pub fn contains(&self, key: TypeId) -> bool {
         self.any || self.keys.contains(&key)
     }
 
@@ -362,7 +362,7 @@ impl ObjectTypes {
     }
 
     /// Add `key`.
-    pub fn insert(&mut self, key: TypeKey) {
+    pub fn insert(&mut self, key: TypeId) {
         if !self.any {
             self.keys.insert(key);
         }
@@ -3596,18 +3596,10 @@ pub struct TirStruct {
 }
 
 impl TirStruct {
-    /// Whether `def` at `type_args` lowers as this struct. `self.name` is
-    /// spelled before the boxing rewrite respells a `&mut` argument, so the
-    /// arguments are compared by key instead.
+    /// Whether `def` at `type_args` lowers as this struct.
     #[must_use]
-    pub fn represents(&self, type_table: &TypeTable, def: StructDef, type_args: &[TypeId]) -> bool {
-        self.def == def
-            && self.type_args.len() == type_args.len()
-            && self
-                .type_args
-                .iter()
-                .zip(type_args)
-                .all(|(&own, &wanted)| type_table.type_key(own) == type_table.type_key(wanted))
+    pub fn represents(&self, def: StructDef, type_args: &[TypeId]) -> bool {
+        self.def == def && self.type_args == type_args
     }
 
     /// The struct of anonymous shape `shape`, holding `fields`.

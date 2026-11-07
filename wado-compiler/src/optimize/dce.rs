@@ -120,8 +120,8 @@ impl DceAnalysis {
     /// that pulls a struct's field types into the reachable set and by the retain
     /// that drops the rest. A generic declaration survives while any instance
     /// of it does.
-    fn keeps_struct(&self, s: &NirStruct, type_table: &TypeTable) -> bool {
-        match s.instance(type_table) {
+    fn keeps_struct(&self, s: &NirStruct) -> bool {
+        match s.instance() {
             Some(instance) => self.structs.contains(&instance),
             None => self.struct_heads.contains(&s.def),
         }
@@ -1583,7 +1583,7 @@ fn populate_type_reachability(
 
         // A struct that survives the sweep keeps its field types.
         for tir_struct in &project.structs {
-            if analysis.keeps_struct(tir_struct, &type_table) {
+            if analysis.keeps_struct(tir_struct) {
                 for field in &tir_struct.fields {
                     collect_type_transitive(field.type_id, &type_table, &mut analysis.types);
                 }
@@ -1761,12 +1761,7 @@ fn collect_type_dependencies(
 /// `analysis` is precomputed by [`analyze_dce`] — this function only
 /// retains entries matching its precomputed indexes.
 pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
-    {
-        let type_table = project.type_table.borrow();
-        project
-            .structs
-            .retain(|s| analysis.keeps_struct(s, &type_table));
-    }
+    project.structs.retain(|s| analysis.keeps_struct(s));
     // Loop-invariant, and the loop it would otherwise sit in is this pass's hot
     // spot: it reads `project` and the type table, neither of which the retains
     // below mutate.

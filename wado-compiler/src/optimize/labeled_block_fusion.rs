@@ -42,43 +42,32 @@ const HOISTED_VALUE: &str = "hoisted_value";
 /// The rule keeps no per-function state: every precondition is re-derived from
 /// the current body on each `apply_block`, since fusion candidates appear and
 /// disappear as neighbouring rewrites land.
-pub(super) struct LabeledBlockFusionRule<'t> {
-    type_table: &'t TypeTable,
-}
-
-/// Build a [`LabeledBlockFusionRule`] for one function. Mirrors the
-/// `build_ref_elim` / `build_elide_box_local` constructors so the peephole
-/// wiring is uniform; no per-function analysis is needed yet.
-pub(super) fn build_labeled_block_fusion(type_table: &TypeTable) -> LabeledBlockFusionRule<'_> {
-    LabeledBlockFusionRule { type_table }
-}
+pub(super) struct LabeledBlockFusionRule;
 
 /// The function's locals, asked whether a payload binding slot is declared
 /// with a payload's type.
 #[derive(Clone, Copy)]
 struct BindingSlots<'a> {
     locals: &'a [NirLocal],
-    type_table: &'a TypeTable,
 }
 
 impl<'a> BindingSlots<'a> {
-    fn of(engine: &'a Engine, type_table: &'a TypeTable) -> Self {
+    fn of(engine: &'a Engine) -> Self {
         Self {
             locals: engine.locals(),
-            type_table,
         }
     }
 
     fn holds(self, binding: u32, type_id: TypeId) -> bool {
         self.locals
             .get(binding as usize)
-            .is_some_and(|local| self.type_table.same_type(local.type_id, type_id))
+            .is_some_and(|local| local.type_id == type_id)
     }
 }
 
-impl Rule for LabeledBlockFusionRule<'_> {
+impl Rule for LabeledBlockFusionRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let slots = BindingSlots::of(engine, self.type_table);
+        let slots = BindingSlots::of(engine);
         let Some(plan) = plan_threading(engine.body, id, slots) else {
             return false;
         };
@@ -93,7 +82,7 @@ impl Rule for LabeledBlockFusionRule<'_> {
         }
         let yields = block_yields_value(engine, block);
         for i in 0..stmts.len() - 1 {
-            let slots = BindingSlots::of(engine, self.type_table);
+            let slots = BindingSlots::of(engine);
             let Some(info) = check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], slots)
             else {
                 continue;
@@ -125,7 +114,7 @@ impl Rule for LabeledBlockFusionRule<'_> {
             engine.note_elided_local(temp);
             return true;
         }
-        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i, self.type_table))
+        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i))
     }
 }
 
@@ -139,7 +128,6 @@ fn thread_bound_block(
     block: BlockId,
     stmts: &[StmtId],
     i: usize,
-    type_table: &TypeTable,
 ) -> bool {
     let StmtKind::Let {
         local_index: temp,
@@ -162,7 +150,7 @@ fn thread_bound_block(
     if !is_local(engine.body, scrut, temp) || body_uses(engine, temp) != 1 {
         return false;
     }
-    let slots = BindingSlots::of(engine, type_table);
+    let slots = BindingSlots::of(engine);
     let Some(plan) = plan_threading_of(engine.body, match_id, lb, slots) else {
         return false;
     };

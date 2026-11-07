@@ -38,7 +38,7 @@ use crate::parallel::Executor;
 use crate::pgo::HeatMap;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldInfo, WorldRegistry};
 
@@ -443,7 +443,7 @@ impl<'a> NarrowedParam<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SroaParamProjection {
     /// The struct type.
-    pub struct_key: TypeKey,
+    pub struct_key: TypeId,
     /// The field's declaration index and name in it.
     pub field_index: u32,
     pub field_name: String,
@@ -801,17 +801,9 @@ impl NirPackage {
     pub fn answers_calls(&self, id: FuncId, params: &[TypeId], ret: TypeId) -> bool {
         use cranelift_entity::EntityRef;
         let func = self.functions[id.index()].borrow();
-        let types = self.type_table.borrow();
-        (types.same_type(func.return_type, ret)
-            || func
-                .scalarized_from
-                .is_some_and(|v| types.same_type(v, ret)))
+        (func.return_type == ret || func.scalarized_from == Some(ret))
             && func.params.len() == params.len()
-            && func
-                .params
-                .iter()
-                .zip(params)
-                .all(|(p, &t)| types.same_type(p.type_id, t))
+            && func.params.iter().zip(params).all(|(p, &t)| p.type_id == t)
     }
 
     /// The function bound to each item an optimizer rewrite calls. Only an
@@ -1023,7 +1015,7 @@ mod tests {
 
     fn narrow_as(r: &mut Reshape, position: usize, field: &str, form: FieldForm) {
         let projection = SroaParamProjection {
-            struct_key: TypeTable::new().type_key(TypeTable::I32),
+            struct_key: TypeTable::I32,
             field_index: 0,
             field_name: field.to_string(),
             form,

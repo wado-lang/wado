@@ -28,7 +28,7 @@ use crate::tir::{
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
     TypeId,
 };
-use crate::type_table::{TypeKey, TypeMemo, TypeTable};
+use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
@@ -370,7 +370,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// payload once per path to it, exponentially many in a chain of variants
 /// that each hold the next twice. The depth limit makes the depth part of the
 /// answer.
-type CopyWalk = IndexMap<(TypeKey, usize), bool>;
+type CopyWalk = IndexMap<(TypeId, usize), bool>;
 
 /// [`needs_value_copy`], remembered for each type over one borrow of the type
 /// table: no mutation outlives the borrow, so no answer goes stale. A walk
@@ -390,7 +390,7 @@ impl<'a> CopyNeeds<'a> {
 
     pub fn of(&self, type_id: TypeId) -> bool {
         self.answers
-            .get_or_compute(self.type_table.type_key(type_id), || {
+            .get_or_compute(type_id, || {
                 needs_value_copy(type_id, self.type_table)
             })
     }
@@ -453,7 +453,7 @@ fn needs_copy_in_env(
     if env.is_some() {
         return needs_copy_walked(type_id, env, type_table, depth, walk);
     }
-    let key = (type_table.type_key(type_id), depth);
+    let key = (type_id, depth);
     if let Some(&answer) = walk.get(&key) {
         return answer;
     }

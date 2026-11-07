@@ -12,12 +12,12 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{ResolvedType, StructFields, TirExpr, TirExprKind, TypeId};
 use crate::tir_visitor::TirRefVisitor;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 /// A `fn` type's parameter and return types. A `fn` value passes where a
 /// `fn mut`, or one with other effects, is expected, so only the shape says
 /// which closures a value of the type can be.
-type FnShape = (Vec<TypeKey>, TypeKey);
+type FnShape = (Vec<TypeId>, TypeId);
 
 /// The types the closures of each shape capture: what a `fn` value of that
 /// shape can hold.
@@ -77,10 +77,7 @@ fn fn_shape(ty: TypeId, type_table: &TypeTable) -> Option<FnShape> {
             params,
             return_type,
             ..
-        } => Some((
-            type_table.type_keys(params),
-            type_table.type_key(*return_type),
-        )),
+        } => Some((params.clone(), *return_type)),
         _ => None,
     }
 }
@@ -89,8 +86,8 @@ fn fn_shape(ty: TypeId, type_table: &TypeTable) -> Option<FnShape> {
 /// one, which a `List` holds without naming its type.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Storage {
-    Of(TypeKey),
-    ArrayOf(TypeKey),
+    Of(TypeId),
+    ArrayOf(TypeId),
 }
 
 pub struct StorageReach<'a> {
@@ -180,9 +177,9 @@ impl<'a> StorageReach<'a> {
         ty: TypeId,
         owned: &IndexSet<Storage>,
         by_value: bool,
-        open: &mut IndexSet<(TypeKey, bool)>,
+        open: &mut IndexSet<(TypeId, bool)>,
     ) -> bool {
-        if !open.insert((self.type_table.type_key(ty), by_value)) {
+        if !open.insert((ty, by_value)) {
             return false;
         }
         match self.members(ty) {
@@ -220,9 +217,9 @@ impl<'a> StorageReach<'a> {
         ) {
             return Vec::new();
         }
-        let mut out = vec![Storage::Of(tt.type_key(ty))];
+        let mut out = vec![Storage::Of(ty)];
         if let Some(element) = self.array_element(ty) {
-            out.push(Storage::ArrayOf(tt.type_key(element)));
+            out.push(Storage::ArrayOf(element));
         }
         out
     }

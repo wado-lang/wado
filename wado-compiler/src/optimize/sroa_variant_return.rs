@@ -15,7 +15,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
@@ -242,8 +242,6 @@ fn rebox_stragglers(
     }
     let exec = gate.exec().clone();
     let reboxed = {
-        let type_table = project.type_table.borrow();
-        let type_table: &TypeTable = &type_table;
         let functions = &project.functions;
         exec.indices_where(functions.len(), |i| {
             let mut func = functions[i].borrow_mut();
@@ -255,7 +253,7 @@ fn rebox_stragglers(
             let own_return = func.return_type;
             let mut body = func.body.take().expect("checked above");
             let span = func.span;
-            let bound = handled_call_sites(&body, scalarized, own_return, type_table);
+            let bound = handled_call_sites(&body, scalarized, own_return);
             let targets = straggler_calls(&body, scalarized, &bound);
             let reboxed = !targets.is_empty();
             for call in targets {
@@ -282,7 +280,6 @@ fn rebox_stragglers_in_globals(
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
 ) -> bool {
     let mut changed = false;
-    let type_table = project.type_table.borrow();
     for global in &mut project.globals {
         let (span, name) = (global.span, global.name.clone());
         // An initializer has no `return`, so no call in it is a pass-through
@@ -290,7 +287,7 @@ fn rebox_stragglers_in_globals(
         let own_return = global.ty;
         let locals = &mut global.locals;
         let body = global.init.slot_expr_mut().body_mut();
-        let bound = handled_call_sites(body, scalarized, own_return, &type_table);
+        let bound = handled_call_sites(body, scalarized, own_return);
         let targets = straggler_calls(body, scalarized, &bound);
         if targets.is_empty() {
             continue;
@@ -322,11 +319,7 @@ fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)
         let Some(layout) = compute_layout(project, variant) else {
             continue;
         };
-        if project
-            .type_table
-            .borrow()
-            .same_type(layout.tuple_type, func.return_type)
-        {
+        if layout.tuple_type == func.return_type {
             out.insert(key, (variant, layout));
         }
     }
@@ -530,14 +523,13 @@ fn handled_call_sites(
     body: &Body,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
     own_return: TypeId,
-    type_table: &TypeTable,
 ) -> IndexSet<ExprId> {
     call_sites(body, own_return)
         .into_iter()
         .filter(|s| {
             scalarized
                 .get(&s.callee)
-                .is_some_and(|(_, l)| type_table.same_type(l.tuple_type, s.expected))
+                .is_some_and(|(_, l)| l.tuple_type == s.expected)
         })
         .map(|s| s.call)
         .collect()
@@ -759,12 +751,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
         // hole it guards opens when `nir/inline` plants a call site after
         // validation, which no hand-written source can force, and this runs
         // over every fixture in the suite.
-        let handled = handled_call_sites(
-            body,
-            &scalarized,
-            func.return_type,
-            &project.type_table.borrow(),
-        );
+        let handled = handled_call_sites(body, &scalarized, func.return_type);
         let stragglers = straggler_calls(body, &scalarized, &handled);
         // `straggler_calls` descends from the root, so it never sees the nodes a
         // rewrite orphaned — the arena is not compacted, and reporting those
@@ -787,10 +774,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
                 continue;
             };
             assert!(
-                project
-                    .type_table
-                    .borrow()
-                    .same_type(site.expected, layout.tuple_type),
+                site.expected == layout.tuple_type,
                 "variant-return SROA left local {local} in `{}` typed by the variant \
                  its callee no longer returns",
                 func.name
@@ -803,7 +787,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     for global in &project.globals {
         let body = global.init.slot_expr().body();
         let handled =
-            handled_call_sites(body, &scalarized, global.ty, &project.type_table.borrow());
+            handled_call_sites(body, &scalarized, global.ty);
         let stragglers = straggler_calls(body, &scalarized, &handled);
         assert!(
             stragglers.is_empty(),
@@ -1012,8 +996,7 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         };
         // Shared layout: a slot already carrying this type is reused, so
         // `Option<char>` stays `[i32, char]` instead of growing a second slot.
-        let same_type = |t: &TypeId| project.type_table.borrow().same_type(*t, slot_type);
-        let index = if let Some(i) = slot_types.iter().position(same_type) {
+        let index = if let Some(i) = slot_types.iter().position(|&t| t == slot_type) {
             i
         } else {
             slot_types.push(slot_type);
@@ -1090,7 +1073,7 @@ fn collect_and_validate(
     exec: &Executor,
 ) -> IndexMap<FuncId, Candidate> {
     let mut candidates: IndexMap<FuncId, Candidate> = IndexMap::default();
-    let mut layout_cache: IndexMap<TypeKey, Option<Layout>> = IndexMap::default();
+    let mut layout_cache: IndexMap<TypeId, Option<Layout>> = IndexMap::default();
 
     for &fid in dirty {
         let func = project.functions[fid.index()].borrow();
@@ -1099,9 +1082,8 @@ fn collect_and_validate(
         }
         let Some(key) = func.id else { continue };
         let variant_type = func.return_type;
-        let type_key = project.type_table.borrow().type_key(variant_type);
         let layout = layout_cache
-            .entry(type_key)
+            .entry(variant_type)
             .or_insert_with(|| compute_layout(project, variant_type))
             .clone();
         let Some(layout) = layout else { continue };
@@ -1150,16 +1132,12 @@ fn collect_and_validate(
             }
             let func = project.functions[callee.index()].borrow();
             if !is_eligible(&func)
-                || !project
-                    .type_table
-                    .borrow()
-                    .same_type(func.return_type, variant_type)
+                || func.return_type != variant_type
             {
                 continue;
             }
-            let type_key = project.type_table.borrow().type_key(variant_type);
             let layout = layout_cache
-                .entry(type_key)
+                .entry(variant_type)
                 .or_insert_with(|| compute_layout(project, variant_type))
                 .clone();
             let Some(layout) = layout else { continue };
@@ -1295,17 +1273,15 @@ impl Returns<'_> {
             return self.block_tail_scalarizable(b);
         }
         match &body.exprs[expr].kind {
-            ExprKind::VariantConstruct { variant_type, .. } => {
-                self.type_table.same_type(*variant_type, cand.variant_type)
-            }
+            ExprKind::VariantConstruct { variant_type, .. } => *variant_type == cand.variant_type,
             // `return g(x)` where `g` shares the variant, hence the layout: `g`
             // already returns this function's tuple, whichever round rewrote it.
             ExprKind::Call { func_id, .. } => self
                 .tail_ok
                 .get(func_id)
-                .is_some_and(|&t| self.type_table.same_type(t, cand.variant_type)),
+                .is_some_and(|&t| t == cand.variant_type),
             ExprKind::Local { index, .. } => {
-                single_def_variant_construct(body, *index, cand, self.type_table).is_some()
+                single_def_variant_construct(body, *index, cand).is_some()
             }
             ExprKind::If {
                 then_branch,
@@ -1356,7 +1332,6 @@ fn single_def_variant_construct(
     body: &Body,
     local: u32,
     cand: &Candidate,
-    type_table: &TypeTable,
 ) -> Option<ExprId> {
     let mut defs: Vec<StmtId> = Vec::new();
     let mut reads = 0usize;
@@ -1380,7 +1355,7 @@ fn single_def_variant_construct(
     let init = value.as_expr()?;
     match &body.exprs[init].kind {
         ExprKind::VariantConstruct { variant_type, .. }
-            if type_table.same_type(*variant_type, cand.variant_type) =>
+            if *variant_type == cand.variant_type =>
         {
             Some(init)
         }
@@ -1701,15 +1676,14 @@ impl<'t> Rebind<'t> {
     /// object as it is; a cell does not.
     fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound> {
         let tt = self.type_table;
-        let payload = tt.type_key(payload_type);
         let declared = self.local_types[local as usize];
-        if tt.type_key(declared) == payload {
+        if declared == payload_type {
             return Some(Rebound::Direct { let_type: declared });
         }
         if let Some(held) = tt.cell_payload(declared) {
-            return (tt.type_key(held) == payload).then_some(Rebound::Celled { cell: declared });
+            return (held == payload_type).then_some(Rebound::Celled { cell: declared });
         }
-        (tt.type_key(tt.peel_refs(declared)) == payload)
+        (tt.peel_refs(declared) == payload_type)
             .then_some(Rebound::Direct { let_type: declared })
     }
 }
@@ -1840,7 +1814,7 @@ impl ReturnRewrite<'_> {
                 body.exprs[expr].type_id = cand.layout.tuple_type;
             }
             ExprKind::Local { index, .. } => {
-                if let Some(init) = single_def_variant_construct(body, index, cand, self.type_table)
+                if let Some(init) = single_def_variant_construct(body, index, cand)
                 {
                     rewrite_construct(body, init, cand, span);
                     body.exprs[expr].type_id = cand.layout.tuple_type;
@@ -2092,7 +2066,7 @@ fn rewrite_call_sites(
 /// into scalars, so no write allocates. It qualifies when every write builds a
 /// case and every read destructures, so nothing ever needs the variant whole.
 fn scalarize_variant_locals(project: &NirPackage, dirty: &[FuncId], touched: &mut IndexSet<usize>) {
-    let mut layouts: IndexMap<TypeKey, Option<Candidate>> = IndexMap::default();
+    let mut layouts: IndexMap<TypeId, Option<Candidate>> = IndexMap::default();
     for &fid in dirty {
         let mut func = project.functions[fid.index()].borrow_mut();
         let Some(mut body) = func.body.take() else {
@@ -2111,7 +2085,7 @@ fn scalarize_locals_in(
     project: &NirPackage,
     func: &mut NirFunction,
     body: &mut Body,
-    layouts: &mut IndexMap<TypeKey, Option<Candidate>>,
+    layouts: &mut IndexMap<TypeId, Option<Candidate>>,
 ) -> bool {
     let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
     for (local, l) in func.locals.iter().enumerate() {
@@ -2121,9 +2095,8 @@ fn scalarize_locals_in(
         {
             continue;
         }
-        let key = project.type_table.borrow().type_key(l.type_id);
         let cand = layouts
-            .entry(key)
+            .entry(l.type_id)
             .or_insert_with(|| local_candidate(project, l.type_id));
         if let Some(cand) = cand {
             candidates.insert(local, cand.clone());

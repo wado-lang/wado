@@ -96,7 +96,7 @@ fn settle(
     type_table: &TypeTable,
 ) -> IndexMap<ParamKey, ParamAbi> {
     loop {
-        while settle_forwards(&mut candidates, type_table) {}
+        while settle_forwards(&mut candidates) {}
         let before = candidates.len();
         candidates.retain(|_, c| splittable(&c.taken().0, type_table));
         if candidates.len() == before {
@@ -120,7 +120,7 @@ fn settle(
 /// One round over the forwards: drop a candidate whose callee does not take
 /// the ABI on the same shape, and widen one to the fields its callees take,
 /// which the call passes on from those it arrived in. Whether anything changed.
-fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &TypeTable) -> bool {
+fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>) -> bool {
     let keys: Vec<ParamKey> = candidates.keys().copied().collect();
     let mut changed = false;
     for key in keys {
@@ -135,9 +135,7 @@ fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &
                 // the callee holds the same fields. Not the same aggregate: one
                 // instance serves `Pair<Meters>` and `Pair<f32>` alike.
                 assert!(
-                    g.field_names == c.field_names
-                        && type_table.type_keys(&g.field_types)
-                            == type_table.type_keys(&c.field_types),
+                    g.field_names == c.field_names && g.field_types == c.field_types,
                     "a forwarded aggregate arrives in the fields it was sent in"
                 );
                 reads.extend(g.taken().1);
@@ -165,7 +163,7 @@ fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
 ) -> IndexMap<ParamKey, Candidate> {
-    let structs = StructDecls::new(&project.structs, type_table);
+    let structs = StructDecls::new(&project.structs);
     let mut out = IndexMap::default();
     for (func_idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();

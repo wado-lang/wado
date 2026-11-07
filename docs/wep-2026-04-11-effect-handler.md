@@ -88,8 +88,8 @@ section records only the current state.
   globals, structs, call-site rewriting, `WithHandler` desugaring),
   runs before `cm_binding` and before drop elaboration, so a handler
   held by value drops after the `with` restores the one it shadowed.
-  Per instantiation key (the declaration and the
-  `TypeKey`s of its type args), the synthesis substitutes the resource's operation template
+  Per instantiation key (the declaration and its type args),
+  the synthesis substitutes the resource's operation template
   and emits a distinct `$Dispatch_<module>/Stream<u8>` struct +
   `$effect_<module>/Stream<u8>` global +
   `$effect_dispatch__<module>/Stream<u8>__op` wrapper triple. The

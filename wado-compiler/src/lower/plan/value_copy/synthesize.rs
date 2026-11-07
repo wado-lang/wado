@@ -393,7 +393,7 @@ fn build_copy_return_expr(
     };
     // An unlisted instance lowers to `AbstractRef(Struct)`, which WIR-build
     // rejects in a `StructLiteral`.
-    let struct_def = project.listed_struct(&type_table.borrow(), def, type_args)?;
+    let struct_def = project.listed_struct(def, type_args)?;
     let right_size_backing = type_table.borrow().is_seq_container(type_id);
     Some(build_struct_copy(
         type_id,

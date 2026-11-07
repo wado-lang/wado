@@ -534,10 +534,10 @@ fn check_cm_boundary_representable_inner(
                     return recurse(value, Slot::Value, visited);
                 }
                 let name = type_table.struct_head_mangled_name(*def);
-                match struct_decl_of(type_table, *def, type_args, tir_modules) {
+                match struct_decl_of(*def, type_args, tir_modules) {
                     // Only the declaration stands for an instance no
                     // monomorphization listed.
-                    Some(decl) if !decl.represents(type_table, *def, type_args) => Err(format!(
+                    Some(decl) if !decl.represents(*def, type_args) => Err(format!(
                         "generic type `{}` has no Component Model value representation",
                         type_table.name(type_id)
                     )),
@@ -950,7 +950,7 @@ fn flat_types_from_type_id_inner(
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else if let Some(struct_decl) =
-                struct_decl_of(type_table, *def, type_args, tir_modules)
+                struct_decl_of(*def, type_args, tir_modules)
             {
                 flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
             } else {
@@ -1062,14 +1062,13 @@ fn declares_no_case(def: DefId, tir_modules: &IndexMap<ModuleSource, TirModule>)
 /// that instantiation and at the declaration otherwise. Keyed by identity, for
 /// the reason [`variant_decl_of`] is.
 pub(super) fn struct_decl_of(
-    type_table: &TypeTable,
     def: StructDef,
     type_args: &[TypeId],
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Option<TirStruct> {
     let mut declaration = None;
     for s in tir_modules.values().flat_map(|module| &module.structs) {
-        if s.represents(type_table, def, type_args) {
+        if s.represents(def, type_args) {
             return Some(s.clone());
         }
         if s.def == def && s.type_args.is_empty() {

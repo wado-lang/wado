@@ -81,7 +81,7 @@ pub struct TypeTable {
     trait_frames: IndexMap<DefId, Arc<TraitFrame>>,
     /// What [`Self::projection_bounds`] answered for each projection, which
     /// depends on nothing but the interned projection.
-    projection_bounds_cache: IndexMap<TypeKey, Arc<[TraitRef]>>,
+    projection_bounds_cache: IndexMap<TypeId, Arc<[TraitRef]>>,
     /// What each type erases to, from erasure on: [`Self::erase_type`]'s
     /// answers.
     erasures: TypeMap<TypeId>,
@@ -89,7 +89,7 @@ pub struct TypeTable {
     erased: bool,
     /// The `&mut T` cell a slot holds a value in, for the types
     /// [`Self::boxes_slot`] names, keyed by the type.
-    slot_boxes: IndexMap<TypeKey, TypeId>,
+    slot_boxes: IndexMap<TypeId, TypeId>,
     /// The first type interned for each non-generic newtype declaration: its base is part
     /// of the intern key, so the declaration alone is no key into `intern_map`.
     newtype_decls: IndexMap<DefId, TypeId>,
@@ -122,7 +122,7 @@ pub struct TypeTable {
     /// Struct field types by declaration and instance arguments, a template's
     /// (no arguments) in its own terms: what [`Self::holds_affine_resource`]
     /// reads.
-    struct_field_index: IndexMap<(DefId, Vec<TypeKey>), Vec<TypeId>>,
+    struct_field_index: IndexMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
@@ -445,16 +445,6 @@ impl TypeTable {
         self.types.get(id)
     }
 
-    /// The [`TypeKey`] for `id`: the id its spelling is interned under.
-    #[must_use]
-    pub fn type_key(&self, id: TypeId) -> TypeKey {
-        TypeKey(
-            self.types
-                .get(id)
-                .and_then(|ty| self.intern_map.get(ty).copied())
-                .unwrap_or(id),
-        )
-    }
 
     /// The struct `id` instantiates, with its arguments.
     #[must_use]
@@ -463,12 +453,6 @@ impl TypeTable {
             ResolvedType::Struct { def, type_args } => Some((*def, type_args)),
             _ => None,
         }
-    }
-
-    /// [`Self::type_key`] of each id, in order.
-    #[must_use]
-    pub fn type_keys(&self, ids: &[TypeId]) -> Vec<TypeKey> {
-        ids.iter().map(|&id| self.type_key(id)).collect()
     }
 
     /// `ty` without its references and newtypes: the object a handle names. A
@@ -488,17 +472,15 @@ impl TypeTable {
         }
     }
 
-    /// The key a cell `cell` names is made under: the shared reference to its
+    /// The type a cell `cell` names its object by: the shared reference to its
     /// innermost pointee, so a `&X` and a `&mut X`, at any depth, name one
     /// cell, as a reference coerces under a shared one. No struct, variant or
-    /// function object is keyed by a reference, so none shares it.
+    /// function object is named by a reference, so none shares it.
     #[must_use]
-    pub fn cell_key(&self, cell: TypeId) -> TypeKey {
+    pub fn cell_key(&self, cell: TypeId) -> TypeId {
         assert!(self.cell_payload(cell).is_some(), "a cell reference");
-        let shared = self
-            .shared_ref_to(self.peel_refs(cell))
-            .expect("interning `&mut X` interns `&X`");
-        self.type_key(shared)
+        self.shared_ref_to(self.peel_refs(cell))
+            .expect("interning `&mut X` interns `&X`")
     }
 
     /// `&pointee`, if the table holds it. It holds one for every `&mut pointee`.
@@ -510,7 +492,7 @@ impl TypeTable {
     /// The heap object a value of `ty` is, or reaches first through its
     /// references: the key an access to one of its fields is made under.
     #[must_use]
-    pub fn heap_object_key(&self, ty: TypeId) -> Option<TypeKey> {
+    pub fn heap_object_key(&self, ty: TypeId) -> Option<TypeId> {
         let ty = self.strip_handles(ty);
         match self.get(ty) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Some(self.cell_key(ty)),
@@ -518,7 +500,7 @@ impl TypeTable {
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Variant { .. }
             | ResolvedType::Function { .. }
-            | ResolvedType::Tuple(_) => Some(self.type_key(ty)),
+            | ResolvedType::Tuple(_) => Some(ty),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -537,23 +519,11 @@ impl TypeTable {
         }
     }
 
-    /// Whether `a` and `b` name one type.
-    #[must_use]
-    pub fn same_type(&self, a: TypeId, b: TypeId) -> bool {
-        self.type_key(a) == self.type_key(b)
-    }
-
-    /// Whether `a` and `b` name one list of types, position by position.
-    #[must_use]
-    pub fn same_types(&self, a: &[TypeId], b: &[TypeId]) -> bool {
-        a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| self.same_type(x, y))
-    }
-
     /// Whether two projections' trait arguments name one instantiation of the
     /// trait. A side reached by a bare bound, `None`, names none other.
-    fn trait_args_agree(&self, a: Option<&[TypeId]>, b: Option<&[TypeId]>) -> bool {
+    fn trait_args_agree(a: Option<&[TypeId]>, b: Option<&[TypeId]>) -> bool {
         match (a, b) {
-            (Some(a), Some(b)) => self.same_types(a, b),
+            (Some(a), Some(b)) => a == b,
             _ => true,
         }
     }
@@ -2521,8 +2491,7 @@ impl TypeTable {
     /// Register the field types of a struct declaration instantiated with
     /// `args` (none for the template) for [`Self::holds_affine_resource`].
     pub fn register_struct_fields(&mut self, def: DefId, args: Vec<TypeId>, fields: Vec<TypeId>) {
-        let key = (def, self.type_keys(&args));
-        self.struct_field_index.insert(key, fields);
+        self.struct_field_index.insert((def, args), fields);
     }
 
     /// Whether a value of `ty` is, or holds at any depth, an affine resource:
@@ -2543,9 +2512,9 @@ impl TypeTable {
         ty: TypeId,
         params: &[bool],
         open: &mut Vec<(DefId, Vec<bool>)>,
-        memo: &mut CutMemo<(TypeKey, Vec<bool>)>,
+        memo: &mut CutMemo<(TypeId, Vec<bool>)>,
     ) -> bool {
-        let key = (self.type_key(ty), params.to_vec());
+        let key = (ty, params.to_vec());
         if let Some(held) = memo.get(&key) {
             return held;
         }
@@ -2561,7 +2530,7 @@ impl TypeTable {
         ty: TypeId,
         params: &[bool],
         open: &mut Vec<(DefId, Vec<bool>)>,
-        memo: &mut CutMemo<(TypeKey, Vec<bool>)>,
+        memo: &mut CutMemo<(TypeId, Vec<bool>)>,
     ) -> bool {
         let ty = self.representation_head(ty);
         // `List` is the compiler's, so no struct registers its fields.
@@ -2636,7 +2605,7 @@ impl TypeTable {
     fn declared_members(&self, def: DefId, type_args: &[TypeId]) -> Option<DeclaredMembers> {
         if let Some(fields) = self
             .struct_field_index
-            .get(&(def, self.type_keys(type_args)))
+            .get(&(def, type_args.to_vec()))
         {
             return Some(DeclaredMembers {
                 types: fields.clone(),
@@ -2671,15 +2640,15 @@ impl TypeTable {
     /// from: a reference names its referent's object, and a newtype its base's.
     /// Two places of different kinds are two objects.
     #[must_use]
-    pub fn object_kind(&self, ty: TypeId) -> TypeKey {
-        self.type_key(self.representation_head(self.peel_refs(ty)))
+    pub fn object_kind(&self, ty: TypeId) -> TypeId {
+        self.representation_head(self.peel_refs(ty))
     }
 
     /// Whether a value of `ty` is, holds or references, at any depth, an object
     /// of `kind` (an [`Self::object_kind`]): what a callee handed one may write.
     /// A type whose members are not registered may hold anything, so it does.
     #[must_use]
-    pub fn reaches_object(&self, ty: TypeId, kind: TypeKey) -> bool {
+    pub fn reaches_object(&self, ty: TypeId, kind: TypeId) -> bool {
         self.reaches_in(ty, Reach::Object(kind), &[], &mut IndexSet::default())
     }
 
@@ -2691,7 +2660,7 @@ impl TypeTable {
         ty: TypeId,
         target: Reach,
         args: &[TypeId],
-        walked: &mut IndexSet<(TypeKey, Vec<TypeKey>)>,
+        walked: &mut IndexSet<(TypeId, Vec<TypeId>)>,
     ) -> bool {
         let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
             ResolvedType::TypeParam { index, .. } => args.get(*index as usize).copied(),
@@ -2706,15 +2675,15 @@ impl TypeTable {
         {
             return true;
         }
-        if !walked.insert((self.type_key(ty), self.type_keys(args))) {
+        if !walked.insert((ty, args.to_vec())) {
             return false;
         }
         // `List` is the compiler's, so no struct registers its fields: it is
         // its backing array and the elements.
         if let Some(elem) = self.list_element(ty) {
-            let backs = |kind: TypeKey| {
-                matches!(self.get(kind.0), ResolvedType::BuiltinArray(array_elem)
-                    if self.same_type(*array_elem, elem))
+            let backs = |kind: TypeId| {
+                matches!(self.get(kind), ResolvedType::BuiltinArray(array_elem)
+                    if *array_elem == elem)
             };
             return matches!(target, Reach::Object(kind) if backs(kind))
                 || self.reaches_in(elem, target, args, walked);
@@ -3081,14 +3050,13 @@ impl TypeTable {
     pub fn register_slot_box(&mut self, ty: TypeId) {
         assert!(self.boxes_slot(ty), "a slot of this type holds a cell");
         let cell = self.make_mut_ref(ty);
-        let key = self.type_key(ty);
-        self.slot_boxes.insert(key, cell);
+        self.slot_boxes.insert(ty, cell);
     }
 
     /// The `&mut T` cell a slot holds each `ty` in, where [`Self::boxes_slot`]
     /// says it does.
     pub fn slot_box(&self, ty: TypeId) -> Option<TypeId> {
-        self.slot_boxes.get(&self.type_key(ty)).copied()
+        self.slot_boxes.get(&ty).copied()
     }
 
     /// Whether `type_id` names storage rather than holding a value: a `&T` or
@@ -3513,13 +3481,13 @@ impl TypeTable {
                     ..
                 },
             ) => {
-                self.same_type(*base_a, *base_b)
+                base_a == base_b
                     && name_a == name_b
-                    && self.same_types(args_a, args_b)
+                    && args_a == args_b
                     && trait_a == trait_b
-                    && self.trait_args_agree(trait_args_a.as_deref(), trait_args_b.as_deref())
+                    && Self::trait_args_agree(trait_args_a.as_deref(), trait_args_b.as_deref())
             }
-            _ => self.same_type(a, b),
+            _ => a == b,
         }
     }
 
@@ -3528,8 +3496,7 @@ impl TypeTable {
     /// the family's its arguments. `None` while its signature is still being
     /// built, which a reader inside that build meets.
     pub fn projection_bounds(&mut self, id: TypeId) -> Option<Arc<[TraitRef]>> {
-        let key = self.type_key(id);
-        if let Some(bounds) = self.projection_bounds_cache.get(&key) {
+        if let Some(bounds) = self.projection_bounds_cache.get(&id) {
             return Some(Arc::clone(bounds));
         }
         let ResolvedType::AssocTypeProjection {
@@ -3551,7 +3518,7 @@ impl TypeTable {
             .instantiate_trait_refs(&sig, &sig.bounds, param_id, trait_args.as_deref(), &args)
             .into();
         self.projection_bounds_cache
-            .insert(key, Arc::clone(&bounds));
+            .insert(id, Arc::clone(&bounds));
         Some(bounds)
     }
 
@@ -3792,7 +3759,7 @@ impl TypeTable {
                     trait_decl: *trait_key,
                     assoc_name: assoc_name.to_string(),
                 })?
-                .at(self, trait_args)
+                .at(trait_args)
         })
         .or_else(|| self.is_never(concrete_id).then_some(Self::NEVER))
     }
@@ -4245,7 +4212,7 @@ impl TypeTable {
                         .collect(),
                 );
                 self.filled_trait_args(&at, concrete_id)
-                    .is_some_and(|filled| self.same_types(&filled, wanted))
+                    .is_some_and(|filled| filled == wanted)
             })
         });
         let entry = match reached {
@@ -4853,7 +4820,7 @@ impl TypeTable {
                             .find(|answer| {
                                 answer.owning_trait == owning_trait
                                     && answer.assoc_name == assoc_name
-                                    && self.trait_args_agree(
+                                    && Self::trait_args_agree(
                                         answer.trait_args.as_deref(),
                                         new_trait_args.as_deref(),
                                     )
@@ -5042,7 +5009,7 @@ impl TypeTable {
     fn erase_member_tables(&mut self) {
         let fields = std::mem::take(&mut self.struct_field_index);
         for ((def, args), types) in fields {
-            let args: Vec<TypeId> = args.iter().map(|key| self.erase_type(key.0)).collect();
+            let args: Vec<TypeId> = args.iter().map(|&arg| self.erase_type(arg)).collect();
             let types = types.iter().map(|&ty| self.erase_type(ty)).collect();
             self.register_struct_fields(def, args, types);
         }
@@ -5109,45 +5076,6 @@ impl TypeTable {
         }
     }
 
-    /// `ids` as struct instance arguments.
-    #[must_use]
-    pub fn instance_args(&self, ids: &[TypeId]) -> Vec<InstanceArg> {
-        ids.iter().map(|&id| self.instance_arg(id)).collect()
-    }
-
-    /// `id` as a struct instance argument: a function type's row tells no two
-    /// instances apart.
-    #[must_use]
-    pub fn instance_arg(&self, id: TypeId) -> InstanceArg {
-        if let Some((def, args)) = self.struct_parts(id) {
-            return InstanceArg::Struct(def, self.instance_args(args));
-        }
-        match self.get(id) {
-            ResolvedType::Ref(inner) => InstanceArg::Ref(Box::new(self.instance_arg(*inner))),
-            ResolvedType::MutRef(inner) => InstanceArg::MutRef(Box::new(self.instance_arg(*inner))),
-            ResolvedType::BuiltinArray(element) => {
-                InstanceArg::Array(Box::new(self.instance_arg(*element)))
-            }
-            ResolvedType::Resource { def, type_args }
-            | ResolvedType::Variant { def, type_args }
-                if !type_args.is_empty() =>
-            {
-                InstanceArg::Generic(*def, self.instance_args(type_args))
-            }
-            ResolvedType::Tuple(elems) => InstanceArg::Tuple(self.instance_args(elems)),
-            ResolvedType::Function {
-                is_mut,
-                params,
-                return_type,
-                ..
-            } => InstanceArg::Function {
-                is_mut: *is_mut,
-                params: self.instance_args(params),
-                ret: Box::new(self.instance_arg(*return_type)),
-            },
-            _ => InstanceArg::Type(self.type_key(id)),
-        }
-    }
 
     /// Get the base type if this is a newtype, or None otherwise
     pub fn get_newtype_base(&self, id: TypeId) -> Option<TypeId> {
@@ -5171,8 +5099,7 @@ impl TypeTable {
     /// the way `Meters` does.
     #[must_use]
     pub fn newtype_chain_holds(&self, id: TypeId, link: TypeId) -> bool {
-        let link = self.type_key(link);
-        self.newtype_chain(id).any(|t| self.type_key(t) == link)
+        self.newtype_chain(id).any(|t| t == link)
     }
 
     /// A newtype's representation head, or `None` for anything else. The head
@@ -5311,7 +5238,7 @@ impl TypeTable {
     /// - One is a newtype of the other
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
-        self.same_type(self.representation_head(a), self.representation_head(b))
+        self.representation_head(a) == self.representation_head(b)
     }
 
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
@@ -5755,12 +5682,7 @@ impl TypeTable {
 
     /// Whether `id` is one of `slots` or is built over one.
     pub fn mentions_any(&self, id: TypeId, slots: &[TypeId]) -> bool {
-        self.mentions_key(id, &self.type_keys(slots))
-    }
-
-    fn mentions_key(&self, id: TypeId, keys: &[TypeKey]) -> bool {
-        keys.contains(&self.type_key(id))
-            || self.any_constituent(id, &mut |t| self.mentions_key(t, keys))
+        slots.contains(&id) || self.any_constituent(id, &mut |t| self.mentions_any(t, slots))
     }
 
     /// The frame slots `id` (recursively) mentions, projections included.
@@ -6002,40 +5924,6 @@ impl TypeTable {
         name
     }
 
-    /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
-    /// E.g., `List<FieldName>` → `List<String>` when `FieldName = String`.
-    pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
-        let base = self.representation_head(id);
-        match self.get(base) {
-            // A tuple is module-independent; every other instance is named by
-            // the module declaring its base.
-            ResolvedType::Tuple(elems) => mangle_tuple_type(
-                &elems
-                    .iter()
-                    .map(|t| self.mangle_type_name_resolving_newtypes(*t))
-                    .collect::<Vec<_>>(),
-            ),
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Resource { def, type_args }
-            | ResolvedType::Variant { def, type_args } => {
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.mangle_type_name_resolving_newtypes(*t))
-                    .collect();
-                let unqualified = mangle_generic_name(&self.decl_mangled_name(*def), &args);
-                mangle_declared(self.def_module(*def), &unqualified)
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                let elem_name = self.mangle_type_name_resolving_newtypes(*elem);
-                mangle_builtin_array_type(&elem_name)
-            }
-            _ => self.mangle_type_name(base),
-        }
-    }
-
     /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
     /// where [`Self::name`] would give the human-readable `[i32, String]`.
     /// A generic renders as `Name<T1,T2,…>`, a function as [`crate::name::mangle_fn_type`]
@@ -6068,13 +5956,6 @@ impl TypeTable {
         ids.iter()
             .map(|&t| self.mangle_type_arg_rowless(t))
             .collect()
-    }
-
-    /// [`Self::mangle_type_arg_rowless`] of the newtype-resolved form, which
-    /// the WIR array and `List` wrapper registrations key on.
-    pub fn mangle_type_arg_rowless_resolving_newtypes(&self, id: TypeId) -> String {
-        let resolved = self.representation_head(id);
-        self.mangle_type_arg_rowless(resolved)
     }
 
     /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
@@ -6868,7 +6749,7 @@ impl TypeTable {
             return self.fq_base_type_name(written).head()
                 == self.fq_base_type_name(concrete).head();
         }
-        self.same_type(written, concrete)
+        written == concrete
     }
 
     /// Whether two receiver-side types can be one, answering an open variable
@@ -6881,7 +6762,7 @@ impl TypeTable {
         binding: &mut TargetBinding,
     ) -> bool {
         let (a, b) = (binding.answered(a), binding.answered(b));
-        if self.same_type(a, b) {
+        if a == b {
             return true;
         }
         let closed = |ty: TypeId| !self.any_infer_var(ty, &mut |var| open(var));
@@ -6966,7 +6847,7 @@ impl TypeTable {
             return true;
         }
         self.zip_shapes(a.1, b.1, |x, y| self.unify_apart((a.0, x), (b.0, y), subst))
-            .unwrap_or_else(|| self.same_type(a.1, b.1))
+            .unwrap_or(a.1 == b.1)
     }
 
     /// `term` past every parameter the substitution has bound.
@@ -7147,7 +7028,7 @@ struct AssocTypeKey {
 }
 
 /// A type keyed by its declaration and arguments: one key whatever ids spell
-/// the arguments, which [`TypeKey`] keeps apart.
+/// the arguments.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstanceKey {
     Nominal(DefId, Vec<InstanceKey>),
@@ -7221,7 +7102,7 @@ impl AssocAnswers {
 
     /// The answer of the impl reached at `trait_args`, where they are known
     /// and an impl's, defaults filled, are exactly them; else [`Self::bare`].
-    fn at(&self, table: &TypeTable, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
+    fn at(&self, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
         trait_args
             .and_then(|wanted| {
                 self.0
@@ -7230,7 +7111,7 @@ impl AssocAnswers {
                         entry
                             .filled
                             .as_deref()
-                            .is_some_and(|filled| table.same_types(filled, wanted))
+                            .is_some_and(|filled| filled == wanted)
                     })
                     .map(|entry| entry.answer)
             })
@@ -7425,52 +7306,16 @@ impl Leaves<'_> {
 enum Reach {
     MutRef,
     /// An object of this [`TypeTable::object_kind`].
-    Object(TypeKey),
+    Object(TypeId),
 }
 
-/// One argument of a struct instance, as [`TypeTable::instance_arg`] reads it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum InstanceArg {
-    Type(TypeKey),
-    Struct(StructDef, Vec<InstanceArg>),
-    Generic(DefId, Vec<InstanceArg>),
-    Tuple(Vec<InstanceArg>),
-    Ref(Box<InstanceArg>),
-    MutRef(Box<InstanceArg>),
-    Array(Box<InstanceArg>),
-    Function {
-        is_mut: bool,
-        params: Vec<InstanceArg>,
-        ret: Box<InstanceArg>,
-    },
+/// An answer about each type, computed once. Valid while the facts the answer
+/// reads stay fixed.
+pub struct TypeMemo<V> {
+    answers: RefCell<IndexMap<TypeId, V>>,
 }
 
-/// What a [`TypeId`] resolves to, as a value to compare or key a map by.
-/// An id addresses a slot; this answers identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TypeKey(TypeId);
-
-/// An arbitrary but fixed order, for a key that has to sort.
-impl Ord for TypeKey {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.0.cmp(&other.0.0)
-    }
-}
-
-impl PartialOrd for TypeKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// An answer about each type, computed once per key: a [`TypeKey`] once erasure
-/// leaves many ids naming one type, the id before it. Valid while the facts the
-/// answer reads stay fixed.
-pub struct TypeMemo<V, K = TypeKey> {
-    answers: RefCell<IndexMap<K, V>>,
-}
-
-impl<V, K> Default for TypeMemo<V, K> {
+impl<V> Default for TypeMemo<V> {
     fn default() -> Self {
         Self {
             answers: RefCell::default(),
@@ -7478,9 +7323,9 @@ impl<V, K> Default for TypeMemo<V, K> {
     }
 }
 
-impl<V: Copy, K: std::hash::Hash + Eq> TypeMemo<V, K> {
+impl<V: Copy> TypeMemo<V> {
     /// `compute` may ask this memo of other types: no borrow is held across it.
-    pub fn get_or_compute(&self, key: K, compute: impl FnOnce() -> V) -> V {
+    pub fn get_or_compute(&self, key: TypeId, compute: impl FnOnce() -> V) -> V {
         if let Some(&answer) = self.answers.borrow().get(&key) {
             return answer;
         }
@@ -7541,7 +7386,7 @@ mod tests {
         assert_eq!(table.cell_key(shared), table.cell_key(mutable));
         assert_eq!(table.cell_key(deep_shared), table.cell_key(deep_mutable));
         assert_eq!(table.heap_object_key(mutable), Some(table.cell_key(shared)));
-        assert_ne!(table.cell_key(shared), table.type_key(TypeTable::I32));
+        assert_ne!(table.cell_key(shared), TypeTable::I32);
         assert_eq!(table.heap_object_key(TypeTable::I32), None);
     }
 

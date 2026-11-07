@@ -79,7 +79,7 @@ fn rewrite_frame(
                     complete
                         && locals
                             .local(*local)
-                            .is_some_and(|(_, binding)| type_table.same_type(binding, *type_id))
+                            .is_some_and(|(_, binding)| binding == *type_id)
                         && type_table.is_boxed_reference_target(*type_id)
                         && (address_taken.contains(local) || scan.written_after(*local, site))
                 })
