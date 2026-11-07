@@ -204,9 +204,8 @@ fn walk_element_decisions(
             }
         },
         Repeat(rep) => {
-            let body: List<Element> = [rep.element];
             let mut met: List<MetPredicate> = [];
-            let _ = predicates_met_at(&body, &[], 0, site, analysis, &mut [], &mut met);
+            element_predicates_met(&rep.element, site, analysis, &mut [], &mut met);
             extend_met(&mut met, cont);
             out.record(rep.atn_decision, met);
             walk_element_decisions(&rep.element, site, cont, analysis, out);
