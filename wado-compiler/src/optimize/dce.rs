@@ -1447,23 +1447,10 @@ impl DceAnalysis {
     }
 }
 
-/// Variant declarations that outlive their uses, both for
-/// `optimize::sroa_variant_return`: `Option`, whose slots the pass mints after
-/// the early DCE, and any variant a function was scalarized *from* — scalarizing
-/// every use away is what makes a declaration look unreachable, and the pass
-/// re-derives its layout to recognise its own earlier work. A kept declaration
-/// keeps its payload types too, or `register_mono_variants` panics.
-fn variant_decls_kept_past_use(project: &NirPackage, type_table: &TypeTable) -> IndexSet<DefId> {
-    project
-        .functions
-        .iter()
-        .filter_map(|f| f.borrow().scalarized_from)
-        .filter_map(|t| match type_table.get(t) {
-            ResolvedType::Variant { def, .. } => Some(*def),
-            _ => None,
-        })
-        .chain(type_table.compiler_item_def(CompilerItem::Option))
-        .collect()
+/// Whether variant declaration `def` outlives its uses: `Option` does, whose
+/// slots `optimize::sroa_variant_return` mints after the early DCE.
+fn kept_past_use(def: DefId, type_table: &TypeTable) -> bool {
+    type_table.compiler_item_def(CompilerItem::Option) == Some(def)
 }
 
 /// Populate `analysis.types` and the declaration views over it. A type is
@@ -1515,6 +1502,14 @@ fn populate_type_reachability(
                 }
             }
         }
+        // The variant every scalarized return came from:
+        // `optimize::sroa_variant_return` recognises its earlier work by that
+        // type's layout, so the type and every declaration it names survive.
+        for func_rc in &project.functions {
+            if let Some(t) = func_rc.borrow().scalarized_from {
+                analysis.types.insert(t);
+            }
+        }
 
         // Reachable globals' declared type + initializer types. At NIR
         // level non-constant initializers have already been extracted
@@ -1559,10 +1554,6 @@ fn populate_type_reachability(
     }
 
     // Phase 2: Transitive closure - include struct fields, variant payloads, and type dependencies
-    // Loop-invariant: it reads `project` and the type table, neither of which
-    // the loop mutates. Recomputing it per round put a whole-program walk inside
-    // the pass's hot spot. `remove_unreachable_types` hoists it the same way.
-    let kept_past_use = variant_decls_kept_past_use(project, &project.type_table.borrow());
     let instance_payloads = variant_instance_payloads(project);
 
     let mut changed = true;
@@ -1602,7 +1593,8 @@ fn populate_type_reachability(
         // its last use keeps payloads alive. The same predicate gates the
         // `project.variants` retain in `remove_unreachable_types`.
         for variant in &project.variants {
-            if analysis.nominal_defs.contains(&variant.def) || kept_past_use.contains(&variant.def)
+            if analysis.nominal_defs.contains(&variant.def)
+                || kept_past_use(variant.def, &type_table)
             {
                 for case in &variant.cases {
                     collect_type_transitive(case.payload, &type_table, &mut analysis.types);
@@ -1760,16 +1752,11 @@ fn collect_type_dependencies(
 /// retains entries matching its precomputed indexes.
 pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
     project.structs.retain(|s| analysis.keeps_struct(s));
-    // Loop-invariant, and the loop it would otherwise sit in is this pass's hot
-    // spot: it reads `project` and the type table, neither of which the retains
-    // below mutate.
-    let kept_past_use = {
-        let type_table = project.type_table.borrow();
-        variant_decls_kept_past_use(project, &type_table)
-    };
-    project
-        .variants
-        .retain(|v| analysis.nominal_defs.contains(&v.def) || kept_past_use.contains(&v.def));
+    let type_table = project.type_table.borrow();
+    project.variants.retain(|v| {
+        analysis.nominal_defs.contains(&v.def) || kept_past_use(v.def, &type_table)
+    });
+    drop(type_table);
     project
         .enums
         .retain(|e| analysis.nominal_defs.contains(&e.def));
@@ -1777,16 +1764,7 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
-    // Plus the variant every scalarized return came from: dropping its `TypeId`
-    // would make `optimize::sroa_variant_return` unable to resolve the layout it
-    // recognises its own earlier work by.
-    let mut keep = analysis.types.clone();
-    for func_rc in &project.functions {
-        if let Some(t) = func_rc.borrow().scalarized_from {
-            keep.insert(t);
-        }
-    }
-    project.type_table.borrow_mut().retain(&keep);
+    project.type_table.borrow_mut().retain(&analysis.types);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
