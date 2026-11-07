@@ -563,10 +563,14 @@ two runs is timed, so no compile is included:
 
 | Slots | Tokens a second, PJRT at one slot as 1 | WebGPU |
 | ----- | -------------------------------------- | ------ |
-| 1     | 1                                      | 5.53   |
-| 2     | 1.78                                   | 2.55   |
-| 4     | 2.82                                   | 3.02   |
-| 8     | 4.16                                   | 3.12   |
+| 1     | 1                                      | 5.52   |
+| 2     | 1.79                                   | 10.8   |
+| 4     | 2.83                                   | 19.6   |
+| 8     | 4.17                                   | 22.6   |
+
+On WebGPU a step in two slots takes as long as in one: each row's last logits
+are gathered, and its attention runs in the kernels, on the device at the
+row's own past, so a step reads nothing back.
 
 `example/gpt2-124m/slots.wado` is the program, which `pjrt_slots.wado` and
 `webgpu_slots.wado` run:
@@ -636,9 +640,6 @@ model, and it does not price 94 and 93 of each program's operations
 
 - Where a node takes one length for every row, the rows share their lengths,
   and the module offers no `Requests`.
-- On WebGPU a step of GPT-2 in two slots takes 4.3 times as long as in one, so
-  more slots there serve fewer tokens a second than one does. Why is not
-  measured.
 - Only GPT-2's spelling of attention is matched. Any other, a mask that is no
   causal table among them, stays operations, which write the scores.
 - `build` cannot check what the graph owes over a padded length, which only
