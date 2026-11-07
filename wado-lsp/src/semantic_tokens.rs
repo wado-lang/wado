@@ -1218,7 +1218,8 @@ mod tests {
         let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
         let src = "use geo from \"./lib.wado\";\nfn f<\n    T: geo::Show,\n>(t: &T) {}\n";
         let host = in_memory_host(&[("/lib.wado", lib), ("/test.wado", src)]);
-        let sem = futures::executor::block_on(wado_compiler::semantics(src, &host, Some("/test.wado")));
+        let sem =
+            futures::executor::block_on(wado_compiler::semantics(src, &host, Some("/test.wado")));
         let tokens = compute(src, Some(&sem));
         assert_eq!(kind_of(&tokens, src, 2, "geo"), token_type::TYPE);
         assert_eq!(kind_of(&tokens, src, 2, "Show"), token_type::TYPE);

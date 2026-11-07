@@ -4654,7 +4654,7 @@ pub struct TraitBound {
     /// The namespace import the trait is named through: `geo` in `geo::Show`.
     pub namespace: Option<String>,
     pub name: String,
-    /// Where `name` is written; `span` starts at the namespace when one is.
+    /// Where `name` is written; `span` covers the namespace too.
     pub name_span: Span,
     /// The trait's own arguments, positionally (`String` in `Eq<String>`). A
     /// position the bound leaves out takes the trait's declared default.

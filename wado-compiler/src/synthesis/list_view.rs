@@ -91,7 +91,9 @@ fn answering_layer(
         .find(|&&(_, ty)| written_impl_at(trait_env, list_arg, ty, tt))
         .unwrap_or_else(|| layers.last().expect("a type is its own first layer"));
     for _ in 0..depth {
-        let pointee = tt.ref_pointee(value.type_id).expect("a layer under a reference");
+        let pointee = tt
+            .ref_pointee(value.type_id)
+            .expect("a layer under a reference");
         let span = value.span;
         value = deref_expr(value, pointee, span);
     }

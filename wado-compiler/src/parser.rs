@@ -6170,8 +6170,6 @@ impl Parser {
             name_span,
             type_args,
             assoc_types,
-            // The written path, as a namespaced type's span covers it, so a
-            // lookup on either segment reaches the trait.
             span: span.merge(&name_span),
             fn_signature: None,
             resolved: None,

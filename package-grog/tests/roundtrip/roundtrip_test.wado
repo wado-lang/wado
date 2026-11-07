@@ -255,7 +255,12 @@ test "a group closed by another number's end tag is refused without reading on" 
 }
 
 test "a value of another field is dropped as it is read, never held whole" {
-    let account = Account { name: "a".repeat(1 << 20), history: [AccountAddress { zip: 1 }] };
+    let account = Account {
+        name: "a".repeat(1 << 20),
+        history: [
+            AccountAddress { zip: 1 },
+        ],
+    };
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
     let mut source = Trickle { content: grog::encode(&account), at: 0, step: i32::MAX };
