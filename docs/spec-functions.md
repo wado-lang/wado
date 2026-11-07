@@ -194,7 +194,8 @@ An argument meeting a `&ListView<T>` parameter converts to it from any type
 implementing `ListArg<T>`, both from `core:linear`. A `List<T>`, or a newtype
 over one such as `ByteList`, copies its elements into a block of the view's
 own. A `&LinearArray<T>` lends its own block. A reference to any of these
-converts as what it points at. A list literal is a `List<T>` first. A
+converts as what it points at, and a `&mut` as the `&` it passes for. A list
+literal is a `List<T>` first. A
 `&ListView<T>` passes as it is.
 
 <!-- {"fixture":"list_view_arg.wado"} -->
@@ -217,6 +218,7 @@ test "a List, a ByteList, a LinearArray and a list literal convert" {
     assert sum(&linear) == 8;
     linear[0] = 10;
     assert sum(&linear) == 16;
+    assert sum(&mut linear) == 16;
     assert sum([4, 5]) == 9;
 }
 ```
