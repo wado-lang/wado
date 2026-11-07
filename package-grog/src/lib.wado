@@ -15,6 +15,8 @@ global VARINT_MAX: i32 = 10;
 /// protobuf's own parsers default to.
 global DEPTH_LIMIT: i32 = 100;
 
+global LENGTH_PAST_END: String = "a length runs past the end of its message";
+
 /// What follows a tag, as the wire format numbers them.
 pub enum WireType {
     Varint,
@@ -218,22 +220,38 @@ impl<M: Message + Default> Iterator for Messages<M> {
     }
 }
 
+// A stream is read no further than the value at hand runs, since its writer may
+// wait on that value before it sends more. So a varint is read a byte at a
+// time, and a value is held only once its end is known. A fill may move the
+// bytes, so a reader is made after the last one.
 impl<M: Message + Default> Messages<M> {
     fn next_value(&mut self, number: i32, wire_type: WireType) -> Result<Option<M>, DecodeError> {
-        while let Some(field) = field_at(&mut self.input)? {
-            if field.number == number && field.wire_type == wire_type {
-                let mut r = reader_of(&self.input, field.size);
-                r.next_field(0)?;
+        let input = &mut self.input;
+        while input.fill(1) {
+            let tag_end = held_or_all(input, varint_held(input, 0));
+            let mut tag = reader_of(input, tag_end);
+            tag.next_field(0)?;
+            let found = tag.wire_type;
+            let wanted = tag.number == number && found == wire_type;
+            if found == WireType::Len && !wanted {
+                drop_length_delimited(input, tag_end)?;
+                continue;
+            }
+            hold_value(input, found, tag_end, 0);
+            let mut r = reader_of(input, input.len());
+            r.next_field(0)?;
+            if wanted {
                 let mut m = M::default();
                 if wire_type == WireType::Len {
                     r.merge_nested(&mut m)?;
                 } else {
                     r.merge_group(&mut m)?;
                 }
-                self.input.consume(field.size);
+                input.consume(r.pos - input.start());
                 return Result::Ok(Option::Some(m));
             }
-            self.input.consume(field.size);
+            r.skip_value()?;
+            input.consume(r.pos - input.start());
         }
         return Result::Ok(null);
     }
@@ -243,13 +261,15 @@ impl<M: Message + Default> Messages<M> {
         if !input.fill(1) {
             return Result::Ok(null);
         }
-        input.fill(VARINT_MAX);
-        let mut prefix = reader_of(input, input.len());
+        let mut prefix = reader_of(input, held_or_all(input, varint_held(input, 0)));
         let size = prefix.size_through_length_prefixed(input.start())?;
         input.fill(size);
         let mut r = reader_of(input, i32::min(size, input.len()));
         let mut m = M::default();
-        r.merge_nested(&mut m)?;
+        // The frame is no message of its own, so what it holds nests as deep
+        // as a decode's input does.
+        r.narrow()?;
+        merge_fields(&mut m, &mut r, 0)?;
         input.consume(size);
         return Result::Ok(Option::Some(m));
     }
@@ -262,53 +282,96 @@ fn reader_of(input: &LinearBuffer, n: i32) -> Reader<&LinearArray<u8>> {
     return Reader::new(input.bytes(), start, start + n, input.position() - start as i64);
 }
 
-/// A field `input` starts with: its bytes, which `input` then holds, and its
-/// tag's number and wire type.
-struct FieldAt {
-    size: i32,
-    number: i32,
-    wire_type: WireType,
+/// The varint `input` holds from `at` on, and the offset past it; `None` where
+/// the stream ends first or the varint is malformed, which a reader over what is
+/// held then reports.
+fn varint_held(input: &mut LinearBuffer, at: i32) -> Option<[u64, i32]> {
+    let mut decoder = VarintDecoder::new();
+    let mut end = at;
+    while input.fill(end + 1) {
+        let fed = decoder.feed(input.bytes().at(input.start() + end));
+        end += 1;
+        if let Some(read) = fed {
+            return match read {
+                Ok(value) => Option::Some([value, end]),
+                Err(_) => null,
+            };
+        }
+    }
+    return null;
 }
 
-/// The field `input` starts with, its value skipped but not decoded; `None` at
-/// the input's end. A field the stream cuts short is refused where a decode
-/// refuses it.
-fn field_at(input: &mut LinearBuffer) -> Result<Option<FieldAt>, DecodeError> {
-    if !input.fill(1) {
-        return Result::Ok(null);
+/// The end of a varint `varint_held` read, or of all that is held where it read
+/// none.
+fn held_or_all(input: &LinearBuffer, varint: Option<[u64, i32]>) -> i32 {
+    return match varint {
+        Some([_, end]) => end,
+        None => input.len(),
+    };
+}
+
+/// Read until the value behind a tag of `wire_type`, from `at` on, is held:
+/// its end, or `None` where the stream ends first or the value is malformed. A
+/// group `depth` groups deep holds its fields to its end-group tag.
+fn hold_value(input: &mut LinearBuffer, wire_type: WireType, at: i32, depth: i32) -> Option<i32> {
+    return match wire_type {
+        Varint => {
+            let [_, end] = varint_held(input, at)?;
+            Option::Some(end);
+        },
+        I64 => held_to(input, at + 8),
+        I32 => held_to(input, at + 4),
+        Len => {
+            let [n, start] = varint_held(input, at)?;
+            if n > (i32::MAX - start) as u64 {
+                return null;
+            }
+            held_to(input, start + n as i32);
+        },
+        SGroup => group_held(input, at, depth),
+        EGroup => null,
+    };
+}
+
+/// Read until the fields of a group `depth` groups deep, from `at` on, are held
+/// through the end-group tag that follows them, which the reader then checks.
+fn group_held(input: &mut LinearBuffer, at: i32, depth: i32) -> Option<i32> {
+    // Past the limit a reader refuses the group at its tag.
+    if depth == DEPTH_LIMIT {
+        return null;
     }
-    // A tag and a length, or a value other than a group, follow in this many.
-    input.fill(2 * VARINT_MAX);
+    let mut end = at;
     loop {
-        let mut r = reader_of(input, input.len());
-        r.next_field(0)?;
-        let [number, wire_type] = [r.number, r.wire_type];
-        let size = if wire_type == WireType::Len {
-            let size = r.size_through_length_prefixed(r.tag_start)?;
-            if !input.fill(size) {
-                r.pos = r.value_start;
-                return Result::Err(r.skip_value().unwrap_err());
-            }
-            size;
-        } else {
-            let held = input.len();
-            match r.skip_value() {
-                Ok(_) => r.pos - input.start(),
-                Err(e) => {
-                    // Only a group runs on past what the fill guarantees, and
-                    // the skip reads it again from its tag over twice as much.
-                    if wire_type == WireType::SGroup {
-                        input.fill(held + i32::min(held, i32::MAX - held));
-                    }
-                    if input.len() == held {
-                        return Result::Err(e);
-                    }
-                    continue;
-                },
-            }
-        };
-        return Result::Ok(Option::Some(FieldAt { size, number, wire_type }));
+        let [tag, value_start] = varint_held(input, end)?;
+        let wire_type = wire_type_of(tag & 7)?;
+        if wire_type == WireType::EGroup {
+            return Option::Some(value_start);
+        }
+        end = hold_value(input, wire_type, value_start, depth + 1)?;
     }
+}
+
+fn held_to(input: &mut LinearBuffer, end: i32) -> Option<i32> {
+    return if input.fill(end) { Option::Some(end) } else { null };
+}
+
+/// Drop the length-delimited field `input` starts with, its tag held to
+/// `tag_end`, a part at a time: a value no caller decodes is never held whole.
+/// One the stream cuts short is refused where a decode refuses it.
+fn drop_length_delimited(input: &mut LinearBuffer, tag_end: i32) -> Result<(), DecodeError> {
+    let mut r = reader_of(input, held_or_all(input, varint_held(input, tag_end)));
+    r.next_field(0)?;
+    let mut left = r.size_through_length_prefixed(r.tag_start)?;
+    let cut_short = DecodeError { offset: r.offset(), reason: LENGTH_PAST_END };
+    while left > 0 {
+        if !input.fill(1) {
+            return Result::Err(cut_short);
+        }
+        let n = i32::min(left, input.len());
+        input.consume(n);
+        left -= n;
+    }
+    return Result::Ok(());
 }
 
 /// Read fields into `message` up to the reader's end, or for a group up to the
@@ -819,7 +882,7 @@ impl<B: Input> Reader<B> {
     fn length(&mut self) -> Result<i32, DecodeError> {
         let n = self.varint()?;
         if n > (self.end - self.pos) as u64 {
-            return self.fail("a length runs past the end of its message");
+            return self.fail(LENGTH_PAST_END);
         }
         return Result::Ok(n as i32);
     }

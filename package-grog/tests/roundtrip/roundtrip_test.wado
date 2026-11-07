@@ -36,19 +36,26 @@ fn held(bytes: &ByteList) -> LinearBuffer {
     return LinearBuffer::of(LinearArray::from_slice(bytes));
 }
 
-/// Serves `content` three bytes a read, so every field straddles a read.
+/// Serves `content` `step` bytes a read, so every field straddles a read. An
+/// `open` stream's writer sends `content` and waits: a read past it traps.
 struct Trickle {
     content: ByteList,
     at: i32,
+    step: i32 = 3,
+    open: bool = false,
+    /// The most bytes one read asked for.
+    largest: i32 = 0,
 }
 
 impl Stream<u8> for Trickle {
     fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let _ = [this, into];
-        let end = i32::min(self.content.len(), self.at + i32::min(max, 3));
+        assert !self.open || self.at < self.content.len(), "a read waits on a writer with nothing more to send";
+        self.largest = i32::max(self.largest, max);
+        let end = i32::min(self.content.len(), self.at + i32::min(max, self.step));
         let items = self.content[self.at..<end].to_list() as List<u8>;
         self.at = end;
-        let result = if end == self.content.len() { CopyResult::Dropped } else { CopyResult::Completed };
+        let result = if end == self.content.len() && !self.open { CopyResult::Dropped } else { CopyResult::Completed };
         resume StartedRead::settled(StreamChunk { items, result });
     }
 
@@ -199,6 +206,67 @@ test "a value cut short off a stream is refused where it starts, as a decode ref
     };
     assert read.len() == 2;
     assert read[1] matches { Err(e) && e.offset == 6 };
+}
+
+test "a value cut short after a read compacts the buffer is refused where it starts" {
+    // The first value is consumed, and reading the second's 127 bytes moves
+    // what is left to the front of the buffer before the stream ends.
+    let mut input = unhex("72021001727f");
+    input.extend(&b"\x00".repeat(40));
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: input, at: 0, step: 24 };
+    let read: List<Result<AccountAddress, grog::DecodeError>> = with &mut source do {
+        Account::history_of(LinearBuffer::of_stream(rx)).collect();
+    };
+    assert read.len() == 2;
+    assert read[1] matches { Err(e) && e.offset == 6 };
+}
+
+test "a value off a stream is read no further than it runs" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: unhex("72021001"), at: 0, open: true };
+    let first = with &mut source do {
+        Account::history_of(LinearBuffer::of_stream(rx)).next();
+    };
+    assert first matches { Some(Ok(a)) && a.zip == 1 };
+}
+
+test "a message behind its length off a stream is read no further than it runs" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: grog::encode_delimited(&AccountAddress { zip: 1 }), at: 0, open: true };
+    let first = with &mut source do {
+        grog::delimited::<AccountAddress>(LinearBuffer::of_stream(rx)).next();
+    };
+    assert first matches { Some(Ok(a)) && a.zip == 1 };
+}
+
+test "a group closed by another number's end tag is refused without reading on" {
+    // Group 8 opens and an end-group tag for 9 follows.
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: unhex("434c"), at: 0, open: true };
+    let first = with &mut source do {
+        legacy::Record::tag_of(LinearBuffer::of_stream(rx)).next();
+    };
+    assert first matches { Some(Err(_)) };
+}
+
+test "a value of another field is dropped as it is read, never held whole" {
+    let account = Account { name: "a".repeat(1 << 20), history: [AccountAddress { zip: 1 }] };
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content: grog::encode(&account), at: 0, step: i32::MAX };
+    let read: List<Result<AccountAddress, grog::DecodeError>> = with &mut source do {
+        Account::history_of(LinearBuffer::of_stream(rx)).collect();
+    };
+    assert read.len() == 1;
+    assert read[0].unwrap().zip == 1;
+    // Holding the name would have grown the buffer, and its reads, to a
+    // fraction of the name's size.
+    assert source.largest < 1 << 18;
 }
 
 test "messages one after another are read each behind its length" {
@@ -407,6 +475,15 @@ test "an open enum's zero is left off the wire however it is spelled" {
 }
 
 test "nesting past the depth limit is refused" {
-    assert grog::decode::<pbstruct::Value>(&nested_lists(40)) matches { Ok(_) };
-    assert grog::decode::<pbstruct::Value>(&nested_lists(60)) matches { Err(_) };
+    assert grog::decode::<pbstruct::Value>(&nested_lists(50)) matches { Ok(_) };
+    assert grog::decode::<pbstruct::Value>(&nested_lists(51)) matches { Err(_) };
+}
+
+test "a message behind its length nests as deep as a decode allows" {
+    let deepest = grog::decode::<pbstruct::Value>(&nested_lists(50)).unwrap();
+    let read: List<Result<pbstruct::Value, grog::DecodeError>> = grog::delimited::<pbstruct::Value>(held(
+        &grog::encode_delimited(&deepest),
+    )).collect();
+    assert read.len() == 1;
+    assert read[0] matches { Ok(_) };
 }
