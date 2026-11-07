@@ -48,8 +48,8 @@ impl Validator {
         return Result::Ok(Validator { nodes: c.nodes, resources: c.resources, dynamic_anchors });
     }
 
-    /// Every keyword `instance` fails, once per value it fails at, or `Ok` when
-    /// it fails none.
+    /// Every keyword `instance` fails, once for each value failing it, or `Ok`
+    /// when it fails none.
     pub fn validate(&self, instance: &Node) -> Result<(), List<ValidationError>> {
         let mut run = Run {};
         self.eval(0, instance, &"", &mut run);
@@ -146,9 +146,6 @@ impl Validator {
             anchors: self.dynamic_anchors.iter_ref().map(|a| self.outermost(a, &run.scope).unwrap_or(-1)).collect(),
         };
         if let Some(k) = run.memo.get(key) && Document::same_node(&run.outcomes[k].node, inst) {
-            if !run.outcomes[k].errors.is_empty() {
-                run.failures += 1;
-            }
             run.replay(k, out);
             return;
         }
@@ -160,14 +157,12 @@ impl Validator {
         let errors = run.sinks.pop().unwrap().errors;
         let k = run.outcomes.len();
         run.outcomes.push(Outcome { node: *inst, errors, evaluated });
+        run.replay(k, out);
         // A cycle's error depends on the references being followed, which the
         // next reference to `t` may not share.
-        if run.cycles == cycles && run.memo.try_insert(key, k) {
-            run.replay(k, out);
-            return;
+        if run.cycles != cycles || !run.memo.try_insert(key, k) {
+            run.outcomes.pop();
         }
-        run.replay(k, out);
-        run.outcomes.pop();
     }
 
     /// Evaluates subschema `t` in place, keeping what it evaluated when it
@@ -511,8 +506,8 @@ struct Run {
     /// Where errors go, innermost last: the first is the caller's, and each
     /// other one gathers a subschema's errors apart.
     sinks: List<Sink> = [Sink {}],
-    /// How many errors were raised, a repeat included, so a caller sees whether
-    /// a subschema failed.
+    /// Grows with every error raised, a repeat included, so a caller sees
+    /// whether a subschema failed.
     failures: i32 = 0,
     /// The dynamic scope, as the resources entered, outermost first.
     scope: List<i32> = [],
@@ -541,14 +536,12 @@ impl Run {
 
     /// Reports outcome `k` here, as though its subschema were evaluated again.
     fn replay(&mut self, k: i32, out: &mut Evaluated) {
-        let failures = self.failures;
         for let e of self.outcomes[k].errors {
             self.report(e);
         }
         if self.outcomes[k].errors.is_empty() {
             out.merge(&self.outcomes[k].evaluated);
         }
-        self.failures = failures;
     }
 }
 
