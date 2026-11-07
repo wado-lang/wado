@@ -257,16 +257,6 @@ fn register_struct(
         return;
     }
 
-    // Also check with newtypes resolved: e.g., List<Tuple<FieldName,FieldValue>> should
-    // reuse the existing List<Tuple<String,List<u8>>> when FieldName/FieldValue are newtypes.
-    if let Some(ref mono) = tir_struct.monomorph_info {
-        let has_newtypes = mono
-            .impl_type_args
-            .iter()
-            .any(|t| type_table.representation_head(*t) != *t);
-        assert!(!has_newtypes, "TEMP struct newtype");
-    }
-
     let fq = wir_type_key(&effective_module, &tir_struct.name);
 
     // Pre-register raw array types for BuiltinArray fields before resolving field types,
@@ -459,13 +449,6 @@ fn register_raw_array_type(
         ctx.array_type_map.insert(element_type_id, existing);
         return;
     }
-    // Newtype dedup: both spellings are entered below, so lookup derives one
-    // key and finds it.
-    assert_eq!(
-        type_table.representation_head(element_type_id),
-        element_type_id,
-        "TEMP array newtype"
-    );
 
     let fq = mangle_builtin_array_type(&elem_name);
     let elem_wir_type = ctx.boxed_slot_type(
@@ -610,13 +593,6 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     continue;
                 }
 
-                // Newtype deduplication: if any element is a newtype, check if the
-                // resolved tuple already exists and reuse it.
-                let has_newtypes = elements
-                    .iter()
-                    .any(|e| type_table.representation_head(*e) != *e);
-                assert!(!has_newtypes, "TEMP tuple newtype");
-
                 // A tuple is a generic instance, so its elements are type
                 // arguments and take the module-qualified mangling. The
                 // non-type-arg mangler qualifies inconsistently across the
@@ -664,18 +640,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         (0..elements.len()).map(|i| i.to_string()).collect(),
                     );
                 }
-                ctx.tuple_type_map
-                    .insert(elements.clone(), wir_type_id.clone());
-                // Also register under resolved elements key for deduplication
-                if has_newtypes {
-                    let resolved_elements: Vec<TypeId> = elements
-                        .iter()
-                        .map(|e| type_table.representation_head(*e))
-                        .collect();
-                    if !ctx.tuple_type_map.contains_key(&resolved_elements) {
-                        ctx.tuple_type_map.insert(resolved_elements, wir_type_id);
-                    }
-                }
+                ctx.tuple_type_map.insert(elements.clone(), wir_type_id);
             }
         }
     }

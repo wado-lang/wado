@@ -186,7 +186,7 @@ Each step leaves the compiler green and is a commit series of its own.
 - [x] Boxing changes no type: cells are references, and WIR build keys them by
   representation. Done when `redefine_to`, `redirects`, `box_payload_types`,
   `box_key`, the prelude `Box` and the `is_mut_ref` captures are gone.
-- [ ] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`,
+- [x] Delete `TypeKey`, `same_type`, `TypeMemo`, `InstanceArg`, `box_key`,
   the `_unboxed` and `_resolving_newtypes` renderers, and the rule in
   `wado-compiler/AGENTS.md`.
 

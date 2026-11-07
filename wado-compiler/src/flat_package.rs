@@ -134,8 +134,9 @@ impl FlatPackage {
 
     /// Erase newtypes and `flags`, and rewrite every type the functions,
     /// globals, structs and variants hold to its erased id, so one type has
-    /// one id there. A `flags` declaration keeps its own id: it declares that
-    /// type rather than holding one.
+    /// one id there, and one struct declaration: instances whose arguments
+    /// differed only by a newtype erase to one type. A `flags` declaration
+    /// keeps its own id: it declares that type rather than holding one.
     pub fn erase_newtypes_and_flags(&mut self) {
         struct Eraser<'t>(&'t mut TypeTable);
         impl TirMutVisitor for Eraser<'_> {
@@ -158,6 +159,20 @@ impl FlatPackage {
         for decl in &mut self.variants {
             eraser.walk_variant_decl(decl);
         }
+        let mut layouts: IndexMap<(StructDef, Vec<TypeId>), Vec<TypeId>> = IndexMap::default();
+        self.structs.retain(|decl| {
+            let layout: Vec<TypeId> = decl.fields.iter().map(|f| f.type_id).collect();
+            match layouts.entry((decl.def, decl.type_args.clone())) {
+                indexmap::map::Entry::Vacant(entry) => {
+                    entry.insert(layout);
+                    true
+                }
+                indexmap::map::Entry::Occupied(entry) => {
+                    assert_eq!(*entry.get(), layout, "one struct type has one layout");
+                    false
+                }
+            }
+        });
     }
 
     /// Walk every function body with `visitor`, which may rewrite it in place.
