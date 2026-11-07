@@ -612,11 +612,11 @@ type "functype//serde_newtype_of_struct.wado/$cm_export__$test_6_a_newtype_write
 
 type "functype//serde_newtype_of_struct.wado/$cm_export__$test_7_newtypes_over_a_primitive_and_a_container__as_struct_fields" = fn();  // TypeId(98)
 
-type "functype//serde_newtype_of_struct.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(99)
+type "functype//serde_newtype_of_struct.wado/$value_copy$core:prelude/slice.wado/Slice<u8>" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(99)
 
-type "functype//serde_newtype_of_struct.wado/$value_copy$core:prelude/slice.wado/Slice<u8>" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(100)
+type "functype//serde_newtype_of_struct.wado/$value_copy$core:serde/DeserializeError" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(100)
 
-type "functype//serde_newtype_of_struct.wado/$value_copy$core:serde/DeserializeError" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(101)
+type "functype//serde_newtype_of_struct.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(101)
 
 type "functype//serde_newtype_of_struct.wado/$test_2_the_newtype_deserializes_as_its_base$cold0" = fn(i32);  // TypeId(102)
 
@@ -3115,18 +3115,18 @@ fn "serde_newtype_of_struct.wado/$cm_export__$test_7_newtypes_over_a_primitive_a
     "wasi/task-return"(0);
 }
 
-fn "serde_newtype_of_struct.wado/$value_copy$core:prelude/string.wado/String"(v) {
-    let $av_1: i32;
-    $av_1 = v.used;
-    return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
-}
-
 fn "serde_newtype_of_struct.wado/$value_copy$core:prelude/slice.wado/Slice<u8>"(v) {
     return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
 fn "serde_newtype_of_struct.wado/$value_copy$core:serde/DeserializeError"(v) {
     return struct.new "core:serde//DeserializeError" { kind: v.kind, message: "serde_newtype_of_struct.wado/$value_copy$core:prelude/string.wado/String"(v.message), offset: v.offset, path: "serde_newtype_of_struct.wado/$value_copy$core:prelude/string.wado/String"(v.path) };
+}
+
+fn "serde_newtype_of_struct.wado/$value_copy$core:prelude/string.wado/String"(v) {
+    let $av_1: i32;
+    $av_1 = v.used;
+    return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
 fn "serde_newtype_of_struct.wado/$test_2_the_newtype_deserializes_as_its_base$cold0"($v0) {

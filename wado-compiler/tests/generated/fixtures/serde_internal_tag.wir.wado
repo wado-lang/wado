@@ -1024,11 +1024,11 @@ type "functype//serde_internal_tag.wado/$cm_export__$test_4_a_tag_after_the_fiel
 
 type "functype//serde_internal_tag.wado/$cm_export__$test_5_a_list_of_cases_round_trips_through_each_format" = fn();  // TypeId(152)
 
-type "functype//serde_internal_tag.wado/$value_copy$core:value/Value" = fn(ref "core:value//Value") -> ref "core:value//Value";  // TypeId(153)
+type "functype//serde_internal_tag.wado/$value_copy$core:prelude/slice.wado/Slice<u8>" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(153)
 
-type "functype//serde_internal_tag.wado/$value_copy$core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:value/Value>" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:value/Value>") -> ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:value/Value>";  // TypeId(154)
+type "functype//serde_internal_tag.wado/$value_copy$core:value/Value" = fn(ref "core:value//Value") -> ref "core:value//Value";  // TypeId(154)
 
-type "functype//serde_internal_tag.wado/$value_copy$core:prelude/slice.wado/Slice<u8>" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(155)
+type "functype//serde_internal_tag.wado/$value_copy$core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:value/Value>" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:value/Value>") -> ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:value/Value>";  // TypeId(155)
 
 type "functype//serde_internal_tag.wado/$value_copy$core:serde/DeserializeError" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(156)
 
@@ -3664,6 +3664,10 @@ fn "serde_internal_tag.wado/$cm_export__$test_5_a_list_of_cases_round_trips_thro
     "wasi/task-return"(0);
 }
 
+fn "serde_internal_tag.wado/$value_copy$core:prelude/slice.wado/Slice<u8>"(v) {
+    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: v.repr, start: v.start, end: v.end };
+}
+
 fn "serde_internal_tag.wado/$value_copy$core:value/Value"(v) {
     let $load_0: i32;
     let $vc_payload_2: i64;
@@ -3765,10 +3769,6 @@ fn "serde_internal_tag.wado/$value_copy$core:collections/treemap.wado/TreeMap<co
             continue l234;
         };
     }; $array_clone_dst_2, kids: builtin::array_copy<i32>(local.tee $array_clone_dst_15(builtin::array_new<i32>(local.tee $array_clone_len_3(builtin::array_len(local.tee $array_clone_src_14(v.kids))))), 0, $array_clone_src_14, 0, $array_clone_len_3); $array_clone_dst_15, lens: builtin::array_copy<i32>(local.tee $array_clone_dst_15(builtin::array_new<i32>(local.tee $array_clone_len_3(builtin::array_len(local.tee $array_clone_src_14(v.lens))))), 0, $array_clone_src_14, 0, $array_clone_len_3); $array_clone_dst_15, nodes: v.nodes, root: v.root, height: v.height };
-}
-
-fn "serde_internal_tag.wado/$value_copy$core:prelude/slice.wado/Slice<u8>"(v) {
-    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
 fn "serde_internal_tag.wado/$value_copy$core:serde/DeserializeError"(v) {

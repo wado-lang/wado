@@ -393,12 +393,12 @@ struct tuple//[wasi:http/types.wado/Request, core:prelude/types.wado/Future<core
     mut 1: ref null "core:prelude//$Resource",
 }
 
-struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>] {  // TypeId(62)
+struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(62)
     mut 0: ref null "core:prelude//$Resource",
     mut 1: ref null "core:prelude//$Resource",
 }
 
-struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(63)
+struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>] {  // TypeId(63)
     mut 0: ref null "core:prelude//$Resource",
     mut 1: ref null "core:prelude//$Resource",
 }
@@ -831,13 +831,13 @@ type "functype//http_client_request_full.wado/$cm_future_write_core:prelude/type
 
 type "functype//http_client_request_full.wado/$cm_future_write_core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>" = fn(i32, ref null "wasi:http/types.wado//ErrorCode") -> ref "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>";  // TypeId(178)
 
-type "functype//http_client_request_full.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(179)
+type "functype//http_client_request_full.wado/$value_copy$wasi:http/types.wado/RequestOptionsError" = fn(ref "wasi:http/types.wado//RequestOptionsError") -> ref "wasi:http/types.wado//RequestOptionsError";  // TypeId(179)
 
-type "functype//http_client_request_full.wado/$value_copy$wasi:http/types.wado/RequestOptionsError" = fn(ref "wasi:http/types.wado//RequestOptionsError") -> ref "wasi:http/types.wado//RequestOptionsError";  // TypeId(180)
+type "functype//http_client_request_full.wado/$value_copy$core:prelude/types.wado/Result<(),wasi:http/types.wado/RequestOptionsError>" = fn(ref null "wasi:http/types.wado//RequestOptionsError") -> ref null "wasi:http/types.wado//RequestOptionsError";  // TypeId(180)
 
-type "functype//http_client_request_full.wado/$value_copy$core:prelude/types.wado/Result<(),wasi:http/types.wado/RequestOptionsError>" = fn(ref null "wasi:http/types.wado//RequestOptionsError") -> ref null "wasi:http/types.wado//RequestOptionsError";  // TypeId(181)
+type "functype//http_client_request_full.wado/$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>" = fn(ref null "core:prelude/string.wado//String") -> ref null "core:prelude/string.wado//String";  // TypeId(181)
 
-type "functype//http_client_request_full.wado/$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>" = fn(ref null "core:prelude/string.wado//String") -> ref null "core:prelude/string.wado//String";  // TypeId(182)
+type "functype//http_client_request_full.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(182)
 
 type "functype//core:prelude/format.wado/$template_segment$core:prelude/format.wado/$tmpl$47518b5dd822a983" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(183)
 
@@ -3189,12 +3189,6 @@ fn "http_client_request_full.wado/$cm_future_write_core:prelude/types.wado/Resul
     } };
 }
 
-fn "http_client_request_full.wado/$value_copy$core:prelude/string.wado/String"(v) {
-    let $av_1: i32;
-    $av_1 = v.used;
-    return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
-}
-
 fn "http_client_request_full.wado/$value_copy$wasi:http/types.wado/RequestOptionsError"(v) {
     let $load_0: i32;
     let $vc_payload_2: ref null "core:prelude/string.wado//String";
@@ -3222,6 +3216,12 @@ fn "http_client_request_full.wado/$value_copy$core:prelude/types.wado/Option<cor
     } else {
         "http_client_request_full.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null(v));
     });
+}
+
+fn "http_client_request_full.wado/$value_copy$core:prelude/string.wado/String"(v) {
+    let $av_1: i32;
+    $av_1 = v.used;
+    return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
 fn "http_client_request_full.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(self, name, value) with Fields {
