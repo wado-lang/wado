@@ -351,6 +351,13 @@ overlap:
 Fuel cannot place this line. It leaves out what the JIT makes of a splice, so it
 ranked 2% above 5%, where the wall clock ranked them the other way.
 
+A marker at the top of a function or closure body has no count around it, so a
+run cannot refute it and only a count of zero overrides it. A marker that stands
+keeps what it means: the path stays cold, along with every function only it
+reaches, even if such a function runs often. That is the cost of this rule, and
+[Reading a rare path as cold](#reading-a-rare-path-as-cold) is why a count alone
+does not grant the same reading.
+
 ### A remark audits the source's markers
 
 Where the profile drops the marker of a path that ran, the compile says so in an

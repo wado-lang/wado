@@ -234,8 +234,8 @@ impl Thresholds {
 
     /// Whether a path that ran `runs` times, where the code around it ran
     /// `around` times, ran too often for the source's marker to stand. A marker
-    /// claims less than [`Self::is_cold`] answers: a path can run and still be
-    /// worth keeping out of line.
+    /// that stands keeps a path that ran cold, callees included, which no count
+    /// alone earns from [`Self::is_cold`]: the author's claim decides there.
     fn refutes_marker(runs: i64, around: i64) -> bool {
         runs as u128 * u128::from(Percent::WHOLE)
             >= around as u128 * u128::from(MARKER_REFUTED_PERCENT)
@@ -592,18 +592,18 @@ impl MarkMap {
             let Some(runs) = counts[region] else {
                 continue;
             };
-            let around = count_of(parents[region]);
-            if !Thresholds::is_cold(runs)
-                && around.is_some_and(|around| !Thresholds::refutes_marker(runs, around))
-            {
-                continue;
-            }
-            self.overridden.insert(marker.node());
-            // A path that never ran is unlikely and cold, which the marker
-            // said; one that ran is not cold.
+            // A path that never ran is unlikely and cold, which the marker said.
             if Thresholds::is_cold(runs) {
+                self.overridden.insert(marker.node());
                 continue;
             }
+            // A marker at the top of a body has no count around it to refute it.
+            let Some(around) = count_of(parents[region])
+                .filter(|&around| Thresholds::refutes_marker(runs, around))
+            else {
+                continue;
+            };
+            self.overridden.insert(marker.node());
             let verdict = if unlikely(region) {
                 "unlikely but not cold"
             } else {
@@ -613,22 +613,13 @@ impl MarkMap {
                 SourceMarker::ColdPath(_) => "`cold_path()` marks this path rare",
                 SourceMarker::Try(_) => "`?` marks its failure path rare",
             };
-            // A loop's body may run more often than the code around it.
-            let measured = match around {
-                Some(around) => {
-                    format!(
-                        "{} where the code around it ran {}",
-                        times(runs),
-                        times(around)
-                    )
-                }
-                None => times(runs),
-            };
             self.remarks.push((
                 span,
                 format!(
-                    "{subject}, but the profile ran it {measured}, so it is {verdict}; the \
-                     profile overrides the marker"
+                    "{subject}, but the profile ran it {} where the code around it ran {}, so it \
+                     is {verdict}; the profile overrides the marker",
+                    times(runs),
+                    times(around)
                 ),
             ));
         }
@@ -758,14 +749,14 @@ mod tests {
         );
     }
 
-    /// LLVM's default: a branch is predictable when one side takes 99% of its
-    /// runs, so the other side is unlikely at 1% or less.
     #[test]
     fn a_tenth_of_the_code_around_a_path_refutes_its_marker() {
         assert!(Thresholds::refutes_marker(100, 1000));
         assert!(!Thresholds::refutes_marker(99, 1000));
     }
 
+    /// LLVM's default: a branch is predictable when one side takes 99% of its
+    /// runs, so the other side is unlikely at 1% or less.
     #[test]
     fn a_side_is_unlikely_at_the_predictable_branchs_complement() {
         let thresholds = Thresholds::default();

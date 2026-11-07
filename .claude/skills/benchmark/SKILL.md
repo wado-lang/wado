@@ -65,8 +65,9 @@ wasm-size has no profile, so a size change is the compiler's or the program's.
 
 The README's PGO section compares three builds, and its commands stand beside
 its tables. The `no-cold-paths` wall clock comes from three more runs, alternated
-with the three of the procedure. `all-wado` leaves out the table's `gale_html`
-row, so run `gale_html.wado` the same way under each flag.
+with the three of the procedure. `benchmark-all` and `all-wado` leave out the
+table's `gale_html` row, so run `mise run -C benchmark gale-highlight-html` the
+same way.
 
 Compare two builds with
 `mise exec -- node benchmark/ab.ts --base <no-pgo logs> --head <PGO logs>`. Its

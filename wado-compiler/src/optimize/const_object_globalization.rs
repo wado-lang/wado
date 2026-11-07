@@ -447,7 +447,7 @@ fn collect_candidates(
                         guarded,
                     });
                 }
-                // The hoisted arguments keep their subtrees verbatim inside the
+                // The hoisted values keep their subtrees verbatim inside the
                 // global's initializer, so a nested candidate there would nest
                 // one global's `GlobalVarSet` inside another's — the shape the
                 // `let`/`&` cases avoid by not recursing either.
@@ -1522,11 +1522,12 @@ fn worth_hoisting(body: &Body, expr: ExprId, gate: &Gate<'_>, reach: Reach) -> b
     }
 }
 
-/// What becomes of a constant once the use that names it has run.
+/// What a constant is priced as once the use that names it has run.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Reach {
-    /// Nothing keeps it past the use, so its allocation dies before the next
-    /// collection and never costs a trace.
+    /// Dying before the next collection and never costing a trace: nothing
+    /// keeps it past the use, or it sits in a field of a struct that may die or
+    /// scalarize, so only owning storage makes hoisting pay.
     Transient,
     /// A callee stores it into the heap, so every evaluation adds one more
     /// object to the live set.

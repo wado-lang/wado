@@ -96,32 +96,36 @@ impl Log for GcLogger {
         if !self.enabled(record.metadata()) {
             return;
         }
-        let now = Instant::now();
         let mut head = Head::default();
         // `Head` stops the formatting with an error once it is full.
         let _ = head.write_fmt(*record.args());
+        let begins = head.starts_with(BEGIN_GC);
+        if !begins && !head.starts_with(END_GC) {
+            return;
+        }
+        let now = Instant::now();
         let mut tally = lock(&TALLY);
         let tally = tally.as_mut().expect("--gc-log started the log");
-        if head.starts_with(BEGIN_GC) {
+        if begins {
             tally.collection_started = Some(now);
-        } else if head.starts_with(END_GC) {
-            let started = tally
-                .collection_started
-                .take()
-                .expect("a collection ends after it begins");
-            let paused = now - started;
-            tally.collections += 1;
-            tally.paused += paused;
-            let (live, capacity) = end_of_gc_sizes(&record.args().to_string());
-            eprintln!(
-                "gc {} at {:.1} ms: paused {:.2} ms, live {:.1} MiB of {:.1} MiB",
-                tally.collections,
-                millis(started - tally.run_started),
-                millis(paused),
-                mib(live),
-                mib(capacity)
-            );
+            return;
         }
+        let started = tally
+            .collection_started
+            .take()
+            .expect("a collection ends after it begins");
+        let paused = now - started;
+        tally.collections += 1;
+        tally.paused += paused;
+        let (live, capacity) = end_of_gc_sizes(&record.args().to_string());
+        eprintln!(
+            "gc {} at {:.1} ms: paused {:.2} ms, live {:.1} MiB of {:.1} MiB",
+            tally.collections,
+            millis(started - tally.run_started),
+            millis(paused),
+            mib(live),
+            mib(capacity)
+        );
     }
 
     fn flush(&self) {}

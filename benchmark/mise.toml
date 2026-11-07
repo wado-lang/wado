@@ -19,9 +19,8 @@
 #   WADO_BENCH_FLAGS="--optimize-inline-threshold 20" mise run all
 #   WADO_BIN="$(mise run benchmark-baseline)" mise run all
 #
-# Every row runs at the 256 MiB default GC heap. `all` and the task of each
-# benchmark in it time Wado twice, with and without the recorded profile
-# (`wado_rows` in `wado.sh`).
+# Every row runs at the 256 MiB default GC heap. Each benchmark's task times
+# Wado twice, with and without the recorded profile (`wado_rows` in `wado.sh`).
 
 [settings]
 lockfile = true
@@ -311,8 +310,7 @@ $dir/target/release/tree_sitter_html_bench
 echo "=== JavaScript highlighters (Node.js) ==="
 node $dir/highlighters.js
 
-echo "=== Wado (Gale) ==="
-wado run -O2 $WADO_BENCH_FLAGS $dir/gale_html.wado
+wado_rows "Wado (Gale)" $dir/gale_html.wado
 """
 
 [tasks.gale-gen]

@@ -499,11 +499,11 @@ impl Taint<'_> {
             }
             NodeRef::Pat(p) => {
                 if let Some(field) = self.seed_field {
-                    for (name, sub) in pattern_fields(body, p) {
+                    for_each_pattern_field(body, p, |name, sub| {
                         if name == field {
                             collect_pattern_bindings(body, sub, &mut found_locals);
                         }
-                    }
+                    });
                 }
             }
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
@@ -643,22 +643,23 @@ fn promoted_reference(body: &Body, type_table: &TypeTable, op: Operand) -> Promo
     PromotedRef::Unknown
 }
 
-/// The fields `pat` reads, each with the sub-pattern it binds. Destructuring
-/// reads a field by naming or positioning it here, leaving no
+/// Visits the fields `pat` reads, each with the sub-pattern it binds.
+/// Destructuring reads a field by naming or positioning it here, leaving no
 /// `ExprKind::FieldAccess` to match. A tuple's `..` only ever trails, so a
 /// position is its field's name.
-fn pattern_fields(body: &Body, pat: PatId) -> Vec<(String, PatId)> {
+fn for_each_pattern_field(body: &Body, pat: PatId, mut visit: impl FnMut(&str, PatId)) {
     match &body.pats[pat].kind {
-        PatKind::Struct { fields, .. } => fields
-            .iter()
-            .map(|f| (f.field_name.clone(), f.pattern))
-            .collect(),
-        PatKind::Tuple(elements, _) => elements
-            .iter()
-            .enumerate()
-            .map(|(i, &p)| (i.to_string(), p))
-            .collect(),
-        _ => Vec::new(),
+        PatKind::Struct { fields, .. } => {
+            for field in fields {
+                visit(&field.field_name, field.pattern);
+            }
+        }
+        PatKind::Tuple(elements, _) => {
+            for (position, &element) in elements.iter().enumerate() {
+                visit(&position.to_string(), element);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -688,9 +689,9 @@ impl BodyCensus {
                     _ => {}
                 },
                 NodeRef::Pat(p) => {
-                    census
-                        .fields_read
-                        .extend(pattern_fields(body, p).into_iter().map(|(name, _)| name));
+                    for_each_pattern_field(body, p, |name, _| {
+                        census.fields_read.insert(name.to_owned());
+                    });
                 }
                 NodeRef::Stmt(_) | NodeRef::Block(_) => {}
             }

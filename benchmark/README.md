@@ -431,8 +431,9 @@ Wall clock, best of three, with the builds alternated between rounds. The PGO
 and `no-pgo` figures are the tables above, from `mise run benchmark-all`.
 `no-cold-paths` is in ms/iter, from
 `WADO_BENCH_FLAGS="-f no-cold-paths" mise run -C benchmark all-wado`. `gale_html`
-is `package-gale-highlight-html/benchmark/gale_html.wado`, run under each flag. A
-comparison reads `noise` where the two builds' ranges overlap, as `ab.ts` judges:
+runs neither of those, so its figures come from
+`mise run -C benchmark gale-highlight-html` under the same flags. A comparison
+reads `noise` where the two builds' ranges overlap, as `ab.ts` judges:
 
 | Benchmark                      | `no-cold-paths` | PGO vs `no-pgo` | PGO vs `no-cold-paths` |
 | ------------------------------ | --------------: | --------------: | ---------------------: |

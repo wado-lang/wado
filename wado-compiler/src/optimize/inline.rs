@@ -2968,7 +2968,8 @@ fn inline_round(
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels. A cold site
             // splices less, but what it spliced recurses as far as a plain one.
-            rescan_cap: thresholds.map(|threshold| threshold.max(&thresholds.plain).pow(2)),
+            rescan_cap: thresholds
+                .map(|threshold| threshold.max(&thresholds.plain).saturating_pow(2)),
             rescan_left: None,
         };
         let mut func = functions[fid.index()].borrow_mut();
