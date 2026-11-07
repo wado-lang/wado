@@ -30,6 +30,9 @@ description: Locate and sync the reference specs and runtimes vendored under ven
   - The properties `\p{…}` takes: `vendor/ecma262/table-*-unicode-properties*.html`
 - `vendor/test262/` - tc39/test262, ECMAScript's conformance tests. Re's corpus
   is `test/built-ins/RegExp/` and `test/language/literals/regexp/`
+- `vendor/JSON-Schema-Test-Suite/` - json-schema-org's conformance tests, which
+  Jade's validator answers to: `tests/draft2020-12/`, with the schemas a remote
+  `$ref` reaches under `remotes/`
 
 `git submodule update --init --recommend-shallow` fetches them.
 

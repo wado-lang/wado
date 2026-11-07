@@ -1,0 +1,604 @@
+//! The schema of a Wado type, derived from its reflection: what `core:json`
+//! writes for the type, and what the derived `Deserialize` reads.
+
+use { Serialize, wire_name } from "core:serde";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
+use {
+    Duration,
+    Instant,
+    PlainDate,
+    PlainDateTime,
+    PlainMonthDay,
+    PlainTime,
+    PlainYearMonth,
+    ZonedDateTime,
+} from "core:temporal";
+use { Uri } from "core:uri";
+use { Url, percent_encode } from "core:url";
+use { Uuid } from "core:uuid";
+use { Document } from "./document.wado";
+use { JsonTypes, Schema, SchemaObject, pointer_token } from "./schema.wado";
+
+/// A type whose JSON form a schema describes. Every value `core:json` writes
+/// for the type validates against the schema. A document that validates may
+/// still not decode, where the type reads text the schema does not constrain,
+/// such as a date or base64url bytes.
+pub trait JsonSchema with () {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema;
+}
+
+/// Collects the definitions the schemas it builds refer to. A struct, a
+/// variant, an enum and a flags type are each defined once and referred to by
+/// `$ref` at every use, which is also how a recursive type ends.
+pub struct SchemaGenerator {
+    prefix: String,
+    definitions: HashMap<String, Schema>,
+}
+
+impl SchemaGenerator {
+    /// Refers to definitions under the root schema's `$defs`.
+    pub fn new() -> SchemaGenerator {
+        return SchemaGenerator { prefix: "#/$defs/", definitions: HashMap::new() };
+    }
+
+    /// Refers to definitions under an OpenAPI document's `components/schemas`.
+    pub fn openapi() -> SchemaGenerator {
+        return SchemaGenerator { prefix: "#/components/schemas/", definitions: HashMap::new() };
+    }
+
+    /// The definitions built so far, by name.
+    pub fn definitions(&self) -> HashMap<String, Schema> {
+        return self.definitions;
+    }
+
+    /// Returns a `$ref` to the definition `name`, building it by `build` the
+    /// first time. An anonymous type, named `""`, is built in place instead.
+    pub fn define(&mut self, name: String, build: fn(&mut SchemaGenerator) -> Schema) -> Schema {
+        if name.is_empty() {
+            return build(self);
+        }
+        if !self.definitions.contains_key(name) {
+            // In place before the build, so a recursive use refers to it.
+            self.definitions[name] = Schema::Bool(true);
+            let body = build(self);
+            self.definitions[name] = body;
+        }
+        let token = percent_encode(pointer_token(name));
+        return Schema::Object(SchemaObject { reference: Option::Some(`${self.prefix}${token}`) });
+    }
+}
+
+/// The standalone schema of `T`: the `$schema` dialect, with the definitions it
+/// refers to under `$defs`.
+pub fn schema_for<T: JsonSchema>() -> Schema {
+    let mut gen = SchemaGenerator::new();
+    let mut root = T::json_schema(&mut gen).into_object();
+    root.dialect = Option::Some(Schema::DRAFT);
+    root.defs = gen.definitions;
+    return Schema::Object(root);
+}
+
+// ── The derivation, one blanket per reflection kind ──
+
+// An open struct only, as serde derives: a closed one writes its own wire form.
+impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: JsonSchema + Serialize> JsonSchema for T {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<T>::decl_name(), |g| struct_schema::<T>(g));
+    }
+}
+
+fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Serialize>(gen: &mut SchemaGenerator) -> Schema {
+    let policy = Reflect::<T>::wire_name_policy();
+    let mut s = SchemaObject::of_type(JsonTypes::Object);
+    for let [i, f] of ReflectStruct::<T>::members().enumerate() {
+        let name = wire_name(&f, policy);
+        let mut field = field_schema(&f, gen).into_object();
+        if let Some(fallback) = ReflectStruct::<T>::default_slot(i)[i] {
+            // A default JSON cannot hold, such as NaN, has no `default` to write.
+            if let Ok(doc) = Document::of(&fallback) {
+                field.default = Option::Some(doc);
+            }
+        } else {
+            s.required.push(name);
+        }
+        s.properties[name] = Schema::Object(field);
+    }
+    return Schema::Object(s);
+}
+
+fn field_schema<T, F: JsonSchema>(_field: &StructField<T, F>, gen: &mut SchemaGenerator) -> Schema {
+    return F::json_schema(gen);
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: JsonSchema> JsonSchema for V {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<V>::decl_name(), |g| variant_schema::<V>(g));
+    }
+}
+
+fn variant_schema<V: ReflectVariant<CasePayloads = [..P]>, ..P: JsonSchema>(gen: &mut SchemaGenerator) -> Schema {
+    let policy = Reflect::<V>::wire_name_policy();
+    let tag = ReflectVariant::<V>::wire_tag();
+    let mut s = SchemaObject {};
+    for let case of ReflectVariant::<V>::members() {
+        s.one_of.push(case_schema(&case, wire_name(&case, policy), &tag, gen));
+    }
+    if s.one_of.is_empty() {
+        return Schema::Bool(false);
+    }
+    return Schema::Object(s);
+}
+
+/// A case as the derived `Serialize` writes it: untagged, a unit case is its
+/// name and a payload case an object holding the payload under the name;
+/// under `#[wire(tag)]`, an object whose `tag` property holds the name, beside
+/// the payload struct's fields.
+fn case_schema<V, P: JsonSchema>(
+    case: &VariantCase<V, P>,
+    name: String,
+    tag: &Option<String>,
+    gen: &mut SchemaGenerator,
+) -> Schema {
+    if let Some(tag) = tag {
+        let mut s = if case.is_unit() {
+            SchemaObject::of_type(JsonTypes::Object);
+        } else {
+            P::json_schema(gen).into_object();
+        };
+        s.properties[*tag] = Schema::Object(SchemaObject::constant(Document::string(name)));
+        s.required.push(*tag);
+        return Schema::Object(s);
+    }
+    if case.is_unit() {
+        return Schema::Object(SchemaObject::constant(Document::string(name)));
+    }
+    return one_property(name, P::json_schema(gen));
+}
+
+/// An object holding `value` under `name` and nothing else, as `core:json`
+/// writes a payload case.
+fn one_property(name: String, value: Schema) -> Schema {
+    let mut s = SchemaObject::of_type(JsonTypes::Object);
+    s.properties[name] = value;
+    s.required.push(name);
+    s.max_properties = Option::Some(1);
+    return Schema::Object(s);
+}
+
+impl<E: ReflectEnum<Members = [..M]>, ..M> JsonSchema for E {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<E>::decl_name(), |_| enum_schema::<E>());
+    }
+}
+
+fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
+    let policy = Reflect::<E>::wire_name_policy();
+    let mut names: List<Document> = [];
+    for let case of ReflectEnum::<E>::members() {
+        names.push(Document::string(wire_name(&case, policy)));
+    }
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        enum: Option::Some(names),
+    });
+}
+
+impl<L: ReflectFlags<Members = [..M]>, ..M> JsonSchema for L {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<L>::decl_name(), |_| flags_schema::<L>());
+    }
+}
+
+fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
+    let policy = Reflect::<L>::wire_name_policy();
+    let mut names: List<Document> = [];
+    for let bit of ReflectFlags::<L>::members() {
+        names.push(Document::string(wire_name(&bit, policy)));
+    }
+    let member = SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        enum: Option::Some(names),
+    };
+    return set_of(Schema::Object(member));
+}
+
+fn array_of(items: Schema) -> SchemaObject {
+    return SchemaObject {
+        type: Option::Some(JsonTypes::Array),
+        items: Option::Some(items),
+    };
+}
+
+fn of_type(t: JsonTypes) -> Schema {
+    return Schema::Object(SchemaObject::of_type(t));
+}
+
+// ── The leaves ──
+
+impl JsonSchema for bool {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::Boolean);
+    }
+}
+
+fn integer(minimum: f64, maximum: f64) -> Schema {
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::Integer),
+        minimum: Option::Some(minimum),
+        maximum: Option::Some(maximum),
+    });
+}
+
+impl JsonSchema for i8 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(i8::MIN as f64, i8::MAX as f64);
+    }
+}
+
+impl JsonSchema for i16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(i16::MIN as f64, i16::MAX as f64);
+    }
+}
+
+impl JsonSchema for i32 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(i32::MIN as f64, i32::MAX as f64);
+    }
+}
+
+impl JsonSchema for u8 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(0.0, u8::MAX as f64);
+    }
+}
+
+impl JsonSchema for u16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(0.0, u16::MAX as f64);
+    }
+}
+
+impl JsonSchema for u32 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(0.0, u32::MAX as f64);
+    }
+}
+
+// `core:json` writes a 64-bit integer as a number within ±(2^53 − 1), where a
+// double holds it exactly, and as a decimal string beyond.
+
+impl JsonSchema for i64 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::Object(SchemaObject {
+            any_of: [
+                integer(f64::MIN_SAFE_INTEGER, f64::MAX_SAFE_INTEGER),
+                signed_decimal(`${i64::MAX}`),
+            ],
+        });
+    }
+}
+
+impl JsonSchema for u64 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::Object(SchemaObject {
+            any_of: [
+                integer(0.0, f64::MAX_SAFE_INTEGER),
+                unsigned_decimal(`${u64::MAX}`),
+            ],
+        });
+    }
+}
+
+impl JsonSchema for i128 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return signed_decimal(`${i128::MAX}`);
+    }
+}
+
+impl JsonSchema for u128 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return unsigned_decimal(`${u128::MAX}`);
+    }
+}
+
+fn decimal_string(pattern: String) -> Schema {
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        pattern: Option::Some(pattern),
+    });
+}
+
+/// A decimal string in `0..=max`, spelled as `core:json` spells it.
+fn unsigned_decimal(max: String) -> Schema {
+    return decimal_string(`^(0|${one_to(max)})$`);
+}
+
+/// A decimal string in `-max - 1..=max`, spelled as `core:json` spells it.
+fn signed_decimal(max: String) -> Schema
+    contract max.byte_at(max.len() - 1) != b'9', "a two's complement maximum never ends in 9"
+{
+    // A two's complement range ends one further below zero than above it.
+    let last = max.len() - 1;
+    let below = `${max.substr_bytes(0, last)}${(max.byte_at(last) + 1) as char}`;
+    return decimal_string(`^(0|-?${one_to(max)}|-${below})$`);
+}
+
+/// A regular expression, as a group, matching the decimal integers in
+/// `1..=max` without leading zeros.
+fn one_to(max: String) -> String {
+    let n = max.len();
+    let mut alternatives: List<String> = [];
+    if n > 1 {
+        alternatives.push(`[1-9]${any_digits(0, n - 2)}`);
+    }
+    // A number of `max`'s length is below it where it first falls below
+    // `max`'s digit, after a prefix it shares.
+    for let i of 0..<n {
+        let lowest = if i == 0 { b'1' } else { b'0' };
+        let digit = max.byte_at(i);
+        if digit > lowest {
+            let rest = any_digits(n - i - 1, n - i - 1);
+            alternatives.push(`${max.substr_bytes(0, i)}${digit_class(lowest, digit - 1)}${rest}`);
+        }
+    }
+    alternatives.push(max);
+    return `(${alternatives.join("|")})`;
+}
+
+/// From `min` to `max` digits, written as briefly as the count allows.
+fn any_digits(min: i32, max: i32) -> String {
+    if max == 0 {
+        return "";
+    }
+    if max == 1 {
+        return if min == 1 { "[0-9]" } else { "[0-9]?" };
+    }
+    if min == max {
+        return `[0-9]{${max}}`;
+    }
+    return `[0-9]{${min},${max}}`;
+}
+
+fn digit_class(low: u8, high: u8) -> String {
+    if low == high {
+        return `${low as char}`;
+    }
+    return `[${low as char}-${high as char}]`;
+}
+
+test "one_to matches exactly the numbers up to max" {
+    assert one_to("9") == "([1-8]|9)";
+    assert one_to("10") == "([1-9]|10)";
+    assert one_to("255") == "([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-4]|255)";
+    assert one_to("3000") == "([1-9][0-9]{0,2}|[1-2][0-9]{3}|3000)";
+}
+
+impl JsonSchema for f32 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::Number);
+    }
+}
+
+impl JsonSchema for f64 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::Number);
+    }
+}
+
+impl JsonSchema for f16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::Number);
+    }
+}
+
+impl JsonSchema for bf16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::Number);
+    }
+}
+
+impl JsonSchema for char {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::Object(SchemaObject {
+            type: Option::Some(JsonTypes::String),
+            min_length: Option::Some(1),
+            max_length: Option::Some(1),
+        });
+    }
+}
+
+impl JsonSchema for String {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::String);
+    }
+}
+
+/// The text of the Wado type `wado_format` names in symbol notation, which
+/// `x-wado-format` holds, with the standard `format` only when every text the
+/// type writes meets it.
+fn text_of(wado_format: String, format: Option<String> = null) -> Schema {
+    let mut s = SchemaObject { type: Option::Some(JsonTypes::String), format };
+    s.extra["x-wado-format"] = Document::string(wado_format);
+    return Schema::Object(s);
+}
+
+// A Temporal type takes no `format`: each writes some text its RFC 3339 format
+// rejects, such as an expanded year, a duration of `P1Y2D`, or a time with no
+// offset.
+
+impl JsonSchema for Instant {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#Instant");
+    }
+}
+
+impl JsonSchema for PlainDate {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#PlainDate");
+    }
+}
+
+impl JsonSchema for Duration {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#Duration");
+    }
+}
+
+impl JsonSchema for PlainTime {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#PlainTime");
+    }
+}
+
+impl JsonSchema for PlainDateTime {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#PlainDateTime");
+    }
+}
+
+impl JsonSchema for PlainYearMonth {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#PlainYearMonth");
+    }
+}
+
+impl JsonSchema for PlainMonthDay {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#PlainMonthDay");
+    }
+}
+
+impl JsonSchema for ZonedDateTime {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:temporal#ZonedDateTime");
+    }
+}
+
+impl JsonSchema for Uri {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:uri#Uri", Option::Some("uri-reference"));
+    }
+}
+
+impl JsonSchema for Uuid {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:uuid#Uuid", Option::Some("uuid"));
+    }
+}
+
+/// A WHATWG URL, which no RFC 3986 format describes: its text may hold
+/// characters RFC 3986 excludes, and `core:url` reads only the special schemes.
+impl JsonSchema for Url {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:url#Url");
+    }
+}
+
+fn base64url() -> Schema {
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::String),
+        content_encoding: Option::Some("base64url"),
+    });
+}
+
+impl JsonSchema for ByteList {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return base64url();
+    }
+}
+
+impl JsonSchema for ByteArray {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return base64url();
+    }
+}
+
+impl JsonSchema for ByteSlice {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return base64url();
+    }
+}
+
+impl JsonSchema for () {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return of_type(JsonTypes::Null);
+    }
+}
+
+// `anyOf` rather than `oneOf`: in `Option<Option<T>>` both branches accept null.
+impl<T: JsonSchema> JsonSchema for Option<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::Object(SchemaObject {
+            any_of: [
+                T::json_schema(gen),
+                of_type(JsonTypes::Null),
+            ],
+        });
+    }
+}
+
+impl<T: JsonSchema, E: JsonSchema> JsonSchema for Result<T, E> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::Object(SchemaObject {
+            one_of: [
+                one_property("Ok", T::json_schema(gen)),
+                one_property("Err", E::json_schema(gen)),
+            ],
+        });
+    }
+}
+
+impl<T: JsonSchema> JsonSchema for List<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::Object(array_of(T::json_schema(gen)));
+    }
+}
+
+fn set_of(items: Schema) -> Schema {
+    return Schema::Object(SchemaObject { ..array_of(items), unique_items: true });
+}
+
+fn string_keyed(values: Schema) -> Schema {
+    return Schema::Object(SchemaObject {
+        type: Option::Some(JsonTypes::Object),
+        additional_properties: Option::Some(values),
+    });
+}
+
+impl<T: Ord + JsonSchema> JsonSchema for TreeSet<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return set_of(T::json_schema(gen));
+    }
+}
+
+impl<T: Hash + JsonSchema> JsonSchema for HashSet<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return set_of(T::json_schema(gen));
+    }
+}
+
+impl<V: JsonSchema> JsonSchema for TreeMap<String, V> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return string_keyed(V::json_schema(gen));
+    }
+}
+
+impl<V: JsonSchema> JsonSchema for HashMap<String, V> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return string_keyed(V::json_schema(gen));
+    }
+}
+
+impl<..T: JsonSchema> JsonSchema for [..T] {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        let mut s = SchemaObject::of_type(JsonTypes::Array);
+        for let item of [..T::json_schema(gen)] {
+            s.prefix_items.push(item);
+        }
+        let arity = s.prefix_items.len();
+        s.min_items = Option::Some(arity);
+        s.max_items = Option::Some(arity);
+        return Schema::Object(s);
+    }
+}

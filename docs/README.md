@@ -216,6 +216,7 @@
 - [Refined Types — Types That Carry a Contract](./wep-2026-10-25-refined-types.md)
 - [Linear Arrays — Arrays Outside the GC Heap](./wep-2026-10-26-linear-arrays.md)
 - [Re — Linear-Time Regular Expressions for Wado](./wep-2026-11-02-re.md)
+- [URI References as Identifiers (`core:uri`)](./wep-2026-11-07-core-uri.md)
 
 ## Standard Library
 
@@ -245,6 +246,7 @@
 - [core:serde](./stdlib-core-serde.md)
 - [core:simd](./stdlib-core-simd.md)
 - [core:temporal](./stdlib-core-temporal.md)
+- [core:uri](./stdlib-core-uri.md)
 - [core:url](./stdlib-core-url.md)
 - [core:uuid](./stdlib-core-uuid.md)
 - [core:value](./stdlib-core-value.md)

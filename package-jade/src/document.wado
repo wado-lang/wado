@@ -1,0 +1,482 @@
+//! A JSON document read once into flat arrays, for the documents Jade reads
+//! without decoding them into a Wado type: a schema, and an instance to
+//! validate. One allocation per array rather than one per value keeps reading
+//! and walking a document cheap.
+
+use {
+    DEFAULT_MAX_DEPTH,
+    DeserializeError,
+    Deserializer,
+    Serialize,
+    SerializeError,
+    SerializeMap,
+    SerializeSeq,
+    Serializer,
+    deeper,
+} from "core:serde";
+use { JsonDeserializer, to_bytes } from "core:json";
+use { HashMap, HashSet } from "core:collections";
+
+/// What a JSON value is.
+pub enum NodeKind {
+    Null,
+    Bool,
+    Number,
+    String,
+    Array,
+    Object,
+}
+
+/// A JSON document. A node is an index into its arrays, in document order: a
+/// container's members follow it, an object's as a key node and a value node
+/// in turn, and `ends` says where its subtree stops. Node 0 is the root.
+pub struct Document {
+    kinds: List<NodeKind> = [],
+    /// A bool's value as 0 or 1, the index of a number in `numbers` or of a
+    /// string in `strings`, or a container's member count.
+    slots: List<i32> = [],
+    /// The index one past the node's subtree.
+    ends: List<i32> = [],
+    numbers: List<f64> = [],
+    strings: List<String> = [],
+}
+
+/// An object with more members than this finds a key through a hashed table
+/// rather than by comparing it with each member's: to check for a repeated key,
+/// and to compare two objects.
+global LINEAR_KEY_CHECK: i32 = 8;
+
+impl Document {
+    /// Reads the JSON text `text`. A repeated key is an error, as in
+    /// `core:json`, and so are a lone surrogate and a number that rounds to
+    /// infinity. `max_depth` bounds nesting.
+    pub fn parse<S: AsByteSlice>(text: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<Document, DeserializeError> {
+        let mut r = Reader {
+            doc: Document {},
+            de: JsonDeserializer::new(text, max_depth),
+        };
+        r.value()?;
+        if r.de.peek_after_whitespace() >= 0 {
+            return Result::Err(DeserializeError::trailing(r.de.pos as i64));
+        }
+        return Result::Ok(r.doc);
+    }
+
+    /// The document `core:json` writes for `value`, or an error for a value
+    /// JSON cannot hold, such as NaN, or one whose `Serialize` writes a key
+    /// twice.
+    pub fn of<T: Serialize>(value: &T) -> Result<Document, SerializeError> {
+        let text = to_bytes(value)?;
+        // Serializing nested as deep as the value does, so reading it back
+        // needs no depth bound of its own.
+        return match Document::parse(text, i32::MAX) {
+            Ok(doc) => Result::Ok(doc),
+            Err(e) => Result::Err(SerializeError::unsupported_value(`${e}`)),
+        };
+    }
+
+    /// Whether `a` and `b` are one node, not merely equal ones.
+    internal fn same_node(a: &Node, b: &Node) -> bool {
+        return ref_eq(a.doc, b.doc) && a.at == b.at;
+    }
+
+    /// A string, without the trip through JSON text `of` takes.
+    pub fn string<S: AsStrSlice>(value: S) -> Document {
+        let mut doc = Document {};
+        doc.push_string(value.to_string());
+        return doc;
+    }
+
+    pub fn root(&self) -> Node {
+        return Node { doc: self, at: 0 };
+    }
+
+    fn push(&mut self, kind: NodeKind, slot: i32) -> i32 {
+        let at = self.kinds.len();
+        self.kinds.push(kind);
+        self.slots.push(slot);
+        self.ends.push(at + 1);
+        return at;
+    }
+
+    fn push_number(&mut self, value: f64) {
+        self.push(NodeKind::Number, self.numbers.len());
+        self.numbers.push(value);
+    }
+
+    fn push_string(&mut self, value: String) {
+        self.push(NodeKind::String, self.strings.len());
+        self.strings.push(value);
+    }
+
+    /// Appends the subtree of `node`, from whatever document holds it.
+    fn push_tree(&mut self, node: &Node) {
+        let src = node.doc;
+        let shift = self.kinds.len() - node.at;
+        for let i of node.at..<src.ends[node.at] {
+            let kind = src.kinds[i];
+            let slot = match kind {
+                Number => {
+                    self.numbers.push(src.numbers[src.slots[i]]);
+                    self.numbers.len() - 1;
+                },
+                String => {
+                    self.strings.push(src.strings[src.slots[i]]);
+                    self.strings.len() - 1;
+                },
+                Null | Bool | Array | Object => src.slots[i],
+            };
+            self.kinds.push(kind);
+            self.slots.push(slot);
+            self.ends.push(src.ends[i] + shift);
+        }
+    }
+}
+
+/// Two documents are equal when their roots are, as `Node` compares them.
+impl Eq for Document {
+    fn eq(&self, other: &Document) -> bool {
+        return self.root() == other.root();
+    }
+}
+
+impl Serialize for Document {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return self.root().serialize(s);
+    }
+}
+
+/// A value inside a `Document`.
+pub struct Node {
+    doc: &Document,
+    at: i32,
+}
+
+impl Node {
+    pub fn kind(&self) -> NodeKind {
+        return self.doc.kinds[self.at];
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        if self.kind() matches { Bool } {
+            return Option::Some(self.doc.slots[self.at] == 1);
+        }
+        return null;
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        if self.kind() matches { Number } {
+            return Option::Some(self.doc.numbers[self.doc.slots[self.at]]);
+        }
+        return null;
+    }
+
+    pub fn as_str(&self) -> Option<StrSlice> {
+        if self.kind() matches { String } {
+            return Option::Some(self.doc.strings[self.doc.slots[self.at]].as_str_slice());
+        }
+        return null;
+    }
+
+    /// The number of an array's elements or an object's members; 0 for any
+    /// other value.
+    pub fn len(&self) -> i32 {
+        return match self.kind() {
+            Array | Object => self.doc.slots[self.at],
+            Null | Bool | Number | String => 0,
+        };
+    }
+
+    /// An array's elements in order; nothing for any other value.
+    pub fn items(&self) -> Elements {
+        let n = if self.kind() matches { Array } { self.len() } else { 0 };
+        return Elements { doc: self.doc, next: self.at + 1, left: n };
+    }
+
+    /// An object's members as key and value, in document order; nothing for any
+    /// other value.
+    pub fn entries(&self) -> Members {
+        let n = if self.kind() matches { Object } { self.len() } else { 0 };
+        return Members { doc: self.doc, next: self.at + 1, left: n };
+    }
+
+    /// The value of an object's member `key`.
+    pub fn get<S: AsStrSlice>(&self, key: S) -> Option<Node> {
+        let key = key.as_str_slice();
+        for let [k, v] of self.entries() {
+            if k == key {
+                return Option::Some(v);
+            }
+        }
+        return null;
+    }
+
+    /// This value as a document of its own.
+    pub fn to_document(&self) -> Document {
+        let mut doc = Document {};
+        doc.push_tree(self);
+        return doc;
+    }
+}
+
+/// JSON Schema's equality: numbers by value, so `1` equals `1.0`; arrays
+/// element by element; objects by their members, whatever their order.
+impl Eq for Node {
+    fn eq(&self, other: &Node) -> bool {
+        let kind = self.kind();
+        if kind != other.kind() {
+            return false;
+        }
+        return match kind {
+            Null => true,
+            Bool => self.as_bool() == other.as_bool(),
+            Number => self.as_f64().unwrap() == other.as_f64().unwrap(),
+            String => self.as_str().unwrap() == other.as_str().unwrap(),
+            Array => {
+                if self.len() != other.len() {
+                    return false;
+                }
+                let mut theirs = other.items();
+                for let mine of self.items() {
+                    if mine != theirs.next().unwrap() {
+                        return false;
+                    }
+                }
+                true;
+            },
+            Object => {
+                if self.len() != other.len() {
+                    return false;
+                }
+                if self.len() <= LINEAR_KEY_CHECK {
+                    for let [k, v] of self.entries() {
+                        if !other.get(k) matches { Some(w) && v == w } {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                let mut theirs = HashMap::<String, Node>::new();
+                for let [k, w] of other.entries() {
+                    theirs[k.to_string()] = w;
+                }
+                for let [k, v] of self.entries() {
+                    if !theirs.get_str(k) matches { Some(w) && v == w } {
+                        return false;
+                    }
+                }
+                true;
+            },
+        };
+    }
+}
+
+impl Serialize for Node {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return match self.kind() {
+            Null => s.serialize_null(),
+            Bool => s.serialize_bool(self.as_bool().unwrap()),
+            Number => s.serialize_f64(self.as_f64().unwrap()),
+            String => s.serialize_string(self.as_str().unwrap()),
+            Array => {
+                let mut seq = s.begin_seq(self.len())?;
+                for let item of self.items() {
+                    seq.element(&item)?;
+                }
+                seq.end();
+            },
+            Object => {
+                let mut map = s.begin_map(self.len())?;
+                for let [k, v] of self.entries() {
+                    map.key(&k)?;
+                    map.value(&v)?;
+                }
+                map.end();
+            },
+        };
+    }
+}
+
+pub struct Elements {
+    doc: &Document,
+    next: i32,
+    left: i32,
+}
+
+impl Iterator for Elements {
+    type Item = Node;
+
+    fn next(&mut self) -> Option<Node> {
+        if self.left == 0 {
+            return null;
+        }
+        let at = self.next;
+        self.next = self.doc.ends[at];
+        self.left -= 1;
+        return Option::Some(Node { doc: self.doc, at });
+    }
+}
+
+pub struct Members {
+    doc: &Document,
+    next: i32,
+    left: i32,
+}
+
+impl Iterator for Members {
+    type Item = [StrSlice, Node];
+
+    fn next(&mut self) -> Option<[StrSlice, Node]> {
+        if self.left == 0 {
+            return null;
+        }
+        let key = self.doc.strings[self.doc.slots[self.next]].as_str_slice();
+        let at = self.next + 1;
+        self.next = self.doc.ends[at];
+        self.left -= 1;
+        return Option::Some([
+            key,
+            Node { doc: self.doc, at },
+        ]);
+    }
+}
+
+/// Reads JSON text into a `Document`, through `core:json`'s lexer.
+struct Reader {
+    doc: Document,
+    de: JsonDeserializer,
+}
+
+impl Reader {
+    fn value(&mut self) -> Result<(), DeserializeError> {
+        let b = self.de.peek_after_whitespace();
+        if b == b'"' {
+            let s = self.de.read_json_string()?;
+            self.doc.push_string(s);
+            return Result::Ok(());
+        }
+        if b == b'[' {
+            return self.array();
+        }
+        if b == b'{' {
+            return self.object();
+        }
+        if b == b't' || b == b'f' {
+            let v = self.de.deserialize_bool()?;
+            self.doc.push(NodeKind::Bool, v as i32);
+            return Result::Ok(());
+        }
+        if b == b'n' {
+            self.de.is_null()?;
+            self.doc.push(NodeKind::Null, 0);
+            return Result::Ok(());
+        }
+        if b < 0 {
+            return Result::Err(DeserializeError::eof(self.de.pos as i64));
+        }
+        let n = self.de.parse_f64_direct()?;
+        self.doc.push_number(n);
+        return Result::Ok(());
+    }
+
+    /// Opens the container whose opening byte is under the cursor, as a node of
+    /// `kind`.
+    fn open(&mut self, kind: NodeKind) -> Result<i32, DeserializeError> {
+        self.de.depth = deeper(self.de.depth, self.de.max_depth, self.de.pos as i64)?;
+        self.de.advance();
+        return Result::Ok(self.doc.push(kind, 0));
+    }
+
+    fn close(&mut self, at: i32) {
+        self.de.depth -= 1;
+        self.doc.ends[at] = self.doc.kinds.len();
+    }
+
+    /// Consumes the `,` between two members, or `close` after the last; true at
+    /// the end.
+    fn after_member(&mut self, close: i32) -> Result<bool, DeserializeError> {
+        let b = self.de.peek_after_whitespace();
+        if b < 0 {
+            return Result::Err(DeserializeError::eof(self.de.pos as i64));
+        }
+        if b != b',' && b != close {
+            return Result::Err(DeserializeError::malformed(
+                `expected ',' or '${close as u8 as char}'`,
+                self.de.pos as i64,
+            ));
+        }
+        self.de.advance();
+        return Result::Ok(b == close);
+    }
+
+    fn array(&mut self) -> Result<(), DeserializeError> {
+        let at = self.open(NodeKind::Array)?;
+        if self.de.peek_after_whitespace() == b']' {
+            self.de.advance();
+        } else {
+            loop {
+                self.value()?;
+                self.doc.slots[at] += 1;
+                if self.after_member(b']')? {
+                    break;
+                }
+            }
+        }
+        self.close(at);
+        return Result::Ok(());
+    }
+
+    fn object(&mut self) -> Result<(), DeserializeError> {
+        let at = self.open(NodeKind::Object)?;
+        let mut seen: Option<HashSet<String>> = null;
+        if self.de.peek_after_whitespace() == b'}' {
+            self.de.advance();
+        } else {
+            loop {
+                let b = self.de.peek_after_whitespace();
+                let start = self.de.pos;
+                if b < 0 {
+                    return Result::Err(DeserializeError::eof(start as i64));
+                }
+                if b != b'"' {
+                    return Result::Err(DeserializeError::unexpected_type("expected a string key", start as i64));
+                }
+                let key = self.de.read_json_string()?;
+                if self.repeats(at, &mut seen, &key) {
+                    let e = DeserializeError::duplicate_field(&key);
+                    return Result::Err(DeserializeError { ..e, offset: start as i64 });
+                }
+                self.doc.push_string(key);
+                self.de.expect_char(b':')?;
+                self.value()?;
+                self.doc.slots[at] += 1;
+                if self.after_member(b'}')? {
+                    break;
+                }
+            }
+        }
+        self.close(at);
+        return Result::Ok(());
+    }
+
+    /// Whether `key` repeats a key the object at `at` has read so far. Once it
+    /// has read `LINEAR_KEY_CHECK` of them, `seen` holds them all.
+    fn repeats(&self, at: i32, seen: &mut Option<HashSet<String>>, key: &String) -> bool {
+        if let Some(set) = seen {
+            return !set.insert(*key);
+        }
+        let object = Node { doc: &self.doc, at };
+        if object.get(key) matches { Some(_) } {
+            return true;
+        }
+        if object.len() + 1 == LINEAR_KEY_CHECK {
+            let mut set = HashSet::<String>::new();
+            for let [k, _] of object.entries() {
+                set.insert(k.to_string());
+            }
+            set.insert(*key);
+            *seen = Option::Some(set);
+        }
+        return false;
+    }
+}

@@ -1,0 +1,97 @@
+use { Document, Schema, SchemaObject, ValidationError, Validator } from "../src/lib.wado";
+
+fn errors(schema: String, data: String) -> List<ValidationError> {
+    let validator = Validator::compile(&Schema::parse(schema).unwrap()).unwrap();
+    let doc = Document::parse(data).unwrap();
+    if let Err(errors) = validator.validate(&doc.root()) {
+        return errors;
+    }
+    return [];
+}
+
+test "an error points into the instance and into the schema" {
+    let found = errors(
+        #"{"properties": {"a/b": {"items": {"minimum": 2}}}}"#,
+        #"{"a/b": [3, 1]}"#,
+    );
+    assert found.len() == 1;
+    assert found[0].instance == "/a~1b/1";
+    assert found[0].keyword == "/properties/a~1b/items/minimum";
+    assert `${found[0]}` == "/a~1b/1: must be at least 2 (/properties/a~1b/items/minimum)";
+}
+
+test "every failing keyword is reported" {
+    let found = errors(#"{"type": "string", "minimum": 5, "required": ["x"]}"#, "3");
+    assert found.len() == 2;
+    assert found[0].message == "must be string";
+    assert found[1].keyword == "/minimum";
+}
+
+test "an empty type array admits no value" {
+    let found = errors(#"{"type": []}"#, "null");
+    assert found.len() == 1;
+    assert found[0].keyword == "/type";
+    assert found[0].message == "no value is valid against an empty `type`";
+}
+
+test "a reference is followed to its target's keywords" {
+    let found = errors(##"{"$defs": {"n": {"type": ["integer", "null"]}}, "$ref": "#/$defs/n"}"##, "1.5");
+    assert found[0].keyword == "/$defs/n/type";
+    assert found[0].message == "must be null or integer";
+}
+
+test "multipleOf divides the numbers as written" {
+    assert errors(#"{"multipleOf": 0.1}"#, "0.3").is_empty();
+    assert errors(#"{"multipleOf": 0.01}"#, "19.99").is_empty();
+    assert errors(#"{"multipleOf": 3}"#, "1e300").len() == 1;
+    assert errors(#"{"multipleOf": 2}"#, "1e300").is_empty();
+    assert errors(#"{"multipleOf": 0.3}"#, "0.1").len() == 1;
+}
+
+test "a reference back to itself at the same instance is an error, not a loop" {
+    let found = errors(##"{"$ref": "#"}"##, "1");
+    assert found.len() == 1;
+    assert found[0].keyword == "/$ref";
+    assert found[0].message == "refers back to itself without moving into the instance";
+    let mutual = errors(
+        ##"{"$defs": {"a": {"$ref": "#/$defs/b"}, "b": {"allOf": [{"$ref": "#/$defs/a"}]}}, "$ref": "#/$defs/a"}"##,
+        "1",
+    );
+    assert mutual.len() == 1;
+    assert mutual[0].keyword == "/$defs/b/allOf/0/$ref";
+    assert errors(##"{"items": {"$ref": "#"}}"##, "[[[1]]]").is_empty();
+}
+
+test "a dynamic reference's fragment is percent-decoded before it names an anchor" {
+    let schema = ##"{
+        "$id": "https://x.test/outer",
+        "$ref": "inner",
+        "$defs": {
+            "node": {"$dynamicAnchor": "node", "type": "integer"},
+            "inner": {"$id": "inner", "$dynamicRef": "#%6eode", "$defs": {"n": {"$dynamicAnchor": "node"}}}
+        }
+    }"##;
+    let found = errors(schema, #""x""#);
+    assert found.len() == 1;
+    assert found[0].keyword == "/$defs/node/type";
+}
+
+test "a reference the schema does not hold is an error at compile" {
+    let e = Validator::compile(&Schema::parse(#"{"items": {"$ref": "other.json"}}"#).unwrap()).unwrap_err();
+    assert e.pointer == "/items/$ref";
+    assert e.message == "refers to no schema this document holds";
+}
+
+test "a schema built breaking a keyword's rule is an error at compile" {
+    let schema = Schema::Object(SchemaObject {
+        items: Option::Some(Schema::Object(SchemaObject { multiple_of: Option::Some(0.0) })),
+    });
+    let e = Validator::compile(&schema).unwrap_err();
+    assert e.pointer == "/items/multipleOf";
+    assert e.message == "must be greater than 0";
+}
+
+test "a pattern outside the supported syntax is an error at compile" {
+    let e = Validator::compile(&Schema::parse(#"{"pattern": "(?<=a)b"}"#).unwrap()).unwrap_err();
+    assert e.pointer == "/pattern";
+}
