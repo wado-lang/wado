@@ -505,7 +505,9 @@ impl AstVisitor<'_> for SpanCollector {
 
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
+            // Both segments of `ns::Trait`, as for a namespaced type.
             self.spans.insert(bound.span.start, token_type::TYPE);
+            self.spans.insert(bound.name_span.start, token_type::TYPE);
             // `Output` in `Builder<Output = T>` names an associated type.
             for assoc in &bound.assoc_types {
                 self.spans.insert(assoc.span.start, token_type::TYPE);
@@ -1199,6 +1201,14 @@ mod tests {
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 1, "ns"), token_type::TYPE);
         assert_eq!(kind_of(&tokens, src, 1, "Value"), token_type::TYPE);
+    }
+
+    #[test]
+    fn a_namespaced_bound_is_a_type_on_both_segments() {
+        let src = "fn f<\n    T: geo::Show,\n>(t: &T) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "geo"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 1, "Show"), token_type::TYPE);
     }
 
     /// `::<` is a turbofish, so the name before it is the callee, not the

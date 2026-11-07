@@ -6109,6 +6109,7 @@ impl Parser {
                 id: self.alloc_ast_id(),
                 namespace: None,
                 name: bound_name.to_string(),
+                name_span: span,
                 type_args: Vec::new(),
                 assoc_types: Vec::new(),
                 span,
@@ -6118,11 +6119,12 @@ impl Parser {
         }
 
         let first = self.consume_ident()?;
-        let (namespace, name) = if self.check(&TokenKind::ColonColon) {
+        let (namespace, name, name_span) = if self.check(&TokenKind::ColonColon) {
             self.advance();
-            (Some(first), self.consume_ident()?)
+            let name_span = self.peek().span;
+            (Some(first), self.consume_ident()?, name_span)
         } else {
-            (None, first)
+            (None, first, span)
         };
         let mut type_args = Vec::new();
         let mut assoc_types = Vec::new();
@@ -6165,6 +6167,7 @@ impl Parser {
             id: self.alloc_ast_id(),
             namespace,
             name,
+            name_span,
             type_args,
             assoc_types,
             span,

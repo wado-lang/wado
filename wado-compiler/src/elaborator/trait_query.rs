@@ -2368,7 +2368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             c.bound.name
                         )
                     } else {
-                        c.bound.name.clone()
+                        c.bound.written_name()
                     }
                 })
                 .collect();
@@ -2716,7 +2716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for &subject in &subjects {
                     self.enforce_single_bound_args(
                         subject,
-                        &bound.name,
+                        &bound.written_name(),
                         written.as_ref(),
                         &param.name,
                         span,
@@ -3084,7 +3084,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             drop(tt);
             let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
                 type_name,
-                trait_name: bound.name.clone(),
+                trait_name: bound.written_name(),
                 assoc_name: constraint.name.clone(),
                 expected: expected_name,
                 actual: actual_name,

@@ -1836,6 +1836,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     id,
                     namespace: None,
                     name: name.to_string(),
+                    name_span: span,
                     type_args: Vec::new(),
                     assoc_types: Vec::new(),
                     span,
