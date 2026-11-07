@@ -5,8 +5,9 @@
 `loam gen` runs what the Kiln generator runs, without Kiln, and prints the
 module. It is the entry point for profiling the generator. `loam dump` prints
 the checked graph: how `build` lowers each node (operations of the graph,
-folded by stage 0, an alias of its operand, a branch, or a weight's transpose
-viewed by the product reading it), where each axis took its name from, each
+folded by stage 0, an alias of its operand, a branch, a weight's transpose
+viewed by the product reading it, or a part of an attention matched as the
+composite), where each axis took its name from, each
 tensor's element type and axes, the values stage 0 folded, what each scope
 leaves `compute` to check, and which lengths the run may pad to a capacity or
 the node that refuses one. The device compiler's fusion is decided when it

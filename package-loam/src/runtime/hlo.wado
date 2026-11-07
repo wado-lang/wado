@@ -304,17 +304,19 @@ pub affine trait Graph: Holds with _ {
     /// `heads / kv_heads` query heads. Where `cos` and `sin` are given, a query
     /// or key at position `p` turns its halves `(a, b)` by
     /// `(a cos − b sin, b cos + a sin)` of row `p`. Each score is scaled,
-    /// capped, and biased by the row of `bias` a batch's and head's extent of 1
-    /// repeats, then masked by `options`. Returns the attended queries, then the
-    /// past key and value with the new (turned) positions after them. Where
-    /// `past_length` is given, the past is a buffer of fixed capacity holding
-    /// that many positions, and the present is the same buffer, the new
-    /// positions written from there: onnxruntime's shared buffer. The buffer
-    /// must hold them, `past_length` + S ≤ P; a position past P is dropped,
-    /// and what the present holds past `past_length` + S is unspecified. A
-    /// new position may be padding, which a causal mask keeps every valid
-    /// query from reading.
-    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+    /// capped, and biased by the row of `bias` an extent of 1 repeats, then
+    /// masked by `options`, or masked and then biased where `options.hidden`
+    /// says so. Returns the attended queries, then the past key and value with
+    /// the new (turned) positions after them. Where `past_length` is given, the
+    /// past is a buffer of fixed capacity holding that many positions, and the
+    /// present is the same buffer, the new positions written from there:
+    /// onnxruntime's shared buffer. The buffer must hold them, `past_length` +
+    /// S ≤ P; a position past P is dropped, and what the present holds past
+    /// `past_length` + S is unspecified. A new position may be padding, which a
+    /// causal mask keeps every valid query from reading. Where `reach` is
+    /// given, no query reads a position at or past it, even one `options.hidden`
+    /// leaves a finite score: the positions past `reach` are padding.
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
         q: &Self::Tensor<f32, [B, S, Q]>,
         k: &Self::Tensor<f32, [B, S, K]>,
@@ -322,14 +324,15 @@ pub affine trait Graph: Holds with _ {
         past_k: &Self::Tensor<f32, [B, H, P, D]>,
         past_v: &Self::Tensor<f32, [B, H, P, D]>,
         past_length: Option<&Self::Tensor<i64, []>>,
+        reach: Option<&Self::Tensor<i64, []>>,
         cos: Option<&Self::Tensor<f32, [Pos, Half]>>,
         sin: Option<&Self::Tensor<f32, [Pos, Half]>>,
-        bias: Option<&Self::Tensor<f32, [BB, BH, S, T]>>,
+        bias: Option<&Self::Tensor<f32, [BB, BH, BS, T]>>,
         options: &Attention,
     ) -> [Self::Tensor<f32, [B, S, Q]>, Self::Tensor<f32, [B, H, T, D]>, Self::Tensor<f32, [B, H, T, D]>]
         contract past_length matches { None } || options.causal, "a shared buffer's padding is masked causally"
     {
-        return decomposed_attention::<Self, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        return decomposed_attention::<Self, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
             self,
             q,
             k,
@@ -337,6 +340,7 @@ pub affine trait Graph: Holds with _ {
             past_k,
             past_v,
             past_length,
+            reach,
             cos,
             sin,
             bias,
@@ -351,7 +355,7 @@ pub affine trait Graph: Holds with _ {
 
 /// `Graph::group_query_attention`'s decomposition, which a graph that runs
 /// some cases as a kernel of its own runs for the rest.
-pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
     g: &mut G,
     q: &G::Tensor<f32, [B, S, Q]>,
     k: &G::Tensor<f32, [B, S, K]>,
@@ -359,9 +363,10 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     past_k: &G::Tensor<f32, [B, H, P, D]>,
     past_v: &G::Tensor<f32, [B, H, P, D]>,
     past_length: Option<&G::Tensor<i64, []>>,
+    reach: Option<&G::Tensor<i64, []>>,
     cos: Option<&G::Tensor<f32, [Pos, Half]>>,
     sin: Option<&G::Tensor<f32, [Pos, Half]>>,
-    bias: Option<&G::Tensor<f32, [BB, BH, S, T]>>,
+    bias: Option<&G::Tensor<f32, [BB, BH, BS, T]>>,
     options: &Attention,
 ) -> [G::Tensor<f32, [B, S, Q]>, G::Tensor<f32, [B, H, T, D]>, G::Tensor<f32, [B, H, T, D]>] with _ {
     let [batch, s, past, d] = [
@@ -405,7 +410,7 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     let raw: G::Tensor<f32, [B, Heads, S, T]> = g.dot_general(&query, &keys, &product);
     let score_extents: List<i32> = [batch, heads, s, total];
     let mut scores = g.binary(
-        Binary::Multiply,
+        if options.divides { Binary::Divide } else { Binary::Multiply },
         &raw,
         &full::<G, f32, [B, Heads, S, T]>(g, options.scale, score_extents),
     );
@@ -414,14 +419,24 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         let tanh = g.unary(Unary::Tanh, &g.binary(Binary::Divide, &scores, &cap));
         scores = g.binary(Binary::Multiply, &cap, &tanh);
     }
-    if let Some(b) = bias {
-        let stretched: G::Tensor<f32, [B, Heads, S, T]> = g.broadcast_in_dim(b, score_extents, [0, 1, 2, 3]);
-        scores = g.binary(Binary::Add, &scores, &stretched);
+    let bias_first = options.hidden matches { None };
+    if let Some(b) = bias && bias_first {
+        scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
     if options.causal || options.window > 0 {
         let hidden = attention_mask::<G, B, Heads, S, T>(g, &first, options, &score_extents);
-        let lowest = full::<G, f32, [B, Heads, S, T]>(g, f32::NEG_INFINITY, score_extents);
+        let lowest = full::<G, f32, [B, Heads, S, T]>(
+            g,
+            options.hidden.unwrap_or(f32::NEG_INFINITY),
+            score_extents,
+        );
         scores = g.select(&hidden, &lowest, &scores);
+    }
+    if let Some(b) = bias && !bias_first {
+        scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
+    }
+    if let Some(length) = reach {
+        scores = masked::<G, f32, [B, Heads, S, T]>(g, &scores, 3, length, f32::NEG_INFINITY);
     }
     let weights = softmax::<G, [B, Heads, S, T]>(g, &scores, 3);
     let attend = DotDims {
@@ -433,6 +448,17 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     let attended: G::Tensor<f32, [B, Heads, S, D]> = g.dot_general(&weights, &values, &attend);
     let back: G::Tensor<f32, [B, S, Heads, D]> = g.transpose(&attended, [0, 2, 1, 3]);
     return [g.reshape(&back, [batch, s, heads * d]), present_k, present_v];
+}
+
+/// `scores` plus `bias`, its extents of 1 repeated.
+fn biased<affine G: Graph, Axes, BiasAxes>(
+    g: &mut G,
+    scores: &G::Tensor<f32, Axes>,
+    bias: &G::Tensor<f32, BiasAxes>,
+    extents: &List<i32>,
+) -> G::Tensor<f32, Axes> with _ {
+    let stretched: G::Tensor<f32, Axes> = g.broadcast_in_dim(bias, *extents, [0, 1, 2, 3]);
+    return g.binary(Binary::Add, scores, &stretched);
 }
 
 /// The query heads, the key heads' groups, and the head width, inside the

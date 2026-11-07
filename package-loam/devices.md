@@ -200,14 +200,25 @@ definition:
 A composite comes first from an operator that names it: `Attention`,
 `GroupQueryAttention`, `MatMulNBits`, `QMoE`, and `DequantizeLinear` with a
 `block_size` before a `MatMul`. A graph that spells the computation in parts,
-as GPT-2 spells its attention, is matched later, as a subgraph. The quantized
+as GPT-2 spells its attention, is matched by the generator as a subgraph, so
+`loam dump` reports it, and every backend takes the composite. The quantized
 product and the mixture of experts arrive with the roadmap items that bring
 their operators.
 
+A subgraph matches only where the composite computes what it says. GPT-2 hides
+a position through a table cut to the queries' rows, so the generator reads the
+table and matches it only where every row is true on and below its diagonal. No
+table reaches the device then, and no `gather` cuts it each pass. The keys must
+be the queries' own batch and sequence, no broadcast may widen the scores past
+the composite's, and nothing outside the subgraph may read a tensor inside it
+but the presents.
+
 A matched subgraph is the composite's decomposition as it stands, with every
-choice it makes kept: a scale applied by `Div` or by `Mul`, and a mask of f32's
-lowest value, as GPT-2's is, rather than negative infinity. So `Cpu` computes what the graph says.
-A kernel may differ from its decomposition only in what
+choice it makes kept: a scale applied by `Div` or by `Mul`, a mask of f32's
+lowest value, as GPT-2's is, rather than negative infinity, and that mask before
+the bias rather than after it. A padded position reads negative infinity past
+the composite's `reach`, as the softmax of the parts does. So `Cpu` computes what
+the graph says. A kernel may differ from its decomposition only in what
 [WEP: Loam § Results Are Held to a Tolerance, Not to the Bit](../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
 already allows: the order of a sum, a fused multiply-add, and an online
 softmax's rescaling, which reorders a sum. A kernel that replaced the mask by
@@ -433,10 +444,7 @@ and a program for each shape class it has met. The caller owns it, and
 2. [x] Capacities and valid lengths.
 3. [x] `wado-run-pjrt` and the StableHLO writer.
 4. [x] The WebGPU compiler.
-5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
-   as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
-   dispatches a layer are recorded beside the ten
-   [Loam on WebGPU](./webgpu.md#what-a-layer-costs) counts.
+5. [x] Attention matched from its parts.
 6. [x] The loop on the device.
 7. [ ] Slots. Finished when the tokens per second at several numbers of slots
    are recorded on the CPU plugin and on `WebGpuBackend`, each request's
@@ -572,6 +580,8 @@ model, and it does not price 94 and 93 of each program's operations
 
 - A valid length is one value for every row, which is a batch of one, until
   slots (step 7) give each row its own.
+- Only GPT-2's spelling of attention is matched. Any other, a mask that is no
+  causal table among them, stays operations, which write the scores.
 - `build` cannot check what the graph owes over a padded length, which only
   `compute` knows on the host. A caller of `build` vouches for it.
 - `compute` takes no capacities from the caller, beyond the `room` of a model
@@ -600,8 +610,8 @@ model, and it does not price 94 and 93 of each program's operations
   it. Where the CPU keeps a NaN, `Relu` among them, the device may give a number.
 - A loop on WebGPU copies what it carries to a new buffer of the pass at each
   step, and those stay until the pass's end. Each also takes a new bind group.
-- GPT-2 (124M)'s `compute` on `WebGpuBackend` takes 2.5 times the kernel
-  pass's time a token, and on `Cpu` 1.9 times; Gemma 3's on `Cpu` 4 times
+- GPT-2 (124M)'s `compute` on `Cpu` takes 1.9 times the kernel pass's time a
+  token, and Gemma 3's 4 times
   ([measured](./webgpu.md#measurements)). `Cpu` reads each weight from a
   `List`, where the kernel pass read packed vectors from linear memory.
 - On `Cpu` a pass still copies the cache it writes into, since `scatter`

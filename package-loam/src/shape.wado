@@ -347,6 +347,10 @@ impl Shape {
         return self.axes.into_iter().map(|a| a.extent).collect();
     }
 
+    pub fn polys(&self) -> List<Poly> {
+        return self.axes.into_iter().map(|a| a.extent.poly()).collect();
+    }
+
     /// The same axes in the order `perm` names, as `Transpose` does.
     pub fn permute(&self, perm: &List<i32>) -> Shape
         contract perm.len() == self.rank()

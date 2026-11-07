@@ -56,6 +56,8 @@ pub enum Lowered {
     Alias,
     Branch,
     Viewed,
+    Attended,
+    Attention,
 }
 
 /// One branch of an `If`, by the attribute holding it.
@@ -111,7 +113,7 @@ pub fn render_dump(graph: &Graph, checked: &Checked) -> String {
     }
     w.blank();
     w.line(
-        `${tally.operations} operations, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.viewed} transposes viewed`,
+        `${tally.operations} operations, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.viewed} transposes viewed, ${tally.attentions} attentions of ${tally.attended} nodes`,
     );
     return w.to_string();
 }
@@ -163,6 +165,8 @@ fn reported(lowering: Lowering) -> Lowered {
         Branch => Lowered::Branch,
         Operation => Lowered::Operation,
         Transposed => Lowered::Viewed,
+        Attended => Lowered::Attended,
+        Attention(_) => Lowered::Attention,
     };
 }
 
@@ -174,6 +178,8 @@ fn label(lowering: &Lowered) -> String {
         Alias => "alias",
         Branch => "branch",
         Viewed => "viewed",
+        Attended => "attended",
+        Attention => "attention",
     };
 }
 
@@ -234,6 +240,9 @@ struct Tally {
     branches: i32 = 0,
     /// The `Transpose`s a product reads past, by the weight as stored.
     viewed: i32 = 0,
+    /// The attention composites, and the nodes each computes in its node's.
+    attentions: i32 = 0,
+    attended: i32 = 0,
 }
 
 fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
@@ -256,6 +265,8 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
             Alias => tally.aliases += 1,
             Branch => tally.branches += 1,
             Viewed => tally.viewed += 1,
+            Attended => tally.attended += 1,
+            Attention => tally.attentions += 1,
         }
         let outputs: List<String> = node.outputs.into_iter().map(|t| t.name).collect();
         // As wide as `operation`, the longest label.

@@ -253,7 +253,7 @@ outputs
 padding
     N: padded
 
-2 operations, 1 folded, 1 aliases, 0 branches, 0 transposes viewed
+2 operations, 1 folded, 1 aliases, 0 branches, 0 transposes viewed, 0 attentions of 0 nodes
 ";
 }
 
@@ -292,7 +292,9 @@ axes
             nodes
                 operation E = Relu(X)
 ");
-    assert report.ends_with("\n6 operations, 1 folded, 0 aliases, 1 branches, 0 transposes viewed\n");
+    assert report.ends_with(
+        "\n6 operations, 1 folded, 0 aliases, 1 branches, 0 transposes viewed, 0 attentions of 0 nodes\n",
+    );
 }
 
 test "dump reports as JSON, every node with its lowering" {

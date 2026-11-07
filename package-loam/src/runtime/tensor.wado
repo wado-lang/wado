@@ -482,6 +482,9 @@ pub struct Attention {
     pub kv_heads: i32,
     /// What each score is multiplied by.
     pub scale: f32,
+    /// Whether each score is divided by `scale` instead, which rounds apart
+    /// from multiplying by its inverse.
+    pub divides: bool = false,
     /// Where above 0, each scaled score `x` becomes `softcap · tanh(x / softcap)`.
     pub softcap: f32,
     /// Where above 0, a position reads only the `window` positions ending at
@@ -489,6 +492,9 @@ pub struct Attention {
     pub window: i32,
     /// Whether a position reads only the positions up to itself.
     pub causal: bool,
+    /// The score of a position the mask hides, which the bias then adds to.
+    /// Where none, such a position scores negative infinity after the bias.
+    pub hidden: Option<f32> = null,
 }
 
 /// ONNX's `MaxPool` over `window`: each position's greatest value under the
