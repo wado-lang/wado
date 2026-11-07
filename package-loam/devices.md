@@ -332,8 +332,9 @@ The rows run along the first axis of every input that pads a length behind it.
 A value computed from each row's lengths, as GPT-2's position ids are, holds
 the rows of `[Slots]` ahead of its axes. An elementwise operation, a reshape
 and a gather by it keep them there, and an elementwise operation whose output
-has the batch axis folds them into it. Where a node takes one length for every
-row, as a `ReduceMean`'s divisor and a `Slice` from a valid length do, reads
+has the batch axis folds them into it. A `Slice` from a valid length gathers
+each row's window from that row's start. Where a node takes one length for every
+row, as a `ReduceMean`'s divisor does, reads
 how many rows the batch holds, or reads such a value any other way, the rows
 share their lengths, and `loam dump` says which node made them.
 
@@ -377,14 +378,26 @@ it. A graph that owes its past's length no such equality gets no `compute`.
 ### Requests share a pass through slots
 
 A pass has a fixed number of slots, and each slot is one row of the batch
-axis. Each slot has its own cache, position and valid length, which are
-inputs, and an inactive slot is masked. A step advances every active slot in
-one pass, so the device reads each weight once for all of them.
+axis. Each slot has its own cache, position and valid length, and a step
+advances every slot in one pass, so the device reads each weight once for all
+of them.
 
-A prompt runs in a program of its own, of its own capacity. It writes its keys
-and values into its slot's cache by `dynamic_update_slice` at the slot's index.
-Which request takes which slot, and when a prompt runs, is the caller's
-scheduling. Loam provides the pieces and does not schedule.
+Where the rows hold their lengths apart and one past grows through a step, the
+`decode` option also offers `decode_rows` and `Requests`:
+
+- `decode_rows` is `decode` at a past for each row. The mask's extent is one
+  capacity for every row, and each row's lengths are its own past's. A row's
+  draws are keyed as row 0 at its own position, so a request draws in a slot
+  what it draws alone.
+- `Requests::new` holds `slots` empty slots of `capacity` positions.
+- `place` runs a request's prompt alone through `compute`, writes its cache into
+  its slot's row, and returns its first token.
+- `decode` runs every slot's steps in one call, an empty slot's among them,
+  whose tokens belong to no request.
+- `release` empties a slot.
+
+Which request takes which slot, and when, is the caller's scheduling. Loam
+provides the pieces and does not schedule.
 
 ONNX exports already carry what a row needs. `GroupQueryAttention` takes a
 length for each row, and other decoders take an attention mask and position ids
@@ -403,6 +416,7 @@ how many positions past its own its cache holds for the steps to come.
   top-p, drawn from a table the host writes once a call. Each entry is
   `core:prng`'s `Squares64` of the seed, the position and the row, so a call's
   splitting of its steps changes no draw, and no device's random source is read.
+  Rows at positions of their own are each keyed as row 0.
 - On PJRT the steps are a `while` loop in one program, with one execution and
   one read back for all of them.
 - On WebGPU the steps are the pass's launches encoded once per step in one pass.
@@ -437,8 +451,8 @@ and a program for each shape class it has met. The caller owns it, and
 - Dropping the model frees the weights, the programs and their memory
   together. A backend holds nothing past a call, so one backend serves any
   number of models without a key to tell their programs apart.
-- `Model` is shared by every request; `Cache` is one request's. Slots (step 7)
-  and the weights an expert routing loads stay in the model.
+- `Model` is shared by every request; `Cache` is one request's, or a row each
+  in `Requests`. The weights an expert routing loads stay in the model.
 - On `Cpu` a program is empty, since `Cpu` computes `build` directly and stays
   the reference.
 
@@ -595,8 +609,8 @@ model, and it does not price 94 and 93 of each program's operations
 
 ## Known gaps
 
-- A valid length is one value for every row, which is a batch of one, until
-  slots (step 7) give each row its own.
+- Where a node takes one length for every row, the rows share their lengths,
+  and the module offers no `Requests`.
 - Only GPT-2's spelling of attention is matched. Any other, a mask that is no
   causal table among them, stays operations, which write the scores.
 - `build` cannot check what the graph owes over a padded length, which only

@@ -44,6 +44,12 @@ pub global KEPT: String = "Kept";
 /// The decoding entry, which runs `DECODED`'s program.
 pub global DECODE: String = "decode";
 
+/// `DECODE` at each row's own past.
+pub global DECODE_ROWS: String = "decode_rows";
+
+/// The requests that decode side by side, a slot each, over `DECODE_ROWS`.
+pub global REQUESTS: String = "Requests";
+
 /// What `DECODE` returns.
 pub global DECODED_TYPE: String = "Decoded";
 
@@ -100,13 +106,16 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert(RECORDED);
     reserved.insert(LEAST_EXTENTS);
     reserved.insert(DECODE);
+    reserved.insert(DECODE_ROWS);
+    reserved.insert(REQUESTS);
     reserved.insert(DECODED_TYPE);
     reserved.insert(DECODED);
     reserved.insert(RECORDED_DECODED);
     // The parameters and locals the entries and what they record bind.
     for let name of [
-        "at", "decoding", "ended", "extents", "finished", "last", "moved", "next", "passed", "recorder", "results",
-        "returned", "room", "rows", "sampler", "sampling", "slots", "start", "state", "step", "steps", "tokens",
+        "at", "capacity", "decoding", "ended", "extents", "finished", "last", "moved", "next", "passed", "past",
+        "pasts", "recorder", "results", "returned", "room", "rows", "sampler", "sampling", "slot", "slots", "start",
+        "state", "step", "steps", "tokens",
     ] as List<String> {
         reserved.insert(name);
     }

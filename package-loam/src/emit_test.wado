@@ -1308,10 +1308,19 @@ fn shared_rows(source: String) -> String {
 }
 
 test "the rows share their lengths where a node takes one length for every row" {
+    let source = `g (float[B, N] X) => (float[B] Y) {
+        Y = ReduceMean <axes = [-1], keepdims = 0> (X)
+    }`;
+    assert shared_rows(source) == "refused at Y = ReduceMean: it averages over a valid length, which takes one for every row";
+}
+
+test "a slice from each row's valid length takes each row's window" {
     let source = `g (float[B, N] X) => (float[B, ?] Y) <int64[1] F = {-1}, int64[1] E = {-4000000000}, int64[1] A = {1}, int64[1] Back = {-1}> {
         Y = Slice(X, F, E, A, Back)
     }`;
-    assert shared_rows(source) == "refused at Y = Slice: it slices from a valid length, which takes one for every row";
+    assert generate(source).unwrap().contains(
+        "let Y = strided_gather::<Bk, f32, [B, N], [B, Y1]>(backend, X, 1, &row_binary::<Bk>(backend, Binary::Add, &lengths.dim_N, &shared::<Bk>(backend, &scalar::<Bk, i64>(backend, -1))), Option::Some(0), to_extent(dim_N), -1);",
+    );
 }
 
 test "the rows share their lengths where a node reads how many rows the batch holds" {
@@ -1439,7 +1448,7 @@ test "a Slice by a negative step walks back from its start" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &scalar::<Bk, i64>(backend, -1)), to_extent(dim_N), -1);",
+        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &shared::<Bk>(backend, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &scalar::<Bk, i64>(backend, -1))), null, to_extent(dim_N), -1);",
     );
 }
 
@@ -1712,7 +1721,8 @@ test "a constant one branch folds is spelled in that branch" {
     assert body.find("let Y = branched::<").unwrap() < k < body.find("}, || {").unwrap();
 }
 
-global DECODER: String = #include_str("../conformance/decoder.onnxtext");
+global ROWS_DECODER: String = #include_str("../conformance/decoder.onnxtext");
+global DECODER: String = ROWS_DECODER.replace("[B, ", "[1, ");
 
 /// Why `source` takes no `decode` of these tensors, the output named in `last`
 /// where one is, or the module where it does.
@@ -1765,8 +1775,26 @@ test "decode refuses logits of more than one position" {
     assert refused_for(decoded("input_ids", "attention_mask", "logits"), "must hold one position");
 }
 
-test "decode refuses rows a pass holds at a capacity" {
-    assert refused_for(decoded_from(DECODER.replace("[1, ", "[B, ")), "must not be held at a capacity");
+test "decode at rows a pass holds at a capacity ends the rows the capacity adds" {
+    let out = decoded_from(ROWS_DECODER).unwrap();
+    assert out.contains("    while ended.len() < capacity_of(rows) {\n        ended.push(true);\n    }\n");
+}
+
+test "rows of their own lengths decode at pasts of their own, which requests in slots take" {
+    let out = decoded_from(ROWS_DECODER).unwrap();
+    assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
+    assert out.contains(", pasts: &List<i64>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Decoded<Bk>");
+    assert out.contains("dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: pasts.into_iter().map(|past| dim_P + past - (dim_P)).collect(), extents: [pasts.len()] })");
+    assert out.contains("let decoding = Decoding::new(backend, sampling, ended, steps, pasts.into_iter().map(|past| dim_T + past - (dim_P)).collect());");
+    assert out.contains("pub struct Requests<affine Bk: Holds> {");
+    assert out.contains("pub fn place(&mut self, backend: &mut Bk, slot: i32, ");
+    assert out.contains("pub fn decode(&mut self, backend: &mut Bk, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Tensor<i64, [Slots, Picks]>");
+}
+
+test "rows that share their lengths decode no request apart" {
+    let out = decoded_from(DECODER).unwrap();
+    assert !out.contains("decode_rows");
+    assert !out.contains("Requests");
 }
 
 test "decode refuses one input as both its token and its mask" {

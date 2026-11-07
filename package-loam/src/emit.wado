@@ -12,6 +12,7 @@ use {
     CHECKPOINT_PARAM,
     CHOSEN,
     DECODE,
+    DECODE_ROWS,
     DECODED,
     DECODED_TYPE,
     KEPT,
@@ -24,6 +25,7 @@ use {
     PASSED,
     RECORDED_DECODED,
     RECORDED,
+    REQUESTS,
     RUNTIME_NAMES,
     is_bound,
     module_idents,
@@ -360,7 +362,12 @@ fn emitted(
     };
     emit_compute(&mut w, &context, host_symbols, &decoding)?;
     if let Some(decoded) = &decoding {
-        emit_decode(&mut w, &context, host_symbols, decoded)?;
+        emit_decode(&mut w, &context, host_symbols, decoded, false)?;
+        // Each row's past is one length, which a row of its own holds apart.
+        if per_row && grown.into_iter().all(|g| g.0.symbol == grown[0].0.symbol) {
+            emit_decode(&mut w, &context, host_symbols, decoded, true)?;
+            emit_requests(&mut w, &context, decoded);
+        }
     }
     return Result::Ok(w.to_string());
 }
@@ -1442,11 +1449,14 @@ struct Entry {
 }
 
 /// The entry `spec`, its inputs and the cache given, up to the program it runs.
+/// Where `apart` names the total, each row's lengths are its own, moved from
+/// the host's to the row's past in `pasts`.
 fn prepared_entry(
     context: &EntryContext,
     spec: &mut FnSpec,
     mut symbols: Symbols,
     room: &Option<Room>,
+    apart: Option<String> = null,
 ) -> Result<Entry, EmitError> {
     let EntryContext { graph, checked, names, held, carriers, padded, read, kept, crossing, owed, conditions, per_row } = *context;
     let shapes = &checked.shapes;
@@ -1555,14 +1565,28 @@ fn prepared_entry(
         class.push(`[chosen.${c}.unwrap() as i32]`);
     }
     if !read.is_empty() {
-        // The host's one length, which every row shares.
-        let [axes, extents] = if per_row { ["[Slots]", "[1]"] } else { ["[]", "[]"] };
+        // The host's one length, which every row shares, or each row's own.
+        let [axes, extents] = if apart matches { Some(_) } {
+            ["[Slots]", "[pasts.len()]"];
+        } else if per_row {
+            ["[Slots]", "[1]"];
+        } else {
+            ["[]", "[]"];
+        };
         let mut fields: List<String> = [];
         for let symbol of *read {
             let ident = symbols.idents[symbol];
-            fields.push(`${ident}: backend.upload(&Tensor::<i64, ${axes}> { data: [${symbols.spell(
-                &Poly::symbol(&symbol),
-            )?}], extents: ${extents} })`);
+            let host = symbols.spell(&Poly::symbol(&symbol))?;
+            let data = match &apart {
+                None => `[${host}]`,
+                Some(total) => if moves_a_step(&symbol, total, owed)? {
+                    let past = symbols.spell(&Poly::symbol(&owed[0].0.symbol))?;
+                    `pasts.into_iter().map(|past| ${host} + past - (${past})).collect()`;
+                } else {
+                    `List::<i64>::filled(pasts.len(), ${host})`;
+                },
+            };
+            fields.push(`${ident}: backend.upload(&Tensor::<i64, ${axes}> { data: ${data}, extents: ${extents} })`);
             taken_args.push(ProgramArgument {
                 crossed: Crossed::Length,
                 tensor: symbol,
@@ -1571,8 +1595,10 @@ fn prepared_entry(
                 axes,
             });
         }
-        lines.push(`let lengths = ${LENGTHS} { ${fields.join(", ")} };`);
+        lines.push(`let lengths = ${LENGTHS}::<${BACKEND_PARAM}> { ${fields.join(", ")} };`);
         arguments.push("&lengths");
+        // A program holds as many rows of lengths as it was recorded with.
+        class.push(`backend.extents_of(&lengths.${symbols.idents[read[0]]})`);
     }
     let first_weight = taken_args.len();
     for let weight of weight_names(graph, kept) {
@@ -1643,9 +1669,6 @@ fn decoding_axes(
         if checked.primitives[name] != "i64" || checked.shapes[name].rank() != 2 {
             return refused(`${name} must be an i64 tensor of rows and positions`);
         }
-        if checked.shapes[name].axes[0].extent.lone_symbol() matches { Some(rows) && padded.contains(&rows) } {
-            return refused(`the rows of ${name} must not be held at a capacity`);
-        }
     }
     if !crossing.returned.contains(&decode.logits) || checked.primitives[decode.logits] != "f32" {
         return refused(`${decode.logits} is no f32 output a pass returns`);
@@ -1686,20 +1709,35 @@ fn decoding_axes(
 
 /// `decode`: [`DECODED`] over inputs on the host, its tokens read back. A
 /// backend that compiles its pass runs the program `RECORDED_DECODED` records.
-fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes: &DecodingAxes) -> Result<(), EmitError> {
-    let EntryContext { checked, names, crossing, .. } = *context;
-    let mut decode = FnSpec::new(DECODE, Vis::Pub);
-    let room = Option::Some(Room { symbol: axes.total, spelled: "(steps - 1) as i64" });
-    let entry = prepared_entry(context, &mut decode, given, &room)?;
+/// `apart` makes it `DECODE_ROWS`, each row at a past of its own, which the
+/// mask's extent holds with its steps, so no room moves the cache.
+fn emit_decode(
+    w: &mut CodeWriter,
+    context: &EntryContext,
+    given: Symbols,
+    axes: &DecodingAxes,
+    apart: bool,
+) -> Result<(), EmitError> {
+    let EntryContext { checked, names, crossing, padded, owed, .. } = *context;
+    let mut decode = FnSpec::new(if apart { DECODE_ROWS } else { DECODE }, Vis::Pub);
+    let room = if apart { null } else { Option::Some(Room { symbol: axes.total, spelled: "(steps - 1) as i64" }) };
+    let entry = prepared_entry(context, &mut decode, given, &room, if apart { Option::Some(axes.total) } else { null })?;
+    if apart {
+        decode.add_param("pasts", "&List<i64>");
+    }
     decode.add_param("steps", "i32").add_param("sampling", "&Sampling");
     let mut symbols = entry.symbols;
     let mut lines = entry.lines;
     let ids = names.get(&axes.ids);
     let chooses = !entry.chosen.is_empty();
-    lines.push("let rows = ended.len();");
-    lines.push(
-        `let decoding = Decoding::new(backend, sampling, ended, steps, ${symbols.spell(&Poly::symbol(&axes.total))?});`,
-    );
+    let total = symbols.spell(&Poly::symbol(&axes.total))?;
+    let at = if apart {
+        let past = symbols.spell(&Poly::symbol(&owed[0].0.symbol))?;
+        `pasts.into_iter().map(|past| ${total} + past - (${past})).collect()`;
+    } else {
+        `[${total}]`;
+    };
+    lines.push(`let decoding = Decoding::new(backend, sampling, ended, steps, ${at});`);
     lines.push("let sampler = sampling.sampler();");
     let mut arguments = entry.arguments;
     if chooses {
@@ -1710,6 +1748,7 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     let mut class = entry.class;
     class.push("sampler.key()");
     class.push("backend.extents_of(&decoding.tokens)");
+    class.push("backend.extents_of(&decoding.position)");
     let taken = entry.taken_args;
     let [erased, erased_weights] = erased_arguments(&taken, entry.first_weight);
     let chosen_argument = if chooses { ", &chosen" } else { "" };
@@ -1741,28 +1780,210 @@ fn emit_decode(w: &mut CodeWriter, context: &EntryContext, given: Symbols, axes:
     decoded_type.add_generic(HOLDS_BOUND);
     decoded_type.add_pub_field("tokens", "Tensor<i64, [Slots, Picks]>");
     decoded_type.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
+    if !apart {
+        w.blank();
+        w.line("/// What `decode` picked, by row, and the cache, which holds each of them but the last.");
+        decoded_type.emit(w);
+    }
     w.blank();
-    w.line("/// What `decode` picked, by row, and the cache, which holds each of them but the last.");
-    decoded_type.emit(w);
-    w.blank();
-    w.line("/// `steps` tokens after the one token each row of the input holds, all read");
-    w.line("/// back once the last is picked. The mask holds the positions so far, that");
-    w.line("/// token's among them, and the cache the ones before it.");
+    if apart {
+        w.line("/// [`decode`] with each row at its own past, `pasts`, which its mask holds");
+        w.line("/// open with its token, and the mask's extent holds with its steps.");
+    } else {
+        w.line("/// `steps` tokens after the one token each row of the input holds, all read");
+        w.line("/// back once the last is picked. The mask holds the positions so far, that");
+        w.line("/// token's among them, and the cache the ones before it.");
+    }
     decode.emit_begin(w);
-    let ids_axis = checked.shapes[axes.ids].axes[1].name;
+    let [rows_axis, ids_axis] = [checked.shapes[axes.ids].axes[0], checked.shapes[axes.ids].axes[1]];
     let mut body: List<String> = [
         `refuse(unmet(steps as i64 - 1, "decode takes at least one step"));`,
-        wado`refuse(extent_mismatch("${axes.ids}", "${ids_axis}", ${ids}.extents[1], "1", 1));`,
-        `let ended = sampling.ended(&${ids}.data);`,
+        wado`refuse(extent_mismatch("${axes.ids}", "${ids_axis.name}", ${ids}.extents[1], "1", 1));`,
+        `let rows = ${ids}.extents[0];`,
+        `let mut ended = sampling.ended(&${ids}.data);`,
     ];
+    // A row the capacity adds has ended, and its past is empty.
+    let held_rows = if rows_axis.extent.lone_symbol() matches { Some(r) && padded.contains(&r) } { "capacity_of(rows)" } else { "rows" };
+    body.push(`while ended.len() < ${held_rows} {`);
+    body.push("    ended.push(true);");
+    body.push("}");
+    if apart {
+        let past = symbols.spell(&Poly::symbol(&owed[0].0.symbol))?;
+        body.push(`assert pasts.len() == rows, "decode_rows takes a past for each row";`);
+        body.push("for let past of pasts {");
+        body.push(`    refuse(unmet(*past, "a row's past must not be negative"));`);
+        body.push(`    refuse(unmet(${past} - *past - steps as i64, "a row's past and its steps must fit the mask"));`);
+        body.push("}");
+        body.push("let mut pasts = *pasts;");
+        body.push("while pasts.len() < ended.len() {");
+        body.push("    pasts.push(0);");
+        body.push("}");
+    }
     body.extend(&lines);
     for let line of entry_lines(context, &symbols, &body) {
         w.line(&line);
     }
     w.end();
-    emit_decoded(w, context, axes, &taken, chooses)?;
-    emit_recorded(w, names, &taken, entry.first_weight, &[], crossing, chooses, true);
+    // Both entries run one program, which `decode` emits.
+    if !apart {
+        emit_decoded(w, context, axes, &taken, chooses)?;
+        emit_recorded(w, names, &taken, entry.first_weight, &[], crossing, chooses, true);
+    }
     return Result::Ok(());
+}
+
+/// `Requests`: the requests that decode side by side, one in each row of a
+/// cache of fixed capacity, over `DECODE_ROWS`. `place` runs a request's prompt
+/// alone through `compute` and writes its cache into its row; `decode` runs
+/// every row's steps in one call. Nothing is emitted where a past's extent has
+/// an open axis besides its rows and its length.
+fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes) {
+    let EntryContext { graph, checked, names, crossing, owed, .. } = *context;
+    let bk = BACKEND_PARAM;
+    let mut empties: List<String> = [];
+    let mut writes: List<String> = [];
+    for let [past, _] of crossing.pairs {
+        let shape = checked.shapes[past];
+        let grown = owed.into_iter().find(|o| o.0.past == past).unwrap().0.axis;
+        let mut extents: List<String> = [];
+        let mut count: List<String> = [];
+        for let [i, axis] of shape.axes.into_iter().enumerate() {
+            // The slots are the rows, the one length `Cache::empty` takes.
+            let extent = if i == 0 {
+                if axis.extent matches { Static(_) } {
+                    return;
+                }
+                "slots";
+            } else if i == grown {
+                "capacity";
+            } else if let Static(n) = axis.extent {
+                `${n}`;
+            } else {
+                return;
+            };
+            extents.push(extent);
+            count.push(extent);
+        }
+        let ident = names.get(&past);
+        let primitive = checked.primitives[past];
+        let typed = `${bk}, ${primitive}, [${axis_list(&shape)}]`;
+        empties.push(
+            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::filled(${count.join(
+                " * ",
+            )}, ${zero_of(&primitive)}), extents: [${extents.join(", ")}] }),`,
+        );
+        writes.push(
+            `self.cache.${ident} = written_at::<${bk}, ${primitive}, [${axis_list(&shape)}], [${axis_list(&shape)}]>(backend, &self.cache.${ident}, &fitted::<${typed}>(backend, &passed.cache.${ident}, ${grown}, self.capacity), 0, &at, null);`,
+        );
+    }
+    let taken: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
+    let mut place_params: List<String> = [];
+    let mut compute_args: List<String> = [];
+    let mut decode_params: List<String> = [];
+    let mut decode_args: List<String> = [];
+    for let input of taken {
+        let ident = names.get(&input);
+        let typed = `${ident}: &${tensor_type(checked, context.held, &input)}`;
+        place_params.push(typed);
+        compute_args.push(ident);
+        if input == axes.ids {
+            decode_args.push("&ids");
+        } else if input == axes.mask {
+            decode_args.push("&mask");
+        } else {
+            decode_params.push(typed);
+            decode_args.push(ident);
+        }
+    }
+    let mask = names.get(&axes.mask);
+    let logits = names.get(&axes.logits);
+    let [ids_type, mask_type] = [
+        `Tensor::<i64, [${axis_list(&checked.shapes[axes.ids])}]>`,
+        `Tensor::<i64, [${axis_list(&checked.shapes[axes.mask])}]>`,
+    ];
+    let mut requests = StructSpec::new(REQUESTS, Vis::Pub);
+    requests.add_generic(HOLDS_BOUND);
+    requests.add_pub_field("cache", `${CACHE}<${bk}>`);
+    requests.add_pub_field("pasts", "List<i64>");
+    requests.add_pub_field("tokens", "List<i64>");
+    requests.add_pub_field("active", "List<bool>");
+    requests.add_field("capacity", "i32");
+    w.blank();
+    w.line("/// The requests decoding side by side, one in each slot: a row of the cache,");
+    w.line("/// each holding `capacity` positions. A slot holds its past, its last token,");
+    w.line("/// and whether a request is in it. The cache is kept through these calls.");
+    requests.emit(w);
+    w.blank();
+    let mut held = ImplSpec::new(`${REQUESTS}<${bk}>`);
+    held.add_generic(GRAPH_BOUND);
+    held.emit_begin(w);
+    w.line("/// `slots` empty slots of `capacity` positions, each a capacity of its own.");
+    w.line(`pub fn new(backend: &mut ${bk}, slots: i32, capacity: i32) -> ${REQUESTS}<${bk}> with _ {`);
+    w.line(`    assert capacity_of(slots) == slots && capacity_of(capacity) == capacity, "a slot count and a capacity are each one capacity_of gives";`);
+    w.line(`    return ${REQUESTS} {`);
+    w.line(`        cache: ${CACHE} {`);
+    for let line of empties {
+        w.line(`            ${line}`);
+    }
+    w.line("        },");
+    w.line("        pasts: List::<i64>::filled(slots, 0),");
+    w.line("        tokens: List::<i64>::filled(slots, 0),");
+    w.line("        active: List::<bool>::filled(slots, false),");
+    w.line("        capacity,");
+    w.line("    };");
+    w.line("}");
+    w.blank();
+    w.line("/// Runs a request's prompt alone through `compute` and puts it in `slot`:");
+    w.line("/// its cache, its past, and the token `sampling` picks after it, which this");
+    w.line("/// returns.");
+    w.line(`pub fn place(&mut self, backend: &mut ${bk}, slot: i32, ${place_params.join(", ")}, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> i64 with _ {`);
+    w.line(`    assert !self.active[slot], "a request is placed in an empty slot";`);
+    w.line("    self.cache.retain(backend);");
+    w.line(`    let passed = compute(backend, ${compute_args.join(", ")}, &${CACHE}::empty(backend, 1), 0, model);`);
+    w.line(`    let past = ${mask}.extents[1] as i64;`);
+    w.line(`    assert past < self.capacity as i64, "a prompt leaves its slot a position for its steps";`);
+    w.line(`    let at = shared::<${bk}>(backend, &scalar::<${bk}, i64>(backend, slot as i64));`);
+    for let line of writes {
+        w.line(`    ${line}`);
+    }
+    w.line(`    let token = sampling.first_tokens(&passed.${logits}, past)[0];`);
+    w.line("    self.pasts[slot] = past;");
+    w.line("    self.tokens[slot] = token;");
+    w.line("    self.active[slot] = true;");
+    w.line("    return token;");
+    w.line("}");
+    w.blank();
+    w.line("/// Empties `slot`. Its row goes on running, and no one reads it.");
+    w.line("pub fn release(&mut self, slot: i32) {");
+    w.line("    self.pasts[slot] = 0;");
+    w.line("    self.tokens[slot] = 0;");
+    w.line("    self.active[slot] = false;");
+    w.line("}");
+    w.blank();
+    w.line("/// `steps` tokens after each slot's last, by slot, every slot in one call.");
+    w.line("/// An empty slot's are of no request.");
+    let mut params = ([`&mut self`, `backend: &mut ${bk}`] as List<String>);
+    params.extend(&decode_params);
+    w.line(`pub fn decode(${params.join(", ")}, steps: i32, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> Tensor<i64, [Slots, Picks]> with _ {`);
+    w.line("    let slots = self.pasts.len();");
+    w.line(`    let ids = ${ids_type} { data: self.tokens, extents: [slots, 1] };`);
+    w.line("    let mut open: List<i64> = [];");
+    w.line("    for let past of self.pasts {");
+    w.line("        open.extend(&List::<i64>::filled(to_extent(past + 1), 1));");
+    w.line("        open.extend(&List::<i64>::filled(self.capacity - to_extent(past + 1), 0));");
+    w.line("    }");
+    w.line(`    let mask = ${mask_type} { data: open, extents: [slots, self.capacity] };`);
+    w.line(`    let decoded = ${DECODE_ROWS}(backend, ${decode_args.join(", ")}, &self.cache, &self.pasts, steps, sampling, model);`);
+    w.line("    self.cache = decoded.cache;");
+    w.line("    for let slot of 0..<slots {");
+    w.line("        if self.active[slot] {");
+    w.line("            self.pasts[slot] += steps as i64;");
+    w.line("            self.tokens[slot] = decoded.tokens.data[slot * steps + steps - 1];");
+    w.line("        }");
+    w.line("    }");
+    w.line("    return decoded.tokens;");
+    w.line("}");
+    w.end();
 }
 
 /// `decoded`: [`build`] run a step at a time around the sampler, each step's
@@ -1855,7 +2076,7 @@ fn emit_decoded(
     w.line(
         `    let next = stepped::<${bk}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
     );
-    w.line("    let at = backend.binary::<i64, []>(Binary::Add, &decoding.position, step);");
+    w.line(`    let at = row_binary::<${bk}>(backend, Binary::Add, &decoding.position, &shared::<${bk}>(backend, step));`);
     let mut returned: List<String> = [];
     for let [k, a] of carried.into_iter().enumerate() {
         returned.push(if a.tensor == axes.ids {
@@ -4074,13 +4295,16 @@ fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut S
             continue;
         }
         let operand = operand_of(&gathered);
+        if symbols.rows_axis(&x, &cut.start)? == Option::Some(cut.axis) {
+            return Result::Err(symbols.refused("it slices the rows from a valid length of their own"));
+        }
         let mut to = x;
         to.axes[cut.axis] = out.axes[cut.axis];
         let typed = `${element}, [${axis_list(&x)}], [${axis_list(&to)}]`;
         gathered = Option::Some(
-            `strided_gather::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${cut.axis}, &${symbols.scalar_value(
+            `strided_gather::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${cut.axis}, ${symbols.lengths_along(
                 &cut.start,
-                "it slices from a valid length, which takes one for every row",
+                &x,
             )?}, ${symbols.spell_extent(&length)?}, ${cut.step})`,
         );
         x = to;

@@ -6,7 +6,7 @@ use { PjrtHost } from "core:pjrt";
 use { Any, Cpu, Element, Graph, Holds, Located, PjrtBackend, Slots, Tensor, Untyped } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
-use { decoded_tokens, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
+use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use gated from "./gated.onnxtext"
     with {
         type: "onnxtext",
@@ -254,6 +254,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         // The prompt's logits, then every step's tokens at once.
         note(`decoded ${k} read backs`, f32::abs((device.read_backs() - read_before - 2) as f32));
         note(`decoded split ${k}`, tokens_apart(&decoded_tokens(device, [2, 6, 1], [3, 4], &sampling), &want));
+        note(`requested ${k}`, requests_apart(device, 2, &sampling));
     }
 }
 

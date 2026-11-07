@@ -1,8 +1,8 @@
-//! A small decoder driven through `decode` and, for what that must equal, a pass
-//! at a time through `compute`, on any backend.
+//! A small decoder driven through `decode` and `Requests` and, for what that
+//! must equal, a pass at a time through `compute`, on any backend.
 
-use { Graph, Sampling, Tensor } from "lib:loam";
-use { AttentionMask0, Cache, InputIds0, Model, Params, S, T, compute, decode } from "./decoder.onnxtext"
+use { Cpu, Graph, Sampling, Tensor } from "lib:loam";
+use { B, Cache, Model, Params, Requests, S, T, compute, decode } from "./decoder.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -14,14 +14,14 @@ use { AttentionMask0, Cache, InputIds0, Model, Params, S, T, compute, decode } f
         },
     };
 
-fn ids(data: List<i64>) -> Tensor<i64, [InputIds0, S]> {
+fn ids(data: List<i64>) -> Tensor<i64, [B, S]> {
     return Tensor {
         data,
         extents: [1, data.len()],
     };
 }
 
-fn mask(length: i32) -> Tensor<i64, [AttentionMask0, T]> {
+fn mask(length: i32) -> Tensor<i64, [B, T]> {
     return Tensor {
         data: List::<i64>::filled(length, 1),
         extents: [1, length],
@@ -43,7 +43,7 @@ pub fn stepped_tokens<affine Bk: Graph>(
 ) -> List<i64> with _ {
     let mut model = Model::new(Params::embedded(g));
     let mut seen = prompt.len();
-    let first = compute(g, &ids(prompt), &mask(seen), &Cache::empty(g), count - 1, &mut model);
+    let first = compute(g, &ids(prompt), &mask(seen), &Cache::empty(g, 1), count - 1, &mut model);
     let mut tokens = sampling.first_tokens(&first.logits, seen as i64);
     let mut cache = first.cache;
     for let _ of 1..<count {
@@ -66,7 +66,7 @@ pub fn decoded_tokens<affine Bk: Graph>(
     let mut model = Model::new(Params::embedded(g));
     let mut seen = prompt.len();
     let count = calls.into_iter().fold(0, |sum, steps| sum + steps);
-    let first = compute(g, &ids(prompt), &mask(seen), &Cache::empty(g), count, &mut model);
+    let first = compute(g, &ids(prompt), &mask(seen), &Cache::empty(g, 1), count, &mut model);
     let mut tokens = sampling.first_tokens(&first.logits, seen as i64);
     let mut cache = first.cache;
     for let steps of calls {
@@ -79,11 +79,74 @@ pub fn decoded_tokens<affine Bk: Graph>(
     return tokens;
 }
 
+/// `count` tokens after each of `prompts`, the requests decoding side by side in
+/// `slots` slots of 16 positions, `steps` at a call. A request waits for a slot
+/// to come free, so each is placed at a time of its own, beside requests at
+/// pasts of their own.
+pub fn requested_tokens<affine Bk: Graph>(
+    g: &mut Bk,
+    prompts: List<List<i64>>,
+    slots: i32,
+    count: i32,
+    steps: i32,
+    sampling: &Sampling,
+) -> List<List<i64>> with _ {
+    assert (count - 1) % steps == 0, "a request ends at the end of a call";
+    let mut model = Model::new(Params::embedded(g));
+    let mut requests = Requests::new(g, slots, 16);
+    let mut tokens: List<List<i64>> = [];
+    let mut held = List::<i32>::filled(slots, -1);
+    let mut placed = 0;
+    while placed < prompts.len() || held.into_iter().any(|r| r >= 0) {
+        for let slot of 0..<slots {
+            if held[slot] < 0 && placed < prompts.len() {
+                let prompt = prompts[placed];
+                let first = requests.place(g, slot, &ids(prompt), &mask(prompt.len()), sampling, &mut model);
+                tokens.push([first]);
+                held[slot] = placed;
+                placed += 1;
+            }
+        }
+        let next = requests.decode(g, steps, sampling, &mut model);
+        for let slot of 0..<slots {
+            let request = held[slot];
+            if request < 0 {
+                continue;
+            }
+            for let step of 0..<steps {
+                tokens[request].push(next.data[slot * steps + step]);
+            }
+            if tokens[request].len() == count {
+                requests.release(slot);
+                held[slot] = -1;
+            }
+        }
+    }
+    return tokens;
+}
+
+/// Prompts of lengths of their own, more of them than the slots
+/// `requested_tokens` is given, so a request waits for a slot.
+pub fn queued_prompts() -> List<List<i64>> {
+    return [[2, 6, 1], [3, 4], [5], [1, 7, 2, 6], [4, 4]];
+}
+
+/// How many of the tokens of `queued_prompts` in `slots` slots differ from each
+/// prompt's run alone on `Cpu`.
+pub fn requests_apart<affine Bk: Graph>(g: &mut Bk, slots: i32, sampling: &Sampling) -> f32 with _ {
+    let requested = requested_tokens(g, queued_prompts(), slots, 7, 2, sampling);
+    let mut apart = 0 as f32;
+    for let [i, prompt] of queued_prompts().into_iter().enumerate() {
+        apart += tokens_apart(&requested[i], &stepped_tokens(&mut Cpu {}, prompt, 7, sampling));
+    }
+    return apart;
+}
+
 /// How many steps `decode` took from a three token past, where the prompt left
 /// its cache no room.
 pub fn steps_taken<affine Bk: Graph>(g: &mut Bk, steps: i32) -> i32 with _ {
     let mut model = Model::new(Params::embedded(g));
-    let first = compute(g, &ids([1, 2]), &mask(2), &Cache::empty(g), 0, &mut model);
+    let first = compute(g, &ids([1, 2]), &mask(2), &Cache::empty(g, 1), 0, &mut model);
     return decode(g, &ids([3]), &mask(3), &first.cache, steps, &Sampling {}, &mut model).tokens.extents[1];
 }
 

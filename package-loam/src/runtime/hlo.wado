@@ -20,7 +20,7 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
-use { Any, Recorded, Recorder, assert_carries, kept_any } from "./recorded.wado";
+use { Any, Recorded, Recorder, Untyped, assert_carries, kept_any } from "./recorded.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -728,26 +728,66 @@ pub fn assembled<affine G: Graph, E: Element, Axes>(
 
 /// `x`'s elements at `start + i * step` along `axis`, for each `i` below
 /// `count`: a `Slice` whose start is a value the graph computes, which no
-/// `slice` takes.
+/// `slice` takes. A start for each row, along the axis `rows` names, takes
+/// each row's own window.
 pub fn strided_gather<affine G: Graph, E: Element, In, Out>(
     g: &mut G,
     x: &G::Tensor<E, In>,
     axis: i32,
-    start: &G::Tensor<i64, []>,
+    start: &G::Tensor<i64, [Slots]>,
+    rows: Option<i32>,
     count: i32,
     step: i64,
 ) -> G::Tensor<E, Out> with _ {
-    let indices = range_i64::<G, Row>(g, start, count, &scalar(g, step));
     let mut sizes = g.extents_of(x);
+    let starts = g.extents_of(start)[0];
+    if starts == 1 {
+        let one: G::Tensor<i64, []> = g.reshape(start, []);
+        let indices = range_i64::<G, Row>(g, &one, count, &scalar(g, step));
+        sizes[axis] = 1;
+        let dims = GatherDims {
+            offset_dims: (0..<sizes.len()).filter(|d| d != axis).collect(),
+            collapsed_slice_dims: [axis],
+            start_index_map: [axis],
+            index_vector_dim: 1,
+            slice_sizes: sizes,
+        };
+        return g.gather(x, &indices, &dims);
+    }
+    // Each index names its row and its position, so the gather leads with
+    // the rows and the positions, which the transpose puts back in place.
+    let r = rows_axis(rows, &sizes, starts);
+    assert r != axis, "a row's window runs along an axis other than the rows";
+    let plane: List<i32> = [starts, count, 1];
+    let row: G::Tensor<i64, [Slots, Row, One]> = g.iota(plane, 0);
+    let steps: G::Tensor<i64, [Slots, Row, One]> = g.iota(plane, 1);
+    let strided = g.binary(Binary::Multiply, &steps, &full::<G, i64, [Slots, Row, One]>(g, step, plane));
+    let at = g.binary(Binary::Add, &strided, &g.broadcast_in_dim(start, plane, [0]));
+    let indices: G::Tensor<i64, [Slots, Row, Untyped]> = g.concatenate(&row, &at, 2);
+    let rank = sizes.len();
+    sizes[r] = 1;
     sizes[axis] = 1;
     let dims = GatherDims {
-        offset_dims: (0..<sizes.len()).filter(|d| d != axis).collect(),
-        collapsed_slice_dims: [axis],
-        start_index_map: [axis],
-        index_vector_dim: 1,
+        offset_dims: (2..<rank).collect(),
+        collapsed_slice_dims: [i32::min(r, axis), i32::max(r, axis)],
+        start_index_map: [r, axis],
+        index_vector_dim: 2,
         slice_sizes: sizes,
     };
-    return g.gather(x, &indices, &dims);
+    let gathered: G::Tensor<E, Untyped> = g.gather(x, &indices, &dims);
+    let mut perm: List<i32> = [];
+    let mut rest = 2;
+    for let d of 0..<rank {
+        if d == r {
+            perm.push(0);
+        } else if d == axis {
+            perm.push(1);
+        } else {
+            perm.push(rest);
+            rest += 1;
+        }
+    }
+    return g.transpose(&gathered, perm);
 }
 
 /// The capacity a length pads to: the next power of two or one and a half of
@@ -945,8 +985,7 @@ fn positions_of<affine G: Graph, Pos, Half, S>(
     let rows = g.extents_of(first)[0];
     let half = g.extents_of(table)[1];
     if rows == 1 {
-        let one: G::Tensor<i64, []> = g.reshape(first, []);
-        let consecutive = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, table, 0, &one, count, 1);
+        let consecutive = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, table, 0, first, null, count, 1);
         return g.reshape(&consecutive, [1, count, half]);
     }
     let plane: List<i32> = [rows, count];
