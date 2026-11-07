@@ -41,9 +41,26 @@ fn branch(cached: bool) -> Tensor<bool, [merged::UseCacheBranch0]> {
 }
 
 fn alone(cpu: &mut Cpu, model: &mut merged::Model<Cpu>, prompt: List<i64>, sampling: &Sampling) -> List<i64> {
-    let first = merged::compute(cpu, &ids(prompt), &mask(prompt.len()), &branch(false), &merged::Cache::empty(cpu, 1), 0, model);
+    let first = merged::compute(
+        cpu,
+        &ids(prompt),
+        &mask(prompt.len()),
+        &branch(false),
+        &merged::Cache::empty(cpu, 1),
+        0,
+        model,
+    );
     let mut tokens = sampling.first_tokens(&first.logits, prompt.len() as i64);
-    let next = merged::decode(cpu, &ids(tokens), &mask(prompt.len() + 1), &branch(true), &first.cache, STEPS, sampling, model);
+    let next = merged::decode(
+        cpu,
+        &ids(tokens),
+        &mask(prompt.len() + 1),
+        &branch(true),
+        &first.cache,
+        STEPS,
+        sampling,
+        model,
+    );
     tokens.extend(&next.tokens.data);
     return tokens;
 }
@@ -51,12 +68,21 @@ fn alone(cpu: &mut Cpu, model: &mut merged::Model<Cpu>, prompt: List<i64>, sampl
 test "requests in slots of a branching decoder each pick the tokens they pick alone" {
     let cpu = &mut Cpu {};
     let mut model = merged::Model::new(merged::Params::embedded(cpu));
-    let prompts: List<List<i64>> = [[1, 5, 42, 7, 9], [3, 8], [12, 21, 4]];
-    for let sampling of [Sampling {}, Sampling { temperature: 0.8, seed: 7 }] {
+    let prompts: List<List<i64>> = [
+        [1, 5, 42, 7, 9],
+        [3, 8],
+        [12, 21, 4],
+    ];
+    for let sampling of [
+        Sampling {},
+        Sampling { temperature: 0.8, seed: 7 },
+    ] {
         let mut requests = merged::Requests::new(cpu, 4, 16);
         let mut tokens: List<List<i64>> = [];
         for let [slot, prompt] of prompts.into_iter().enumerate() {
-            tokens.push([requests.place(cpu, slot, &ids(prompt), &mask(prompt.len()), &branch(false), &sampling, &mut model)]);
+            tokens.push([
+                requests.place(cpu, slot, &ids(prompt), &mask(prompt.len()), &branch(false), &sampling, &mut model),
+            ]);
         }
         let next = requests.decode(cpu, &branch(true), STEPS, &sampling, &mut model);
         for let [slot, prompt] of prompts.into_iter().enumerate() {

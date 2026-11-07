@@ -32,14 +32,8 @@ use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783df
     };
 
 global PROMPTS: List<String> = [
-    "Hello, my name is",
-    "The capital of France",
-    "Once upon a time, there was a",
-    "In 1969, the first",
-    "My favorite food is",
-    "The quick brown fox",
-    "Water boils at",
-    "The best way to learn a language is to",
+    "Hello, my name is", "The capital of France", "Once upon a time, there was a", "In 1969, the first",
+    "My favorite food is", "The quick brown fox", "Water boils at", "The best way to learn a language is to",
 ];
 
 /// The tokens each request picks after its first.
@@ -93,14 +87,27 @@ fn alone<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, prompt: List
     let sampling = Sampling {};
     let first = gpt2::compute(g, &ids(prompt), &mask(prompt.len()), &branch(false), &gpt2::Cache::empty(g, 1), 0, model);
     let mut tokens = sampling.first_tokens(&first.logits, prompt.len() as i64);
-    let next = gpt2::decode(g, &ids(tokens), &mask(prompt.len() + 1), &branch(true), &first.cache, STEPS, &sampling, model);
+    let next = gpt2::decode(
+        g,
+        &ids(tokens),
+        &mask(prompt.len() + 1),
+        &branch(true),
+        &first.cache,
+        STEPS,
+        &sampling,
+        model,
+    );
     tokens.extend(&next.tokens.data);
     return tokens;
 }
 
 /// Each slot's `1 + STEPS` tokens, a prompt placed in every slot, and the
 /// nanoseconds the one call of `decode` took.
-fn side_by_side<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, slots: i32) -> [List<List<i64>>, u64] with (MonotonicClock, _) {
+fn side_by_side<affine Bk: Graph>(
+    g: &mut Bk,
+    model: &mut gpt2::Model<Bk>,
+    slots: i32,
+) -> [List<List<i64>>, u64] with (MonotonicClock, _) {
     let sampling = Sampling {};
     let mut requests = gpt2::Requests::new(g, slots, CAPACITY);
     let mut tokens: List<List<i64>> = [];
@@ -132,6 +139,8 @@ pub fn measured<affine Bk: Graph>(backend: Bk, checkpoint: &LinearArray<u8>) wit
         let apart = (0..<slots).filter(|slot| tokens[slot] != alone_tokens[slot]).count();
         let per_second = (slots * STEPS) as f64 / (nanoseconds as f64 / 1_000_000_000.0);
         let ms = nanoseconds as f64 / 1_000_000.0 / STEPS as f64;
-        println(`${slots} slots: ${per_second:.1} tokens/s, ${ms:.1} ms a step, ${apart} of ${slots} requests apart from their runs alone`);
+        println(
+            `${slots} slots: ${per_second:.1} tokens/s, ${ms:.1} ms a step, ${apart} of ${slots} requests apart from their runs alone`,
+        );
     }
 }

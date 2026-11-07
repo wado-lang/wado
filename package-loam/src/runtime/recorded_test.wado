@@ -179,7 +179,12 @@ test "a branch the host took in a loop's body adds nothing to what the loop retu
         host_of(&count),
         host_of(&x),
         host_of(&taken),
-    ]) == [host_of(&Tensor::<f32, [A]> { data: [4.0, 8.0], extents: [2] })] as List<Any<Cpu>>;
+    ]) == [
+        host_of(&Tensor::<f32, [A]> {
+            data: [4.0, 8.0],
+            extents: [2],
+        }),
+    ] as List<Any<Cpu>>;
 }
 
 test "a loop's body runs on the values the run before returned" {
