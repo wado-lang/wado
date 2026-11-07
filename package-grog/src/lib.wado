@@ -252,7 +252,7 @@ impl<M: Message + Default> Delimited<M> {
         }
         input.fill(VARINT_MAX);
         let mut prefix = reader_of(input, input.len());
-        let size = prefix.length_prefixed_size()?;
+        let size = prefix.size_through_length_prefixed(input.start())?;
         input.fill(size);
         let mut r = reader_of(input, i32::min(size, input.len()));
         let mut m = M::default();
@@ -291,7 +291,7 @@ fn field_size(input: &mut LinearBuffer) -> Result<Option<i32>, DecodeError> {
         let mut r = reader_of(input, input.len());
         r.next_field(0)?;
         if r.wire_type == WireType::Len {
-            let size = r.length_prefixed_size()?;
+            let size = r.size_through_length_prefixed(r.tag_start)?;
             input.fill(size);
             return Result::Ok(Option::Some(i32::min(size, input.len())));
         }
@@ -657,7 +657,7 @@ impl Writer {
 }
 
 /// What a [`Reader`] reads: bytes in the GC heap, or in linear memory.
-pub trait Input with () {
+pub affine trait Input with () {
     fn size(&self) -> i32;
 
     fn byte(&self, index: i32) -> u8
@@ -767,16 +767,17 @@ impl<B: Input> Reader<B> {
         return self.fail("the input ends inside a varint");
     }
 
-    /// The bytes a length prefix and the value behind it take, the prefix being
-    /// next. Past the 2 GiB a decode holds, it fails.
-    fn length_prefixed_size(&mut self) -> Result<i32, DecodeError> {
-        let start = self.pos;
+    /// The bytes from `from` to the end of the value behind the length prefix
+    /// that is next. Past the 2 GiB a decode holds, it fails.
+    fn size_through_length_prefixed(&mut self, from: i32) -> Result<i32, DecodeError>
+        contract from <= self.pos
+    {
         let n = self.varint()?;
-        let prefix = self.pos - start;
-        if n > (i32::MAX - prefix) as u64 {
+        let before = self.pos - from;
+        if n > (i32::MAX - before) as u64 {
             return self.fail("a length is past the 2 GiB a decode holds");
         }
-        return Result::Ok(prefix + n as i32);
+        return Result::Ok(before + n as i32);
     }
 
     fn advance(&mut self, n: i32) -> Result<i32, DecodeError> {
