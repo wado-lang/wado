@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794093311354,
+  "lastUpdate": 1794115815959,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75561,6 +75561,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ad627f8a2243aba490383db41bc306ba8cc6a552"
         },
         "date": 1794093310088,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404793,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8a3b39de70ddd16f4f7926d856861e49b27233e",
+          "message": "Merge pull request #2580 from wado-lang/ccr-a7390310-f47sn8\n\nfeat(jade): resolve remote references among supplied documents and the bundled meta-schemas",
+          "timestamp": "2026-11-08T14:12:56+09:00",
+          "tree_id": "0cc732f687c34565ed85df0c965f75c8a33aefc7",
+          "url": "https://github.com/wado-lang/wado/commit/b8a3b39de70ddd16f4f7926d856861e49b27233e"
+        },
+        "date": 1794115814913,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
