@@ -615,6 +615,16 @@ struct Disturbance {
 /// What a value refers into.
 type Owners = IndexMap<Owner, OwnerSite>;
 
+/// `owners`, each updated by `update` and keyed by the owner it leaves.
+fn rekey(owners: Owners, mut update: impl FnMut(&mut Owner, &mut OwnerSite)) -> Owners {
+    let mut rekeyed = Owners::default();
+    for (mut owner, mut site) in owners {
+        update(&mut owner, &mut site);
+        merge_owners(&mut rekeyed, Owners::from_iter([(owner, site)]));
+    }
+    rekeyed
+}
+
 fn merge_owners(into: &mut Owners, from: Owners) {
     for (owner, site) in from {
         let gone = site.gone;
@@ -985,32 +995,26 @@ impl MoveWalker<'_, '_> {
     /// `owners`, judged where the value carrying them is formed: one gone here
     /// stays gone, and only a `&mut` use from here on disturbs the rest.
     fn settle(&self, owners: Owners, holder: AstId) -> Owners {
-        let mut settled = Owners::default();
-        for (mut owner, mut site) in owners {
-            match self.site_gone(holder, &owner, &site) {
+        rekey(owners, |owner, site| {
+            match self.site_gone(holder, owner, site) {
                 Some((_, gone)) => site.gone = Some(gone),
                 None => owner.disturbed = self.disturbed_count(owner.def),
             }
-            merge_owners(&mut settled, Owners::from_iter([(owner, site)]));
-        }
-        settled
+        })
     }
 
     /// `owners`, settled where a branch ended, past the join of that branch
     /// with the others: what the others moved or disturbed, they did on a
     /// path the value did not come by.
     fn past_join(&self, owners: Owners) -> Owners {
-        let mut joined = Owners::default();
-        for (mut owner, mut site) in owners {
+        rekey(owners, |owner, site| {
             if site.gone.is_none() {
                 let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
                 site.moved_elsewhere
                     .extend(self.moves_overlapping(owner.def, &path));
                 owner.disturbed = self.disturbed_count(owner.def);
             }
-            merge_owners(&mut joined, Owners::from_iter([(owner, site)]));
-        }
-        joined
+        })
     }
 
     /// Settle what the branch `id` names yields, `owners`, where it ends. One
@@ -2383,7 +2387,11 @@ impl MoveWalker<'_, '_> {
             (false, true) => self.flow = then_flow,
             (true, _) => {}
         }
-        self.join_branches([then_block.id].into_iter().chain(else_block.map(|eb| eb.id)));
+        self.join_branches(
+            [then_block.id]
+                .into_iter()
+                .chain(else_block.map(|eb| eb.id)),
+        );
         then_div && else_div
     }
 

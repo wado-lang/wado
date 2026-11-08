@@ -5457,9 +5457,12 @@ impl Parser {
         // Expect opening brace
         self.expect(&TokenKind::LBrace)?;
 
+        // Parse match arms
         let mut arms = Vec::new();
         while !self.check(&TokenKind::RBrace) {
-            arms.push(self.parse_match_arm()?);
+            let arm = self.parse_match_arm()?;
+            arms.push(arm);
+
             // Trailing comma is optional
             if self.check(&TokenKind::Comma) {
                 self.advance();
