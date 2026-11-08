@@ -268,13 +268,6 @@ const TEMPLATE_PACK_BOUND: PackBound = PackBound {
     note: None,
 };
 
-/// The `[..P]` pack a reflect bound projects: the pack element type itself and
-/// the `(name, index)` handle a mapped pack is rebuilt from.
-struct PackHead {
-    ty: TypeId,
-    name: String,
-    index: u32,
-}
 
 /// The dispatch record's per-parameter mutability. A reflect member takes
 /// either one never-`mut` argument — the subject of `discriminant(&self)` /
@@ -1249,25 +1242,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_param_name: &str,
         trait_: CompilerItem,
         assoc_name: &str,
-        elem: impl FnOnce(&mut TypeTable, &PackHead) -> TypeId,
+        elem: impl FnOnce(&mut TypeTable, TypeId) -> TypeId,
     ) -> Option<TypeId> {
         let pack_tuple = self.reflect_pack_bound_ty(type_param_name, trait_, assoc_name)?;
         let mut tt = self.tysys.type_table.borrow_mut();
         let elems = tt.as_tuple(pack_tuple)?;
-        let head = elems.iter().find_map(|&e| match tt.get(e) {
-            ResolvedType::TypePack {
-                name,
-                index,
-                mapped_elem: None,
-            } => Some(PackHead {
-                ty: e,
-                name: name.clone(),
-                index: *index,
-            }),
-            _ => None,
+        let pack = elems.iter().copied().find(|&e| {
+            matches!(
+                tt.get(e),
+                ResolvedType::TypePack {
+                    mapped_elem: None,
+                    ..
+                }
+            )
         })?;
-        let mapped = elem(&mut tt, &head);
-        let member_pack = tt.make_mapped_type_pack(head.name, head.index, mapped);
+        let mapped = elem(&mut tt, pack);
+        let member_pack = tt.map_pack(pack, mapped);
         Some(tt.make_tuple(vec![member_pack]))
     }
 
@@ -1284,9 +1274,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assoc_name: &str,
         member_struct_item: CompilerItem,
     ) -> Option<TypeId> {
-        self.map_bound_pack(type_param_name, trait_, assoc_name, |tt, head| {
+        self.map_bound_pack(type_param_name, trait_, assoc_name, |tt, pack| {
             let def = tt.require_compiler_item_def(member_struct_item);
-            let elem_param = tt.make_type_param(head.name.clone(), head.index);
+            let elem_param = tt.pack_placeholder(pack);
             tt.make_generic_instance(def, vec![self_ty, elem_param])
         })
     }
@@ -1303,7 +1293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The slot names the pack itself, not a `TypeParam` placeholder: a
             // derivation infers `Option<F>`'s payload from it, and inference
             // binds through the pack.
-            |tt, head| tt.make_option(head.ty),
+            |tt, pack| tt.make_option(pack),
         )
     }
 

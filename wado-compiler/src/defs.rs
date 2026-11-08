@@ -573,6 +573,19 @@ impl DefTable {
         &self.get(def).name
     }
 
+    /// The module-level function `module` declares under `name`: what a path
+    /// into that module resolves, for a registry built from a parse of its own.
+    #[must_use]
+    pub fn function_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.iter().find(|&def| {
+            let entry = self.get(def);
+            entry.kind == DefKind::Function
+                && !entry.function_local
+                && entry.module == *module
+                && entry.name == name
+        })
+    }
+
     /// Whether `def` was declared inside a function body.
     ///
     /// A renderer needs this: two sibling functions' `struct Point` are two

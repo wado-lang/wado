@@ -26,7 +26,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for item in &module.items {
             match item {
                 Item::Struct(struct_decl) => {
-                    let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
+                    let def = self.tysys.def_at(struct_decl.id);
+                    let mut scope = self.enter_decl_params_scope(def, &struct_decl.type_params);
 
                     let mut fields = Vec::new();
                     for field in &struct_decl.fields {
@@ -35,6 +36,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         fields.push((field.name.clone(), type_id, field.visibility));
                     }
                     let type_param_type_ids = slot_type_ids(
+                        def,
                         &ParamSlot::list(&struct_decl.type_params),
                         &mut scope.tysys.type_table.borrow_mut(),
                     );
@@ -45,7 +47,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         fields,
                         type_param_type_ids,
                     );
-                    let def = scope.tysys.def_at(struct_decl.id);
                     scope.sem.decls.local.struct_fields.insert(def, info);
 
                     drop(scope);
@@ -63,7 +64,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         // Each use instantiates the base from its AST; resolved
                         // here once, in its own frame, for what it owes there.
-                        self.enter_decl_params_scope(&newtype_decl.type_params)
+                        self.enter_decl_params_scope(def, &newtype_decl.type_params)
                             .resolve_type(&newtype_decl.ty);
                         self.sem
                             .decls
@@ -73,8 +74,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 Item::Variant(variant_decl) => {
-                    let mut scope = self.enter_decl_params_scope(&variant_decl.type_params);
+                    let def = self.tysys.def_at(variant_decl.id);
+                    let mut scope = self.enter_decl_params_scope(def, &variant_decl.type_params);
                     let type_param_type_ids = slot_type_ids(
+                        def,
                         &ParamSlot::list(&variant_decl.type_params),
                         &mut scope.tysys.type_table.borrow_mut(),
                     );
@@ -85,7 +88,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
 
                     let module_source = scope.current_module_source.clone();
-                    let def = scope.tysys.def_at(variant_decl.id);
                     scope.sem.decls.local.variant_cases.insert(
                         def,
                         VariantInfo::of_decl(
@@ -252,13 +254,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut method_scope = scope.enter_inherited_type_param_scope();
                     let offset = method_scope.annotate_ctx.trait_ctx.type_params.len();
                     let self_binding = method_scope.self_binding();
+                    let method_def = method_scope.tysys.def_at(method.id);
                     for (i, param) in method.type_params.iter().enumerate() {
                         let idx = (offset + i) as u32;
-                        let type_id = method_scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_declared_param(param.name.clone(), idx, param.is_pack);
+                        let type_id = method_scope.tysys.type_table.borrow_mut().make_declared_param(
+                            method_def,
+                            param.name.clone(),
+                            idx,
+                            param.is_pack,
+                        );
                         method_scope.bind_param(
                             &param.name,
                             BinderInScope::declared(idx, type_id, param),

@@ -28,8 +28,8 @@ pub struct BuiltinFunctionInfo {
     /// Import namespace from #[namespace("...")] attribute (default: "wasi")
     /// Only relevant for functions with `canonical_name`
     pub namespace: String,
-    /// Generic type parameter names (e.g., ["T"] for `fn array_new<T>`)
-    pub type_params: Vec<String>,
+    /// Generic type parameters (e.g., `T` for `fn array_new<T>`), in order
+    pub type_params: Vec<TypeId>,
     /// Parameter types (resolved to `TypeIds`)
     pub params: Vec<(String, TypeId)>,
     /// Return type (resolved to `TypeId`, UNIT for void functions)
@@ -113,7 +113,23 @@ impl BuiltinRegistry {
         func: &Function,
         type_table: &RefCell<TypeTable>,
     ) {
-        let type_params: Vec<String> = func.type_params.iter().map(|p| p.name.clone()).collect();
+        let type_params: Vec<(String, TypeId)> = if func.type_params.is_empty() {
+            Vec::new()
+        } else {
+            let mut table = type_table.borrow_mut();
+            let owner = table
+                .defs()
+                .function_in(source, &func.name)
+                .unwrap_or_else(|| panic!("{source} declares `{}`", func.name));
+            func.type_params
+                .iter()
+                .zip(0..)
+                .map(|(p, index)| {
+                    let id = table.make_type_param(owner, p.name.clone(), index);
+                    (p.name.clone(), id)
+                })
+                .collect()
+        };
 
         let params: Vec<(String, TypeId)> = func
             .params
@@ -156,7 +172,7 @@ impl BuiltinRegistry {
             name: func.name.clone(),
             canonical_name,
             namespace,
-            type_params,
+            type_params: type_params.into_iter().map(|(_, id)| id).collect(),
             params,
             return_type,
             diverges,
@@ -169,15 +185,15 @@ impl BuiltinRegistry {
     }
 
     /// The `TypeId` a `core:builtin` signature type names.
-    fn resolve_type(ty: &Type, type_params: &[String], type_table: &RefCell<TypeTable>) -> TypeId {
+    fn resolve_type(
+        ty: &Type,
+        type_params: &[(String, TypeId)],
+        type_table: &RefCell<TypeTable>,
+    ) -> TypeId {
         match ty {
             Type::Named(named) => {
-                // Check if it's a type parameter
-                if let Some(index) = type_params.iter().position(|p| p == &named.name) {
-                    return type_table.borrow_mut().intern(ResolvedType::TypeParam {
-                        index: index as u32,
-                        name: named.name.clone(),
-                    });
+                if let Some(&(_, param)) = type_params.iter().find(|(p, _)| p == &named.name) {
+                    return param;
                 }
                 if let Some(id) = TypeTable::primitive_by_name(&named.name) {
                     return id;

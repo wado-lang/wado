@@ -488,17 +488,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A scope binding a declaration's `params` and no type parameter the
-    /// caller brought: a declaration names its parameters itself.
+    /// A scope binding the `params` declaration `owner` declares and no type
+    /// parameter the caller brought: a declaration names its parameters itself.
     pub(super) fn enter_decl_params_scope(
         &mut self,
+        owner: DefId,
         params: &[ast::GenericParam],
     ) -> TypeParamScope<'_, 'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let ctx = &mut scope.annotate_ctx.trait_ctx;
         ctx.clear_binders();
         ctx.type_param_bounds.clear();
-        scope.register_generic_params(params, 0);
+        scope.register_generic_params(owner, params, 0);
         scope
     }
 
@@ -822,10 +823,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx
             .trait_ctx
             .binders()
-            .flat_map(|(name, binder)| {
+            .flat_map(|(_, binder)| {
                 let elem = tt
                     .is_type_pack(binder.type_id)
-                    .then(|| tt.make_type_param(name.clone(), binder.index));
+                    .then(|| tt.pack_placeholder(binder.type_id));
                 std::iter::once(binder.type_id).chain(elem)
             })
             .collect()
@@ -859,14 +860,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
-    /// in the current `trait_ctx`, starting from `offset`. Skips effect params.
-    /// Returns the next free index (i.e. `offset + non_effect_count`).
+    /// Register the generic parameters `owner` declares as `TypeParam` /
+    /// `TypePack` ids in the current `trait_ctx`, starting from `offset`. Skips
+    /// effect params. Returns the next free index (i.e. `offset +
+    /// non_effect_count`).
     ///
     /// Trait bounds attached to each parameter are also recorded in
     /// `type_param_bounds` so trait-method lookups on the parameter work.
     pub(super) fn register_generic_params(
         &mut self,
+        owner: DefId,
         params: &[ast::GenericParam],
         offset: u32,
     ) -> u32 {
@@ -886,6 +889,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(sig) => (self.resolve_type(&ast::Type::Function(sig.clone())), false),
                 None => (
                     self.tysys.type_table.borrow_mut().make_declared_param(
+                        owner,
                         tp.name.clone(),
                         idx,
                         tp.is_pack,

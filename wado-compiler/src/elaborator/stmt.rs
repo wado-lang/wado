@@ -197,7 +197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|(_, type_id, _)| *type_id)
             .collect();
-        self.enter_decl_params_scope(&struct_decl.type_params)
+        self.enter_decl_params_scope(def, &struct_decl.type_params)
             .resolve_field_defaults(struct_decl, &field_types);
     }
 
@@ -329,6 +329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The type parameters are final already — read off the AST, not
         // resolved — so only the fields are left for `resolve_local_struct`.
         let type_param_type_ids = slot_type_ids(
+            def,
             &ParamSlot::list(&struct_decl.type_params),
             &mut self.tysys.type_table.borrow_mut(),
         );
@@ -349,7 +350,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
+        let def = self.tysys.def_at(struct_decl.id);
+        let mut scope = self.enter_decl_params_scope(def, &struct_decl.type_params);
         let fields: Vec<_> = struct_decl
             .fields
             .iter()
@@ -367,7 +369,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(struct_decl.id, type_params);
 
-        let def = self.tysys.def_at(struct_decl.id);
         self.sem
             .decls
             .local

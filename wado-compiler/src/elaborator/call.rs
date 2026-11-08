@@ -285,14 +285,14 @@ enum BoundArgsAtCall {
     Read(Option<Vec<TypeId>>),
 }
 
-/// What a site settled one type parameter to. A pack carries no type here:
+/// What a site settled one type parameter to. A pack stands for itself here:
 /// `[..T::default()]` means the elements, and no callee spells `[i32]::default`.
 #[derive(Debug, Clone)]
 pub(super) enum SettledAs {
     /// The type argument that filled a scalar slot.
     Type(TypeId),
-    /// A variadic pack (`..T`).
-    Pack,
+    /// A variadic pack (`..T`), as its declaration binds it.
+    Pack(TypeId),
 }
 
 impl SettledAs {
@@ -300,12 +300,12 @@ impl SettledAs {
     pub(super) fn type_id(&self) -> Option<TypeId> {
         match self {
             Self::Type(type_id) => Some(*type_id),
-            Self::Pack => None,
+            Self::Pack(_) => None,
         }
     }
 
     pub(super) fn is_pack(&self) -> bool {
-        matches!(self, Self::Pack)
+        matches!(self, Self::Pack(_))
     }
 }
 
@@ -351,7 +351,7 @@ pub(super) fn slot_type_bindings(
         .filter_map(|(&slot, &type_id)| {
             let (name, settled) = match table.get(slot) {
                 ResolvedType::TypeParam { name, .. } => (name, SettledAs::Type(type_id)),
-                ResolvedType::TypePack { name, .. } => (name, SettledAs::Pack),
+                ResolvedType::TypePack { name, .. } => (name, SettledAs::Pack(slot)),
                 _ => return None,
             };
             Some(DefaultTypeBinding {
@@ -3188,12 +3188,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if space.len() != type_args.len() {
             return Vec::new();
         }
+        let owner = callee.def();
         space
             .into_iter()
             .zip(type_args.iter().copied())
-            .map(|(param, type_id)| DefaultTypeBinding {
+            .zip(0..)
+            .map(|((param, type_id), index)| DefaultTypeBinding {
                 settled: if param.is_pack {
-                    SettledAs::Pack
+                    let owner = owner.expect("a declaration with a pack parameter has a def");
+                    SettledAs::Pack(self.tysys.type_table.borrow_mut().make_type_pack(
+                        owner,
+                        param.name.clone(),
+                        index,
+                    ))
                 } else {
                     SettledAs::Type(type_id)
                 },
@@ -3248,20 +3255,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         };
-        // The one place a pack's own type is minted, from the name and the
-        // position it enters at — so the spread in `[..T::default()]` has a
-        // pack to expand, and no producer of a binding can spell it wrong.
+        // A pack stands for itself, so the spread in `[..T::default()]` has a
+        // pack to expand.
         let in_scope: Vec<TypeId> = bindings
             .iter()
-            .enumerate()
-            .map(|(i, b)| {
-                b.settled.type_id().unwrap_or_else(|| {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(b.name.clone(), i as u32)
-                })
+            .map(|b| match b.settled {
+                SettledAs::Type(type_id) | SettledAs::Pack(type_id) => type_id,
             })
             .collect();
         scope.annotate_ctx.trait_ctx.clear_binders();
@@ -3360,22 +3359,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Copy what the signature needs before instantiating: `info`
             // borrows the registry, and minting variables takes `self`.
-            let param_names: Vec<String> = info.type_params.clone();
+            let param_ids: Vec<TypeId> = info.type_params.clone();
             let decl_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
             let decl_return = info.return_type;
-            let param_ids: Vec<TypeId> = param_names
-                .iter()
-                .enumerate()
-                .map(|(i, name)| {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::TypeParam {
-                            index: i as u32,
-                            name: name.clone(),
-                        })
-                })
-                .collect();
 
             let inst = self.instantiate(
                 &param_ids,
@@ -3481,14 +3467,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(GenericParam::is_real_type_param)
             .collect();
-        self.project_assoc_bound_args(&params, type_args);
+        self.project_assoc_bound_args(callee.def(), &params, type_args);
     }
 
-    /// [`Self::infer_type_args_from_assoc_bounds`] over a declared parameter
-    /// list, for a static method (`String::format<T: ReflectTemplate<Holes =
-    /// [..V]>, ..V>`), whose params come from its impl rather than a callee.
+    /// [`Self::infer_type_args_from_assoc_bounds`] over the parameter list
+    /// `owner` declares, for a static method (`String::format<T:
+    /// ReflectTemplate<Holes = [..V]>, ..V>`), whose params come from its impl
+    /// rather than a callee.
     pub(super) fn project_assoc_bound_args(
         &mut self,
+        owner: Option<DefId>,
         params: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
@@ -3497,22 +3485,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trailing slots absent. Seed them open so the projection below can
         // pin them from the owner's bound.
         for (i, param) in params.iter().enumerate().skip(type_args.len()) {
-            let open = self.open_slot(param, i);
+            let open = self.open_slot(owner, param, i);
             type_args.push(open);
         }
         self.resolve_assoc_bound_args(params, type_args);
     }
 
-    /// A call's slot for `param` at `index` that nothing has answered yet: a
-    /// fresh variable, as `instantiate` mints. The callee's own binder would
-    /// read as the caller's of one name and index, a slot the caller forwards.
-    /// A pack keeps its declared form, as `instantiate` keeps it.
-    fn open_slot(&mut self, param: &ast::GenericParam, index: usize) -> TypeId {
+    /// A call's slot for `param`, which `owner` declares at `index`, that
+    /// nothing has answered yet: a fresh variable, as `instantiate` mints. A
+    /// pack keeps its declared form, as `instantiate` keeps it.
+    fn open_slot(
+        &mut self,
+        owner: Option<DefId>,
+        param: &ast::GenericParam,
+        index: usize,
+    ) -> TypeId {
         if param.is_pack {
+            let owner = owner.expect("a declaration with a pack parameter has a def");
             self.tysys
                 .type_table
                 .borrow_mut()
-                .make_type_pack(param.name.clone(), index as u32)
+                .make_type_pack(owner, param.name.clone(), index as u32)
         } else {
             self.mint_infer_var_named(&param.name)
         }
@@ -3762,10 +3755,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let n = space.len();
+        let owner = callee
+            .def()
+            .expect("a callee declaring a type default has a def");
 
         let defaults: Vec<Option<TypeId>> =
             self.with_resolving_home(Some(callee.module().clone()), |s| {
-                let mut scope = s.enter_decl_params_scope(&params);
+                let mut scope = s.enter_decl_params_scope(owner, &params);
                 space
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
@@ -3776,7 +3772,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             *type_args = space
                 .iter()
                 .enumerate()
-                .map(|(i, p)| self.open_slot(p, i))
+                .map(|(i, p)| self.open_slot(Some(owner), p, i))
                 .collect();
         }
         if type_args.len() != n {
@@ -4294,7 +4290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the method's own slot count says nothing about.
         let expected_args =
             self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
-        let [declaring_slots, own_slots] = self
+        let (method_def, [declaring_slots, own_slots]) = self
             .static_call_sig(
                 callee.type_name,
                 callee.method_name,
@@ -4302,11 +4298,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 SigChoice::Any,
                 &expected_args,
             )
-            .map_or([0, 0], |sig| {
-                [
-                    sig.declaring_type_params().len(),
-                    sig.own_type_params().len(),
-                ]
+            .map_or((None, [0, 0]), |sig| {
+                (
+                    Some(sig.def),
+                    [
+                        sig.declaring_type_params().len(),
+                        sig.own_type_params().len(),
+                    ],
+                )
             });
         let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
         // A turbofish names only the method's own slots, so the receiver's are
@@ -4332,7 +4331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // type (`..V` off `Holes`) is projected once the owner is inferred, as
         // the free-function path does; the bound check then sees it concrete.
         if !method_args.is_empty() {
-            self.project_assoc_bound_args(&params, &mut method_args);
+            self.project_assoc_bound_args(method_def, &params, &mut method_args);
         }
         Some(StaticTypeArgs {
             params,

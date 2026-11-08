@@ -1001,11 +1001,11 @@ impl HeldTypes for AffineParams<'_> {
         let is_affine_param = match table.get(type_id) {
             // A pack mapped through a constructor (`[..TemplateHole<T, V>]`)
             // holds its element as a parameter of the pack's name and index.
-            ResolvedType::TypeParam { name, index } => {
+            ResolvedType::TypeParam { .. } => {
                 declared_affine(type_id)
                     || self.affine_params.iter().any(|&param| {
-                        matches!(table.get(param), ResolvedType::TypePack { name: n, index: i, .. }
-                            if n == name && i == index)
+                        table.is_type_pack(param)
+                            && table.param_identity(param) == table.param_identity(type_id)
                     })
             }
             ResolvedType::TypePack { .. } => declared_affine(type_id),

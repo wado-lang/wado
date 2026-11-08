@@ -152,9 +152,10 @@ impl ParamKind {
 
 /// A rigid binder a resolved type names, for the caller to place.
 #[derive(Clone, Copy)]
-enum Binder<'a> {
-    /// A type parameter or pack, by its spelling and declared position.
-    Param { name: &'a str, index: u32 },
+enum Binder {
+    /// A type parameter or pack, by the declaration that binds it and its
+    /// position there.
+    Param { owner: DefId, index: u32 },
     /// A generic associated type's own parameter, by its identity: an impl
     /// may write it under a name of its own.
     Family(TypeId),
@@ -633,19 +634,20 @@ impl Lowering {
                 .ok_or(Unsaid::Unsayable)
         };
         let placed =
-            |name: &str, index: u32| param(Binder::Param { name, index }).ok_or(Unsaid::Open);
+            |owner: DefId, index: u32| param(Binder::Param { owner, index }).ok_or(Unsaid::Open);
         // A pack spliced into a tuple is the pack; a mapped one (`R[F := F_i]`
         // per element) is a shape the solver has no way to say.
         let tuple_elem = |a: TypeId| {
             let ResolvedType::TypePack {
-                name,
+                owner,
                 index,
                 mapped_elem,
+                ..
             } = table.get(a)
             else {
                 return self.type_id(table, a, param);
             };
-            let pack = placed(name, *index)?;
+            let pack = placed(*owner, *index)?;
             match mapped_elem {
                 None => Ok(SolverType::Pack(pack)),
                 Some(_) => Err(Unsaid::Unsayable),
@@ -714,15 +716,18 @@ impl Lowering {
                 is_mut: table.is_mut_ref(id),
                 inner: Box::new(self.type_id(table, *inner, param)?),
             }),
-            ResolvedType::TypeParam { name, index } => placed(name, *index).map(SolverType::Param),
+            ResolvedType::TypeParam { owner, index, .. } => {
+                placed(*owner, *index).map(SolverType::Param)
+            }
             // Outside a tuple, a pack stands for one of its elements: a rigid
             // type carrying the pack's bounds, at the pack's slot. A mapped
             // one is `R` at that element.
             ResolvedType::TypePack {
-                name,
+                owner,
                 index,
                 mapped_elem: None,
-            } => placed(name, *index).map(SolverType::Param),
+                ..
+            } => placed(*owner, *index).map(SolverType::Param),
             ResolvedType::TypePack {
                 mapped_elem: Some(mapped),
                 ..
@@ -2015,7 +2020,7 @@ impl SolverBridge {
                 .trait_env
                 .bound_declaring_assoc_type(bounds, assoc, &tysys.resolutions)
         };
-        let placed = place_binder(ctx);
+        let placed = place_binder(ctx, &table);
         let mut env = Env::default();
         let mut unstated = Vec::new();
         for (position, (name, binder)) in ctx.trait_ctx.type_params.iter().enumerate() {
@@ -2095,17 +2100,11 @@ impl SolverBridge {
     /// which stands for many.
     pub(super) fn is_rigid(&self, tysys: &TypeSystem, ctx: &scope::Scope, type_id: TypeId) -> bool {
         let table = tysys.type_table.borrow();
-        let place = place_binder(ctx);
+        let place = place_binder(ctx, &table);
         let rigid = |binder: Binder| {
-            if let Binder::Param { name, .. } = binder
-                && matches!(
-                    table.get(ctx.trait_ctx.type_params.get(name)?.type_id),
-                    ResolvedType::TypePack { .. }
-                )
-            {
-                return None;
-            }
-            place(binder)
+            let at = place(binder)?;
+            let (_, bound) = ctx.trait_ctx.type_params.get_index(at as usize)?;
+            (!table.is_type_pack(bound.type_id)).then_some(at)
         };
         matches!(
             self.lowering.type_id(&table, type_id, &rigid),
@@ -2211,7 +2210,7 @@ impl SolverBridge {
             .iter()
             .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
         {
-            self.shapes_in(&table, type_id, &place_binder(ctx), &mut shapes);
+            self.shapes_in(&table, type_id, &place_binder(ctx, &table), &mut shapes);
         }
         let defs = tysys.resolutions.defs();
         let bodies = owed
@@ -2669,18 +2668,24 @@ fn by_position(binder: Binder) -> Option<u32> {
     }
 }
 
-/// [`place_in`] for a binder a resolved type names. A family parameter sits
-/// where the scope binds its identity, under whatever name it is written.
-fn place_binder(ctx: &scope::Scope) -> impl Fn(Binder) -> Option<u32> + '_ {
-    let place = place_in(ctx);
-    move |binder| match binder {
-        Binder::Param { name, .. } => place(name),
-        Binder::Family(id) => ctx
-            .trait_ctx
+/// Where the binder a resolved type names sits among `ctx`'s, by its identity:
+/// a parameter of the declaration that binds it, or a family parameter, under
+/// whatever name either is written.
+fn place_binder<'a>(
+    ctx: &'a scope::Scope,
+    table: &'a TypeTable,
+) -> impl Fn(Binder) -> Option<u32> + 'a {
+    move |binder| {
+        ctx.trait_ctx
             .type_params
             .values()
-            .position(|bound| bound.type_id == id)
-            .map(|i| u32::try_from(i).expect("fewer than 2^32 params")),
+            .position(|bound| match binder {
+                Binder::Param { owner, index } => {
+                    table.param_identity(bound.type_id) == Some((owner, index))
+                }
+                Binder::Family(id) => bound.type_id == id,
+            })
+            .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
     }
 }
 

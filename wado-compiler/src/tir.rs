@@ -716,6 +716,9 @@ pub enum ResolvedType {
     /// It appears only within the item that binds it; a *use* of a polymorphic
     /// signature instantiates these into [`ResolvedType::InferVar`]s.
     TypeParam {
+        /// The declaration that binds it, which is its identity: an enclosing
+        /// function's `T` and a callee's own `T` at one index are two types.
+        owner: DefId,
         name: String,
         /// Index of the type parameter in the generic definition (0 for first param)
         index: u32,
@@ -736,6 +739,8 @@ pub enum ResolvedType {
     /// element `i` is `R[F := F_i]`, degenerating to `|F|` copies of `R` when
     /// `R` does not mention the pack).
     TypePack {
+        /// The declaration that binds it, as a [`ResolvedType::TypeParam`]'s.
+        owner: DefId,
         name: String,
         index: u32,
         mapped_elem: Option<TypeId>,

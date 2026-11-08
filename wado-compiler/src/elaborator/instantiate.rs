@@ -119,7 +119,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
-                    ResolvedType::TypeParam { index, name } => Some((*index, name.clone(), false)),
+                    ResolvedType::TypeParam { index, name, .. } => {
+                        Some((*index, name.clone(), false))
+                    }
                     ResolvedType::TypePack { index, name, .. } => {
                         Some((*index, name.clone(), true))
                     }

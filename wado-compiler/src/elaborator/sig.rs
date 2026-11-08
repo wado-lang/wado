@@ -743,7 +743,9 @@ mod tests {
 
     /// `fn id<T>(x: T) -> T` instantiated at `T = i32`.
     fn generic_identity(table: &RefCell<TypeTable>) -> DeclSig {
-        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
+        let t = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "T".to_string(), 0);
         DeclSig {
             type_params: vec![("T".to_string(), t)],
             param_types: vec![t],
@@ -778,7 +780,9 @@ mod tests {
     #[test]
     fn instantiate_substitutes_inside_containers() {
         let table = RefCell::new(TypeTable::new());
-        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
+        let t = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "T".to_string(), 0);
         let list_of_t = table.borrow_mut().make_ref(t);
         let sig = DeclSig {
             type_params: vec![("T".to_string(), t)],
@@ -797,8 +801,12 @@ mod tests {
     #[test]
     fn a_partial_instantiation_leaves_trailing_slots_abstract() {
         let table = RefCell::new(TypeTable::new());
-        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
-        let u = table.borrow_mut().make_type_param("U".to_string(), 1);
+        let t = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "T".to_string(), 0);
+        let u = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "U".to_string(), 1);
         let sig = DeclSig {
             type_params: vec![("T".to_string(), t), ("U".to_string(), u)],
             param_types: vec![t, u],
@@ -831,8 +839,10 @@ mod tests {
     /// `impl<V> Index<i32> for Map<u8, V> { type Output = V; }` — the
     /// concrete `u8` position binds nothing, so `V` keeps its own slot.
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
-        let v = table.borrow_mut().make_type_param("V".to_string(), 1);
         let def = DefId::for_test(1);
+        let v = table
+            .borrow_mut()
+            .make_type_param(def, "V".to_string(), 1);
         table.borrow_mut().record_impl_target(
             def,
             TypeTable::UNKNOWN,

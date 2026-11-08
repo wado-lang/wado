@@ -1,7 +1,6 @@
 //! Expression resolution (literals, identifiers, field access, index,
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
-use super::scope::BinderInScope;
 use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -5035,8 +5034,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let (source, is_enumerate) = util::split_enumerate(&comp.iterable);
         let iterable_type = self.resolve_expr(source, ctx, None);
-        let Some((pack_name, pack_index, elem_type)) =
-            self.tysys.comprehension_pack(iterable_type, ctx.pack_walks)
+        let Some((pack, elem_type)) = self.tysys.comprehension_pack(iterable_type, ctx.pack_walks)
         else {
             let type_name = self.tysys.type_table.borrow().name(iterable_type);
             let _ = self.emit(TypeError::InvalidPattern {
@@ -5073,7 +5071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return iterable_type;
         }
         let mut type_table = self.tysys.type_table.borrow_mut();
-        let mapped = type_table.make_mapped_type_pack(pack_name, pack_index, body_type);
+        let mapped = type_table.map_pack(pack, body_type);
         type_table.make_tuple(vec![mapped])
     }
 
@@ -5196,10 +5194,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         SpreadElems::Fixed(inner_elems)
     }
 
-    /// The `(name, index)` of the type pack a spread operand's static call is
-    /// made on: `F::method()` parses as a `Call` whose callee is a two-segment
-    /// path `F::method`; returns `Some` when `F` is a type pack in scope.
-    pub(super) fn call_pack_subject(&self, inner: &Expr) -> Option<(String, u32)> {
+    /// The type pack a spread operand's static call is made on: `F::method()`
+    /// parses as a `Call` whose callee is a two-segment path `F::method`;
+    /// returns `Some` when `F` is a type pack in scope.
+    pub(super) fn call_pack_subject(&self, inner: &Expr) -> Option<TypeId> {
         let Expr::Call(call) = inner else {
             return None;
         };
@@ -5209,35 +5207,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if id.segments.len() != 2 {
             return None;
         }
-        let subject_name = &id.segments[0].name;
-        let &BinderInScope {
-            index,
-            type_id: tid,
-            ..
-        } = self.annotate_ctx.trait_ctx.type_params.get(subject_name)?;
-        matches!(
-            self.tysys.type_table.borrow().get(tid),
-            ResolvedType::TypePack { .. }
-        )
-        .then(|| (subject_name.clone(), index))
+        let subject = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(&id.segments[0].name)?
+            .type_id;
+        self.tysys
+            .type_table
+            .borrow()
+            .is_type_pack(subject)
+            .then_some(subject)
     }
 
     /// If `inner` is a static call on a type-pack subject (`F::method()`) whose
     /// return type `result_type` is pack-independent, build the mapped pack
     /// `..F::method()` — `result_type` repeated `|F|` times.
     fn spread_pack_map_type(&mut self, inner: &Expr, result_type: TypeId) -> Option<TypeId> {
-        let (name, index) = self.call_pack_subject(inner)?;
+        let pack = self.call_pack_subject(inner)?;
         // Only this scope knows `F` is a pack rather than a plain type param,
         // so record the answer for reify instead of leaving it to re-derive one.
-        self.sem
-            .types
-            .pack_spread_subjects
-            .insert(inner.id(), (name.clone(), index));
+        self.sem.types.pack_spread_subjects.insert(inner.id(), pack);
         Some(
             self.tysys
                 .type_table
                 .borrow_mut()
-                .make_mapped_type_pack(name, index, result_type),
+                .map_pack(pack, result_type),
         )
     }
 
@@ -5614,14 +5609,11 @@ impl TypeSystem {
         &self,
         iterable_type: TypeId,
         walk: u32,
-    ) -> Option<(String, u32, TypeId)> {
+    ) -> Option<(TypeId, TypeId)> {
         let mut table = self.type_table.borrow_mut();
         let (elems, _) = table.as_tuple_through_ref(iterable_type)?;
         let pack = table.pack_in(&elems)?;
-        let ResolvedType::TypePack { name, index, .. } = table.get(pack).clone() else {
-            unreachable!("`pack_in` answers a pack");
-        };
-        Some((name, index, table.pack_step_type(pack, walk)))
+        Some((pack, table.pack_step_type(pack, walk)))
     }
 
     /// The type one step of `walk` over the pack in `elements` binds.
@@ -5664,7 +5656,7 @@ impl TypeSystem {
         walk: u32,
     ) -> Option<TypeId> {
         self.comprehension_pack(iterable_type, walk)
-            .map(|(_, _, elem)| elem)
+            .map(|(_, elem)| elem)
     }
 }
 

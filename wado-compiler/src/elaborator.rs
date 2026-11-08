@@ -257,6 +257,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+        let owner = self.tysys.resolutions.defs().def_at(impl_block.id);
         for param in &impl_block.type_params {
             let Some(slot) = slots.of_name(&param.name) else {
                 continue;
@@ -276,6 +277,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 continue;
             }
             let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+                owner,
                 param.name.clone(),
                 slot,
                 param.is_pack,
@@ -712,7 +714,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .make_type_param(name, index)
+                    .make_type_param(def, name, index)
             })
             .collect();
         Some(self.generic_newtype_instance(def, params))
@@ -1820,7 +1822,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (decl_id, type_params, methods, is_resource) in decl_ops {
             let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
             let owner = defs.def_at(decl_id);
-            let ops = self.resolve_effect_ops(&type_params, &methods, is_resource.then_some(owner));
+            let ops =
+                self.resolve_effect_ops(owner, &type_params, &methods, is_resource.then_some(owner));
             for method in &methods {
                 let op = defs.def_at(method.id);
                 self.sem
@@ -1906,7 +1909,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &effect_decl.methods,
                         OperationOwner::Interface,
                     );
-                    self.resolve_operation_param_defaults(&[], &effect_decl.methods, None);
+                    self.resolve_operation_param_defaults(
+                        self.tysys.def_at(effect_decl.id),
+                        &[],
+                        &effect_decl.methods,
+                        None,
+                    );
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
                     // `AstId` every other function's do.
@@ -1922,10 +1930,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         OperationOwner::Resource,
                     );
+                    let resource = self.tysys.def_at(resource_decl.id);
                     self.resolve_operation_param_defaults(
+                        resource,
                         &resource_decl.type_params,
                         &resource_decl.methods,
-                        Some(self.tysys.def_at(resource_decl.id)),
+                        Some(resource),
                     );
                 }
                 // Other items will be added as needed

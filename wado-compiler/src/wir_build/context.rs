@@ -848,7 +848,7 @@ impl<'a> WirContext<'a> {
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,
             // These should never reach codegen — must be resolved by monomorphization
-            ResolvedType::TypeParam { name, index } => {
+            ResolvedType::TypeParam { name, index, .. } => {
                 panic!("unsubstituted TypeParam `{name}` (index {index}) reached codegen")
             }
             ResolvedType::AssocParam { name, index, .. } => {

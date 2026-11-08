@@ -418,11 +418,11 @@ pub(crate) struct TypeAnnotations {
     /// after its own scope is torn down. `AstId` is dense per module across all
     /// item kinds, so function and decl entries never collide.
     pub(crate) decl_type_params: IndexMap<AstId, Vec<TirTypeParam>>,
-    /// The `(name, slot)` of the type pack a spread operand's static call is
-    /// made on (`..F::method()`), keyed by the spread's inner expression. Only
-    /// the scope that wrote `F` can say it is a pack rather than a plain type
+    /// The type pack a spread operand's static call is made on
+    /// (`..F::method()`), keyed by the spread's inner expression. Only the
+    /// scope that wrote `F` can say it is a pack rather than a plain type
     /// param, so the body walk answers and reify reads.
-    pub(crate) pack_spread_subjects: IndexMap<AstId, (String, u32)>,
+    pub(crate) pack_spread_subjects: IndexMap<AstId, TypeId>,
     /// Per-impl-method mangled / display names as `resolve_method` computed
     /// them (`MethodName::format_local(struct_name, trait_name, method_name)`
     /// and the trait-omitted display form). Reify reads these instead of

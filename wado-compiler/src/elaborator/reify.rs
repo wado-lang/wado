@@ -825,11 +825,11 @@ impl<'a> Reify<'a> {
 
     // Decl/signature facts the body walk records once per decl, read
     // straight from `sem.types` with no overlay walk. A pack-spread subject
-    // joins them: its `(name, slot)` names the enclosing signature's pack, so
-    // it is the same for every element a tuple `for-of` unrolls.
+    // joins them: it is the enclosing signature's pack, so it is the same for
+    // every element a tuple `for-of` unrolls.
     reify_annotation_accessors! {
         base {
-            ann_pack_spread_subject => pack_spread_subjects: (String, u32),
+            ann_pack_spread_subject => pack_spread_subjects: tir::TypeId,
             ann_method_impl_type_params => method_impl_type_params: Vec<TirTypeParam>,
             ann_fn_param_types => fn_param_types: Vec<tir::TypeId>,
             ann_fn_affine_params => fn_affine_params: Vec<tir::TypeId>,
@@ -6393,23 +6393,16 @@ impl<'a> Reify<'a> {
                             elem.span(),
                         ));
                     }
-                } else if let Some((pack_name, pack_index)) =
-                    self.ann_pack_spread_subject(inner.id())
-                {
+                } else if let Some(plain_pack) = self.ann_pack_spread_subject(inner.id()) {
                     // Pack-map `..F::method()` (pack-independent return): the
                     // expansion iterates the *plain* pack `F` to rewrite the call
                     // per field type; the element type is the mapped pack, which
                     // splices to the return type repeated `|F|` times.
-                    let plain_pack = self
+                    let mapped = self
                         .tysys
                         .type_table
                         .borrow_mut()
-                        .make_type_pack(pack_name.clone(), pack_index);
-                    let mapped = self.tysys.type_table.borrow_mut().make_mapped_type_pack(
-                        pack_name,
-                        pack_index,
-                        spread_expr.type_id,
-                    );
+                        .map_pack(plain_pack, spread_expr.type_id);
                     elem_types.push(mapped);
                     elements.push(TirExpr::new(
                         TirExprKind::TypePackExpansion {
@@ -10341,12 +10334,18 @@ fn call_with_params(
     let span = callee.span;
     // A method's own parameters are numbered after its impl's.
     let offset = func.impl_type_params.len() as u32;
+    let owner = func.def_id.expect("a function a call forwards to is declared");
     let type_args: Vec<TypeId> = func
         .type_params
         .iter()
         .filter(|param| !param.is_effect)
         .map(|param| {
-            type_table.make_declared_param(param.name.clone(), offset + param.index, param.is_pack)
+            type_table.make_declared_param(
+                owner,
+                param.name.clone(),
+                offset + param.index,
+                param.is_pack,
+            )
         })
         .collect();
     assert_eq!(func.type_params.len(), callee.type_params.len());

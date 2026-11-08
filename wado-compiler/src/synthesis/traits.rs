@@ -597,11 +597,9 @@ fn generate_struct_reflect_methods(
     ) = {
         let mut tt = type_table.borrow_mut();
         let struct_type = if is_generic {
-            let param_ids = make_type_param_ids(type_params, &mut tt);
-            tt.make_generic_instance(
-                def.decl().expect("a generic struct names its declaration"),
-                param_ids,
-            )
+            let decl = def.decl().expect("a generic struct names its declaration");
+            let param_ids = make_type_param_ids(decl, type_params, &mut tt);
+            tt.make_generic_instance(decl, param_ids)
         } else {
             tt.make_struct(*def)
         };
@@ -2055,7 +2053,7 @@ fn generate_variant_reflect_methods(
     let (variant_type, ref_variant_type, member_types, members_tuple_type) = {
         let mut tt = type_table.borrow_mut();
         let variant_type = if is_generic {
-            let param_ids = make_type_param_ids(&target.type_params, &mut tt);
+            let param_ids = make_type_param_ids(target.def, &target.type_params, &mut tt);
             tt.make_generic_instance(target.def, param_ids)
         } else {
             tt.make_variant(target.def)
@@ -3580,11 +3578,15 @@ enum ImplScope {
     AnyModule,
 }
 
-/// Resolve type parameter definitions into `TypeIds`.
-fn make_type_param_ids(type_params: &[TirTypeParam], tt: &mut TypeTable) -> Vec<TypeId> {
+/// The `TypeId`s of the type parameters `owner` declares.
+fn make_type_param_ids(
+    owner: DefId,
+    type_params: &[TirTypeParam],
+    tt: &mut TypeTable,
+) -> Vec<TypeId> {
     type_params
         .iter()
-        .map(|tp| tt.make_declared_param(tp.name.clone(), tp.index, tp.is_pack))
+        .map(|tp| tt.make_declared_param(owner, tp.name.clone(), tp.index, tp.is_pack))
         .collect()
 }
 
@@ -3865,7 +3867,7 @@ fn eq_targets(
                 let ty = if r.type_params.is_empty() {
                     tt.make_resource(def)
                 } else {
-                    let ids = make_type_param_ids(&r.type_params, tt);
+                    let ids = make_type_param_ids(def, &r.type_params, tt);
                     tt.make_generic_instance(def, ids)
                 };
                 EqMembers::Scalar(ty, common::handle_bits)
@@ -3886,7 +3888,7 @@ fn eq_targets(
             type_params.clone(),
             span,
             || {
-                let ids = make_type_param_ids(&type_params, tt);
+                let ids = make_type_param_ids(def, &type_params, tt);
                 EqMembers::Fields(tt.make_generic_instance(def, ids), fields)
             },
         ));
@@ -3905,7 +3907,7 @@ fn eq_targets(
             type_params.clone(),
             span,
             || {
-                let ids = make_type_param_ids(&type_params, tt);
+                let ids = make_type_param_ids(def, &type_params, tt);
                 EqMembers::Cases(tt.make_generic_instance(def, ids), cases)
             },
         ));
@@ -4150,7 +4152,7 @@ fn generate_struct_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     let generic_struct_infos = collect_generic_struct_fields(module);
     for (_name, type_params, fields, span, def) in &generic_struct_infos {
         let receiver = &FqTypeName::declared(tt.defs(), *def);
-        let type_param_ids = make_type_param_ids(type_params, &mut tt);
+        let type_param_ids = make_type_param_ids(*def, type_params, &mut tt);
         let struct_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_struct_type = tt.make_ref(struct_type);
 
@@ -4204,7 +4206,7 @@ fn generate_variant_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         let variant_type = if type_params.is_empty() {
             tt.make_variant(def)
         } else {
-            let ids = make_type_param_ids(&type_params, &mut tt);
+            let ids = make_type_param_ids(def, &type_params, &mut tt);
             tt.make_generic_instance(def, ids)
         };
         let func = generate_variant_ord_fn(

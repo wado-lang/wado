@@ -2241,6 +2241,17 @@ impl TypeTable {
         matches!(self.get(id), ResolvedType::Tuple(_))
     }
 
+    /// The declaration binding `id` and its position there, where `id` is a
+    /// type parameter or pack: a pack's element placeholder sits at its pack's.
+    #[must_use]
+    pub fn param_identity(&self, id: TypeId) -> Option<(DefId, u32)> {
+        match self.get(id) {
+            ResolvedType::TypeParam { owner, index, .. }
+            | ResolvedType::TypePack { owner, index, .. } => Some((*owner, *index)),
+            _ => None,
+        }
+    }
+
     /// Whether a type is a declared type pack, as opposed to one of the
     /// tuples a pack stands for.
     pub fn is_type_pack(&self, id: TypeId) -> bool {
@@ -2283,15 +2294,15 @@ impl TypeTable {
                     // A pack slot stands for a run, so its column is a pack too:
                     // element `k` is the cells with the pack bound to its `k`-th.
                     TupleSlot::Pack(name) => {
-                        let parts: Vec<(u32, TypeId)> =
+                        let parts: Vec<(DefId, u32, TypeId)> =
                             cells.iter().map(|&c| self.pack_element(c)).collect();
-                        let (index, _) = parts[0];
+                        let (owner, index, _) = parts[0];
                         assert!(
-                            parts.iter().all(|&(i, _)| i == index),
+                            parts.iter().all(|&(o, i, _)| o == owner && i == index),
                             "one scope gives a pack name one index"
                         );
-                        let elem = self.make_tuple(parts.iter().map(|&(_, e)| e).collect());
-                        self.make_mapped_type_pack(name.clone(), index, elem)
+                        let elem = self.make_tuple(parts.iter().map(|&(_, _, e)| e).collect());
+                        self.make_mapped_type_pack(owner, name.clone(), index, elem)
                     }
                 }
             })
@@ -2299,10 +2310,11 @@ impl TypeTable {
         Some(self.make_tuple(columns))
     }
 
-    /// What one row contributes at a pack slot: the pack's index, and its
-    /// mapped element or the scalar placeholder an identity pack stands for.
-    fn pack_element(&mut self, cell: TypeId) -> (u32, TypeId) {
+    /// What one row contributes at a pack slot: the pack's owner and index, and
+    /// its mapped element or the scalar placeholder an identity pack stands for.
+    fn pack_element(&mut self, cell: TypeId) -> (DefId, u32, TypeId) {
         let ResolvedType::TypePack {
+            owner,
             name,
             index,
             mapped_elem,
@@ -2311,8 +2323,9 @@ impl TypeTable {
             unreachable!("`tuple_layout` marks a slot a pack only for a `TypePack`")
         };
         (
+            owner,
             index,
-            mapped_elem.unwrap_or_else(|| self.make_type_param(name, index)),
+            mapped_elem.unwrap_or_else(|| self.make_type_param(owner, name, index)),
         )
     }
 
@@ -3142,9 +3155,10 @@ impl TypeTable {
         }
     }
 
-    /// Create a type parameter (e.g., `T` in `struct Box<T>`)
-    pub fn make_type_param(&mut self, name: String, index: u32) -> TypeId {
-        self.intern(ResolvedType::TypeParam { name, index })
+    /// Create the type parameter `owner` declares at `index` (`T` in
+    /// `struct Box<T>`).
+    pub fn make_type_param(&mut self, owner: DefId, name: String, index: u32) -> TypeId {
+        self.intern(ResolvedType::TypeParam { owner, name, index })
     }
 
     /// The parameters of `owning_trait`'s generic associated type
@@ -3172,11 +3186,17 @@ impl TypeTable {
 
     /// The id a declaration's parameter at `index` interns to. A pack holds a
     /// tuple in its one slot, so it is a `TypePack` and not a `TypeParam`.
-    pub fn make_declared_param(&mut self, name: String, index: u32, is_pack: bool) -> TypeId {
+    pub fn make_declared_param(
+        &mut self,
+        owner: DefId,
+        name: String,
+        index: u32,
+        is_pack: bool,
+    ) -> TypeId {
         if is_pack {
-            self.make_type_pack(name, index)
+            self.make_type_pack(owner, name, index)
         } else {
-            self.make_type_param(name, index)
+            self.make_type_param(owner, name, index)
         }
     }
 
@@ -3223,8 +3243,9 @@ impl TypeTable {
     }
 
     /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
-    pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
+    pub fn make_type_pack(&mut self, owner: DefId, name: String, index: u32) -> TypeId {
         self.intern(ResolvedType::TypePack {
+            owner,
             name,
             index,
             mapped_elem: None,
@@ -3309,6 +3330,7 @@ impl TypeTable {
     /// identity pack driving its length and the one type every element is.
     pub fn repeated_element(&mut self, pack: TypeId) -> Option<(TypeId, TypeId)> {
         let ResolvedType::TypePack {
+            owner,
             name,
             index,
             mapped_elem: Some(element),
@@ -3316,22 +3338,23 @@ impl TypeTable {
         else {
             return None;
         };
-        if self.mentions_param_slot(element, index) {
+        if self.mentions_param_slot(element, owner, index) {
             return None;
         }
-        Some((self.make_type_pack(name, index), element))
+        Some((self.make_type_pack(owner, name, index), element))
     }
 
-    /// Whether `id` mentions the type parameter or pack at slot `index`.
-    fn mentions_param_slot(&self, id: TypeId, index: u32) -> bool {
+    /// Whether `id` mentions the type parameter or pack `owner` declares at
+    /// slot `index`.
+    fn mentions_param_slot(&self, id: TypeId, owner: DefId, index: u32) -> bool {
         match self.get(id) {
-            ResolvedType::TypeParam { index: at, .. }
-            | ResolvedType::TypePack { index: at, .. }
-                if *at == index =>
-            {
-                true
+            ResolvedType::TypeParam {
+                owner: of, index: at, ..
             }
-            _ => self.any_constituent(id, &mut |t| self.mentions_param_slot(t, index)),
+            | ResolvedType::TypePack {
+                owner: of, index: at, ..
+            } if *of == owner && *at == index => true,
+            _ => self.any_constituent(id, &mut |t| self.mentions_param_slot(t, owner, index)),
         }
     }
 
@@ -3339,12 +3362,55 @@ impl TypeTable {
     /// pack param may recur in `elem` as a scalar `TypeParam` placeholder.
     /// Drives its arity from pack `(name, index)`. See
     /// [`ResolvedType::TypePack`].
-    pub fn make_mapped_type_pack(&mut self, name: String, index: u32, elem: TypeId) -> TypeId {
+    pub fn make_mapped_type_pack(
+        &mut self,
+        owner: DefId,
+        name: String,
+        index: u32,
+        elem: TypeId,
+    ) -> TypeId {
         self.intern(ResolvedType::TypePack {
+            owner,
             name,
             index,
             mapped_elem: Some(elem),
         })
+    }
+
+    /// `pack` mapped through `elem`: the mapped pack of `pack`'s declaration and
+    /// slot.
+    pub fn map_pack(&mut self, pack: TypeId, elem: TypeId) -> TypeId {
+        let ResolvedType::TypePack {
+            owner, name, index, ..
+        } = self.get(pack).clone()
+        else {
+            unreachable!("only a pack maps, found {:?}", self.get(pack))
+        };
+        self.make_mapped_type_pack(owner, name, index, elem)
+    }
+
+    /// The scalar placeholder an identity pack's element stands as: a type
+    /// parameter at the pack's declaration and slot, which per-element
+    /// substitution binds to `P_k`.
+    pub fn pack_placeholder(&mut self, pack: TypeId) -> TypeId {
+        let ResolvedType::TypePack {
+            owner, name, index, ..
+        } = self.get(pack).clone()
+        else {
+            unreachable!("only a pack has a placeholder, found {:?}", self.get(pack))
+        };
+        self.make_type_param(owner, name, index)
+    }
+
+    /// The identity pack `pack`'s declaration binds at `pack`'s slot.
+    pub fn plain_pack(&mut self, pack: TypeId) -> TypeId {
+        let ResolvedType::TypePack {
+            owner, name, index, ..
+        } = self.get(pack).clone()
+        else {
+            unreachable!("only a pack has a plain form, found {:?}", self.get(pack))
+        };
+        self.make_type_pack(owner, name, index)
     }
 
     /// Create the projection `<param_id as owning_trait<trait_args>>::assoc_name<args>`,
@@ -4666,14 +4732,15 @@ impl TypeTable {
             return replaced;
         }
         match self.get(type_id).clone() {
-            ResolvedType::TypeParam { name, index } => match leaves.params.get(&index) {
+            ResolvedType::TypeParam { owner, name, index } => match leaves.params.get(&index) {
                 Some(&filled) => filled,
                 None => match leaves.renames.get(&index) {
-                    Some(&moved) => self.make_type_param(name, moved),
+                    Some(&moved) => self.make_type_param(owner, name, moved),
                     None => type_id,
                 },
             },
             ResolvedType::TypePack {
+                owner,
                 name,
                 index,
                 mapped_elem,
@@ -4682,9 +4749,9 @@ impl TypeTable {
                 None => match (leaves.renames.get(&index), mapped_elem) {
                     (Some(&moved), Some(elem)) => {
                         let elem = self.subst_rec(elem, leaves);
-                        self.make_mapped_type_pack(name, moved, elem)
+                        self.make_mapped_type_pack(owner, name, moved, elem)
                     }
-                    (Some(&moved), None) => self.make_type_pack(name, moved),
+                    (Some(&moved), None) => self.make_type_pack(owner, name, moved),
                     // A mapped pack the substitution leaves keeps its length,
                     // its element substituted.
                     (None, Some(elem)) => {
@@ -4692,7 +4759,7 @@ impl TypeTable {
                         if substituted == elem {
                             type_id
                         } else {
-                            self.make_mapped_type_pack(name, index, substituted)
+                            self.make_mapped_type_pack(owner, name, index, substituted)
                         }
                     }
                     (None, None) => type_id,
@@ -7461,8 +7528,8 @@ mod tests {
     #[test]
     fn a_family_answer_is_instantiated_at_the_projection_arguments() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
-        let method_param = table.make_type_param("E".to_string(), 1);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
+        let method_param = table.make_type_param(DefId::for_test(0), "E".to_string(), 1);
         let projection = table.make_assoc_type_projection(
             self_param,
             DefId::for_test(0),
@@ -7511,10 +7578,10 @@ mod tests {
     #[test]
     fn substitute_rewrites_projection_base_to_another_param() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
         let substitution = IndexMap::from_iter([(0, receiver)]);
         let substituted = table.substitute_type_params(projection, &substitution);
 
@@ -7536,10 +7603,10 @@ mod tests {
     #[test]
     fn a_projection_answer_replaces_the_projection() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
             projection,
             &IndexMap::from_iter([(0, receiver)]),
@@ -7561,10 +7628,10 @@ mod tests {
     #[test]
     fn an_answer_for_another_trait_leaves_the_projection() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
             projection,
             &IndexMap::from_iter([(0, receiver)]),
@@ -7584,10 +7651,10 @@ mod tests {
     #[test]
     fn an_unanswered_projection_stays_abstract() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Iter");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
             projection,
             &IndexMap::from_iter([(0, receiver)]),
@@ -7606,7 +7673,7 @@ mod tests {
     #[test]
     fn substitute_leaves_unrelated_projection_untouched() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
         let substitution = IndexMap::from_iter([(7, TypeTable::I32)]);
@@ -7627,8 +7694,8 @@ mod tests {
     #[test]
     fn a_target_of_distinct_binders_covers_every_instance() {
         let mut table = TypeTable::new();
-        let k = table.make_type_param("K".to_string(), 0);
-        let v = table.make_type_param("V".to_string(), 1);
+        let k = table.make_type_param(DefId::for_test(1), "K".to_string(), 0);
+        let v = table.make_type_param(DefId::for_test(1), "V".to_string(), 1);
         let head = table.make_builtin_array(k);
         assert!(covers(&mut table, head, vec![k, v]));
     }
@@ -7642,8 +7709,8 @@ mod tests {
     #[test]
     fn a_pack_binder_covers_every_arity() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
-        let rest = table.make_type_pack("Rest".to_string(), 1);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
+        let rest = table.make_type_pack(DefId::for_test(1), "Rest".to_string(), 1);
         let head = table.make_builtin_array(t);
         assert!(covers(&mut table, head, vec![t, rest]));
     }
@@ -7653,7 +7720,7 @@ mod tests {
     #[test]
     fn a_binder_written_twice_reaches_some_instances() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
         let head = table.make_builtin_array(t);
         assert!(!covers(&mut table, head, vec![t, t]));
     }
@@ -7661,7 +7728,7 @@ mod tests {
     #[test]
     fn a_concrete_argument_reaches_some_instances() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
         let head = table.make_builtin_array(t);
         assert!(!covers(&mut table, head, vec![t, TypeTable::I32]));
     }
@@ -7671,7 +7738,7 @@ mod tests {
     #[test]
     fn a_reference_target_reaches_some_instances() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
         let wrapper = table.make_builtin_array(t);
         let whole = table.make_ref(wrapper);
         assert!(!covers(&mut table, whole, vec![t]));

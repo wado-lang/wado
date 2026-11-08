@@ -1446,12 +1446,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve against. Number them from the index the declaration gave the
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
-        let base = slots.first().map_or(0, |&slot| self.declared_slot(slot));
+        let Some(&first) = slots.first() else {
+            return vec![None; method_type_params.len()];
+        };
+        let base = self.declared_slot(first);
+        let (owner, _) = self
+            .tysys
+            .type_table
+            .borrow()
+            .param_identity(first)
+            .expect("a method's slot is a declared parameter");
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.clear_binders();
-                scope.register_generic_params(method_type_params, base);
+                scope.register_generic_params(owner, method_type_params, base);
                 method_type_params
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
@@ -2273,7 +2282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_type_param(name.clone(), slot),
+                    .make_type_param(impl_ref.0, name.clone(), slot),
             };
             Self::bind_type_param(
                 &mut scope,

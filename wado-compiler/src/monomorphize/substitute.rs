@@ -125,6 +125,7 @@ impl Monomorphizer {
                         index,
                         name: pack_name,
                         mapped_elem,
+                        ..
                     } = type_table.get(e).clone()
                     else {
                         new_elems.push(self.substitute_type(e, substitution, type_table));

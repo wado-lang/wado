@@ -2591,7 +2591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The template is written against the blanket param, so `-> Self` /
         // `-> T` lands on the receiver at the call site.
-        let blanket_slot = self.tysys.blanket_param_slot(&blanket_param);
+        let blanket_slot = self.tysys.blanket_param_slot(blanket_def, &blanket_param);
         let return_type = SubstitutionContext::new()
             .bind(&[blanket_slot], &[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
@@ -2599,6 +2599,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
         // as a Wasm validation failure.
         let param_types = self.blanket_static_param_types(
+            blanket_def,
             &blanket_module,
             &blanket_param,
             method,
@@ -2678,6 +2679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// types the instantiation will actually take.
     fn blanket_static_param_types(
         &mut self,
+        blanket: DefId,
         blanket_module: &ModuleSource,
         blanket_param: &str,
         method: &str,
@@ -2688,7 +2690,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .lookup_static_method_sig_keyed(blanket_param, method, Some(&key))
             .map(|sig| sig.value_param_types())
             .unwrap_or_default();
-        let blanket_slot = self.tysys.blanket_param_slot(blanket_param);
+        let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
         let mut tt = self.tysys.type_table.borrow_mut();
         template
             .iter()
@@ -3819,11 +3821,12 @@ impl TypeSystem {
         (name, key)
     }
 
-    /// The blanket impl's one type parameter, `T` in `impl<T> Trait for T`.
-    fn blanket_param_slot(&self, blanket_param: &str) -> TypeId {
+    /// The blanket impl `blanket`'s one type parameter, `T` in `impl<T> Trait
+    /// for T`.
+    fn blanket_param_slot(&self, blanket: DefId, blanket_param: &str) -> TypeId {
         self.type_table
             .borrow_mut()
-            .make_type_param(blanket_param.to_string(), 0)
+            .make_type_param(blanket, blanket_param.to_string(), 0)
     }
 
     /// The first row of a tuple `zip` whose layout differs from row zero's.
@@ -3881,7 +3884,7 @@ impl TypeSystem {
         // By the numbering, not the count: a concrete head argument leaves a
         // gap, so the block's last slot sits past how many names it contributed.
         match table.get(table.peel_refs(param)) {
-            ResolvedType::TypeParam { index, name }
+            ResolvedType::TypeParam { index, name, .. }
             | ResolvedType::TypePack { index, name, .. } => {
                 *index < sig.method_slot_base && !header.ty.mentions(name)
             }
