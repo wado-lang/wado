@@ -11,8 +11,8 @@ composite), where each axis took its name from, each
 tensor's element type and axes, the values stage 0 folded, what each scope
 leaves `compute` to check, which lengths the run may pad to a capacity or the
 node that refuses one, and whether each row of a batch holds those lengths of
-its own or the node that makes the rows share them. The device compiler's fusion is decided when it
-runs, so no dump reports it. `--format json` prints the same for a test to
+its own or the node that makes the rows share them. The device compiler's
+fusion is decided when it runs, so no dump reports it. `--format json` prints the same for a test to
 read.
 
 ```sh

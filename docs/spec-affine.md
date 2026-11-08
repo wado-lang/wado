@@ -259,10 +259,11 @@ holding. A trap does not unwind, so it runs no drops.
 A temporary a `let` keeps borrowed stops holding its value when the `let`'s
 scope ends, as a local declared there would, after the `let`'s own bindings.
 The `let` keeps the borrow written as its initializer, or as an operand of a
-struct, tuple or list literal or of a cast that it keeps, and the temporary borrowed
-is the operand of that `&` or `&mut`, or what a field read (a tuple's constant
-index among them) or a dereference of the operand reads from. This is Rust's temporary lifetime extension. A
-temporary only a call's operand borrows is not kept, whatever the call returns.
+struct, tuple or list literal or of a cast that it keeps, and the temporary
+borrowed is the operand of that `&` or `&mut`, or what a field read (a tuple's
+constant index among them) or a dereference of the operand reads from. This is
+Rust's temporary lifetime extension. A temporary only a call's operand borrows
+is not kept, whatever the call returns.
 
 <!-- {"fixture":"affine_temporary_extended_by_let.wado"} -->
 

@@ -320,8 +320,8 @@ each symbolic axis whether it can promise that, at build time:
   too, since its capacity would not match the refused length's exact extent.
 - Any other operation that reads across a padded axis, such as a split of it
   into axes it never lines up with, makes the generator refuse to pad that
-  axis. It then compiles one program per length of that
-  axis, and `loam dump` says which node refused.
+  axis. It then compiles one program per length of that axis, and `loam dump`
+  says which node refused.
 
 A valid length is one per row of the batch axis, since the rows of one pass are
 different requests (see
@@ -333,10 +333,10 @@ A value computed from each row's lengths, as GPT-2's position ids are, holds
 the rows of `[Slots]` ahead of its axes. An elementwise operation, a reshape
 and a gather by it keep them there, and an elementwise operation whose output
 has the batch axis folds them into it. A `Slice` from a valid length gathers
-each row's window from that row's start. Where a node takes one length for every
-row, as a `ReduceMean`'s divisor does, reads
-how many rows the batch holds, or reads such a value any other way, the rows
-share their lengths, and `loam dump` says which node made them.
+each row's window from that row's start. Where a node takes one length for
+every row, as a `ReduceMean`'s divisor does, reads how many rows the batch
+holds, or reads such a value any other way, the rows share their lengths, and
+`loam dump` says which node made them.
 
 The generated module takes them so:
 
