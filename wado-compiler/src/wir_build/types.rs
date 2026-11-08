@@ -48,13 +48,13 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     let cells: Vec<(WirTypeId, TypeId)> = cell_payloads(&package.type_table.borrow(), |t| {
         ctx.wado_types.contains_key(&t)
     })
-        .into_iter()
-        .map(|(name, payload)| {
-            let id = ctx.reserve_type(wir_type_key(&ModuleSource::prelude(), &name));
-            ctx.cell_type_map.insert(name, id.clone());
-            (id, payload)
-        })
-        .collect();
+    .into_iter()
+    .map(|(name, payload)| {
+        let id = ctx.reserve_type(wir_type_key(&ModuleSource::prelude(), &name));
+        ctx.cell_type_map.insert(name, id.clone());
+        (id, payload)
+    })
+    .collect();
 
     let type_table = &*package.type_table.borrow();
     for (id, shape) in shapes {
@@ -154,8 +154,8 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
 /// Drop each tuple, array and variant with a part no WIR type lowers, until
 /// none is left. No value of such a type is ever built: it reaches the table
 /// only as a type argument a mangled name spells, like `ReflectEnum::Members`
-/// at a call that survives `-O0`, and no declaration lowers its struct
-/// instances.
+/// at a blanket call that inlining did not remove, and no declaration lowers
+/// its struct instances.
 fn drop_unbuildable(found: &mut IndexMap<TypeId, (String, Shape<'_>)>, tt: &TypeTable) {
     loop {
         let unbuildable: Vec<TypeId> = found
@@ -444,10 +444,12 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>, type_table: &TypeT
             ..
         } = type_table.get(type_id)
         {
-            // Skip if any param/return contains type params (unmonomorphized)
-            if params.iter().any(|p| type_table.contains_type_param(*p))
-                || type_table.contains_type_param(*return_type)
-            {
+            // A signature over a type parameter, or over a type no value has,
+            // types no closure.
+            let registered = |t| ctx.wado_types.contains_key(&t);
+            if params.iter().chain([return_type]).any(|&p| {
+                type_table.contains_type_param(p) || !buildable(type_table, p, registered)
+            }) {
                 continue;
             }
 
