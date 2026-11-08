@@ -4261,6 +4261,7 @@ fn test_format_keeps_parens_around_a_statement_keyword_expression() {
         "(if c { 1 } else { 2 }) < 2 < 3;",
         "(lbl: { 1 })..<4;",
         "(with Log => &mut sink do { 1 }) + 2;",
+        "({ x: 1 }).x;",
     ] {
         let source = format!("fn run() {{\n    {stmt}\n}}\n");
         let formatted = wado_compiler::format(&source).expect("format failed");
@@ -4273,6 +4274,9 @@ fn test_format_keeps_parens_around_a_statement_keyword_expression() {
     // An arm of a one-line `if` is a statement too.
     assert_format_preserves_ast(
         "fn run() {\n    let y = if c { (match x { _ => 1 }) + 2 } else { 3 };\n}\n",
+    );
+    assert_format_preserves_ast(
+        "fn run() {\n    if let { x } = (if c { ({ x: 1 }) } else { ({ x: 2 }) }) && x > 0 {\n        return;\n    }\n}\n",
     );
 }
 

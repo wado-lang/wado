@@ -3352,16 +3352,22 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
 }
 
 /// Whether an expression statement starts with `if`, `match`, a label or
-/// `with`, which re-parses as that statement and ends it at its `}`. A whole
-/// `with` is the statement `with` parses to.
+/// `with`, which re-parses as that statement and ends it at its `}`, or with
+/// the `{` of an anonymous struct literal, which no statement starts with. A
+/// whole `with` is the statement `with` parses to.
 fn expr_stmt_needs_parens(expr: &Expr) -> bool {
     !matches!(expr, Expr::WithHandler(_))
         && prints_first(expr, &|e| {
-            matches!(
-                e,
-                Expr::If(_) | Expr::Match(_) | Expr::LabeledBlock(_) | Expr::WithHandler(_)
-            )
+            is_anonymous_struct_literal(e)
+                || matches!(
+                    e,
+                    Expr::If(_) | Expr::Match(_) | Expr::LabeledBlock(_) | Expr::WithHandler(_)
+                )
         })
+}
+
+fn is_anonymous_struct_literal(expr: &Expr) -> bool {
+    matches!(expr, Expr::StructLiteral(s) if s.name.is_none())
 }
 
 /// Whether `expr`, or the operand it prints first and bare, is one `opens`
@@ -3386,24 +3392,25 @@ fn prints_first(expr: &Expr, opens: &impl Fn(&Expr) -> bool) -> bool {
         },
         Expr::CompoundAssign(c) => prints_first(&c.target, opens),
         Expr::TaggedTemplate(t) => prints_first(&t.tag, opens),
-        // A postfix or cast operand carries parens from `binds_tighter_than`,
-        // and everything else opens with a keyword, delimiter, or operator.
+        Expr::Call(c) => prints_first_bare(&c.callee, OperandSlot::Callee, opens),
+        Expr::MethodCall(m) => prints_first_bare(&m.receiver, OperandSlot::Postfix, opens),
+        Expr::FieldAccess(f) => prints_first_bare(&f.expr, OperandSlot::Postfix, opens),
+        Expr::Index(i) => {
+            i.unchecked.is_none() && prints_first_bare(&i.expr, OperandSlot::Postfix, opens)
+        }
+        Expr::TryOp(t) => prints_first_bare(&t.expr, OperandSlot::Postfix, opens),
+        Expr::Cast(c) => prints_first_bare(&c.expr, OperandSlot::Cast, opens),
+        // Everything else opens with a keyword, delimiter, or operator.
         Expr::WithHandler(_)
         | Expr::Ident(_)
         | Expr::Literal(_)
         | Expr::Unary(_)
-        | Expr::Call(_)
-        | Expr::MethodCall(_)
         | Expr::StaticMethodCall(_)
-        | Expr::FieldAccess(_)
-        | Expr::Index(_)
-        | Expr::TryOp(_)
         | Expr::Block(_)
         | Expr::If(_)
         | Expr::Match(_)
         | Expr::Closure(_)
         | Expr::TemplateString(_)
-        | Expr::Cast(_)
         | Expr::StructLiteral(_)
         | Expr::TupleLiteral(_)
         | Expr::TupleComprehension(_)
@@ -3411,6 +3418,11 @@ fn prints_first(expr: &Expr, opens: &impl Fn(&Expr) -> bool) -> bool {
         | Expr::Spread(..)
         | Expr::Error(_) => false,
     }
+}
+
+/// [`prints_first`] of an operand in `slot`, which prints first only bare.
+fn prints_first_bare(operand: &Expr, slot: OperandSlot, opens: &impl Fn(&Expr) -> bool) -> bool {
+    binds_tighter_than(operand, slot) && prints_first(operand, opens)
 }
 
 /// Whether the operand of the prefix operator `op` needs parens. Exhaustive, so
