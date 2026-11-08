@@ -37,10 +37,12 @@ global SKIPPED_FILES: List<[String, String]> = [
         "optional/refOfUnknownKeyword.json",
         "Draft 2020-12 leaves a reference into an unknown keyword undefined (Core 9.4.2)",
     ],
+    ["optional/format/hostname.json", NEEDS_IDNA],
+    ["optional/format/idn-email.json", NEEDS_IDNA],
+    ["optional/format/idn-hostname.json", NEEDS_IDNA],
 ];
 
-/// The files of `optional/format/` whose format Jade does not assert yet.
-global UNASSERTED_FORMATS: List<String> = ["hostname", "idn-email", "idn-hostname"];
+global NEEDS_IDNA: String = "the format needs IDNA, which Wado does not offer";
 
 /// Where the files whose tests compile with `format` asserting lie.
 global FORMAT_DIR: String = "optional/format";
@@ -81,11 +83,6 @@ fn skip_reason(file: &String) -> Option<String> {
     for let [name, why] of SKIPPED_FILES {
         if name == *file {
             return Option::Some(why);
-        }
-    }
-    for let name of UNASSERTED_FORMATS {
-        if *file == fs::join(&FORMAT_DIR, `${name}.json`) {
-            return Option::Some("Jade does not assert this format yet");
         }
     }
     return null;
