@@ -3,7 +3,7 @@
 //! slots, the ATN simulator, the scan memo), the ATN's decision tables, the
 //! recovery sets, and what each rule's actions read off its calls.
 
-use { Grammar } from "./ir.wado";
+use { Grammar, Element } from "./ir.wado";
 use { LoweredGrammar, Op, Rule } from "./gir.wado";
 use { GrammarAnalysis, close_over_callers } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
@@ -17,6 +17,8 @@ use {
     rule_action_bodies,
     rule_binding_reads,
     rule_named_bindings,
+    body_names_binding,
+    binding_name,
 } from "./action_translate.wado";
 use { HashMap, HashSet } from "core:collections";
 
@@ -25,13 +27,24 @@ use { HashMap, HashSet } from "core:collections";
 pub struct RuleCaptures {
     pub spans: List<String> = [],
     pub nodes: List<String> = [],
+    /// The labels `@after` reads in a rule of several alternatives: it runs
+    /// once the alternative that bound them has ended, so each alternative
+    /// leaves its label's value in the rule's value struct.
+    pub labels: List<LabelCapture> = [],
 }
 
 impl RuleCaptures {
     /// Whether no action reads a capture of the rule.
     pub fn is_empty(&self) -> bool {
-        return self.spans.is_empty() && self.nodes.is_empty();
+        return self.spans.is_empty() && self.nodes.is_empty() && self.labels.is_empty();
     }
+}
+
+/// A label `@after` reads: a token's (`is_token`) or a call of `ref_name`'s.
+pub struct LabelCapture {
+    pub base: String,
+    pub is_token: bool,
+    pub ref_name: String,
 }
 
 global NO_CAPTURES: RuleCaptures = RuleCaptures {};
@@ -353,11 +366,51 @@ fn rule_captures_of(grammar: &Grammar, lowered: &LoweredGrammar) -> HashMap<Stri
                 }
             }
         }
+        if let Some(after) = &rule.after_action && rule.alternatives.len() > 1 {
+            for let alt of &rule.alternatives {
+                for let e of &alt.elements {
+                    collect_after_labels(e, &after.text, &mut c.labels);
+                }
+            }
+        }
         if !c.is_empty() {
             captures[rule.name] = c;
         }
     }
     return captures;
+}
+
+/// Each label or reference inside `e` the `@after` body `after` names.
+fn collect_after_labels(e: &Element, after: &String, out: &mut List<LabelCapture>) {
+    let named = match e {
+        Label(l) && !l.list => match &l.element {
+            RuleRef(r) => Option::Some(LabelCapture { base: binding_name(&l.name), is_token: false, ref_name: r.name }),
+            _ => Option::Some(LabelCapture { base: binding_name(&l.name), is_token: true, ref_name: "" }),
+        },
+        TokenRef(t) => Option::Some(LabelCapture { base: binding_name(&t.name), is_token: true, ref_name: "" }),
+        RuleRef(r) => Option::Some(LabelCapture { base: binding_name(&r.name), is_token: false, ref_name: r.name }),
+        _ => null,
+    };
+    if let Some(label) = named {
+        if body_names_binding(after, &label.base)
+            && !out.iter_ref().any(|o| o.is_token == label.is_token && o.base == label.base) {
+            out.push(label);
+        }
+        return;
+    }
+    match e {
+        Label(l) => collect_after_labels(&l.element, after, out),
+        Repeat(r) => collect_after_labels(&r.element, after, out),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                for let inner of &alt.elements {
+                    collect_after_labels(inner, after, out);
+                }
+            }
+        },
+        _ => {
+        },
+    }
 }
 
 fn body_reads_any<S: AsStrSlice>(bodies: &List<String>, base: S, want_node: bool) -> bool {

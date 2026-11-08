@@ -144,6 +144,7 @@ test "DiagnosticOwner labels every site" {
     assert DiagnosticOwner { rule: "r", site: DiagnosticSite::SimpleCstGroup }.label() == "SimpleCst group in rule 'r'";
     assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Optional("tail") }.label() == "optional 'tail' in rule 'r'";
     assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Action(7) }.label() == "action 7";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::AttrInit("n") }.label() == "initializer of 'n' in rule 'r'";
     assert DiagnosticOwner { site: DiagnosticSite::LexerAction(7) }.label() == "lexer action 7";
     assert DiagnosticOwner::host("@members").label() == "@members";
 }

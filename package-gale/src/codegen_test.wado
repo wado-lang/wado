@@ -4038,6 +4038,96 @@ WS : [ \\t]+ -> skip ;
     assert got == "a b => (s (e a) (e b)) [3 13 ]\n";
 }
 
+test "a returns or locals initializer holds when the rule is entered" {
+    let got = parses("grammar T;
+s : r {System.out.print($r.v + \" \" + $r.n);} EOF ;
+r returns [int v = 5, int n] locals [int k = 2] : 'a' {$n = $k;} ;
+WS : ' ' -> skip ;
+", "s", ["a"]);
+    assert got == "a => (s (r a)) [5 2]\n";
+}
+
+// A predicate reading the invocation it sits in is ignored where prediction
+// meets it in another (`doc/predicates.md`). The outer `r` has cleared its `x`
+// by the time it reaches `r?`; the second `r` of `s` is met through the first's
+// empty alternative, and the first's `d` is not its own.
+test "prediction ignores a context-dependent predicate outside its own invocation" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        let options = GenerateOptions { atn };
+        assert parses("grammar T;
+s : r EOF ;
+r locals [int x = 1] : {$x > 0}? 'a' {$x = 0;} r? ;
+WS : ' ' -> skip ;
+", "s", ["a a"], &options) == "a a => (s (r a (r a)))\n";
+        assert parses("grammar T;
+s : r[0] r[1] EOF ;
+r[int d] : {$d > 0}? 'a' | ;
+WS : ' ' -> skip ;
+", "s", ["a", "a a"], &options) == "a => (s r (r a))\na a => error\n";
+    }
+}
+
+test "a label read where its alternative did not bind it" {
+    let got = parses("grammar T;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF ;
+r1 : (x='b')? 'a' {String s = $x.text; System.out.println(\"r1 \" + \"null\".equals(s) + \" \" + (s == null));} ;
+r2 : x='-'? 'a' {System.out.println(\"r2 \" + ($x == (null)) + \" \" + ((null) != $x));} ;
+r3 : ID* 'a' {System.out.println(\"r3 \" + ($ctx.ID() != null));} ;
+r4 : ID 'a' | ID 'c' | INT 'b' {System.out.println(\"r4 \" + ($ctx.ID() != null));} ;
+INT : [0-9]+ ;
+ID : [d-w]+ ;
+WS : ' ' -> skip ;
+", "s", ["A a", "B a", "C a", "D 1 b"]);
+    assert got == "A a => (s A (r1 a)) [r1 false true\n]
+B a => (s B (r2 a)) [r2 true false\n]
+C a => (s C (r3 a)) [r3 true\n]
+D 1 b => (s D (r4 1 b)) [r4 false\n]
+";
+}
+
+test "@after reads a label of whichever alternative ran" {
+    let got = parses("grammar T;
+s : 'E' r5 EOF ;
+r5 @after {System.out.println(\"r5 \" + $y.v);} : (y=q)? 'a' | 'b' ;
+q returns [int v] : INT {$v = $INT.int;} ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["E 7 a"]);
+    assert got == "E 7 a => (s E (r5 (q 7) a)) [r5 7\n]\n";
+}
+
+test "a left-recursive suffix binds its token-set label" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e (x=('b'|'c'))? '+' {System.out.println(\"e \" + $x.text);} | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["1 b +"]);
+    assert got == "1 b + => (s (e (e 1) b +)) [e b\n]\n";
+}
+
+// An action only hides the predicates behind it from the paths that run it: a
+// path still empty there reaches the predicate past the group.
+test "an action in one alternative leaves the others' predicates in view" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar T;
+s : 'G' r7 EOF | 'H' r8 EOF ;
+r7 : ({} 'b' | 'c' | ) {false}? 'a' | 'a' ;
+r8 : ({} ({false}? 'a')?) 'b' | 'a' 'b' ;
+WS : ' ' -> skip ;
+", "s", ["G a", "H a b"], &GenerateOptions { atn }) == "G a => (s G (r7 a))\nH a b => error\n";
+    }
+}
+
+test "each left-recursive suffix starts from the initializer" {
+    let got = parses("grammar T;
+s : e EOF ;
+e returns [int v = 5] : e '+' e {System.out.print($v + \" \"); $v = 0;} | INT {System.out.print($v + \" \"); $v = 1;} ;
+INT : [0-9]+ ;
+", "s", ["1+2+3"]);
+    assert got == "1+2+3 => (s (e (e (e 1) + (e 2)) + (e 3))) [5 5 5 5 5 ]\n";
+}
+
 test "a `<` in a call argument is a comparison, not a bracket" {
     let got = parses("grammar T;
 s : a=n e[$a.v < 2, $a.v] EOF ;

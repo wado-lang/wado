@@ -44,7 +44,7 @@ use {
     open_chain_arm,
 } from "./gen_util.wado";
 use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
-use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
+use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM, VALS_LOCAL } from "./ident.wado";
 use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { MetPredicate } from "./gate_conditions.wado";
@@ -146,10 +146,13 @@ use {
     emit_alt_helper_exit,
     ambiguous_group_predicate_gated,
     atn_decision_gates,
+    AtnGate,
     call_args,
     emit_arg_stores,
+    emit_attr_inits,
     emit_no_viable_return,
     emit_span_capture,
+    after_label_field,
     gen_action_body,
     gen_alt_actions_at,
     gen_parser_member_methods,
@@ -159,6 +162,7 @@ use {
     result_type_carries_vals,
     rule_call_ctx_field,
     rule_call_span_field,
+    rule_has_attr_inits,
     rule_has_emittable_actions,
     rule_result_type,
     warn_unhandled_actions,
@@ -1026,7 +1030,9 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
         w.line(`${gate} = ${SCAN_MEMO_HANDLE}.gate_of(memo_at);`);
     }
     if edges {
-        w.line(`${edge} = memo_edge;`);
+        // A walk from the edge leaves it there or closes it, as the cached gate
+        // says; one from past it leaves it where it was.
+        w.line(`if memo_edge != pos { ${edge} = memo_edge; }`);
     }
     w.line(`return ${SCAN_MEMO_HANDLE}.end_of(memo_at);`);
     w.end();
@@ -2467,8 +2473,8 @@ fn gen_scan_op_group<S: AsStrSlice>(
                 elements.len(),
                 ctx,
                 fail_stmt,
-                &NO_SCAN_GATES,
-                &NO_SCAN_GATE_COND,
+                &alt.gates,
+                &alt.gate_cond,
                 known,
             );
             return;
@@ -2743,7 +2749,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         let shape = &ole.bodies[si];
         let elements = &shape.elements;
         if !scan_body_is_gated(shape) && !scan_elements_can_fail(elements, 0, sig, ctx) {
-            gen_scan_op_elements(w, elements, 0, elements.len(), ctx, "", &NO_SCAN_GATES, &NO_SCAN_GATE_COND, sig);
+            gen_scan_op_elements(w, elements, 0, elements.len(), ctx, "", &shape.gates, &shape.gate_cond, sig);
             w.line(`break ${chain_done};`);
             w.end();
             continue;
@@ -3159,6 +3165,7 @@ fn open_rule_inner_fn<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRule, ctx:
     if ctx.rule_emits_vals(rule) {
         w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
     }
+    emit_attr_inits(w, rule, ctx);
     emit_arg_stores(w, rule, ctx);
     emit_span_capture(w, rule, ctx);
     // `@init` shares the inner fn's `vals`; the seed is threaded into the
@@ -3781,7 +3788,39 @@ fn gen_alt_elements(
     if let Some(a) = after_action {
         gen_prequel_in_scope(w, a, &ctx.current_rule_name(), false, ctx);
     }
+    leave_after_labels(w, ctx);
     ctx.cursor.set_alt_bindings(outer);
+}
+
+/// Leave each label the rule's `@after` reads in its value-struct field, as the
+/// alternative ending here bound it (`RuleCaptures.labels`).
+fn leave_after_labels(w: &mut CodeWriter, ctx: &EmitContext) {
+    for let label of &ctx.plan.rule_captures(&ctx.current_rule_name()).labels {
+        let Some(b) = ctx.cursor.alt_bindings().iter_ref().find(|b| b.binds(label.is_token, &label.base)) else {
+            continue;
+        };
+        let value = match b.reach {
+            Unmatched => {
+                continue;
+            },
+            Shared => b.field,
+            Bound => if label.is_token { b.field } else { `Option::Some(${b.field})` },
+        };
+        w.line(`${VALS_LOCAL}.${after_label_field(&label.base)} = ${value};`);
+    }
+}
+
+/// The bindings `@after` reads in a rule of several alternatives: the fields
+/// each alternative left its labels in.
+fn after_label_bindings(ctx: &EmitContext) -> List<AltBinding> {
+    return ctx.plan.rule_captures(&ctx.current_rule_name()).labels.iter_ref().map(|label| AltBinding {
+        is_token: label.is_token,
+        base: label.base,
+        field: `${VALS_LOCAL}.${after_label_field(&label.base)}`,
+        ref_name: label.ref_name,
+        reach: LabelReach::Shared,
+        capture: label.base,
+    }).collect();
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
@@ -4181,7 +4220,9 @@ fn gen_group_body(
     proven: &List<i32> = &NO_KINDS,
 ) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
-        if proves(proven, &kinds) {
+        if let TokenOnly(to) = &g.shape {
+            gen_consume_token_group_op(w, to, &kinds, ctx, nc, proven);
+        } else if proves(proven, &kinds) {
             w.line("p.take();");
         } else {
             w.line(`let _ = ${expect_set_call(ctx, &kinds)};`);
@@ -4343,13 +4384,17 @@ fn gen_lr_fn<S: AsStrSlice>(
     // reassignment); a plain value-channel LR rule just passes it through.
     if emits_vals {
         let entry_needs_mut = ctx.settings.emit_actions
-            && (rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } || rule_threads_args(rule));
+            && (rule.init_action matches { Some(_) }
+                || rule.after_action matches { Some(_) }
+                || rule_threads_args(rule)
+                || rule_has_attr_inits(rule));
         let mut_kw = if entry_needs_mut { "mut " } else { "" };
         w.line(`let ${mut_kw}vals = ${vals_struct_name(rule)} {};`);
     }
     let left_operand_text = lr_alts.iter_ref().any(|a| ctx.captures_span(&a.prefix_self_ref.name));
     emit_span_capture(w, rule, ctx, left_operand_text);
     if ctx.settings.emit_actions {
+        emit_attr_inits(w, rule, ctx);
         emit_arg_stores(w, rule, ctx);
         if let Some(a) = &rule.init_action {
             gen_prequel_action(w, a, &rule.name, true, ctx);
@@ -4586,6 +4631,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     if emits_vals {
         w.line(`let ${lr.prefix_self_ref.name} = _lr_acc;`);
         w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
+        emit_attr_inits(w, rule, ctx);
         capture_left_operand(w, &lr.prefix_self_ref.name, ctx);
     }
     // Interleave the alt's actions with the suffix ops. The LR rewrite strips
@@ -4616,6 +4662,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
         gen_op(w, &ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
     }
     gen_alt_actions_at(w, actions, ops.len() + 1, ctx);
+    leave_after_labels(w, ctx);
     ctx.cursor.set_alt_bindings(outer);
     w.line("p.b.finish_node(p.last_end());");
     if emits_vals {
@@ -5413,7 +5460,7 @@ fn gen_prequel_action<S: AsStrSlice>(
     // binds, and `@after` reaches one only through the captures the rule's
     // value struct keeps.
     let outer = *ctx.cursor.alt_bindings();
-    ctx.cursor.set_alt_bindings(if at_entry { unmatched_bindings(ctx.current_rule()) } else { [] });
+    ctx.cursor.set_alt_bindings(if at_entry { unmatched_bindings(ctx.current_rule()) } else { after_label_bindings(ctx) });
     gen_prequel_in_scope(w, src, rule_name, at_entry, ctx);
     ctx.cursor.set_alt_bindings(outer);
 }
@@ -5803,7 +5850,10 @@ fn gen_group_shape(
     atn: GroupAtn,
 ) {
     match &g_op.shape {
-        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts, proven),
+        TokenOnly(to) => {
+            let kinds = ctx.analysis.single_token_kinds(&g_elem.alternatives);
+            gen_consume_token_group_op(w, to, &kinds, ctx, name_counts, proven);
+        },
         SingleAlt(_) => gen_consume_single_alt_group_op(
             w,
             &g_op.alts[0],
@@ -5837,26 +5887,25 @@ fn gen_group_shape(
 
 /// Token-only group emit (`(K_A | K_B | …)`): `lower` matched the
 /// shape and assigned the outer field name in `TokenOnlyShape.field`.
-/// `alts` carries the token kinds of the alternatives — the emit gates
-/// `p.advance()` on a `expect_set` check so a token outside the group
-/// fails cleanly instead of being silently consumed. ANTLR4 reports a
-/// `NoViableAltException` at the same site.
+/// `kinds` are the alternatives' tokens — the emit gates `p.advance()` on a
+/// `expect_set` check so a token outside the group fails cleanly instead of
+/// being silently consumed. ANTLR4 reports a `NoViableAltException` at the
+/// same site.
 fn gen_consume_token_group_op(
     w: &mut CodeWriter,
     to: &TokenOnlyShape,
-    alts: &List<Alternative>,
+    kinds: &List<i32>,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
     proven: &List<i32>,
 ) {
     let _ = dedup_name(&to.dedup_base, name_counts);
-    let kinds = ctx.analysis.single_token_kinds(alts);
     let bind = leaf_binding(ctx, &to.dedup_base, &to.field);
-    if proves(proven, &kinds) {
+    if proves(proven, kinds) {
         w.line(`${bind}p.take();`);
         return;
     }
-    w.line(`${bind}${expect_set_call(ctx, &kinds)};`);
+    w.line(`${bind}${expect_set_call(ctx, kinds)};`);
 }
 
 /// Single-alt group emit `(e1 e2 …)`: parse each inner element (each appends
@@ -8001,7 +8050,7 @@ fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx:
 }
 
 /// `atn_predict_call` over the verdicts `atn_decision_gates` rendered.
-fn atn_gated_predict_call(atn_dec: i32, gates: &List<[i32, String]>, side: PickSide, ctx: &mut EmitContext) -> String
+fn atn_gated_predict_call(atn_dec: i32, gates: &List<AtnGate>, side: PickSide, ctx: &mut EmitContext) -> String
     contract ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator"
 {
     let [tokens, pos] = match side {
@@ -8014,10 +8063,11 @@ fn atn_gated_predict_call(atn_dec: i32, gates: &List<[i32, String]>, side: PickS
         ctx.cursor.note_ref(&decide);
         return `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, ${prec})`;
     }
-    let met = gates.iter_ref().map(|g| `${g.0}`).collect().join(", ");
-    let arms = gates.iter_ref().map(|g| `${g.0} => ${g.1}, `).collect().join("");
+    let met = gates.iter_ref().map(|g| `${g.label}`).collect().join(", ");
+    let own = gates.iter_ref().filter(|g| g.own_invocation).map(|g| `${g.label}`).collect().join(", ");
+    let arms = gates.iter_ref().map(|g| `${g.label} => ${g.cond}, `).collect().join("");
     let ask = `|_pred| match _pred { ${arms}_ => unreachable() }`;
-    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &[${met}], ${ask})`;
+    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &[${met}], &[${own}], ${ask})`;
 }
 
 /// A group deciding between alternatives. Under `SimpleCst` each alternative is

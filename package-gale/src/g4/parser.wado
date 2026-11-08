@@ -1700,7 +1700,8 @@ fn split_attr_decl<S: AsStrSlice>(seg: S, span: Span) -> Option<AttrDecl> {
         type_end -= 1;
     }
     let type_text = src.slice(skip_ws(&src, 0, type_end), type_end).to_string();
-    return Option::<AttrDecl>::Some(AttrDecl { type_text, name, span });
+    let init = if n < full { Option::Some(src.slice(n + 1, full).trim().to_string()) } else { null };
+    return Option::<AttrDecl>::Some(AttrDecl { type_text, name, span, init });
 }
 
 pub fn parse<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {

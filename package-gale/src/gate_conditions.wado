@@ -30,6 +30,9 @@ pub struct PredicateSite {
     /// Ahead of the rule's alternatives, where every label is unmatched
     /// (`unmatched_bindings`), built only for a body that translates.
     pub before_alternatives: bool = false,
+    /// Reached in another invocation of the rule than the decision's own, whose
+    /// values and labels the decision cannot read.
+    pub foreign: bool = false,
 }
 
 /// The dispatch-gate condition one of an alternative's `edge_gates` contributes,
@@ -240,7 +243,7 @@ fn walk_element_decisions(
         },
         RuleRef(r) => {
             // The callee's decision sees none of this rule's values or labels.
-            let outside = PredicateSite { rule_index: site.rule_index, vals_in_scope: false };
+            let outside = PredicateSite { rule_index: site.rule_index, vals_in_scope: false, foreign: true };
             let exit = &mut walk.exits[analysis.rule_index_of(&r.name)];
             let known = exit.len();
             for let [a, at] of cont {
@@ -259,10 +262,18 @@ fn extend_met(met: &mut List<MetPredicate>, more: &List<MetPredicate>) {
     }
 }
 
+/// Record `a` met at `site`. Met in the decision's own invocation as well as in
+/// another, it keeps the own site: the simulator tells the paths apart.
 fn push_met(met: &mut List<MetPredicate>, a: &AltAction, site: &PredicateSite) {
-    if !met.iter_ref().any(|m| m.0.source.action_id == a.source.action_id) {
-        met.push([*a, *site]);
+    for let m of &mut *met {
+        if m.0.source.action_id == a.source.action_id {
+            if m.1.foreign && !site.foreign {
+                m.1 = *site;
+            }
+            return;
+        }
     }
+    met.push([*a, *site]);
 }
 
 /// The predicates prediction meets entering the sequence `elements` (its
@@ -336,6 +347,7 @@ fn element_predicates_met(
                 rule_index: analysis.rule_index_of(&r.name),
                 vals_in_scope: false,
                 before_alternatives: true,
+                foreign: true,
             };
             for let calt of &analysis.find_rule(&r.name).unwrap().alternatives {
                 let _ = predicates_met_at(&calt.elements, &calt.actions, 0, &callee_site, analysis, visited, out);
@@ -590,6 +602,7 @@ fn element_empty_paths(
                 rule_index: analysis.rule_index_of(&r.name),
                 vals_in_scope: false,
                 before_alternatives: true,
+                foreign: true,
             };
             let callee = &analysis.find_rule(&r.name).unwrap().alternatives;
             let paths = alts_empty_paths(callee, settings, analysis, &callee_site, visited);
@@ -633,7 +646,8 @@ fn alt_empty_paths(
             let a = &alt.actions[k];
             k += 1;
             if a.kind matches { Action } {
-                return EmptyPaths { escapes: cond_or(escapes, reach), free: ScanCond::Never };
+                let past_action = if analysis.tail_is_nullable_deep(&alt.elements, i) { reach } else { ScanCond::Never };
+                return EmptyPaths { escapes: cond_or(escapes, past_action), free: ScanCond::Never };
             }
             let holds = match scan_gate_condition_for(a, settings, analysis, site) {
                 Some(code) => ScanCond::When(code),

@@ -795,9 +795,19 @@ r returns [int i = 0, String s = \"x\"] locals [int n = f(1, 2)] : ID ;";
     let r = &g.parser_rules[0];
     assert r.returns_decls.len() == 2;
     assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i";
+    assert r.returns_decls[0].init == Option::Some("0");
     assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s";
+    assert r.returns_decls[1].init == Option::Some("\"x\"");
     assert r.locals_decls.len() == 1;
     assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n";
+    assert r.locals_decls[0].init == Option::Some("f(1, 2)");
+}
+
+test "prequel attr decl without an initializer has none" {
+    let g = parse("grammar Test;\nr locals [int n, bool b = x >= 1] : ID ;").unwrap();
+    let r = &g.parser_rules[0];
+    assert r.locals_decls[0].init matches { None };
+    assert r.locals_decls[1].name == "b" && r.locals_decls[1].init == Option::Some("x >= 1");
 }
 
 test "action language from string-literal option value" {

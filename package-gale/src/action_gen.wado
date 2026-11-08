@@ -16,7 +16,7 @@ use {
 use { Diagnostics, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, RuleCallOp } from "./gir.wado";
 use { EmitContext } from "./emit_context.wado";
 use { GenSettings } from "./gen_settings.wado";
-use { RuleCaptures } from "./parser_plan.wado";
+use { RuleCaptures, LabelCapture } from "./parser_plan.wado";
 use {
     MetPredicate,
     body_names_unwired_base,
@@ -51,7 +51,7 @@ use {
     translate_predicate,
 } from "./java2wado.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
-use { AltBinding } from "./attr_resolve.wado";
+use { AltBinding, unmatched_bindings } from "./attr_resolve.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { split_top_level_commas } from "./g4/scan.wado";
 use { escape_ident, PARSER_HANDLE } from "./ident.wado";
@@ -87,6 +87,40 @@ pub fn wrapper_args(rule: &ParserRule, ctx: &EmitContext) -> List<String> {
         return [];
     }
     return rule.args.iter_ref().map(|a| arg_param_name(&a.name)).collect();
+}
+
+/// Store each `returns` / `locals` initializer into the rule's `vals` local.
+/// The jar runs them as the rule's context is built, so they see none of its
+/// arguments yet.
+pub fn emit_attr_inits(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut EmitContext) {
+    if !ctx.settings.emit_actions || !ctx.rule_emits_vals(rule) {
+        return;
+    }
+    let outer = *ctx.cursor.alt_bindings();
+    ctx.cursor.set_alt_bindings(unmatched_bindings(rule));
+    emit_decl_inits(w, rule, &rule.returns_decls, ctx);
+    emit_decl_inits(w, rule, &rule.locals_decls, ctx);
+    ctx.cursor.set_alt_bindings(outer);
+}
+
+pub fn rule_has_attr_inits(rule: &ParserRule) -> bool {
+    let initialized = |d: &AttrDecl| d.init matches { Some(_) } && field_in_vals(d);
+    return rule.returns_decls.iter_ref().any(initialized) || rule.locals_decls.iter_ref().any(initialized);
+}
+
+fn emit_decl_inits(w: &mut CodeWriter, rule: &ParserRule, decls: &List<AttrDecl>, ctx: &mut EmitContext) {
+    for let d of decls {
+        let Some(init) = &d.init else {
+            continue;
+        };
+        if !field_in_vals(d) {
+            continue;
+        }
+        let owner = DiagnosticOwner { rule: rule.name, site: DiagnosticSite::AttrInit(d.name) };
+        if let Some(code) = translate_body_or_warn(&`$${d.name} = ${*init};`, &owner, false, ctx) {
+            emit_action_stmt(w, &code);
+        }
+    }
 }
 
 /// Store each threaded rule argument into the rule's `vals` local, so `$arg`
@@ -329,9 +363,27 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
         gen_vals_fields(w, &rule.returns_decls);
         gen_vals_fields(w, &rule.locals_decls);
         gen_capture_fields(w, ctx.plan.rule_captures(&rule.name));
+        for let label of &ctx.plan.rule_captures(&rule.name).labels {
+            w.line(`${after_label_field(&label.base)}: ${after_label_type(label, ctx)} = ${if label.is_token { "-1" } else { "null" }},`);
+        }
         w.end();
         w.blank();
     }
+}
+
+/// The value-struct field a label `@after` reads is left in.
+pub fn after_label_field<S: AsStrSlice>(base: S) -> String {
+    return `label_${base}`;
+}
+
+/// What a label `@after` reads holds: a token's index, or a call's result,
+/// `null` where the alternative that ran did not bind it.
+pub fn after_label_type(label: &LabelCapture, ctx: &EmitContext) -> String {
+    if label.is_token {
+        return "i32";
+    }
+    let callee = ctx.analysis.find_rule(&label.ref_name).expect("a rule label calls a parser rule");
+    return if ctx.rule_emits_vals(callee) { `Option<${vals_struct_name(callee)}>` } else { "Option<()>" };
 }
 
 /// The captured token range / builder row of each labeled rule call an action
@@ -519,29 +571,49 @@ fn current_rule_is_multi_alt(ctx: &EmitContext) -> bool {
     return ctx.current_rule().alternatives.len() > 1;
 }
 
+/// A predicate an ATN-routed decision evaluates: the action id its edge is
+/// labelled with, its condition, and whether it reads the decision's own
+/// invocation, so holds only on a path that has not entered another one.
+pub struct AtnGate {
+    pub label: i32,
+    pub cond: String,
+    pub own_invocation: bool,
+}
+
 /// The predicates an ATN-routed decision evaluates before it predicts, from
 /// what it meets (`DecisionPredicates`): each one's action id, which labels its
 /// edge in the simulator, and its condition as the parse or a scan can evaluate
 /// it. ANTLR4 evaluates every predicate prediction meets before any token or
 /// action (`doc/predicates.md`, "Finding Visible Predicates"). One on a callee's
 /// alternative guards that path alone, which the labelled edge says. A
-/// predicate the site cannot evaluate is left out, and its path stays open.
-pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_scan: bool) -> List<[i32, String]> {
-    let mut gates: List<[i32, String]> = [];
+/// predicate the site cannot evaluate is left out, and its path stays open, as
+/// is one reading a rule's values or labels met in another invocation of it
+/// (`doc/predicates.md`, "Using Context-Dependent Predicates").
+pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_scan: bool) -> List<AtnGate> {
+    let mut gates: List<AtnGate> = [];
     let rule = ctx.cursor.current_rule_index();
     for let [a, met_site] of met {
-        if gates.iter_ref().any(|g| g.0 == a.source.action_id) {
+        if gates.iter_ref().any(|g| g.label == a.source.action_id) {
             continue;
         }
-        let site = if met_site.rule_index == rule { ctx.predicate_site() } else { *met_site };
-        if in_scan {
-            if let Some(c) = scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site) {
-                gates.push([a.source.action_id, scan_answered_at_edge(&ctx.settings, &c)]);
-            }
-        } else if let Some(c) = predicate_condition_for(a, &ctx.settings, &ctx.analysis, &site) {
-            need_predicate_fn(a, ctx);
-            gates.push([a.source.action_id, c]);
+        let reads_invocation = !find_attr_refs(&a.source.text).is_empty();
+        if met_site.foreign && reads_invocation {
+            continue;
         }
+        let own = !met_site.foreign && met_site.rule_index == rule;
+        let site = if own { ctx.predicate_site() } else { *met_site };
+        let cond = if in_scan {
+            scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site).map(|c| scan_answered_at_edge(&ctx.settings, &c));
+        } else {
+            predicate_condition_for(a, &ctx.settings, &ctx.analysis, &site);
+        };
+        let Some(cond) = cond else {
+            continue;
+        };
+        if !in_scan {
+            need_predicate_fn(a, ctx);
+        }
+        gates.push(AtnGate { label: a.source.action_id, cond, own_invocation: own && reads_invocation });
     }
     return gates;
 }
@@ -848,19 +920,23 @@ pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitCon
 /// Translate an action (a statement list) or a predicate condition (an
 /// expression) to Wado, warning (loud) and returning `null` on failure.
 fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut EmitContext) -> Option<String> {
-    if body_names_unwired_base(&src.text, &ctx.settings) {
+    return translate_body_or_warn(&src.text, &action_owner(src.action_id, ctx), is_predicate, ctx);
+}
+
+fn translate_body_or_warn(text: &String, owner: &DiagnosticOwner, is_predicate: bool, ctx: &mut EmitContext) -> Option<String> {
+    if body_names_unwired_base(text, &ctx.settings) {
         // A refused base already reported the cause; an undeclared one has not.
         if !ctx.settings.parser_superclass_declared {
             ctx.diagnostics.warn(
-                &action_owner(src.action_id, ctx),
+                owner,
                 DiagnosticKind::UnsupportedAction,
-                `action ${src.action_id} names 'this', but the grammar declares no parser superClass to receive it`,
+                `${owner.label()} names 'this', but the grammar declares no parser superClass to receive it`,
             );
         }
         return null;
     }
-    if body_needs_no_translator(&src.text, &ctx.settings) {
-        return Option::Some(src.text);
+    if body_needs_no_translator(text, &ctx.settings) {
+        return Option::Some(*text);
     }
     let rule = ctx.current_rule();
     let vals_in_scope = ctx.rule_emits_vals(rule);
@@ -870,7 +946,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Em
             &lang,
             rule,
             ctx.analysis.parser_rules(),
-            &src.text,
+            text,
             vals_in_scope,
             ctx.cursor.alt_bindings(),
             &ctx.settings.grammar_name,
@@ -881,7 +957,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Em
             &lang,
             rule,
             ctx.analysis.parser_rules(),
-            &src.text,
+            text,
             vals_in_scope,
             ctx.cursor.alt_bindings(),
             &ctx.settings.grammar_name,
@@ -892,7 +968,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Em
     return match translated {
         Ok(code) => Option::Some(code),
         Err(msg) => {
-            ctx.diagnostics.warn(&action_owner(src.action_id, ctx), DiagnosticKind::UnsupportedAction, msg);
+            ctx.diagnostics.warn(owner, DiagnosticKind::UnsupportedAction, msg);
             null;
         },
     };

@@ -4503,6 +4503,7 @@ test "predict drops an alternative whose predicate fails from the viable ones" {
         mk(5),
     ];  // ID '(' ')' — only alt 0 is viable
     let kinds = to_kinds(&paren);
+    let bracket = left_edge_pred_id(&g, 0, 1);
     let pick = |false_preds: List<i32>| atn_predict_with_stack(
         &sim,
         d,
@@ -4512,10 +4513,14 @@ test "predict drops an alternative whose predicate fails from the viable ones" {
         eof,
         0,
         &false_preds,
-        |_| false,
+        &[],
+        |label| {
+            assert label != bracket, "a predicate of an alternative the input rules out is never asked";
+            return false;
+        },
     );
     assert pick([]) == 0;
-    assert pick([left_edge_pred_id(&g, 0, 1)]) == 0;
+    assert pick([bracket]) == 0;
     assert pick([left_edge_pred_id(&g, 0, 0)]) == -1;
 }
 
@@ -4553,6 +4558,7 @@ test "a failed alternative covering the others does not settle the decision" {
         eof,
         0,
         &false_preds,
+        &[],
         |_| false,
     );
     let p = left_edge_pred_id(&g, 1, 0);
@@ -4593,6 +4599,7 @@ test "a failed predicate in a called rule closes only its own path" {
         eof,
         0,
         false_preds,
+        &[],
         |_| false,
     );
     assert pick("TK_A", &[]) == 0;
@@ -4780,9 +4787,9 @@ test "a cached prediction answers only its own caller stack" {
     let mut state = AtnPredictor::new();
     for let round of 0..<2 {
         state.stack = [-1, csr[0], csr[1]];
-        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[], atn_unasked) == 0, `round ${round}`;
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[], &[], atn_unasked) == 0, `round ${round}`;
         state.stack = [-1, csr[0], csr[2]];
-        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[], atn_unasked) == 1, `round ${round}`;
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[], &[], atn_unasked) == 1, `round ${round}`;
     }
 }
 

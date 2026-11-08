@@ -165,6 +165,8 @@ pub variant DiagnosticSite {
     Optional(String),
     /// A parser action / predicate body, by action id.
     Action(i32),
+    /// A `returns` / `locals` initializer, by the attribute's name.
+    AttrInit(String),
     /// A lexer action body, by action id. `rule` stays empty — a lexer rule
     /// is not a parser rule and must not inline under one.
     LexerAction(i32),
@@ -195,6 +197,7 @@ impl DiagnosticOwner {
             SimpleCstGroup => `SimpleCst group in rule '${self.rule}'`,
             Optional(field) => `optional '${*field}' in rule '${self.rule}'`,
             Action(id) => `action ${*id}`,
+            AttrInit(name) => `initializer of '${*name}' in rule '${self.rule}'`,
             LexerAction(id) => `lexer action ${*id}`,
             Host(name) => *name,
         };
