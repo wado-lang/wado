@@ -2453,7 +2453,8 @@ fn plan_slot_temp_sroa(
     // Each slot local is declared once, before the block, so its definition
     // dominates every projection the consumer left behind; the exits assign it.
     // One with no zero value is declared without one, rather than by a `let`
-    // per exit, which would leave reads no single definition dominates.
+    // per exit, which would leave reads no single definition dominates — and a
+    // later fold would pick one arbitrarily.
     let span = body.stmts[let_s].span;
     let pads: Vec<Option<Pad>> = fields
         .iter()
