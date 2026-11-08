@@ -372,9 +372,9 @@ fn build_lr_suffix(
     rule_index: &HashMap<String, i32>,
 ) -> [i32, i32] {
     let operand_prec = |i: i32| if element_is_self_ref(&alt.elements[i], rule_name) {
-        lr_operand_prec(lr_alt, i - 1, rule_name)
+        lr_operand_prec(lr_alt, i - 1, rule_name);
     } else {
-        NOT_AN_OPERAND
+        NOT_AN_OPERAND;
     };
     return build_sequence(b, &alt.elements, r, rule_index, &alt.prediction_guards(), 1, operand_prec);
 }

@@ -364,11 +364,8 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
         gen_vals_fields(w, &rule.locals_decls);
         gen_capture_fields(w, ctx.plan.rule_captures(&rule.name));
         for let label of &ctx.plan.rule_captures(&rule.name).labels {
-            w.line(`${after_label_field(&label.base)}: ${label_value_type(label.is_token, &label.ref_name, ctx)} = ${if label.is_token {
-                "-1";
-            } else {
-                "null";
-            }},`);
+            let ty = label_value_type(label.is_token, &label.ref_name, ctx);
+            w.line(`${after_label_field(&label.base)}: ${ty} = ${unbound_label_value(label.is_token)},`);
         }
         w.end();
         w.blank();
@@ -470,6 +467,8 @@ pub fn rule_result_type() -> String {
     return String::from("()");
 }
 
+/// A rule's inner / wrapper result type: `<Rule>Vals` when the rule exposes a
+/// value channel (action execution on), else `()`.
 pub fn rule_result_type_for(rule: &ParserRule, ctx: &EmitContext) -> String {
     if ctx.rule_emits_vals(rule) {
         return vals_struct_name(rule);
@@ -485,6 +484,11 @@ pub fn label_value_type<S: AsStrSlice>(is_token: bool, ref_name: S, ctx: &EmitCo
     }
     let callee = ctx.analysis.find_rule(ref_name).expect("a rule label calls a parser rule");
     return `Option<${rule_result_type_for(callee, ctx)}>`;
+}
+
+/// A `label_value_type` value no alternative bound.
+pub fn unbound_label_value(is_token: bool) -> String {
+    return if is_token { "-1" } else { "null" };
 }
 
 /// Whether a rule's result type is a `<Rule>Vals` struct rather than the

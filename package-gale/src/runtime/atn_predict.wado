@@ -125,13 +125,14 @@ impl AtnPredictor {
     {
         let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
         let mut asked: List<i32> = [];
-        if self.floor > 0 {
+        let mut floor = self.floor;
+        loop {
             let alt = atn_predict_above(
                 &mut ATN_DFA,
                 sim,
                 decision,
                 &self.stack,
-                self.floor,
+                floor,
                 tokens,
                 pos,
                 eof,
@@ -140,27 +141,11 @@ impl AtnPredictor {
                 &mut asked,
                 ask,
             );
-            if alt != ATN_READS_HIDDEN {
-                return [alt, self.floor];
+            if floor == 0 || alt != ATN_READS_HIDDEN {
+                return [alt, floor];
             }
+            floor = 0;
         }
-        return [
-            atn_predict_above(
-                &mut ATN_DFA,
-                sim,
-                decision,
-                &self.stack,
-                0,
-                tokens,
-                pos,
-                eof,
-                min_prec,
-                &mut preds,
-                &mut asked,
-                ask,
-            ),
-            0,
-        ];
     }
 
     fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
@@ -1019,7 +1004,20 @@ internal fn atn_predict_with_stack(
 ) -> i32 {
     let mut dfa = AtnDfa::new();
     let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
-    return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, &mut preds, &mut [], ask);
+    return atn_predict_above(
+        &mut dfa,
+        sim,
+        decision,
+        rule_stack,
+        0,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        &mut preds,
+        &mut [],
+        ask,
+    );
 }
 
 fn atn_predict_above<effect E>(
