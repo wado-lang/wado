@@ -4248,9 +4248,9 @@ fn test_format_keeps_parens_around_a_handler_closure_body() {
     }
 }
 
-/// An expression statement opening with `if`, `match`, a label or `with`
-/// keeps its parentheses: bare, the keyword reads as that statement, which ends
-/// at its `}`.
+/// An expression statement opening with `if`, `match`, a label or `with` keeps
+/// its parentheses: bare, the keyword reads as that statement, which ends at its
+/// `}`. So does one opening with an anonymous struct literal's `{`.
 #[test]
 fn test_format_keeps_parens_around_a_statement_keyword_expression() {
     for stmt in [

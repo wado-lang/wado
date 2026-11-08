@@ -2241,7 +2241,7 @@ fn is_temporary(expr: &TirExpr, cx: &Cx) -> bool {
 }
 
 /// How long a spilled temporary lives.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum Lifetime {
     /// Until the innermost owner ends.
     Owner,

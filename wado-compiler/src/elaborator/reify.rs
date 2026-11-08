@@ -2133,8 +2133,9 @@ impl<'a> Reify<'a> {
     }
 
     /// Desugar `let PAT = EXPR else { ELSE };` into one statement,
-    /// `let [b₁, …] = match EXPR { PAT => [b₁, …], _ => { ELSE } };`, so it
-    /// ends where the `let` does and owns what a `let` owns.
+    /// `let [b₁, …] = match EXPR { PAT′ => [b₁′, …], _ => { ELSE } };`, where
+    /// `PAT′` binds a twin `bᵢ′` of each local, so it ends where the `let` does
+    /// and owns what a `let` owns.
     fn reify_let_else(&mut self, l: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         let span = l.span;
         let else_ast = l
@@ -2177,27 +2178,25 @@ impl<'a> Reify<'a> {
             }
         };
         remap_pattern_locals(&mut tir_pattern, twin);
-        let mut reads: Vec<TirExpr> = binders
-            .iter()
-            .map(|(name, index, type_id)| {
-                self.handed_on(TirExpr::new(
+        let (mut reads, mut bound): (Vec<TirExpr>, Vec<TirPattern>) = binders
+            .into_iter()
+            .map(|(name, local_index, type_id)| {
+                let read = self.handed_on(TirExpr::new(
                     TirExprKind::Local {
-                        index: twin(*index),
+                        index: twin(local_index),
                         name: name.clone(),
                     },
-                    *type_id,
+                    type_id,
                     span,
-                ))
+                ));
+                let binding = TirPattern::Binding {
+                    name,
+                    local_index,
+                    type_id,
+                };
+                (read, binding)
             })
-            .collect();
-        let mut bound: Vec<TirPattern> = binders
-            .into_iter()
-            .map(|(name, local_index, type_id)| TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
-            })
-            .collect();
+            .unzip();
         let (handed, pattern) = match reads.len() {
             0 => (
                 TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
