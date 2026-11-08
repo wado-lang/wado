@@ -2602,18 +2602,20 @@ pub fn "core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/Stri
     if (len != b."core:prelude/string.wado/StrSlice::len"()) {
         return false;
     }
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        $for_0_body: {
-            if (self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((self.start + i)) != b.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((b.start + i))) {
-                return false;
+    $block_5: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < len) {
+                break;
             }
+            $for_0_body: {
+                if (self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((self.start + i)) != b.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((b.start + i))) {
+                    return false;
+                }
+            }
+            i = (i + 1);
         }
-        i = (i + 1);
-    }
+    };
     return true;
 }
 
@@ -2621,23 +2623,25 @@ fn "core:prelude/array.wado/seq_cmp<u8>"(a: &Array<u8>, a_start: i32, a_end: i32
     let a_len: i32 = (a_end - a_start);
     let b_len: i32 = (b_end - b_start);
     let min_len: i32 = "core:prelude/primitive.wado::i32::min"(a_len, b_len);
-    let mut i: i32 = 0;
-    loop {
-        if !(i < min_len) {
-            break;
-        }
-        $for_0_body: {
-            let x: u8 = "core:builtin::array_get_value"::<u8>(a, (a_start + i));
-            let y: u8 = "core:builtin::array_get_value"::<u8>(b, (b_start + i));
-            if (x < y) {
-                return core:prelude/traits.wado/Ordering::Less;
+    $block_5: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < min_len) {
+                break;
             }
-            if (x > y) {
-                return core:prelude/traits.wado/Ordering::Greater;
+            $for_0_body: {
+                let x: u8 = "core:builtin::array_get_value"::<u8>(a, (a_start + i));
+                let y: u8 = "core:builtin::array_get_value"::<u8>(b, (b_start + i));
+                if (x < y) {
+                    return core:prelude/traits.wado/Ordering::Less;
+                }
+                if (x > y) {
+                    return core:prelude/traits.wado/Ordering::Greater;
+                }
             }
+            i = (i + 1);
         }
-        i = (i + 1);
-    }
+    };
     if (a_len < b_len) {
         return core:prelude/traits.wado/Ordering::Less;
     }
@@ -2652,18 +2656,20 @@ fn "core:prelude/array.wado/seq_eq<u8>"(a: &Array<u8>, a_start: i32, a_end: i32,
     if (len != (b_end - b_start)) {
         return false;
     }
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        $for_0_body: {
-            if !("core:builtin::array_get_value"::<u8>(a, (a_start + i)) == "core:builtin::array_get_value"::<u8>(b, (b_start + i))) {
-                return false;
+    $block_5: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < len) {
+                break;
             }
+            $for_0_body: {
+                if !("core:builtin::array_get_value"::<u8>(a, (a_start + i)) == "core:builtin::array_get_value"::<u8>(b, (b_start + i))) {
+                    return false;
+                }
+            }
+            i = (i + 1);
         }
-        i = (i + 1);
-    }
+    };
     return true;
 }
 
