@@ -139,12 +139,10 @@ fn lone_assignees(body: &Body, params: &[NirParam]) -> Assignees {
                 type_id,
                 ..
             } = &body.stmts[s].kind
+                && (!body.declares_without_value(*type_id, *value)
+                    || declarations.insert(*local_index, s).is_some())
             {
-                if !body.declares_without_value(*type_id, *value)
-                    || declarations.insert(*local_index, s).is_some()
-                {
-                    bound.insert(*local_index);
-                }
+                bound.insert(*local_index);
             }
         }
         NodeRef::Pat(p) => {
