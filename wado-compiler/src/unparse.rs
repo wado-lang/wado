@@ -1684,7 +1684,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_expr_stmt(&mut self, e: &ExprStmt) {
         self.write_indent();
-        self.unparse_expr(&e.expr);
+        self.with_parens_if(expr_stmt_needs_parens(&e.expr), |s| s.unparse_expr(&e.expr));
         self.output.push_str(";\n");
     }
 
@@ -3342,28 +3342,50 @@ fn cast_before_lt(operand: &Expr, next: Option<&ChainedComparison>) -> bool {
 }
 
 /// Whether a closure body starts with `with`, which re-parses as the closure's
-/// own effect row. Descends the leftmost operand of each form that prints one
-/// bare; exhaustive, so a new [`Expr`] is decided here rather than defaulted.
+/// own effect row.
 fn closure_body_needs_parens(expr: &Expr) -> bool {
+    prints_first(expr, &|e| matches!(e, Expr::WithHandler(_)))
+}
+
+/// Whether an expression statement starts with `if`, `match`, a label or
+/// `with`, which re-parses as that statement and ends it at its `}`. A whole
+/// `with` is the statement `with` parses to.
+fn expr_stmt_needs_parens(expr: &Expr) -> bool {
+    !matches!(expr, Expr::WithHandler(_))
+        && prints_first(expr, &|e| {
+            matches!(
+                e,
+                Expr::If(_) | Expr::Match(_) | Expr::LabeledBlock(_) | Expr::WithHandler(_)
+            )
+        })
+}
+
+/// Whether `expr`, or the operand it prints first and bare, is one `opens`
+/// picks. Descends the leftmost operand of each form that prints one bare;
+/// exhaustive, so a new [`Expr`] is decided here rather than defaulted.
+fn prints_first(expr: &Expr, opens: &impl Fn(&Expr) -> bool) -> bool {
+    if opens(expr) {
+        return true;
+    }
     match expr {
-        Expr::WithHandler(_) => true,
-        Expr::Binary(b) => !needs_parens(&b.left, b.op, true) && closure_body_needs_parens(&b.left),
-        Expr::Range(r) => closure_body_needs_parens(&r.start),
+        Expr::Binary(b) => !needs_parens(&b.left, b.op, true) && prints_first(&b.left, opens),
+        Expr::Range(r) => prints_first(&r.start, opens),
         Expr::ComparisonChain(c) => {
-            !cast_before_lt(&c.first, c.comparisons.first()) && closure_body_needs_parens(&c.first)
+            !cast_before_lt(&c.first, c.comparisons.first()) && prints_first(&c.first, opens)
         }
         Expr::Matches(m) => {
-            !matches_scrutinee_needs_parens(&m.expr) && closure_body_needs_parens(&m.expr)
+            !matches_scrutinee_needs_parens(&m.expr) && prints_first(&m.expr, opens)
         }
         Expr::Assign(a) => match &a.target {
-            AssignTarget::Place(target) => closure_body_needs_parens(target),
+            AssignTarget::Place(target) => prints_first(target, opens),
             AssignTarget::Destructuring { .. } => false,
         },
-        Expr::CompoundAssign(c) => closure_body_needs_parens(&c.target),
-        Expr::TaggedTemplate(t) => closure_body_needs_parens(&t.tag),
+        Expr::CompoundAssign(c) => prints_first(&c.target, opens),
+        Expr::TaggedTemplate(t) => prints_first(&t.tag, opens),
         // A postfix or cast operand carries parens from `binds_tighter_than`,
         // and everything else opens with a keyword, delimiter, or operator.
-        Expr::Ident(_)
+        Expr::WithHandler(_)
+        | Expr::Ident(_)
         | Expr::Literal(_)
         | Expr::Unary(_)
         | Expr::Call(_)

@@ -4248,6 +4248,30 @@ fn test_format_keeps_parens_around_a_handler_closure_body() {
     }
 }
 
+/// An expression statement opening with `if`, `match`, a label or `with`
+/// keeps its parentheses: bare, the keyword reads as that statement, which ends
+/// at its `}`.
+#[test]
+fn test_format_keeps_parens_around_a_statement_keyword_expression() {
+    for stmt in [
+        "(match x { _ => 1 });",
+        "(if c { 1 } else { 2 });",
+        "(lbl: { 1 });",
+        "(match x { _ => 1 }) + 2;",
+        "(if c { 1 } else { 2 }) < 2 < 3;",
+        "(lbl: { 1 })..<4;",
+        "(with Log => &mut sink do { 1 }) + 2;",
+    ] {
+        let source = format!("fn run() {{\n    {stmt}\n}}\n");
+        let formatted = wado_compiler::format(&source).expect("format failed");
+        assert!(
+            formatted.starts_with("fn run() {\n    ("),
+            "expected the statement to stay parenthesized, got:\n{formatted}"
+        );
+        assert_format_preserves_ast(&source);
+    }
+}
+
 /// `#[side_effect(negative = p)]` names a parameter, so the value stays an
 /// identifier while `#[param(name = "...")]` keeps its quotes.
 #[test]
