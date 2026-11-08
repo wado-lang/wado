@@ -13,7 +13,7 @@ use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{NamePolicy, RangeKind, RestClause, Visibility};
+use crate::ast::{MAX_GENERIC_PARAMS, NamePolicy, RangeKind, RestClause, Visibility};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap;
 use crate::module_source::ModuleSource;
@@ -121,7 +121,7 @@ impl TypeParamId {
         const BASE: u32 = 1 << 30;
         const PACKS_PER_WALK: u32 = 1 << 10;
         // An impl's list and its method's index one sequence.
-        const _: () = assert!(2 * crate::ast::MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
+        const _: () = assert!(2 * MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
         assert!(
             self.index < PACKS_PER_WALK && walk < BASE / PACKS_PER_WALK - 1,
             "a declaration's parameters and a body's walk nesting are bounded"
