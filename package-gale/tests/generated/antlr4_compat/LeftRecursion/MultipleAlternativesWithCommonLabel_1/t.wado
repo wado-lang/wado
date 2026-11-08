@@ -1952,7 +1952,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 let mut vals = EVals {};
                 let inc = p.take();
                 if !p.speculating {
-                    assert true; vals.v = left.v + 1;
+                    assert inc >= 0; vals.v = left.v + 1;
                 }
                 p.b.finish_node(p.last_end());
                 _lr_acc = vals;
@@ -1970,7 +1970,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 let mut vals = EVals {};
                 let dec = p.take();
                 if !p.speculating {
-                    assert true; vals.v = left.v - 1;
+                    assert dec >= 0; vals.v = left.v - 1;
                 }
                 p.b.finish_node(p.last_end());
                 _lr_acc = vals;

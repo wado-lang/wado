@@ -1196,6 +1196,8 @@ internal global ATN_TR_RULE: i32 = 4;
 internal global ATN_TR_PRECEDENCE: i32 = 5;
 internal global ATN_TR_SET: i32 = 6;
 
+internal global ATN_ACTION_EDGE: i32 = 16777214;
+
 global mut ATN_SIMS_DECODED: i32 = 0;
 
 internal struct AtnSim {
@@ -1380,8 +1382,11 @@ global ATN_NODE_PAIR_STRIDE: i64 = 1073741824;
 global ATN_DFA_NODE_CAP: i32 = 4000000;
 
 global CFG_KEY_PR_SLOT: i32 = 2048;
-global CFG_KEY_ALT_SLOT: i32 = 2048;
+global CFG_KEY_ALT_SLOT: i32 = 4096;
+global CFG_KEY_GUARD_SLOT: i32 = 65536;
+global ATN_DFA_GUARD_CAP: i32 = 32768;
 global CFG_KEY_STATE_SLOT: i32 = 1048576;
+global ATN_NO_GUARD: i32 = 0;
 
 global CTX_BOUNDARY: i32 = -3;
 global CTX_UNKNOWN_RETURN: i32 = -4;
@@ -1392,6 +1397,7 @@ global CTX_UNKNOWN: i32 = 1;
 
 global ATN_READS_HIDDEN: i32 = -6;
 internal global ATN_FAILED_ALT: i32 = 1024;
+global ATN_PASSED_ACTION: i32 = 2048;
 
 global ATN_DFA_UNDECIDED: i32 = -7;
 global ATN_DFA_DEAD: i32 = -8;
@@ -1440,7 +1446,7 @@ impl AtnPredictor {
         return read;
     }
 
-    internal fn predict(
+    internal fn predict<effect E>(
         &mut self,
         sim: &AtnSim,
         decision: i32,
@@ -1448,9 +1454,11 @@ impl AtnPredictor {
         pos: i32,
         eof: i32,
         min_prec: i32,
-        false_preds: &List<i32>,
-    ) -> i32 {
-        let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, false_preds);
+        met: &List<i32>,
+        own: &List<i32>,
+        ask: fn(i32) -> bool with E,
+    ) -> i32 with E {
+        let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, met, own, ask);
         self.read_down_to(reach);
         return alt;
     }
@@ -1459,7 +1467,7 @@ impl AtnPredictor {
         self.reach = i32::min(self.reach, depth);
     }
 
-    fn predict_reaching(
+    fn predict_reaching<effect E>(
         &mut self,
         sim: &AtnSim,
         decision: i32,
@@ -1467,31 +1475,35 @@ impl AtnPredictor {
         pos: i32,
         eof: i32,
         min_prec: i32,
-        false_preds: &List<i32>,
-    ) -> [i32, i32]
+        met: &List<i32>,
+        own: &List<i32>,
+        ask: fn(i32) -> bool with E,
+    ) -> [i32, i32] with E
         contract self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor"
     {
-        if self.floor > 0 {
+        let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
+        let mut asked: List<i32> = [];
+        let mut floor = self.floor;
+        loop {
             let alt = atn_predict_above(
                 &mut ATN_DFA,
                 sim,
                 decision,
                 &self.stack,
-                self.floor,
+                floor,
                 tokens,
                 pos,
                 eof,
                 min_prec,
-                false_preds,
+                &mut preds,
+                &mut asked,
+                ask,
             );
-            if alt != ATN_READS_HIDDEN {
-                return [alt, self.floor];
+            if floor == 0 || alt != ATN_READS_HIDDEN {
+                return [alt, floor];
             }
+            floor = 0;
         }
-        return [
-            atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, false_preds),
-            0,
-        ];
     }
 
     fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
@@ -1654,6 +1666,9 @@ struct CtxArena {
     cover_cache: AtnKeyMap,
     node_limit: i32,
     closure_cut_short: bool,
+    guard_label: List<i32>,
+    guard_rest: List<i32>,
+    guard_index: AtnKeyMap,
 }
 
 struct AtnConfig {
@@ -1661,6 +1676,20 @@ struct AtnConfig {
     alt: i32,
     pctx: i32,
     pr: i32,
+    guard: i32,
+}
+
+internal struct AtnPreds {
+    met: List<i32>,
+    own: List<i32>,
+    failed: List<i32>,
+    origin: i32 = -1,
+}
+
+internal global ATN_NO_PREDS: AtnPreds = AtnPreds { met: [], own: [], failed: [] };
+
+internal fn atn_unasked(_label: i32) -> bool {
+    return true;
 }
 
 impl CtxArena {
@@ -1678,11 +1707,59 @@ impl CtxArena {
             cover_cache: AtnKeyMap::new(),
             node_limit: ATN_ARENA_CAP,
             closure_cut_short: false,
+            guard_label: [-1],
+            guard_rest: [ATN_NO_GUARD],
+            guard_index: AtnKeyMap::new(),
         };
         let empty = arena.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = arena.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
         assert empty == CTX_EMPTY && unknown == CTX_UNKNOWN, "the bottom and unknown-caller contexts are the arena's first nodes";
         return arena;
+    }
+
+    fn guard_with(&mut self, guard: i32, label: i32) -> i32
+        contract label >= 0
+    {
+        if self.guard_holds(guard, label) {
+            return guard;
+        }
+        let k = atn_node_pair_key(guard, label);
+        let known = self.guard_index.get(k);
+        if known >= 0 {
+            return known;
+        }
+        let g = self.guard_label.len();
+        assert g < CFG_KEY_GUARD_SLOT, "one prediction's guards fit the config key";
+        self.guard_label.push(label);
+        self.guard_rest.push(guard);
+        self.guard_index.set(k, g);
+        return g;
+    }
+
+    fn guard_holds(&self, guard: i32, label: i32) -> bool {
+        let mut g = guard;
+        while g != ATN_NO_GUARD {
+            if self.guard_label[g] == label {
+                return true;
+            }
+            g = self.guard_rest[g];
+        }
+        return false;
+    }
+
+    fn push_held_guards(&self, configs: &List<AtnConfig>, out: &mut List<i32>) {
+        for let c of configs {
+            if c.alt >= ATN_FAILED_ALT {
+                continue;
+            }
+            let mut g = c.guard;
+            while g != ATN_NO_GUARD {
+                if !out.contains(&self.guard_label[g]) {
+                    out.push(self.guard_label[g]);
+                }
+                g = self.guard_rest[g];
+            }
+        }
     }
 
     fn node_count(&self) -> i32 {
@@ -1900,6 +1977,7 @@ struct CfgSet {
     alt: List<i32>,
     pr: List<i32>,
     pctx: List<i32>,
+    guard: List<i32>,
     index: AtnKeyMap,
 }
 
@@ -1910,6 +1988,7 @@ impl CfgSet {
             alt: [],
             pr: [],
             pctx: [],
+            guard: [],
             index: AtnKeyMap::new(),
         };
     }
@@ -1919,13 +1998,14 @@ impl CfgSet {
         self.alt.clear();
         self.pr.clear();
         self.pctx.clear();
+        self.guard.clear();
         self.index.clear();
     }
 
-    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32) -> [i32, bool]
+    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32, guard: i32) -> [i32, bool]
         contract alt + 1 < CFG_KEY_ALT_SLOT
     {
-        let k = atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64;
+        let k = (atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_GUARD_SLOT as i64 + guard as i64;
         let found = self.index.get(k);
         if found >= 0 {
             let merged = arena.merge(self.pctx[found], pctx);
@@ -1938,6 +2018,7 @@ impl CfgSet {
         self.alt.push(alt);
         self.pr.push(pr);
         self.pctx.push(pctx);
+        self.guard.push(guard);
         self.index.set(k, i);
         return [i, true];
     }
@@ -1950,6 +2031,7 @@ impl CfgSet {
                 alt: self.alt[i],
                 pctx: self.pctx[i],
                 pr: self.pr[i],
+                guard: self.guard[i],
             });
         }
         return out;
@@ -1982,7 +2064,7 @@ fn atn_closure(
     seeds: &List<AtnConfig>,
     scratch: &mut ClosureScratch,
     lr_loop_unconsumed: i32 = -1,
-    false_preds: &List<i32> = &ATN_NO_FALSE_PREDS,
+    preds: &AtnPreds = &ATN_NO_PREDS,
 ) -> List<AtnConfig> {
     scratch.cset.clear();
     scratch.rset.clear();
@@ -1996,10 +2078,11 @@ fn atn_closure(
         if guard > ATN_CLOSURE_GUARD {
             break;
         }
-        if c.state == lr_loop_unconsumed && sim.tr_kind[sim.state_tr_start[c.state] + c.alt] == ATN_TR_PRECEDENCE {
+        if c.state == lr_loop_unconsumed
+            && sim.tr_kind[sim.state_tr_start[c.state] + c.alt % ATN_FAILED_ALT] == ATN_TR_PRECEDENCE {
             continue;
         }
-        let res = scratch.cset.add(arena, c.state, c.alt, c.pr, c.pctx);
+        let res = scratch.cset.add(arena, c.state, c.alt, c.pr, c.pctx, c.guard);
         let idx = res.0;
         while scratch.expanded.len() <= idx {
             scratch.expanded.push(-9);
@@ -2009,31 +2092,21 @@ fn atn_closure(
             continue;
         }
         scratch.expanded[idx] = merged_pctx;
-        let cur = AtnConfig { state: c.state, alt: c.alt, pctx: merged_pctx, pr: c.pr };
-        atn_expand(sim, arena, &cur, scratch, false_preds);
+        let cur = AtnConfig { ..c, pctx: merged_pctx };
+        atn_expand(sim, arena, &cur, scratch, preds);
     }
     return scratch.rset.to_list();
 }
 
-fn atn_expand(
-    sim: &AtnSim,
-    arena: &mut CtxArena,
-    cur: &AtnConfig,
-    scratch: &mut ClosureScratch,
-    false_preds: &List<i32>,
-) {
+fn atn_expand(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch, preds: &AtnPreds) {
     let work = &mut scratch.work;
     let rset = &mut scratch.rset;
-    if cur.state == ATN_ACCEPT_EOF {
-        rset.add(arena, cur.state, cur.alt, cur.pr, cur.pctx);
+    if cur.state == ATN_ACCEPT_EOF || atn_state_consumes(sim, cur.state) {
+        rset.add(arena, cur.state, atn_settled_alt(cur.alt), cur.pr, cur.pctx, cur.guard);
         return;
     }
     if sim.state_kind[cur.state] == ATN_RULE_STOP {
         atn_pop(arena, cur, scratch);
-        return;
-    }
-    if atn_state_consumes(sim, cur.state) {
-        rset.add(arena, cur.state, cur.alt, cur.pr, cur.pctx);
         return;
     }
     let pctx = atn_collapse_into_caller_loop(sim, arena, cur, work, &mut scratch.hidden_alts);
@@ -2046,16 +2119,10 @@ fn atn_expand(
         let k = sim.tr_kind[start + j];
         let target = sim.tr_target[start + j];
         if k == ATN_TR_EPSILON {
-            let pred = sim.tr_label[start + j];
-            let alt = if pred >= 0 && cur.alt < ATN_FAILED_ALT && false_preds.contains(&pred) {
-                cur.alt + ATN_FAILED_ALT;
-            } else {
-                cur.alt;
-            };
-            work.push(AtnConfig { state: target, alt, pctx, pr: cur.pr });
+            work.push(atn_past_edge(arena, &AtnConfig { ..*cur, state: target, pctx }, sim.tr_label[start + j], preds));
         } else if k == ATN_TR_PRECEDENCE {
             if sim.tr_prec[start + j] >= cur.pr {
-                work.push(AtnConfig { state: target, alt: cur.alt, pctx, pr: cur.pr });
+                work.push(AtnConfig { ..*cur, state: target, pctx });
             }
         } else if k == ATN_TR_RULE {
             if target < 0 {
@@ -2066,9 +2133,32 @@ fn atn_expand(
                 continue;
             }
             let npctx = arena.push(sim.tr_follow[start + j], cur.pr, pctx);
-            work.push(AtnConfig { state: target, alt: cur.alt, pctx: npctx, pr: sim.tr_prec[start + j] });
+            work.push(AtnConfig { ..*cur, state: target, pctx: npctx, pr: sim.tr_prec[start + j] });
         }
     }
+}
+
+fn atn_past_edge(arena: &mut CtxArena, next: &AtnConfig, label: i32, preds: &AtnPreds) -> AtnConfig {
+    if label < 0 || next.alt >= ATN_FAILED_ALT {
+        return *next;
+    }
+    if label == ATN_ACTION_EDGE {
+        return AtnConfig { ..*next, alt: next.alt + ATN_PASSED_ACTION };
+    }
+    if preds.own.contains(&label) && next.pctx != preds.origin {
+        return *next;
+    }
+    if preds.failed.contains(&label) {
+        return AtnConfig { ..*next, alt: next.alt + ATN_FAILED_ALT };
+    }
+    if preds.met.contains(&label) {
+        return AtnConfig { ..*next, guard: arena.guard_with(next.guard, label) };
+    }
+    return *next;
+}
+
+fn atn_settled_alt(alt: i32) -> i32 {
+    return if alt >= ATN_PASSED_ACTION { alt - ATN_PASSED_ACTION } else { alt };
 }
 
 fn atn_collapse_into_caller_loop(
@@ -2084,9 +2174,10 @@ fn atn_collapse_into_caller_loop(
     let s = arena.node_start[cur.pctx];
     let n = arena.node_len[cur.pctx];
     let mut collapses = false;
+    let settled = atn_settled_alt(cur.alt);
     for let mut e = s; e < s + n; e += 1 {
-        if arena.ret[e] == CTX_HIDDEN_RETURN && !hidden_alts.contains(&cur.alt) {
-            hidden_alts.push(cur.alt);
+        if arena.ret[e] == CTX_HIDDEN_RETURN && !hidden_alts.contains(&settled) {
+            hidden_alts.push(settled);
         }
         collapses = collapses || atn_edge_collapses(sim, arena, e, cur);
     }
@@ -2096,7 +2187,7 @@ fn atn_collapse_into_caller_loop(
     let kept = arena.ret.len();
     for let mut e = s; e < s + n; e += 1 {
         if atn_edge_collapses(sim, arena, e, cur) {
-            work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: arena.parent[e], pr: arena.rpr[e] });
+            work.push(AtnConfig { ..*cur, pctx: arena.parent[e], pr: arena.rpr[e] });
         } else {
             arena.append_edge(arena.ret[e], arena.rpr[e], arena.parent[e]);
         }
@@ -2115,18 +2206,19 @@ fn atn_edge_collapses(sim: &AtnSim, arena: &CtxArena, e: i32, cur: &AtnConfig) -
 fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
     let s = arena.node_start[cur.pctx];
     let n = arena.node_len[cur.pctx];
+    let settled = atn_settled_alt(cur.alt);
     for let mut e = s; e < s + n; e += 1 {
         let r = arena.ret[e];
         if r == CTX_BOUNDARY {
-            scratch.rset.add(arena, ATN_ACCEPT_EOF, cur.alt, cur.pr, CTX_EMPTY);
+            scratch.rset.add(arena, ATN_ACCEPT_EOF, settled, cur.pr, CTX_EMPTY, cur.guard);
         } else if r == CTX_UNKNOWN_RETURN {
-            scratch.rset.add(arena, cur.state, cur.alt, cur.pr, CTX_UNKNOWN);
+            scratch.rset.add(arena, cur.state, settled, cur.pr, CTX_UNKNOWN, cur.guard);
         } else if r == CTX_HIDDEN_RETURN {
-            if !scratch.hidden_alts.contains(&cur.alt) {
-                scratch.hidden_alts.push(cur.alt);
+            if !scratch.hidden_alts.contains(&settled) {
+                scratch.hidden_alts.push(settled);
             }
         } else {
-            scratch.work.push(AtnConfig { state: r, alt: cur.alt, pctx: arena.parent[e], pr: arena.rpr[e] });
+            scratch.work.push(AtnConfig { ..*cur, state: r, pctx: arena.parent[e], pr: arena.rpr[e] });
         }
     }
 }
@@ -2162,7 +2254,7 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
                 false;
             };
             if matched {
-                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, pr: c.pr });
+                out.push(AtnConfig { ..*c, state: sim.tr_target[start + j] });
             }
         }
     }
@@ -2225,8 +2317,6 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
     return true;
 }
 
-internal global ATN_NO_FALSE_PREDS: List<i32> = [];
-
 internal fn atn_predict_once(
     sim: &AtnSim,
     decision: i32,
@@ -2242,7 +2332,17 @@ internal fn atn_predict_once(
         atn.read_down_to(atn.verdict_reach[v]);
         return atn.verdict_alt[v];
     }
-    let [alt, reach] = atn.predict_reaching(sim, decision, tokens, pos, eof, min_prec, &ATN_NO_FALSE_PREDS);
+    let [alt, reach] = atn.predict_reaching(
+        sim,
+        decision,
+        tokens,
+        pos,
+        eof,
+        min_prec,
+        &ATN_NO_PREDS.met,
+        &ATN_NO_PREDS.own,
+        atn_unasked,
+    );
     atn.read_down_to(reach);
     atn.record_verdict(decision, pos, min_prec, depth, alt, reach);
     return alt;
@@ -2256,13 +2356,29 @@ internal fn atn_predict_with_stack(
     start_pos: i32,
     eof: i32,
     min_prec: i32 = 0,
-    false_preds: &List<i32> = &ATN_NO_FALSE_PREDS,
+    met: &List<i32> = &ATN_NO_PREDS.met,
+    own: &List<i32> = &ATN_NO_PREDS.own,
+    ask: fn(i32) -> bool = atn_unasked,
 ) -> i32 {
     let mut dfa = AtnDfa::new();
-    return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, false_preds);
+    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
+    return atn_predict_above(
+        &mut dfa,
+        sim,
+        decision,
+        rule_stack,
+        0,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        &mut preds,
+        &mut [],
+        ask,
+    );
 }
 
-fn atn_predict_above(
+fn atn_predict_above<effect E>(
     dfa: &mut AtnDfa,
     sim: &AtnSim,
     decision: i32,
@@ -2272,21 +2388,41 @@ fn atn_predict_above(
     start_pos: i32,
     eof: i32,
     min_prec: i32,
-    false_preds: &List<i32>,
-) -> i32 {
-    let [alt, _] = atn_predict_walk(
-        dfa,
-        sim,
-        decision,
-        rule_stack,
-        floor,
-        tokens,
-        start_pos,
-        eof,
-        min_prec,
-        false_preds,
-    );
-    return alt;
+    preds: &mut AtnPreds,
+    asked: &mut List<i32>,
+    ask: fn(i32) -> bool with E,
+) -> i32 with E {
+    loop {
+        let mut held: List<i32> = [];
+        let [alt, _] = atn_walk(
+            dfa,
+            sim,
+            decision,
+            rule_stack,
+            floor,
+            tokens,
+            start_pos,
+            eof,
+            min_prec,
+            preds,
+            &mut held,
+        );
+        held.sort();
+        let known_failed = preds.failed.len();
+        for let label of held {
+            if asked.contains(&label) {
+                continue;
+            }
+            asked.push(label);
+            if !ask(label) {
+                preds.failed.push(label);
+            }
+        }
+        if preds.failed.len() == known_failed {
+            return alt;
+        }
+        preds.failed.sort();
+    }
 }
 
 fn atn_predict_walk(
@@ -2299,12 +2435,28 @@ fn atn_predict_walk(
     start_pos: i32,
     eof: i32,
     min_prec: i32,
-    false_preds: &List<i32>,
+) -> [i32, bool] {
+    let mut held: List<i32> = [];
+    return atn_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, &ATN_NO_PREDS, &mut held);
+}
+
+fn atn_walk(
+    dfa: &mut AtnDfa,
+    sim: &AtnSim,
+    decision: i32,
+    rule_stack: &List<i32>,
+    floor: i32,
+    tokens: &Array<i32>,
+    start_pos: i32,
+    eof: i32,
+    min_prec: i32,
+    preds: &AtnPreds,
+    held: &mut List<i32>,
 ) -> [i32, bool] {
     dfa.make_room(sim);
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
     dfa.arena.open_budget();
-    let mut s = dfa.start_state(sim, decision, caller, min_prec, false_preds);
+    let mut s = dfa.start_state(sim, decision, caller, min_prec, &AtnPreds { ..*preds, origin: caller });
     let mut fallback = -1;
     let mut pos = start_pos;
     loop {
@@ -2313,12 +2465,17 @@ fn atn_predict_walk(
             return [fallback, false];
         }
         if verdict != ATN_DFA_UNDECIDED {
+            if verdict != ATN_READS_HIDDEN {
+                dfa.arena.push_held_guards(&dfa.state_configs[s], held);
+            }
             return [verdict, true];
         }
         fallback = dfa.state_first[s];
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
-            let survivors = atn_unique_alts(&atn_move(sim, &dfa.state_configs[s], eof, eof));
+            let ended = atn_move(sim, &dfa.state_configs[s], eof, eof);
+            dfa.arena.push_held_guards(&ended, held);
+            let survivors = atn_unique_alts(&ended);
             return if survivors.is_empty() { [fallback, false] } else { [atn_resolve(&survivors), true] };
         }
         s = dfa.step(sim, s, token, eof);
@@ -2356,19 +2513,25 @@ impl AtnDfa {
             self.sim_serial = sim.serial;
         }
         assert self.sim_serial == sim.serial, "a DFA caches the predictions of one ATN";
-        if self.arena.closure_cut_short || self.arena.node_count() >= ATN_DFA_NODE_CAP {
+        if self.arena.closure_cut_short
+            || self.arena.node_count() >= ATN_DFA_NODE_CAP
+            || self.arena.guard_label.len() >= ATN_DFA_GUARD_CAP {
             *self = AtnDfa::new();
             self.sim_serial = sim.serial;
         }
     }
 
-    fn start_state(&mut self, sim: &AtnSim, decision: i32, caller: i32, min_prec: i32, false_preds: &List<i32>) -> i32 {
+    fn start_state(&mut self, sim: &AtnSim, decision: i32, caller: i32, min_prec: i32, preds: &AtnPreds) -> i32 {
         let from = self.seeds.keys.len();
         self.seeds.keys.push(ATN_DFA_START_KEY);
         self.seeds.keys.push(decision);
         self.seeds.keys.push(caller);
         self.seeds.keys.push(min_prec);
-        self.seeds.keys.extend(false_preds);
+        self.seeds.keys.extend(&preds.met);
+        self.seeds.keys.push(ATN_DFA_START_KEY);
+        self.seeds.keys.extend(&preds.own);
+        self.seeds.keys.push(ATN_DFA_START_KEY);
+        self.seeds.keys.extend(&preds.failed);
         let known = self.seeds.find(from);
         if known >= 0 {
             self.seeds.keys.truncate(from);
@@ -2381,9 +2544,15 @@ impl AtnDfa {
             if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
                 continue;
             }
-            seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: caller, pr: min_prec });
+            seeds.push(AtnConfig {
+                state: sim.tr_target[start + j],
+                alt: j,
+                pctx: caller,
+                pr: min_prec,
+                guard: ATN_NO_GUARD,
+            });
         }
-        let configs = atn_closure(sim, &mut self.arena, &seeds, &mut self.scratch, dstate, false_preds);
+        let configs = atn_closure(sim, &mut self.arena, &seeds, &mut self.scratch, dstate, preds);
         return self.add_state(sim, configs, from);
     }
 
@@ -2402,6 +2571,7 @@ impl AtnDfa {
             self.seeds.keys.push(c.alt);
             self.seeds.keys.push(c.pr);
             self.seeds.keys.push(c.pctx);
+            self.seeds.keys.push(c.guard);
         }
         let mut next = self.seeds.find(from);
         if next >= 0 {
@@ -4592,7 +4762,7 @@ fn scan_option_value(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, foll
             if pos == sp { break; }
         }
         return pos;
-    } else if _kind_set_28(kind) {
+    } else if _kind_set_27(kind) {
         pos = start + 1;
         return pos;
     }
@@ -4931,9 +5101,7 @@ fn scan_lexer_alt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow:
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_16(kind) {
-        if _kind_set_17(kind) {
-            return scan_lexer_alt__alt_0(tokens, start, atn, follow);
-        }
+        return scan_lexer_alt__alt_0(tokens, start, atn, follow);
     }
     scope: {
         try_0: {
@@ -4960,13 +5128,13 @@ fn scan_lexer_elements(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_18(kind) {
+    if _kind_set_17(kind) {
         try_0: {
             atn.stack.push(544);
             pos = scan_lexer_element(tokens, pos, atn, 0);
             atn.stack.pop();
             if pos < 0 { break try_0; }
-            while pos < tokens.len() && _kind_set_18(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+            while pos < tokens.len() && _kind_set_17(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                 let sp = pos;
                 atn.stack.push(544);
                 pos = scan_lexer_element(tokens, pos, atn, 0);
@@ -4988,13 +5156,13 @@ fn scan_lexer_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fol
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_20(kind) {
+    if _kind_set_19(kind) {
         try_0: {
             atn.stack.push(551);
             pos = scan_lexer_atom(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
             atn.stack.pop();
             if pos < 0 { break try_0; }
-            if pos < tokens.len() && _kind_set_19(tokens[pos]) {
+            if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                 let sp = pos;
                 pos = scan_ebnf_suffix(tokens, pos, atn, follow);
                 if pos < 0 { pos = sp; }
@@ -5011,7 +5179,7 @@ fn scan_lexer_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fol
             pos = scan_lexer_block(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
             atn.stack.pop();
             if pos < 0 { break try_1; }
-            if pos < tokens.len() && _kind_set_19(tokens[pos]) {
+            if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                 let sp = pos;
                 pos = scan_ebnf_suffix(tokens, pos, atn, follow);
                 if pos < 0 { pos = sp; }
@@ -5072,11 +5240,11 @@ fn scan_lexer_command(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> 
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_21(kind) {
+    if _kind_set_20(kind) {
         let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
         if la_1 == TK_LPAREN {
             return scan_lexer_command__alt_0(tokens, start, atn);
-        } else if _kind_set_22(la_1) {
+        } else if _kind_set_21(la_1) {
             return scan_lexer_command_name(tokens, start, atn);
         } else {
             let mut best: i32 = -1;
@@ -5094,7 +5262,7 @@ fn scan_lexer_command_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_21(kind) {
+    if _kind_set_20(kind) {
         pos = start + 1;
         return pos;
     }
@@ -5105,7 +5273,7 @@ fn scan_lexer_command_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_33(kind) {
+    if _kind_set_32(kind) {
         pos = start + 1;
         return pos;
     }
@@ -5141,7 +5309,7 @@ fn scan_alternative(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follo
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_23(kind) {
+    if _kind_set_22(kind) {
         try_0: {
             if pos < tokens.len() && tokens[pos] == TK_LT {
                 let sp = pos;
@@ -5154,7 +5322,7 @@ fn scan_alternative(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follo
             pos = scan_element(tokens, pos, atn, 0);
             atn.stack.pop();
             if pos < 0 { break try_0; }
-            while pos < tokens.len() && _kind_set_24(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+            while pos < tokens.len() && _kind_set_23(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                 let sp = pos;
                 atn.stack.push(635);
                 pos = scan_element(tokens, pos, atn, 0);
@@ -5176,14 +5344,14 @@ fn scan_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_25(kind) {
+    if _kind_set_24(kind) {
         if _kind_set_2(kind) {
             let _atn_alt = atn_decide_52(atn, tokens, pos, 0);
             if _atn_alt == 0 {
                 return scan_element__alt_0(tokens, start, atn, follow);
             }
             return scan_element__alt_1(tokens, start, atn, follow);
-        } else if _kind_set_26(kind) {
+        } else if _kind_set_25(kind) {
             return scan_element__alt_1(tokens, start, atn, follow);
         }
     }
@@ -5261,11 +5429,11 @@ fn scan_labeled_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_2(tokens[pos]) { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_31(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_30(tokens[pos]) { return -1; }
     pos += 1;
     sg_7_done: {
         let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_25(sgk_7) {
+        if _kind_set_24(sgk_7) {
             sg_7_0: {
                 atn.stack.push(713);
                 pos = scan_atom(tokens, pos, atn, 0);
@@ -5293,7 +5461,7 @@ fn scan_ebnf(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
     pos = scan_block(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
     atn.stack.pop();
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _kind_set_19(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_18(tokens[pos]) {
         let sp = pos;
         pos = scan_block_suffix(tokens, pos, atn, follow);
         if pos < 0 { pos = sp; }
@@ -5315,7 +5483,7 @@ fn scan_ebnf_suffix(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follo
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_19(kind) {
+    if _kind_set_18(kind) {
         pos = start + 1;
         if pos < tokens.len() && tokens[pos] == TK_QUESTION && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
             pos += 1;
@@ -5329,7 +5497,7 @@ fn scan_lexer_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_29(kind) {
+    if _kind_set_28(kind) {
         if kind == TK_STRING_LITERAL {
             let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
             if la_1 == TK_RANGE {
@@ -5379,7 +5547,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_29(kind) {
+    if _kind_set_28(kind) {
         try_0: {
             atn.stack.push(763);
             pos = scan_terminal_def(tokens, pos, atn, follow);
@@ -5464,7 +5632,7 @@ fn scan_not_set(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_NOT {
         let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
-        if _kind_set_30(la_1) {
+        if _kind_set_29(la_1) {
             return scan_not_set__alt_0(tokens, start, atn, follow);
         } else if la_1 == TK_LPAREN {
             return scan_not_set__alt_1(tokens, start, atn, follow);
@@ -5535,7 +5703,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_32(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_31(tokens[pos]) {
         let sp = pos;
         sg_8_done: {
             sg_8: {
@@ -7010,9 +7178,7 @@ fn _parse_lexer_alt__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_lexer_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
-        if _kind_set_17(kind) {
-            return _parse_lexer_alt__inner_alt_0(p, follow);
-        }
+        return _parse_lexer_alt__inner_alt_0(p, follow);
     }
     scope: {
         p.site = 67;
@@ -7062,10 +7228,10 @@ fn _parse_lexer_alt(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_lexer_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
-    if _kind_set_18(kind) {
+    if _kind_set_17(kind) {
         if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_27, &EXPECTED_27); }
         let mut _plus_first = true;
-        while !p.recovering && (_plus_first || _kind_set_18(p.peek_kind())) {
+        while !p.recovering && (_plus_first || _kind_set_17(p.peek_kind())) {
             if !_plus_first {
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             }
@@ -7105,11 +7271,11 @@ fn _parse_lexer_elements(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_lexer_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_27, &EXPECTED_27); }
     let kind = p.peek_kind();
-    if _kind_set_20(kind) {
+    if _kind_set_19(kind) {
         p.site = 70;
         p.atn_ret_pending = 551;
         _parse_lexer_atom(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
-        let mut opt_enter: bool = _kind_set_19(p.peek_kind());
+        let mut opt_enter: bool = _kind_set_18(p.peek_kind());
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -7131,7 +7297,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 72;
         p.atn_ret_pending = 557;
         _parse_lexer_block(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
-        let mut opt_enter: bool = _kind_set_19(p.peek_kind());
+        let mut opt_enter: bool = _kind_set_18(p.peek_kind());
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -7263,10 +7429,10 @@ fn scan_lexer_command__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
 fn _parse_lexer_command__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_29, &EXPECTED_29); }
     let kind = p.peek_kind();
-    if _kind_set_21(kind) {
+    if _kind_set_20(kind) {
         if p.peek_at(1) == TK_LPAREN {
             return _parse_lexer_command__inner_alt_0(p);
-        } else if _kind_set_22(p.peek_at(1)) {
+        } else if _kind_set_21(p.peek_at(1)) {
             p.site = 80;
             p.atn_ret_pending = 602;
             return _parse_lexer_command_name(p);
@@ -7419,7 +7585,7 @@ fn _parse_alt_list(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_alternative__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
-    if _kind_set_23(kind) {
+    if _kind_set_22(kind) {
         if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_31, &EXPECTED_31); }
         if p.peek_kind() == TK_LT {
             p.site = 85;
@@ -7428,7 +7594,7 @@ fn _parse_alternative__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if !kind_set_has(&SYNC_32, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_32, &EXPECTED_32); }
         let mut _plus_first = true;
-        while !p.recovering && (_plus_first || _kind_set_24(p.peek_kind())) {
+        while !p.recovering && (_plus_first || _kind_set_23(p.peek_kind())) {
             if !_plus_first {
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             }
@@ -7520,14 +7686,14 @@ fn scan_element__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
 fn _parse_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_32, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_32, &EXPECTED_32); }
     let kind = p.peek_kind();
-    if _kind_set_25(kind) {
+    if _kind_set_24(kind) {
         if _kind_set_2(kind) {
             let _atn_alt = atn_decide_52(&mut p.atn, &p.kinds, p.pos, 0);
             if _atn_alt == 0 {
                 return _parse_element__inner_alt_0(p, follow);
             }
             return _parse_element__inner_alt_1(p, follow);
-        } else if _kind_set_26(kind) {
+        } else if _kind_set_25(kind) {
             return _parse_element__inner_alt_1(p, follow);
         }
     }
@@ -7626,7 +7792,7 @@ fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 98;
         p.atn_ret_pending = 697;
         _parse_action_block(p);
-    } else if _kind_set_27(grp_kind) {
+    } else if _kind_set_26(grp_kind) {
         p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_35);
@@ -7640,7 +7806,7 @@ fn scan_predicate_option__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPred
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_28(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_27(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -7688,7 +7854,7 @@ fn _parse_labeled_element__inner(p: &mut Parser) -> () {
     p.expect_set(&SYNC_36, &EXPECTED_36);
     if !kind_set_has(&SYNC_37, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_37, &EXPECTED_37); }
     let grp_kind = p.peek_kind();
-    if _kind_set_25(grp_kind) {
+    if _kind_set_24(grp_kind) {
         p.site = 100;
         p.atn_ret_pending = 713;
         _parse_atom(p, 0);
@@ -7721,7 +7887,7 @@ fn _parse_ebnf__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 102;
     p.atn_ret_pending = 719;
     _parse_block(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
-    let mut opt_enter: bool = _kind_set_19(p.peek_kind());
+    let mut opt_enter: bool = _kind_set_18(p.peek_kind());
     if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -7776,7 +7942,7 @@ fn _parse_block_suffix(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_38, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_38, &EXPECTED_38); }
     let kind = p.peek_kind();
-    if _kind_set_19(kind) {
+    if _kind_set_18(kind) {
         p.take();
         if p.peek_kind() == TK_QUESTION && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
             p.take();
@@ -7822,7 +7988,7 @@ fn scan_lexer_atom__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
 fn _parse_lexer_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_39, &EXPECTED_39); }
     let kind = p.peek_kind();
-    if _kind_set_29(kind) {
+    if _kind_set_28(kind) {
         if kind == TK_STRING_LITERAL {
             if p.peek_at(1) == TK_RANGE {
                 p.site = 105;
@@ -7906,7 +8072,7 @@ fn _parse_lexer_atom(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_40, &EXPECTED_40); }
     let kind = p.peek_kind();
-    if _kind_set_29(kind) {
+    if _kind_set_28(kind) {
         p.site = 109;
         p.atn_ret_pending = 763;
         _parse_terminal_def(p, follow);
@@ -8009,7 +8175,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_43, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_43, &EXPECTED_43); }
     let kind = p.peek_kind();
     if kind == TK_NOT {
-        if _kind_set_30(p.peek_at(1)) {
+        if _kind_set_29(p.peek_at(1)) {
             return _parse_not_set__inner_alt_0(p, follow);
         } else if p.peek_at(1) == TK_LPAREN {
             return _parse_not_set__inner_alt_1(p, follow);
@@ -8398,7 +8564,7 @@ fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 132;
         p.atn_ret_pending = 908;
         _parse_qualified_identifier(p, follow);
-    } else if _kind_set_27(grp_kind) {
+    } else if _kind_set_26(grp_kind) {
         p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_52);
@@ -8420,7 +8586,7 @@ fn scan_element_option__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredic
                 if pos < 0 { break sg_1_0; }
                 break sg_1_done;
             }
-        } else if _kind_set_27(sgk_1) {
+        } else if _kind_set_26(sgk_1) {
             pos += 1;
             break sg_1_done;
         }
@@ -8904,70 +9070,66 @@ fn _kind_set_16(k: i32) -> bool {
 }
 
 fn _kind_set_17(k: i32) -> bool {
-    return k matches { TK_ACTION | TK_DOT | TK_LEXER_CHAR_SET | TK_LPAREN | TK_NOT | TK_OR | TK_RPAREN | TK_SEMI | TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _kind_set_18(k: i32) -> bool {
     return k matches { TK_ACTION | TK_DOT | TK_LEXER_CHAR_SET | TK_LPAREN | TK_NOT | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_19(k: i32) -> bool {
+fn _kind_set_18(k: i32) -> bool {
     return k matches { TK_PLUS | TK_QUESTION | TK_STAR };
 }
 
-fn _kind_set_20(k: i32) -> bool {
+fn _kind_set_19(k: i32) -> bool {
     return k matches { TK_DOT | TK_LEXER_CHAR_SET | TK_NOT | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_21(k: i32) -> bool {
+fn _kind_set_20(k: i32) -> bool {
     return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
 }
 
-fn _kind_set_22(k: i32) -> bool {
+fn _kind_set_21(k: i32) -> bool {
     return k matches { TK_COMMA | TK_OR | TK_RPAREN | TK_SEMI };
 }
 
-fn _kind_set_23(k: i32) -> bool {
+fn _kind_set_22(k: i32) -> bool {
     return k matches { TK_ACTION | TK_DOT | TK_LPAREN | TK_LT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_24(k: i32) -> bool {
+fn _kind_set_23(k: i32) -> bool {
     return k matches { TK_ACTION | TK_DOT | TK_LPAREN | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_25(k: i32) -> bool {
+fn _kind_set_24(k: i32) -> bool {
     return k matches { TK_DOT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_26(k: i32) -> bool {
+fn _kind_set_25(k: i32) -> bool {
     return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
 }
 
-fn _kind_set_27(k: i32) -> bool {
+fn _kind_set_26(k: i32) -> bool {
     return k matches { TK_INT | TK_STRING_LITERAL };
 }
 
-fn _kind_set_28(k: i32) -> bool {
+fn _kind_set_27(k: i32) -> bool {
     return k matches { TK_ACTION | TK_INT | TK_STRING_LITERAL };
 }
 
-fn _kind_set_29(k: i32) -> bool {
+fn _kind_set_28(k: i32) -> bool {
     return k matches { TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_30(k: i32) -> bool {
+fn _kind_set_29(k: i32) -> bool {
     return k matches { TK_LEXER_CHAR_SET | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _kind_set_31(k: i32) -> bool {
+fn _kind_set_30(k: i32) -> bool {
     return k matches { TK_ASSIGN | TK_PLUS_ASSIGN };
 }
 
-fn _kind_set_32(k: i32) -> bool {
+fn _kind_set_31(k: i32) -> bool {
     return k matches { TK_AT | TK_COLON | TK_OPTIONS };
 }
 
-fn _kind_set_33(k: i32) -> bool {
+fn _kind_set_32(k: i32) -> bool {
     return k matches { TK_INT | TK_RULE_REF | TK_TOKEN_REF };
 }
 

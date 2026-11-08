@@ -35,7 +35,9 @@ A language-independent scanner (skipping strings and comments) finds `$ident(.id
 
 A rule declaring any of args / `returns` / `locals` gets a generated value struct, threaded through its parse function and returned to callers. Fields are default-initialized; rule args become extra parameters. A caller binds the returned value struct to a local when an action references it, so `$a.v` resolves to that local. Rules with no declarations keep a unit return, so actionless grammars stay byte-identical, and scan functions are unaffected (no values or actions during scan). Left-recursive rules keep the left operand's values in a local across the precedence-climbing loop; the corpus's `$ctx`-cast LR-binary idiom maps onto the same locals. General `$ctx`-mediated typed child access needs a typed CST and is a later item.
 
-A cast `$ctx` member reaching a name the enclosing alternative already binds needs no typed CST: `((XContext)$ctx).INC()` names the alternative's own `INC` token, so it resolves to whatever `$INC` resolves to there, and `!= null` on it becomes the token-presence test. A name the alternative does not bind stays a loud error rather than a guess.
+A `$ctx` token accessor tested against `null` needs no typed CST: `$ctx.INC()` or `((XContext)$ctx).INC()` reads what `$INC` reads, so `!= null` on it becomes the token-presence test, and it counts as a read of the `INC` binding. Where `INC` occurs more than once in that context (the rule's, or a labeled alternative's for its cast), ANTLR4's accessor returns a list, which is never null. Any other use of an accessor stays a loud error rather than a guess.
+
+A label's `.text` that never matched reads `"null"`, which prints as Java's `null` does. A comparison asks whether the text is there first: Java's `==` compares references, and a text read is a fresh `String`, so `==` holds only where both sides are missing; `.equals` traps on a missing receiver and is false on a missing argument.
 
 ### The value channel is the context object
 
@@ -48,6 +50,14 @@ This is what makes the reads well-scoped by construction. A rule's body is not o
 The channel therefore opens for a rule that captures anything, not only one declaring args / `returns` / `locals`. Grammars whose actions are off stay byte-identical: the capture, the field, and the struct are all gated on action emission.
 
 A repeat writes its capture once per iteration, so a reference reads the last match — ANTLR's `$x` for a looped label.
+
+### A label belongs to its alternative
+
+ANTLR keeps a label in a field of the rule's context, so the label is the whole alternative's. Bound inside a group, an optional or a loop, it reads as `null` where that element matched nothing. Bound twice, it reads the last binding.
+
+A label bound once at the alternative's top level, ahead of every body naming it and of every predicate prediction can meet before it binds, stays a plain `let`. Any other is shared (`LabelReach::Shared`): the alternative declares one local where it starts, `-1` for a token and `null` for a rule call, and every binding assigns it. A shared token label that never matched reads as the jar's does: `.text` is `null`, a number is `0`, and `$x == null` is `x < 0`. A shared rule label holds an `Option`, so `$y.v` traps where the jar throws `NullPointerException`.
+
+A decision ahead of the rule's alternatives finds every label unmatched (`LabelReach::Unmatched`). A decision inside an alternative reads the shared locals as they stand. A scan holds no label, so it leaves a predicate that reads one to the parse.
 
 ## Runtime context API
 
@@ -121,7 +131,7 @@ Cost model (verified on a probe): a handler operation with no post-resume code h
 
 Gating: a non-superClass grammar emits no interface, no effect clause, and no operation call — byte-identical output.
 
-ATN purity holds: a superClass predicate is pre-evaluated at the decision (in the caller, where the handler is ambient) via the existing exclusion path, so the simulator body stays a pure function of the token stream.
+A superClass predicate reaches the simulator the way any predicate does, as the decision's answer callback, so the simulator carries the base effect only where it asks one.
 
 Parser side: a parser base's operations are predicates taking `p: &Parser`. There is no view here — the parser's cursor is a field, so the recognizer itself is what an ANTLR base method reads through `this`, and the action-context API (`la` / `lt` / `token_text` / `token_start` / `rule_text` / …) becomes that base's public surface. There is no command surface either, so a name reached from an action body is refused the way an argument-passing one is. Every generated parse function carries the base effect — a predicate can sit in any rule and an effect propagates to each caller — while scan functions stay exempt, evaluating no action.
 
@@ -135,7 +145,9 @@ Each predicate compiles to a standalone effect-free function callable from every
 
 1. Static dispatch: an alt-initial predicate guards its branch. Only alt-initial predicates participate in prediction (ANTLR's "visible" predicates); a mid-alt predicate evaluating false is a parse failure at that point, feeding normal recovery.
 2. Scan tournament: a context-independent predicate is evaluated before scanning its gated alternative (false excludes it). A context-dependent predicate is treated as true during cross-rule scans — matching ANTLR, which ignores dependent predicates evaluated outside their owning context — and evaluated for real in the owning rule's dispatch.
-3. ATN simulator: because prediction predicates are alt-initial, the caller pre-evaluates each gated alternative at the decision and excludes the false ones from the simulator's seed, so the simulator stays a pure function of the token stream.
+3. ATN simulator: the decision hands the simulator the predicates it may meet and a callback that answers one. The simulator first finds the alternatives the input leaves viable, asks only the predicates guarding those, then predicts again with the false ones closed. A predicate on a path the input or the caller stack rules out is never evaluated, as ANTLR evaluates none.
+
+Prediction answers no predicate on a path past an action, and the paths into one alternative can differ: in `(u | ) {p}? X` with `u : {} ;`, the path through `u` crosses an action and skips `p`, so the alternative stays viable when `p` is false. The simulator carries that per configuration, through an action edge that marks it. A scan stops answering predicates once it may have crossed an action without consuming a token. A predicate behind the alternative's own first action guards the parse and gates nothing.
 
 All predicates false at a decision produces a "no viable alternative" diagnostic. Purity is enforced by the type system (stronger than ANTLR's convention); ambient logging remains possible, which is what the corpus's printing predicates need. Predicate evaluation counts and ordering need not match ANTLR (different algorithms) — the chosen parse must match, the trace need not.
 
@@ -145,7 +157,7 @@ That includes the report: a **required** group whose dispatch takes no alternati
 
 ## Actions inside a group
 
-An action belongs to the alternative it is written in, whether that alternative is a rule's or a group's, and runs when the alternative is taken. One element walker therefore serves every body — rule alternative, group alternative, LR suffix, a transparent group's inlined elements — taking the alternative's actions and its own op bindings, so an action's position and the labels it reads come from the body it sits in rather than the one that encloses it. Under a `Repeat` this runs the action once per iteration, which is what a group under `*` means.
+An action belongs to the alternative it is written in, whether that alternative is a rule's or a group's, and runs when the alternative is taken. One element walker therefore serves every body — rule alternative, group alternative, LR suffix, a transparent group's inlined elements — taking the alternative's actions, so an action's position comes from the body it sits in. The labels it reads are those of the rule alternative enclosing it (see "A label belongs to its alternative"). Under a `Repeat` this runs the action once per iteration, which is what a group under `*` means.
 
 Where a body is emitted as several shape branches (an optional whose absent positions are skipped), only the elements are shape-conditional: an action between them is written in the alternative, not in the optional, so it runs in every branch. An action nested inside the skipped element belongs to that element's own body and goes with it.
 

@@ -28,11 +28,14 @@ pub struct FollowSet {
     /// Ascending kind ids.
     pub kinds: List<i32>,
     pub closed: bool,
+    /// Whether a wildcard or a `~set`, whose kinds `kinds` cannot name, may
+    /// follow, so `kinds` under-approximates.
+    pub open: bool,
 }
 
 impl FollowSet {
     pub fn empty() -> FollowSet {
-        return FollowSet { kinds: [], closed: false };
+        return FollowSet { kinds: [], closed: false, open: false };
     }
 }
 
@@ -109,10 +112,9 @@ impl FollowEnv {
 
 /// What may follow each parser rule, as lowering and emit ask it.
 pub struct RuleFollow {
+    /// FOLLOW of each rule whose set is exact: no wildcard or `~set` may
+    /// follow it.
     kinds: HashMap<String, List<i32>>,
-    /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is
-    /// the real one rather than an over-approximation.
-    exact: bool,
     /// The rules an `EOF` the grammar writes may follow.
     before_eof_token: List<String>,
     /// Per rule, the strings `r` for which `rule r EOF` can occur
@@ -126,27 +128,23 @@ impl RuleFollow {
     pub fn unknown() -> RuleFollow {
         return RuleFollow {
             kinds: HashMap::new(),
-            exact: false,
             before_eof_token: [],
             input_end: HashMap::new(),
         };
     }
 
-    /// Whether the per-rule sets are the real FOLLOW, not an over-approximation.
-    pub fn is_exact(&self) -> bool {
-        return self.exact;
+    /// Whether `rule_name`'s FOLLOW is known exactly.
+    pub fn is_exact<S: AsStrSlice>(&self, rule_name: S) -> bool {
+        return self.kinds.contains_key_str(rule_name);
     }
 
     /// The rule's classical FOLLOW, for a probe whose scan ends at the
     /// rule's tail — there, "can the caller continue" is exactly membership
-    /// in this set. Empty when the fixed point is not exact, which keeps the
+    /// in this set. Empty when the set is not exact, which keeps the
     /// probe on its previous answer. The set over-approximates (a union over
     /// every call site), so conjoining it can only move a verdict from
     /// "exit" to "iterate": a token it excludes cannot continue any caller.
     pub fn for_probe<S: AsStrSlice>(&self, rule_name: S) -> List<i32> {
-        if !self.exact {
-            return [];
-        }
         let Some(follow) = self.kinds.get_str(rule_name) else {
             return [];
         };
@@ -157,9 +155,6 @@ impl RuleFollow {
     /// to the simulator: a caller may continue on one of them, or FOLLOW is not
     /// known exactly.
     pub fn at_end_conflict_routes<S: AsStrSlice>(&self, rule_name: S, branch_tokens: &List<i32>) -> bool {
-        if !self.exact {
-            return true;
-        }
         let Some(follow) = self.kinds.get_ref_str(rule_name) else {
             return true;
         };
@@ -188,7 +183,10 @@ pub fn settle_rule_follow(parser_rules: &List<ParserRule>, analysis: &mut Gramma
     let fenv = build(parser_rules, analysis, &parser_rules[0].name);
     let mut kinds = HashMap::<String, List<i32>>::new();
     for let rule of parser_rules {
-        kinds[rule.name] = fenv.rule_follow(&rule.name).kinds;
+        let follow = fenv.rule_follow(&rule.name);
+        if !follow.open {
+            kinds[rule.name] = follow.kinds;
+        }
     }
     // Unseeded, so EOF is in a rule's FOLLOW only where the grammar matches it.
     let written = build(parser_rules, analysis, "");
@@ -201,44 +199,8 @@ pub fn settle_rule_follow(parser_rules: &List<ParserRule>, analysis: &mut Gramma
     }
     return RuleFollow {
         kinds,
-        exact: !grammar_has_open_first_element(parser_rules),
         before_eof_token,
         input_end: rule_input_end(parser_rules, analysis),
-    };
-}
-
-fn grammar_has_open_first_element(parser_rules: &List<ParserRule>) -> bool {
-    for let rule of parser_rules {
-        for let alt of &rule.alternatives {
-            for let e of &alt.elements {
-                if element_has_open_first(e) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-fn element_has_open_first(e: &Element) -> bool {
-    return match *e {
-        Wildcard(_) => true,
-        Not(_) => true,
-        Label(l) => element_has_open_first(&l.element),
-        Repeat(r) => element_has_open_first(&r.element),
-        Group(g) => {
-            for let alt of &g.alternatives {
-                for let inner of &alt.elements {
-                    if element_has_open_first(inner) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        },
-        RuleRef(_) => false,
-        TokenRef(_) => false,
-        Literal(_) => false,
     };
 }
 
@@ -285,7 +247,7 @@ fn compute_rule_follow<S: AsStrSlice>(
     let mut plans: List<List<Contribution>> = [];
     for let rule of parser_rules {
         let mut plan: List<Contribution> = [];
-        let outer = PlanFollow { bits: [], inherits: true };
+        let outer = PlanFollow { bits: [], inherits: true, open: false };
         for let alt of &rule.alternatives {
             plan_elements(&alt.elements, analysis, &outer, &mut plan);
         }
@@ -294,14 +256,14 @@ fn compute_rule_follow<S: AsStrSlice>(
 
     let mut env: List<FollowBits> = [];
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
-        env.push(FollowBits { bits: [], closed: false });
+        env.push(FollowBits { bits: [], closed: false, open: false });
     }
     if !start_rule.is_empty() {
         let si = analysis.rule_index_of(start_rule);
         if si >= 0 {
             let mut seed: List<u64> = [];
             bits_set(&mut seed, analysis.eof_kind_id());
-            env[si] = FollowBits { bits: seed, closed: true };
+            env[si] = FollowBits { bits: seed, closed: true, open: false };
         }
     }
 
@@ -309,6 +271,7 @@ fn compute_rule_follow<S: AsStrSlice>(
         for let c of &plans[ri] {
             let callee = &mut env[c.callee];
             let _ = bits_union_into(&mut callee.bits, &c.bits);
+            callee.open = callee.open || c.open;
         }
     }
 
@@ -324,9 +287,11 @@ fn compute_rule_follow<S: AsStrSlice>(
                 }
                 let callee = &mut env[c.callee];
                 let new_closed = callee.closed || caller_follow.closed;
+                let new_open = callee.open || caller_follow.open;
                 let bits_changed = bits_union_into(&mut callee.bits, &caller_follow.bits);
-                if bits_changed || new_closed != callee.closed {
+                if bits_changed || new_closed != callee.closed || new_open != callee.open {
                     callee.closed = new_closed;
+                    callee.open = new_open;
                     changed = true;
                 }
             }
@@ -338,7 +303,11 @@ fn compute_rule_follow<S: AsStrSlice>(
 
     let mut result = HashMap::<String, FollowSet>::new();
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
-        result[parser_rules[ri].name] = FollowSet { kinds: bits_ids(&env[ri].bits), closed: env[ri].closed };
+        result[parser_rules[ri].name] = FollowSet {
+            kinds: bits_ids(&env[ri].bits),
+            closed: env[ri].closed,
+            open: env[ri].open,
+        };
     }
     return result;
 }
@@ -350,13 +319,16 @@ struct Contribution {
     callee: i32,
     bits: List<u64>,
     inherits_outer: bool,
+    open: bool,
 }
 
 /// Static effective-follow during plan building: FIRST-derived bits plus the
-/// flag standing in for the dynamic "enclosing rule's FOLLOW" part.
+/// flag standing in for the dynamic "enclosing rule's FOLLOW" part. `open`
+/// says a wildcard or `~set` the bits cannot name is in that FIRST.
 struct PlanFollow {
     bits: List<u64>,
     inherits: bool,
+    open: bool,
 }
 
 /// Walk an element list, computing the static per-position effective follow
@@ -382,7 +354,7 @@ fn plan_element(elem: &Element, analysis: &mut GrammarAnalysis, local: &PlanFoll
         RuleRef(r) => {
             let callee = analysis.rule_index_of(&r.name);
             if callee >= 0 {
-                plan.push(Contribution { callee, bits: local.bits, inherits_outer: local.inherits });
+                plan.push(Contribution { callee, bits: local.bits, inherits_outer: local.inherits, open: local.open });
             }
         },
         Group(g) => {
@@ -396,6 +368,8 @@ fn plan_element(elem: &Element, analysis: &mut GrammarAnalysis, local: &PlanFoll
             // inner also sees its own FIRST. An `?` cannot iterate.
             if !rep.kind matches { Optional } {
                 accumulate_first_bits(analysis, &rep.element, &mut inner_outer.bits);
+                let mut visiting: List<String> = [];
+                inner_outer.open = inner_outer.open || analysis.element_reaches_open_end(&rep.element, &mut visiting);
             }
             plan_element(&rep.element, analysis, &inner_outer, plan);
         },
@@ -413,11 +387,13 @@ fn plan_local_follow(elements: &List<Element>, i: i32, analysis: &mut GrammarAna
     let mut bits: List<u64> = [];
     suffix_first_bits(analysis, elements, i + 1, &mut bits);
     let mut inherits = false;
+    let mut open = analysis.elements_reach_open_end(elements, i + 1);
     if analysis.tail_is_nullable_deep(elements, i + 1) {
         bits_union_into(&mut bits, &outer.bits);
         inherits = outer.inherits;
+        open = open || outer.open;
     }
-    return PlanFollow { bits, inherits };
+    return PlanFollow { bits, inherits, open };
 }
 
 /// Internal FOLLOW set: a u64 bitset over token-kind ids plus the
@@ -426,6 +402,7 @@ fn plan_local_follow(elements: &List<Element>, i: i32, analysis: &mut GrammarAna
 struct FollowBits {
     bits: List<u64>,
     closed: bool,
+    open: bool,
 }
 
 /// Set into `bits` the FIRST set of `elements[start..]`, computed directly as

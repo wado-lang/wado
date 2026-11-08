@@ -1,13 +1,14 @@
-// One label name bound to a *different* rule in each alternative. Per-alt
-// resolution has to pick the rule the enclosing alternative actually called —
-// `$x.n` is `a`'s returns field and `$x.m` is `b`'s, and neither rule has the
-// other's — so reading the first-declared binding resolves the wrong channel.
+// One label name bound to a *different* rule in each labelled alternative.
+// Per-alt resolution has to pick the rule the enclosing alternative actually
+// called — `$x.n` is `a`'s returns field and `$x.m` is `b`'s, and neither rule
+// has the other's — so reading the first-declared binding resolves the wrong
+// channel.
 grammar WadoLabelCrossRule;
 
 options { language = Wado; }
 
-r : x=a { p.emit(`${$x.n}`); }
-  | x=b { p.emit(`${$x.m}`); }
+r : x=a { p.emit(`${$x.n}`); } # A1
+  | x=b { p.emit(`${$x.m}`); } # B1
   ;
 
 a returns [i32 n] : A { $n = 1; } ;

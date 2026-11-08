@@ -52,6 +52,9 @@ pub struct AttrDecl {
     pub type_text: String,
     pub name: String,
     pub span: Span,
+    /// The host-language expression after `=`, which the jar stores when the
+    /// rule is entered.
+    pub init: Option<String> = null,
 }
 
 /// A `catch [decl] { body }` exception handler on a parser rule. Retained
@@ -953,23 +956,24 @@ impl Alternative {
         return Alternative { label: null, options: [], elements };
     }
 
-    /// The predicates at the alternative's left edge, up to its first action
-    /// there: what prediction meets before any token or action.
-    pub fn left_edge_predicates(&self) -> List<AltAction> {
+    /// The predicates ahead of the alternative's first action, wherever they
+    /// sit, then that action: prediction meets a predicate through any prefix
+    /// that matched nothing, and none on a path past an action.
+    pub fn prediction_guards(&self) -> List<AltAction> {
         let mut out: List<AltAction> = [];
         for let a of &self.actions {
-            if a.before_index != 0 || a.kind matches { Action } {
+            out.push(*a);
+            if a.kind matches { Action } {
                 break;
             }
-            out.push(*a);
         }
         return out;
     }
 
-    /// Whether an action runs at the left edge, which hides from prediction
-    /// every predicate behind it.
-    pub fn opens_with_action(&self) -> bool {
-        return self.actions.iter_ref().any(|a| a.before_index == 0 && a.kind matches { Action });
+    /// The predicates prediction answers at the alternative's left edge, where
+    /// a dispatch gates it: those placed there ahead of its first action.
+    pub fn edge_gates(&self) -> List<AltAction> {
+        return self.prediction_guards().into_iter().filter(|a| a.before_index == 0 && a.kind matches { Predicate }).collect();
     }
 }
 

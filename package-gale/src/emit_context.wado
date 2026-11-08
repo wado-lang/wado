@@ -3,7 +3,7 @@
 //! and records the tables its text names and the diagnostics it raises. Where
 //! the walk stands is the `EmitCursor`.
 
-use { AltAction, Alternative, ParserRule } from "./ir.wado";
+use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
 use { Admits, Diagnostics, Rule, admits_or_everything } from "./gir.wado";
 use { RuleOverlap, ambiguity_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
@@ -11,9 +11,16 @@ use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry, follow_mask_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { ParserPlan } from "./parser_plan.wado";
-use { PredicateSite, alt_has_gate, alt_scan_gate_conditions, gate_condition_for } from "./gate_conditions.wado";
+use {
+    DecisionPredicates,
+    PredicateSite,
+    alt_has_gate,
+    alt_scan_gate_conditions,
+    gate_condition_for,
+    predicates_met_entering,
+} from "./gate_conditions.wado";
 use { AmbiguousNode } from "./prediction.wado";
-use { AltBinding } from "./attr_resolve.wado";
+use { AltBinding, unmatched_bindings } from "./attr_resolve.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 use { SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
@@ -186,6 +193,11 @@ impl EmitCursor {
         return &self.alt_bindings;
     }
 
+    /// The alternative's shared local for a label, where it has one.
+    pub fn shared_label<S: AsStrSlice>(&self, is_token: bool, base: S) -> Option<&AltBinding> {
+        return self.alt_bindings.iter_ref().find(|b| b.reach matches { Shared } && b.binds(is_token, &base));
+    }
+
     /// The rendered expected-token set the action about to be emitted would see.
     /// Set around a site codegen can answer for, cleared everywhere else.
     pub fn set_expected_names<S: AsStrSlice>(&mut self, rendered: S) {
@@ -307,6 +319,7 @@ pub struct EmitContext {
     pub tables: TableRegistry,
     pub diagnostics: Diagnostics,
     pub plan: ParserPlan,
+    pub decisions: DecisionPredicates,
     pub cursor: EmitCursor,
 }
 
@@ -319,9 +332,10 @@ impl EmitContext {
         tables: TableRegistry,
         diagnostics: Diagnostics,
         plan: ParserPlan,
+        decisions: DecisionPredicates,
     ) -> EmitContext {
         let cursor = EmitCursor::new(analysis.parser_rules().len());
-        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, cursor };
+        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, decisions, cursor };
     }
 
     /// The rule being emitted.
@@ -458,6 +472,19 @@ impl EmitContext {
         return alt_scan_gate_conditions(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
+    /// The predicates of the rule being emitted that prediction meets entering
+    /// `elements` at `index` (`gate_conditions::predicates_met_at`).
+    pub fn own_predicates_met_at(
+        &mut self,
+        elements: &List<Element>,
+        actions: &List<AltAction>,
+        index: i32,
+    ) -> List<AltAction> {
+        let site = self.predicate_site();
+        let met = predicates_met_entering(elements, actions, index, &site, &mut self.analysis);
+        return met.into_iter().filter(|m| m.1.rule_index == site.rule_index).map(|m| m.0).collect();
+    }
+
     /// `rule_overlap::rule_overlap_groups` for the rule being emitted.
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
@@ -489,9 +516,23 @@ impl EmitContext {
         return self.plan.rule_captures(&self.current_rule().name).nodes.contains_str(field);
     }
 
+    /// Make rule `idx` the one being emitted, ahead of every alternative: its
+    /// decision finds each label unmatched.
+    pub fn enter_rule(&mut self, idx: i32) {
+        self.cursor.set_current_rule_index(idx);
+        if self.settings.emit_actions {
+            self.cursor.set_alt_bindings(unmatched_bindings(&self.analysis.parser_rules()[idx]));
+        }
+    }
+
     /// Whether an action of the rule being emitted reads the binding `base`.
     pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
         return self.plan.reads_binding(self.cursor.current_rule_index(), base);
+    }
+
+    /// Whether a body of the rule being emitted names the binding `base`.
+    pub fn names_binding<S: AsStrSlice>(&self, base: S) -> bool {
+        return self.plan.names_binding(self.cursor.current_rule_index(), base);
     }
 
     /// Register a context-free gated predicate's body for a standalone

@@ -44,10 +44,10 @@ mise run doc-stdlib
 mise run update-docs-index
 mise run update-rust-paths-baseline
 mise run update-wadopoet-vocabulary
-mise run update-baselines
 mise run format
 mise run test
 mise run test-wado
+mise run test-stdlib O2
 mise run test-hooks
 mise run check
 mise run check-grammar
@@ -351,8 +351,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # package-gale and the stdlib are excluded: `test-gale-o2` and `test-stdlib`
-# cover them, and the full run reaches the stdlib through
-# `update-baselines` already. benchmark/* test blocks need
+# cover them. benchmark/* test blocks need
 # no `--dir`: their file reads sit in `export fn run()`, which the test world
 # never calls. Same batch-compilation shape as `test-gale-o2`, whose comment
 # explains the purge and what holding the pages costs in RSS.

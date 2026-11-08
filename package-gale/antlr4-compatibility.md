@@ -102,7 +102,7 @@ checks no diagnostic carries a span.
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
 
-Two more are decided as the text is read, so each carries a span:
+Four more are decided as the text is read, so each carries a span:
 
 - **An escape the lexicon does not define** — ANTLR4 error 156. A string
   literal takes `\n \r \t \b \f \\ \' \uXXXX \u{…}`. A char set takes the same
@@ -116,6 +116,18 @@ Two more are decided as the text is read, so each carries a span:
   while `x = (ID)`, `x += (A*)`, `n = (ID ',')+` and `x += (.|A)` do not. A
   label belongs on an atom or a set. `(e)` is not the free wrapper it looks
   like.
+- **A label rebound as another kind in one rule** — ANTLR4 error 75. A label
+  is one field of the rule's context, so every binding of it binds a token or a
+  call of the same rule, and all of them collect (`+=`) or none do. `x=a | x=b`
+  with two rules is rejected, and so are `x=a | x='y'` and `x=A x+=B`. Labelled
+  alternatives (`# One`) each have a context of their own, where `x=a # One | x=b # Two` is accepted. Pinned by "a label rebound as another kind, or to
+  another rule, in one rule is rejected" in `src/g4/parser_test.wado`, and by
+  `wado_label_cross_rule.g4` and `java_rule_label_text.g4`.
+- **A rule prequel reading a label of labelled alternatives** — the label lives
+  in the alternative's context, which `@init` and `@after` do not see. The jar
+  accepts the grammar and its Java fails to compile; Gale rejects it as it
+  reads it. Pinned by "a prequel reading a label of labelled alternatives is
+  rejected" in `src/g4/parser_test.wado`.
 
 ### ICU is the source of truth for `\p{...}`
 
@@ -1105,9 +1117,21 @@ the compiled fast path:**
    carries the simulator, every other ambiguity the prediction tree gives up
    on goes to it as well (`ambiguity_routes`). The tournament picks the
    longest scan, and ANTLR4 the lowest alternative the rest of the input
-   admits. The simulator disables an alternative whose predicate is false,
-   including one the alternative reaches at the left edge of a rule it opens
-   with: ANTLR4 finds those visible at the decision (`doc/predicates.md`).
+   admits. The simulator disables an alternative whose predicate is false
+   where prediction reaches it before consuming a token and before any
+   action: at the alternative's left edge, behind elements that matched
+   nothing, at the left edge of a rule or group it opens with, or past a
+   group's or a loop's exit. ANTLR4 finds those visible at the decision
+   (`doc/predicates.md`). Every decision the simulator makes, a rule's, a
+   group's or a loop's, can ask the predicates it meets
+   (`DecisionPredicates`), its callers' past the rule's end included. Each
+   configuration records the predicates its path passed, and the simulator
+   asks only those guarding the configurations the input leaves viable,
+   then predicts again with the false ones closed. So a predicate on a path
+   the input or the caller stack rules out is never evaluated, as the jar
+   evaluates none (`PredsInGlobalFOLLOW`). A scan answers a predicate under
+   the same rule, a group alternative's included: only at the position its
+   decision started from.
    A left-recursive rule whose atom choice reaches the simulator is routed as
    in 1, in any grammar: its static loop would take a suffix the full context
    gives the caller (TypeScript's `new Map<T>()`, where `()` is the `new`'s).

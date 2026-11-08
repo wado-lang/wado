@@ -61,7 +61,8 @@ use { push_unique } from "./list_util.wado";
 use { LowerContext } from "./lower_context.wado";
 use { plan_parser } from "./parser_plan.wado";
 use { EmitContext } from "./emit_context.wado";
-use { SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
+use { SCAN_GATE_TYPE, scan_edge_field, scan_gate_fields } from "./scan_gate.wado";
+use { scan_answers_predicates } from "./gate_conditions.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
@@ -194,6 +195,7 @@ pub fn install_action_context(
     settings.scan_gate_fields = scan_gate_fields(grammar, &gate_bodies).iter_ref().filter(|f| declared.contains(f)).map(
         |f| *f,
     ).collect();
+    settings.scan_edge_field = scan_edge_field(&settings.scan_gate_fields);
     settings.gate_bodies = gate_bodies;
     return ActionContext { settings, lexer_members, parser_members };
 }
@@ -219,6 +221,8 @@ fn lower_context(
     let mut analysis = GrammarAnalysis::new(&grammar.parser_rules, token_kinds, vocab);
     analysis.precompute_scannability();
     let follow = settle_rule_follow(&grammar.parser_rules, &mut analysis);
+    let mut settings = settings;
+    settings.scan_answers_predicates = scan_answers_predicates(&grammar.parser_rules, &settings, &mut analysis);
     return LowerContext::new(analysis, settings, follow, diagnostics);
 }
 
@@ -237,10 +241,10 @@ pub fn lower_for_analysis(grammar: &mut Grammar, token_kinds: TokenKinds) -> [Lo
 /// The context the parser emits in: what lowering settled, planned against the
 /// lowered grammar and its ATN.
 fn emit_context(grammar: &Grammar, lowered: &LoweredGrammar, lctx: LowerContext, atn: &Atn) -> EmitContext {
-    let LowerContext { analysis, settings, follow, tables, diagnostics, marks, .. } = lctx;
+    let LowerContext { analysis, settings, follow, tables, diagnostics, marks, decisions, .. } = lctx;
     let mut analysis = analysis;
     let plan = plan_parser(grammar, lowered, &mut analysis, &settings, &marks, atn);
-    return EmitContext::new(analysis, settings, follow, tables, diagnostics, plan);
+    return EmitContext::new(analysis, settings, follow, tables, diagnostics, plan, decisions);
 }
 
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
@@ -348,7 +352,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         gen_latn_data_global(&mut w, &latn.atn);
     }
     if ctx.settings.emit_scan_gate() {
-        gen_scan_gate_type(&mut w, &ctx.settings.scan_gate_fields, &parser_members);
+        gen_scan_gate_type(&mut w, &ctx.settings, &parser_members);
     }
     let body = w.to_string();
     let rt = gen_runtime(
@@ -581,9 +585,12 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool) {
 /// parser holds and every scan walks by reference. Its fields carry the
 /// parser's own names, which is what lets one predicate text render for both
 /// sides — see `scan_gate.wado`.
-fn gen_scan_gate_type(w: &mut CodeWriter, fields: &List<String>, members: &MemberDecls) {
+fn gen_scan_gate_type(w: &mut CodeWriter, settings: &GenSettings, members: &MemberDecls) {
     w.begin(`struct ${SCAN_GATE_TYPE}`);
-    for let f of fields {
+    if settings.scan_answers_predicates {
+        w.line(`${settings.scan_edge_field}: i32 = -1,`);
+    }
+    for let f of &settings.scan_gate_fields {
         // The member's own declared type and initialiser, not `i32 = 0`. The
         // seed is `p.scan_gate.f = p.f;`, so a `long` member declared here as an
         // `i32` is a type error in the generated parser rather than anything
