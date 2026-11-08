@@ -2167,9 +2167,7 @@ impl<'a> Reify<'a> {
         let mut tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, span, ctx);
         let binders = collect_pattern_bindings_with_index(&tir_pattern);
         if l.is_mut {
-            for (name, index, _) in &binders {
-                ctx.make_mutable(name, *index);
-            }
+            ctx.make_mutable(&binders);
         }
 
         // The matched arm binds a twin of each local and hands it on to the
@@ -9173,9 +9171,7 @@ impl<'a> Reify<'a> {
     ) -> TirStmt {
         let pattern = self.reify_pattern(pattern, value_type, span, ctx);
         if is_mut {
-            for (name, index, _) in collect_pattern_bindings_with_index(&pattern) {
-                ctx.make_mutable(&name, index);
-            }
+            ctx.make_mutable(&collect_pattern_bindings_with_index(&pattern));
         }
         TirStmt::new(TirStmtKind::LetDestructure { pattern, value }, span)
     }

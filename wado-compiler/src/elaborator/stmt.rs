@@ -710,9 +710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let first = ctx.local_count();
         let bindings = self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
         if let_stmt.is_mut {
-            for (name, index, _) in bindings {
-                ctx.make_mutable(&name, index);
-            }
+            ctx.make_mutable(&bindings);
         }
         ctx.twin_locals(first);
         if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
