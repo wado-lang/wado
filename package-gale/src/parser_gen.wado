@@ -3925,10 +3925,7 @@ fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field
 /// A binding exists only for a semantic action to read. A reference reaches it
 /// by its base name, or by the local itself where no binding records it.
 fn let_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field: S1) -> String {
-    if !ctx.settings.emit_actions {
-        return String::new();
-    }
-    if ctx.reads_binding(base) || ctx.reads_binding(field) {
+    if ctx.settings.emit_actions && (ctx.reads_binding(base) || ctx.reads_binding(field)) {
         return `let ${field} = `;
     }
     return String::new();
