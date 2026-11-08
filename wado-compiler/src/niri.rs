@@ -830,7 +830,7 @@ impl<'a> Interpreter<'a> {
                 return;
             };
             let (local_index, value) = (*local_index, *value);
-            let lattice = if body.declares_without_value(self.type_table, *type_id, value) {
+            let lattice = if body.declares_without_value(*type_id, value) {
                 Lattice::Unevaluated
             } else {
                 self.operand_to_lattice(body, value)
