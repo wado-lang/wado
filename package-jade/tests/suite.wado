@@ -7,7 +7,7 @@ use { Document, Schema, SchemaSet, Validator } from "../src/lib.wado";
 use { DEFAULT_BASE } from "../src/validate.wado";
 
 /// Where the suite serves the documents of its `remotes/` directory.
-pub global REMOTE_BASE: String = "http://localhost:1234/";
+global REMOTE_BASE: String = "http://localhost:1234/";
 
 /// The copies of the remote documents the generated tests refer to.
 global REMOTES: String = "tests/generated/remotes";
@@ -29,11 +29,12 @@ pub fn check(schema: String, data: String, valid: bool) with Preopens {
 /// The schema the suite serves at `uri`, read from `remotes`, a directory
 /// laid out as the suite's `remotes/` is.
 pub fn serve(remotes: &String, uri: &Uri) -> Result<Schema, String> with Preopens {
+    let unserved = `refers to ${*uri}, which the suite does not serve`;
     let Some(path) = remote_path(uri) else {
-        return Result::Err(`refers to ${*uri}, which the suite does not serve`);
+        return Result::Err(unserved);
     };
     let Ok(text) = fs::read_to_string(fs::join(remotes, &path)) else {
-        return Result::Err(`refers to ${*uri}, which the suite does not serve`);
+        return Result::Err(unserved);
     };
     let Ok(schema) = Schema::parse(text) else {
         return Result::Err(`refers to ${*uri}, which is no Draft 2020-12 schema`);
@@ -43,9 +44,5 @@ pub fn serve(remotes: &String, uri: &Uri) -> Result<Schema, String> with Preopen
 
 /// Where under `remotes/` the suite serves `uri` from.
 pub fn remote_path(uri: &Uri) -> Option<String> {
-    let name = `${*uri}`;
-    if !name.starts_with(&REMOTE_BASE) {
-        return null;
-    }
-    return Option::Some(name.substr_bytes(REMOTE_BASE.len(), name.len()));
+    return `${*uri}`.strip_prefix(&REMOTE_BASE).map(|p| p.to_string());
 }

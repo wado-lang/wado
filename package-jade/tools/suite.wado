@@ -162,7 +162,7 @@ fn copy_remotes(text: &String) -> Result<(), String> with Preopens {
     set.insert(base, root);
     return match set.load(&base, copy_remote) {
         Err(Failed(f)) => Result::Err(f.error),
-        _ => Result::Ok(()),
+        Ok(_) | Err(Invalid(_)) => Result::Ok(()),
     };
 }
 

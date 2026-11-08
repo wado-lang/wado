@@ -183,11 +183,7 @@ pub variant LoadError<E> {
     Failed(FailedLoad<E>),
 }
 
-impl<E> From<SchemaError> for LoadError<E> {
-    fn from(value: SchemaError) -> LoadError<E> {
-        return LoadError::Invalid(value);
-    }
-}
+impl<E> From<SchemaError> for LoadError<E>;
 
 impl<E: Display> Display for LoadError<E> {
     fn fmt(&self, f: &mut Formatter) {
@@ -204,7 +200,6 @@ impl<E: Display> Error for LoadError<E> {
 /// A document the loader failed to fetch.
 pub struct FailedLoad<E> {
     pub uri: Uri,
-    /// Why, as the loader reported it.
     pub error: E,
 }
 
