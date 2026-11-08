@@ -1798,7 +1798,7 @@ fn _parse_opt__inner(p: &mut Parser, follow: i64 = 0) -> OptVals {
         p.site = 1;
         r = Option::Some(_parse_a(p));
         if !p.speculating {
-             p.emit(p.rule_tree_at(vals._node_r)) 
+             p.emit((if r matches { None } { "null" } else { p.rule_tree_at(vals._node_r) })) 
         }
     }
     p.expect(TK_B, &EMPTY_SYNC, true);
