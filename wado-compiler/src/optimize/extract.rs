@@ -665,7 +665,7 @@ fn classify_candidate(
                 let owned_enough = ctx.param_set.contains(&i)
                     || !ctx
                         .type_table
-                        .is_reference_shaped(engine.locals()[i as usize].type_id);
+                        .is_reference(engine.locals()[i as usize].type_id);
                 owned_enough
                     && !ctx.multi_version_locals.contains(&i)
                     && !ctx.address_taken.contains(&i)

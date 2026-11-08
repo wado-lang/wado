@@ -32,7 +32,7 @@ use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::projected_const_field;
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::TypeId;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -576,23 +576,9 @@ impl GlobalStoreCollector<'_> {
 
     /// `Some(true)` when `func_id`'s `self` parameter is `&mut self`,
     /// `Some(false)` when it is `&self` or by-value, `None` when unresolvable.
-    ///
-    /// Read off [`NirParam::is_mut_ref`], captured before boxing: boxing lowers
-    /// `&mut T`, `&T`, and a by-value primitive receiver alike to `Box<T>`, so
-    /// by then the type no longer says which of them mutates its caller's
-    /// storage.
-    ///
-    /// [`NirParam::is_mut_ref`]: crate::nir::NirParam::is_mut_ref
     fn callee_mutates_self(&self, func_id: FuncId) -> Option<bool> {
         let func = self.funcs.get(func_id.index())?.borrow();
-        let receiver = func.params.first()?;
-        Some(
-            receiver.is_mut_ref
-                || matches!(
-                    self.type_table.get(receiver.type_id),
-                    ResolvedType::MutRef(_)
-                ),
-        )
+        Some(func.params.first()?.writes_caller(self.type_table))
     }
 
     /// Mark the global a place roots at as one nothing may be read off, through
@@ -973,13 +959,14 @@ impl ConstFoldVisitor<'_> {
     /// After a statement is walked, capture any introduced binding into
     /// the interpreter's env so subsequent uses can fold against it.
     fn update_env_from_stmt(&mut self, body: &Body, s: StmtId) {
-        let (local_index, is_mut, value) = match &body.stmts[s].kind {
+        let (local_index, is_mut, value, type_id) = match &body.stmts[s].kind {
             StmtKind::Let {
                 local_index,
                 is_mut,
                 value,
+                type_id,
                 ..
-            } => (*local_index, *is_mut, *value),
+            } => (*local_index, *is_mut, *value, *type_id),
             // A destructure can rebind an index a prior `let` recorded — index
             // reuse is real (`labeled_block_fusion` producing a `LetDestructure`,
             // see `const_object_globalization`'s `locals_declared_once` note). The
@@ -1000,7 +987,11 @@ impl ConstFoldVisitor<'_> {
             }
             _ => return,
         };
-        let lat = operand_lattice(&self.interpreter, body, value);
+        let lat = if body.declares_without_value(type_id, value) {
+            Lattice::Unevaluated
+        } else {
+            operand_lattice(&self.interpreter, body, value)
+        };
         // A mutable binding carries its value forward only while that value is a
         // scalar. An aggregate is mutated in place — through an element `&mut`,
         // an iterator, a captured reference — none of which reassigns the local

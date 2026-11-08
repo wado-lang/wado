@@ -121,11 +121,8 @@ fn format_closure_signature(
     return_type: TypeId,
     type_table: &TypeTable,
 ) -> String {
-    let param_names: Vec<String> = params
-        .iter()
-        .map(|(_, ty)| type_table.name_unboxed(*ty))
-        .collect();
-    let ret_name = type_table.name_unboxed(return_type);
+    let param_names: Vec<String> = params.iter().map(|(_, ty)| type_table.name(*ty)).collect();
+    let ret_name = type_table.name(return_type);
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }
 
@@ -643,7 +640,6 @@ impl ClosureLowerer {
                 type_id: self_ref_type,
                 local_index: 0,
                 is_mut: false,
-                is_mut_ref: false,
                 span: collected.span,
             });
             for (i, (name, type_id)) in call_params.iter().enumerate() {
@@ -652,7 +648,6 @@ impl ClosureLowerer {
                     type_id: *type_id,
                     local_index: (i + 1) as u32,
                     is_mut: false,
-                    is_mut_ref: false,
                     span: collected.span,
                 });
             }
@@ -975,7 +970,6 @@ impl ClosureLowerer {
                     type_id: self_ref_type,
                     local_index: 0,
                     is_mut: false,
-                    is_mut_ref: false,
                     span,
                 },
                 TirParam {
@@ -983,7 +977,6 @@ impl ClosureLowerer {
                     type_id: formatter_mut_ref,
                     local_index: 1,
                     is_mut: false,
-                    is_mut_ref: false,
                     span,
                 },
             ],
@@ -1424,8 +1417,8 @@ impl TirRefVisitor for LocalCollector<'_> {
         self.walk_pattern(pattern);
     }
 
-    /// A slot a producer preallocates and assigns — a power-assert capture, a
-    /// minted temporary — is declared by that assignment and nothing else.
+    /// A slot a producer preallocates and assigns, a minted temporary, is
+    /// declared by that assignment and nothing else.
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Assign { target, value } = &expr.kind
             && let TirExprKind::Local { index, .. } = &target.kind

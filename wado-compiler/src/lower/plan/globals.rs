@@ -54,9 +54,9 @@ fn returned_value(body: TirBlock) -> TirExpr {
 }
 
 /// Take each global initializer out of its own function and into the module's
-/// `$initialize_module`, in dependency order. Must run before `boxing`, the
-/// extracted code being able to contain the `&primitive` and closure
-/// expressions boxing rewrites; the top-level aggregator calling each
+/// `$initialize_module`, in dependency order. Must run before `boxing`, which
+/// puts the extracted code's address-taken locals in cells; the top-level
+/// aggregator calling each
 /// `$initialize_module` is built later by [`build_initialize_modules`].
 pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
     // Reify classified these, and nothing since could have changed the answer:

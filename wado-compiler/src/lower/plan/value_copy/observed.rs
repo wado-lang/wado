@@ -13,11 +13,11 @@
 //! - is handed to a call that may write the field.
 
 use super::funcset::FuncKeySet;
+use super::is_scalar_type;
 use super::modref::ModRef;
 use super::place::field_owner;
 use super::reach::{ClosureCaptures, StorageReach};
 use super::retention::{CallRetention, RESULT};
-use super::{is_reference_type, is_scalar_type};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
@@ -214,7 +214,7 @@ impl Scan<'_> {
     fn visit_binding_pattern(&mut self, pattern: &TirPattern, owner: TypeId, path: &mut Steps) {
         match pattern {
             TirPattern::Binding { type_id, .. } => {
-                if !path.is_empty() && is_reference_type(*type_id, self.type_table) {
+                if !path.is_empty() && self.type_table.is_reference(*type_id) {
                     self.held.push(path.clone());
                 }
             }
@@ -288,7 +288,7 @@ impl TirRefVisitor for Scan<'_> {
                 ..
             }) if matches!(target.kind, TirExprKind::Local { .. }) => self.bind_local(value),
             TirStmtKind::LetDestructure { pattern, value }
-                if is_reference_type(value.type_id, self.type_table) =>
+                if self.type_table.is_reference(value.type_id) =>
             {
                 self.visit_binding_pattern(pattern, value.type_id, &mut Vec::new());
             }
@@ -339,7 +339,7 @@ impl TirRefVisitor for Scan<'_> {
                 expr: scrutinee,
                 arms,
             } => {
-                if is_reference_type(scrutinee.type_id, self.type_table) {
+                if self.type_table.is_reference(scrutinee.type_id) {
                     for arm in arms {
                         self.visit_binding_pattern(
                             &arm.pattern,

@@ -15,7 +15,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
@@ -23,6 +23,7 @@ use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::CompilerItem;
 use crate::compiler_trace;
+use crate::name;
 use crate::nir_visitor::reachable_exprs;
 use crate::parallel::Executor;
 
@@ -30,10 +31,6 @@ use crate::parallel::Executor;
 /// `super::multi_value_return`'s own cap, so the classifier that turns this
 /// tuple into a Wasm multi-value signature never rejects it on arity.
 const MAX_TUPLE_ARITY: usize = 8;
-
-/// The sole field of the `Box<T>` `lower::plan::boxing` promotes an
-/// address-taken local into.
-const BOX_FIELD: &str = "value";
 
 /// One case of `Option`, as the compiler-item registry declares it.
 #[derive(Clone)]
@@ -245,8 +242,6 @@ fn rebox_stragglers(
     }
     let exec = gate.exec().clone();
     let reboxed = {
-        let type_table = project.type_table.borrow();
-        let type_table: &TypeTable = &type_table;
         let functions = &project.functions;
         exec.indices_where(functions.len(), |i| {
             let mut func = functions[i].borrow_mut();
@@ -258,7 +253,7 @@ fn rebox_stragglers(
             let own_return = func.return_type;
             let mut body = func.body.take().expect("checked above");
             let span = func.span;
-            let bound = handled_call_sites(&body, scalarized, own_return, type_table);
+            let bound = handled_call_sites(&body, scalarized, own_return);
             let targets = straggler_calls(&body, scalarized, &bound);
             let reboxed = !targets.is_empty();
             for call in targets {
@@ -285,7 +280,6 @@ fn rebox_stragglers_in_globals(
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
 ) -> bool {
     let mut changed = false;
-    let type_table = project.type_table.borrow();
     for global in &mut project.globals {
         let (span, name) = (global.span, global.name.clone());
         // An initializer has no `return`, so no call in it is a pass-through
@@ -293,7 +287,7 @@ fn rebox_stragglers_in_globals(
         let own_return = global.ty;
         let locals = &mut global.locals;
         let body = global.init.slot_expr_mut().body_mut();
-        let bound = handled_call_sites(body, scalarized, own_return, &type_table);
+        let bound = handled_call_sites(body, scalarized, own_return);
         let targets = straggler_calls(body, scalarized, &bound);
         if targets.is_empty() {
             continue;
@@ -325,11 +319,7 @@ fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)
         let Some(layout) = compute_layout(project, variant) else {
             continue;
         };
-        if project
-            .type_table
-            .borrow()
-            .same_type(layout.tuple_type, func.return_type)
-        {
+        if layout.tuple_type == func.return_type {
             out.insert(key, (variant, layout));
         }
     }
@@ -533,14 +523,13 @@ fn handled_call_sites(
     body: &Body,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
     own_return: TypeId,
-    type_table: &TypeTable,
 ) -> IndexSet<ExprId> {
     call_sites(body, own_return)
         .into_iter()
         .filter(|s| {
             scalarized
                 .get(&s.callee)
-                .is_some_and(|(_, l)| type_table.same_type(l.tuple_type, s.expected))
+                .is_some_and(|(_, l)| l.tuple_type == s.expected)
         })
         .map(|s| s.call)
         .collect()
@@ -762,12 +751,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
         // hole it guards opens when `nir/inline` plants a call site after
         // validation, which no hand-written source can force, and this runs
         // over every fixture in the suite.
-        let handled = handled_call_sites(
-            body,
-            &scalarized,
-            func.return_type,
-            &project.type_table.borrow(),
-        );
+        let handled = handled_call_sites(body, &scalarized, func.return_type);
         let stragglers = straggler_calls(body, &scalarized, &handled);
         // `straggler_calls` descends from the root, so it never sees the nodes a
         // rewrite orphaned — the arena is not compacted, and reporting those
@@ -790,10 +774,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
                 continue;
             };
             assert!(
-                project
-                    .type_table
-                    .borrow()
-                    .same_type(site.expected, layout.tuple_type),
+                site.expected == layout.tuple_type,
                 "variant-return SROA left local {local} in `{}` typed by the variant \
                  its callee no longer returns",
                 func.name
@@ -805,8 +786,7 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     // repair is not trusted on faith.
     for global in &project.globals {
         let body = global.init.slot_expr().body();
-        let handled =
-            handled_call_sites(body, &scalarized, global.ty, &project.type_table.borrow());
+        let handled = handled_call_sites(body, &scalarized, global.ty);
         let stragglers = straggler_calls(body, &scalarized, &handled);
         assert!(
             stragglers.is_empty(),
@@ -921,6 +901,11 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             }
         }
         ResolvedType::Newtype { base_type, .. } => slot_shape(*base_type, type_table),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            if type_table.cell_payload(payload).is_some() =>
+        {
+            Some(SlotShape::Wrapped)
+        }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => slot_shape(*inner, type_table),
         ResolvedType::Function { .. }
         | ResolvedType::Never
@@ -945,7 +930,9 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_) => true,
         ResolvedType::Newtype { base_type, .. } => is_gc_ref(*base_type, type_table),
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => is_gc_ref(*inner, type_table),
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            type_table.cell_payload(type_id).is_some() || is_gc_ref(*inner, type_table)
+        }
         ResolvedType::Primitive(_)
         | ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }
@@ -1010,8 +997,7 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         };
         // Shared layout: a slot already carrying this type is reused, so
         // `Option<char>` stays `[i32, char]` instead of growing a second slot.
-        let same_type = |t: &TypeId| project.type_table.borrow().same_type(*t, slot_type);
-        let index = if let Some(i) = slot_types.iter().position(same_type) {
+        let index = if let Some(i) = slot_types.iter().position(|&t| t == slot_type) {
             i
         } else {
             slot_types.push(slot_type);
@@ -1088,7 +1074,7 @@ fn collect_and_validate(
     exec: &Executor,
 ) -> IndexMap<FuncId, Candidate> {
     let mut candidates: IndexMap<FuncId, Candidate> = IndexMap::default();
-    let mut layout_cache: IndexMap<TypeKey, Option<Layout>> = IndexMap::default();
+    let mut layout_cache: IndexMap<TypeId, Option<Layout>> = IndexMap::default();
 
     for &fid in dirty {
         let func = project.functions[fid.index()].borrow();
@@ -1097,9 +1083,8 @@ fn collect_and_validate(
         }
         let Some(key) = func.id else { continue };
         let variant_type = func.return_type;
-        let type_key = project.type_table.borrow().type_key(variant_type);
         let layout = layout_cache
-            .entry(type_key)
+            .entry(variant_type)
             .or_insert_with(|| compute_layout(project, variant_type))
             .clone();
         let Some(layout) = layout else { continue };
@@ -1147,17 +1132,11 @@ fn collect_and_validate(
                 continue;
             }
             let func = project.functions[callee.index()].borrow();
-            if !is_eligible(&func)
-                || !project
-                    .type_table
-                    .borrow()
-                    .same_type(func.return_type, variant_type)
-            {
+            if !is_eligible(&func) || func.return_type != variant_type {
                 continue;
             }
-            let type_key = project.type_table.borrow().type_key(variant_type);
             let layout = layout_cache
-                .entry(type_key)
+                .entry(variant_type)
                 .or_insert_with(|| compute_layout(project, variant_type))
                 .clone();
             let Some(layout) = layout else { continue };
@@ -1293,17 +1272,15 @@ impl Returns<'_> {
             return self.block_tail_scalarizable(b);
         }
         match &body.exprs[expr].kind {
-            ExprKind::VariantConstruct { variant_type, .. } => {
-                self.type_table.same_type(*variant_type, cand.variant_type)
-            }
+            ExprKind::VariantConstruct { variant_type, .. } => *variant_type == cand.variant_type,
             // `return g(x)` where `g` shares the variant, hence the layout: `g`
             // already returns this function's tuple, whichever round rewrote it.
             ExprKind::Call { func_id, .. } => self
                 .tail_ok
                 .get(func_id)
-                .is_some_and(|&t| self.type_table.same_type(t, cand.variant_type)),
+                .is_some_and(|&t| t == cand.variant_type),
             ExprKind::Local { index, .. } => {
-                single_def_variant_construct(body, *index, cand, self.type_table).is_some()
+                single_def_variant_construct(body, *index, cand).is_some()
             }
             ExprKind::If {
                 then_branch,
@@ -1350,12 +1327,7 @@ fn null_return_case(body: &Body, op: Operand, cand: &Candidate) -> Option<u32> {
 /// happen before a later side effect. The rewrite retypes the binding in place,
 /// so nothing moves and no trap or ordering analysis is needed. Returns the
 /// construction.
-fn single_def_variant_construct(
-    body: &Body,
-    local: u32,
-    cand: &Candidate,
-    type_table: &TypeTable,
-) -> Option<ExprId> {
+fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Option<ExprId> {
     let mut defs: Vec<StmtId> = Vec::new();
     let mut reads = 0usize;
     count_local_def_use(
@@ -1377,9 +1349,7 @@ fn single_def_variant_construct(
     }
     let init = value.as_expr()?;
     match &body.exprs[init].kind {
-        ExprKind::VariantConstruct { variant_type, .. }
-            if type_table.same_type(*variant_type, cand.variant_type) =>
-        {
+        ExprKind::VariantConstruct { variant_type, .. } if *variant_type == cand.variant_type => {
             Some(init)
         }
         _ => None,
@@ -1666,82 +1636,47 @@ fn call_callee(body: &Body, op: Operand) -> Option<FuncId> {
 }
 
 /// How a payload binding is re-minted as a `let` at the call site.
-enum Rebound<'a> {
+enum Rebound {
     /// The slot read lands in the local unchanged, under the local's own
     /// declared type.
     Direct { let_type: TypeId },
-    /// The local's address is taken, so `lower::plan::boxing` promoted its slot
-    /// to `Box<T>`; the re-minted binding boxes the slot read as lowering did.
-    Boxed { box_type: TypeId, name: &'a str },
+    /// The local's address is taken, so it lives in a cell; the re-minted
+    /// binding puts the slot read in a cell as lowering did.
+    Celled { cell: TypeId },
 }
 
 /// Per-function facts deciding whether a payload binding can be re-minted, and
 /// in what form. A local a retained parameter aliases cannot: the alias is
 /// established outside this body, and the `let` would not re-establish it.
-/// Neither can one whose declared type is neither the payload nor a `Box` of it
-/// — local indices are pooled, so a declaration matching neither belongs to
+/// Neither can one whose declared type is neither the payload nor its cell —
+/// local indices are pooled, so a declaration matching neither belongs to
 /// another binding.
 struct Rebind<'t> {
-    /// The table the keys below were taken from, so a payload arriving at
-    /// [`Self::rebound`] is keyed the same way.
     type_table: &'t TypeTable,
     local_types: Vec<TypeId>,
-    /// The key of each declared local type, references stripped: `&T` is `T` at
-    /// WIR level (`wir_build::context`), what needs a cell arriving as `Box<T>`.
-    peeled_keys: Vec<TypeKey>,
-    /// Declared `Box<T>` local type → (`T`'s key, the struct's mangled name).
-    boxes: IndexMap<TypeId, (TypeKey, String)>,
 }
 
 impl<'t> Rebind<'t> {
     fn new(func: &NirFunction, type_table: &'t TypeTable) -> Self {
-        let local_types: Vec<TypeId> = func.locals.iter().map(|l| l.type_id).collect();
-        let boxes = local_types
-            .iter()
-            .filter_map(|&declared| match type_table.get(declared) {
-                ResolvedType::Struct { def, type_args }
-                    if type_args.len() == 1
-                        && type_table.is_compiler_struct_instance(declared, CompilerItem::Box) =>
-                {
-                    Some((
-                        declared,
-                        (
-                            type_table.type_key(type_args[0]),
-                            type_table.struct_mangled_name(*def, type_args),
-                        ),
-                    ))
-                }
-                _ => None,
-            })
-            .collect();
-        let peeled_keys = local_types
-            .iter()
-            .map(|&t| type_table.type_key(type_table.peel_refs(t)))
-            .collect();
         Self {
             type_table,
-            local_types,
-            peeled_keys,
-            boxes,
+            local_types: func.locals.iter().map(|l| l.type_id).collect(),
         }
     }
 
-    /// `payload_type` is what the slot read produces. Never pass the pattern's
-    /// own type: `lower::plan::boxing` rewrites it along with the local, so the
-    /// two agreeing says nothing about the value that arrives.
-    fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound<'_>> {
-        let payload = self.type_table.type_key(payload_type);
+    /// `payload_type` is what the slot read produces. A reference to an object
+    /// is the object at WIR level (`wir_build::context`), so it binds the
+    /// object as it is; a cell does not.
+    fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound> {
+        let tt = self.type_table;
         let declared = self.local_types[local as usize];
-        if self.peeled_keys[local as usize] == payload {
+        if declared == payload_type {
             return Some(Rebound::Direct { let_type: declared });
         }
-        match self.boxes.get(&declared) {
-            Some((inner, name)) if *inner == payload => Some(Rebound::Boxed {
-                box_type: declared,
-                name,
-            }),
-            _ => None,
+        if let Some(held) = tt.cell_payload(declared) {
+            return (held == payload_type).then_some(Rebound::Celled { cell: declared });
         }
+        (tt.peel_refs(declared) == payload_type).then_some(Rebound::Direct { let_type: declared })
     }
 }
 
@@ -1871,8 +1806,7 @@ impl ReturnRewrite<'_> {
                 body.exprs[expr].type_id = cand.layout.tuple_type;
             }
             ExprKind::Local { index, .. } => {
-                if let Some(init) = single_def_variant_construct(body, index, cand, self.type_table)
-                {
+                if let Some(init) = single_def_variant_construct(body, index, cand) {
                     rewrite_construct(body, init, cand, span);
                     body.exprs[expr].type_id = cand.layout.tuple_type;
                     self.retyped.push(index);
@@ -2123,7 +2057,7 @@ fn rewrite_call_sites(
 /// into scalars, so no write allocates. It qualifies when every write builds a
 /// case and every read destructures, so nothing ever needs the variant whole.
 fn scalarize_variant_locals(project: &NirPackage, dirty: &[FuncId], touched: &mut IndexSet<usize>) {
-    let mut layouts: IndexMap<TypeKey, Option<Candidate>> = IndexMap::default();
+    let mut layouts: IndexMap<TypeId, Option<Candidate>> = IndexMap::default();
     for &fid in dirty {
         let mut func = project.functions[fid.index()].borrow_mut();
         let Some(mut body) = func.body.take() else {
@@ -2142,7 +2076,7 @@ fn scalarize_locals_in(
     project: &NirPackage,
     func: &mut NirFunction,
     body: &mut Body,
-    layouts: &mut IndexMap<TypeKey, Option<Candidate>>,
+    layouts: &mut IndexMap<TypeId, Option<Candidate>>,
 ) -> bool {
     let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
     for (local, l) in func.locals.iter().enumerate() {
@@ -2152,9 +2086,8 @@ fn scalarize_locals_in(
         {
             continue;
         }
-        let key = project.type_table.borrow().type_key(l.type_id);
         let cand = layouts
-            .entry(key)
+            .entry(l.type_id)
             .or_insert_with(|| local_candidate(project, l.type_id));
         if let Some(cand) = cand {
             candidates.insert(local, cand.clone());
@@ -2882,21 +2815,21 @@ fn bind_payload_before(
         .expect("variant-return SROA: arm_is_one_level accepted an unbindable local")
     {
         Rebound::Direct { let_type } => (Operand::Expr(read), let_type),
-        Rebound::Boxed { box_type, name } => (
+        Rebound::Celled { cell } => (
             Operand::Expr(body.exprs.push(ExprNode {
                 kind: ExprKind::StructLiteral {
-                    struct_type: box_type,
-                    struct_name: name.to_string(),
+                    struct_type: cell,
+                    struct_name: name::CELL_STRUCT.to_string(),
                     fields: vec![ArenaStructField {
-                        name: BOX_FIELD.to_string(),
+                        name: name::CELL_FIELD.to_string(),
                         value: Operand::Expr(read),
                         field_index: 0,
                     }],
                 },
-                type_id: box_type,
+                type_id: cell,
                 span: cx.span,
             })),
-            box_type,
+            cell,
         ),
     };
     let let_stmt = body.stmts.push(StmtNode {

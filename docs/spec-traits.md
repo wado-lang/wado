@@ -37,6 +37,10 @@ test {
 }
 ```
 
+An impl, with a trait or without one, is written for a type or for one
+reference to it (`impl Greet for &Person`, `impl &mut Person`). A reference to
+a reference (`&&Person`, `&mut &Person`) is a compile error there.
+
 ### Supertraits
 
 A trait can require its implementors to implement other traits. `impl Ord for T`

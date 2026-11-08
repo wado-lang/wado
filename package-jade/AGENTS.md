@@ -37,7 +37,10 @@ JSON Schema forbids an `x-` keyword from affecting evaluation.
 - `src/schema.wado` — `Schema`, one field per keyword, and its reader.
 - `src/derive.wado` — `JsonSchema`, a schema derived from a Wado type.
 - `src/validate.wado` — `Validator`, a schema compiled and held against
-  documents.
+  documents, and `SchemaSet`, the documents its references reach.
+- `meta/` — Draft 2020-12's meta-schemas as json-schema.org serves them, under
+  the specification's license. A reference reaches them without their being
+  supplied.
 - `tools/suite.wado` — writes `tests/generated/` from the Test Suite
   (`mise run suite-jade`).
 

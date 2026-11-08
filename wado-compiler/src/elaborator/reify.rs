@@ -61,9 +61,9 @@ use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts,
-    ImplFacts, IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall,
-    MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch,
-    impl_self_layers, with_body_facts,
+    ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee,
+    LiteralFromCall, MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts,
+    StaticMethodDispatch, impl_self_layers, with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -750,6 +750,12 @@ impl<'a> Reify<'a> {
     /// Whether `expr` is a place the body being reified moves.
     fn moves(&self, expr: &ast::Expr) -> bool {
         self.ask_ownership(|modes, facts| modes.moves(expr, facts))
+    }
+
+    /// Whether `expr` is a temporary a `let` of the body being reified keeps
+    /// borrowed.
+    fn extends(&self, expr: &ast::Expr) -> bool {
+        self.ask_ownership(|modes, _| modes.extended(expr))
     }
 
     /// Whether the body being reified takes ownership of the value of `expr`,
@@ -1463,7 +1469,6 @@ impl<'a> Reify<'a> {
                 type_id,
                 local_index,
                 is_mut: param.is_mut,
-                is_mut_ref: false,
                 span: param.span,
             });
         }
@@ -2500,14 +2505,34 @@ impl<'a> Reify<'a> {
             return tir.clone();
         }
 
-        let view = self.ann_list_view_conversions(expr.id());
-        let tir = self.reify_unmoved(expr, ctx, if view.is_some() { None } else { expected_type });
+        let conversion = self.ann_list_view_conversions(expr.id());
+        let tir = self.reify_unmoved(
+            expr,
+            ctx,
+            if conversion.is_some() {
+                None
+            } else {
+                expected_type
+            },
+        );
         let tir = if self.moves(expr) { tir.moved() } else { tir };
+        if self.extends(expr) {
+            tir.mark(|marks| marks.extended = true);
+        }
         let span = tir.span;
-        if let Some(view) = view {
+        if let Some(ListViewConversion {
+            view,
+            depth,
+            answering,
+        }) = conversion
+        {
+            let tt = self.tysys.type_table.borrow();
+            let layers = tt.ref_depth(tir.type_id) - depth;
+            let tir = deref_to_layers(tir, layers, &tt);
             return TirExpr::new(
                 TirExprKind::ListViewOf {
                     value: Box::new(tir),
+                    answering,
                 },
                 view,
                 span,
@@ -2710,8 +2735,7 @@ impl<'a> Reify<'a> {
                         op: TirUnaryOp::Deref,
                         expr: referent,
                     } = &inner.kind
-                    && self.tysys.type_table.borrow().type_key(referent.type_id)
-                        == self.tysys.type_table.borrow().type_key(recorded_type)
+                    && referent.type_id == recorded_type
                 {
                     return *referent.clone();
                 }
@@ -2845,7 +2869,7 @@ impl<'a> Reify<'a> {
     fn reify_condition_expr(&mut self, expr: &ast::Expr, ctx: &mut FunctionContext) -> TirExpr {
         let cond = self.reify_expr(expr, ctx, Some(TypeTable::BOOL));
         assert!(
-            admits_condition(&self.tysys.type_table.borrow(), cond.type_id),
+            admits_condition(cond.type_id),
             "`resolve_condition_expr` rejects a non-`bool` condition, and a module holding one is never reified; got {}",
             cond.type_id
         );
@@ -2972,6 +2996,19 @@ impl<'a> Reify<'a> {
         let seen_local_index = conditional
             .then(|| ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None));
 
+        let binding = |value: TirExpr, is_mut: bool| {
+            TirStmt::new(
+                TirStmtKind::Let {
+                    name: cap_name.clone(),
+                    local_index: local_index.expect("bound with its reference"),
+                    is_mut,
+                    type_id,
+                    value,
+                    storage: LetStorage::Planned,
+                },
+                cap_span,
+            )
+        };
         let mut decls = Vec::new();
         let spliced = if hoisted {
             // A hoisted slot binds ahead of the condition, its scope reaching
@@ -2982,17 +3019,7 @@ impl<'a> Reify<'a> {
                 "a conditional slot is never hoisted"
             );
             let local_ref = local_ref.expect("a hoisted slot is never a place");
-            decls.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: cap_name,
-                    local_index: local_index.expect("bound with its reference"),
-                    is_mut: false,
-                    type_id,
-                    value: resolved,
-                    storage: LetStorage::Planned,
-                },
-                cap_span,
-            ));
+            decls.push(binding(resolved, false));
             // The capture stands where the operand did: what consumed the
             // operand moves the local.
             if self.takes(expr) {
@@ -3001,8 +3028,9 @@ impl<'a> Reify<'a> {
                 local_ref
             }
         } else {
-            // Otherwise the capture sits where the operand does, moving no
-            // evaluation; until it runs, the local holds its Wasm default.
+            // Otherwise the capture is declared ahead of the condition, as
+            // `let x: T;` is, and assigned where the operand is evaluated,
+            // moving no evaluation.
             let mut stmts = Vec::new();
             let tail = match &local_ref {
                 // The block ends in the place itself, so it yields what the
@@ -3011,6 +3039,10 @@ impl<'a> Reify<'a> {
                 // The local hands on what the operand evaluated to, which it
                 // owns if the value is affine.
                 Some(local_ref) => {
+                    decls.push(binding(
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, cap_span),
+                        true,
+                    ));
                     stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
                     if self.is_affine(expr) {
                         local_ref.clone().moved()
@@ -4602,14 +4634,11 @@ impl<'a> Reify<'a> {
                 .expect("a template has one segment more than holes");
             return TirExpr::new(TirExprKind::StringLiteral(cooked), string_type, span);
         }
-        let lone_string = {
-            let tt = self.tysys.type_table.borrow();
-            matches!(holes.as_slice(), [(value, None)]
-                if tt.same_type(value.type_id, string_type))
-                && segments
-                    .iter()
-                    .all(|[cooked, raw]| cooked.is_empty() && raw.is_empty())
-        };
+        let lone_string = matches!(holes.as_slice(), [(value, None)]
+                if value.type_id == string_type)
+            && segments
+                .iter()
+                .all(|[cooked, raw]| cooked.is_empty() && raw.is_empty());
         if lone_string {
             return holes.pop().expect("matched one hole").0;
         }
@@ -9740,7 +9769,7 @@ impl TypeSystem {
     /// on a target that drops it.
     fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {
         let tt = self.type_table.borrow();
-        if tt.same_type(scrutinee_type, target) || tt.peel_refs(target) != target {
+        if scrutinee_type == target || tt.peel_refs(target) != target {
             return target;
         }
         drop(tt);
@@ -9895,7 +9924,7 @@ fn adjust_receiver_for_self_kind(
     let target = adjusted_receiver_type(receiver.type_id, self_kind, self_layers, type_table);
     let tt = type_table.borrow();
     let held = tt.ref_depth(target);
-    if tt.same_type(tt.ref_layers(receiver.type_id, held), target) {
+    if tt.ref_layers(receiver.type_id, held) == target {
         return deref_to_layers(receiver, held, &tt);
     }
     to_layers_of(deref_to_layers(receiver, held - 1, &tt), target, &tt)

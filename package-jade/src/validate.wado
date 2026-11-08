@@ -7,53 +7,197 @@ use { percent_decode } from "core:url";
 use { Regex } from "lib:re";
 use { Document, Node } from "./document.wado";
 use { Divisor, Number } from "./number.wado";
-use { JsonTypes, Schema, SchemaError, pointer_token, type_names } from "./schema.wado";
+use { JsonTypes, Schema, SchemaError, pointer_token, type_names, write_location, write_place } from "./schema.wado";
 
 /// The base URI of a schema that declares no `$id`.
 internal global DEFAULT_BASE: String = "jade:root";
 
 /// A schema compiled for validation.
 pub struct Validator {
+    /// The subschema an instance is held against.
+    root: i32,
     nodes: List<Compiled>,
     resources: List<Resource>,
+    /// The anchors a `$dynamicRef` may resolve through the dynamic scope.
+    dynamic_anchors: List<String>,
 }
 
 /// An instance failing one keyword.
 pub struct ValidationError {
     /// JSON Pointer to the failing value in the instance.
     pub instance: String,
-    /// JSON Pointer to the keyword in the schema.
+    /// The URI the document holding the keyword was supplied under, or none
+    /// for the schema `Validator::compile` was given.
+    pub uri: Option<Uri>,
+    /// JSON Pointer to the keyword in that document.
     pub keyword: String,
     pub message: String,
 }
 
 impl Display for ValidationError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.instance}: ${self.message} (${self.keyword})`);
+        f.write_str(`${self.instance}: ${self.message} (`);
+        write_place(f, &self.uri, &self.keyword);
+        f.write_str(")");
     }
 }
 
 impl Error for ValidationError {
 }
 
-impl Validator {
-    /// `schema` compiled, its references resolved. A reference to a schema
-    /// that `schema` does not hold is an error.
-    pub fn compile(schema: &Schema) -> Result<Validator, SchemaError> {
-        let mut c = Compiler {};
-        c.add(schema, "", &Uri::from_str(&DEFAULT_BASE).unwrap(), null)?;
-        c.link()?;
-        return Result::Ok(Validator { nodes: c.nodes, resources: c.resources });
+/// The schema documents a validator's references reach, each under the URI it
+/// was retrieved from. A reference reaches Draft 2020-12's meta-schemas without
+/// their being supplied.
+pub struct SchemaSet {
+    documents: List<[Uri, Schema]> = [],
+}
+
+impl SchemaSet {
+    pub fn new() -> SchemaSet {
+        return SchemaSet {};
     }
 
-    /// Every keyword `instance` fails, or `Ok` when it fails none.
+    /// Holds `schema` as the document retrieved from `uri`, in place of any
+    /// held there before.
+    pub fn insert(&mut self, uri: Uri, schema: Schema)
+        contract uri.fragment() matches { None }, "a document's URI has no fragment"
+    {
+        if let Some(k) = self.find(&uri) {
+            self.documents[k].1 = schema;
+        } else {
+            self.documents.push([uri, schema]);
+        }
+    }
+
+    /// A document some reference names that the set does not hold yet, or
+    /// none once every reference resolves.
+    pub fn missing(&self) -> Result<Option<Uri>, SchemaError> {
+        let mut c = Compiler::of(self);
+        c.load_all()?;
+        for let d of 0..<c.added.len() {
+            c.reach(d);
+        }
+        return match c.link() {
+            Ok(_) => Result::Ok(null),
+            Err(Unresolved(u)) => Result::Ok(Option::Some(u.target.without_fragment())),
+            Err(Invalid(e)) => Result::Err(e),
+        };
+    }
+
+    internal fn holds(&self, uri: &Uri) -> bool {
+        return self.find(uri) matches { Some(_) };
+    }
+
+    fn find(&self, uri: &Uri) -> Option<i32> {
+        return self.documents.iter_ref().position(|d| d.0 == *uri);
+    }
+}
+
+/// Draft 2020-12's meta-schemas, which a reference reaches in every
+/// `SchemaSet` that supplies no document under their URIs.
+global META_SCHEMAS: List<[Uri, Schema]> = [
+    meta_schema(#include_str("../meta/schema.json")),
+    meta_schema(#include_str("../meta/core.json")),
+    meta_schema(#include_str("../meta/applicator.json")),
+    meta_schema(#include_str("../meta/unevaluated.json")),
+    meta_schema(#include_str("../meta/validation.json")),
+    meta_schema(#include_str("../meta/meta-data.json")),
+    meta_schema(#include_str("../meta/format-annotation.json")),
+    meta_schema(#include_str("../meta/format-assertion.json")),
+    meta_schema(#include_str("../meta/content.json")),
+];
+
+/// A meta-schema, under the `$id` it declares.
+fn meta_schema(text: String) -> [Uri, Schema] {
+    let schema = Schema::parse(text).unwrap();
+    let Object(o) = schema else {
+        unreachable();
+    };
+    return [Uri::from_str(o.id.unwrap()).unwrap(), schema];
+}
+
+/// Why a schema did not compile.
+pub variant CompileError {
+    Invalid(SchemaError),
+    Unresolved(UnresolvedRef),
+}
+
+impl From<SchemaError> for CompileError;
+
+impl From<UnresolvedRef> for CompileError;
+
+impl Display for CompileError {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Invalid(e) => e.fmt(f),
+            Unresolved(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Error for CompileError {
+}
+
+/// A reference to a document that nobody supplied.
+pub struct UnresolvedRef {
+    /// The URI the referring document was supplied under, or none for the
+    /// schema `Validator::compile` was given.
+    pub uri: Option<Uri>,
+    /// JSON Pointer to the reference in that document.
+    pub pointer: String,
+    /// What the reference names.
+    pub target: Uri,
+}
+
+impl Display for UnresolvedRef {
+    fn fmt(&self, f: &mut Formatter) {
+        write_location(f, &self.uri, &self.pointer);
+        f.write_str(`refers to ${self.target}, a document nobody supplied`);
+    }
+}
+
+impl Error for UnresolvedRef {
+}
+
+impl Validator {
+    /// `schema` compiled, its references resolved. A reference to a schema
+    /// that neither `schema` nor Draft 2020-12's meta-schemas hold is an
+    /// error; a `SchemaSet` supplies more documents.
+    pub fn compile(schema: &Schema) -> Result<Validator, CompileError> {
+        let base = Uri::from_str(&DEFAULT_BASE).unwrap();
+        let mut set = SchemaSet::new();
+        set.insert(base, *schema);
+        return Validator::compile_in(&set, &base);
+    }
+
+    /// The document `set` holds under `uri` compiled, its references resolved
+    /// among the documents of `set`.
+    pub fn compile_in(set: &SchemaSet, uri: &Uri) -> Result<Validator, CompileError>
+        contract set.holds(uri), "`uri` must name a document the set holds"
+    {
+        let mut c = Compiler::of(set);
+        c.load(uri)?;
+        let root = c.documents.get_str(&`${*uri}`).unwrap();
+        c.reach(c.node_document[root]);
+        let dynamic_anchors = c.link()?;
+        return Result::Ok(Validator {
+            root,
+            nodes: c.nodes,
+            resources: c.resources,
+            dynamic_anchors,
+        });
+    }
+
+    /// Every keyword `instance` fails, once for each value failing it, or `Ok`
+    /// when it fails none.
     pub fn validate(&self, instance: &Node) -> Result<(), List<ValidationError>> {
         let mut run = Run {};
-        self.eval(0, instance, &"", &mut run);
-        if run.errors.is_empty() {
+        self.eval(self.root, instance, &"", &mut run);
+        let errors = run.sinks[0].errors;
+        if errors.is_empty() {
             return Result::Ok(());
         }
-        return Result::Err(run.errors);
+        return Result::Err(errors);
     }
 
     fn eval(&self, i: i32, inst: &Node, ip: &String, run: &mut Run) -> Evaluated {
@@ -61,7 +205,7 @@ impl Validator {
         let mut out = Evaluated {};
         if let Some(admits) = n.always {
             if !admits {
-                run.fail(ip, &n.at, "", "no value is valid against `false`");
+                run.fail(ip, n, "", "no value is valid against `false`");
             }
             return out;
         }
@@ -92,14 +236,21 @@ impl Validator {
     /// `d`'s target: the outermost schema in the dynamic scope that declares
     /// the anchor, when `d` names one, or else the target its URI names.
     fn dynamic_target(&self, d: &DynamicRef, scope: &List<i32>) -> i32 {
-        if let Some(name) = &d.anchor {
-            for let r of *scope {
-                if let Some(t) = self.resources[r].dynamic_anchors.get_str(name) {
-                    return t;
-                }
-            }
+        if let Some(name) = &d.anchor && let Some(t) = self.outermost(name, scope) {
+            return t;
         }
         return d.target;
+    }
+
+    /// The schema the outermost resource in `scope` declares the dynamic
+    /// anchor `name` at.
+    fn outermost(&self, name: &String, scope: &List<i32>) -> Option<i32> {
+        for let r of *scope {
+            if let Some(t) = self.resources[r].dynamic_anchors.get_str(name) {
+                return Option::Some(t);
+            }
+        }
+        return null;
     }
 
     /// Follows `n`'s reference `keyword` to `t`. Reaching `t` again at the same
@@ -116,21 +267,52 @@ impl Validator {
     ) {
         for let [held, at] of run.following {
             if held == t && Document::same_node(&at, inst) {
-                run.fail(ip, &n.at, keyword, "refers back to itself without moving into the instance");
+                run.cycles += 1;
+                run.fail(ip, n, keyword, "refers back to itself without moving into the instance");
                 return;
             }
         }
+        if !self.nodes[t].shared {
+            run.following.push([t, *inst]);
+            self.apply(t, inst, ip, run, out);
+            run.following.pop();
+            return;
+        }
+        // Evaluating `t` answers alike wherever the dynamic scope binds each
+        // anchor alike, so two references reaching it at one value share it.
+        let key = MemoKey {
+            target: t,
+            at: Document::position(inst),
+            anchors: self.dynamic_anchors.iter_ref().map(|a| self.outermost(a, &run.scope).unwrap_or(-1)).collect(),
+        };
+        if let Some(k) = run.memo().get(key) {
+            run.replay(k, out);
+            return;
+        }
+        let cycles = run.cycles;
+        run.sinks.push(Sink {});
         run.following.push([t, *inst]);
-        self.apply(t, inst, ip, run, out);
+        let evaluated = self.eval(t, inst, ip, run);
         run.following.pop();
+        let errors = run.sinks.pop().unwrap().errors;
+        let k = run.outcomes.len();
+        run.outcomes.push(Outcome { errors, evaluated });
+        run.replay(k, out);
+        // A cycle's error depends on the references being followed, which the
+        // next reference to `t` may not share.
+        if run.cycles == cycles {
+            run.memo()[key] = k;
+        } else {
+            run.outcomes.pop();
+        }
     }
 
     /// Evaluates subschema `t` in place, keeping what it evaluated when it
     /// passes.
     fn apply(&self, t: i32, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
-        let before = run.errors.len();
+        let before = run.failures;
         let ev = self.eval(t, inst, ip, run);
-        if run.errors.len() == before {
+        if run.failures == before {
             out.merge(&ev);
         }
     }
@@ -142,52 +324,56 @@ impl Validator {
 
     /// Evaluates subschema `t` without reporting what it fails.
     fn passes(&self, t: i32, inst: &Node, ip: &String, run: &mut Run) -> [bool, Evaluated] {
-        let mut quiet = Run { scope: run.scope, following: run.following };
-        let ev = self.eval(t, inst, ip, &mut quiet);
-        return [quiet.errors.is_empty(), ev];
+        let before = run.failures;
+        run.sinks.push(Sink { quiet: true });
+        let ev = self.eval(t, inst, ip, run);
+        run.sinks.pop();
+        let ok = run.failures == before;
+        run.failures = before;
+        return [ok, ev];
     }
 
     /// The keywords that assert on the instance's value: `type`, `const`,
     /// `enum`, and those on a number or a string.
     fn assert_value(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run) {
         if n.type != JsonTypes::none() && !has_type(inst, n.type) {
-            run.fail(ip, &n.at, "type", `must be ${type_names(n.type).join(" or ")}`);
+            run.fail(ip, n, "type", `must be ${type_names(n.type).join(" or ")}`);
         }
         if let Some(c) = &n.const && *inst != c.root() {
-            run.fail(ip, &n.at, "const", "must equal the constant");
+            run.fail(ip, n, "const", "must equal the constant");
         }
         if let Some(values) = &n.enum && !values.iter_ref().any(|v| *inst == v.root()) {
-            run.fail(ip, &n.at, "enum", "must equal one of the values");
+            run.fail(ip, n, "enum", "must equal one of the values");
         }
         if let Some(x) = inst.as_number() {
             if let Some(m) = &n.multiple_of && !m.divides(&x) {
-                run.fail(ip, &n.at, "multipleOf", "must be a multiple");
+                run.fail(ip, n, "multipleOf", "must be a multiple");
             }
             if let Some(m) = &n.minimum && x < *m {
-                run.fail(ip, &n.at, "minimum", `must be at least ${m}`);
+                run.fail(ip, n, "minimum", `must be at least ${m}`);
             }
             if let Some(m) = &n.exclusive_minimum && x <= *m {
-                run.fail(ip, &n.at, "exclusiveMinimum", `must be greater than ${m}`);
+                run.fail(ip, n, "exclusiveMinimum", `must be greater than ${m}`);
             }
             if let Some(m) = &n.maximum && x > *m {
-                run.fail(ip, &n.at, "maximum", `must be at most ${m}`);
+                run.fail(ip, n, "maximum", `must be at most ${m}`);
             }
             if let Some(m) = &n.exclusive_maximum && x >= *m {
-                run.fail(ip, &n.at, "exclusiveMaximum", `must be less than ${m}`);
+                run.fail(ip, n, "exclusiveMaximum", `must be less than ${m}`);
             }
         }
         if let Some(s) = inst.as_str() {
             if n.min_length matches { Some(_) } || n.max_length matches { Some(_) } {
                 let len = s.chars().count();
                 if let Some(m) = n.min_length && len < m {
-                    run.fail(ip, &n.at, "minLength", `must have at least ${m} characters`);
+                    run.fail(ip, n, "minLength", `must have at least ${m} characters`);
                 }
                 if let Some(m) = n.max_length && len > m {
-                    run.fail(ip, &n.at, "maxLength", `must have at most ${m} characters`);
+                    run.fail(ip, n, "maxLength", `must have at most ${m} characters`);
                 }
             }
             if let Some(re) = &n.pattern && !re.is_match(s) {
-                run.fail(ip, &n.at, "pattern", `must match ${re}`);
+                run.fail(ip, n, "pattern", `must match ${re}`);
             }
         }
     }
@@ -207,7 +393,7 @@ impl Validator {
                 }
             }
             if !any {
-                run.fail(ip, &n.at, "anyOf", "must be valid against at least one schema");
+                run.fail(ip, n, "anyOf", "must be valid against at least one schema");
             }
         }
         if !n.one_of.is_empty() {
@@ -220,11 +406,11 @@ impl Validator {
                 }
             }
             if valid != 1 {
-                run.fail(ip, &n.at, "oneOf", `must be valid against exactly one schema, not ${valid}`);
+                run.fail(ip, n, "oneOf", `must be valid against exactly one schema, not ${valid}`);
             }
         }
         if let Some(t) = n.not && self.passes(t, inst, ip, run).0 {
-            run.fail(ip, &n.at, "not", "must not be valid against the schema");
+            run.fail(ip, n, "not", "must not be valid against the schema");
         }
         if let Some(t) = n.if {
             let [ok, ev] = self.passes(t, inst, ip, run);
@@ -243,17 +429,17 @@ impl Validator {
         let items: List<Node> = inst.items().collect();
         let len = items.len();
         if let Some(m) = n.min_items && len < m {
-            run.fail(ip, &n.at, "minItems", `must have at least ${m} items`);
+            run.fail(ip, n, "minItems", `must have at least ${m} items`);
         }
         if let Some(m) = n.max_items && len > m {
-            run.fail(ip, &n.at, "maxItems", `must have at most ${m} items`);
+            run.fail(ip, n, "maxItems", `must have at most ${m} items`);
         }
         if n.unique_items {
             duplicates: {
                 for let a of 0..<len {
                     for let b of a + 1..<len {
                         if items[a] == items[b] {
-                            run.fail(ip, &n.at, "uniqueItems", `has equal items at ${a} and ${b}`);
+                            run.fail(ip, n, "uniqueItems", `has equal items at ${a} and ${b}`);
                             break duplicates;
                         }
                     }
@@ -263,7 +449,7 @@ impl Validator {
         let prefix = i32::min(len, n.prefix_items.len());
         for let k of 0..<prefix {
             self.check(n.prefix_items[k], &items[k], &`${*ip}/${k}`, run);
-            out.items.push(k);
+            out.items.insert(k);
         }
         if let Some(t) = n.items {
             for let k of prefix..<len {
@@ -276,24 +462,20 @@ impl Validator {
             for let k of 0..<len {
                 if self.passes(t, &items[k], &`${*ip}/${k}`, run).0 {
                     count += 1;
-                    out.items.push(k);
+                    out.items.insert(k);
                 }
             }
             if count < n.min_contains {
                 let keyword = if n.min_contains == 1 { "contains" } else { "minContains" };
-                run.fail(ip, &n.at, keyword, `must contain at least ${n.min_contains} matching items`);
+                run.fail(ip, n, keyword, `must contain at least ${n.min_contains} matching items`);
             }
             if let Some(m) = n.max_contains && count > m {
-                run.fail(ip, &n.at, "maxContains", `must contain at most ${m} matching items`);
+                run.fail(ip, n, "maxContains", `must contain at most ${m} matching items`);
             }
         }
         if let Some(t) = n.unevaluated_items && !out.all_items {
-            let mut seen = HashSet::<i32>::new();
-            for let k of out.items {
-                seen.insert(k);
-            }
             for let k of 0..<len {
-                if !seen.contains(k) {
+                if !out.items.contains(k) {
                     self.check(t, &items[k], &`${*ip}/${k}`, run);
                 }
             }
@@ -304,14 +486,14 @@ impl Validator {
     fn eval_object(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run, out: &mut Evaluated) {
         let len = inst.len();
         if let Some(m) = n.min_properties && len < m {
-            run.fail(ip, &n.at, "minProperties", `must have at least ${m} properties`);
+            run.fail(ip, n, "minProperties", `must have at least ${m} properties`);
         }
         if let Some(m) = n.max_properties && len > m {
-            run.fail(ip, &n.at, "maxProperties", `must have at most ${m} properties`);
+            run.fail(ip, n, "maxProperties", `must have at most ${m} properties`);
         }
         for let name of n.required {
             if inst.get(&name) matches { None } {
-                run.fail(ip, &n.at, "required", `must have the property ${name:?}`);
+                run.fail(ip, n, "required", `must have the property ${name:?}`);
             }
         }
         for let [key, names] of n.dependent_required.entries() {
@@ -320,7 +502,7 @@ impl Validator {
                     if inst.get(&name) matches { None } {
                         run.fail(
                             ip,
-                            &n.at,
+                            n,
                             `dependentRequired/${pointer_token(key)}`,
                             `must have the property ${name:?}`,
                         );
@@ -346,10 +528,14 @@ impl Validator {
                 matched = true;
             }
             if matched {
-                out.props.push(key.to_string());
+                out.props.insert(key.to_string());
             }
             if let Some(t) = n.property_names {
+                run.memos.push(HashMap::new());
+                let kept = run.outcomes.len();
                 self.check(t, &Document::string(key).root(), &kp, run);
+                run.memos.pop();
+                run.outcomes.truncate(kept);
             }
         }
         for let [key, t] of n.dependent_schemas.entries() {
@@ -358,14 +544,9 @@ impl Validator {
             }
         }
         if let Some(t) = n.unevaluated_properties {
-            let mut seen = HashSet::<String>::new();
-            for let p of out.props {
-                seen.insert(p);
-            }
             for let [key, value] of inst.entries() {
-                if !seen.contains_str(key) {
+                if out.props.insert(key.to_string()) {
                     self.check(t, &value, &`${*ip}/${pointer_token(key)}`, run);
-                    out.props.push(key.to_string());
                 }
             }
         }
@@ -374,7 +555,10 @@ impl Validator {
 
 /// One subschema, its subschemas named by their index in the table.
 struct Compiled {
-    /// JSON Pointer to this subschema in the schema document.
+    /// The URI the document holding this subschema was supplied under, or none
+    /// for the schema `Validator::compile` was given.
+    source: Option<Uri>,
+    /// JSON Pointer to this subschema in that document.
     at: String,
     /// The schema resource holding this subschema.
     owner: i32,
@@ -382,6 +566,9 @@ struct Compiled {
     always: Option<bool> = null,
     reference: Option<i32> = null,
     dynamic_ref: Option<DynamicRef> = null,
+    /// Whether more than one keyword leads here, so evaluating it once per
+    /// value saves the rest.
+    shared: bool = false,
     type: JsonTypes = JsonTypes::none(),
     const: Option<Document> = null,
     enum: Option<List<Document>> = null,
@@ -441,33 +628,111 @@ struct Resource {
 /// What evaluating an instance against a subschema evaluated of it, which
 /// `unevaluatedItems` and `unevaluatedProperties` read.
 struct Evaluated {
-    props: List<String> = [],
-    items: List<i32> = [],
+    props: HashSet<String> = HashSet::new(),
+    items: HashSet<i32> = HashSet::new(),
     all_items: bool = false,
 }
 
 impl Evaluated {
     fn merge(&mut self, other: &Evaluated) {
-        self.props.extend(&other.props);
-        self.items.extend(&other.items);
+        for let p of other.props.iter_ref() {
+            self.props.insert(*p);
+        }
+        for let k of other.items.iter_ref() {
+            self.items.insert(*k);
+        }
         self.all_items = self.all_items || other.all_items;
     }
 }
 
-/// The state of one validation: the errors so far, the dynamic scope as the
-/// resources entered, outermost first, and the references being followed, each
-/// as its target and the instance it was followed at.
+/// The state of one validation.
 struct Run {
-    errors: List<ValidationError> = [],
+    /// Where errors go, innermost last: the first is the caller's, and each
+    /// other one gathers a subschema's errors apart.
+    sinks: List<Sink> = [Sink {}],
+    /// Grows with every error raised, a repeat included, so a caller sees
+    /// whether a subschema failed.
+    failures: i32 = 0,
+    /// The dynamic scope, as the resources entered, outermost first.
     scope: List<i32> = [],
+    /// The references being followed, each as its target and the instance it
+    /// was followed at.
     following: List<[i32, Node]> = [],
+    /// How many times a reference was found to loop.
+    cycles: i32 = 0,
+    /// The outcomes of shared subschemas, one memo for each document being
+    /// evaluated, innermost last: a key places a value only within its
+    /// document.
+    memos: List<HashMap<MemoKey, i32>> = [HashMap::new()],
+    outcomes: List<Outcome> = [],
 }
 
 impl Run {
-    fn fail(&mut self, ip: &String, at: &String, keyword: String, message: String) {
-        let pointer = if keyword.is_empty() { *at } else { `${*at}/${keyword}` };
-        self.errors.push(ValidationError { instance: *ip, keyword: pointer, message });
+    /// Reports `n`'s `keyword`, or `n` itself when `keyword` is empty, as
+    /// failing at the value `ip` points to.
+    fn fail(&mut self, ip: &String, n: &Compiled, keyword: String, message: String) {
+        self.failures += 1;
+        if self.top().quiet {
+            return;
+        }
+        let pointer = if keyword.is_empty() { n.at } else { `${n.at}/${keyword}` };
+        self.keep(ValidationError { instance: *ip, uri: n.source, keyword: pointer, message });
     }
+
+    fn keep(&mut self, e: ValidationError) {
+        let top = self.top();
+        if top.seen.insert(`${e}`) {
+            top.errors.push(e);
+        }
+    }
+
+    /// The sink errors go to now.
+    fn top(&mut self) -> &mut Sink {
+        return &mut self.sinks[self.sinks.len() - 1];
+    }
+
+    /// The memo of the document being evaluated.
+    fn memo(&mut self) -> &mut HashMap<MemoKey, i32> {
+        return &mut self.memos[self.memos.len() - 1];
+    }
+
+    /// Reports outcome `k` here, as though its subschema were evaluated again.
+    fn replay(&mut self, k: i32, out: &mut Evaluated) {
+        let outcome = &self.outcomes[k];
+        if outcome.errors.is_empty() {
+            out.merge(&outcome.evaluated);
+            return;
+        }
+        self.failures += outcome.errors.len();
+        if !self.top().quiet {
+            for let e of &outcome.errors {
+                self.keep(*e);
+            }
+        }
+    }
+}
+
+/// A subschema's errors, each once.
+struct Sink {
+    /// Whether only that the subschema failed matters, not why, so no error is
+    /// kept.
+    quiet: bool = false,
+    errors: List<ValidationError> = [],
+    seen: HashSet<String> = HashSet::new(),
+}
+
+/// A shared subschema evaluated at a value, under a binding of every dynamic
+/// anchor: the schema each one resolves to, or -1 for none.
+struct MemoKey {
+    target: i32,
+    at: i32,
+    anchors: List<i32>,
+}
+
+/// What evaluating a shared subschema at a value found.
+struct Outcome {
+    errors: List<ValidationError>,
+    evaluated: Evaluated,
 }
 
 struct Compiler {
@@ -477,6 +742,28 @@ struct Compiler {
     /// by `uri#anchor`.
     targets: HashMap<String, i32> = HashMap::new(),
     refs: List<PendingRef> = [],
+    /// The subschemas under `$defs`, which only a reference leads to.
+    defs: List<i32> = [],
+    /// Each document's root subschema, by the URI it was supplied under.
+    documents: HashMap<String, i32> = HashMap::new(),
+    /// The URI of the document being added, as `Compiled.source` records it.
+    source: Option<Uri> = null,
+    /// The supplied documents not added yet, which a reference adds once it
+    /// needs them.
+    unloaded: SchemaSet = SchemaSet::new(),
+    /// The documents added, in order.
+    added: List<AddedDocument> = [],
+    /// The index into `added` of the document each subschema belongs to.
+    node_document: List<i32> = [],
+    /// The added documents the compiled one reaches, in the order reached.
+    /// `link` resolves only their references.
+    reached: List<i32> = [],
+}
+
+struct AddedDocument {
+    /// Its references, as indices into `Compiler.refs`.
+    refs: List<i32> = [],
+    reached: bool = false,
 }
 
 /// A reference, resolved against its base, to look up once every target is
@@ -485,34 +772,94 @@ struct PendingRef {
     node: i32,
     uri: Uri,
     dynamic: bool,
+    /// The subschema it names, and its fragment, once linked.
+    found: Option<[i32, String]> = null,
 }
 
 impl Compiler {
-    fn add(&mut self, schema: &Schema, at: String, base: &Uri, parent: Option<i32>) -> Result<i32, SchemaError> {
+    /// A compiler holding none of `set`'s documents yet.
+    fn of(set: &SchemaSet) -> Compiler {
+        return Compiler { unloaded: *set };
+    }
+
+    /// Adds the supplied document retrieved from `uri`, answering whether one
+    /// was waiting.
+    fn load(&mut self, uri: &Uri) -> Result<bool, SchemaError> {
+        let Some(k) = self.unloaded.find(uri) else {
+            return Result::Ok(false);
+        };
+        let [u, schema] = self.unloaded.documents.remove(k);
+        self.add_document(&u, &schema)?;
+        return Result::Ok(true);
+    }
+
+    /// Adds every supplied document still waiting, answering whether there
+    /// was one.
+    fn load_all(&mut self) -> Result<bool, SchemaError> {
+        let waiting = self.unloaded.documents;
+        self.unloaded = SchemaSet::new();
+        for let [uri, schema] of &waiting {
+            self.add_document(uri, schema)?;
+        }
+        return Result::Ok(!waiting.is_empty());
+    }
+
+    /// Adds the meta-schema retrieved from `uri`, answering whether there is
+    /// one.
+    fn load_meta_schema(&mut self, uri: &Uri) -> Result<bool, SchemaError> {
+        for let [held, schema] of &META_SCHEMAS {
+            if *held == *uri {
+                self.add_document(held, schema)?;
+                return Result::Ok(true);
+            }
+        }
+        return Result::Ok(false);
+    }
+
+    /// Marks added document `d` as one the compiled schema reaches.
+    fn reach(&mut self, d: i32) {
+        if !self.added[d].reached {
+            self.added[d].reached = true;
+            self.reached.push(d);
+        }
+    }
+
+    fn add_document(&mut self, uri: &Uri, schema: &Schema) -> Result<(), SchemaError> {
+        self.added.push(AddedDocument {});
+        self.source = if `${*uri}` == DEFAULT_BASE { null } else { Option::Some(*uri) };
+        // The URI a document was retrieved from names it, whatever its `$id`
+        // says, so it is a resource of its own around the root.
+        let retrieved = self.resources.len();
+        self.resources.push(Resource { uri: *uri, at: "", parent: null });
+        return match self.add(schema, "", uri, retrieved) {
+            Ok(root) => {
+                self.documents[`${*uri}`] = root;
+                Result::Ok(());
+            },
+            Err(e) => Result::Err(SchemaError { ..e, uri: self.source }),
+        };
+    }
+
+    fn add(&mut self, schema: &Schema, at: String, base: &Uri, parent: i32) -> Result<i32, SchemaError> {
         let i = self.nodes.len();
         let mut uri = *base;
-        let mut owner = parent;
-        let id = if let Object(o) = schema {
-            o.id;
-        } else {
-            null;
-        };
-        if parent matches { None } || id matches { Some(_) } {
-            if let Some(id) = &id {
-                uri = base.resolve(&parse_uri(id, `${at}/$id`)?).without_fragment();
-            }
-            owner = Option::Some(self.resources.len());
-            self.resources.push(Resource { uri, at, parent });
+        let mut r = parent;
+        let mut identified_at = at;
+        if let Object(o) = schema && let Some(id) = &o.id {
+            identified_at = `${at}/$id`;
+            uri = base.resolve(&parse_uri(id, identified_at)?).without_fragment();
+            r = self.resources.len();
+            self.resources.push(Resource { uri, at, parent: Option::Some(parent) });
         }
-        let r = owner.unwrap();
-        let mut holder = owner;
+        let mut holder = Option::Some(r);
         while let Some(h) = holder {
             let res = &self.resources[h];
-            self.targets[`${res.uri}#${at.substr_bytes(res.at.len(), at.len())}`] = i;
+            self.claim(`${res.uri}#${at.substr_bytes(res.at.len(), at.len())}`, i, &identified_at)?;
             holder = res.parent;
         }
-        let mut node = Compiled { at, owner: r };
+        let mut node = Compiled { source: self.source, at, owner: r };
         self.nodes.push(node);
+        self.node_document.push(self.added.len() - 1);
         let o = match schema {
             Bool(b) => {
                 node.always = Option::Some(*b);
@@ -523,25 +870,17 @@ impl Compiler {
         };
         o.check(&at)?;
         if let Some(a) = &o.anchor {
-            self.targets[`${uri}#${*a}`] = i;
+            self.claim(`${uri}#${*a}`, i, &`${at}/$anchor`)?;
         }
         if let Some(a) = &o.dynamic_anchor {
-            self.targets[`${uri}#${*a}`] = i;
+            self.claim(`${uri}#${*a}`, i, &`${at}/$dynamicAnchor`)?;
             self.resources[r].dynamic_anchors[*a] = i;
         }
         if let Some(reference) = &o.reference {
-            self.refs.push(PendingRef {
-                node: i,
-                uri: uri.resolve(&parse_uri(reference, `${at}/$ref`)?),
-                dynamic: false,
-            });
+            self.add_ref(i, uri.resolve(&parse_uri(reference, `${at}/$ref`)?), false);
         }
         if let Some(reference) = &o.dynamic_ref {
-            self.refs.push(PendingRef {
-                node: i,
-                uri: uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?),
-                dynamic: true,
-            });
+            self.add_ref(i, uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?), true);
         }
         node.type = o.type;
         node.const = o.const;
@@ -581,7 +920,7 @@ impl Compiler {
             let here = `${at}/patternProperties/${pointer_token(p)}`;
             node.pattern_properties.push([
                 regex(p, here)?,
-                self.add(s, here, &uri, owner)?,
+                self.add(s, here, &uri, r)?,
             ]);
         }
         node.required = o.required;
@@ -592,14 +931,31 @@ impl Compiler {
         node.min_properties = o.min_properties;
         node.max_properties = o.max_properties;
         node.unevaluated_properties = self.add_some(&o.unevaluated_properties, `${at}/unevaluatedProperties`, &uri, r)?;
-        self.add_map(&o.defs, `${at}/$defs`, &uri, r)?;
+        for let [_, d] of self.add_map(&o.defs, `${at}/$defs`, &uri, r)?.entries() {
+            self.defs.push(*d);
+        }
         self.nodes[i] = node;
         return Result::Ok(i);
     }
 
+    fn add_ref(&mut self, node: i32, uri: Uri, dynamic: bool) {
+        self.added[self.node_document[node]].refs.push(self.refs.len());
+        self.refs.push(PendingRef { node, uri, dynamic });
+    }
+
+    /// Points `uri` at subschema `i`. A URI identifies at most one schema, so
+    /// another one claiming it is the error Core §9.1.2 asks for, at `at`.
+    fn claim(&mut self, uri: String, i: i32, at: &String) -> Result<(), SchemaError> {
+        if let Some(held) = self.targets.get_str(&uri) && held != i {
+            return Result::Err(SchemaError { pointer: *at, message: `identifies ${uri}, as another schema does` });
+        }
+        self.targets[uri] = i;
+        return Result::Ok(());
+    }
+
     fn add_some(&mut self, s: &Option<Schema>, at: String, base: &Uri, r: i32) -> Result<Option<i32>, SchemaError> {
         if let Some(s) = s {
-            return Result::Ok(Option::Some(self.add(s, at, base, Option::Some(r))?));
+            return Result::Ok(Option::Some(self.add(s, at, base, r)?));
         }
         return Result::Ok(null);
     }
@@ -607,7 +963,7 @@ impl Compiler {
     fn add_list(&mut self, list: &List<Schema>, at: String, base: &Uri, r: i32) -> Result<List<i32>, SchemaError> {
         let mut out: List<i32> = [];
         for let k of 0..<list.len() {
-            out.push(self.add(&list[k], `${at}/${k}`, base, Option::Some(r))?);
+            out.push(self.add(&list[k], `${at}/${k}`, base, r)?);
         }
         return Result::Ok(out);
     }
@@ -621,21 +977,36 @@ impl Compiler {
     ) -> Result<HashMap<String, i32>, SchemaError> {
         let mut out = HashMap::<String, i32>::new();
         for let [k, s] of map.entries() {
-            out[*k] = self.add(s, `${at}/${pointer_token(k)}`, base, Option::Some(r))?;
+            out[*k] = self.add(s, `${at}/${pointer_token(k)}`, base, r)?;
         }
         return Result::Ok(out);
     }
 
-    /// Points every reference at its target.
-    fn link(&mut self) -> Result<(), SchemaError> {
+    /// Points every reference at its target, and marks the targets more than
+    /// one keyword leads to. Returns the anchors a `$dynamicRef` may resolve
+    /// through the dynamic scope.
+    fn link(&mut self) -> Result<List<String>, CompileError> {
+        // Resolving a reference may add a document, and reach it.
+        for let mut q = 0; q < self.reached.len(); q += 1 {
+            for let k of self.added[self.reached[q]].refs {
+                let r = self.refs[k];
+                let found = self.resolve(&r)?;
+                self.reach(self.node_document[found.0]);
+                self.refs[k].found = Option::Some(found);
+            }
+        }
+        // A document's root and every subschema outside `$defs` are led to by
+        // the keyword holding them.
+        let mut leads: List<i32> = List::filled(self.nodes.len(), 1);
+        for let d of &self.defs {
+            leads[*d] = 0;
+        }
+        let mut anchors: List<String> = [];
         for let r of self.refs {
-            let keyword = if r.dynamic { "$dynamicRef" } else { "$ref" };
-            let Some([target, fragment]) = self.lookup(&r.uri) else {
-                return Result::Err(SchemaError {
-                    pointer: `${self.nodes[r.node].at}/${keyword}`,
-                    message: "refers to no schema this document holds",
-                });
+            let Some([target, fragment]) = r.found else {
+                continue;
             };
+            leads[target] += 1;
             if !r.dynamic {
                 self.nodes[r.node].reference = Option::Some(target);
                 continue;
@@ -645,11 +1016,47 @@ impl Compiler {
                 let declared = self.resources[self.nodes[target].owner].dynamic_anchors.get_str(&fragment);
                 if declared matches { Some(t) && t == target } {
                     anchor = Option::Some(fragment);
+                    for let declaring of &self.resources {
+                        if let Some(t) = declaring.dynamic_anchors.get_str(&fragment) && t != target {
+                            leads[t] += 1;
+                        }
+                    }
+                    if !anchors.contains_str(&fragment) {
+                        anchors.push(fragment);
+                    }
                 }
             }
             self.nodes[r.node].dynamic_ref = Option::Some(DynamicRef { target, anchor });
         }
-        return Result::Ok(());
+        for let i of 0..<self.nodes.len() {
+            self.nodes[i].shared = leads[i] > 1;
+        }
+        return Result::Ok(anchors);
+    }
+
+    /// The subschema `r` names, and its fragment percent-decoded. A document
+    /// is added the first time a reference needs it: the one retrieved from
+    /// the URI named, else the meta-schema no document replaces, else every
+    /// supplied one, since any of them may identify the URI by an `$id`.
+    fn resolve(&mut self, r: &PendingRef) -> Result<[i32, String], CompileError> {
+        if let Some(found) = self.lookup(&r.uri) {
+            return Result::Ok(found);
+        }
+        let document = r.uri.without_fragment();
+        let held = self.targets.contains_key(`${document}#`);
+        if !held && (self.load(&document)? || self.load_meta_schema(&document)? || self.load_all()?) {
+            return self.resolve(r);
+        }
+        let n = &self.nodes[r.node];
+        let pointer = `${n.at}/${if r.dynamic { "$dynamicRef" } else { "$ref" }}`;
+        if held {
+            return Result::Err(CompileError::Invalid(SchemaError {
+                uri: n.source,
+                pointer,
+                message: "refers to no schema the document holds",
+            }));
+        }
+        return Result::Err(CompileError::Unresolved(UnresolvedRef { uri: n.source, pointer, target: r.uri }));
     }
 
     /// The subschema `uri` names, and its fragment percent-decoded.

@@ -1,0 +1,15 @@
+// A type parameter shadows the namespace import of its name, so a bound
+// qualified by it names no trait, as a type qualified by it names no type.
+use geo from "./sub/spec_modules_geo.wado";
+
+#[allow(shadowed_name)]
+fn shown<geo, T: geo::Show>(t: &T) -> i32 {
+    return 0;
+}
+
+test {
+    assert shown::<i32, i32>(&1) == 0;
+}
+
+__DATA__
+{"compile_error": "'geo::Show' is not a declared trait"}

@@ -845,8 +845,25 @@ pub fn cm_name_key(cm_name: &str) -> String {
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
 /// The WIR struct an affine resource is: the object holding its handle. Not a
-/// `Box<i32>`, which the optimizer scalarizes as a value with no identity.
+/// cell, which the optimizer scalarizes as a value with no identity.
 pub const RESOURCE_OBJECT_STRUCT: &str = "$Resource";
+
+/// The object of one field, `value`, that a reference to a primitive, an enum,
+/// a variant, a function or another reference points at.
+pub const CELL_STRUCT: &str = "$Cell";
+
+/// The one field of a [`CELL_STRUCT`].
+pub const CELL_FIELD: &str = "value";
+
+/// How a cell's name spells a function payload: every function value lowers
+/// to one representation, so its cells are one struct.
+pub const CELL_FN_PAYLOAD: &str = "fn";
+
+/// The WIR struct a cell holding the payload spelled `payload` lowers to.
+#[must_use]
+pub fn cell_struct_name(payload: &str) -> String {
+    mangle_generic_name(CELL_STRUCT, &[payload.to_string()])
+}
 
 /// The name closure `functor_id`'s functor struct is interned under.
 #[must_use]
@@ -2795,20 +2812,6 @@ pub fn wir_type_key(module_source: &ModuleSource, name: &str) -> String {
     format!("{module_source}//{name}")
 }
 
-/// The name a type's key names: past `module` where [`wir_type_key`] qualified
-/// it, past the [`wir_tuple_type_key`] prefix of a tuple, and the whole key of
-/// a builtin. A URL module may spell `//` anywhere in its path, and a name in
-/// its type arguments, so the boundary is found from the module.
-#[must_use]
-pub fn unqualified_name<'a>(key: &'a str, module: Option<&ModuleSource>) -> &'a str {
-    let Some(module) = module else {
-        return key.strip_prefix(TUPLE_KEY_PREFIX).unwrap_or(key);
-    };
-    key.strip_prefix(module.to_string().as_str())
-        .and_then(|rest| rest.strip_prefix("//"))
-        .expect("a type with a module is keyed by wir_type_key")
-}
-
 /// Key of a plain `enum`, prefixed so a same-named variant keeps
 /// [`wir_type_key`].
 ///
@@ -2968,20 +2971,6 @@ mod tests {
     use crate::compiler_host::DependencyIndex;
     use crate::hashmap::IndexSet;
     use std::assert_matches;
-
-    #[test]
-    fn a_key_names_what_follows_its_module_whatever_either_spells() {
-        let mut interner = ModuleSourceInterner::new();
-        let remote = interner.remote("https://example.com/lib//a.wado");
-        let name = "Hole<https://example.com/b.wado/$t>";
-        assert_eq!(
-            unqualified_name(&wir_type_key(&remote, name), Some(&remote)),
-            name
-        );
-        let tuple = wir_tuple_type_key(&["core:prelude//String".to_string()]);
-        assert_eq!(unqualified_name(&tuple, None), "[core:prelude//String]");
-        assert_eq!(unqualified_name("Array<i32>", None), "Array<i32>");
-    }
 
     #[test]
     fn cm_names() {

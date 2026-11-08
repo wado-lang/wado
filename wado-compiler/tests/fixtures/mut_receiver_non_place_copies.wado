@@ -3,9 +3,8 @@
 // read out of. Each shape below hands `bump` a projection of `h`; only the place
 // receiver may write through.
 //
-// `Wrap` is the receiver whose auto-`&mut` is a `Box<T>` by lowering time
-// (`boxing::prepare_types` boxes every `&variant`), so the copy has to land under
-// the box rather than beside it.
+// `Wrap` is the receiver whose auto-`&mut` points at a cell (every `&variant`
+// does), so the copy has to land under the cell rather than beside it.
 use { println, Stdout } from "core:cli";
 
 struct Holder {

@@ -1,0 +1,25 @@
+// A loop's first iteration starts in the state the loop entered with, so a
+// read of a value moved before the loop is an error even where the body
+// refills it before any later iteration.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+test {
+    let mut t = Tok { id: 1 };
+    builtin::drop(t);
+    let mut i = 0;
+    while i < 2 {
+        assert t.id >= 0;
+        t = Tok { id: 2 };
+        i += 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":18:16: analysis error: affine value `t` used after it was moved (moved at 15:19)"}

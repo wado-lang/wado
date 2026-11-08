@@ -9,6 +9,7 @@ test "allOf: allOf" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":"baz","bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "allOf: mismatch second" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":"baz"}"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "allOf: mismatch first" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "allOf: wrong type" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":"baz","bar":"quux"}"#,
         false,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "allOf with base schema: valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"bar":{"type":"integer"}},"required":["bar"],"allOf":[{"properties":{"foo":{"type":"string"}},"required":["foo"]},{"properties":{"baz":{"type":"null"}},"required":["baz"]}]}"#,
         #"{"foo":"quux","bar":2,"baz":null}"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "allOf with base schema: mismatch base schema" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"bar":{"type":"integer"}},"required":["bar"],"allOf":[{"properties":{"foo":{"type":"string"}},"required":["foo"]},{"properties":{"baz":{"type":"null"}},"required":["baz"]}]}"#,
         #"{"foo":"quux","baz":null}"#,
         false,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "allOf with base schema: mismatch first allOf" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"bar":{"type":"integer"}},"required":["bar"],"allOf":[{"properties":{"foo":{"type":"string"}},"required":["foo"]},{"properties":{"baz":{"type":"null"}},"required":["baz"]}]}"#,
         #"{"bar":2,"baz":null}"#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "allOf with base schema: mismatch second allOf" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"bar":{"type":"integer"}},"required":["bar"],"allOf":[{"properties":{"foo":{"type":"string"}},"required":["foo"]},{"properties":{"baz":{"type":"null"}},"required":["baz"]}]}"#,
         #"{"foo":"quux","bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "allOf with base schema: mismatch both" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"bar":{"type":"integer"}},"required":["bar"],"allOf":[{"properties":{"foo":{"type":"string"}},"required":["foo"]},{"properties":{"baz":{"type":"null"}},"required":["baz"]}]}"#,
         #"{"bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "allOf simple types: valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"maximum":30},{"minimum":20}]}"#,
         #"25"#,
         true,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "allOf simple types: mismatch one" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"maximum":30},{"minimum":20}]}"#,
         #"35"#,
         false,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "allOf with boolean schemas, all true: any value is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[true,true]}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "allOf with boolean schemas, some false: any value is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[true,false]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "allOf with boolean schemas, all false: any value is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[false,false]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "allOf with one empty schema: any data is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{}]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "allOf with two empty schemas: any data is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{},{}]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "allOf with the first empty schema: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{},{"type":"number"}]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "allOf with the first empty schema: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{},{"type":"number"}]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "allOf with the last empty schema: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"type":"number"},{}]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "allOf with the last empty schema: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"type":"number"},{}]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "nested allOf, to check validation semantics: null is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"allOf":[{"type":"null"}]}]}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "nested allOf, to check validation semantics: anything non-null is invalid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"allOf":[{"type":"null"}]}]}"#,
         #"123"#,
         false,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "allOf combined with anyOf, oneOf: allOf: false, anyOf: false, oneOf: false
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "allOf combined with anyOf, oneOf: allOf: false, anyOf: false, oneOf: true"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"5"#,
         false,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "allOf combined with anyOf, oneOf: allOf: false, anyOf: true, oneOf: false"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"3"#,
         false,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "allOf combined with anyOf, oneOf: allOf: false, anyOf: true, oneOf: true" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"15"#,
         false,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "allOf combined with anyOf, oneOf: allOf: true, anyOf: false, oneOf: false"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"2"#,
         false,
+        [],
     );
 }
 
@@ -225,6 +252,7 @@ test "allOf combined with anyOf, oneOf: allOf: true, anyOf: false, oneOf: true" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"10"#,
         false,
+        [],
     );
 }
 
@@ -233,6 +261,7 @@ test "allOf combined with anyOf, oneOf: allOf: true, anyOf: true, oneOf: false" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"6"#,
         false,
+        [],
     );
 }
 
@@ -241,5 +270,6 @@ test "allOf combined with anyOf, oneOf: allOf: true, anyOf: true, oneOf: true" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"multipleOf":2}],"anyOf":[{"multipleOf":3}],"oneOf":[{"multipleOf":5}]}"#,
         #"30"#,
         true,
+        [],
     );
 }

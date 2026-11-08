@@ -17,13 +17,13 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, closure_call_method_info, closure_call_name,
+    self, FunctionId, LocalMethodName, closure_call_method_info, closure_call_name,
     diagnostic_function_name, minted_name,
 };
 use crate::nir_arena::{Body, ExprBody, Tracked};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
 use crate::token::Span;
-use crate::type_table::{InstanceArg, TypeTable};
+use crate::type_table::TypeTable;
 
 /// Canonical identity of a function entity. Minted in `lower` over the
 /// post-monomorphization function set and intrinsic to the entity — not its
@@ -981,13 +981,24 @@ pub struct NirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` — the only kind that can mutate the
-    /// caller's argument storage. Captured pre-boxing (see [`crate::tir::TirParam::is_mut_ref`]).
+    /// The parameter was declared `&mut T`, the only kind that can mutate the
+    /// caller's argument storage. It outlives `sroa_param`, which can narrow
+    /// such a parameter to a field whose type no longer says so.
     pub is_mut_ref: bool,
     pub span: Span,
     /// How this parameter arrives at the Wasm level. Set by
     /// `optimize::multi_value_param`; `Single` everywhere else.
     pub param_abi: ParamAbi,
+}
+
+impl NirParam {
+    /// Whether a write through this parameter reaches the caller's argument
+    /// storage: it is a `&mut`, or was declared one before `sroa_param` narrowed
+    /// it to a field that still references what the caller passed.
+    #[must_use]
+    pub fn writes_caller(&self, type_table: &TypeTable) -> bool {
+        self.is_mut_ref || type_table.is_mut_ref(self.type_id)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1009,21 +1020,20 @@ pub struct NirStruct {
     pub wire_name_policy: Option<ast::NamePolicy>,
 }
 
-/// A concrete struct type as its declaration and argument types: what tells
-/// two instances apart whichever ids spell their arguments.
-pub type StructInstance = (StructDef, Vec<InstanceArg>);
+/// A concrete struct type as its declaration and argument types.
+pub type StructInstance = (StructDef, Vec<TypeId>);
 
 /// The instance `type_id` is, when it is a struct type.
 #[must_use]
 pub fn struct_instance(type_id: TypeId, type_table: &TypeTable) -> Option<StructInstance> {
     let (def, type_args) = type_table.struct_parts(type_id)?;
-    Some((def, type_table.instance_args(type_args)))
+    Some((def, type_args.to_vec()))
 }
 
 impl NirStruct {
     /// The instance this declaration reifies, when it is concrete.
     #[must_use]
-    pub fn instance(&self, type_table: &TypeTable) -> Option<StructInstance> {
+    pub fn instance(&self) -> Option<StructInstance> {
         if !self.type_params.is_empty() {
             return None;
         }
@@ -1031,7 +1041,7 @@ impl NirStruct {
             .monomorph_info
             .as_ref()
             .map_or(&[][..], |m| &m.impl_type_args);
-        Some((self.def, type_table.instance_args(args)))
+        Some((self.def, args.to_vec()))
     }
 
     /// The fields in `field_index` order, which is how a struct literal lowers.
@@ -1053,26 +1063,14 @@ pub struct StructDecls<'a>(IndexMap<StructInstance, &'a NirStruct>);
 
 impl<'a> StructDecls<'a> {
     #[must_use]
-    pub fn new(structs: &'a [NirStruct], type_table: &TypeTable) -> Self {
+    pub fn new(structs: &'a [NirStruct]) -> Self {
         let mut by_instance: IndexMap<StructInstance, &NirStruct> = IndexMap::default();
         for decl in structs {
-            let Some(instance) = decl.instance(type_table) else {
+            let Some(instance) = decl.instance() else {
                 continue;
             };
-            // Instances whose arguments differ only by a newtype or a row are
-            // declared apart and are one type.
-            let Some(first) = by_instance.get(&instance) else {
-                by_instance.insert(instance, decl);
-                continue;
-            };
-            let field_types = |s: &NirStruct| {
-                let ids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
-                type_table.instance_args(&ids)
-            };
-            assert!(
-                field_types(first) == field_types(decl),
-                "one struct type has one layout"
-            );
+            let previous = by_instance.insert(instance, decl);
+            assert!(previous.is_none(), "one struct type has one declaration");
         }
         Self(by_instance)
     }
@@ -1081,6 +1079,26 @@ impl<'a> StructDecls<'a> {
     #[must_use]
     pub fn of_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&'a NirStruct> {
         self.0.get(&struct_instance(type_id, type_table)?).copied()
+    }
+
+    /// The fields of the object `type_id` names, by name and type in field
+    /// order: a concrete struct's declared ones, or a cell's one.
+    #[must_use]
+    pub fn object_fields(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+    ) -> Option<Vec<(&'a str, TypeId)>> {
+        if let Some(payload) = type_table.cell_payload(type_id) {
+            return Some(vec![(name::CELL_FIELD, payload)]);
+        }
+        let decl = self.of_type(type_id, type_table)?;
+        Some(
+            decl.fields_in_order()
+                .iter()
+                .map(|f| (f.name.as_str(), f.type_id))
+                .collect(),
+        )
     }
 
     /// Each instance with its declaration's fields, in field order.
@@ -1109,22 +1127,30 @@ pub struct StructFieldTypes(IndexMap<StructInstance, Vec<TypeId>>);
 
 impl StructFieldTypes {
     #[must_use]
-    pub fn new(structs: &[NirStruct], type_table: &TypeTable) -> Self {
-        StructDecls::new(structs, type_table).field_types()
+    pub fn new(structs: &[NirStruct]) -> Self {
+        StructDecls::new(structs).field_types()
     }
 
-    /// The field types of `type_id`, when it is a concrete struct type.
+    /// The field types of `type_id`, when it is a concrete struct type or a
+    /// cell.
     #[must_use]
-    pub fn of_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&[TypeId]> {
+    pub fn of_type<'s>(
+        &'s self,
+        type_id: TypeId,
+        type_table: &'s TypeTable,
+    ) -> Option<&'s [TypeId]> {
+        if let Some(cell) = type_table.cell_field_types(type_id) {
+            return Some(cell);
+        }
         self.0
             .get(&struct_instance(type_id, type_table)?)
             .map(Vec::as_slice)
     }
 }
 
-/// The field types and names of a tuple or concrete struct type, in field
-/// order (what a field index counts, `()` fields included), and whether it is
-/// a struct. `None` for anything else.
+/// The field types and names of a tuple, a concrete struct type or a cell, in
+/// field order (what a field index counts, `()` fields included), and whether
+/// it is a struct or a cell. `None` for anything else.
 pub fn aggregate_field_info(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -1134,9 +1160,11 @@ pub fn aggregate_field_info(
         let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
         return Some((elems, names, false));
     }
-    let fields = structs.of_type(type_id, type_table)?.fields_in_order();
-    let types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
-    let names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
+    let (names, types) = structs
+        .object_fields(type_id, type_table)?
+        .into_iter()
+        .map(|(name, ty)| (name.to_string(), ty))
+        .unzip();
     Some((types, names, true))
 }
 
@@ -1214,6 +1242,15 @@ pub struct NirVariantDecl {
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<NirVariantCase>,
     pub span: Span,
+}
+
+impl NirVariantDecl {
+    /// How many type arguments an instance gives it: its type parameters,
+    /// less the effect ones.
+    #[must_use]
+    pub fn type_arity(&self) -> usize {
+        self.type_params.iter().filter(|p| !p.is_effect).count()
+    }
 }
 
 /// A case in a variant declaration

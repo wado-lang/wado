@@ -9,6 +9,7 @@ test "minProperties validation: longer is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"{"foo":1,"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "minProperties validation: exact length is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "minProperties validation: too short is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "minProperties validation: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "minProperties validation: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #""""#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "minProperties validation: ignores other non-objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"12"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "minProperties validation: ignores null" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "minProperties validation: ignores booleans" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"true"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "minProperties validation with a decimal: longer is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"{"foo":1,"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -81,5 +90,6 @@ test "minProperties validation with a decimal: too short is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minProperties":1}"#,
         #"{}"#,
         false,
+        [],
     );
 }

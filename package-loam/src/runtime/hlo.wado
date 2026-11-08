@@ -20,7 +20,7 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
-use { Any, Recorded, Recorder, assert_carries, kept_any } from "./recorded.wado";
+use { Any, Recorded, Recorder, Untyped, assert_carries, kept_any } from "./recorded.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -267,6 +267,11 @@ pub affine trait Graph: Holds with _ {
     fn yielded<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return *x;
     }
+    /// `branch`, the one the host took, whose results are its own: nothing it
+    /// yields is a result of the region it is added to.
+    fn taken<T>(&mut self, branch: fn() -> T with _) -> T with _ {
+        return branch();
+    }
     /// StableHLO's `while` over a count: `body` run `count` times, each given
     /// which run it is, from 0, and what the run before returned, the first
     /// `initial`, and what the last returned. `body` adds its operations through
@@ -308,14 +313,15 @@ pub affine trait Graph: Holds with _ {
     /// masked by `options`, or masked and then biased where `options.hidden`
     /// says so. Returns the attended queries, then the past key and value with
     /// the new (turned) positions after them. Where `past_length` is given, the
-    /// past is a buffer of fixed capacity holding that many positions, and the
-    /// present is the same buffer, the new positions written from there:
-    /// onnxruntime's shared buffer. The buffer must hold them, `past_length` +
-    /// S ≤ P; a position past P is dropped, and what the present holds past
-    /// `past_length` + S is unspecified. A new position may be padding, which a
-    /// causal mask keeps every valid query from reading. Where `reach` is
-    /// given, no query reads a position at or past it, even one `options.hidden`
-    /// leaves a finite score: the positions past `reach` are padding.
+    /// past is a buffer of fixed capacity holding that many positions in each
+    /// batch row, and the present is the same buffer, each row's new positions
+    /// written from its own: onnxruntime's shared buffer. The buffer must hold
+    /// them, `past_length` + S ≤ P; a position past P is dropped, and what the
+    /// present holds past `past_length` + S is unspecified. A new position may
+    /// be padding, which a causal mask keeps every valid query from reading.
+    /// Where `reach` is given, no query reads a position at or past its row's,
+    /// even one `options.hidden` leaves a finite score: the positions past
+    /// `reach` are padding.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
         q: &Self::Tensor<f32, [B, S, Q]>,
@@ -323,8 +329,8 @@ pub affine trait Graph: Holds with _ {
         v: &Self::Tensor<f32, [B, S, K]>,
         past_k: &Self::Tensor<f32, [B, H, P, D]>,
         past_v: &Self::Tensor<f32, [B, H, P, D]>,
-        past_length: Option<&Self::Tensor<i64, []>>,
-        reach: Option<&Self::Tensor<i64, []>>,
+        past_length: Option<&Self::Tensor<i64, [Slots]>>,
+        reach: Option<&Self::Tensor<i64, [Slots]>>,
         cos: Option<&Self::Tensor<f32, [Pos, Half]>>,
         sin: Option<&Self::Tensor<f32, [Pos, Half]>>,
         bias: Option<&Self::Tensor<f32, [BB, BH, BS, T]>>,
@@ -362,8 +368,8 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     v: &G::Tensor<f32, [B, S, K]>,
     past_k: &G::Tensor<f32, [B, H, P, D]>,
     past_v: &G::Tensor<f32, [B, H, P, D]>,
-    past_length: Option<&G::Tensor<i64, []>>,
-    reach: Option<&G::Tensor<i64, []>>,
+    past_length: Option<&G::Tensor<i64, [Slots]>>,
+    reach: Option<&G::Tensor<i64, [Slots]>>,
     cos: Option<&G::Tensor<f32, [Pos, Half]>>,
     sin: Option<&G::Tensor<f32, [Pos, Half]>>,
     bias: Option<&G::Tensor<f32, [BB, BH, BS, T]>>,
@@ -378,14 +384,14 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
     let [heads, kv] = [options.heads, options.kv_heads];
     let [first, total] = match past_length {
         Some(l) => [*l, past],
-        None => [scalar(g, past as i64), past + s],
+        None => [shared(g, &scalar(g, past as i64)), past + s],
     };
     let mut query = heads_first::<G, B, S, Q, Heads, D>(g, q, heads, d);
     let mut key = heads_first::<G, B, S, K, H, D>(g, k, kv, d);
     let value = heads_first::<G, B, S, K, H, D>(g, v, kv, d);
     if let Some(c) = cos && let Some(n) = sin {
-        let cos_rows = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, c, 0, &first, s, 1);
-        let sin_rows = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, n, 0, &first, s, 1);
+        let cos_rows = positions_of::<G, Pos, Half, S>(g, c, &first, s);
+        let sin_rows = positions_of::<G, Pos, Half, S>(g, n, &first, s);
         query = turned::<G, B, Heads, S, D, Half>(g, &query, &cos_rows, &sin_rows);
         key = turned::<G, B, H, S, D, Half>(g, &key, &cos_rows, &sin_rows);
     }
@@ -393,9 +399,8 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         if past_length matches { None } {
             return g.concatenate(held, new, 2);
         }
-        return g.reshape(&written_at::<G, f32, [B, H, P, D], [B, H, S, D]>(g, held, new, 2, &first), [
-            batch, kv, total, d,
-        ]);
+        let written = written_at::<G, f32, [B, H, P, D], [B, H, S, D]>(g, held, new, 2, &first, Option::Some(0));
+        return g.reshape(&written, [batch, kv, total, d]);
     };
     let present_k = present(past_k, &key);
     let present_v = present(past_v, &value);
@@ -436,7 +441,7 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
     if let Some(length) = reach {
-        scores = masked::<G, f32, [B, Heads, S, T]>(g, &scores, 3, length, f32::NEG_INFINITY);
+        scores = masked::<G, f32, [B, Heads, S, T]>(g, &scores, 3, length, Option::Some(0), f32::NEG_INFINITY);
     }
     let weights = softmax::<G, [B, Heads, S, T]>(g, &scores, 3);
     let attend = DotDims {
@@ -572,44 +577,55 @@ pub fn reduce_mean<affine G: Graph, In, Out>(
     return g.binary(Binary::Divide, &sum, &divisor);
 }
 
-/// The one axis of a mask along an axis of a wider tensor.
-struct Along {
-}
-
-/// `x` with each position along `axis` at or past `length` replaced by
-/// `fill`: the padding of a valid length read as what a reduction over it
-/// leaves unchanged.
+/// `x` with each position along `axis` at or past its row's `length` replaced
+/// by `fill`: the padding of a valid length read as what a reduction over it
+/// leaves unchanged. The rows run along the axis `rows`, which a length every
+/// row shares does not need.
 pub fn masked<affine G: Graph, E: Element, Axes>(
     g: &mut G,
     x: &G::Tensor<E, Axes>,
     axis: i32,
-    length: &G::Tensor<i64, []>,
+    length: &G::Tensor<i64, [Slots]>,
+    rows: Option<i32>,
     fill: E,
 ) -> G::Tensor<E, Axes> with _ {
     let extents = g.extents_of(x);
-    let along = [extents[axis]] as List<i32>;
-    let positions: G::Tensor<i64, [Along]> = g.iota(along, 0);
-    let valid_along: G::Tensor<bool, [Along]> = g.compare(Comparison::Lt, &positions, &g.broadcast_in_dim(
-        length,
-        along,
-        [],
-    ));
-    let valid: G::Tensor<bool, Axes> = g.broadcast_in_dim(&valid_along, extents, [axis]);
+    let count = g.extents_of(length)[0];
+    // The mask varies along `axis` and the rows alone, so it is built over those
+    // and broadcast to the rest.
+    let mut varying: List<i32> = [axis];
+    if count > 1 {
+        varying.push(rows_axis(rows, &extents, count));
+        varying.sort();
+    }
+    let plane: List<i32> = varying.into_iter().map(|d| extents[d]).collect();
+    let positions: G::Tensor<i64, [Slots, Row]> = g.iota(plane, varying.position(|d| d == axis).unwrap());
+    let lengths: G::Tensor<i64, [Slots, Row]> = if count == 1 {
+        g.broadcast_in_dim(&g.reshape::<i64, [Slots], []>(length, []), plane, []);
+    } else {
+        g.broadcast_in_dim(length, plane, [varying.position(|d| d != axis).unwrap()]);
+    };
+    let valid: G::Tensor<bool, Axes> = g.broadcast_in_dim(
+        &g.compare(Comparison::Lt, &positions, &lengths),
+        extents,
+        varying,
+    );
     return g.select(&valid, x, &full::<G, E, Axes>(g, fill, extents));
 }
 
-/// `a` joined by `b` along `axis`, `b` written from `a`'s valid length
-/// `length` on: a `Concat` along a padded length, which would otherwise put
-/// `a`'s padding between the two.
+/// `a` joined by `b` along `axis`, each row of `b` written from its row's
+/// valid length in `length` on, as `written_at` writes: a `Concat` along a
+/// padded length, which would otherwise put `a`'s padding between the two.
 pub fn joined_at<affine G: Graph, E: Element, A, B, Out>(
     g: &mut G,
     a: &G::Tensor<E, A>,
     b: &G::Tensor<E, B>,
     axis: i32,
-    length: &G::Tensor<i64, []>,
+    length: &G::Tensor<i64, [Slots]>,
+    rows: Option<i32>,
 ) -> G::Tensor<E, Out> with _ {
     let joined: G::Tensor<E, Out> = g.concatenate(a, b, axis);
-    return written_at::<G, E, Out, B>(g, &joined, b, axis, length);
+    return written_at::<G, E, Out, B>(g, &joined, b, axis, length, rows);
 }
 
 /// The branch `chosen` names, where the host took it, or `g`'s conditional on
@@ -623,29 +639,46 @@ pub fn branched<affine G: Graph, Axes, T>(
     otherwise: fn() -> T with _,
 ) -> T with _ {
     return match chosen {
-        Some(true) => then(),
-        Some(false) => otherwise(),
+        Some(true) => g.taken(then),
+        Some(false) => g.taken(otherwise),
         None => g.conditional(pred, then, otherwise),
     };
 }
 
-/// `a` with `b` written over it along `axis` from `at` on, any part of `b`
-/// past `a`'s end dropped.
+/// `a` with `b` written over it along `axis` from its row's `at` on, any part
+/// of `b` past `a`'s end dropped. The rows run along the axis `rows`, as for
+/// `masked`.
 pub fn written_at<affine G: Graph, E: Element, A, B>(
     g: &mut G,
     a: &G::Tensor<E, A>,
     b: &G::Tensor<E, B>,
     axis: i32,
-    at: &G::Tensor<i64, []>,
+    at: &G::Tensor<i64, [Slots]>,
+    rows: Option<i32>,
 ) -> G::Tensor<E, A> with _ {
-    let start: G::Tensor<i64, [Row]> = g.broadcast_in_dim(at, [1], []);
+    let rank = g.extents_of(b).len();
+    let count = g.extents_of(at)[0];
+    if count == 1 {
+        let dims = ScatterDims {
+            update_window_dims: (0..<rank).collect(),
+            inserted_window_dims: [],
+            scatter_dims_to_operand_dims: [axis],
+            index_vector_dim: 0,
+        };
+        return g.scatter(a, at, b, &dims);
+    }
+    let r = rows_axis(rows, &g.extents_of(b), count);
+    // Each row's index, then where its write starts along `axis`.
+    let row_of: G::Tensor<i64, [Slots, One]> = g.iota([count, 1], 0);
+    let start: G::Tensor<i64, [Slots, One]> = g.reshape(at, [count, 1]);
+    let indices: G::Tensor<i64, [Slots, Row]> = g.concatenate(&row_of, &start, 1);
     let dims = ScatterDims {
-        update_window_dims: (0..<g.extents_of(b).len()).collect(),
-        inserted_window_dims: [],
-        scatter_dims_to_operand_dims: [axis],
-        index_vector_dim: 0,
+        update_window_dims: (0..<rank).filter(|d| d != r).collect(),
+        inserted_window_dims: [r],
+        scatter_dims_to_operand_dims: [r, axis],
+        index_vector_dim: 1,
     };
-    return g.scatter(a, &start, b, &dims);
+    return g.scatter(a, &indices, b, &dims);
 }
 
 /// ONNX's `Range` of `count` elements: `start`, then `delta` apart, each a
@@ -718,26 +751,69 @@ pub fn assembled<affine G: Graph, E: Element, Axes>(
 
 /// `x`'s elements at `start + i * step` along `axis`, for each `i` below
 /// `count`: a `Slice` whose start is a value the graph computes, which no
-/// `slice` takes.
+/// `slice` takes. A start for each row, along the axis `rows` names, takes
+/// each row's own window.
 pub fn strided_gather<affine G: Graph, E: Element, In, Out>(
     g: &mut G,
     x: &G::Tensor<E, In>,
     axis: i32,
-    start: &G::Tensor<i64, []>,
+    start: &G::Tensor<i64, [Slots]>,
+    rows: Option<i32>,
     count: i32,
     step: i64,
 ) -> G::Tensor<E, Out> with _ {
-    let indices = range_i64::<G, Row>(g, start, count, &scalar(g, step));
     let mut sizes = g.extents_of(x);
+    let starts = g.extents_of(start)[0];
+    if starts == 1 {
+        let one: G::Tensor<i64, []> = g.reshape(start, []);
+        let indices = range_i64::<G, Row>(g, &one, count, &scalar(g, step));
+        sizes[axis] = 1;
+        let dims = GatherDims {
+            offset_dims: (0..<sizes.len()).filter(|d| d != axis).collect(),
+            collapsed_slice_dims: [axis],
+            start_index_map: [axis],
+            index_vector_dim: 1,
+            slice_sizes: sizes,
+        };
+        return g.gather(x, &indices, &dims);
+    }
+    // Each index names its row and its position, so the gather leads with
+    // the rows and the positions, which the transpose puts back in place.
+    let r = rows_axis(rows, &sizes, starts);
+    assert r != axis, "a row's window runs along an axis other than the rows";
+    let plane: List<i32> = [starts, count, 1];
+    let row: G::Tensor<i64, [Slots, Row, One]> = g.iota(plane, 0);
+    let steps: G::Tensor<i64, [Slots, Row, One]> = g.iota(plane, 1);
+    let strided = g.binary(Binary::Multiply, &steps, &full::<G, i64, [Slots, Row, One]>(g, step, plane));
+    let at = g.binary(Binary::Add, &strided, &g.broadcast_in_dim(start, plane, [0]));
+    let indices: G::Tensor<i64, [Slots, Row, Untyped]> = g.concatenate(&row, &at, 2);
+    let rank = sizes.len();
+    sizes[r] = 1;
     sizes[axis] = 1;
     let dims = GatherDims {
-        offset_dims: (0..<sizes.len()).filter(|d| d != axis).collect(),
-        collapsed_slice_dims: [axis],
-        start_index_map: [axis],
-        index_vector_dim: 1,
+        offset_dims: (2..<rank).collect(),
+        collapsed_slice_dims: [
+            i32::min(r, axis),
+            i32::max(r, axis),
+        ],
+        start_index_map: [r, axis],
+        index_vector_dim: 2,
         slice_sizes: sizes,
     };
-    return g.gather(x, &indices, &dims);
+    let gathered: G::Tensor<E, Untyped> = g.gather(x, &indices, &dims);
+    let mut perm: List<i32> = [];
+    let mut rest = 2;
+    for let d of 0..<rank {
+        if d == r {
+            perm.push(0);
+        } else if d == axis {
+            perm.push(1);
+        } else {
+            perm.push(rest);
+            rest += 1;
+        }
+    }
+    return g.transpose(&gathered, perm);
 }
 
 /// The capacity a length pads to: the next power of two or one and a half of
@@ -819,11 +895,120 @@ pub fn resized<E: Default, Axes>(t: &Tensor<E, Axes>, extents: List<i32>) -> Ten
 pub struct One {
 }
 
+/// One row of a batch. A valid length of `[Slots]` holds each row's, or one
+/// that every row shares where its extent is 1.
+pub struct Slots {
+}
+
+/// `length` as the one valid length every row shares.
+pub fn shared<affine G: Graph>(g: &mut G, length: &G::Tensor<i64, []>) -> G::Tensor<i64, [Slots]> with _ {
+    return g.reshape(length, [1]);
+}
+
+/// `a` and `b`, lengths of `[Slots]`, as many rows each as the one with more:
+/// a length every row shares stands for each.
+fn rows_of_both<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<i64, [Slots]>,
+    b: &G::Tensor<i64, [Slots]>,
+) -> [G::Tensor<i64, [Slots]>, G::Tensor<i64, [Slots]>] with _ {
+    let rows = i32::max(g.extents_of(a)[0], g.extents_of(b)[0]);
+    return [
+        g.broadcast_in_dim(a, [rows], [0]),
+        g.broadcast_in_dim(b, [rows], [0]),
+    ];
+}
+
+/// `op` of each row's `a` and `b`.
+pub fn row_binary<affine G: Graph>(
+    g: &mut G,
+    op: Binary,
+    a: &G::Tensor<i64, [Slots]>,
+    b: &G::Tensor<i64, [Slots]>,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let [x, y] = rows_of_both(g, a, b);
+    return g.binary(op, &x, &y);
+}
+
+/// `quotient` of each row's `a` and `d`.
+pub fn row_quotient<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<i64, [Slots]>,
+    d: &G::Tensor<i64, [Slots]>,
+    up: bool,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let [x, y] = rows_of_both(g, a, d);
+    return quotient::<G, [Slots]>(g, &x, &y, up);
+}
+
+/// `from_end_indices` of each row's index `a` into its own `extent`.
+pub fn row_from_end<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<i64, [Slots]>,
+    extent: &G::Tensor<i64, [Slots]>,
+) -> G::Tensor<i64, [Slots]> with _ {
+    let [x, e] = rows_of_both(g, a, extent);
+    let rows = g.extents_of(&x);
+    let negative = g.compare(Comparison::Lt, &x, &full::<G, i64, [Slots]>(g, 0, rows));
+    return g.select(&negative, &g.binary(Binary::Add, &x, &e), &x);
+}
+
+/// `range_i64` from each row's `start` by its `delta`, a row each.
+pub fn row_range<affine G: Graph, A>(
+    g: &mut G,
+    start: &G::Tensor<i64, [Slots]>,
+    count: i32,
+    delta: &G::Tensor<i64, [Slots]>,
+) -> G::Tensor<i64, [Slots, A]> with _ {
+    let [first, step] = rows_of_both(g, start, delta);
+    let plane: List<i32> = [g.extents_of(&first)[0], count];
+    let steps: G::Tensor<i64, [Slots, A]> = g.iota(plane, 1);
+    let scaled = g.binary(Binary::Multiply, &steps, &g.broadcast_in_dim(&step, plane, [0]));
+    return g.binary(Binary::Add, &scaled, &g.broadcast_in_dim(&first, plane, [0]));
+}
+
+/// The axis `rows` names, along which a tensor of `extents` holds a row for
+/// each of `count` lengths.
+fn rows_axis(rows: Option<i32>, extents: &List<i32>, count: i32) -> i32 {
+    let Some(r) = rows else {
+        panic("a length for each row reads a tensor along its rows");
+    };
+    assert extents[r] == count, "a tensor has as many rows as there are lengths";
+    return r;
+}
+
 /// The axes left once a reduction drops one, inside these helpers, and the
 /// axis it drops where they flatten a tensor into rows.
 struct Rows {
 }
 struct Row {
+}
+
+/// The rows of `table` at the `count` positions from each batch row's `first`
+/// on, a batch row each, or one that every batch row shares.
+fn positions_of<affine G: Graph, Pos, Half, S>(
+    g: &mut G,
+    table: &G::Tensor<f32, [Pos, Half]>,
+    first: &G::Tensor<i64, [Slots]>,
+    count: i32,
+) -> G::Tensor<f32, [Slots, S, Half]> with _ {
+    let rows = g.extents_of(first)[0];
+    let half = g.extents_of(table)[1];
+    if rows == 1 {
+        let consecutive = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, table, 0, first, null, count, 1);
+        return g.reshape(&consecutive, [1, count, half]);
+    }
+    let plane: List<i32> = [rows, count];
+    let steps: G::Tensor<i64, [Slots, S]> = g.iota(plane, 1);
+    let at = g.binary(Binary::Add, &steps, &g.broadcast_in_dim(first, plane, [0]));
+    let dims = GatherDims {
+        offset_dims: [2],
+        collapsed_slice_dims: [0],
+        start_index_map: [0],
+        index_vector_dim: 2,
+        slice_sizes: [1, half],
+    };
+    return g.gather(table, &at, &dims);
 }
 
 /// `x`'s rows `[a, b, rest]`, `a` and `b` as wide as a row of `cos`, turned
@@ -832,11 +1017,11 @@ struct Row {
 fn turned<affine G: Graph, B, N, S, D, Half>(
     g: &mut G,
     x: &G::Tensor<f32, [B, N, S, D]>,
-    cos: &G::Tensor<f32, [S, Half]>,
-    sin: &G::Tensor<f32, [S, Half]>,
+    cos: &G::Tensor<f32, [Slots, S, Half]>,
+    sin: &G::Tensor<f32, [Slots, S, Half]>,
 ) -> G::Tensor<f32, [B, N, S, D]> with _ {
     let extents = g.extents_of(x);
-    let half = g.extents_of(cos)[1];
+    let half = g.extents_of(cos)[2];
     let columns = |from: i32, to: i32| -> [List<i32>, List<i32>] {
         return [
             [0, 0, 0, from],
@@ -847,8 +1032,8 @@ fn turned<affine G: Graph, B, N, S, D, Half>(
     let [b_start, b_limit] = columns(half, 2 * half);
     let a: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, a_start, a_limit, [1, 1, 1, 1]);
     let b: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, b_start, b_limit, [1, 1, 1, 1]);
-    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(cos, a_limit, [2, 3]);
-    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(sin, a_limit, [2, 3]);
+    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(cos, a_limit, [0, 2, 3]);
+    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(sin, a_limit, [0, 2, 3]);
     let first = g.binary(Binary::Subtract, &g.binary(Binary::Multiply, &a, &c), &g.binary(Binary::Multiply, &b, &n));
     let second = g.binary(Binary::Add, &g.binary(Binary::Multiply, &b, &c), &g.binary(Binary::Multiply, &a, &n));
     let rotated: G::Tensor<f32, [B, N, S, D]> = g.concatenate(&first, &second, 3);
@@ -860,29 +1045,30 @@ fn turned<affine G: Graph, B, N, S, D, Half>(
     return g.concatenate(&rotated, &rest, 3);
 }
 
-/// Where a query at row `i` after `first` positions may not read key `j`: past
-/// it where `causal`, and `window` or more before it where there is a window.
+/// Where a query at row `i` after its batch row's `first` positions may not
+/// read key `j`: past it where `causal`, and `window` or more before it where
+/// there is a window.
 fn attention_mask<affine G: Graph, B, N, S, T>(
     g: &mut G,
-    first: &G::Tensor<i64, []>,
+    first: &G::Tensor<i64, [Slots]>,
     options: &Attention,
     extents: &List<i32>,
 ) -> G::Tensor<bool, [B, N, S, T]> with _ {
-    let plane: List<i32> = [extents[2], extents[3]];
-    let row: G::Tensor<i64, [S, T]> = g.iota(plane, 0);
-    let position = g.binary(Binary::Add, &row, &g.broadcast_in_dim(first, plane, []));
-    let key: G::Tensor<i64, [S, T]> = g.iota(plane, 1);
-    let mut hidden: G::Tensor<bool, [S, T]> = if options.causal {
+    let plane: List<i32> = [g.extents_of(first)[0], extents[2], extents[3]];
+    let row: G::Tensor<i64, [Slots, S, T]> = g.iota(plane, 1);
+    let position = g.binary(Binary::Add, &row, &g.broadcast_in_dim(first, plane, [0]));
+    let key: G::Tensor<i64, [Slots, S, T]> = g.iota(plane, 2);
+    let mut hidden: G::Tensor<bool, [Slots, S, T]> = if options.causal {
         g.compare(Comparison::Gt, &key, &position);
     } else {
-        full::<G, bool, [S, T]>(g, false, plane);
+        full::<G, bool, [Slots, S, T]>(g, false, plane);
     };
     if options.window > 0 {
         let behind = g.binary(Binary::Subtract, &position, &key);
-        let far = g.compare(Comparison::Ge, &behind, &full::<G, i64, [S, T]>(g, options.window as i64, plane));
+        let far = g.compare(Comparison::Ge, &behind, &full::<G, i64, [Slots, S, T]>(g, options.window as i64, plane));
         hidden = g.select(&far, &far, &hidden);
     }
-    return g.broadcast_in_dim(&hidden, *extents, [2, 3]);
+    return g.broadcast_in_dim(&hidden, *extents, [0, 2, 3]);
 }
 
 /// `Cpu` compiles nothing: it computes each operation as `build` adds it, the

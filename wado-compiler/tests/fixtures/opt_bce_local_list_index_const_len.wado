@@ -3,7 +3,7 @@
 // check was inlined, so guard and check read different locals; and the check's
 // failure message boxes the index, which marked the loop counter aliased. The
 // length here is the constant the pushes leave; `opt_bce_local_list_index_boxed`
-// takes a runtime one. An index past the guard keeps its check, outlined cold.
+// takes a runtime one. An index past the guard keeps its check.
 
 #[inline(never)]
 fn sum3(a: i32) -> i32 {
@@ -30,5 +30,5 @@ __DATA__
     "wir_contrast": {"O2": [
         {"        s += v[i];": "        s += v[i + 1];"}
     ]},
-    "wir_not_expect:O2": ["index_value", "$cold"]
+    "wir_not_expect:O2": ["index_value", "$contract_report"]
 }

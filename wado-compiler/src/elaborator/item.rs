@@ -829,7 +829,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             if !tt.converts_without_impl(target, source) {
                 return;
             }
-            let provided = if tt.same_type(target, source) {
+            let provided = if target == source {
                 "every type converts to itself"
             } else {
                 "a newtype converts to and from each type down its chain"
@@ -1834,7 +1834,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // The trait's own declaration node, which the resolution
                     // walk answers for; a fresh id nothing resolved would not.
                     id,
+                    namespace: None,
                     name: name.to_string(),
+                    name_span: span,
                     type_args: Vec::new(),
                     assoc_types: Vec::new(),
                     span,
@@ -2264,7 +2266,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_id,
                     local_index: next_local,
                     is_mut: p.is_mut,
-                    is_mut_ref: false,
                     span: p.span,
                 });
                 next_local += 1;

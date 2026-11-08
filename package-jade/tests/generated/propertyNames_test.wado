@@ -9,6 +9,7 @@ test "propertyNames validation: all property names valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #"{"f":{},"foo":{}}"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "propertyNames validation: some property names invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #"{"foo":{},"foobar":{}}"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "propertyNames validation: object without properties is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "propertyNames validation: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #"[1,2,3,4]"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "propertyNames validation: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #""foobar""#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "propertyNames validation: ignores other non-objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #"12"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "propertyNames validation: ignores null" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "propertyNames validation: ignores booleans" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"maxLength":3}}"#,
         #"true"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "propertyNames validation with pattern: matching property names valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"pattern":"^a+$"}}"#,
         #"{"a":{},"aa":{},"aaa":{}}"#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "propertyNames validation with pattern: non-matching property name is inval
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"pattern":"^a+$"}}"#,
         #"{"aaA":{}}"#,
         false,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "propertyNames validation with pattern: object without properties is valid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"pattern":"^a+$"}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "propertyNames with boolean schema true: object with any properties is vali
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":true}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "propertyNames with boolean schema true: empty object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":true}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "propertyNames with boolean schema false: object with any properties is inv
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":false}"#,
         #"{"foo":1}"#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "propertyNames with boolean schema false: empty object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":false}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "propertyNames with const: object with property foo is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"const":"foo"}}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "propertyNames with const: object with any other property is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"const":"foo"}}"#,
         #"{"bar":1}"#,
         false,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "propertyNames with const: empty object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"const":"foo"}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "propertyNames with enum: object with property foo is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"enum":["foo","bar"]}}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "propertyNames with enum: object with property foo and bar is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"enum":["foo","bar"]}}"#,
         #"{"foo":1,"bar":1}"#,
         true,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "propertyNames with enum: object with any other property is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"enum":["foo","bar"]}}"#,
         #"{"baz":1}"#,
         false,
+        [],
     );
 }
 
@@ -177,5 +198,6 @@ test "propertyNames with enum: empty object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","propertyNames":{"enum":["foo","bar"]}}"#,
         #"{}"#,
         true,
+        [],
     );
 }

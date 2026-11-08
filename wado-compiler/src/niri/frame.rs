@@ -232,10 +232,9 @@ impl LoopSnapshot {
 /// Whether a `&mut` argument's storage is also named by another argument. Each
 /// parameter binds its own snapshot and each write-back replays whole, so a
 /// second handle either reads a value the program never had or loses its own
-/// write. Whether it could actually observe the write is not asked: after
-/// `prepare_types` a `&` reference to a primitive is the same `Box<T>` a
-/// by-value parameter carries. Wado has no borrow checker, so this is ordinary
-/// source — the frame declines the call rather than mis-running it.
+/// write. Whether it could actually observe the write is not asked. Wado has no
+/// borrow checker, so this is ordinary source — the frame declines the call
+/// rather than mis-running it.
 fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
@@ -326,7 +325,10 @@ impl Interpreter<'_> {
         self.step_budget -= 1;
         match &body.stmts[s].kind {
             StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                type_id,
+                ..
             } => {
                 let (index, value) = (*local_index, *value);
                 // A fresh binding forks the local's storage; an alias taken
@@ -339,6 +341,10 @@ impl Interpreter<'_> {
                     .any(|(root, _)| *root == index)
                 {
                     return Flow::Bail;
+                }
+                if body.declares_without_value(*type_id, value) {
+                    self.bind_local(index, Lattice::Unevaluated);
+                    return Flow::Fallthrough(Lattice::Unevaluated);
                 }
                 // What makes a binding of a reference an alias is that nothing
                 // displaces it. `mut` does not say so: scalarizing leaves an
@@ -841,7 +847,7 @@ impl Interpreter<'_> {
         // `place_of` drops a deref, so `*h.f` names the place field `h.f` does;
         // only the reference itself rebinds.
         let type_id = body.exprs[value.as_expr()?].type_id;
-        if !self.type_table.is_reference_shaped(type_id) {
+        if !self.type_table.is_reference(type_id) {
             return None;
         }
         if index.is_some() {
@@ -1116,7 +1122,7 @@ impl Interpreter<'_> {
         // reference — would leave the snapshot standing for a value the program
         // no longer holds. The writes it performs are still applied; only its
         // result is refused.
-        let returns_reference = self.type_table.is_reference_shaped(callee.return_type);
+        let returns_reference = self.type_table.is_reference(callee.return_type);
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
@@ -1125,7 +1131,7 @@ impl Interpreter<'_> {
         for (arg, param) in args.iter().zip(&callee.params) {
             let place = self.frame_place_of(body, *arg);
             retains_unsettled_storage |= callee.retains.contains(&param.name)
-                && self.type_table.is_reference_shaped(param.type_id)
+                && self.type_table.is_reference(param.type_id)
                 && !place
                     .as_ref()
                     .is_some_and(|(root, _)| self.frame.place_is_settled(*root));
@@ -1241,7 +1247,7 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if self.type_table.is_reference_shaped(body.exprs[e].type_id) {
+        if self.type_table.is_reference(body.exprs[e].type_id) {
             compiler_trace!("region_seed", "region {e:?}: reference-shaped, refused");
             return None;
         }
@@ -1278,8 +1284,8 @@ impl Interpreter<'_> {
                 return None;
             };
             // A scalar under a writable reference would be a value where the
-            // program holds an alias: boxing collapses `&mut x` into a bare
-            // read, so no write position is left for `region_needs` to see.
+            // program holds an alias: a write through the cell leaves no
+            // write position on the local for `region_needs` to see.
             if read.writable_reference && value.is_scalar() {
                 compiler_trace!(
                     "region_seed",

@@ -21,7 +21,7 @@ use crate::name::{DeclaredHead, FunctionId, LocalMethodName, checked_name, unche
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
 use crate::token::{Quote, Span};
-use crate::type_table::{AnonStructId, TypeKey, TypeTable};
+use crate::type_table::{AnonStructId, TypeTable};
 
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
@@ -306,7 +306,7 @@ impl SubstitutionContext {
 
 /// Type identifier for resolved types in TIR.
 /// This is a newtype wrapper to prevent misuse of raw integers as `TypeId`s.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct TypeId(pub u32);
 
 impl std::fmt::Display for TypeId {
@@ -320,7 +320,7 @@ impl std::fmt::Display for TypeId {
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub struct ObjectTypes {
     any: bool,
-    keys: IndexSet<TypeKey>,
+    keys: IndexSet<TypeId>,
 }
 
 impl ObjectTypes {
@@ -333,7 +333,7 @@ impl ObjectTypes {
     }
 
     /// The set of `key` alone.
-    pub fn one(key: TypeKey) -> Self {
+    pub fn one(key: TypeId) -> Self {
         Self {
             any: false,
             keys: std::iter::once(key).collect(),
@@ -346,13 +346,13 @@ impl ObjectTypes {
     }
 
     /// The keys of a set that is not [`Self::is_any`].
-    pub fn keys(&self) -> impl Iterator<Item = TypeKey> + '_ {
+    pub fn keys(&self) -> impl Iterator<Item = TypeId> + '_ {
         assert!(!self.any, "an `any` set has no key list");
         self.keys.iter().copied()
     }
 
     /// Whether `key` is in the set.
-    pub fn contains(&self, key: TypeKey) -> bool {
+    pub fn contains(&self, key: TypeId) -> bool {
         self.any || self.keys.contains(&key)
     }
 
@@ -362,7 +362,7 @@ impl ObjectTypes {
     }
 
     /// Add `key`.
-    pub fn insert(&mut self, key: TypeKey) {
+    pub fn insert(&mut self, key: TypeId) {
         if !self.any {
             self.keys.insert(key);
         }
@@ -513,9 +513,8 @@ pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable
     // Monomorphization holds a substituted shape before its instances are
     // drained, while one generic instance may still be spelled by two ids of
     // its arguments.
-    let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
-        tt.same_type(a, b) || tt.instance_key(a) == tt.instance_key(b)
-    };
+    let same =
+        |tt: &TypeTable, a: TypeId, b: TypeId| a == b || tt.instance_key(a) == tt.instance_key(b);
     if same(tt, field_ty, hole_ty) || same(tt, field.value.type_id, field_ty) {
         return None;
     }
@@ -585,7 +584,7 @@ pub fn to_layers_of(expr: TirExpr, target: TypeId, type_table: &TypeTable) -> Ti
         .take(want - have)
         .collect();
     missing.into_iter().rev().fold(expr, |expr, layer| {
-        let op = if matches!(type_table.get(layer), ResolvedType::MutRef(_)) {
+        let op = if type_table.is_mut_ref(layer) {
             TirUnaryOp::MutRef
         } else {
             TirUnaryOp::Ref
@@ -942,6 +941,9 @@ pub struct ExprMarks {
     /// A by-value argument whose storage the call's evaluation may write before
     /// the callee is done with it: a confined parameter still copies it.
     pub written: bool,
+    /// A temporary a `let` keeps borrowed ([`crate::ownership::Modes::extended`]),
+    /// which drops as the `let`'s scope ends rather than its statement.
+    pub extended: bool,
 }
 
 impl TirExpr {
@@ -962,6 +964,14 @@ impl TirExpr {
     pub fn mark(&self, set: impl FnOnce(&mut ExprMarks)) {
         let mut marks = self.marks.get();
         set(&mut marks);
+        self.marks.set(marks);
+    }
+
+    /// Replace `self` with `with`, the same value spelled another way, which
+    /// keeps what the ownership walk decided about it.
+    pub fn rewrite(&mut self, with: TirExpr) {
+        let marks = self.marks();
+        *self = with;
         self.marks.set(marks);
     }
 
@@ -1439,6 +1449,9 @@ pub enum TirExprKind {
     /// (pre-monomorphize) expands it to `&ListArg::lowered(&value)`.
     ListViewOf {
         value: Box<TirExpr>,
+        /// The type whose impl answers: `value`'s own, or for a `&mut` value
+        /// the `&` it passes for.
+        answering: TypeId,
     },
 
     /// A value whose type holds an `Option<!>` where the node's type holds an
@@ -3564,14 +3577,6 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` (captured here before the boxing
-    /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
-    /// distinction). A `&T` cannot be written through, so only a `&mut`
-    /// parameter can mutate the caller's argument storage.
-    ///
-    /// `lower::plan` fills it, so anything running before that — `link` among
-    /// them — reads `false` here whatever the type says, and must ask the type.
-    pub is_mut_ref: bool,
     pub span: Span,
 }
 
@@ -3605,18 +3610,10 @@ pub struct TirStruct {
 }
 
 impl TirStruct {
-    /// Whether `def` at `type_args` lowers as this struct. `self.name` is
-    /// spelled before the boxing rewrite respells a `&mut` argument, so the
-    /// arguments are compared by key instead.
+    /// Whether `def` at `type_args` lowers as this struct.
     #[must_use]
-    pub fn represents(&self, type_table: &TypeTable, def: StructDef, type_args: &[TypeId]) -> bool {
-        self.def == def
-            && self.type_args.len() == type_args.len()
-            && self
-                .type_args
-                .iter()
-                .zip(type_args)
-                .all(|(&own, &wanted)| type_table.type_key(own) == type_table.type_key(wanted))
+    pub fn represents(&self, def: StructDef, type_args: &[TypeId]) -> bool {
+        self.def == def && self.type_args == type_args
     }
 
     /// The struct of anonymous shape `shape`, holding `fields`.

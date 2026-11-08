@@ -165,9 +165,6 @@ pub enum CompilerItem {
     /// `MapEntriesRefIter<K, V>` — what `TreeMap::entries` returns, and
     /// what the `map<K, V>` lower walks.
     MapEntriesIter,
-    /// `Box<T>` — boxes primitive values into a struct that
-    /// participates in GC tracing.
-    Box,
     /// `i128` — the signed 128-bit wide-int struct.
     I128,
     /// `u128` — the unsigned 128-bit wide-int struct.
@@ -821,7 +818,6 @@ impl CompilerItem {
         Self::List,
         Self::TreeMap,
         Self::MapEntriesIter,
-        Self::Box,
         Self::I128,
         Self::U128,
         Self::RangeExclusive,
@@ -1101,7 +1097,6 @@ impl CompilerItem {
             Self::List => "list",
             Self::TreeMap => "tree_map",
             Self::MapEntriesIter => "map_entries_iter",
-            Self::Box => "box",
             Self::I128 => "i128",
             Self::U128 => "u128",
             Self::RangeExclusive => "range_exclusive",
@@ -1419,7 +1414,6 @@ impl CompilerItem {
             | Self::Shl
             | Self::Shr
             | Self::List
-            | Self::Box
             | Self::I128
             | Self::U128
             | Self::RangeExclusive
@@ -1773,7 +1767,6 @@ impl CompilerItem {
             Self::List
             | Self::TreeMap
             | Self::MapEntriesIter
-            | Self::Box
             | Self::I128
             | Self::U128
             | Self::RangeExclusive
@@ -1996,7 +1989,7 @@ impl fmt::Display for CompilerItem {
 /// kind-specific accessors.
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub enum CompilerItemKind {
-    /// A `struct` declaration (`Box`, `Range*`, `KilnRequest`).
+    /// A `struct` declaration (`Range*`, `KilnRequest`).
     Struct,
     /// A `variant` declaration (`Option`, `Result`).
     Variant,

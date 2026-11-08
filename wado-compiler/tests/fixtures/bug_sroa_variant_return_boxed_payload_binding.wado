@@ -1,11 +1,10 @@
-// A payload binding whose local `lower::plan::boxing` promoted to `Box<T>`.
+// A payload binding whose local `lower::plan::boxing` moved into a cell.
 //
 // `make` returns `Result<Big, Failure>`, which variant-return SROA flattens to
 // `[tag, Option<Big>, Option<Failure>]`. `err` is address-taken by `${err:?}`,
-// so lowering promotes its local to `Box<Failure>` and rewrites the pattern's
-// own type to match. Measuring the local against the pattern rather than
-// against the payload the slot yields therefore passed, and the raw read landed
-// in a `Box<Failure>` local: "type mismatch: expected (ref null $type), found
+// so lowering moves its local into a `&mut Failure` cell. Measuring the local
+// against the pattern rather than against the payload the slot yields passed
+// once, and the raw read landed in the cell local: "type mismatch: expected (ref null $type), found
 // (ref $type)" at codegen.
 use { println, Stdout } from "core:cli";
 

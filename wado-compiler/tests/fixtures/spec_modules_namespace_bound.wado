@@ -1,0 +1,27 @@
+// A bound names a trait through a namespace import, as an `impl` header does.
+use geo from "./sub/spec_modules_geo.wado";
+
+struct Local {}
+
+impl geo::Show for Local {
+    fn show(&self) -> String {
+        return "local";
+    }
+}
+
+fn shown<T: geo::Show>(t: &T) -> String with _ {
+    return t.show();
+}
+
+struct Shelf<T: geo::Show + Eq> {
+    item: T,
+}
+
+test {
+    assert shown(&Local {}) == "local";
+    let shelf = Shelf { item: Local {} };
+    assert shown(&shelf.item) == "local";
+}
+
+__DATA__
+{"test": {}}

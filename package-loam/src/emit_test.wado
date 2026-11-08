@@ -1,6 +1,7 @@
-use { HashMap, TreeMap } from "core:collections";
-use { Decode, EmitError, NameCollision, Placement, UnmappedDtype, emit } from "./emit.wado";
+use { HashMap, HashSet, TreeMap } from "core:collections";
+use { Decode, EmitError, NameCollision, Placement, UnmappedDtype, emit, rows_judged } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo } from "./graph.wado";
+use { module_idents } from "./idents.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { keep_last } from "./specialize.wado";
@@ -790,7 +791,7 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &lengths.dim_T), N, 1, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &scalar::<Bk, i64>(backend, 1)));",
+        "let Y = joined_at::<Bk, f32, [P0, U, P2], [P0, N1, P2], [P0, U, P2]>(backend, &joined_at::<Bk, f32, [P0, T, P2], [P0, N1, P2], [P0, U, P2]>(backend, P, N, 1, &shared::<Bk>(backend, &lengths.dim_T), null), N, 1, &shared::<Bk>(backend, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_T, &scalar::<Bk, i64>(backend, 1))), null);",
     );
 }
 
@@ -1213,10 +1214,16 @@ test "a build reads the valid length where it sums, normalizes, contracts or joi
     }`;
     let built = build_of(&generate(source).unwrap());
     assert built.contains("lengths: &Lengths<Bk>");
-    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, 0 as f32)");
-    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, -f32::INFINITY)");
-    assert built.contains("masked::<Bk, f32, [N, P1]>(backend, P, 0, &lengths.dim_N, 0 as f32)");
-    assert built.contains("(backend, X, X, 0, &lengths.dim_N)");
+    assert built.contains(
+        "masked::<Bk, f32, [N]>(backend, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null, 0 as f32)",
+    );
+    assert built.contains(
+        "masked::<Bk, f32, [N]>(backend, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null, -f32::INFINITY)",
+    );
+    assert built.contains(
+        "masked::<Bk, f32, [N, P1]>(backend, P, 0, &shared::<Bk>(backend, &lengths.dim_N), null, 0 as f32)",
+    );
+    assert built.contains("(backend, X, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null)");
 }
 
 test "a build takes a padded past to its attention as a buffer of fixed capacity, with its valid length" {
@@ -1232,7 +1239,157 @@ test "a build takes a padded past to its attention as a buffer of fixed capacity
         Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T32)
     }`;
     let built = build_of(&generate(source).unwrap());
-    assert built.contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, &Attention {");
+    assert built.contains(
+        "(Q, K, V, PK, PV, Option::Some(&shared::<Bk>(backend, &lengths.dim_P)), null, null, null, null, &Attention {",
+    );
+}
+
+/// An attention over a batch of `B` rows, each with a past of its own length.
+global ROWS_ATTENTION: String = `g (float[B, S, 8] Q, float[B, S, 8] K, float[B, S, 8] V, float[B, 1, P, 8] PK, float[B, 1, P, 8] PV, int64[B, T] M)
+    => (float[B, S, 8] Y, float[B, 1, T, 8] PY, float[B, 1, T, 8] VY) {
+    Dims = Shape(M)
+    One = Constant<value_ints = [1]>()
+    Total = Gather(Dims, One)
+    Last = Sub(Total, One)
+    L = Cast<to = 6>(Last)
+    TotalScalar = Squeeze(Total)
+    T32 = Cast<to = 6>(TotalScalar)
+    Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T32)
+}`;
+
+test "each row of a batch holds lengths of its own, which compute gives every row as one" {
+    let out = generate(ROWS_ATTENTION).unwrap();
+    assert out.contains("pub dim_P: Bk::Tensor<i64, [Slots]>,");
+    assert build_of(&out).contains(
+        "(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, &Attention {",
+    );
+    assert compute_of(&out).contains("dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: [dim_P], extents: [1] })");
+}
+
+test "positions counted from each row's past take the rows ahead of their axes, until the batch's rows take them" {
+    let source = `g (int64[B, S] I, float[B, 1, P, 8] PK) => (float[B, S, 8] Y) <float[16, 8] E, float[16, 8] W> {
+        Ds = Shape(I)
+        Dp = Shape(PK)
+        One = Constant<value = int64 {1}>()
+        Two = Constant<value = int64 {2}>()
+        Zero = Constant<value_ints = [0]>()
+        Past = Gather<axis = 0>(Dp, Two)
+        Len = Gather<axis = 0>(Ds, One)
+        Total = Add(Past, Len)
+        Pos = Range(Past, Total, One)
+        Ids = Unsqueeze(Pos, Zero)
+        Tok = Gather(E, I)
+        At = Gather(W, Ids)
+        Y = Add(Tok, At)
+    }`;
+    let built = build_of(&generate(source).unwrap());
+    assert built.contains("let slots = backend.extents_of(&lengths.dim_P)[0] as i64;");
+    assert built.contains(
+        "let Pos = row_range::<Bk, S>(backend, &lengths.dim_P, to_extent(dim_S), &shared::<Bk>(backend, &scalar::<Bk, i64>(backend, 1)));",
+    );
+    assert built.contains(
+        "let Ids = backend.reshape::<i64, [Slots, S], [Slots, Ids0, S]>(&Pos, [to_extent(slots), 1, to_extent(dim_S)]);",
+    );
+    assert built.contains("let At = backend.gather::<f32, [W0, Y2], [Slots, Ids0, S], [Slots, Ids0, S, Y2]>(");
+    assert built.contains(
+        "&backend.broadcast_in_dim::<f32, [B, S, Y2], [B, S, Y2]>(&backend.reshape::<f32, [Slots, Ids0, S, Y2], [B, S, Y2]>(&At, [to_extent(slots), to_extent(dim_S), 8]), [to_extent(dim_B), to_extent(dim_S), 8], [0, 1, 2])",
+    );
+}
+
+/// Why each row of `source`'s batch shares the lengths, by the node refusing
+/// its own, where one does.
+fn shared_rows(source: String) -> String {
+    let graph = read(&source).unwrap();
+    let Err(Shared(refusal)) = rows_judged(&graph, &infer(&graph).unwrap()) else {
+        return "";
+    };
+    let shared = generate(source).unwrap();
+    assert !shared.contains("[Slots]>,"), "the rows share each length";
+    return `${refusal}`;
+}
+
+test "the rows share their lengths where a node takes one length for every row" {
+    let source = `g (float[B, N] X) => (float[B] Y) {
+        Y = ReduceMean <axes = [-1], keepdims = 0> (X)
+    }`;
+    assert shared_rows(source) == "refused at Y = ReduceMean: it averages over a valid length, which takes one for every row";
+}
+
+test "a slice from each row's valid length takes each row's window" {
+    let source = `g (float[B, N] X) => (float[B, ?] Y) <int64[1] F = {-1}, int64[1] E = {-4000000000}, int64[1] A = {1}, int64[1] Back = {-1}> {
+        Y = Slice(X, F, E, A, Back)
+    }`;
+    assert generate(source).unwrap().contains(
+        "let Y = strided_gather::<Bk, f32, [B, N], [B, Y1]>(backend, X, 1, &row_binary::<Bk>(backend, Binary::Add, &lengths.dim_N, &shared::<Bk>(backend, &scalar::<Bk, i64>(backend, -1))), Option::Some(0), to_extent(dim_N), -1);",
+    );
+}
+
+test "the rows share their lengths where a node reads how many rows the batch holds" {
+    let source = `g (float[B, N] X) => (float[B, N] Y) {
+        Y = Softmax <axis = 0> (X)
+    }`;
+    assert shared_rows(source) == "refused at Y = Softmax: it reads how many rows B holds, which no row holds apart";
+}
+
+test "the rows share their lengths where the inputs padding one lead with two axes" {
+    let source = `g (float[B, N] X, float[C, N] Z) => (float[B, N] Y, float[C, N] W) {
+        Y = Softmax <axis = 1> (X)
+        W = Softmax <axis = 1> (Z)
+    }`;
+    assert shared_rows(source) == "the inputs padding a length lead with two axes, B and C";
+}
+
+test "the rows share their lengths where a tensor each row's lengths computed meets an operation keeping no rows" {
+    let source = `g (int64[B, S] I, float[B, 1, P, 8] PK) => (float[S] Y) {
+        Ds = Shape(I)
+        Dp = Shape(PK)
+        One = Constant<value = int64 {1}>()
+        Two = Constant<value = int64 {2}>()
+        Past = Gather<axis = 0>(Dp, Two)
+        Len = Gather<axis = 0>(Ds, One)
+        Total = Add(Past, Len)
+        Pos = Range(Past, Total, One)
+        F = Cast<to = 1>(Pos)
+        Y = Softmax <axis = 0> (F)
+    }`;
+    assert shared_rows(source) == "refused at Y = Softmax: it reads F, which each row's lengths computed";
+}
+
+test "the rows share their lengths where a node gathers along one" {
+    let source = `g (float[B, N] X, int64[2] I) => (float[B, 2] Y) {
+        Y = Gather<axis = 1>(X, I)
+    }`;
+    assert shared_rows(source) == "refused at Y = Gather: it gathers along a valid length, which takes one for every row";
+}
+
+test "the rows share their lengths where a node reads a valid length over no axis of the rows" {
+    let source = `g (float[B, N] X, float[N] Z) => (float[B, N] W, float[N] Y) {
+        W = Softmax<axis = 1>(X)
+        Y = Softmax<axis = 0>(Z)
+    }`;
+    assert shared_rows(source) == "refused at Y = Softmax: it reads a valid length over no axis of the rows, B";
+}
+
+test "the rows share their lengths where a node reads a tensor folded from one" {
+    let source = `g (float[B, N] X) => (float[2] Y) {
+        S = Shape(X)
+        Y = Cast<to = 1>(S)
+    }`;
+    assert shared_rows(source) == "refused at Y = Cast: it reads S, folded from a valid length, which takes one for every row";
+}
+
+test "the rows share their lengths where the pass returns what each row's lengths computed" {
+    let source = `g (int64[B, S] I, float[B, 1, P, 8] PK) => (int64[S] Pos) {
+        Ds = Shape(I)
+        Dp = Shape(PK)
+        One = Constant<value = int64 {1}>()
+        Two = Constant<value = int64 {2}>()
+        Past = Gather<axis = 0>(Dp, Two)
+        Len = Gather<axis = 0>(Ds, One)
+        Total = Add(Past, Len)
+        Pos = Range(Past, Total, One)
+    }`;
+    assert shared_rows(source) == "the pass returns Pos, which each row's lengths computed";
 }
 
 test "compute holds a cache at the capacity of the total, its past's length what the graph owes it" {
@@ -1329,7 +1486,7 @@ test "a Slice by a negative step walks back from its start" {
     }`;
     let out = generate(source).unwrap();
     assert out.contains(
-        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &scalar::<Bk, i64>(backend, -1)), to_extent(dim_N), -1);",
+        "let Y = strided_gather::<Bk, f32, [N], [Y0]>(backend, X, 0, &shared::<Bk>(backend, &backend.binary::<i64, []>(Binary::Add, &lengths.dim_N, &scalar::<Bk, i64>(backend, -1))), null, to_extent(dim_N), -1);",
     );
 }
 
@@ -1602,7 +1759,8 @@ test "a constant one branch folds is spelled in that branch" {
     assert body.find("let Y = branched::<").unwrap() < k < body.find("}, || {").unwrap();
 }
 
-global DECODER: String = #include_str("../conformance/decoder.onnxtext");
+global ROWS_DECODER: String = #include_str("../conformance/decoder.onnxtext");
+global DECODER: String = ROWS_DECODER.replace("[B, ", "[1, ");
 
 /// Why `source` takes no `decode` of these tensors, the output named in `last`
 /// where one is, or the module where it does.
@@ -1655,8 +1813,91 @@ test "decode refuses logits of more than one position" {
     assert refused_for(decoded("input_ids", "attention_mask", "logits"), "must hold one position");
 }
 
-test "decode refuses rows a pass holds at a capacity" {
-    assert refused_for(decoded_from(DECODER.replace("[1, ", "[B, ")), "must not be held at a capacity");
+test "decode at rows a pass holds at a capacity ends the rows the capacity adds" {
+    let out = decoded_from(ROWS_DECODER).unwrap();
+    assert out.contains("    while ended.len() < capacity_of(rows) {\n        ended.push(true);\n    }\n");
+}
+
+test "rows of their own lengths decode at pasts of their own, which requests in slots take" {
+    let out = decoded_from(ROWS_DECODER).unwrap();
+    assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
+    assert out.contains(", pasts: &List<i64>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Decoded<Bk>");
+    assert out.contains(
+        "dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: pasts.into_iter().map(|past| dim_P + past - (dim_P)).collect(), extents: [pasts.len()] })",
+    );
+    assert out.contains(
+        "let decoding = Decoding::new(backend, sampling, ended, steps, pasts.into_iter().map(|past| dim_T + past - (dim_P)).collect());",
+    );
+    assert out.contains("pub struct Requests<affine Bk: Holds> {");
+    assert out.contains("pub fn place(&mut self, backend: &mut Bk, slot: i32, ");
+    assert out.contains(
+        "pub fn decode(&mut self, backend: &mut Bk, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Tensor<i64, [Slots, Picks]>",
+    );
+}
+
+test "a past that does not grow keeps rows of their own lengths from taking requests in slots" {
+    let stateful = ROWS_DECODER.replace(
+        "float[B, 1, P, 16] past_value)",
+        "float[B, 1, P, 16] past_value, float[B, 4] past_state)",
+    ).replace("float[B, 1, ?, 16] present_value)", "float[B, 1, ?, 16] present_value, float[B, 4] present_state)").replace(
+        "    logits = Add(raw, tilt)",
+        "    logits = Add(raw, tilt)\n    present_state = Neg(past_state)",
+    );
+    let out = decoded_from(stateful).unwrap();
+    assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
+    assert !out.contains("Requests");
+}
+
+test "every local the entries bind is a name no graph tensor takes" {
+    // Renamed so that no tensor shares a name with a local, which would hide it.
+    let source = ROWS_DECODER.replace("open", "unmasked");
+    let graph = read(&source).unwrap();
+    let mut tensors = HashSet::<String>::new();
+    for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
+        for let vi of *declared {
+            tensors.insert(vi.name);
+        }
+    }
+    for let n of graph.nodes {
+        for let t of n.outputs {
+            tensors.insert(t);
+        }
+    }
+    // What the emitter spells from a symbol or a tensor.
+    let derived = |name: &String| name.starts_with("dim_")
+        || name.starts_with("capacity_")
+        || tensors.contains(*name)
+        || tensors.into_iter().any(|t| name.starts_with(`${t}_`));
+    let reserved = module_idents();
+    let out = decoded_from(source).unwrap();
+    let mut unreserved: List<String> = [];
+    for let line of out.split("\n") {
+        let mut rest = line.as_str_slice();
+        while let Some(at) = rest.find("let ") {
+            rest = rest.slice(at + 4, rest.len());
+            if rest.starts_with("mut ") {
+                rest = rest.slice(4, rest.len());
+            }
+            let mut end = 0;
+            for let c of rest.chars() {
+                if !c.is_ascii_alphanumeric() && c != '_' {
+                    break;
+                }
+                end += c.len_utf8();
+            }
+            let name = rest.slice(0, end).to_string();
+            if end > 0 && !reserved.contains(name) && !derived(&name) && !unreserved.contains(&name) {
+                unreserved.push(name);
+            }
+        }
+    }
+    assert unreserved == [] as List<String>, unreserved.join(", ");
+}
+
+test "rows that share their lengths decode no request apart" {
+    let out = decoded_from(DECODER).unwrap();
+    assert !out.contains("decode_rows");
+    assert !out.contains("Requests");
 }
 
 test "decode refuses one input as both its token and its mask" {

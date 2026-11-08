@@ -23,8 +23,7 @@ use super::multi_value_return::is_eligible_field_type;
 /// call costs more than the aggregate it avoids.
 const MAX_PARAM_FIELDS: usize = 8;
 
-/// One field is `sroa_param`'s, which knows a by-value `Box<T>` for the
-/// reference it is.
+/// One field is `sroa_param`'s, which knows a cell for the reference it is.
 const MIN_PARAM_FIELDS: usize = 2;
 
 /// Set `param_abi` on every parameter that can take one Wasm slot per field.
@@ -97,7 +96,7 @@ fn settle(
     type_table: &TypeTable,
 ) -> IndexMap<ParamKey, ParamAbi> {
     loop {
-        while settle_forwards(&mut candidates, type_table) {}
+        while settle_forwards(&mut candidates) {}
         let before = candidates.len();
         candidates.retain(|_, c| splittable(&c.taken().0, type_table));
         if candidates.len() == before {
@@ -121,7 +120,7 @@ fn settle(
 /// One round over the forwards: drop a candidate whose callee does not take
 /// the ABI on the same shape, and widen one to the fields its callees take,
 /// which the call passes on from those it arrived in. Whether anything changed.
-fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &TypeTable) -> bool {
+fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>) -> bool {
     let keys: Vec<ParamKey> = candidates.keys().copied().collect();
     let mut changed = false;
     for key in keys {
@@ -136,9 +135,7 @@ fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &
                 // the callee holds the same fields. Not the same aggregate: one
                 // instance serves `Pair<Meters>` and `Pair<f32>` alike.
                 assert!(
-                    g.field_names == c.field_names
-                        && type_table.type_keys(&g.field_types)
-                            == type_table.type_keys(&c.field_types),
+                    g.field_names == c.field_names && g.field_types == c.field_types,
                     "a forwarded aggregate arrives in the fields it was sent in"
                 );
                 reads.extend(g.taken().1);
@@ -166,7 +163,7 @@ fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
 ) -> IndexMap<ParamKey, Candidate> {
-    let structs = StructDecls::new(&project.structs, type_table);
+    let structs = StructDecls::new(&project.structs);
     let mut out = IndexMap::default();
     for (func_idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
@@ -181,8 +178,12 @@ fn collect_candidates(
             if param.is_mut || param.is_mut_ref {
                 continue;
             }
+            // A cell is the aggregate itself, its one field read off the
+            // parameter as a struct's is.
             let (aggregate, through_ref) = match type_table.get(param.type_id) {
-                ResolvedType::Ref(referent) => (*referent, true),
+                ResolvedType::Ref(referent) if type_table.cell_payload(param.type_id).is_none() => {
+                    (*referent, true)
+                }
                 _ => (param.type_id, false),
             };
             let Some((all_types, all_names, _)) =

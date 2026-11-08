@@ -47,9 +47,6 @@ fn record_declaration(
         "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
         func.name
     );
-    // Read from the type, as validation did: `TirParam::is_mut_ref` is filled by
-    // `lower::plan`, which runs after link, so every one of them is still
-    // `false`.
     let params: Vec<ParamShape<'_>> = func
         .params
         .iter()

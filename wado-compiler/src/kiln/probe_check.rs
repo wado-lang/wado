@@ -56,7 +56,7 @@ pub fn check_probe(sem: &Semantics, module: &ModuleSource) -> Vec<Diagnostic> {
                     spell(supplied.keys())
                 ),
             ),
-            Some(&want) if !types.same_type(param.type_id, want) => refuse(
+            Some(&want) if param.type_id != want => refuse(
                 &param.span,
                 format!(
                     "`probe` takes `{}` as `{}`, but a host supplies it as `{}`",
@@ -73,7 +73,7 @@ pub fn check_probe(sem: &Semantics, module: &ModuleSource) -> Vec<Diagnostic> {
         matches!(types.get(ok), ResolvedType::Primitive(PrimitiveType::U64))
             && types
                 .as_result(generate.return_type)
-                .is_some_and(|(_, generate_err)| types.same_type(err, generate_err))
+                .is_some_and(|(_, generate_err)| err == generate_err)
     });
     if !answers_extent {
         refuse(

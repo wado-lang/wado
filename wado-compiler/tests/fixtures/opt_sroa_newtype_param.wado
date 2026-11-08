@@ -1,11 +1,11 @@
 // Test: Newtype parameter SROA
 // Verifies that newtype `&self` methods and functions taking `&Newtype`
-// parameters are correctly SROA'd — the Box<T> wrapper is eliminated
-// and scalar values are passed directly.
+// parameters are correctly SROA'd — the cell is eliminated and scalar
+// values are passed directly.
 //
-// Newtypes of primitives (e.g., `type Meters = f64`) use Box<T> for
-// reference semantics at the WIR level, same as regular primitive refs.
-// Single-field parameter SROA should unwrap these identically to Box<T>.
+// A reference to a newtype of a primitive (e.g., `type Meters = f64`) points
+// at a cell at the WIR level, same as a regular primitive reference.
+// Single-field parameter SROA should unwrap these identically.
 
 // `black_box` keeps the newtype values off const-folding's radar so the
 // methods below survive into the WIR to be matched.

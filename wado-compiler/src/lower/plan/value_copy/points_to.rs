@@ -28,9 +28,7 @@ use loc_set::{Loc, LocSet};
 
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
-use super::is_reference_type;
 use super::last_use::collect_child_exprs;
-use super::place::could_write_through;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
 use crate::cut_memo::CutWalk;
 use crate::defs::DefId;
@@ -44,7 +42,7 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeMemo, TypeTable};
+use crate::type_table::{TypeMemo, TypeTable};
 
 /// A frame: a function, or a global's initializer, whose locals have locations
 /// of their own.
@@ -215,21 +213,21 @@ impl PointsTo {
 /// What a handle held in a value lets its holder do to another local's storage.
 #[derive(Clone, Copy)]
 enum Handle {
-    /// Name it: a `&T`, a box, or a function value.
+    /// Name it: a `&T` or a function value.
     Names,
-    /// Write it: a `&mut T`, a writable box, or a function value, or one of
-    /// those read through a `&T`.
+    /// Write it: a `&mut T` or a function value, or one of those read through
+    /// a `&T`.
     Writes,
 }
 
 /// The types a walk is inside of: a struct by its type, a variant by its
 /// declaration and its arguments resolved to concrete types. A cycle back to
 /// one adds no path to a handle.
-type UnderWay = CutWalk<(Option<DefId>, Vec<TypeKey>)>;
+type UnderWay = CutWalk<(Option<DefId>, Vec<TypeId>)>;
 
 /// `walk` inside `key`, or `false` where `key` is already under way.
 fn guarded(
-    key: (Option<DefId>, Vec<TypeKey>),
+    key: (Option<DefId>, Vec<TypeId>),
     under_way: &mut UnderWay,
     walk: impl FnOnce(&mut UnderWay) -> bool,
 ) -> bool {
@@ -256,9 +254,8 @@ impl<'a> HoldsHandle<'a> {
     }
 
     fn of(&self, ty: TypeId) -> bool {
-        self.known.get_or_compute(self.type_table.type_key(ty), || {
-            self.walk(ty, None, &mut UnderWay::new(false), 0)
-        })
+        self.known
+            .get_or_compute(ty, || self.walk(ty, None, &mut UnderWay::new(false), 0))
     }
 
     /// `env` is what the template parameters `ty` is written in take.
@@ -275,18 +272,12 @@ impl<'a> HoldsHandle<'a> {
         }
         let tt = self.type_table;
         let next = depth + 1;
-        if tt.is_reference_shaped(ty) {
-            let referent = match tt.get(ty) {
-                ResolvedType::Ref(payload) => Some(*payload),
-                ResolvedType::MutRef(_) => None,
-                _ => tt.box_payload_of(ty).filter(|_| !tt.is_mut_box(ty)),
-            };
-            return match (self.handle, referent) {
-                (Handle::Writes, Some(payload)) => self.walk(payload, env, under_way, next),
-                _ => true,
-            };
-        }
         match tt.get(ty) {
+            ResolvedType::Ref(payload) => match self.handle {
+                Handle::Writes => self.walk(*payload, env, under_way, next),
+                Handle::Names => true,
+            },
+            ResolvedType::MutRef(_) => true,
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -299,7 +290,7 @@ impl<'a> HoldsHandle<'a> {
                 let Some(fields) = self.fields.get(&(*def, type_args.clone())) else {
                     return true;
                 };
-                guarded((None, vec![tt.type_key(ty)]), under_way, |under_way| {
+                guarded((None, vec![ty]), under_way, |under_way| {
                     fields
                         .iter()
                         .any(|f| self.walk(f.type_id, None, under_way, next))
@@ -322,9 +313,9 @@ impl<'a> HoldsHandle<'a> {
                 };
                 // An instance whose arguments resolve is under way once, so a
                 // variant recursing through its own instance ends there.
-                let resolved: Option<Vec<TypeKey>> = type_args
+                let resolved: Option<Vec<TypeId>> = type_args
                     .iter()
-                    .map(|&a| resolve_param_in_env(a, env, tt).map(|c| tt.type_key(c)))
+                    .map(|&a| resolve_param_in_env(a, env, tt))
                     .collect();
                 match resolved {
                     Some(args) => guarded((Some(*def), args), under_way, |u| {
@@ -1163,8 +1154,8 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
             .params
             .iter()
             .map(|p| Slot {
-                by_ref: type_table.is_reference_shaped(p.type_id),
-                writes: p.is_mut_ref || could_write_through(p.type_id, &type_table),
+                by_ref: type_table.is_reference(p.type_id),
+                writes: type_table.is_mut_ref(p.type_id),
             })
             .collect();
         let dispatches = matches!(func.kind, FunctionKind::FnCanonicalDispatch { .. });
@@ -1341,7 +1332,7 @@ impl Builder<'_> {
     /// The storage a projection over `base` names: `base`'s own, or what it
     /// refers to where it is a reference read through.
     fn projected(&mut self, base: &TirExpr) -> Option<u32> {
-        if self.type_table.is_reference_shaped(base.type_id) {
+        if self.type_table.is_reference(base.type_id) {
             Some(self.referent(base))
         } else {
             self.place(base)
@@ -1390,7 +1381,7 @@ impl Builder<'_> {
     /// value where its type holds a writable handle, and its own storage where
     /// the slot is a `&mut`.
     fn hand(&mut self, arg: &TirExpr, slot: Slot) -> Option<u32> {
-        let (value, own) = if slot.by_ref && !self.type_table.is_reference_shaped(arg.type_id) {
+        let (value, own) = if slot.by_ref && !self.type_table.is_reference(arg.type_id) {
             self.operand(arg)
         } else {
             (self.eval(arg), None)
@@ -1443,14 +1434,14 @@ impl Builder<'_> {
     /// How each parameter of a value of type `callee` takes its argument.
     fn fn_slots(&self, callee: TypeId) -> Vec<Slot> {
         let tt = self.type_table;
-        let ResolvedType::Function { params, .. } = tt.get(tt.peel_refs_and_box(callee)) else {
+        let ResolvedType::Function { params, .. } = tt.get(tt.peel_refs(callee)) else {
             unreachable!("an indirect call's callee is a function value");
         };
         params
             .iter()
             .map(|&p| Slot {
-                by_ref: tt.is_reference_shaped(p),
-                writes: could_write_through(p, tt),
+                by_ref: tt.is_reference(p),
+                writes: tt.is_mut_ref(p),
             })
             .collect()
     }
@@ -1507,7 +1498,7 @@ impl Builder<'_> {
         if let Some(ReturnConvention::PartOf(params)) = &decl.returns {
             for &p in params {
                 let Some(h) = handed[p] else { continue };
-                if self.type_table.is_reference_shaped(args[p].type_id) && !returns_reference {
+                if self.type_table.is_reference(args[p].type_id) && !returns_reference {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);
@@ -1571,7 +1562,7 @@ impl Builder<'_> {
         }
         // A binding takes part of the value, or what it refers to, or — lifted
         // to a reference to the scrutinee — the scrutinee's own storage.
-        let referent = if self.type_table.is_reference_shaped(scrutinee.type_id) {
+        let referent = if self.type_table.is_reference(scrutinee.type_id) {
             self.deref(value)
         } else {
             None
@@ -1678,7 +1669,7 @@ impl Builder<'_> {
     /// is a reference read through, what the storage it names holds.
     fn part_of(&mut self, whole: &TirExpr) -> Option<u32> {
         let v = self.eval(whole);
-        if self.type_table.is_reference_shaped(whole.type_id) {
+        if self.type_table.is_reference(whole.type_id) {
             self.deref(v)
         } else {
             v
@@ -1718,8 +1709,8 @@ impl Builder<'_> {
             | TirExprKind::VariantPayload { expr: inner, .. } => self.part_of(inner),
             TirExprKind::Cast { expr: inner, .. } => {
                 let v = self.eval(inner);
-                if self.type_table.is_reference_shaped(inner.type_id)
-                    && !is_reference_type(expr.type_id, self.type_table)
+                if self.type_table.is_reference(inner.type_id)
+                    && !self.type_table.is_reference(expr.type_id)
                 {
                     self.deref(v)
                 } else {
@@ -1739,7 +1730,7 @@ impl Builder<'_> {
                 let mut args = args.iter().map(|a| &a.expr);
                 if let Some(decl) = self.builtins.get(&**func) {
                     let args: Vec<&TirExpr> = args.collect();
-                    let returns_reference = self.type_table.is_reference_shaped(expr.type_id);
+                    let returns_reference = self.type_table.is_reference(expr.type_id);
                     return self.builtin_call(decl, returns_reference, &args);
                 }
                 match self.functions.id(&func.module_source, &func.name) {
@@ -1838,7 +1829,7 @@ impl Builder<'_> {
                         CaptureSource::Local(index) => {
                             let node = self.local(self.frame, index);
                             // A capture by reference holds the local's storage.
-                            if self.type_table.is_reference_shaped(capture.type_id) {
+                            if self.type_table.is_reference(capture.type_id) {
                                 held.push(self.naming(node));
                             }
                             held.push(node);

@@ -1,7 +1,7 @@
 //! Box-local elimination for WIR: `elide_adjacent_box_locals` substitutes a
 //! single-field `StructNew` local's `inner` at its one `StructGet` use — sound
 //! even for a heap-reading `inner`, the preceding ops all being pure and
-//! unconditional — targeting the `Box<T>` locals minted during NIR→WIR lowering,
+//! unconditional — targeting the cell locals minted during NIR→WIR lowering,
 //! which NIR's own `elide_box_local` never sees.
 //!
 //! `unwrap_box_locals` takes the ones adjacency cannot reach — the by-reference
@@ -140,7 +140,7 @@ enum BoxUseWalk {
     Blocked,
 }
 
-/// Elide single-field (`Box<T>`) struct locals with a heap-reading initializer
+/// Elide single-field (cell) struct locals with a heap-reading initializer
 /// when the def and its single use are adjacent in straight-line code. A
 /// heap-reading `inner` is only safe to move into a single use whose preceding
 /// ops are all pure and unconditional, which is what the adjacency buys.
@@ -359,7 +359,7 @@ fn substitute_box_use(instr: &mut WirInstr, name: &str, field: &str, inner: &Wir
     done
 }
 
-/// Retype a single-field (`Box<T>`) struct local to its field, dropping the
+/// Retype a single-field (cell) struct local to its field, dropping the
 /// `StructNew`. Nothing moves, so an intervening write is no obstacle.
 pub(super) fn unwrap_box_locals(module: &mut WirPackage) {
     for func in &mut module.functions {

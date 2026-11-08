@@ -63,12 +63,8 @@ impl AssocTarget {
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
         match ty {
-            Type::Named(named) => {
-                self.record_type_name_reference(named.id, &named.name);
-                self.resolve_named_type(named.id, &named.name, named.span, true)
-            }
+            Type::Named(named) => self.resolve_named_type(named.id, &named.name, named.span, true),
             Type::Generic(generic) => {
-                self.record_type_name_reference(generic.id, &generic.name);
                 self.resolve_generic_type(generic.id, &generic.name, &generic.args, generic.span)
             }
             Type::Function(func_ty) => {
@@ -1525,7 +1521,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !inherits
             {
                 let at = self.bound_trait_args(base, &bound, &space, trait_);
-                if !at.is_some_and(|at| self.tysys.type_table.borrow().same_types(&at, wanted)) {
+                if at.as_deref() != Some(wanted) {
                     continue;
                 }
             }

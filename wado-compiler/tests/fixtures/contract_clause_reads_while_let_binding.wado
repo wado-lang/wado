@@ -1,0 +1,43 @@
+// A clause that rides the last argument reads a `while let` binding moved into
+// an earlier argument, through a method that borrows it.
+use { println, Stdout } from "core:cli";
+
+struct Key {
+    frag: Option<String>,
+}
+
+impl Key {
+    fn frag(&self) -> Option<StrSlice> {
+        if let Some(f) = &self.frag {
+            return Option::Some(f.as_str_slice());
+        }
+        return null;
+    }
+}
+
+// The last parameter is a value, so the clause rides the last argument.
+fn add(keys: &mut List<Key>, k: Key, _n: i32)
+    contract k.frag() matches { None }
+{
+    keys.push(k);
+}
+
+fn next(keys: &List<Key>) -> Option<Key> {
+    if keys.len() < 3 {
+        return Option::Some(Key { frag: null });
+    }
+    return null;
+}
+
+export fn run() with Stdout {
+    let mut keys: List<Key> = [Key { frag: null }];
+    while let Some(k) = next(&keys) {
+        add(&mut keys, k, 0);
+    }
+    println(`${keys.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n"
+}

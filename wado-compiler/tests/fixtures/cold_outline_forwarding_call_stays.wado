@@ -1,0 +1,28 @@
+// A cold region that is one call stays where it is: the helper's call site
+// would hand over every local the region reads, which costs what the region
+// does. Pricing it by the enclosing function's parameters alone took the call
+// for a saving and wrapped it in a helper that only forwards.
+
+fn report(a: i32, b: i32, c: i32, site: String) -> ! {
+    panic(`${a} ${b} ${c} ${site}`);
+}
+
+export fn run() {
+    let a = builtin::black_box(1);
+    let b = builtin::black_box(2);
+    let c = builtin::black_box(3);
+    if a > 100 {
+        builtin::cold_path();
+        report(a, b, c, "site");
+    }
+}
+
+__DATA__
+{
+    "wir_contrast": {"O2": [
+        {"report(a, b, c, \"site\");": "report(a + b * c, b - c * a, c + a * b, `site ${a}`);"}
+    ]},
+    "wir_not_expect:O2": [
+        "run$cold0"
+    ]
+}

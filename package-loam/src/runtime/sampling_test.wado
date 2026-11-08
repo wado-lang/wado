@@ -1,5 +1,5 @@
-use { Decoding, Picks, Sampling, Slots, opened, stepped } from "./sampling.wado";
-use { One } from "./hlo.wado";
+use { Decoding, Picks, Sampling, opened, stepped } from "./sampling.wado";
+use { One, Slots } from "./hlo.wado";
 use { Cpu, Tensor } from "./tensor.wado";
 
 /// Tokens of a row, as a test spells its logits.
@@ -127,7 +127,7 @@ test "an ended row keeps returning its first end token" {
     let sampling = Sampling {
         ends: [2, 3],
     };
-    let decoding = Decoding::new(&mut cpu, &sampling, [false, false], 3, 0);
+    let decoding = Decoding::new(&mut cpu, &sampling, [false, false], 3, [0]);
     let scores = logits([
         [0.0, 0.0, 1.0, 0.0],
         [1.0, 0.0, 0.0, 0.0],
@@ -173,9 +173,55 @@ test "a mask opens the position a step reads" {
         data: [1, 1, 0, 0],
         extents: [1, 4],
     };
-    let at = Tensor::<i64, []> {
+    let at = Tensor::<i64, [Slots]> {
         data: [2],
-        extents: [],
+        extents: [1],
     };
     assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).data == [1, 1, 1, 0];
+}
+
+test "a mask opens each row's own position" {
+    let mut cpu = Cpu {};
+    let mask = Tensor::<i64, [Slots, Picks]> {
+        data: [1, 1, 0, 0, 1, 0, 0, 0],
+        extents: [2, 4],
+    };
+    let at = Tensor::<i64, [Slots]> {
+        data: [2, 1],
+        extents: [2],
+    };
+    assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).data == [1, 1, 1, 0, 1, 1, 0, 0];
+}
+
+/// The tokens `steps` steps draw over even logits, a row at each of `at`.
+fn drawn_at(at: List<i64>, rows: i32, steps: i32) -> List<i64> {
+    let mut cpu = Cpu {};
+    let sampling = Sampling { temperature: 1.0, seed: 3 };
+    let decoding = Decoding::new(&mut cpu, &sampling, List::<bool>::filled(rows, false), steps, at);
+    let even = logits(List::<List<f32>>::filled(rows, List::<f32>::filled(8, 1.0)));
+    let mut tokens = decoding.tokens;
+    let mut finished = decoding.finished;
+    for let step of 0..<steps {
+        let next = stepped::<Cpu, [Slots, One, Vocabulary]>(
+            &mut cpu,
+            &even,
+            &decoding,
+            &tokens,
+            &finished,
+            &Tensor::<i64, []> {
+                data: [step as i64],
+                extents: [],
+            },
+        );
+        tokens = next.tokens;
+        finished = next.finished;
+    }
+    return tokens.data;
+}
+
+test "a row at a position of its own draws what it draws alone" {
+    let both = drawn_at([3, 9], 2, 4);
+    let held = both.len() / 2;
+    assert both[0..<4].to_list() == drawn_at([3], 1, 4)[0..<4].to_list();
+    assert both[held..<held + 4].to_list() == drawn_at([9], 1, 4)[0..<4].to_list();
 }

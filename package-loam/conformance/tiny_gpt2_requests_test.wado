@@ -1,0 +1,93 @@
+//! A tiny GPT-2 that branches on whether it is given a past, as GPT-2's merged
+//! export does, decoding requests side by side in slots. Each request picks the
+//! tokens it picks alone: its prompt through `compute`, then one call of
+//! `decode`. A pass with no past owes the mask the prompt's length, so the
+//! prompt leaves no room, and `decode` grows the cache.
+
+use { Cpu, Sampling, Tensor } from "lib:loam";
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                last: { logits: 1 },
+                decode: { ids: "input_ids", mask: "attention_mask", logits: "logits" },
+            },
+        },
+    };
+
+global STEPS: i32 = 6;
+
+fn ids(tokens: List<i64>) -> Tensor<i64, [merged::BatchSize, merged::SequenceLength]> {
+    return Tensor {
+        data: tokens,
+        extents: [1, tokens.len()],
+    };
+}
+
+fn mask(length: i32) -> Tensor<i64, [merged::BatchSize, merged::SequenceLength]> {
+    return Tensor {
+        data: List::<i64>::filled(length, 1),
+        extents: [1, length],
+    };
+}
+
+fn branch(cached: bool) -> Tensor<bool, [merged::UseCacheBranch0]> {
+    return Tensor {
+        data: [cached],
+        extents: [1],
+    };
+}
+
+fn alone(cpu: &mut Cpu, model: &mut merged::Model<Cpu>, prompt: List<i64>, sampling: &Sampling) -> List<i64> {
+    let first = merged::compute(
+        cpu,
+        &ids(prompt),
+        &mask(prompt.len()),
+        &branch(false),
+        &merged::Cache::empty(cpu, 1),
+        0,
+        model,
+    );
+    let mut tokens = sampling.first_tokens(&first.logits, prompt.len() as i64);
+    let next = merged::decode(
+        cpu,
+        &ids(tokens),
+        &mask(prompt.len() + 1),
+        &branch(true),
+        &first.cache,
+        STEPS,
+        sampling,
+        model,
+    );
+    tokens.extend(&next.tokens.data);
+    return tokens;
+}
+
+test "requests in slots of a branching decoder each pick the tokens they pick alone" {
+    let cpu = &mut Cpu {};
+    let mut model = merged::Model::new(merged::Params::embedded(cpu));
+    let prompts: List<List<i64>> = [
+        [1, 5, 42, 7, 9],
+        [3, 8],
+        [12, 21, 4],
+    ];
+    for let sampling of [
+        Sampling {},
+        Sampling { temperature: 0.8, seed: 7 },
+    ] {
+        let mut requests = merged::Requests::new(cpu, 4, 16);
+        let mut tokens: List<List<i64>> = [];
+        for let [slot, prompt] of prompts.into_iter().enumerate() {
+            tokens.push([
+                requests.place(cpu, slot, &ids(prompt), &mask(prompt.len()), &branch(false), &sampling, &mut model),
+            ]);
+        }
+        let next = requests.decode(cpu, &branch(true), STEPS, &sampling, &mut model);
+        for let [slot, prompt] of prompts.into_iter().enumerate() {
+            tokens[slot].extend(&next.data[slot * STEPS..<(slot + 1) * STEPS].to_list());
+            assert tokens[slot] == alone(cpu, &mut model, prompt, &sampling);
+        }
+    }
+}

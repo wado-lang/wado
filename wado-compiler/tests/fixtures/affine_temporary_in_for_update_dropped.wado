@@ -1,0 +1,31 @@
+// A C-style `for` update is a statement of its own: a temporary it borrows
+// drops as it ends, so the next iteration cannot read what it kept.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn id(t: &Tok) -> &Tok {
+    return t;
+}
+
+test {
+    let a = make(1);
+    let mut r = &a;
+    for let mut i = 0; i < 2; r = id(&make(i)) {
+        assert r.n >= 0;
+        i += 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":25:16: analysis error: `r` refers into the temporary at 24:39, which dropped as its statement ended"}

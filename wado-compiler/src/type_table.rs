@@ -81,39 +81,15 @@ pub struct TypeTable {
     trait_frames: IndexMap<DefId, Arc<TraitFrame>>,
     /// What [`Self::projection_bounds`] answered for each projection, which
     /// depends on nothing but the interned projection.
-    projection_bounds_cache: IndexMap<TypeKey, Arc<[TraitRef]>>,
-    /// Erasure redirects: set by `erase_newtypes_and_flags()`.
-    /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
-    /// Newtype → ultimate base type; Flags → u32.
-    ///
-    /// A sparse [`TypeMap`] (most types are not erased): `Some(target)` is a
-    /// live redirect, an absent slot means "no redirect". `get` consults it
-    /// on every call, so the hash-free index matters here too.
-    redirects: TypeMap<TypeId>,
-    /// Each type whose spelling names an erased type among its arguments,
-    /// mapped to the spelling naming what erasure redirects it to: two
-    /// spellings of one type, which [`Self::type_key`] answers alike. Sparse,
-    /// as `redirects` is.
-    settled_spellings: TypeMap<TypeId>,
-    /// Whether erasure is done, so a type interned from here on is settled as
-    /// it arrives.
-    instances_settled: bool,
-    /// The settled spellings minted as keys that nothing has interned as a
-    /// type yet, which `newtype_decls` leaves out until something does.
-    unindexed: IndexSet<TypeId>,
-    /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
-    /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
-    /// `&mut T` into `Box<T>` wrapper structs for primitives, variants and
-    /// function types. Sites that read receiver / argument types in
-    /// post-boxing IR (DCE inspect scanning, dispatch synthesis, etc.) use
-    /// [`Self::peel_refs_and_box`] to look through both the reference
-    /// layer and any boxing wrapper in a single step.
-    ///
-    /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
-    box_payload_types: TypeMap<TypeId>,
-    /// The `Box<T>` a slot holds a value in, for the types
+    projection_bounds_cache: IndexMap<TypeId, Arc<[TraitRef]>>,
+    /// What each type erases to, from erasure on: [`Self::erase_type`]'s
+    /// answers.
+    erasures: TypeMap<TypeId>,
+    /// Whether erasure is done, so [`Self::intern`] answers erased ids.
+    erased: bool,
+    /// The `&mut T` cell a slot holds a value in, for the types
     /// [`Self::boxes_slot`] names, keyed by the type.
-    slot_boxes: IndexMap<TypeKey, TypeId>,
+    slot_boxes: IndexMap<TypeId, TypeId>,
     /// The first type interned for each non-generic newtype declaration: its base is part
     /// of the intern key, so the declaration alone is no key into `intern_map`.
     newtype_decls: IndexMap<DefId, TypeId>,
@@ -146,7 +122,7 @@ pub struct TypeTable {
     /// Struct field types by declaration and instance arguments, a template's
     /// (no arguments) in its own terms: what [`Self::holds_affine_resource`]
     /// reads.
-    struct_field_index: IndexMap<(DefId, Vec<TypeKey>), Vec<TypeId>>,
+    struct_field_index: IndexMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
@@ -297,11 +273,8 @@ impl TypeTable {
             assoc_type_sigs: IndexMap::default(),
             trait_frames: IndexMap::default(),
             projection_bounds_cache: IndexMap::default(),
-            redirects: TypeMap::default(),
-            settled_spellings: TypeMap::default(),
-            instances_settled: false,
-            unindexed: IndexSet::default(),
-            box_payload_types: TypeMap::default(),
+            erasures: TypeMap::default(),
+            erased: false,
             slot_boxes: IndexMap::default(),
             newtype_decls: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
@@ -336,21 +309,23 @@ impl TypeTable {
         table
     }
 
+    /// The id `ty` interns to; from erasure on, the id of what it erases to,
+    /// the only one the IR holds.
     pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
-        if let Some(&id) = self.intern_map.get(&ty) {
-            if self.unindexed.swap_remove(&id) {
-                self.index_type(id, &ty);
+        let id = if let Some(&id) = self.intern_map.get(&ty) {
+            id
+        } else {
+            let id = self.types.next_id();
+            self.index_type(id, &ty);
+            self.push_type(ty.clone());
+            let shared = self.shared_spelling(&ty);
+            self.intern_map.insert(ty, id);
+            if let Some(shared) = shared {
+                self.intern(shared);
             }
-            return id;
-        }
-        let id = self.types.next_id();
-        self.index_type(id, &ty);
-        self.push_type(ty.clone());
-        self.intern_map.insert(ty, id);
-        if self.instances_settled {
-            self.settle_spelling(id);
-        }
-        id
+            id
+        };
+        if self.erased { self.erase_type(id) } else { id }
     }
 
     /// Append `ty` at [`TypeMap::next_id`]: the only way a slot is filled.
@@ -366,59 +341,55 @@ impl TypeTable {
         }
     }
 
-    /// The spelling of `id` with each erased type in it named as what erasure
-    /// redirects it to.
-    fn settle_spelling(&mut self, id: TypeId) -> TypeId {
-        if let Some(&settled) = self.settled_spellings.get(id) {
-            return settled;
-        }
-        // An erased newtype among an instance's arguments is its base, as it
-        // is everywhere else once erasure redirects it.
-        let resolved = self.resolved_id(id);
-        if resolved != id {
-            let settled = self.settle_spelling(resolved);
-            self.settled_spellings.set_growing(id, settled);
-            return settled;
+    /// The type `id` names once newtypes, `flags` and function rows are erased,
+    /// spelled with erased arguments: the one id every spelling of that type
+    /// shares.
+    pub fn erase_type(&mut self, id: TypeId) -> TypeId {
+        assert!(self.erased, "erasure has run");
+        if let Some(&erased) = self.erasures.get(id) {
+            return erased;
         }
         let spelling = self.types.get(id).expect("an interned type").clone();
         let rebuilt = match &spelling {
-            ResolvedType::Tuple(elems) => ResolvedType::Tuple(self.settle_spellings(elems)),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
+                let erased = self.erase_type(self.representation_head(id));
+                self.erasures.set_growing(id, erased);
+                return erased;
+            }
+            ResolvedType::Tuple(elems) => ResolvedType::Tuple(self.erase_types(elems)),
             ResolvedType::Resource { def, type_args } => ResolvedType::Resource {
                 def: *def,
-                type_args: self.settle_spellings(type_args),
+                type_args: self.erase_types(type_args),
             },
             ResolvedType::Variant { def, type_args } => ResolvedType::Variant {
                 def: *def,
-                type_args: self.settle_spellings(type_args),
+                type_args: self.erase_types(type_args),
             },
             ResolvedType::Struct { def, type_args } => ResolvedType::Struct {
                 def: *def,
-                type_args: self.settle_spellings(type_args),
+                type_args: self.erase_types(type_args),
             },
-            ResolvedType::Ref(inner) => ResolvedType::Ref(self.settle_spelling(*inner)),
-            ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.settle_spelling(*inner)),
-            ResolvedType::BuiltinArray(elem) => {
-                ResolvedType::BuiltinArray(self.settle_spelling(*elem))
-            }
+            ResolvedType::Ref(inner) => ResolvedType::Ref(self.erase_type(*inner)),
+            ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.erase_type(*inner)),
+            ResolvedType::BuiltinArray(elem) => ResolvedType::BuiltinArray(self.erase_type(*elem)),
+            // The effect check has run: a row distinguishes nothing any later
+            // phase reads.
             ResolvedType::Function {
                 is_mut,
                 params,
                 return_type,
-                effects,
+                effects: _,
             } => ResolvedType::Function {
                 is_mut: *is_mut,
-                params: self.settle_spellings(params),
-                return_type: self.settle_spelling(*return_type),
-                effects: effects.clone(),
+                params: self.erase_types(params),
+                return_type: self.erase_type(*return_type),
+                effects: Vec::new(),
             },
-            // A newtype keeps its identity until erasure redirects it, and the
-            // rest name no other type.
-            ResolvedType::Newtype { .. }
-            | ResolvedType::Primitive(_)
+            // These name no other type.
+            ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
-            | ResolvedType::Flags { .. }
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
@@ -428,105 +399,50 @@ impl TypeTable {
             | ResolvedType::Unknown
             | ResolvedType::Error => spelling.clone(),
         };
-        let settled = if rebuilt == spelling {
+        let erased = if rebuilt == spelling {
             id
         } else {
-            self.intern_settled(rebuilt)
+            self.intern_erased(rebuilt)
         };
-        self.settled_spellings.set_growing(id, settled);
-        settled
+        self.erasures.set_growing(id, erased);
+        erased
     }
 
-    /// The id `spelling` interns to, minted where no type spells it yet. A
-    /// minted one is a declaration's type only once something interns it as a
-    /// type: until then the type it settles is there under its own spelling.
-    fn intern_settled(&mut self, spelling: ResolvedType) -> TypeId {
+    /// The id the erased `spelling` interns to, which is its own erasure.
+    fn intern_erased(&mut self, spelling: ResolvedType) -> TypeId {
         if let Some(&id) = self.intern_map.get(&spelling) {
             return id;
         }
         let id = self.types.next_id();
         self.push_type(spelling.clone());
+        let shared = self.shared_spelling(&spelling);
         self.intern_map.insert(spelling, id);
-        self.unindexed.insert(id);
-        self.settled_spellings.set_growing(id, id);
+        self.erasures.set_growing(id, id);
+        if let Some(shared) = shared {
+            self.intern_erased(shared);
+        }
         id
     }
 
-    fn settle_spellings(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
-        ids.iter().map(|&id| self.settle_spelling(id)).collect()
-    }
-
-    /// The slot holding `id`'s value: itself, or what a redirect points it at.
-    /// One hop — [`Self::redefine_to`] refuses a target that is redirected.
-    fn resolved_id(&self, id: TypeId) -> TypeId {
-        self.redirects.get(id).copied().unwrap_or(id)
-    }
-
-    /// [`Self::get`] for a caller holding an id from another table. One this
-    /// table does not carry answers `None` rather than panicking.
-    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
-        self.types.get(self.resolved_id(id))
+    fn erase_types(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
+        ids.iter().map(|&id| self.erase_type(id)).collect()
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
-        let id = self.resolved_id(id);
         self.types
             .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
-    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a reference it
-    /// redefined. Erasure's redirect is not one, and the spelling tells them
-    /// apart: only a reference is ever redefined.
-    fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
-        let target = self.redirects.get(id).copied()?;
-        self.spelled_ref(id).map(|_| target)
-    }
-
-    /// [`Self::get`] before the newtype / flags erasure, which runs once
-    /// monomorphize is done. A boxing redefinition is no part of that, so a
-    /// redefined reference reads as the `Box<T>` here too.
-    ///
-    /// Erasure is a representation choice — a `flags` value is a `u32` at
-    /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
-    /// name that has to match an impl must read the identity; only code that
-    /// cares how the value is stored should read [`Self::get`].
-    #[must_use]
-    pub fn get_unerased(&self, id: TypeId) -> &ResolvedType {
-        let id = self.box_redefinition(id).unwrap_or(id);
-        self.types
-            .get(id)
-            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
-    }
-
-    /// Whether `id` names a newtype, erased or not.
+    /// Whether `id` names a newtype.
     pub fn is_newtype(&self, id: TypeId) -> bool {
-        matches!(self.get_unerased(id), ResolvedType::Newtype { .. })
+        matches!(self.get(id), ResolvedType::Newtype { .. })
     }
 
-    /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
+    /// [`Self::get`] returning `None` for an id this table does not carry: one
+    /// DCE's `retain` pruned, or one from another table.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
-        self.types.get(self.resolved_id(id))
-    }
-
-    /// The [`TypeKey`] for `id`.
-    ///
-    /// Newtype erasure and the boxing rewrite both leave many ids resolving to
-    /// one type, so an id is a slot and not a type identity.
-    #[must_use]
-    pub fn type_key(&self, id: TypeId) -> TypeKey {
-        let resolved = self.resolved_id(id);
-        let interned = self
-            .types
-            .get(resolved)
-            .and_then(|ty| self.intern_map.get(ty).copied())
-            .unwrap_or(resolved);
-        TypeKey(
-            self.settled_spellings
-                .get(interned)
-                .copied()
-                .unwrap_or(interned),
-        )
+        self.types.get(id)
     }
 
     /// The struct `id` instantiates, with its arguments.
@@ -538,37 +454,78 @@ impl TypeTable {
         }
     }
 
-    /// [`Self::type_key`] of each id, in order.
-    #[must_use]
-    pub fn type_keys(&self, ids: &[TypeId]) -> Vec<TypeKey> {
-        ids.iter().map(|&id| self.type_key(id)).collect()
-    }
-
-    /// `ty` without its references and newtypes: the object a handle names.
+    /// `ty` without its references and newtypes: the object a handle names. A
+    /// reference to a cell names the cell, so it stops there.
     #[must_use]
     pub fn strip_handles(&self, mut ty: TypeId) -> TypeId {
         loop {
-            if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.get(ty) {
-                ty = *inner;
-            } else if let ResolvedType::Newtype { .. } = self.get(ty) {
-                ty = self.representation_head(ty);
-            } else {
-                return ty;
+            match self.get(ty) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
+                    if !self.is_boxed_reference_target(*inner) =>
+                {
+                    ty = *inner;
+                }
+                ResolvedType::Newtype { .. } => ty = self.representation_head(ty),
+                _ => return ty,
             }
         }
+    }
+
+    /// The type a cell `cell` names its object by: `cell` with every layer
+    /// shared, so a `&X` and a `&mut X` name one cell at each depth, as a
+    /// reference coerces under a shared one, while cells of two depths, whose
+    /// payloads lower apart, stay apart. No struct, variant or function object
+    /// is named by a reference, so none shares it.
+    #[must_use]
+    pub fn cell_key(&self, cell: TypeId) -> TypeId {
+        assert!(self.cell_payload(cell).is_some(), "a cell reference");
+        self.shared_form(cell)
+    }
+
+    /// `ty` with every reference layer shared, interned beside `ty`.
+    fn shared_form(&self, ty: TypeId) -> TypeId {
+        match self.get(ty) {
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => self
+                .find_ref(RefKind::Shared, self.shared_form(*pointee))
+                .expect("interning a reference interns its shared form"),
+            _ => ty,
+        }
+    }
+
+    /// The spelling of `ty`'s shared form, where it is another type.
+    fn shared_spelling(&self, ty: &ResolvedType) -> Option<ResolvedType> {
+        match ty {
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
+                let shared = ResolvedType::Ref(self.shared_form(*pointee));
+                (shared != *ty).then_some(shared)
+            }
+            _ => None,
+        }
+    }
+
+    /// The reference of `kind` to `pointee`, if the table holds it. It holds
+    /// `&pointee` for every `&mut pointee`.
+    #[must_use]
+    pub fn find_ref(&self, kind: RefKind, pointee: TypeId) -> Option<TypeId> {
+        let spelling = match kind {
+            RefKind::Shared => ResolvedType::Ref(pointee),
+            RefKind::Mut => ResolvedType::MutRef(pointee),
+        };
+        self.intern_map.get(&spelling).copied()
     }
 
     /// The heap object a value of `ty` is, or reaches first through its
     /// references: the key an access to one of its fields is made under.
     #[must_use]
-    pub fn heap_object_key(&self, ty: TypeId) -> Option<TypeKey> {
+    pub fn heap_object_key(&self, ty: TypeId) -> Option<TypeId> {
         let ty = self.strip_handles(ty);
         match self.get(ty) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Some(self.cell_key(ty)),
             ResolvedType::Struct { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Variant { .. }
             | ResolvedType::Function { .. }
-            | ResolvedType::Tuple(_) => Some(self.type_key(ty)),
+            | ResolvedType::Tuple(_) => Some(ty),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -582,30 +539,16 @@ impl TypeTable {
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Newtype { .. } => {
-                unreachable!("strip_handles removes every reference and newtype")
-            }
+            ResolvedType::Newtype { .. } => unreachable!("strip_handles removes every newtype"),
             ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
         }
     }
 
-    /// Whether `a` and `b` name one type.
-    #[must_use]
-    pub fn same_type(&self, a: TypeId, b: TypeId) -> bool {
-        self.type_key(a) == self.type_key(b)
-    }
-
-    /// Whether `a` and `b` name one list of types, position by position.
-    #[must_use]
-    pub fn same_types(&self, a: &[TypeId], b: &[TypeId]) -> bool {
-        a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| self.same_type(x, y))
-    }
-
     /// Whether two projections' trait arguments name one instantiation of the
     /// trait. A side reached by a bare bound, `None`, names none other.
-    fn trait_args_agree(&self, a: Option<&[TypeId]>, b: Option<&[TypeId]>) -> bool {
+    fn trait_args_agree(a: Option<&[TypeId]>, b: Option<&[TypeId]>) -> bool {
         match (a, b) {
-            (Some(a), Some(b)) => self.same_types(a, b),
+            (Some(a), Some(b)) => a == b,
             _ => true,
         }
     }
@@ -668,9 +611,12 @@ impl TypeTable {
         self.is_integer(id) || self.is_float(id)
     }
 
-    /// Iterate over all live type IDs in the table. Erased slots are skipped.
+    /// Every type the IR may hold: from erasure on, only the ids that are their
+    /// own erasure, since the IR holds no other.
     pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.types.ids()
+        self.types
+            .ids()
+            .filter(|&id| !self.erased || self.erasures.get(id) == Some(&id))
     }
 
     pub fn mark_unrestricted_resource(&mut self, def: DefId, classes: Option<HandleClasses>) {
@@ -990,21 +936,20 @@ impl TypeTable {
         }
     }
 
-    /// Whether `&T` / `&mut T` is represented as a `Box<T>` cell rather than
-    /// `T`'s own GC handle (WEP 2026-06-13, Reference Representation). The
-    /// boxing pass and every consumer deciding by representation read this one
-    /// predicate.
+    /// Whether `&T` / `&mut T` points at a cell holding `T` rather than at
+    /// `T`'s own GC object (WEP 2026-06-13, Reference Representation). Every
+    /// consumer deciding by representation reads this one predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
-        matches!(
-            self.get(self.representation_head(ty)),
+        match self.get(self.representation_head(ty)) {
             ResolvedType::Primitive(_)
-                | ResolvedType::Enum { .. }
-                | ResolvedType::Variant { .. }
-                | ResolvedType::Function { .. }
-                | ResolvedType::Ref(_)
-                | ResolvedType::MutRef(_)
-        )
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Function { .. } => true,
+            // A reference to nothing holds nothing, so it stays stackless.
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => !self.is_stackless(ty),
+            _ => false,
+        }
     }
 
     /// Whether a value of `ty` is mutated in place through a reference to it, so
@@ -1012,10 +957,9 @@ impl TypeTable {
     /// a `List` or a tuple. Assigning such a place writes into its storage
     /// wherever a reference to it may be read (WEP 2026-10-13). `i128` / `u128`
     /// are struct-backed but immutable, so their storage may be shared and is
-    /// never written. A reference names storage rather than holding a value,
-    /// whether spelled `&T` or as the `Box<T>` boxing makes of one.
+    /// never written. A reference names storage rather than holding a value.
     pub fn is_in_place_aggregate(&self, ty: TypeId) -> bool {
-        if self.is_reference_shaped(ty) {
+        if self.is_reference(ty) {
             return false;
         }
         match self.get(ty) {
@@ -1774,39 +1718,28 @@ impl TypeTable {
     /// become `None` holes rather than being renumbered away, so surviving ids
     /// keep their indices, and the intern map and secondary indices are rebuilt.
     /// `get(id)` must not panic for a surviving id, so `keep` is implicitly
-    /// closed under `redirects` and stale redirect entries are dropped.
+    /// closed under what each kept type is built from.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
         // Built where a family's projection first needs it.
         let mut registered: Option<IndexMap<(DefId, String), Vec<TypeId>>> = None;
-        // Implicit closure under `redirects`: every kept id whose `get`
-        // result lives at a different id must keep that target alive too.
         let mut effective_keep: IndexSet<TypeId> = keep.clone();
-        let mut queue: Vec<TypeId> = Vec::new();
+        let mut queue: Vec<TypeId> = keep.iter().copied().collect();
         let keep_id = |set: &mut IndexSet<TypeId>, queue: &mut Vec<TypeId>, id: TypeId| {
             if set.insert(id) {
                 queue.push(id);
             }
         };
-        for &id in keep {
-            if let Some(&target) = self.redirects.get(id) {
-                keep_id(&mut effective_keep, &mut queue, target);
-            }
-            queue.push(id);
-        }
         // A surviving type spells itself with the ids it is built from, and the
         // reachability walk reaches it through its erased view alone. Whatever
-        // reads one back — `contains_type_param` over a `Function`'s params,
-        // `peel_refs_and_box` over a `Box` wrapper — needs them to resolve.
+        // reads one back, `contains_type_param` over a `Function`'s params
+        // say, needs them to resolve.
         while let Some(id) = queue.pop() {
             let mut components: Vec<TypeId> = Vec::new();
-            if let Some(&payload) = self.box_payload_types.get(id) {
-                components.push(payload);
-            }
             if let Some(wrapper) = self.slot_box(id) {
                 components.push(wrapper);
             }
-            if let Some(&settled) = self.settled_spellings.get(id) {
-                components.push(settled);
+            if let Some(&erased) = self.erasures.get(id) {
+                components.push(erased);
             }
             if let Some(ty) = self.types.get(id) {
                 match ty {
@@ -1833,9 +1766,11 @@ impl TypeTable {
                         components.extend(type_args.iter().copied());
                         components.push(*base_type);
                     }
-                    ResolvedType::Ref(inner)
-                    | ResolvedType::MutRef(inner)
-                    | ResolvedType::BuiltinArray(inner) => components.push(*inner),
+                    ResolvedType::BuiltinArray(inner) => components.push(*inner),
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                        components.push(*inner);
+                        components.push(self.shared_form(id));
+                    }
                     ResolvedType::Function {
                         params,
                         return_type,
@@ -1884,9 +1819,6 @@ impl TypeTable {
             }
             for component in components {
                 keep_id(&mut effective_keep, &mut queue, component);
-                if let Some(&target) = self.redirects.get(component) {
-                    keep_id(&mut effective_keep, &mut queue, target);
-                }
             }
         }
 
@@ -1895,17 +1827,9 @@ impl TypeTable {
         self.types.retain(|id, _| effective_keep.contains(&id));
         // Read off the types just pruned, so asked again where needed.
         self.projection_bounds_cache.clear();
-        // A redirect entry is meaningful only when both endpoints survive.
-        self.redirects
-            .retain(|id, &target| effective_keep.contains(&id) && effective_keep.contains(&target));
-        self.box_payload_types.retain(|id, &payload| {
-            effective_keep.contains(&id) && effective_keep.contains(&payload)
-        });
         self.slot_boxes
             .retain(|_, wrapper| effective_keep.contains(wrapper));
-        self.settled_spellings
-            .retain(|id, _| effective_keep.contains(&id));
-        self.unindexed.retain(|id| effective_keep.contains(id));
+        self.erasures.retain(|id, _| effective_keep.contains(&id));
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -1915,19 +1839,10 @@ impl TypeTable {
         self.intern_map.clear();
         self.newtype_decls.clear();
         for (id, ty) in self.types.iter() {
-            // A redefined reference keeps its spelling in the slot alone.
-            // Re-interning it would hand a later `intern(&T)` an id that no
-            // longer resolves as a reference.
-            if self.box_redefinition(id).is_none() {
-                self.intern_map.insert(ty.clone(), id);
-            }
+            self.intern_map.insert(ty.clone(), id);
         }
-        let indexed: Vec<(TypeId, ResolvedType)> = self
-            .types
-            .iter()
-            .filter(|(id, _)| !self.unindexed.contains(id))
-            .map(|(id, ty)| (id, ty.clone()))
-            .collect();
+        let indexed: Vec<(TypeId, ResolvedType)> =
+            self.types.iter().map(|(id, ty)| (id, ty.clone())).collect();
         for (id, ty) in indexed {
             self.index_type(id, &ty);
         }
@@ -2284,11 +2199,6 @@ impl TypeTable {
         }
     }
 
-    /// The `T` of a compiler `Box<T>` instance.
-    pub fn as_box(&self, type_id: TypeId) -> Option<TypeId> {
-        self.single_arg_of(type_id, CompilerItem::Box)
-    }
-
     /// Check if a type is `Option<T>`, returning the inner type if so.
     pub fn as_option(&self, type_id: TypeId) -> Option<TypeId> {
         self.single_arg_of(type_id, CompilerItem::Option)
@@ -2558,9 +2468,14 @@ impl TypeTable {
 
     /// The `TypeId` of the declaration itself — not of any instantiation of it.
     pub fn find_struct_type(&self, def: StructDef) -> Option<TypeId> {
+        self.find_struct_instance(def, &[])
+    }
+
+    /// The type of struct `def` at `type_args`, if the table holds it.
+    pub fn find_struct_instance(&self, def: StructDef, type_args: &[TypeId]) -> Option<TypeId> {
         let key = ResolvedType::Struct {
             def,
-            type_args: Vec::new(),
+            type_args: type_args.to_vec(),
         };
         self.intern_map.get(&key).copied()
     }
@@ -2601,8 +2516,7 @@ impl TypeTable {
     /// Register the field types of a struct declaration instantiated with
     /// `args` (none for the template) for [`Self::holds_affine_resource`].
     pub fn register_struct_fields(&mut self, def: DefId, args: Vec<TypeId>, fields: Vec<TypeId>) {
-        let key = (def, self.type_keys(&args));
-        self.struct_field_index.insert(key, fields);
+        self.struct_field_index.insert((def, args), fields);
     }
 
     /// Whether a value of `ty` is, or holds at any depth, an affine resource:
@@ -2623,9 +2537,9 @@ impl TypeTable {
         ty: TypeId,
         params: &[bool],
         open: &mut Vec<(DefId, Vec<bool>)>,
-        memo: &mut CutMemo<(TypeKey, Vec<bool>)>,
+        memo: &mut CutMemo<(TypeId, Vec<bool>)>,
     ) -> bool {
-        let key = (self.type_key(ty), params.to_vec());
+        let key = (ty, params.to_vec());
         if let Some(held) = memo.get(&key) {
             return held;
         }
@@ -2641,7 +2555,7 @@ impl TypeTable {
         ty: TypeId,
         params: &[bool],
         open: &mut Vec<(DefId, Vec<bool>)>,
-        memo: &mut CutMemo<(TypeKey, Vec<bool>)>,
+        memo: &mut CutMemo<(TypeId, Vec<bool>)>,
     ) -> bool {
         let ty = self.representation_head(ty);
         // `List` is the compiler's, so no struct registers its fields.
@@ -2714,10 +2628,7 @@ impl TypeTable {
     /// struct's fields, a variant's payloads. `None` where nothing registered
     /// them.
     fn declared_members(&self, def: DefId, type_args: &[TypeId]) -> Option<DeclaredMembers> {
-        if let Some(fields) = self
-            .struct_field_index
-            .get(&(def, self.type_keys(type_args)))
-        {
+        if let Some(fields) = self.struct_field_index.get(&(def, type_args.to_vec())) {
             return Some(DeclaredMembers {
                 types: fields.clone(),
                 of_template: false,
@@ -2748,18 +2659,18 @@ impl TypeTable {
     }
 
     /// The kind of GC object a place of `ty` reads its fields or elements
-    /// from: a reference names its referent's object, a `Box<T>` its payload's,
-    /// and a newtype its base's. Two places of different kinds are two objects.
+    /// from: a reference names its referent's object, and a newtype its base's.
+    /// Two places of different kinds are two objects.
     #[must_use]
-    pub fn object_kind(&self, ty: TypeId) -> TypeKey {
-        self.type_key(self.representation_head(self.peel_refs_and_box(ty)))
+    pub fn object_kind(&self, ty: TypeId) -> TypeId {
+        self.representation_head(self.peel_refs(ty))
     }
 
     /// Whether a value of `ty` is, holds or references, at any depth, an object
     /// of `kind` (an [`Self::object_kind`]): what a callee handed one may write.
     /// A type whose members are not registered may hold anything, so it does.
     #[must_use]
-    pub fn reaches_object(&self, ty: TypeId, kind: TypeKey) -> bool {
+    pub fn reaches_object(&self, ty: TypeId, kind: TypeId) -> bool {
         self.reaches_in(ty, Reach::Object(kind), &[], &mut IndexSet::default())
     }
 
@@ -2771,7 +2682,7 @@ impl TypeTable {
         ty: TypeId,
         target: Reach,
         args: &[TypeId],
-        walked: &mut IndexSet<(TypeKey, Vec<TypeKey>)>,
+        walked: &mut IndexSet<(TypeId, Vec<TypeId>)>,
     ) -> bool {
         let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
             ResolvedType::TypeParam { index, .. } => args.get(*index as usize).copied(),
@@ -2786,20 +2697,15 @@ impl TypeTable {
         {
             return true;
         }
-        if !walked.insert((self.type_key(ty), self.type_keys(args))) {
+        if !walked.insert((ty, args.to_vec())) {
             return false;
-        }
-        if let Reach::Object(_) = target
-            && let Some(payload) = self.box_payload_of(ty)
-        {
-            return self.reaches_in(payload, target, args, walked);
         }
         // `List` is the compiler's, so no struct registers its fields: it is
         // its backing array and the elements.
         if let Some(elem) = self.list_element(ty) {
-            let backs = |kind: TypeKey| {
-                matches!(self.get(kind.0), ResolvedType::BuiltinArray(array_elem)
-                    if self.same_type(*array_elem, elem))
+            let backs = |kind: TypeId| {
+                matches!(self.get(kind), ResolvedType::BuiltinArray(array_elem)
+                    if *array_elem == elem)
             };
             return matches!(target, Reach::Object(kind) if backs(kind))
                 || self.reaches_in(elem, target, args, walked);
@@ -2990,45 +2896,6 @@ impl TypeTable {
         })
     }
 
-    /// Redefine `id` to resolve as `target`, retiring its own spelling so a
-    /// later [`Self::intern`] of that spelling mints a fresh id instead.
-    ///
-    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the reference, which is
-    /// how [`Self::is_mut_box`] still tells `&T` from `&mut T`.
-    pub fn redefine_to(&mut self, id: TypeId, target: TypeId) {
-        assert!(
-            self.redirects.get(target).is_none(),
-            "a redirect target is never itself redirected: `get` takes one hop"
-        );
-        let spelling = self
-            .types
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
-        assert!(
-            matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
-            "only a reference is redefined: `box_redefinition` tells one by that shape"
-        );
-        if self.intern_map.get(&spelling) == Some(&id) {
-            self.intern_map.shift_remove(&spelling);
-        }
-        self.redirects.set_growing(id, target);
-    }
-
-    /// Point each erasure redirect aimed at a reference [`Self::redefine_to`]
-    /// moved on at where it went, so `get` keeps its one hop: an erased
-    /// `type R = &i32` resolves to the `Box<i32>` its reference became.
-    pub fn follow_redefinitions(&mut self) {
-        let moved: Vec<(TypeId, TypeId)> = self
-            .redirects
-            .iter()
-            .filter_map(|(id, &to)| Some((id, *self.redirects.get(to)?)))
-            .collect();
-        for (id, to) in moved {
-            self.redirects.set_growing(id, to);
-        }
-    }
-
     /// Whether `id` bottoms out in a primitive, through any newtype chain.
     pub fn is_primitive_like(&self, id: TypeId) -> bool {
         self.primitive_head(id).is_some()
@@ -3097,6 +2964,11 @@ impl TypeTable {
         }
     }
 
+    /// Whether `type_id` is a `&mut`, the one handle a holder can write through.
+    pub fn is_mut_ref(&self, type_id: TypeId) -> bool {
+        matches!(self.get(type_id), ResolvedType::MutRef(_))
+    }
+
     /// The type the reference `type_id` points at.
     pub fn ref_pointee(&self, type_id: TypeId) -> Option<TypeId> {
         match self.get(type_id) {
@@ -3115,6 +2987,23 @@ impl TypeTable {
         depth
     }
 
+    /// The types a value of `type_id` passes for through its references,
+    /// outermost first, each with the dereferences reaching it: every layer,
+    /// and after a `&mut` layer the `&` to its pointee. `&&mut X` →
+    /// `(0, &&mut X)`, `(1, &mut X)`, `(1, &X)`, `(2, X)`.
+    pub fn reference_layers(&mut self, mut type_id: TypeId) -> Vec<(usize, TypeId)> {
+        let mut layers = vec![(0, type_id)];
+        while let Some(pointee) = self.ref_pointee(type_id) {
+            let depth = layers.last().expect("the first layer is pushed").0;
+            if self.ref_kind(type_id) == Some(RefKind::Mut) {
+                layers.push((depth, self.make_ref(pointee)));
+            }
+            layers.push((depth + 1, pointee));
+            type_id = pointee;
+        }
+        layers
+    }
+
     /// `type_id` with its outer references stripped until at most `layers`
     /// hold the pointee: `&&mut X` at 1 → `&mut X`, the layer holding it.
     pub fn ref_layers(&self, mut type_id: TypeId, layers: usize) -> TypeId {
@@ -3126,45 +3015,60 @@ impl TypeTable {
         type_id
     }
 
-    /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
+    /// [`Self::peel_refs`] as [`Self::get_pruned`] is to [`Self::get`]: an id this
     /// table does not carry answers `None` rather than panicking.
     pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {
         loop {
-            match self.try_get(type_id)? {
+            match self.get_pruned(type_id)? {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
                 _ => return Some(type_id),
             }
         }
     }
 
-    /// Peel reference layers and any `Box<T>` the boxing pass introduced,
-    /// returning the underlying value type. Post-boxing IR should use this over
-    /// [`Self::peel_refs`] so a `&fn(…)` parameter — by then `Box<fn(…)>` — and
-    /// an unwrapped `fn(…)` look the same. Matches `peel_refs` when unboxed.
-    pub fn peel_refs_and_box(&self, type_id: TypeId) -> TypeId {
-        let peeled = self.peel_refs(type_id);
-        self.box_payload_types
-            .get(peeled)
-            .copied()
-            .unwrap_or(peeled)
+    /// What the cell `ty` holds, where `ty` is a reference to a cell: a
+    /// reference whose target [`Self::is_boxed_reference_target`] names. Such a
+    /// reference points at an object of one field, `value`, which holds `T`.
+    #[must_use]
+    pub fn cell_payload(&self, ty: TypeId) -> Option<TypeId> {
+        self.cell_field_types(ty).map(|fields| fields[0])
     }
 
-    /// Register a `Box<T>` wrapper's `TypeId` → payload `T`'s `TypeId`
-    /// mapping. Called by the boxing pass for every wrapper it creates;
-    /// downstream phases consume the mapping via [`Self::peel_refs_and_box`].
-    pub fn register_box_payload(&mut self, wrapper: TypeId, payload: TypeId) {
-        self.box_payload_types.set_growing(wrapper, payload);
+    /// The WIR struct the cell `cell` lowers to, named by its payload's
+    /// representation: `&X` and `&mut X` share one, and so do the cells of two
+    /// function types.
+    #[must_use]
+    pub fn cell_struct_name(&self, cell: TypeId) -> String {
+        let payload = self.representation_head(self.cell_payload(cell).expect("a cell reference"));
+        let spelled = match self.get(payload) {
+            ResolvedType::Function { .. } => name::CELL_FN_PAYLOAD.to_string(),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                match self.cell_payload(payload) {
+                    Some(_) => self.cell_struct_name(payload),
+                    None => self.mangle_type_arg_rowless(self.representation_head(*inner)),
+                }
+            }
+            _ => self.mangle_type_arg_rowless(payload),
+        };
+        name::cell_struct_name(&spelled)
     }
 
-    /// Direct lookup for the payload of a single `Box<T>` wrapper, or
-    /// `None` if the given `TypeId` is not a registered wrapper.
-    pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
-        self.box_payload_types.get(wrapper).copied()
+    /// [`Self::cell_payload`] as the field types of the cell.
+    #[must_use]
+    pub fn cell_field_types(&self, ty: TypeId) -> Option<&[TypeId]> {
+        match self.get(ty) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
+                if self.is_boxed_reference_target(*inner) =>
+            {
+                Some(std::slice::from_ref(inner))
+            }
+            _ => None,
+        }
     }
 
     /// Whether a slot (a field, a tuple element, a payload or an array element)
-    /// holds a `ty` in a `Box<T>`: an affine variant. A variant value is
-    /// immutable, so only a box makes the slot a place that `&mut` writes
+    /// holds a `ty` in a cell: an affine variant. A variant value is
+    /// immutable, so only a cell makes the slot a place that `&mut` writes
     /// (WEP: Affine Types).
     pub fn boxes_slot(&self, ty: TypeId) -> bool {
         self.is_variant_value(ty) && self.holds_affine_resource(ty)
@@ -3179,48 +3083,24 @@ impl TypeTable {
         )
     }
 
-    /// Record the `Box<T>` a slot holds each `ty` in.
-    pub fn register_slot_box(&mut self, ty: TypeId, wrapper: TypeId) {
-        let key = self.type_key(ty);
-        self.slot_boxes.insert(key, wrapper);
+    /// Mint the `&mut T` cell a slot holds each `ty` in, for the types
+    /// [`Self::boxes_slot`] names.
+    pub fn register_slot_box(&mut self, ty: TypeId) {
+        assert!(self.boxes_slot(ty), "a slot of this type holds a cell");
+        let cell = self.make_mut_ref(ty);
+        self.slot_boxes.insert(ty, cell);
     }
 
-    /// The `Box<T>` a slot holds each `ty` in, where [`Self::boxes_slot`] says
-    /// it does.
+    /// The `&mut T` cell a slot holds each `ty` in, where [`Self::boxes_slot`]
+    /// says it does.
     pub fn slot_box(&self, ty: TypeId) -> Option<TypeId> {
-        self.slot_boxes.get(&self.type_key(ty)).copied()
+        self.slot_boxes.get(&ty).copied()
     }
 
-    /// Whether `type_id` may name storage rather than hold a value: a `&T` /
-    /// `&mut T`, or the `Box<T>` the boxing pass redefines one into. Both
-    /// spellings answer yes, since after `prepare_types` no signature test
-    /// tells a boxed reference from a by-value parameter of the same shape.
-    ///
-    /// [`RefKind::from_resolved`] alone sees only what is still spelled as a
-    /// reference, so a caller reasoning about values asks this instead.
-    pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
+    /// Whether `type_id` names storage rather than holding a value: a `&T` or
+    /// a `&mut T`.
+    pub fn is_reference(&self, type_id: TypeId) -> bool {
         RefKind::from_resolved(self.get(type_id)).is_some()
-            || self.box_payload_of(type_id).is_some()
-    }
-
-    /// Whether `wrapper` is a boxed reference that can be written through: a
-    /// `&mut T` collapsed onto `Box<T>`, where `*q = v` writes the box the
-    /// caller still holds. Only an id still spelled as a shared `&T` answers
-    /// `false`, so an unclassified wrapper stays writable.
-    pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
-        self.box_payload_types.get(wrapper).is_some()
-            && !matches!(self.spelled_ref(wrapper), Some((_, RefKind::Shared)))
-    }
-
-    /// How `id`'s own slot spells a reference, or `None` when it is not one: an
-    /// erased newtype redirected onto a reference is not. The sole reader of a
-    /// redefined reference; every other view answers `Box<T>`.
-    pub fn spelled_ref(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
-        match *self.types.get(id)? {
-            ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
-            ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
-            _ => None,
-        }
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
@@ -3639,13 +3519,13 @@ impl TypeTable {
                     ..
                 },
             ) => {
-                self.same_type(*base_a, *base_b)
+                base_a == base_b
                     && name_a == name_b
-                    && self.same_types(args_a, args_b)
+                    && args_a == args_b
                     && trait_a == trait_b
-                    && self.trait_args_agree(trait_args_a.as_deref(), trait_args_b.as_deref())
+                    && Self::trait_args_agree(trait_args_a.as_deref(), trait_args_b.as_deref())
             }
-            _ => self.same_type(a, b),
+            _ => a == b,
         }
     }
 
@@ -3654,8 +3534,7 @@ impl TypeTable {
     /// the family's its arguments. `None` while its signature is still being
     /// built, which a reader inside that build meets.
     pub fn projection_bounds(&mut self, id: TypeId) -> Option<Arc<[TraitRef]>> {
-        let key = self.type_key(id);
-        if let Some(bounds) = self.projection_bounds_cache.get(&key) {
+        if let Some(bounds) = self.projection_bounds_cache.get(&id) {
             return Some(Arc::clone(bounds));
         }
         let ResolvedType::AssocTypeProjection {
@@ -3676,8 +3555,7 @@ impl TypeTable {
         let bounds: Arc<[TraitRef]> = self
             .instantiate_trait_refs(&sig, &sig.bounds, param_id, trait_args.as_deref(), &args)
             .into();
-        self.projection_bounds_cache
-            .insert(key, Arc::clone(&bounds));
+        self.projection_bounds_cache.insert(id, Arc::clone(&bounds));
         Some(bounds)
     }
 
@@ -3733,7 +3611,7 @@ impl TypeTable {
             if assoc_name == "Output" && self.is_scalar_primitive_like(receiver) {
                 return Some(receiver);
             }
-            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(receiver) else {
+            let ResolvedType::Newtype { base_type, .. } = self.get(receiver) else {
                 return None;
             };
             receiver = *base_type;
@@ -3862,7 +3740,7 @@ impl TypeTable {
     /// The [`InstanceKey`] of `id`.
     pub fn instance_key(&self, id: TypeId) -> InstanceKey {
         let args = |type_args: &[TypeId]| type_args.iter().map(|a| self.instance_key(*a)).collect();
-        match self.get_unerased(id) {
+        match self.get(id) {
             ResolvedType::Resource { def, type_args }
             | ResolvedType::Variant { def, type_args }
             | ResolvedType::Struct {
@@ -3918,7 +3796,7 @@ impl TypeTable {
                     trait_decl: *trait_key,
                     assoc_name: assoc_name.to_string(),
                 })?
-                .at(self, trait_args)
+                .at(trait_args)
         })
         .or_else(|| self.is_never(concrete_id).then_some(Self::NEVER))
     }
@@ -3933,7 +3811,7 @@ impl TypeTable {
             if let Some(found) = lookup(current) {
                 return Some(found);
             }
-            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(current) else {
+            let ResolvedType::Newtype { base_type, .. } = self.get(current) else {
                 return None;
             };
             current = *base_type;
@@ -4163,7 +4041,7 @@ impl TypeTable {
     /// [`Self::nominal_type_args`] leaves a newtype out, since a newtype's
     /// representation is its base's.
     pub fn declared_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
-        match self.get_unerased(type_id) {
+        match self.get(type_id) {
             ResolvedType::Newtype { type_args, .. } => Some(type_args.clone()),
             _ => self.nominal_type_args(type_id),
         }
@@ -4371,7 +4249,7 @@ impl TypeTable {
                         .collect(),
                 );
                 self.filled_trait_args(&at, concrete_id)
-                    .is_some_and(|filled| self.same_types(&filled, wanted))
+                    .is_some_and(|filled| filled == wanted)
             })
         });
         let entry = match reached {
@@ -4462,7 +4340,7 @@ impl TypeTable {
     pub fn replace_subterms(
         &mut self,
         type_id: TypeId,
-        replacements: &IndexMap<TypeKey, TypeId>,
+        replacements: &IndexMap<TypeId, TypeId>,
     ) -> TypeId {
         self.subst_rec(
             type_id,
@@ -4475,24 +4353,18 @@ impl TypeTable {
 
     /// The tuples `id` is built over that hold one of `packs` as an element,
     /// the outermost where one holds another.
-    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexMap<TypeKey, TypeId> {
-        let packs = self.type_keys(packs);
-        let mut found = IndexMap::default();
-        self.collect_tuples_holding(id, &packs, &mut found);
+    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexSet<TypeId> {
+        let mut found = IndexSet::default();
+        self.collect_tuples_holding(id, packs, &mut found);
         found
     }
 
-    fn collect_tuples_holding(
-        &self,
-        id: TypeId,
-        packs: &[TypeKey],
-        found: &mut IndexMap<TypeKey, TypeId>,
-    ) {
+    fn collect_tuples_holding(&self, id: TypeId, packs: &[TypeId], found: &mut IndexSet<TypeId>) {
         if self
             .as_tuple(id)
-            .is_some_and(|elems| elems.iter().any(|&e| packs.contains(&self.type_key(e))))
+            .is_some_and(|elems| elems.iter().any(|e| packs.contains(e)))
         {
-            found.entry(self.type_key(id)).or_insert(id);
+            found.insert(id);
             return;
         }
         self.any_constituent(id, &mut |t| {
@@ -4789,7 +4661,7 @@ impl TypeTable {
             return type_id;
         }
         if !leaves.subterms.is_empty()
-            && let Some(&replaced) = leaves.subterms.get(&self.type_key(type_id))
+            && let Some(&replaced) = leaves.subterms.get(&type_id)
         {
             return replaced;
         }
@@ -4985,7 +4857,7 @@ impl TypeTable {
                             .find(|answer| {
                                 answer.owning_trait == owning_trait
                                     && answer.assoc_name == assoc_name
-                                    && self.trait_args_agree(
+                                    && Self::trait_args_agree(
                                         answer.trait_args.as_deref(),
                                         new_trait_args.as_deref(),
                                     )
@@ -5155,36 +5027,60 @@ impl TypeTable {
         self.intern(ResolvedType::Flags { def })
     }
 
-    /// Erase all `Newtype` and `Flags` entries from the type table by populating
-    /// the redirect map. After this call, `get(id)` for any erased `TypeId` returns
-    /// its ultimate base type (`Newtype` chains) or `u32` (`Flags`).
+    /// Map every type, and the members of every declaration and shape, to what
+    /// it erases to: from here on the IR holds no newtype and no `flags`.
     ///
     /// Must be called after monomorphize, whose dispatch reads the identities
     /// this replaces.
     pub fn erase_newtypes_and_flags(&mut self) {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
+        self.erased = true;
         for id in ids {
-            let redirect = match self.types.get(id).unwrap() {
-                ResolvedType::Newtype { .. } => Some(self.representation_head(id)),
-                ResolvedType::Flags { .. } => Some(TypeTable::U32),
-                _ => None,
-            };
-            if let Some(target) = redirect {
-                self.redirects.set_growing(id, target);
-            }
+            self.erase_type(id);
         }
-        self.settle_instance_spellings();
+        self.erase_member_tables();
     }
 
-    /// Settle every spelling, and each one interned from here on, now that
-    /// erasure redirects: a type argument naming an erased type would
-    /// otherwise key apart from the same type naming what it erases to.
-    fn settle_instance_spellings(&mut self) {
-        let ids: Vec<TypeId> = self.iter_type_ids().collect();
-        self.instances_settled = true;
-        for id in ids {
-            self.settle_spelling(id);
+    /// Rewrite the members of declarations and shapes to erased ids, keyed by
+    /// erased arguments, as the IR's are.
+    fn erase_member_tables(&mut self) {
+        let fields = std::mem::take(&mut self.struct_field_index);
+        for ((def, args), types) in fields {
+            let args: Vec<TypeId> = args.iter().map(|&arg| self.erase_type(arg)).collect();
+            let types = types.iter().map(|&ty| self.erase_type(ty)).collect();
+            self.register_struct_fields(def, args, types);
         }
+        let mut cases = std::mem::take(&mut self.variant_case_index);
+        for (_, _, payload) in cases.values_mut().flatten() {
+            *payload = self.erase_type(*payload);
+        }
+        self.variant_case_index = cases;
+        // A shape keeps its id, so its struct keeps its declaration; two that
+        // erase alike stay two structs, as two declarations would.
+        let mut shapes = std::mem::take(&mut self.anon_structs);
+        for entry in &mut shapes {
+            match &mut entry.shape {
+                AnonShape::Fields(fields) => {
+                    for (_, ty) in fields {
+                        *ty = self.erase_type(*ty);
+                    }
+                }
+                AnonShape::Template(shape) => {
+                    for hole in &mut shape.holes {
+                        hole.ty = self.erase_type(hole.ty);
+                    }
+                }
+                AnonShape::Synthetic(_) => {}
+            }
+        }
+        self.anon_struct_index.clear();
+        for (index, entry) in shapes.iter().enumerate() {
+            let id = AnonStructId(u32::try_from(index).expect("anon struct space"));
+            self.anon_struct_index
+                .entry((entry.module.clone(), entry.shape.clone()))
+                .or_insert(id);
+        }
+        self.anon_structs = shapes;
     }
 
     /// What each effect variable stands for once the effect check has solved
@@ -5217,46 +5113,6 @@ impl TypeTable {
         }
     }
 
-    /// `ids` as struct instance arguments.
-    #[must_use]
-    pub fn instance_args(&self, ids: &[TypeId]) -> Vec<InstanceArg> {
-        ids.iter().map(|&id| self.instance_arg(id)).collect()
-    }
-
-    /// `id` as a struct instance argument: a function type's row tells no two
-    /// instances apart.
-    #[must_use]
-    pub fn instance_arg(&self, id: TypeId) -> InstanceArg {
-        if let Some((def, args)) = self.struct_parts(id) {
-            return InstanceArg::Struct(def, self.instance_args(args));
-        }
-        match self.get(id) {
-            ResolvedType::Ref(inner) => InstanceArg::Ref(Box::new(self.instance_arg(*inner))),
-            ResolvedType::MutRef(inner) => InstanceArg::MutRef(Box::new(self.instance_arg(*inner))),
-            ResolvedType::BuiltinArray(element) => {
-                InstanceArg::Array(Box::new(self.instance_arg(*element)))
-            }
-            ResolvedType::Resource { def, type_args }
-            | ResolvedType::Variant { def, type_args }
-                if !type_args.is_empty() =>
-            {
-                InstanceArg::Generic(*def, self.instance_args(type_args))
-            }
-            ResolvedType::Tuple(elems) => InstanceArg::Tuple(self.instance_args(elems)),
-            ResolvedType::Function {
-                is_mut,
-                params,
-                return_type,
-                ..
-            } => InstanceArg::Function {
-                is_mut: *is_mut,
-                params: self.instance_args(params),
-                ret: Box::new(self.instance_arg(*return_type)),
-            },
-            _ => InstanceArg::Type(self.type_key(id)),
-        }
-    }
-
     /// Get the base type if this is a newtype, or None otherwise
     pub fn get_newtype_base(&self, id: TypeId) -> Option<TypeId> {
         if let ResolvedType::Newtype { base_type, .. } = self.get(id) {
@@ -5279,8 +5135,7 @@ impl TypeTable {
     /// the way `Meters` does.
     #[must_use]
     pub fn newtype_chain_holds(&self, id: TypeId, link: TypeId) -> bool {
-        let link = self.type_key(link);
-        self.newtype_chain(id).any(|t| self.type_key(t) == link)
+        self.newtype_chain(id).any(|t| t == link)
     }
 
     /// A newtype's representation head, or `None` for anything else. The head
@@ -5294,13 +5149,10 @@ impl TypeTable {
     /// first: a link's impl serves every level above it, so the chain — not the
     /// receiver alone — says which type a call dispatches to (WEP 2026-01-29).
     /// References are stepped over. `None` when no link owns.
-    ///
-    /// Reads the unerased view: erasure redirects a link to its base, and the
-    /// erased view would report no chain at all.
     pub fn newtype_link_owning(&self, id: TypeId, owns: impl Fn(TypeId) -> bool) -> Option<TypeId> {
         let mut current = id;
         loop {
-            match self.get_unerased(current) {
+            match self.get(current) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = *inner,
                 ResolvedType::Newtype { base_type, .. } => {
                     if owns(current) {
@@ -5327,10 +5179,8 @@ impl TypeTable {
     ///
     /// Unlike [`Self::representation_head`] the walk stops at a `flags`
     /// type, which is a declaration carrying its own impls rather than a
-    /// stand-in for `u32`, and it reads the identity ([`Self::get_unerased`]):
-    /// erasure redirects a link to its base, and the erased view shows no chain
-    /// to walk. Identity is *not* inherited — a newtype names itself through
-    /// `Reflect` — so this never answers for a type's name.
+    /// stand-in for `u32`. Identity is *not* inherited — a newtype names itself
+    /// through `Reflect` — so this never answers for a type's name.
     pub fn reflect_structure_head(&self, id: TypeId) -> TypeId {
         self.newtype_chain(id)
             .last()
@@ -5352,7 +5202,7 @@ impl TypeTable {
 
     /// `id` and every type its newtype chain wraps, nearest first.
     fn newtype_chain(&self, id: TypeId) -> impl Iterator<Item = TypeId> {
-        std::iter::successors(Some(id), |&current| match self.get_unerased(current) {
+        std::iter::successors(Some(id), |&current| match self.get(current) {
             ResolvedType::Newtype { base_type, .. } => Some(*base_type),
             _ => None,
         })
@@ -5403,14 +5253,7 @@ impl TypeTable {
     /// and a `flags` type answered as `u32`, anything else unchanged.
     /// [`Self::reflect_structure_head`] answers the other question — where a
     /// declaration's impls live — and so stops at `flags`, which writes its own.
-    ///
-    /// Works before and after `erase_newtypes_and_flags()`: the redirect map is
-    /// consulted first, so `FieldName` answers `String` either way.
     pub fn representation_head(&self, id: TypeId) -> TypeId {
-        // Fast path: after erasure, redirects always point directly to the base.
-        if let Some(&redirect) = self.redirects.get(id) {
-            return redirect;
-        }
         let mut current = id;
         loop {
             match self
@@ -5418,14 +5261,7 @@ impl TypeTable {
                 .get(current)
                 .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
             {
-                ResolvedType::Newtype { base_type, .. } => {
-                    // Use redirect if already computed; otherwise follow the raw chain.
-                    current = self
-                        .redirects
-                        .get(*base_type)
-                        .copied()
-                        .unwrap_or(*base_type);
-                }
+                ResolvedType::Newtype { base_type, .. } => current = *base_type,
                 ResolvedType::Flags { .. } => return TypeTable::U32,
                 _ => return current,
             }
@@ -5438,7 +5274,7 @@ impl TypeTable {
     /// - One is a newtype of the other
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
-        self.same_type(self.representation_head(a), self.representation_head(b))
+        self.representation_head(a) == self.representation_head(b)
     }
 
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
@@ -5882,12 +5718,7 @@ impl TypeTable {
 
     /// Whether `id` is one of `slots` or is built over one.
     pub fn mentions_any(&self, id: TypeId, slots: &[TypeId]) -> bool {
-        self.mentions_key(id, &self.type_keys(slots))
-    }
-
-    fn mentions_key(&self, id: TypeId, keys: &[TypeKey]) -> bool {
-        keys.contains(&self.type_key(id))
-            || self.any_constituent(id, &mut |t| self.mentions_key(t, keys))
+        slots.contains(&id) || self.any_constituent(id, &mut |t| self.mentions_any(t, slots))
     }
 
     /// The frame slots `id` (recursively) mentions, projections included.
@@ -5976,16 +5807,6 @@ impl TypeTable {
     #[must_use]
     pub fn name(&self, id: TypeId) -> String {
         self.render_name(id, false)
-    }
-
-    /// [`Self::name`] as the type read before `boxing::prepare_types`
-    /// redefined a reference into `Box<T>`: what the source wrote, `&i32`.
-    #[must_use]
-    pub fn name_unboxed(&self, id: TypeId) -> String {
-        match self.spelled_ref(id) {
-            Some((payload, kind)) => ref_type_name(kind, &self.name_unboxed(payload)),
-            None => self.name(id),
-        }
     }
 
     /// [`Self::name`] with every declared head written in the spec's
@@ -6139,40 +5960,6 @@ impl TypeTable {
         name
     }
 
-    /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
-    /// E.g., `List<FieldName>` → `List<String>` when `FieldName = String`.
-    pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
-        let base = self.representation_head(id);
-        match self.get(base) {
-            // A tuple is module-independent; every other instance is named by
-            // the module declaring its base.
-            ResolvedType::Tuple(elems) => mangle_tuple_type(
-                &elems
-                    .iter()
-                    .map(|t| self.mangle_type_name_resolving_newtypes(*t))
-                    .collect::<Vec<_>>(),
-            ),
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Resource { def, type_args }
-            | ResolvedType::Variant { def, type_args } => {
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.mangle_type_name_resolving_newtypes(*t))
-                    .collect();
-                let unqualified = mangle_generic_name(&self.decl_mangled_name(*def), &args);
-                mangle_declared(self.def_module(*def), &unqualified)
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                let elem_name = self.mangle_type_name_resolving_newtypes(*elem);
-                mangle_builtin_array_type(&elem_name)
-            }
-            _ => self.mangle_type_name(base),
-        }
-    }
-
     /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
     /// where [`Self::name`] would give the human-readable `[i32, String]`.
     /// A generic renders as `Name<T1,T2,…>`, a function as [`crate::name::mangle_fn_type`]
@@ -6207,19 +5994,12 @@ impl TypeTable {
             .collect()
     }
 
-    /// [`Self::mangle_type_arg_rowless`] of the newtype-resolved form, which
-    /// the WIR array and `List` wrapper registrations key on.
-    pub fn mangle_type_arg_rowless_resolving_newtypes(&self, id: TypeId) -> String {
-        let resolved = self.representation_head(id);
-        self.mangle_type_arg_rowless(resolved)
-    }
-
     /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
     /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
     /// ultimate base and every `Flags` to `u32`, recursively through composite
     /// types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
-    /// name that matches the post-erasure call site, whose `field_ty` reads
-    /// through the erasure redirect map.
+    /// name that matches the post-erasure call site, whose `field_ty` is
+    /// erased.
     pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
@@ -6255,16 +6035,6 @@ impl TypeTable {
             }
             _ => self.mangle_type_arg_rowless(id),
         }
-    }
-
-    /// [`Self::mangle_type_arg_rowless`] as the type read *before*
-    /// `boxing::prepare_types` redefined every reference `TypeId` into `Box<T>`,
-    /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
-    /// A bridge is keyed by a type its struct takes as an argument, which no
-    /// row tells apart.
-    pub fn mangle_type_arg_unboxed(&self, id: TypeId) -> String {
-        self.fq_type_name_spelled_in(id, true, RowSpelling::Nowhere)
-            .to_mangled()
     }
 
     /// The base type name without type arguments: the head's own name, so
@@ -6321,16 +6091,10 @@ impl TypeTable {
     pub fn impl_receiver_key(&self, id: TypeId) -> Receiver {
         let declared = |def: DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
-        // Unerased: which impls a type has is a fact about its identity, and
-        // erasure rewrites a newtype / flags id to the representation it is
-        // stored as, whose impls are a different set.
-        match self.get_unerased(id) {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
-                    "a reference unerased is a reference erased: `get_unerased` resolves the \
-                     box redefinition, the one rewrite that makes the two views differ",
-                ))
-            }
+        match self.get(id) {
+            resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => Receiver::Ref(
+                RefKind::from_resolved(resolved).expect("a reference has a reference kind"),
+            ),
             ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
             // The head is the declaration, arguments never spelled into it — an
             // `impl` header writes `MyArray`, not `MyArray<i32>`, and
@@ -6380,13 +6144,11 @@ impl TypeTable {
         self.fq_fn_name(resolved, |t| self.fq_type_name(t))
     }
 
-    /// The declaration a type's head names, with any arguments dropped. Read
-    /// off the identity ([`Self::get_unerased`]): this is the head an `impl`
-    /// header writes, and erasure would answer `u32` for a `flags` type and the
-    /// base's name for a newtype — templates no impl declares.
+    /// The declaration a type's head names, with any arguments dropped: the
+    /// head an `impl` header writes.
     #[must_use]
     pub fn fq_base_type_name(&self, id: TypeId) -> FqTypeName {
-        match self.get_unerased(id) {
+        match self.get(id) {
             ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
             ResolvedType::Enum { def }
             | ResolvedType::Variant { def, .. }
@@ -6431,53 +6193,34 @@ impl TypeTable {
     /// the name stays structured all the way to its consumers.
     #[must_use]
     pub fn fq_type_name(&self, id: TypeId) -> FqTypeName {
-        self.fq_type_name_spelled(id, false)
-    }
-
-    /// [`Self::fq_type_name`] as the type read *before* `boxing::prepare_types`
-    /// redefined every reference `TypeId` into `Box<T>`. Every shape recurses,
-    /// so a reference nested anywhere in the spelling comes back as one.
-    pub fn fq_type_name_unboxed(&self, id: TypeId) -> FqTypeName {
-        self.fq_type_name_spelled(id, true)
-    }
-
-    fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> FqTypeName {
-        self.fq_type_name_spelled_in(id, unboxed, RowSpelling::OutsideArgs)
+        self.fq_type_name_spelled_in(id, RowSpelling::OutsideArgs)
     }
 
     /// [`Self::fq_type_name`] with every function type's row spelled, inside
     /// type arguments too: what the effect check reads a receiver's argument
     /// rows off.
     pub fn fq_type_name_with_rows(&self, id: TypeId) -> FqTypeName {
-        self.fq_type_name_spelled_in(id, false, RowSpelling::Everywhere)
+        self.fq_type_name_spelled_in(id, RowSpelling::Everywhere)
     }
 
     /// [`Self::fq_type_name`] with no row spelled: a type's own argument,
     /// where a row selects no representation.
     pub fn fq_type_name_rowless(&self, id: TypeId) -> FqTypeName {
-        self.fq_type_name_spelled_in(id, false, RowSpelling::Nowhere)
+        self.fq_type_name_spelled_in(id, RowSpelling::Nowhere)
     }
 
-    /// [`Self::fq_type_name_spelled`], with function types' rows spelled where
-    /// `rows` says.
-    fn fq_type_name_spelled_in(&self, id: TypeId, unboxed: bool, rows: RowSpelling) -> FqTypeName {
+    /// [`Self::fq_type_name`], with function types' rows spelled where `rows`
+    /// says.
+    fn fq_type_name_spelled_in(&self, id: TypeId, rows: RowSpelling) -> FqTypeName {
         let rowless = rows == RowSpelling::Nowhere;
         let arg_rows = match rows {
             RowSpelling::Everywhere => RowSpelling::Everywhere,
             RowSpelling::OutsideArgs | RowSpelling::Nowhere => RowSpelling::Nowhere,
         };
-        // Only a reference is read off the slot's own type. Every other shape
-        // keeps the erased view below, where ids that erase together must
-        // answer one name.
-        if unboxed && let Some((payload, kind)) = self.spelled_ref(id) {
-            return self
-                .fq_type_name_spelled_in(payload, unboxed, rows)
-                .with_reference(kind);
-        }
         let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
             type_args
                 .iter()
-                .map(|t| self.fq_type_name_spelled_in(*t, unboxed, arg_rows))
+                .map(|t| self.fq_type_name_spelled_in(*t, arg_rows))
                 .collect()
         };
         // The erased view, unlike [`Self::fq_base_type_name`]: this spelling
@@ -6513,12 +6256,12 @@ impl TypeTable {
             } => FqTypeName::binder_of_family(&self.defs, *owning_trait, assoc_name, name),
             ResolvedType::Tuple(elems) => FqTypeName::tuple(args_of(elems)),
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(ARRAY_TYPE_NAME)
-                .with_args(vec![self.fq_type_name_spelled_in(*elem, unboxed, arg_rows)]),
+                .with_args(vec![self.fq_type_name_spelled_in(*elem, arg_rows)]),
             ResolvedType::Ref(inner) => self
-                .fq_type_name_spelled_in(*inner, unboxed, rows)
+                .fq_type_name_spelled_in(*inner, rows)
                 .with_reference(RefKind::Shared),
             ResolvedType::MutRef(inner) => self
-                .fq_type_name_spelled_in(*inner, unboxed, rows)
+                .fq_type_name_spelled_in(*inner, rows)
                 .with_reference(RefKind::Mut),
             // Structural, so substituting the base reaches it: the base is what
             // a monomorphized call answers, and the projection follows.
@@ -6530,7 +6273,7 @@ impl TypeTable {
                 trait_args,
                 ..
             } => FqTypeName::projection(
-                self.fq_type_name_spelled(*param_id, unboxed),
+                self.fq_type_name(*param_id),
                 assoc_name,
                 &self.defs,
                 *owning_trait,
@@ -6546,9 +6289,9 @@ impl TypeTable {
                 *is_mut,
                 params
                     .iter()
-                    .map(|&p| self.fq_type_name_spelled_in(p, unboxed, rows))
+                    .map(|&p| self.fq_type_name_spelled_in(p, rows))
                     .collect(),
-                self.fq_type_name_spelled_in(*return_type, unboxed, rows),
+                self.fq_type_name_spelled_in(*return_type, rows),
                 if rowless { Vec::new() } else { effects.clone() },
             ),
             // Shapes that name no declaration — packs, `Unknown`. They carry no
@@ -6717,7 +6460,7 @@ impl TypeTable {
     /// Impl block `def`'s target head at `head_args`; `None` where the target
     /// is no generic head of that arity.
     pub fn impl_target_at(&mut self, def: DefId, head_args: &[TypeId]) -> Option<TypeId> {
-        match self.get_unerased(self.impl_target(def).whole) {
+        match self.get(self.impl_target(def).whole) {
             ResolvedType::Struct {
                 def: StructDef::Decl(head),
                 type_args,
@@ -6785,7 +6528,7 @@ impl TypeTable {
             if self.nominal_def(link) == Some(decl) {
                 return self.declared_type_args(link);
             }
-            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+            let ResolvedType::Newtype { base_type, .. } = self.get(link) else {
                 return None;
             };
             link = *base_type;
@@ -6866,15 +6609,14 @@ impl TypeTable {
     /// targets share one `&` head, so their referents' heads must agree too.
     pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
         let target = self.impl_target(def);
-        if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) =
-            self.get_unerased(target.whole)
+        if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) = self.get(target.whole)
             && let ResolvedType::Ref(asked) | ResolvedType::MutRef(asked) = self.get(instance)
             && self.param_slot(*written).is_none()
         {
             let head = self.impl_receiver_key(*written);
             let mut link = self.peel_refs(*asked);
             while self.impl_receiver_key(link) != head {
-                let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+                let ResolvedType::Newtype { base_type, .. } = self.get(link) else {
                     return false;
                 };
                 link = *base_type;
@@ -6882,7 +6624,7 @@ impl TypeTable {
         }
         let written = &target.args;
         let instance = self.peel_refs(instance);
-        let args = match self.get_unerased(instance) {
+        let args = match self.get(instance) {
             ResolvedType::Struct { type_args, .. } => type_args.clone(),
             _ => self.declared_type_args(instance).unwrap_or_default(),
         };
@@ -6893,7 +6635,7 @@ impl TypeTable {
     /// names a head, not a shape, over distinct binders.
     pub fn impl_covers_every_instance(&self, def: DefId) -> bool {
         let target = self.impl_target(def);
-        let names_a_head = match self.get_unerased(target.whole) {
+        let names_a_head = match self.get(target.whole) {
             ResolvedType::Ref(_)
             | ResolvedType::MutRef(_)
             | ResolvedType::Unit
@@ -7043,7 +6785,7 @@ impl TypeTable {
             return self.fq_base_type_name(written).head()
                 == self.fq_base_type_name(concrete).head();
         }
-        self.same_type(written, concrete)
+        written == concrete
     }
 
     /// Whether two receiver-side types can be one, answering an open variable
@@ -7056,7 +6798,7 @@ impl TypeTable {
         binding: &mut TargetBinding,
     ) -> bool {
         let (a, b) = (binding.answered(a), binding.answered(b));
-        if self.same_type(a, b) {
+        if a == b {
             return true;
         }
         let closed = |ty: TypeId| !self.any_infer_var(ty, &mut |var| open(var));
@@ -7141,7 +6883,7 @@ impl TypeTable {
             return true;
         }
         self.zip_shapes(a.1, b.1, |x, y| self.unify_apart((a.0, x), (b.0, y), subst))
-            .unwrap_or_else(|| self.same_type(a.1, b.1))
+            .unwrap_or(a.1 == b.1)
     }
 
     /// `term` past every parameter the substitution has bound.
@@ -7190,7 +6932,7 @@ type Term = (Side, TypeId);
 const TEMPLATE_NAME_MAX_CHARS: usize = 50;
 
 /// An interned shape with the mangle it was minted under. The mangle renders
-/// the shape's field types, and erasure later redirects a newtype among them
+/// the shape's field types, and erasure later rewrites a newtype among them
 /// to its base: rendering again would spell a different name from the one the
 /// `TirStruct` was registered under, so the name is fixed at interning.
 #[derive(Debug, Clone)]
@@ -7240,7 +6982,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Set `id`'s value, growing the backing storage with empty slots as
-    /// needed. Used for sparse maps such as erasure redirects.
+    /// needed, for a sparse map such as `erasures`.
     pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
         let idx = id.0 as usize;
         if idx >= self.slots.len() {
@@ -7322,7 +7064,7 @@ struct AssocTypeKey {
 }
 
 /// A type keyed by its declaration and arguments: one key whatever ids spell
-/// the arguments, which [`TypeKey`] keeps apart.
+/// the arguments.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstanceKey {
     Nominal(DefId, Vec<InstanceKey>),
@@ -7396,7 +7138,7 @@ impl AssocAnswers {
 
     /// The answer of the impl reached at `trait_args`, where they are known
     /// and an impl's, defaults filled, are exactly them; else [`Self::bare`].
-    fn at(&self, table: &TypeTable, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
+    fn at(&self, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
         trait_args
             .and_then(|wanted| {
                 self.0
@@ -7405,7 +7147,7 @@ impl AssocAnswers {
                         entry
                             .filled
                             .as_deref()
-                            .is_some_and(|filled| table.same_types(filled, wanted))
+                            .is_some_and(|filled| filled == wanted)
                     })
                     .map(|entry| entry.answer)
             })
@@ -7480,7 +7222,7 @@ static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
 static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
-static NO_SUBTERMS: IndexMap<TypeKey, TypeId> = IndexMap::with_hasher(FxBuildHasher);
+static NO_SUBTERMS: IndexMap<TypeId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_RENAMES: IndexMap<u32, u32> = IndexMap::with_hasher(FxBuildHasher);
 
 /// Where a type's spelling writes its function types' rows. A function value
@@ -7522,7 +7264,7 @@ struct Leaves<'s> {
     /// unchanged, so it takes the spelling interning gives it now.
     reintern_instances: bool,
     /// Whole types replaced wherever they stand, before any leaf inside them.
-    subterms: &'s IndexMap<TypeKey, TypeId>,
+    subterms: &'s IndexMap<TypeId, TypeId>,
     /// Slots moved to another index, name and pack shape kept, where `params`
     /// fills none.
     renames: &'s IndexMap<u32, u32>,
@@ -7591,48 +7333,13 @@ impl Leaves<'_> {
 enum Reach {
     MutRef,
     /// An object of this [`TypeTable::object_kind`].
-    Object(TypeKey),
+    Object(TypeId),
 }
 
-/// One argument of a struct instance, as [`TypeTable::instance_arg`] reads it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum InstanceArg {
-    Type(TypeKey),
-    Struct(StructDef, Vec<InstanceArg>),
-    Generic(DefId, Vec<InstanceArg>),
-    Tuple(Vec<InstanceArg>),
-    Ref(Box<InstanceArg>),
-    MutRef(Box<InstanceArg>),
-    Array(Box<InstanceArg>),
-    Function {
-        is_mut: bool,
-        params: Vec<InstanceArg>,
-        ret: Box<InstanceArg>,
-    },
-}
-
-/// What a [`TypeId`] resolves to, as a value to compare or key a map by.
-/// An id addresses a slot; this answers identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TypeKey(TypeId);
-
-/// An arbitrary but fixed order, for a key that has to sort.
-impl Ord for TypeKey {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.0.cmp(&other.0.0)
-    }
-}
-
-impl PartialOrd for TypeKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// An answer about each type, computed once per [`TypeKey`] so every id naming
-/// one type shares it. Valid while the facts the answer reads stay fixed.
+/// An answer about each type, computed once. Valid while the facts the answer
+/// reads stay fixed.
 pub struct TypeMemo<V> {
-    answers: RefCell<IndexMap<TypeKey, V>>,
+    answers: RefCell<IndexMap<TypeId, V>>,
 }
 
 impl<V> Default for TypeMemo<V> {
@@ -7645,7 +7352,7 @@ impl<V> Default for TypeMemo<V> {
 
 impl<V: Copy> TypeMemo<V> {
     /// `compute` may ask this memo of other types: no borrow is held across it.
-    pub fn get_or_compute(&self, key: TypeKey, compute: impl FnOnce() -> V) -> V {
+    pub fn get_or_compute(&self, key: TypeId, compute: impl FnOnce() -> V) -> V {
         if let Some(&answer) = self.answers.borrow().get(&key) {
             return answer;
         }
@@ -7692,70 +7399,23 @@ mod tests {
         assert_matches!(table.get(TypeTable::UNIT), ResolvedType::Unit);
     }
 
-    /// The boxing rewrite redefines many slots onto one type, so two ids that
-    /// resolve alike are the normal case and `==` is not the question to ask.
+    /// A `&X` and a `&mut X` name one cell at any depth, and stay two types.
     #[test]
-    fn a_key_unifies_ids_a_redefinition_left_resolving_alike() {
+    fn references_to_one_cell_share_its_key() {
         let mut table = TypeTable::new();
-        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
-        let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
-        table.redefine_to(redefined, shared);
+        let shared = table.make_ref(TypeTable::I32);
+        let mutable = table.make_mut_ref(TypeTable::I32);
+        let deep_shared = table.make_ref(shared);
+        let deep_mutable = table.make_ref(mutable);
 
-        assert_ne!(shared, redefined);
-        assert_eq!(table.type_key(redefined), table.type_key(shared));
-        assert_ne!(table.type_key(shared), table.type_key(TypeTable::I32));
-    }
-
-    /// A redefinition reaches every view of the type: only `is_mut_box` reads
-    /// the reference left in the slot. The spelling also leaves `intern`, so a
-    /// later ask for it mints a live reference.
-    #[test]
-    fn a_redefinition_reaches_every_view_of_the_type() {
-        let mut table = TypeTable::new();
-        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
-        let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
-        table.redefine_to(redefined, shared);
-
-        assert_matches!(table.get(redefined), ResolvedType::Ref(TypeTable::I32));
-        assert_matches!(
-            table.get_unerased(redefined),
-            ResolvedType::Ref(TypeTable::I32)
-        );
-        let minted = table.intern(ResolvedType::MutRef(TypeTable::I32));
-        assert_ne!(minted, redefined);
-        assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
-    }
-
-    /// `&T` and `&mut T` share one `Box<T>`, so the reference left in the slot
-    /// is the only thing that still tells a writable box from a shared one.
-    #[test]
-    fn a_redefined_ref_still_says_whether_it_was_mut() {
-        let mut table = TypeTable::new();
-        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
-        let mutable = table.intern(ResolvedType::MutRef(TypeTable::I32));
-        for wrapper in [shared, mutable] {
-            table.redefine_to(wrapper, TypeTable::I32);
-            table.register_box_payload(wrapper, TypeTable::I32);
-        }
-
-        assert!(!table.is_mut_box(shared));
-        assert!(table.is_mut_box(mutable));
-    }
-
-    /// `retain` rebuilds the intern map from the surviving slots, and a
-    /// retired reference is still spelled as one there.
-    #[test]
-    fn retain_leaves_a_retired_spelling_retired() {
-        let mut table = TypeTable::new();
-        let redefined = table.intern(ResolvedType::Ref(TypeTable::I32));
-        table.redefine_to(redefined, TypeTable::I32);
-        let mut keep = IndexSet::default();
-        keep.insert(redefined);
-        keep.insert(TypeTable::I32);
-        table.retain(&keep);
-
-        assert_eq!(table.type_key(redefined), table.type_key(TypeTable::I32));
-        assert_ne!(table.intern(ResolvedType::Ref(TypeTable::I32)), redefined);
+        assert_ne!(shared, mutable);
+        assert_eq!(table.cell_payload(mutable), Some(TypeTable::I32));
+        assert_eq!(table.cell_key(shared), table.cell_key(mutable));
+        assert_eq!(table.cell_key(deep_shared), table.cell_key(deep_mutable));
+        assert_ne!(table.cell_key(shared), table.cell_key(deep_shared));
+        assert_eq!(table.heap_object_key(mutable), Some(table.cell_key(shared)));
+        assert_ne!(table.cell_key(shared), TypeTable::I32);
+        assert_eq!(table.heap_object_key(TypeTable::I32), None);
     }
 
     /// A surviving anonymous struct spells itself with its field types, which

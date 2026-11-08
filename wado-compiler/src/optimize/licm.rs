@@ -20,7 +20,7 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
@@ -35,42 +35,27 @@ use crate::optimize::condition_implication::{
 };
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, LazyHeapFrame};
 
-/// Field writes by pointee type, keyed by [`TypeTable::type_key`] so the same
-/// type arriving under another id is still a hit, each with the local the write
-/// goes through where its receiver is one.
+/// Field writes by pointee type, each with the local the write goes through
+/// where its receiver is one.
 #[derive(Default)]
-struct FieldWrites(IndexMap<(TypeKey, u32), IndexSet<Option<u32>>>);
+struct FieldWrites(IndexMap<(TypeId, u32), IndexSet<Option<u32>>>);
 
 impl FieldWrites {
-    fn insert(
-        &mut self,
-        pointee: TypeId,
-        field_idx: u32,
-        receiver: Option<u32>,
-        type_table: &TypeTable,
-    ) {
+    fn insert(&mut self, pointee: TypeId, field_idx: u32, receiver: Option<u32>) {
         self.0
-            .entry((type_table.type_key(pointee), field_idx))
+            .entry((pointee, field_idx))
             .or_default()
             .insert(receiver);
     }
 
     /// Whether a write may reach `root`'s object: one through no local, or
     /// through a local whose objects `shares` does not rule apart from it.
-    fn reach(
-        &self,
-        pointee: TypeId,
-        field_idx: u32,
-        type_table: &TypeTable,
-        shares: impl Fn(u32) -> bool,
-    ) -> bool {
-        self.0
-            .get(&(type_table.type_key(pointee), field_idx))
-            .is_some_and(|receivers| {
-                receivers
-                    .iter()
-                    .any(|receiver| receiver.is_none_or(&shares))
-            })
+    fn reach(&self, pointee: TypeId, field_idx: u32, shares: impl Fn(u32) -> bool) -> bool {
+        self.0.get(&(pointee, field_idx)).is_some_and(|receivers| {
+            receivers
+                .iter()
+                .any(|receiver| receiver.is_none_or(&shares))
+        })
     }
 }
 
@@ -135,10 +120,9 @@ impl ModifiedVars {
         field_idx: u32,
     ) -> bool {
         let pointee = ctx.type_table.peel_refs(root_type);
-        self.field_writes
-            .reach(pointee, field_idx, ctx.type_table, |receiver| {
-                ctx.heap.get(body).locals_may_share(receiver, root)
-            })
+        self.field_writes.reach(pointee, field_idx, |receiver| {
+            ctx.heap.get(body).locals_may_share(receiver, root)
+        })
     }
 
     /// True when hoisting `root.field_idx` is unsound: another handle on the
@@ -1077,7 +1061,7 @@ impl ReloadGain<'_> {
 /// object the local `root` holds.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct Watch {
-    key: TypeKey,
+    key: TypeId,
     root: u32,
     field: u32,
 }
@@ -1610,7 +1594,7 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
         ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => true,
         ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            is_gc_heap_type(*inner, type_table)
+            type_table.cell_payload(type_id).is_some() || is_gc_heap_type(*inner, type_table)
         }
         _ => false,
     }
@@ -1671,7 +1655,7 @@ fn record_field_write(
         };
         modified
             .field_writes
-            .insert(pointee, *field_index, receiver, type_table);
+            .insert(pointee, *field_index, receiver);
     }
 }
 
@@ -2276,7 +2260,7 @@ enum ArithKey {
     Binary(u8, Box<ArithKey>, Box<ArithKey>),
     /// A cast by its target: `x as i32 as i64` and `x as u32 as i64` differ
     /// only there.
-    Cast(TypeKey, Box<ArithKey>),
+    Cast(TypeId, Box<ArithKey>),
 }
 
 fn arith_structural_key(body: &Body, types: &TypeTable, e: ExprId) -> ArithKey {
@@ -2302,7 +2286,7 @@ fn arith_structural_key(body: &Body, types: &TypeTable, e: ExprId) -> ArithKey {
             ArithKey::Unary(*op as u8, Box::new(arith_operand_key(body, types, *expr)))
         }
         ExprKind::Cast { expr, target_type } => ArithKey::Cast(
-            types.type_key(*target_type),
+            *target_type,
             Box::new(arith_operand_key(body, types, *expr)),
         ),
         ExprKind::Local { index, .. } => ArithKey::Local(*index),

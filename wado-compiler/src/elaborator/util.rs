@@ -971,8 +971,7 @@ fn pattern_literal_mismatch(
             owner: Some(owner), ..
         } => {
             let owner_type = TypeTable::primitive_type_id(*owner);
-            return (!type_table.same_type(owner_type, scrutinee))
-                .then(|| owner.as_str().to_string());
+            return (owner_type != scrutinee).then(|| owner.as_str().to_string());
         }
         PatternLiteral::Int { .. }
             if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>

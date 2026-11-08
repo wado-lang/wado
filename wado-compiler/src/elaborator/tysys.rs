@@ -17,7 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, range_item};
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use super::sem::decls::ModuleDecls;
 use super::trait_env::{NamespaceImports, TraitEnv};
@@ -258,7 +258,7 @@ impl TypeSystem {
         type_id: TypeId,
         params: bool,
         into: Option<TypeId>,
-        walked: &mut IndexSet<(TypeKey, bool)>,
+        walked: &mut IndexSet<(TypeId, bool)>,
     ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
         let (args, members) = match resolved {
@@ -292,7 +292,7 @@ impl TypeSystem {
                 self.case_payload_types(type_id).unwrap_or_default(),
             ),
         };
-        if !walked.insert((self.type_table.borrow().type_key(type_id), params)) {
+        if !walked.insert((type_id, params)) {
             return false;
         }
         args.into_iter()
@@ -321,7 +321,7 @@ impl TypeSystem {
         &self,
         type_id: TypeId,
         target: &dyn Fn(TypeId, &ResolvedType) -> bool,
-        walked: &mut IndexSet<TypeKey>,
+        walked: &mut IndexSet<TypeId>,
     ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
         if target(type_id, &resolved) {
@@ -359,7 +359,7 @@ impl TypeSystem {
                 reached
             }
         };
-        if !walked.insert(self.type_table.borrow().type_key(type_id)) {
+        if !walked.insert(type_id) {
             return false;
         }
         reached
@@ -896,7 +896,7 @@ fn is_open(resolved: &ResolvedType) -> bool {
 fn may_name_one_type(table: &TypeTable, a: TypeId, b: TypeId) -> bool {
     let (a, b) = (table.representation_head(a), table.representation_head(b));
     let (ra, rb) = (table.get(a), table.get(b));
-    if table.same_type(a, b) || is_open(ra) || is_open(rb) {
+    if a == b || is_open(ra) || is_open(rb) {
         return true;
     }
     let both = |x: Vec<TypeId>, y: Vec<TypeId>| {
@@ -995,18 +995,9 @@ struct AffineParams<'a> {
 }
 
 impl HeldTypes for AffineParams<'_> {
-    fn key(&self, type_id: TypeId) -> TypeKey {
-        self.types.key(type_id)
-    }
-
     fn held(&self, type_id: TypeId) -> Held {
         let table = self.types.type_table.borrow();
-        let declared_affine = |param_id: TypeId| {
-            let key = table.type_key(param_id);
-            self.affine_params
-                .iter()
-                .any(|&param| table.type_key(param) == key)
-        };
+        let declared_affine = |param_id: TypeId| self.affine_params.contains(&param_id);
         let is_affine_param = match table.get(type_id) {
             // A pack mapped through a constructor (`[..TemplateHole<T, V>]`)
             // holds its element as a parameter of the pack's name and index.
@@ -1054,10 +1045,6 @@ impl HeldTypes for AffineParams<'_> {
 }
 
 impl HeldTypes for TypeSystem {
-    fn key(&self, type_id: TypeId) -> TypeKey {
-        self.type_table.borrow().type_key(type_id)
-    }
-
     /// A type declared `affine` is move-only whatever its members hold, as a
     /// type implementing `Drop` is.
     fn held(&self, type_id: TypeId) -> Held {

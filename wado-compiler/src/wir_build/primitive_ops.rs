@@ -80,11 +80,7 @@ impl FunctionTranslator<'_, '_> {
     /// eagerly, where the elements encode smaller inline, else `array.new_data`.
     pub(super) fn translate_packed_array(&self, data: &PackedData, type_id: TypeId) -> WirInstr {
         let array_type_id = if data.as_bytes().is_some() {
-            self.ctx
-                .array_type_by_name
-                .get("u8")
-                .cloned()
-                .expect("[WIR] PackedArray: u8 array type not registered")
+            self.ctx.array_type(self.type_table, TypeTable::U8)
         } else {
             self.ref_type_id(type_id)
         };
@@ -897,22 +893,7 @@ impl FunctionTranslator<'_, '_> {
             );
         };
 
-        // Get the raw GC array type. Element name must match the
-        // key `register_raw_array_type` uses
-        // (`mangle_type_arg_rowless`, qualifies struct args by
-        // `ModuleSource`).
-        let elem_name = self.type_table.mangle_type_arg_rowless(element_type_id);
-        let raw_array_type = self
-            .ctx
-            .array_type_by_name
-            .get(&elem_name)
-            .or_else(|| self.ctx.array_type_map.get(&element_type_id))
-            .cloned();
-        let Some(raw_type) = raw_array_type else {
-            panic!(
-                "[WIR] build_list_get: raw GC array type not registered (element_type_id={element_type_id:?}, elem_name={elem_name})"
-            );
-        };
+        let raw_type = self.ctx.array_type(self.type_table, element_type_id);
 
         // StructGet field "repr" (field 0) to get raw array
         let repr_result_ty =
@@ -996,22 +977,9 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } = list_struct_wir
             else {
-                return WirInstr::Drop(Box::new(val));
+                unreachable!("a `List` is a struct, not {list_struct_wir:?}");
             };
-
-            // Same alignment as `build_list_get` above: lookup must
-            // use the qualified mangle so the key matches what
-            // `register_raw_array_type` registered.
-            let elem_name = self.type_table.mangle_type_arg_rowless(element_type_id);
-            let raw_array_type = self
-                .ctx
-                .array_type_by_name
-                .get(&elem_name)
-                .or_else(|| self.ctx.array_type_map.get(&element_type_id))
-                .cloned();
-            let Some(raw_type) = raw_array_type else {
-                return WirInstr::Drop(Box::new(val));
-            };
+            let raw_type = self.ctx.array_type(self.type_table, element_type_id);
 
             let repr_result_ty =
                 self.struct_field_wir_type(&list_struct_type, SeqField::Backing.field_name());

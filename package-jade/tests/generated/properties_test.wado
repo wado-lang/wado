@@ -9,6 +9,7 @@ test "object properties validation: both properties present and valid is valid" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"integer"},"bar":{"type":"string"}}}"#,
         #"{"foo":1,"bar":"baz"}"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "object properties validation: one property invalid is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"integer"},"bar":{"type":"string"}}}"#,
         #"{"foo":1,"bar":{}}"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "object properties validation: both properties invalid is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"integer"},"bar":{"type":"string"}}}"#,
         #"{"foo":[],"bar":{}}"#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "object properties validation: doesn't invalidate other properties" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"integer"},"bar":{"type":"string"}}}"#,
         #"{"quux":[]}"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "object properties validation: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"integer"},"bar":{"type":"string"}}}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "object properties validation: ignores other non-objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"integer"},"bar":{"type":"string"}}}"#,
         #"12"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "properties, patternProperties, additionalProperties interaction: property 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"foo":[1,2]}"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "properties, patternProperties, additionalProperties interaction: property 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"foo":[1,2,3,4]}"#,
         false,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "properties, patternProperties, additionalProperties interaction: patternPr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"foo":[]}"#,
         false,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "properties, patternProperties, additionalProperties interaction: patternPr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"fxo":[1,2]}"#,
         true,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "properties, patternProperties, additionalProperties interaction: patternPr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"fxo":[]}"#,
         false,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "properties, patternProperties, additionalProperties interaction: additiona
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"bar":[]}"#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "properties, patternProperties, additionalProperties interaction: additiona
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"quux":3}"#,
         true,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "properties, patternProperties, additionalProperties interaction: additiona
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"array","maxItems":3},"bar":{"type":"array"}},"patternProperties":{"f.o":{"minItems":2}},"additionalProperties":{"type":"integer"}}"#,
         #"{"quux":"foo"}"#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "properties with boolean schema: no property present is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":true,"bar":false}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "properties with boolean schema: only 'true' property present is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":true,"bar":false}}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "properties with boolean schema: only 'false' property present is invalid" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":true,"bar":false}}"#,
         #"{"bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "properties with boolean schema: both properties present is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":true,"bar":false}}"#,
         #"{"foo":1,"bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "properties with escaped characters: object with all numbers is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo\nbar":{"type":"number"},"foo\"bar":{"type":"number"},"foo\\bar":{"type":"number"},"foo\rbar":{"type":"number"},"foo\tbar":{"type":"number"},"foo\fbar":{"type":"number"}}}"#,
         #"{"foo\nbar":1,"foo\"bar":1,"foo\\bar":1,"foo\rbar":1,"foo\tbar":1,"foo\fbar":1}"#,
         true,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "properties with escaped characters: object with strings is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo\nbar":{"type":"number"},"foo\"bar":{"type":"number"},"foo\\bar":{"type":"number"},"foo\rbar":{"type":"number"},"foo\tbar":{"type":"number"},"foo\fbar":{"type":"number"}}}"#,
         #"{"foo\nbar":"1","foo\"bar":"1","foo\\bar":"1","foo\rbar":"1","foo\tbar":"1","foo\fbar":"1"}"#,
         false,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "properties with null valued instance properties: allows null values" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"type":"null"}}}"#,
         #"{"foo":null}"#,
         true,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "properties whose names are Javascript object property names: ignores array
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"__proto__":{"type":"number"},"toString":{"properties":{"length":{"type":"string"}}},"constructor":{"type":"number"}}}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "properties whose names are Javascript object property names: ignores other
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"__proto__":{"type":"number"},"toString":{"properties":{"length":{"type":"string"}}},"constructor":{"type":"number"}}}"#,
         #"12"#,
         true,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "properties whose names are Javascript object property names: none of the p
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"__proto__":{"type":"number"},"toString":{"properties":{"length":{"type":"string"}}},"constructor":{"type":"number"}}}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "properties whose names are Javascript object property names: __proto__ not
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"__proto__":{"type":"number"},"toString":{"properties":{"length":{"type":"string"}}},"constructor":{"type":"number"}}}"#,
         #"{"__proto__":"foo"}"#,
         false,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "properties whose names are Javascript object property names: toString not 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"__proto__":{"type":"number"},"toString":{"properties":{"length":{"type":"string"}}},"constructor":{"type":"number"}}}"#,
         #"{"toString":{"length":37}}"#,
         false,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "properties whose names are Javascript object property names: constructor n
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"__proto__":{"type":"number"},"toString":{"properties":{"length":{"type":"string"}}},"constructor":{"type":"number"}}}"#,
         #"{"constructor":{"length":37}}"#,
         false,
+        [],
     );
 }
 
@@ -225,5 +252,6 @@ test "properties whose names are Javascript object property names: all present a
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"__proto__":{"type":"number"},"toString":{"properties":{"length":{"type":"string"}}},"constructor":{"type":"number"}}}"#,
         #"{"__proto__":12,"toString":{"length":"foo"},"constructor":37}"#,
         true,
+        [],
     );
 }

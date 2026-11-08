@@ -22,7 +22,7 @@ use crate::optimize::condition_implication::{
 };
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapFrame, LazyHeapFrame};
 use crate::tir::TypeId;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use super::subtree_redefines;
 
@@ -42,7 +42,7 @@ struct Walk<'w> {
     frame: &'w HeapFrame,
     types: &'w TypeTable,
     root: u32,
-    key: TypeKey,
+    key: TypeId,
     loop_body: BlockId,
     /// The holders of the checks the fast loop deletes.
     checks: &'w [NodeRef],
@@ -98,7 +98,7 @@ pub(super) fn points(
         frame: heap.get(engine.body),
         types,
         root,
-        key: types.type_key(types.peel_refs(root_ty)),
+        key: types.peel_refs(root_ty),
         loop_body,
         checks,
         reads: IndexMap::default(),
@@ -317,7 +317,7 @@ impl Walk<'_> {
     }
 
     fn of_key(&self, ty: TypeId) -> bool {
-        self.types.type_key(self.types.peel_refs(ty)) == self.key
+        self.types.peel_refs(ty) == self.key
     }
 
     /// The worst `node`'s subtree does to the bound, `None` for

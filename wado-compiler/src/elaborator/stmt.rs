@@ -1126,7 +1126,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let abstract_at = |id: TypeId| {
             matches!(tt.get(id), ResolvedType::TypeParam { .. }) || tt.contains_undecided(id)
         };
-        abstract_at(resolved) || abstract_at(scrutinee) || tt.same_type(resolved, scrutinee)
+        abstract_at(resolved) || abstract_at(scrutinee) || resolved == scrutinee
     }
 
     /// The declaration a written qualifier means, the resolve pass answering
@@ -1543,7 +1543,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(*name_id),
                         *span,
                     );
-                    self.record_constant_path(variant_qualifier.as_ref(), *name_id, assoc.decl);
+                    self.record_reference_to_def(*name_id, assoc.decl);
                     self.resolve_associated_const_body(&assoc, ctx);
                     return Some(PatternConstant {
                         shown,
@@ -2494,19 +2494,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
         {
-            self.record_constant_path(variant_qualifier.as_ref(), *name_id, assoc.decl);
+            self.record_reference_to_def(*name_id, assoc.decl);
         }
-    }
-
-    /// Record the uses an associated constant's pattern path makes: its
-    /// owner type, then the constant.
-    fn record_constant_path(&mut self, qualifier: Option<&Type>, name_id: AstId, decl: AstId) {
-        match qualifier {
-            Some(Type::Named(t)) => self.record_type_name_reference(t.id, &t.name),
-            Some(Type::Generic(t)) => self.record_type_name_reference(t.id, &t.name),
-            Some(_) | None => {}
-        }
-        self.record_reference_to_def(name_id, decl);
     }
 
     /// A range with a bound naming a constant other than a primitive's limit.

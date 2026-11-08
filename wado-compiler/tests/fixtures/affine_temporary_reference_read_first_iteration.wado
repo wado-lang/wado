@@ -1,0 +1,33 @@
+// A reference into a temporary dropped before the loop is an error in the
+// first iteration even where the body points it elsewhere before any later one.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn id(t: &Tok) -> &Tok {
+    return t;
+}
+
+test {
+    let a = make(1);
+    let mut r = id(&make(2));
+    let mut i = 0;
+    while i < 2 {
+        assert r.n >= 0;
+        r = &a;
+        i += 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":26:16: analysis error: `r` refers into the temporary at 23:21, which dropped as its statement ended"}

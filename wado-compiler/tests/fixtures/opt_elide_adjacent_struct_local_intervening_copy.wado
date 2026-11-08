@@ -5,15 +5,15 @@
 // When a callee whose receiver is a value-typed reference (`&self: &R`)
 // formats two of its fields with `{r.x} {r.y}` template-string syntax,
 // boxing+inlining of `u64::fmt_decimal` lowers each formatted value into a
-// `LocalSet (StructNew "Box<u64>" { value: <StructGet> })` paired with a
+// `LocalSet (StructNew "$Cell<u64>" { value: <StructGet> })` paired with a
 // fresh `&mut Formatter` parameter alias. The alias is a pure local copy:
 //
-//     self_N = struct.new "Box<u64>" { value: r.field };
+//     self_N = struct.new "$Cell<u64>" { value: r.field };
 //     f_M    = $local_K;                                              // intervening copy
 //     u64::fmt_decimal(self_N.value, f_M);                             // leftmost use
 //
 // The historical pass skipped only `Nop` placeholders, so the
-// `f_M = $local_K;` blocked the rewrite and `Box<u64>` survived. The
+// `f_M = $local_K;` blocked the rewrite and `$Cell<u64>` survived. The
 // relaxed pass consults `ModRef::can_move_past` and, finding the
 // intervening copy is `Control::Linear`, neither reads `self_N` nor
 // writes anything `r.field` depends on, performs the substitution.
@@ -26,7 +26,7 @@ struct R {
 }
 
 // Defined as a separate function so the `&R` parameter survives SROA
-// — otherwise the struct fields collapse to plain locals and the Box
+// — otherwise the struct fields collapse to plain locals and the cell
 // pattern doesn't appear in the first place.
 fn dump(r: &R) with Stdout {
     println(`${r.total} ${r.sum}`);
@@ -42,6 +42,6 @@ __DATA__
     "stdout": "100 200\n",
     "wir_pass": {"O2": ["nir/sroa_param", "nir/inline"]},
     "wir_not_expect:O2": [
-        "struct.new \"core:prelude/types.wado//Box<u64>\""
+        "struct.new \"core:prelude//$Cell<u64>\""
     ]
 }

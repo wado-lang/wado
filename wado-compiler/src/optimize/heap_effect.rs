@@ -11,6 +11,7 @@ use cranelift_entity::EntityRef;
 use crate::builtin_facts::{SideEffect, Storage};
 use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::RefKind;
 use crate::nir::StructFieldTypes;
 use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
@@ -20,7 +21,7 @@ use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, ObjectTypes, ResolvedType, RetainInto, RetainSpec,
     ReturnConvention, TypeId,
 };
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use super::arena_query::holds_reference;
 use super::body_memo::BodyMemo;
@@ -131,11 +132,11 @@ impl Access {
 #[derive(Clone, Default, PartialEq, Debug)]
 struct FieldWrites {
     any: bool,
-    by_type: IndexMap<TypeKey, Option<IndexSet<u32>>>,
+    by_type: IndexMap<TypeId, Option<IndexSet<u32>>>,
 }
 
 impl FieldWrites {
-    fn record(&mut self, key: TypeKey, field: Option<u32>) {
+    fn record(&mut self, key: TypeId, field: Option<u32>) {
         if self.any {
             return;
         }
@@ -179,7 +180,7 @@ impl FieldWrites {
         }
     }
 
-    fn may_write(&self, key: TypeKey, field: u32) -> bool {
+    fn may_write(&self, key: TypeId, field: u32) -> bool {
         self.any
             || self
                 .by_type
@@ -287,9 +288,9 @@ struct Layouts {
 }
 
 impl Layouts {
-    fn of(project: &NirPackage, type_table: &TypeTable) -> Self {
+    fn of(project: &NirPackage) -> Self {
         Self {
-            struct_fields: StructFieldTypes::new(&project.structs, type_table),
+            struct_fields: StructFieldTypes::new(&project.structs),
         }
     }
 }
@@ -309,7 +310,7 @@ pub(super) struct HeapEffectsCache {
     indirect: Summary,
     /// Filled during a sweep by whichever visit asks first; its values depend
     /// only on the type, so the order changes nothing.
-    reach_memo: Mutex<IndexMap<TypeKey, Arc<ObjectTypes>>>,
+    reach_memo: Mutex<IndexMap<TypeId, Arc<ObjectTypes>>>,
     /// Where `assert_one_settled` resumes its rotation.
     #[cfg(debug_assertions)]
     cursor: usize,
@@ -331,7 +332,7 @@ impl HeapEffectsCache {
     }
 
     fn refresh(&mut self, project: &NirPackage, type_table: &TypeTable, gate: &FunctionGate) {
-        let layouts = Layouts::of(project, type_table);
+        let layouts = Layouts::of(project);
         if self.gate != Some(gate.id()) || self.layouts != layouts {
             *self = Self {
                 gate: Some(gate.id()),
@@ -631,7 +632,7 @@ impl HeapEffects<'_> {
         &self,
         body: &Body,
         call: ExprId,
-        key: TypeKey,
+        key: TypeId,
         field: u32,
     ) -> bool {
         if !self.returns(body, call) {
@@ -682,36 +683,35 @@ impl HeapEffects<'_> {
 
     /// Every object type a value of `ty` may reach, itself included.
     pub(super) fn reach(&self, ty: TypeId) -> Arc<ObjectTypes> {
-        let key = self.type_table.type_key(ty);
-        if let Some(hit) = lock(&self.cache.reach_memo).get(&key) {
+        if let Some(hit) = lock(&self.cache.reach_memo).get(&ty) {
             return Arc::clone(hit);
         }
         let mut out = ObjectTypes::default();
         let mut seen = IndexSet::default();
         self.reach_into(ty, &mut seen, &mut out);
         let out = Arc::new(out);
-        lock(&self.cache.reach_memo).insert(key, Arc::clone(&out));
+        lock(&self.cache.reach_memo).insert(ty, Arc::clone(&out));
         out
     }
 
-    fn reach_into(&self, ty: TypeId, seen: &mut IndexSet<TypeKey>, out: &mut ObjectTypes) {
+    fn reach_into(&self, ty: TypeId, seen: &mut IndexSet<TypeId>, out: &mut ObjectTypes) {
         if out.is_any() {
             return;
         }
         let tt = self.type_table;
         let ty = tt.strip_handles(ty);
-        if !seen.insert(tt.type_key(ty)) {
+        if !seen.insert(ty) {
             return;
         }
         match tt.get(ty) {
             ResolvedType::Tuple(elems) => {
-                out.insert(tt.type_key(ty));
+                out.insert(ty);
                 for &elem in elems {
                     self.reach_into(elem, seen, out);
                 }
             }
             ResolvedType::Struct { .. } => {
-                out.insert(tt.type_key(ty));
+                out.insert(ty);
                 if let Some(fields) = self.struct_field_types(ty) {
                     for &f in fields {
                         self.reach_into(f, seen, out);
@@ -721,7 +721,7 @@ impl HeapEffects<'_> {
                 }
             }
             ResolvedType::Variant { def, type_args } => {
-                out.insert(tt.type_key(ty));
+                out.insert(ty);
                 match tt.variant_template_cases(*def) {
                     Some(cases) => {
                         for &(_, _, payload) in cases {
@@ -734,7 +734,7 @@ impl HeapEffects<'_> {
                 }
             }
             ResolvedType::BuiltinArray(element) => {
-                out.insert(tt.type_key(ty));
+                out.insert(ty);
                 self.reach_into(*element, seen, out);
             }
             // A closure's environment holds whatever it captured.
@@ -754,8 +754,12 @@ impl HeapEffects<'_> {
             | ResolvedType::Enum { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Flags { .. } => {}
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Newtype { .. } => {
-                unreachable!("strip_handles removes every reference and newtype")
+            ResolvedType::Ref(payload) | ResolvedType::MutRef(payload) => {
+                out.insert(tt.cell_key(ty));
+                self.reach_into(*payload, seen, out);
+            }
+            ResolvedType::Newtype { .. } => {
+                unreachable!("strip_handles removes every newtype")
             }
             ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
         }
@@ -766,23 +770,38 @@ impl HeapEffects<'_> {
         &self,
         payload: TypeId,
         args: &[TypeId],
-        seen: &mut IndexSet<TypeKey>,
+        seen: &mut IndexSet<TypeId>,
         out: &mut ObjectTypes,
     ) {
         let tt = self.type_table;
-        if let ResolvedType::TypeParam { index, .. } = tt.get(payload) {
-            match args.get(*index as usize) {
+        if !tt.contains_type_param(payload) {
+            self.reach_into(payload, seen, out);
+            return;
+        }
+        match tt.get(payload) {
+            ResolvedType::TypeParam { index, .. } => match args.get(*index as usize) {
                 Some(&arg) => self.reach_into(arg, seen, out),
                 None => {
                     out.set_any();
                 }
+            },
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                let ResolvedType::TypeParam { index, .. } = tt.get(tt.peel_refs(payload)) else {
+                    out.set_any();
+                    return;
+                };
+                let Some(&arg) = args.get(*index as usize) else {
+                    out.set_any();
+                    return;
+                };
+                // A table without the instance holds no value of it, so no
+                // cell its layers would be.
+                let reached = instantiated_reference(tt, payload, arg).unwrap_or(arg);
+                self.reach_into(reached, seen, out);
             }
-        } else if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(payload) {
-            self.reach_template(*inner, args, seen, out);
-        } else if tt.contains_type_param(payload) {
-            out.set_any();
-        } else {
-            self.reach_into(payload, seen, out);
+            _ => {
+                out.set_any();
+            }
         }
     }
 
@@ -803,6 +822,20 @@ impl HeapEffects<'_> {
     fn tuple_element_type(&self, ty: Option<TypeId>, index: usize) -> Option<TypeId> {
         let ty = self.type_table.strip_handles(ty?);
         self.type_table.as_tuple(ty)?.get(index).copied()
+    }
+}
+
+/// `payload`, a chain of references to a type parameter, with `arg` for the
+/// parameter, if the table holds it.
+fn instantiated_reference(tt: &TypeTable, payload: TypeId, arg: TypeId) -> Option<TypeId> {
+    match tt.get(payload) {
+        ResolvedType::Ref(inner) => {
+            tt.find_ref(RefKind::Shared, instantiated_reference(tt, *inner, arg)?)
+        }
+        ResolvedType::MutRef(inner) => {
+            tt.find_ref(RefKind::Mut, instantiated_reference(tt, *inner, arg)?)
+        }
+        _ => Some(arg),
     }
 }
 
@@ -839,7 +872,7 @@ enum OperandNode {
 }
 
 enum Keys {
-    One(TypeKey),
+    One(TypeId),
     Set(Arc<ObjectTypes>),
 }
 
@@ -849,7 +882,7 @@ impl Keys {
             .map_or_else(|| Keys::Set(Arc::new(ObjectTypes::everything())), Keys::One)
     }
 
-    fn contains(&self, key: TypeKey) -> bool {
+    fn contains(&self, key: TypeId) -> bool {
         match self {
             Keys::One(k) => *k == key,
             Keys::Set(set) => set.contains(key),
@@ -1685,7 +1718,7 @@ impl HeapFrame {
         body: &Body,
         call: ExprId,
         effect: Effect,
-        key: TypeKey,
+        key: TypeId,
         local: u32,
     ) -> bool {
         self.call_may_besides(effects, body, call, effect, key, local, |_| false)
@@ -1699,7 +1732,7 @@ impl HeapFrame {
         body: &Body,
         call: ExprId,
         effect: Effect,
-        key: TypeKey,
+        key: TypeId,
         local: u32,
         answered: impl Fn(Operand) -> bool,
     ) -> bool {
@@ -1799,7 +1832,7 @@ impl HeapFrame {
         &self,
         writes_only: bool,
         at: impl Fn(NodeRef) -> bool,
-        (key, field): (TypeKey, u32),
+        (key, field): (TypeId, u32),
         local: u32,
         own: impl Fn(Operand) -> bool,
     ) -> bool {

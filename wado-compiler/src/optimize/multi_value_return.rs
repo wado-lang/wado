@@ -139,7 +139,7 @@ fn walk_call_args_for_uses(
 /// every return statement and call site permit the multi-value ABI.
 pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
-    let structs = StructDecls::new(&project.structs, &type_table);
+    let structs = StructDecls::new(&project.structs);
 
     // The tail-call rule couples caller and callee candidacy, so the candidate
     // set is refuted to a fix-point: optimistic (assume every aggregate-returning
@@ -431,16 +431,14 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -
                 && expected
                     .tail_ok
                     .get(func_id)
-                    .is_some_and(|&ret| expected.type_table.same_type(ret, expected.return_type))
+                    .is_some_and(|&ret| ret == expected.return_type)
         }
         ExprKind::StructLiteral {
             struct_type,
             fields,
             ..
         } => match expected.struct_type {
-            Some(t) => {
-                expected.type_table.same_type(*struct_type, t) && fields.len() == expected.arity
-            }
+            Some(t) => *struct_type == t && fields.len() == expected.arity,
             None => false,
         },
         ExprKind::LabeledBlock { block: b, .. } => {

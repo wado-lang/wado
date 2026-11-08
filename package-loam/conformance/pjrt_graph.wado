@@ -7,11 +7,12 @@
 use { println, Stdout } from "core:cli";
 use { PjrtHost } from "core:pjrt";
 use { Any, Cpu, Graph, Holds, PjrtBackend, Tensor, Untyped } from "lib:loam";
-use { programs } from "./pjrt_programs.wado";
+use { programs, ragged_attention } from "./pjrt_programs.wado";
 
 export fn run() with (Stdout, PjrtHost) {
     let mut device = PjrtBackend::new();
     programs(&mut device, |name, apart| println(`${name} ${apart}`));
+    ragged_attention(&mut device, |name, apart| println(`${name} ${apart}`));
     assert device.donations() > 0, "a step updates the cache in place";
 
     let weight = Tensor::<f32, Untyped> {

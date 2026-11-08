@@ -9,6 +9,7 @@ test "unevaluatedItems true: with no unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":true}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "unevaluatedItems true: with unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":true}"#,
         #"["foo"]"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "unevaluatedItems false: with no unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "unevaluatedItems false: with unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #"["foo"]"#,
         false,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "unevaluatedItems as schema: with no unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":{"type":"string"}}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "unevaluatedItems as schema: with valid unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":{"type":"string"}}"#,
         #"["foo"]"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "unevaluatedItems as schema: with invalid unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":{"type":"string"}}"#,
         #"[42]"#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "unevaluatedItems with uniform items: unevaluatedItems doesn't apply" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"string"},"unevaluatedItems":false}"#,
         #"["foo","bar"]"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "unevaluatedItems with tuple: with no unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"string"}],"unevaluatedItems":false}"#,
         #"["foo"]"#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "unevaluatedItems with tuple: with unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"string"}],"unevaluatedItems":false}"#,
         #"["foo","bar"]"#,
         false,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "unevaluatedItems with items and prefixItems: unevaluatedItems doesn't appl
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"string"}],"items":true,"unevaluatedItems":false}"#,
         #"["foo",42]"#,
         true,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "unevaluatedItems with items: valid under items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"number"},"unevaluatedItems":{"type":"string"}}"#,
         #"[5,6,7,8]"#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "unevaluatedItems with items: invalid under items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"number"},"unevaluatedItems":{"type":"string"}}"#,
         #"["foo","bar","baz"]"#,
         false,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "unevaluatedItems with nested tuple: with no unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"string"}],"allOf":[{"prefixItems":[true,{"type":"number"}]}],"unevaluatedItems":false}"#,
         #"["foo",42]"#,
         true,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "unevaluatedItems with nested tuple: with unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"string"}],"allOf":[{"prefixItems":[true,{"type":"number"}]}],"unevaluatedItems":false}"#,
         #"["foo",42,true]"#,
         false,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "unevaluatedItems with nested items: with only (valid) additional items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":{"type":"boolean"},"anyOf":[{"items":{"type":"string"}},true]}"#,
         #"[true,false]"#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "unevaluatedItems with nested items: with no additional items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":{"type":"boolean"},"anyOf":[{"items":{"type":"string"}},true]}"#,
         #"["yes","no"]"#,
         true,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "unevaluatedItems with nested items: with invalid additional item" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":{"type":"boolean"},"anyOf":[{"items":{"type":"string"}},true]}"#,
         #"["yes",false]"#,
         false,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "unevaluatedItems with nested prefixItems and items: with no additional ite
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"prefixItems":[{"type":"string"}],"items":true}],"unevaluatedItems":false}"#,
         #"["foo"]"#,
         true,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "unevaluatedItems with nested prefixItems and items: with additional items"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"prefixItems":[{"type":"string"}],"items":true}],"unevaluatedItems":false}"#,
         #"["foo",42,true]"#,
         true,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "unevaluatedItems with nested unevaluatedItems: with no additional items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"prefixItems":[{"type":"string"}]},{"unevaluatedItems":true}],"unevaluatedItems":false}"#,
         #"["foo"]"#,
         true,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "unevaluatedItems with nested unevaluatedItems: with additional items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"prefixItems":[{"type":"string"}]},{"unevaluatedItems":true}],"unevaluatedItems":false}"#,
         #"["foo",42,true]"#,
         true,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "unevaluatedItems with anyOf: when one schema matches and has no unevaluate
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"anyOf":[{"prefixItems":[true,{"const":"bar"}]},{"prefixItems":[true,true,{"const":"baz"}]}],"unevaluatedItems":false}"#,
         #"["foo","bar"]"#,
         true,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "unevaluatedItems with anyOf: when one schema matches and has unevaluated i
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"anyOf":[{"prefixItems":[true,{"const":"bar"}]},{"prefixItems":[true,true,{"const":"baz"}]}],"unevaluatedItems":false}"#,
         #"["foo","bar",42]"#,
         false,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "unevaluatedItems with anyOf: when two schemas match and has no unevaluated
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"anyOf":[{"prefixItems":[true,{"const":"bar"}]},{"prefixItems":[true,true,{"const":"baz"}]}],"unevaluatedItems":false}"#,
         #"["foo","bar","baz"]"#,
         true,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "unevaluatedItems with anyOf: when two schemas match and has unevaluated it
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"anyOf":[{"prefixItems":[true,{"const":"bar"}]},{"prefixItems":[true,true,{"const":"baz"}]}],"unevaluatedItems":false}"#,
         #"["foo","bar","baz",42]"#,
         false,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "unevaluatedItems with oneOf: with no unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"oneOf":[{"prefixItems":[true,{"const":"bar"}]},{"prefixItems":[true,{"const":"baz"}]}],"unevaluatedItems":false}"#,
         #"["foo","bar"]"#,
         true,
+        [],
     );
 }
 
@@ -225,6 +252,7 @@ test "unevaluatedItems with oneOf: with unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"oneOf":[{"prefixItems":[true,{"const":"bar"}]},{"prefixItems":[true,{"const":"baz"}]}],"unevaluatedItems":false}"#,
         #"["foo","bar",42]"#,
         false,
+        [],
     );
 }
 
@@ -233,6 +261,7 @@ test "unevaluatedItems with not: with unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"not":{"not":{"prefixItems":[true,{"const":"bar"}]}},"unevaluatedItems":false}"#,
         #"["foo","bar"]"#,
         false,
+        [],
     );
 }
 
@@ -241,6 +270,7 @@ test "unevaluatedItems with if/then/else: when if matches and it has no unevalua
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"if":{"prefixItems":[true,{"const":"bar"}]},"then":{"prefixItems":[true,true,{"const":"then"}]},"else":{"prefixItems":[true,true,true,{"const":"else"}]},"unevaluatedItems":false}"#,
         #"["foo","bar","then"]"#,
         true,
+        [],
     );
 }
 
@@ -249,6 +279,7 @@ test "unevaluatedItems with if/then/else: when if matches and it has unevaluated
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"if":{"prefixItems":[true,{"const":"bar"}]},"then":{"prefixItems":[true,true,{"const":"then"}]},"else":{"prefixItems":[true,true,true,{"const":"else"}]},"unevaluatedItems":false}"#,
         #"["foo","bar","then","else"]"#,
         false,
+        [],
     );
 }
 
@@ -257,6 +288,7 @@ test "unevaluatedItems with if/then/else: when if doesn't match and it has no un
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"if":{"prefixItems":[true,{"const":"bar"}]},"then":{"prefixItems":[true,true,{"const":"then"}]},"else":{"prefixItems":[true,true,true,{"const":"else"}]},"unevaluatedItems":false}"#,
         #"["foo",42,42,"else"]"#,
         true,
+        [],
     );
 }
 
@@ -265,6 +297,7 @@ test "unevaluatedItems with if/then/else: when if doesn't match and it has uneva
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"const":"foo"}],"if":{"prefixItems":[true,{"const":"bar"}]},"then":{"prefixItems":[true,true,{"const":"then"}]},"else":{"prefixItems":[true,true,true,{"const":"else"}]},"unevaluatedItems":false}"#,
         #"["foo",42,42,"else",42]"#,
         false,
+        [],
     );
 }
 
@@ -273,6 +306,7 @@ test "unevaluatedItems with boolean schemas: with no unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[true],"unevaluatedItems":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -281,6 +315,7 @@ test "unevaluatedItems with boolean schemas: with unevaluated items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[true],"unevaluatedItems":false}"#,
         #"["foo"]"#,
         false,
+        [],
     );
 }
 
@@ -289,6 +324,7 @@ test "unevaluatedItems with $ref: with no unevaluated items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/bar","prefixItems":[{"type":"string"}],"unevaluatedItems":false,"$defs":{"bar":{"prefixItems":[true,{"type":"string"}]}}}"##,
         #"["foo","bar"]"#,
         true,
+        [],
     );
 }
 
@@ -297,6 +333,7 @@ test "unevaluatedItems with $ref: with unevaluated items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/bar","prefixItems":[{"type":"string"}],"unevaluatedItems":false,"$defs":{"bar":{"prefixItems":[true,{"type":"string"}]}}}"##,
         #"["foo","bar","baz"]"#,
         false,
+        [],
     );
 }
 
@@ -305,6 +342,7 @@ test "unevaluatedItems before $ref: with no unevaluated items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false,"prefixItems":[{"type":"string"}],"$ref":"#/$defs/bar","$defs":{"bar":{"prefixItems":[true,{"type":"string"}]}}}"##,
         #"["foo","bar"]"#,
         true,
+        [],
     );
 }
 
@@ -313,6 +351,7 @@ test "unevaluatedItems before $ref: with unevaluated items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false,"prefixItems":[{"type":"string"}],"$ref":"#/$defs/bar","$defs":{"bar":{"prefixItems":[true,{"type":"string"}]}}}"##,
         #"["foo","bar","baz"]"#,
         false,
+        [],
     );
 }
 
@@ -321,6 +360,7 @@ test "unevaluatedItems with $dynamicRef: with no unevaluated items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://example.com/unevaluated-items-with-dynamic-ref/derived","$ref":"./baseSchema","$defs":{"derived":{"$dynamicAnchor":"addons","prefixItems":[true,{"type":"string"}]},"baseSchema":{"$id":"./baseSchema","$comment":"unevaluatedItems comes first so it's more likely to catch bugs with implementations that are sensitive to keyword ordering","unevaluatedItems":false,"type":"array","prefixItems":[{"type":"string"}],"$dynamicRef":"#addons","$defs":{"defaultAddons":{"$comment":"Needed to satisfy the bookending requirement","$dynamicAnchor":"addons"}}}}}"##,
         #"["foo","bar"]"#,
         true,
+        [],
     );
 }
 
@@ -329,6 +369,7 @@ test "unevaluatedItems with $dynamicRef: with unevaluated items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://example.com/unevaluated-items-with-dynamic-ref/derived","$ref":"./baseSchema","$defs":{"derived":{"$dynamicAnchor":"addons","prefixItems":[true,{"type":"string"}]},"baseSchema":{"$id":"./baseSchema","$comment":"unevaluatedItems comes first so it's more likely to catch bugs with implementations that are sensitive to keyword ordering","unevaluatedItems":false,"type":"array","prefixItems":[{"type":"string"}],"$dynamicRef":"#addons","$defs":{"defaultAddons":{"$comment":"Needed to satisfy the bookending requirement","$dynamicAnchor":"addons"}}}}}"##,
         #"["foo","bar","baz"]"#,
         false,
+        [],
     );
 }
 
@@ -337,6 +378,7 @@ test "unevaluatedItems can't see inside cousins: always fails" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"prefixItems":[true]},{"unevaluatedItems":false}]}"#,
         #"[1]"#,
         false,
+        [],
     );
 }
 
@@ -345,6 +387,7 @@ test "item is evaluated in an uncle schema to unevaluatedItems: no extra items" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"prefixItems":[{"type":"string"}],"unevaluatedItems":false}},"anyOf":[{"properties":{"foo":{"prefixItems":[true,{"type":"string"}]}}}]}"#,
         #"{"foo":["test"]}"#,
         true,
+        [],
     );
 }
 
@@ -353,6 +396,7 @@ test "item is evaluated in an uncle schema to unevaluatedItems: uncle keyword ev
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"prefixItems":[{"type":"string"}],"unevaluatedItems":false}},"anyOf":[{"properties":{"foo":{"prefixItems":[true,{"type":"string"}]}}}]}"#,
         #"{"foo":["test","test"]}"#,
         false,
+        [],
     );
 }
 
@@ -361,6 +405,7 @@ test "unevaluatedItems depends on adjacent contains: second item is evaluated by
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[true],"contains":{"type":"string"},"unevaluatedItems":false}"#,
         #"[1,"foo"]"#,
         true,
+        [],
     );
 }
 
@@ -369,6 +414,7 @@ test "unevaluatedItems depends on adjacent contains: contains fails, second item
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[true],"contains":{"type":"string"},"unevaluatedItems":false}"#,
         #"[1,2]"#,
         false,
+        [],
     );
 }
 
@@ -377,6 +423,7 @@ test "unevaluatedItems depends on adjacent contains: contains passes, second ite
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[true],"contains":{"type":"string"},"unevaluatedItems":false}"#,
         #"[1,2,"foo"]"#,
         false,
+        [],
     );
 }
 
@@ -385,6 +432,7 @@ test "unevaluatedItems depends on multiple nested contains: 5 not evaluated, pas
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"contains":{"multipleOf":2}},{"contains":{"multipleOf":3}}],"unevaluatedItems":{"multipleOf":5}}"#,
         #"[2,3,4,5,6]"#,
         true,
+        [],
     );
 }
 
@@ -393,6 +441,7 @@ test "unevaluatedItems depends on multiple nested contains: 7 not evaluated, fai
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"contains":{"multipleOf":2}},{"contains":{"multipleOf":3}}],"unevaluatedItems":{"multipleOf":5}}"#,
         #"[2,3,4,7,8]"#,
         false,
+        [],
     );
 }
 
@@ -401,6 +450,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -409,6 +459,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"["a","a"]"#,
         true,
+        [],
     );
 }
 
@@ -417,6 +468,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"["a","b","a","b","a"]"#,
         true,
+        [],
     );
 }
 
@@ -425,6 +477,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"["c","a","c","c","b","a"]"#,
         true,
+        [],
     );
 }
 
@@ -433,6 +486,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"["b","b"]"#,
         false,
+        [],
     );
 }
 
@@ -441,6 +495,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"["c","c"]"#,
         false,
+        [],
     );
 }
 
@@ -449,6 +504,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"["c","b","c","b","c"]"#,
         false,
+        [],
     );
 }
 
@@ -457,6 +513,7 @@ test "unevaluatedItems and contains interact to control item dependency relation
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"contains":{"const":"a"}},"then":{"if":{"contains":{"const":"b"}},"then":{"if":{"contains":{"const":"c"}}}},"unevaluatedItems":false}"#,
         #"["c","a","c","a","c"]"#,
         false,
+        [],
     );
 }
 
@@ -465,6 +522,7 @@ test "unevaluatedItems with minContains = 0: empty array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"type":"string"},"minContains":0,"unevaluatedItems":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -473,6 +531,7 @@ test "unevaluatedItems with minContains = 0: no items evaluated by contains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"type":"string"},"minContains":0,"unevaluatedItems":false}"#,
         #"[0]"#,
         false,
+        [],
     );
 }
 
@@ -481,6 +540,7 @@ test "unevaluatedItems with minContains = 0: some but not all items evaluated by
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"type":"string"},"minContains":0,"unevaluatedItems":false}"#,
         #"["foo",0]"#,
         false,
+        [],
     );
 }
 
@@ -489,6 +549,7 @@ test "unevaluatedItems with minContains = 0: all items evaluated by contains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"type":"string"},"minContains":0,"unevaluatedItems":false}"#,
         #"["foo","bar"]"#,
         true,
+        [],
     );
 }
 
@@ -497,6 +558,7 @@ test "non-array instances are valid: ignores booleans" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #"true"#,
         true,
+        [],
     );
 }
 
@@ -505,6 +567,7 @@ test "non-array instances are valid: ignores integers" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #"123"#,
         true,
+        [],
     );
 }
 
@@ -513,6 +576,7 @@ test "non-array instances are valid: ignores floats" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -521,6 +585,7 @@ test "non-array instances are valid: ignores objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -529,6 +594,7 @@ test "non-array instances are valid: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -537,6 +603,7 @@ test "non-array instances are valid: ignores null" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":false}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -545,6 +612,7 @@ test "unevaluatedItems with null instance elements: allows null elements" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","unevaluatedItems":{"type":"null"}}"#,
         #"[null]"#,
         true,
+        [],
     );
 }
 
@@ -553,6 +621,7 @@ test "unevaluatedItems can see annotations from if without then and else: valid 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"prefixItems":[{"const":"a"}]},"unevaluatedItems":false}"#,
         #"["a"]"#,
         true,
+        [],
     );
 }
 
@@ -561,6 +630,7 @@ test "unevaluatedItems can see annotations from if without then and else: invali
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","if":{"prefixItems":[{"const":"a"}]},"unevaluatedItems":false}"#,
         #"["b"]"#,
         false,
+        [],
     );
 }
 
@@ -569,5 +639,6 @@ test "Evaluated items collection needs to consider instance location: with an un
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"prefixItems":[true,{"type":"string"}]}],"unevaluatedItems":false}"#,
         #"[["foo","bar"],"bar"]"#,
         false,
+        [],
     );
 }

@@ -252,12 +252,6 @@ pub(super) fn spelled_at(trait_: &FqTraitName, at: &[(FqTypeName, FqTypeName)]) 
     })
 }
 
-/// Whether `actual` is the type a constraint written `expected` names. A
-/// reference is not its referent: `from_iter` pushes the items it is handed.
-fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
-    tt.same_type(expected, actual)
-}
-
 /// A bound question on the open stack, closed when dropped.
 struct OpenQuestion<'s>(&'s RefCell<Vec<TraitCheckFrame>>);
 
@@ -479,12 +473,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None,
                     |e| e.family_param_bounds(owning_trait, &decl.name, &binding.type_params),
                 );
-                let table = self.tysys.type_table.borrow();
-                let same = |a: &TraitRef, b: &TraitRef| {
-                    a.decl == b.decl && table.same_types(&a.args, &b.args)
-                };
                 declared.iter().zip(&written).all(|(d, w)| {
-                    d.len() == w.len() && d.iter().all(|bound| w.iter().any(|b| same(bound, b)))
+                    d.len() == w.len()
+                        && d.iter().all(|bound| {
+                            w.iter()
+                                .any(|b| bound.decl == b.decl && bound.args == b.args)
+                        })
                 })
             });
         if agrees {
@@ -791,7 +785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let comparable = |id: TypeId| {
                 !table.contains_assoc_type_projection(id) && !table.awaits_inference(id)
             };
-            if !comparable(expected) || !comparable(found) || table.same_type(expected, found) {
+            if !comparable(expected) || !comparable(found) || expected == found {
                 continue;
             }
             drop(table);
@@ -2354,9 +2348,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Two candidates can share a spelling; reporting both as "Base"
             // names no escape from the collision.
             let ambiguous_spelling = |c: &BoundCandidate| {
-                candidates
-                    .iter()
-                    .any(|other| other.bound.name == c.bound.name && other.decl != c.decl)
+                candidates.iter().any(|other| {
+                    other.bound.written_name() == c.bound.written_name() && other.decl != c.decl
+                })
             };
             let traits = candidates
                 .iter()
@@ -2368,7 +2362,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             c.bound.name
                         )
                     } else {
-                        c.bound.name.clone()
+                        c.bound.written_name()
                     }
                 })
                 .collect();
@@ -2716,7 +2710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for &subject in &subjects {
                     self.enforce_single_bound_args(
                         subject,
-                        &bound.name,
+                        &bound.written_name(),
                         written.as_ref(),
                         &param.name,
                         span,
@@ -3073,9 +3067,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => self.resolve_type(&constraint.ty),
             };
             let tt = self.tysys.type_table.borrow();
+            // A reference is not its referent: `from_iter` pushes the items it
+            // is handed.
             if tt.contains_type_param(expected)
                 || tt.contains_type_param(actual)
-                || satisfies(&tt, expected, actual)
+                || expected == actual
             {
                 continue;
             }
@@ -3084,7 +3080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             drop(tt);
             let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
                 type_name,
-                trait_name: bound.name.clone(),
+                trait_name: bound.written_name(),
                 assoc_name: constraint.name.clone(),
                 expected: expected_name,
                 actual: actual_name,
@@ -3405,14 +3401,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(&ArgClass::Exact(rhs)) = rhs else {
             return false;
         };
-        let table = self.tysys.type_table.borrow();
-        table.same_type(rhs, receiver)
-            && self
-                .tysys
-                .trait_env
-                .methodful_default_impls_by_receiver(&table.impl_receiver_key(receiver), trait_)
-                .next()
-                .is_none()
+        if rhs != receiver {
+            return false;
+        }
+        let receiver_key = self.tysys.type_table.borrow().impl_receiver_key(receiver);
+        self.tysys
+            .trait_env
+            .methodful_default_impls_by_receiver(&receiver_key, trait_)
+            .next()
+            .is_none()
     }
 
     /// Single entry point for resolving a trait method a binary operator

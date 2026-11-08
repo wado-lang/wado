@@ -110,7 +110,7 @@ impl AstVisitor<'_> for BoundBindingsChecked<'_> {
                     .and_then(|owner| self.trait_env.assoc_type_decl(&owner, &binding.name));
                 match declared {
                     None => self.errors.push(TypeError::AssocTypeNotInTrait {
-                        trait_name: bound.name.clone(),
+                        trait_name: bound.written_name(),
                         assoc_name: binding.name.clone(),
                         span: binding.span,
                     }),

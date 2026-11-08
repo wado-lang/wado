@@ -1,0 +1,23 @@
+// A closure whose body is an expression returns it after the temporaries it
+// borrows drop, as a body's `return` does.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+test {
+    let f = || &make(1);
+    assert f().n == 1;
+}
+
+__DATA__
+{"compile_error": ":18:17: analysis error: cannot return a reference into the temporary at 18:17, which drops as the body returns"}

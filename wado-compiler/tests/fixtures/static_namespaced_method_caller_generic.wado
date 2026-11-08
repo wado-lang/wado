@@ -1,0 +1,50 @@
+//! A generic static binds its impl's parameters to the caller's own type
+//! parameters, under every spelling, with no second substitution reaching the
+//! caller's: not by position, nor where a caller's parameter sits at the
+//! method's own slot.
+
+use lib from "./sub/static_namespaced_method_caller_generic.wado";
+use { Params } from "./sub/static_namespaced_method_caller_generic.wado";
+
+fn named<A, B>(a: &A, b: &B) -> i32 {
+    return Params::load(b, &5, &"x");
+}
+
+fn spaced<A, B>(a: &A, b: &B) -> i32 {
+    return lib::Params::load(b, &5, &"x");
+}
+
+fn named_at_slot<A, B, C>(a: &A, b: &B, c: &C) -> i32 {
+    return Params::load(c, &5, &"x");
+}
+
+fn spaced_at_slot<A, B, C>(a: &A, b: &B, c: &C) -> i32 {
+    return lib::Params::load(c, &5, &"x");
+}
+
+fn named_returned_at_slot<A, B, C>(a: A, b: B, c: C) -> C {
+    return Params::first(c, 5, "x");
+}
+
+fn named_spelled_at_slot<A, B, C>(a: A, b: B, c: C) -> C {
+    return Params::<C, i32>::first(c, 5, "x");
+}
+
+fn spaced_returned_at_slot<A, B, C>(a: A, b: B, c: C) -> C {
+    return lib::Params::first(c, 5, "x");
+}
+
+fn spaced_spelled_at_slot<A, B, C>(a: A, b: B, c: C) -> C {
+    return lib::Params::<C, i32>::first(c, 5, "x");
+}
+
+test {
+    assert named(&1, &true) == 1;
+    assert spaced(&1, &true) == 1;
+    assert named_at_slot(&1, &true, &2.0) == 1;
+    assert spaced_at_slot(&1, &true, &2.0) == 1;
+    assert named_returned_at_slot(1, true, 2.5) == 2.5;
+    assert named_spelled_at_slot(1, true, 2.5) == 2.5;
+    assert spaced_returned_at_slot(1, true, 2.5) == 2.5;
+    assert spaced_spelled_at_slot(1, true, 2.5) == 2.5;
+}

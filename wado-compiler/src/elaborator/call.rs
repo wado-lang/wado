@@ -9,7 +9,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
+    FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
     unalias_namespace_member,
 };
 use crate::tir::{
@@ -17,7 +17,6 @@ use crate::tir::{
 };
 use crate::type_table::TypeTable;
 
-use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
@@ -26,7 +25,9 @@ use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
-use super::sem::types::{BodyFacts, CalleeParams, IndirectCallee, StaticMethodDispatch};
+use super::sem::types::{
+    BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
+};
 use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
@@ -36,6 +37,7 @@ use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
 use super::util::{integer_digits, parse_i128_literal};
+use super::{Elaborator, InstanceImpl, InstanceOrder};
 use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
@@ -554,11 +556,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if binding.is_mut {
             return;
         }
-        let is_mut_ref = matches!(
-            self.tysys.type_table.borrow().get(binding.type_id),
-            ResolvedType::MutRef(_)
-        );
-        if is_mut_ref {
+        if self.tysys.type_table.borrow().is_mut_ref(binding.type_id) {
             return;
         }
         let _ = self.emit(TypeError::ClosureMutBindingRequired {
@@ -702,13 +700,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .tuples_holding(declared, &open);
-        let declared_key = self.tysys.type_table.borrow().type_key(declared);
         let mut replacements = IndexMap::default();
         // A tuple parameter itself stays, for the unifier to splice the pack
         // across its argument's elements.
-        for (key, tuple) in held.into_iter().filter(|&(key, _)| key != declared_key) {
+        for tuple in held.into_iter().filter(|&tuple| tuple != declared) {
             let var = self.mint_infer_var();
-            replacements.insert(key, var);
+            replacements.insert(tuple, var);
             stand_ins.push((var, tuple));
         }
         let checked = self
@@ -828,33 +825,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let literal_list = matches!(arg, Expr::TupleLiteral(_))
             .then(|| self.tysys.type_table.borrow_mut().make_list(element));
         let resolved = self.resolve_expr(arg, ctx, literal_list);
-        if !self.converts_to_list_view(view, resolved) {
+        let Some((depth, answering)) = self.list_view_layer(view, resolved) else {
             return resolved;
-        }
-        self.sem.types.list_view_conversions.insert(arg.id(), view);
+        };
+        self.sem.types.list_view_conversions.insert(
+            arg.id(),
+            ListViewConversion {
+                view,
+                depth,
+                answering,
+            },
+        );
         view
     }
 
-    /// Whether an `arg` argument converts to the parameter `param` through
-    /// `ListArg<T>`, `param` being a `&ListView<T>` and `arg` not already one.
-    /// A `T` still being inferred names no trait to ask, and the argument says
-    /// nothing of it: the call names it.
-    pub(super) fn converts_to_list_view(&self, param: TypeId, arg: TypeId) -> bool {
+    /// The layer of an `arg` argument whose `ListArg<T>` impl converts it to
+    /// the parameter `param`, `param` being a `&ListView<T>` and `arg` not
+    /// already one: how many times to dereference it, and the type answering.
+    /// A reference answers by an impl of its own before its pointee's, and a
+    /// `&mut` as the `&` it passes for before that. A `T` still being inferred
+    /// names no trait to ask, and the argument says nothing of it: the call
+    /// names it.
+    pub(super) fn list_view_layer(&self, param: TypeId, arg: TypeId) -> Option<(usize, TypeId)> {
         let list_arg = {
             let tt = self.tysys.type_table.borrow();
-            let Some(element) = tt.list_view_ref_element(param) else {
-                return false;
-            };
+            let element = tt.list_view_ref_element(param)?;
             if tt.is_compiler_item_type(arg, CompilerItem::ListView)
                 || tt.contains_infer_var(element)
             {
-                return false;
+                return None;
             }
             tt.compiler_trait_fq(CompilerItem::ListArg)
                 .with_args(vec![tt.fq_type_name(element)])
         };
-        self.tysys
-            .type_implements_trait(&self.annotate_ctx, arg, &list_arg)
+        let layers = self.tysys.type_table.borrow_mut().reference_layers(arg);
+        layers
+            .into_iter()
+            .find(|&(_, ty)| self.answers_at_layer(ty, &list_arg))
+    }
+
+    /// Whether `layer` answers `trait_` itself: a reference only by an impl of
+    /// its own, since one holds every trait its pointee holds.
+    fn answers_at_layer(&self, layer: TypeId, trait_: &FqTraitName) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        if tt.ref_pointee(layer).is_none() {
+            drop(tt);
+            return self
+                .tysys
+                .type_implements_trait(&self.annotate_ctx, layer, trait_);
+        }
+        let decl = trait_.canonical().expect("a compiler trait is declared");
+        matches!(
+            self.tysys
+                .solver()
+                .instance_order(&tt, layer, decl, trait_.args()),
+            Some(InstanceOrder::One(InstanceImpl { depth: 0, .. }))
+        )
     }
 }
 
@@ -1027,7 +1053,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// where it is the only prefix, else under the `effective` name it reached.
     fn record_receiver_reference(&mut self, ident: &ast::IdentExpr, effective: &str) {
         match ident.segments.as_slice() {
-            [receiver, _] => self.record_type_name_reference(receiver.id, &receiver.name),
+            [receiver, _] => self.record_type_name_reference(receiver.id),
             [first, ..] => self.record_item_reference_by_name(first.id, effective),
             [] => {}
         }
@@ -1147,14 +1173,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let (newtype_def, base) = {
             let table = self.tysys.type_table.borrow();
-            let ResolvedType::Newtype { def, .. } = table.get_unerased(named) else {
+            let ResolvedType::Newtype { def, .. } = table.get(named) else {
                 unreachable!("`named` is a newtype");
             };
             (*def, table.reflect_structure_head(named))
         };
         let expected = expected.map(|ty| {
             let table = self.tysys.type_table.borrow();
-            match table.get_unerased(ty) {
+            match table.get(ty) {
                 ResolvedType::Newtype { def, .. } if *def == newtype_def => {
                     table.reflect_structure_head(ty)
                 }
@@ -1290,7 +1316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && tt
                     .nominal_type_args(receiver)
                     .is_none_or(|args| args.is_empty());
-            if tt.same_type(arg, receiver) || bare_generic_of_arg {
+            if arg == receiver || bare_generic_of_arg {
                 (DesugarKind::NewtypeFromCollapse, arg)
             } else if tt.newtype_chain_holds(arg, receiver) {
                 (DesugarKind::NewtypeFromUnwrap, receiver)
@@ -1372,19 +1398,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .ok_or(WrappedCase::NotAVariant)?;
             (tt.nominal_type_args(target).unwrap_or_default(), info)
         };
-        let [source_key, unit_key] = {
-            let tt = self.tysys.type_table.borrow();
-            [tt.type_key(source), tt.type_key(TypeTable::UNIT)]
-        };
         let carrying: Vec<(usize, &str)> = info
             .cases
             .iter()
             .enumerate()
-            .filter(|(_, case)| self.tysys.type_table.borrow().type_key(case.payload) != unit_key)
-            .filter(|(_, case)| {
-                let payload = self.tysys.substitute_type_params(case.payload, &args);
-                self.tysys.type_table.borrow().type_key(payload) == source_key
-            })
+            .filter(|(_, case)| case.payload != TypeTable::UNIT)
+            .filter(|(_, case)| self.tysys.substitute_type_params(case.payload, &args) == source)
             .map(|(index, case)| (index, case.name.as_str()))
             .collect();
         match carrying.as_slice() {
@@ -1967,16 +1986,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let mut substituted: Vec<TypeId> = if generic {
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    raw_param_types
-                        .iter()
-                        .map(|&t| self.substitute_in_frame(t, &combined_type_args))
-                        .collect()
-                } else {
-                    raw_param_types
-                };
+                let mut substituted = self.static_param_types_at(
+                    raw_param_types,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                );
                 let block = resolved
                     .found()
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
@@ -2177,6 +2191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_types: &args,
                         receiver_type: ns_receiver_type,
                         receiver_args: &impl_type_args_inferred,
+                        method_args: &method_type_args,
                         ..StaticQuery::of(type_name, method_name)
                     });
                     if self.report_unanswered_static(&resolved, method_name, call.span) {
@@ -2254,11 +2269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type = self.fill_static_method_slots(
-                        method_ref.method_id,
-                        &method_type_args,
-                        resolved.return_type(),
-                    );
+                    let mut return_type = resolved.return_type();
                     if let Some(key) = &ns_key {
                         self.retype_static_to_newtype(
                             key,
@@ -2318,15 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    let checked: Vec<TypeId> = if method_type_args.is_empty() {
-                        param_types.clone()
-                    } else {
-                        param_types
-                            .iter()
-                            .map(|&t| self.substitute_in_frame(t, &method_type_args))
-                            .collect()
-                    };
-                    self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    self.recoerce_literal_args(&call.args, &mut args, &param_types);
                     if func_ref.monomorph_info.is_some()
                         && self.report_value_for_reference(
                             &param_types,
@@ -2342,7 +2345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
-                            &checked,
+                            &param_types,
                             &args,
                             &arg_sites,
                             &param_defaults,
@@ -2364,7 +2367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_default_walk(
                         call.id,
                         &args,
-                        &checked,
+                        &param_types,
                         &param_defaults,
                         defaults_module.clone(),
                         &type_bindings,
@@ -5267,8 +5270,7 @@ impl TypeSystem {
     /// * expected-return constraints from the declaration-site's type parameters,
     ///   unified against the caller's expected generic-instance type args.
     ///
-    /// Falls back to a bare `Variant` type if any type parameter remains unbound
-    /// and we are in a non-generic context — preserving the legacy behaviour.
+    /// Falls back to a bare `Variant` type if any type parameter remains unbound.
     pub(super) fn infer_variant_type_args(
         &mut self,
         ctx: &Scope,
@@ -5315,18 +5317,25 @@ impl TypeSystem {
             }
         }
 
-        let type_args = infer.solve();
+        let (type_args, bindings) = infer.solve_with_bindings();
 
-        // If unresolved type params remain in concrete code, fall back to bare
-        // Variant. A variable an enclosing call answers is not unresolved.
-        let has_unresolved = {
-            let tt = self.type_table.borrow();
-            type_args
-                .iter()
-                .any(|&t| tt.contains_type_param(t) && !ctx.awaits_pending_call(&tt, t))
-        };
+        // A slot nothing bound is left to the use site's expected type. Only
+        // the binding map tells it from a slot bound to an enclosing parameter
+        // that shares its name and so its `TypeId`. In concrete code a
+        // parameter left in an answer is unbound too, unless it is a variable
+        // an enclosing call answers.
+        let has_unresolved = variant_info
+            .type_param_type_ids
+            .iter()
+            .any(|param| !bindings.contains_key(param))
+            || ctx.trait_ctx.type_params.is_empty() && {
+                let tt = self.type_table.borrow();
+                type_args
+                    .iter()
+                    .any(|&t| tt.contains_type_param(t) && !ctx.awaits_pending_call(&tt, t))
+            };
 
-        if has_unresolved && ctx.trait_ctx.type_params.is_empty() {
+        if has_unresolved {
             return self
                 .type_table
                 .borrow()

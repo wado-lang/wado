@@ -126,15 +126,51 @@ impl FlatPackage {
     }
 
     /// The listed struct `def` instantiated with `type_args` lowers as.
-    pub fn listed_struct(
-        &self,
-        type_table: &TypeTable,
-        def: StructDef,
-        type_args: &[TypeId],
-    ) -> Option<&TirStruct> {
-        self.structs
-            .iter()
-            .find(|s| s.represents(type_table, def, type_args))
+    pub fn listed_struct(&self, def: StructDef, type_args: &[TypeId]) -> Option<&TirStruct> {
+        self.structs.iter().find(|s| s.represents(def, type_args))
+    }
+
+    /// Erase newtypes and `flags`, and rewrite every type the functions,
+    /// globals, structs and variants hold to its erased id, so one type has
+    /// one id there, and one struct declaration: instances whose arguments
+    /// differed only by a newtype erase to one type. A `flags` declaration
+    /// keeps its own id: it declares that type rather than holding one.
+    pub fn erase_newtypes_and_flags(&mut self) {
+        struct Eraser<'t>(&'t mut TypeTable);
+        impl TirMutVisitor for Eraser<'_> {
+            fn visit_type_id(&mut self, type_id: &mut TypeId) {
+                *type_id = self.0.erase_type(*type_id);
+            }
+        }
+        let mut table = self.type_table.borrow_mut();
+        table.erase_newtypes_and_flags();
+        let mut eraser = Eraser(&mut table);
+        for func in &self.functions {
+            eraser.walk_function(&mut func.borrow_mut());
+        }
+        for global in &mut self.globals {
+            eraser.walk_global(global);
+        }
+        for decl in &mut self.structs {
+            eraser.walk_struct(decl);
+        }
+        for decl in &mut self.variants {
+            eraser.walk_variant_decl(decl);
+        }
+        let mut layouts: IndexMap<(StructDef, Vec<TypeId>), Vec<TypeId>> = IndexMap::default();
+        self.structs.retain(|decl| {
+            let layout: Vec<TypeId> = decl.fields.iter().map(|f| f.type_id).collect();
+            match layouts.entry((decl.def, decl.type_args.clone())) {
+                indexmap::map::Entry::Vacant(entry) => {
+                    entry.insert(layout);
+                    true
+                }
+                indexmap::map::Entry::Occupied(entry) => {
+                    assert_eq!(*entry.get(), layout, "one struct type has one layout");
+                    false
+                }
+            }
+        });
     }
 
     /// Walk every function body with `visitor`, which may rewrite it in place.

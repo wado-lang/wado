@@ -8,20 +8,18 @@ use {
     Comparison,
     Graph,
     One,
+    Slots,
     Unary,
     capacity_of,
     full,
     scalar,
+    shared,
     softmax,
     strided_gather,
     written_at,
 } from "./hlo.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 use { Any, Recorder, Untyped } from "./recorded.wado";
-
-/// One row of a batch.
-pub struct Slots {
-}
 
 /// One token of the vocabulary.
 struct Tokens {
@@ -93,14 +91,18 @@ impl Sampling {
     /// of it and the row, so it does not depend on how a call splits its steps,
     /// and no device's random source is read. Every step's are written up front,
     /// as a keyed hash is cheap on the host and has no operation in `Graph`. 24
-    /// bits fill an f32 exactly.
-    fn draws(&self, at: i64, steps: i32, held: i32, rows: i32) -> Tensor<f32, [Picks, Slots]> {
+    /// bits fill an f32 exactly. Where `at` holds a position for each row, each
+    /// row is a request of its own, and draws what it draws alone, as row 0.
+    fn draws(&self, at: &List<i64>, steps: i32, held: i32, rows: i32) -> Tensor<f32, [Picks, Slots]> {
         let mut data = List::<f32>::filled(held * rows, 0.0);
         if self.temperature != 0.0 {
             let keyed = Squares64::from_seed(Seed::from_u64(self.seed));
+            let apart = at.len() > 1;
             for let i of 0..<steps * rows {
-                let position = at + (i / rows) as i64;
-                let hash = keyed.at((position << 32 | (i % rows) as i64) as u64);
+                let row = i % rows;
+                let position = if apart { at[row] } else { at[0] } + (i / rows) as i64;
+                let key = if apart { 0 } else { row };
+                let hash = keyed.at((position << 32 | key as i64) as u64);
                 data[i] = (hash >> 40) as f32 / (1 << 24) as f32;
             }
         }
@@ -116,19 +118,19 @@ impl Sampling {
         let mut cpu = Cpu {};
         let extents = logits.extents;
         let rows = extents[0];
-        let decoding = Decoding::new(&mut cpu, self, List::<bool>::filled(rows, false), 1, at);
+        let decoding = Decoding::new(&mut cpu, self, List::<bool>::filled(rows, false), 1, [at]);
         let flat: Tensor<f32, [Slots, Tokens]> = cpu.reshape(logits, [rows, extents[extents.len() - 1]]);
         return picked(&mut cpu, &flat, &decoding, &scalar(&mut cpu, 0 as i64)).data;
     }
 }
 
 /// The values a decoding program takes beside the model's: how many steps it
-/// runs, the position its first token picks, each row's tokens so far and
-/// whether an end token has ended it, then the sampler. `sampler` says which of
-/// those a step reads.
+/// runs, the position its first token picks, each row's or one every row
+/// shares, each row's tokens so far and whether an end token has ended it, then
+/// the sampler. `sampler` says which of those a step reads.
 pub struct Decoding<affine G: Holds> {
     pub steps: G::Tensor<i64, []>,
-    pub position: G::Tensor<i64, []>,
+    pub position: G::Tensor<i64, [Slots]>,
     pub tokens: G::Tensor<i64, [Slots, Picks]>,
     pub finished: G::Tensor<bool, [Slots]>,
     temperature: G::Tensor<f32, []>,
@@ -141,15 +143,20 @@ pub struct Decoding<affine G: Holds> {
 
 impl<affine G: Graph> Decoding<G> {
     /// `steps` steps of a row for each of `ended`, which says whether an end
-    /// token has ended it, from the position `at`, sampled as `sampling` says.
-    /// The tokens hold a capacity, so a program serves every number of steps
-    /// below it.
-    pub fn new(g: &mut G, sampling: &Sampling, ended: List<bool>, steps: i32, at: i64) -> Decoding<G> with _ {
+    /// token has ended it, from the position `at`, one every row shares or each
+    /// row's, sampled as `sampling` says. The tokens hold a capacity, so a
+    /// program serves every number of steps below it.
+    pub fn new(g: &mut G, sampling: &Sampling, ended: List<bool>, steps: i32, at: List<i64>) -> Decoding<G> with _
+        contract at.len() == 1 || at.len() == ended.len()
+    {
         let held = capacity_of(steps);
         let rows = ended.len();
         return Decoding {
             steps: scalar(g, steps as i64),
-            position: scalar(g, at),
+            position: g.upload(&Tensor::<i64, [Slots]> {
+                data: at,
+                extents: [at.len()],
+            }),
             tokens: g.upload(&Tensor::<i64, [Slots, Picks]> {
                 data: List::<i64>::filled(rows * held, 0),
                 extents: [rows, held],
@@ -161,7 +168,7 @@ impl<affine G: Graph> Decoding<G> {
             temperature: scalar(g, sampling.temperature),
             top_k: scalar(g, sampling.top_k as f32),
             top_p: scalar(g, sampling.top_p),
-            draws: g.upload(&sampling.draws(at, steps, held, rows)),
+            draws: g.upload(&sampling.draws(&at, steps, held, rows)),
             ends: sampling.ends.into_iter().map(|end| scalar(g, end)).collect(),
             sampler: sampling.sampler(),
         };
@@ -177,7 +184,7 @@ impl<affine G: Graph> Decoding<G> {
     pub fn erased(&self, g: &G) -> List<Any<G>> {
         let mut all: List<Any<G>> = [
             Any::I64(g.relabeled::<i64, [], Untyped>(&self.steps)),
-            Any::I64(g.relabeled::<i64, [], Untyped>(&self.position)),
+            Any::I64(g.relabeled::<i64, [Slots], Untyped>(&self.position)),
             Any::I64(g.relabeled::<i64, [Slots, Picks], Untyped>(&self.tokens)),
             Any::Bool(g.relabeled::<bool, [Slots], Untyped>(&self.finished)),
             Any::F32(g.relabeled::<f32, [], Untyped>(&self.temperature)),
@@ -208,7 +215,7 @@ impl Decoding<Recorder> {
         };
         return Decoding {
             steps: recorder.parameter::<i64, []>(next()),
-            position: recorder.parameter::<i64, []>(next()),
+            position: recorder.parameter::<i64, [Slots]>(next()),
             tokens: recorder.parameter::<i64, [Slots, Picks]>(next()),
             finished: recorder.parameter::<bool, [Slots]>(next()),
             temperature: recorder.parameter::<f32, []>(next()),
@@ -273,19 +280,20 @@ pub fn stepped<affine G: Graph, Axes>(
     let column: G::Tensor<i64, [Slots, One]> = g.reshape(&token, [rows, 1]);
     return Stepped {
         token: column,
-        tokens: written_at::<G, i64, [Slots, Picks], [Slots, One]>(g, tokens, &column, 1, step),
+        tokens: written_at::<G, i64, [Slots, Picks], [Slots, One]>(g, tokens, &column, 1, &shared(g, step), null),
         finished: ended,
     };
 }
 
-/// `mask` with its position `at` open, for the step that reads the token there.
+/// `mask`, of a row each, with its position `at` open, each row's or one every
+/// row shares, for the step that reads the token there.
 pub fn opened<affine G: Graph, Axes>(
     g: &mut G,
     mask: &G::Tensor<i64, Axes>,
-    at: &G::Tensor<i64, []>,
+    at: &G::Tensor<i64, [Slots]>,
 ) -> G::Tensor<i64, Axes> with _ {
     let ones = full::<G, i64, [Slots, One]>(g, 1, [g.extents_of(mask)[0], 1]);
-    return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, at);
+    return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, at, Option::Some(0));
 }
 
 /// The token each row of `logits` picks for the step `step`: its greatest
@@ -316,7 +324,15 @@ fn picked<affine G: Graph>(
         let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_p, rows, []);
         probabilities = kept_from(g, &probabilities, &probabilities, &probabilities, &wanted);
     }
-    let draw = strided_gather::<G, f32, [Picks, Slots], [One, Slots]>(g, &decoding.draws, 0, step, 1, 1);
+    let draw = strided_gather::<G, f32, [Picks, Slots], [One, Slots]>(
+        g,
+        &decoding.draws,
+        0,
+        &shared(g, step),
+        null,
+        1,
+        1,
+    );
     return categorical(g, &probabilities, &g.reshape(&draw, rows));
 }
 

@@ -115,7 +115,7 @@ impl Interpreter<'_> {
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
         if value.is_scalar() {
-            if self.type_table.is_reference_shaped(node_type) {
+            if self.type_table.is_reference(node_type) {
                 compiler_trace!("region_seed", "commit {e:?}: refused, reference-shaped");
                 return false;
             }
@@ -251,7 +251,7 @@ impl Interpreter<'_> {
         // A reference names storage; a literal is a fresh object, and `ref.eq`
         // tells the two apart. The node's own type answers for the root, and
         // this answers for every leaf under it.
-        if self.type_table.is_reference_shaped(ty) {
+        if self.type_table.is_reference(ty) {
             return None;
         }
         match value {
@@ -306,7 +306,7 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if !self.type_table.same_type(ty, type_id) {
+        if ty != type_id {
             return None;
         }
         let (length, backing_type, live) = backing;
@@ -317,7 +317,7 @@ impl Interpreter<'_> {
             return existing;
         }
         let cut = Value::seq(backing_type, live.to_vec())?;
-        let previous = existing_fields(sink.body(), existing, type_id, self.type_table);
+        let previous = existing_fields(sink.body(), existing, type_id);
         let slot = |index: SeqField| slot_at(&previous, index.index() as usize);
         let backing = self.write_value(sink, slot(SeqField::Backing), &cut, backing_type, span)?;
         let len = self.write_value(sink, slot(SeqField::Len), length, TypeTable::I32, span)?;
@@ -353,7 +353,7 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if !self.type_table.same_type(ty, type_id) {
+        if ty != type_id {
             return None;
         }
         let tuple = self.type_table.as_tuple(type_id);
@@ -377,7 +377,7 @@ impl Interpreter<'_> {
         let previous = if tuple.is_some() {
             existing_elements(sink.body(), existing)
         } else {
-            existing_fields(sink.body(), existing, type_id, self.type_table)
+            existing_fields(sink.body(), existing, type_id)
         };
         let mut written = Vec::with_capacity(names.len());
         for (index, (name, field_type)) in names.into_iter().enumerate() {
@@ -415,7 +415,7 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if !self.type_table.same_type(ty, type_id) {
+        if ty != type_id {
             return None;
         }
         let ResolvedType::BuiltinArray(element_type) = *self.type_table.get(type_id) else {
@@ -462,7 +462,7 @@ impl Interpreter<'_> {
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
-        if !self.type_table.same_type(ty, type_id) {
+        if ty != type_id {
             return None;
         }
         let (case_name, case) = self
@@ -476,9 +476,7 @@ impl Interpreter<'_> {
                     case_index: held,
                     payload,
                     ..
-                } if self.type_table.same_type(*variant_type, type_id) && *held == case_index => {
-                    Some(*payload)
-                }
+                } if *variant_type == type_id && *held == case_index => Some(*payload),
                 _ => None,
             },
             None => None,
@@ -1362,7 +1360,6 @@ fn existing_fields(
     body: &Body,
     existing: Option<Operand>,
     type_id: TypeId,
-    type_table: &TypeTable,
 ) -> Option<Vec<Option<Operand>>> {
     let ExprKind::StructLiteral {
         struct_type,
@@ -1372,7 +1369,7 @@ fn existing_fields(
     else {
         return None;
     };
-    if !type_table.same_type(*struct_type, type_id) {
+    if *struct_type != type_id {
         return None;
     }
     let mut slots = vec![None; fields.len()];

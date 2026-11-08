@@ -1,5 +1,5 @@
 //! One-field parameter SROA: a function taking `&S` / `&mut S` and
-//! reading exactly one of `S`'s fields — canonically `Box<T>`, but equally an
+//! reading exactly one of `S`'s fields — canonically a cell, but equally an
 //! options record whose other fields `param_spec` already folded away — is
 //! rewritten to take that field, collapsing the call site's `StructLiteral`
 //! allocation to the field's value.
@@ -26,7 +26,7 @@ use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamPr
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
@@ -45,7 +45,7 @@ type FnKey = FuncId;
 struct SroaInfo {
     /// The struct the parameter holds or references.
     struct_type: TypeId,
-    struct_key: TypeKey,
+    struct_key: TypeId,
     /// Type of the field the callee reads — the new scalar parameter type.
     inner_type_id: TypeId,
     /// Name of the field the callee reads.
@@ -148,7 +148,7 @@ fn collect_and_validate(
 ) -> IndexMap<(FnKey, usize), SroaInfo> {
     let type_table = project.type_table.borrow();
     let types = &*type_table;
-    let structs = StructDecls::new(&project.structs, types);
+    let structs = StructDecls::new(&project.structs);
     let struct_fields = structs.field_types();
     let own = state.0.refresh(project, gate.exec(), |f| {
         f.body.as_ref().map(|body| OwnWrites::of(body, types))
@@ -175,11 +175,11 @@ fn collect_and_validate(
             // parameter is read through its shadow local.
             //
             // A retained parameter keeps its identity, which a field snapshot
-            // drops. A boxed reference's retention is the referent its payload
+            // drops. A cell of a reference retains the referent its payload
             // names, which the rewrite passes on unchanged.
             if func.retains.iter().any(|s| s == &param.name)
                 && types
-                    .box_payload_of(param.type_id)
+                    .cell_payload(param.type_id)
                     .is_none_or(|payload| types.ref_pointee(payload).is_none())
             {
                 continue;
@@ -213,7 +213,10 @@ fn collect_and_validate(
                 type_table: types,
                 struct_fields: &struct_fields,
             };
-            if param_snapshot_unsound(&func, pi, std::slice::from_ref(&info.struct_key), &reach) {
+            let object = types
+                .heap_object_key(info.struct_type)
+                .expect("a struct or a cell is a heap object");
+            if param_snapshot_unsound(&func, pi, &[object], &reach) {
                 continue;
             }
             found.push(((key, pi), info));
@@ -244,7 +247,7 @@ fn collect_and_validate(
             )
         }))
         .collect();
-    let mut shared_by_type: IndexMap<TypeId, Vec<TypeKey>> = IndexMap::default();
+    let mut shared_by_type: IndexMap<TypeId, Vec<TypeId>> = IndexMap::default();
     loop {
         let entries: Vec<(&(FnKey, usize), &SroaInfo)> = candidates.iter().collect();
         let uses = gate.exec().map(&entries, |&(&(key, pi), info)| {
@@ -288,16 +291,15 @@ fn collect_and_validate(
         for (k, fi) in &resolved {
             let info = &mut candidates[k];
             let fields = structs
-                .of_type(info.struct_type, types)
-                .expect("a candidate's struct is declared")
-                .fields_in_order();
-            let Some(field) = fields.get(*fi as usize) else {
+                .object_fields(info.struct_type, types)
+                .expect("a candidate's struct is declared");
+            let Some(&(field_name, field_type)) = fields.get(*fi as usize) else {
                 invalid.insert(*k);
                 continue;
             };
             info.field_index = *fi;
-            info.field_name.clone_from(&field.name);
-            info.inner_type_id = field.type_id;
+            field_name.clone_into(&mut info.field_name);
+            info.inner_type_id = field_type;
         }
         for k in &widened {
             candidates[k].form = FieldForm::Mutable;
@@ -367,21 +369,17 @@ fn candidate_info_for(
     structs: &StructDecls<'_>,
 ) -> Option<SroaInfo> {
     let struct_type = struct_behind_ref(param_type, type_table)?;
-    let fields = structs.of_type(struct_type, type_table)?.fields_in_order();
+    let fields = structs.object_fields(struct_type, type_table)?;
     // Seed on field 0; a wider struct has this overwritten once its uses agree.
-    let first = fields.first()?;
-    let (field_name, field_type) = (first.name.clone(), first.type_id);
-    // One `Box` holds `&X` and `&mut X` alike, its field typed by whichever it
-    // met first; the parameter's own payload says which this one holds.
-    let inner_type_id = type_table.box_payload_of(param_type).unwrap_or(field_type);
+    let &(field_name, field_type) = fields.first()?;
     Some(SroaInfo {
         struct_type,
-        struct_key: type_table.type_key(struct_type),
-        inner_type_id,
-        field_name,
+        struct_key: wrapper_key(struct_type, type_table),
+        inner_type_id: field_type,
+        field_name: field_name.to_string(),
         field_index: if fields.len() == 1 { 0 } else { u32::MAX },
         form: FieldForm::Value,
-        scalar_type_id: inner_type_id,
+        scalar_type_id: field_type,
     })
 }
 
@@ -399,10 +397,24 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, type_table: &TypeTable) -> bool 
     ty != TypeTable::UNIT && ty != TypeTable::NEVER
 }
 
-fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
-    type_table
-        .struct_parts(type_id)
-        .map(|_| type_table.type_key(type_id))
+/// Whether `type_id` is an object with fields this pass unwraps: a struct, or a
+/// cell, whose one field is `value`.
+fn is_wrapper(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.struct_parts(type_id).is_some() || type_table.cell_payload(type_id).is_some()
+}
+
+fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
+    is_wrapper(type_id, type_table).then(|| wrapper_key(type_id, type_table))
+}
+
+/// The key one kind of wrapper is matched by: a cell's [`TypeTable::cell_key`],
+/// so a `&mut T` argument at any layer matches the `&T` parameter it coerces
+/// to.
+fn wrapper_key(wrapper: TypeId, type_table: &TypeTable) -> TypeId {
+    if type_table.cell_payload(wrapper).is_some() {
+        return type_table.cell_key(wrapper);
+    }
+    wrapper
 }
 
 /// The struct a reference `type_id` points to.
@@ -417,12 +429,13 @@ fn referenced_struct(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> 
     }
 }
 
-/// The struct `type_id` names, whether it is the struct or one reference to it.
+/// The wrapper `type_id` names, whether it is the wrapper or one reference to
+/// a struct.
 fn struct_behind_ref(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
-    match type_table.struct_parts(type_id) {
-        Some(_) => Some(type_id),
-        None => referenced_struct(type_id, type_table),
+    if is_wrapper(type_id, type_table) {
+        return Some(type_id);
     }
+    referenced_struct(type_id, type_table)
 }
 
 /// What [`param_snapshot_unsound`] weighs a candidate against: everything the
@@ -437,19 +450,19 @@ struct WriteReach<'a> {
 /// Reject a reference candidate whose call-time snapshot the callee could
 /// invalidate through another access path: a write landing on a `stale` struct
 /// that an aliasing global write or a sibling param can *reach* —
-/// `f(&s.m, &mut s)`, or a `&mut` hidden in a by-value field. A boxed reference
-/// counts, `&x` of an address-taken local lowering to a read of the one box.
+/// `f(&s.m, &mut s)`, or a `&mut` hidden in a by-value field. A cell counts,
+/// `&x` of an address-taken local lowering to a read of the one cell.
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
-    stale: &[TypeKey],
+    stale: &[TypeId],
     reach: &WriteReach<'_>,
 ) -> bool {
     let type_table = reach.type_table;
     let param_type = func.params[pi].type_id;
-    let candidate_is_ref = referenced_struct(param_type, type_table).is_some();
-    let candidate_is_boxed_ref = type_table.box_payload_of(param_type).is_some();
-    if !candidate_is_ref && !candidate_is_boxed_ref {
+    if referenced_struct(param_type, type_table).is_none()
+        && type_table.cell_payload(param_type).is_none()
+    {
         return false;
     }
     stale.iter().any(|&struct_key| {
@@ -483,10 +496,10 @@ fn by_value_structs(
     ty: TypeId,
     type_table: &TypeTable,
     struct_fields: &StructFieldTypes,
-    out: &mut IndexSet<TypeKey>,
+    out: &mut IndexSet<TypeId>,
 ) {
     if let Some(contents) = struct_contents(ty, type_table, struct_fields) {
-        if out.insert(type_table.type_key(ty)) {
+        if out.insert(ty) {
             for &held in contents {
                 by_value_structs(held, type_table, struct_fields, out);
             }
@@ -498,7 +511,7 @@ fn by_value_structs(
     if let Some((_, type_args)) = type_table.instance_parts(ty)
         && !matches!(type_table.get(ty), ResolvedType::Resource { .. })
     {
-        if out.insert(type_table.type_key(ty)) {
+        if out.insert(ty) {
             for &arg in type_args {
                 by_value_structs(arg, type_table, struct_fields, out);
             }
@@ -522,32 +535,26 @@ fn struct_contents<'a>(
 }
 
 /// Whether a parameter's *own* storage can be written through: the pointee of a
-/// plain `MutRef`, or a `&mut T` boxing collapsed onto `Box<T>`. Everything else
-/// arrives as a copy or a read-only handle — but its interior may still hand out
-/// a mutable reference, which [`mut_reachable_contains`] picks up.
+/// `&mut`, a cell's included. Everything else arrives as a copy or a read-only
+/// handle — but its interior may still hand out a mutable reference, which
+/// [`mut_reachable_contains`] picks up.
 fn param_root_writable(param_type: TypeId, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(param_type), ResolvedType::MutRef(_))
-        || type_table.is_mut_box(param_type)
+    type_table.is_mut_ref(param_type)
 }
 
-/// A shared `&T` collapsed onto `Box<T>`: the wrapper may be reachable, but
-/// `*p` cannot be written through it, so its payload is sealed.
-fn is_shared_box(ty: TypeId, type_table: &TypeTable) -> bool {
-    type_table.box_payload_of(ty).is_some() && !type_table.is_mut_box(ty)
-}
-
-/// Whether a write can land on a `target`-typed location reachable from `ty`.
+/// Whether a write can land on a location reachable from `ty` whose heap
+/// object key is `target`.
 ///
 /// `writable` says the location being visited is one the callee can write. That
 /// is a property of the location, not of the walk's depth: a `&mut` pointee and
-/// a mutable box are writable wherever they appear, a shared pointee never is,
+/// a `&mut` cell are writable wherever they appear, a shared pointee never is,
 /// and a component of a writable aggregate inherits it. So a by-value
-/// `Holder { r: &mut i32 }` is a copy whose `r` still writes the caller's box,
+/// `Holder { r: &mut i32 }` is a copy whose `r` still writes the caller's cell,
 /// while a by-value `M` writes nothing.
 fn mut_reachable_contains(
     ty: TypeId,
     writable: bool,
-    target: TypeKey,
+    target: TypeId,
     type_table: &TypeTable,
     struct_fields: &StructFieldTypes,
     visited: &mut IndexSet<(TypeId, bool)>,
@@ -556,24 +563,29 @@ fn mut_reachable_contains(
         return false;
     }
     if let Some(contents) = struct_contents(ty, type_table, struct_fields) {
-        let writable_here = writable || type_table.is_mut_box(ty);
-        if writable_here && type_table.type_key(ty) == target {
+        if writable && ty == target {
             return true;
         }
-        let contents_writable = writable_here && !is_shared_box(ty, type_table);
         return contents.iter().any(|&held| {
-            mut_reachable_contains(
-                held,
-                contents_writable,
-                target,
-                type_table,
-                struct_fields,
-                visited,
-            )
+            mut_reachable_contains(held, writable, target, type_table, struct_fields, visited)
         });
     }
+    if let Some(payload) = type_table.cell_payload(ty) {
+        let cell_writable = type_table.is_mut_ref(ty);
+        if cell_writable && type_table.cell_key(ty) == target {
+            return true;
+        }
+        return mut_reachable_contains(
+            payload,
+            cell_writable,
+            target,
+            type_table,
+            struct_fields,
+            visited,
+        );
+    }
     if let Some((_, type_args)) = type_table.instance_parts(ty) {
-        if writable && type_table.type_key(ty) == target {
+        if writable && ty == target {
             return true;
         }
         return type_args.iter().any(|&t| {
@@ -801,7 +813,7 @@ fn transitive_reachable_writes(
 /// [`Opaque`](ReachableWrites::Opaque) answers `true` unconditionally.
 fn may_write_aliasing_location(
     writes: &ReachableWrites,
-    target: TypeKey,
+    target: TypeId,
     targets: &WriteTargets,
     type_table: &TypeTable,
     struct_fields: &StructFieldTypes,
@@ -1325,7 +1337,7 @@ fn rewrite_call_sites(
             // through. Read from the package, not from this run's `clones`: a clone
             // minted on an earlier fixpoint iteration is still a clone, and losing
             // that fact projects the wrapper's field onto it a second time.
-            let scalar_param_struct: IndexMap<u32, TypeKey> = reshapes
+            let scalar_param_struct: IndexMap<u32, TypeId> = reshapes
                 .get(&key)
                 .map(|reshape| {
                     func.params
@@ -1377,7 +1389,7 @@ fn rewrite_calls_node(
     body: &mut Body,
     node: NodeRef,
     sroa_positions: &IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)>,
-    scalar_param_struct: &IndexMap<u32, TypeKey>,
+    scalar_param_struct: &IndexMap<u32, TypeId>,
     type_table: &TypeTable,
 ) -> bool {
     let mut kids = Vec::new();
@@ -1396,7 +1408,7 @@ fn rewrite_call_expr(
     body: &mut Body,
     id: ExprId,
     sroa_positions: &IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)>,
-    scalar_param_struct: &IndexMap<u32, TypeKey>,
+    scalar_param_struct: &IndexMap<u32, TypeId>,
     type_table: &TypeTable,
 ) -> bool {
     let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind else {
@@ -1471,7 +1483,7 @@ fn plan_call_site(
     body: &Body,
     args: &[Operand],
     positions: &IndexMap<usize, SroaInfo>,
-    scalar_param_struct: &IndexMap<u32, TypeKey>,
+    scalar_param_struct: &IndexMap<u32, TypeId>,
     type_table: &TypeTable,
 ) -> Vec<(usize, ArgPlan)> {
     let mut plan: Vec<(usize, ArgPlan)> = positions
@@ -1515,7 +1527,7 @@ fn classify_arg(
     body: &Body,
     op: Operand,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, TypeKey>,
+    scalar_param_struct: &IndexMap<u32, TypeId>,
     type_table: &TypeTable,
 ) -> ArgPlan {
     // Matched as an operand, since the promoted form of that local reads it
@@ -1544,8 +1556,8 @@ fn classify_arg(
 fn scalarized_from(
     body: &Body,
     op: Operand,
-    scalar_param_struct: &IndexMap<u32, TypeKey>,
-) -> Option<TypeKey> {
+    scalar_param_struct: &IndexMap<u32, TypeId>,
+) -> Option<TypeId> {
     scalar_param_struct
         .iter()
         .find(|(local, _)| is_local_operand(body, op, **local))
@@ -1564,12 +1576,9 @@ fn peel_one_ref(body: &Body, arg: ExprId) -> ExprId {
     }
 }
 
-/// Whether `ty` names the wrapper struct, directly or behind a reference or box.
-fn denotes_struct(ty: TypeId, key: TypeKey, type_table: &TypeTable) -> bool {
-    struct_behind_ref(ty, type_table).map(|s| type_table.type_key(s)) == Some(key)
-        || type_table
-            .box_payload_of(ty)
-            .is_some_and(|p| struct_key_of(p, type_table) == Some(key))
+/// Whether `ty` names the wrapper, directly or behind a reference.
+fn denotes_struct(ty: TypeId, key: TypeId, type_table: &TypeTable) -> bool {
+    struct_behind_ref(ty, type_table).map(|s| wrapper_key(s, type_table)) == Some(key)
 }
 
 /// The argument operand at a scalarized parameter position. The position exists
@@ -1594,7 +1603,7 @@ fn rewrite_arg_operand(
     body: &mut Body,
     op: Operand,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, TypeKey>,
+    scalar_param_struct: &IndexMap<u32, TypeId>,
     type_table: &TypeTable,
     span: Span,
 ) -> Operand {
@@ -1614,7 +1623,7 @@ fn rewrite_arg(
     body: &mut Body,
     arg: ExprId,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, TypeKey>,
+    scalar_param_struct: &IndexMap<u32, TypeId>,
     type_table: &TypeTable,
 ) {
     // Peel auto-ref wrappers (`&x`, `&mut x`).

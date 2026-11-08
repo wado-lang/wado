@@ -19,9 +19,10 @@ export fn run() with (Stdout, PjrtHost) {
         println(summary(analysis));
         if analysis.alias_bytes > 0 {
             updating += 1;
-            // Beyond its cache `attended` returns at most 16 rows of 32 f32s.
+            // Beyond its cache a step returns at most five of the TPU's tiles of
+            // 512 bytes, which the tokens of the slots `Requests` decodes take.
             let others = analysis.output_bytes - analysis.alias_bytes;
-            assert others <= 16 * 32 * 4, "a step updates the whole cache in place";
+            assert others <= 5 * 512, "a step updates the whole cache in place";
         }
     }
     assert updating > 0;

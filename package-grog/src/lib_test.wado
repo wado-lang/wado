@@ -1,5 +1,5 @@
 use { TreeMap } from "core:collections";
-use { DecodeError, Enum, Enumeration, Int32, Message, Reader, Sizer, Writer, decode, encode } from "./lib.wado";
+use { DecodeError, Enum, Enumeration, Input, Int32, Message, Reader, Sizer, Writer, decode, encode } from "./lib.wado";
 
 /// A closed enum, as Grog generates one for proto2.
 enum Closed {
@@ -37,7 +37,7 @@ impl Message for Keyed {
         w.raw(&self.unknown_fields);
     }
 
-    fn merge_field(&mut self, number: i32, r: &mut Reader) -> Result<bool, DecodeError> {
+    fn merge_field<B: Input>(&mut self, number: i32, r: &mut Reader<B>) -> Result<bool, DecodeError> {
         if number == 1 {
             return r.map::<Enum<Closed>, Int32, Closed, i32>(&mut self.m);
         }

@@ -100,6 +100,7 @@ pub fn lower(flat: &mut FlatPackage) {
             site: None,
             expanding: Vec::new(),
             bound: IndexSet::default(),
+            declared: Vec::new(),
         };
         expander.visit_block(&mut body);
         Unwrap.visit_block(&mut body);
@@ -509,7 +510,6 @@ fn report_function(
             type_id: local.type_id,
             local_index: i as u32,
             is_mut: false,
-            is_mut_ref: false,
             span,
         }
     });
@@ -518,7 +518,6 @@ fn report_function(
         type_id: site_type,
         local_index: site,
         is_mut: false,
-        is_mut_ref: false,
         span,
     };
     let params: Vec<TirParam> = params.chain([site_param]).collect();
@@ -657,9 +656,24 @@ struct Expander<'a> {
     expanding: Vec<FunctionId>,
     /// The locals [`Self::bind`] made.
     bound: IndexSet<u32>,
+    /// The declarations of the locals [`Self::bind`] assigns in place, which
+    /// go ahead of the statement being expanded.
+    declared: Vec<TirStmt>,
 }
 
 impl TirMutVisitor for Expander<'_> {
+    fn visit_block(&mut self, block: &mut TirBlock) {
+        let outer = std::mem::take(&mut self.declared);
+        let mut stmts = Vec::with_capacity(block.stmts.len());
+        for mut stmt in std::mem::take(&mut block.stmts) {
+            self.visit_stmt(&mut stmt);
+            stmts.append(&mut self.declared);
+            stmts.push(stmt);
+        }
+        block.stmts = stmts;
+        self.declared = outer;
+    }
+
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         // A closure's body is a frame of its own, whose calls keep reaching
         // the checked function.
@@ -892,8 +906,9 @@ impl Expander<'_> {
 
     /// Bind what `slot` evaluates to a new local of the function, where `sink`
     /// says, and answer the read of it. In place it is assigned where it is
-    /// evaluated, as a power-assert capture is: a `let` there would scope the
-    /// local to that argument, out of reach of the clauses after it.
+    /// evaluated and declared ahead of the statement, as `let x: T;` is and as
+    /// a power-assert capture is: a `let` there would scope the local to that
+    /// argument, out of reach of the clauses after it.
     fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
         // Each binding joins `bound`, so its size is the serial.
@@ -916,33 +931,43 @@ impl Expander<'_> {
             type_id,
             span,
         );
+        let binding = |value: TirExpr| {
+            TirStmt::new(
+                TirStmtKind::Let {
+                    name,
+                    local_index: index,
+                    is_mut: in_place,
+                    type_id,
+                    value,
+                    storage: LetStorage::Planned,
+                },
+                span,
+            )
+        };
         let value = take(slot);
         *slot = match sink {
             Sink::Ahead(stmts) => {
-                stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name,
-                        local_index: index,
-                        is_mut: false,
-                        type_id,
-                        value,
-                        storage: LetStorage::Planned,
-                    },
-                    span,
-                ));
+                stmts.push(binding(value));
                 read.clone()
             }
-            Sink::InPlace => TirExpr::new(
-                TirExprKind::Block(TirBlock::new(
-                    vec![
-                        assign_stmt(read.clone(), value, span),
-                        TirStmt::new(TirStmtKind::Expr(read.clone()), span),
-                    ],
+            Sink::InPlace => {
+                self.declared.push(binding(TirExpr::new(
+                    TirExprKind::Unit,
+                    TypeTable::UNIT,
                     span,
-                )),
-                type_id,
-                span,
-            ),
+                )));
+                TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(
+                        vec![
+                            assign_stmt(read.clone(), value, span),
+                            TirStmt::new(TirStmtKind::Expr(read.clone()), span),
+                        ],
+                        span,
+                    )),
+                    type_id,
+                    span,
+                )
+            }
         };
         read
     }
