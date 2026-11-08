@@ -95,16 +95,8 @@ use crate::synthesis::common::{
     ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
-<<<<<<< HEAD
-    EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
-    TirTypeParam, TypeParamId, agree_branch_types,
-||||||| 33143edb96f
-    EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
-    TirTypeParam, agree_branch_types,
-=======
     EffectRef, ExitScope, SourceStmt, StructDef, TemplateId, TirEffectOp, TirField, TirImpl,
-    TirParam, TirTypeParam, agree_branch_types,
->>>>>>> origin/main
+    TirParam, TirTypeParam, TypeParamId, agree_branch_types,
 };
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
