@@ -61,7 +61,7 @@ use { push_unique } from "./list_util.wado";
 use { LowerContext } from "./lower_context.wado";
 use { plan_parser } from "./parser_plan.wado";
 use { EmitContext } from "./emit_context.wado";
-use { SCAN_EDGE_FIELD, SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
+use { SCAN_GATE_TYPE, scan_edge_field, scan_gate_fields } from "./scan_gate.wado";
 use { scan_answers_predicates } from "./gate_conditions.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
@@ -195,6 +195,7 @@ pub fn install_action_context(
     settings.scan_gate_fields = scan_gate_fields(grammar, &gate_bodies).iter_ref().filter(|f| declared.contains(f)).map(
         |f| *f,
     ).collect();
+    settings.scan_edge_field = scan_edge_field(&settings.scan_gate_fields);
     settings.gate_bodies = gate_bodies;
     return ActionContext { settings, lexer_members, parser_members };
 }
@@ -587,8 +588,7 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool) {
 fn gen_scan_gate_type(w: &mut CodeWriter, settings: &GenSettings, members: &MemberDecls) {
     w.begin(`struct ${SCAN_GATE_TYPE}`);
     if settings.scan_answers_predicates {
-        assert !settings.scan_gate_fields.contains(&SCAN_EDGE_FIELD), "no member takes the scan edge's name";
-        w.line(`${SCAN_EDGE_FIELD}: i32 = -1,`);
+        w.line(`${settings.scan_edge_field}: i32 = -1,`);
     }
     for let f of &settings.scan_gate_fields {
         // The member's own declared type and initialiser, not `i32 = 0`. The

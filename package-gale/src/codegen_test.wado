@@ -3796,6 +3796,21 @@ WS : [ \\t\\r\\n]+ -> skip ;
     assert got == "(x() => (start ( (body x (xs ()) ))\nx() => (start (body (r x) (xs () )))\n";
 }
 
+test "a member named as the scan edge keeps both fields" {
+    let got = parses("grammar T;
+@parser::members {
+    int _scan_edge = 0;
+}
+start : LB {_scan_edge = 1;} body {_scan_edge = 0;} RB EOF | body EOF ;
+body : r xs RB | ID xs ;
+r : {_scan_edge == 0}? ID | RB ;
+xs : LB+ ;
+ID : 'x' ; LB : '(' ; RB : ')' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+", "start", ["(x()", "x()"]);
+    assert got == "(x() => (start ( (body x (xs ()) ))\nx() => (start (body (r x) (xs () )))\n";
+}
+
 /// One strategy: the sentence the dump prints for it, and the local the emitter
 /// mints when it takes it. Each local is named once per decision.
 struct StrategyMarker {

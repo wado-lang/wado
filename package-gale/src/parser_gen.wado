@@ -46,7 +46,7 @@ use {
 } from "./gen_util.wado";
 use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
-use { GateScope, SCAN_EDGE_FIELD, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
+use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { MetPredicate } from "./gate_conditions.wado";
 use { is_nullable } from "./grammar_analysis.wado";
@@ -1008,10 +1008,11 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     // Past the edge no predicate is answered, so which edge it was is no part of
     // the key.
     let edges = ctx.settings.scan_answers_predicates;
-    let edge = `${SCAN_GATE_HANDLE}.${SCAN_EDGE_FIELD}`;
+    let edge_field = &ctx.settings.scan_edge_field;
+    let edge = `${SCAN_GATE_HANDLE}.${*edge_field}`;
     if edges {
         w.line(
-            `let memo_gate = if ${edge} == pos { ${gate} } else { ${SCAN_GATE_TYPE} { ..${gate}, ${SCAN_EDGE_FIELD}: -1 } };`,
+            `let memo_gate = if ${edge} == pos { ${gate} } else { ${SCAN_GATE_TYPE} { ..${gate}, ${*edge_field}: -1 } };`,
         );
         w.line(`let memo_at = ${SCAN_MEMO_HANDLE}.find(${key}, &memo_gate);`);
     } else {
@@ -1262,7 +1263,7 @@ fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &EmitContext, from: &ScanOrigin) 
                 }
             }
             if ctx.settings.scan_answers_predicates {
-                w.line(`${ctx.scan_gate_member(&SCAN_EDGE_FIELD)} = ${PARSER_HANDLE}.pos;`);
+                w.line(`${ctx.scan_gate_member(&ctx.settings.scan_edge_field)} = ${PARSER_HANDLE}.pos;`);
             }
         },
         Entry(slot) => gen_scan_gate_restore(w, ctx, slot),

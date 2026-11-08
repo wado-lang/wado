@@ -12,7 +12,7 @@ use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this } from "./superclass.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { and_operand } from "./gen_util.wado";
-use { SCAN_EDGE_FIELD, SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
+use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
 use { translate_predicate } from "./java2wado.wado";
 use { alt_is_left_recursive } from "./lr_util.wado";
 
@@ -390,13 +390,13 @@ pub fn alt_scan_gate_conditions(
     if conds.is_empty() {
         return conds;
     }
-    return scan_answered_at_edge(&conds);
+    return scan_answered_at_edge(settings, &conds);
 }
 
 /// A scan's condition `cond`, answered only where `pos` is the position the
 /// scan's decision started from, and holding anywhere else.
-pub fn scan_answered_at_edge<S: AsStrSlice>(cond: S) -> String {
-    return `(${SCAN_GATE_HANDLE}.${SCAN_EDGE_FIELD} != pos || ${and_operand(cond)})`;
+pub fn scan_answered_at_edge<S: AsStrSlice>(settings: &GenSettings, cond: S) -> String {
+    return `(${SCAN_GATE_HANDLE}.${settings.scan_edge_field} != pos || ${and_operand(cond)})`;
 }
 
 /// The predicates past the left edge of `alt` that a scan starting at element
@@ -420,7 +420,7 @@ pub fn alt_scan_checks(
             continue;
         }
         if let Some(code) = scan_gate_condition_for(a, settings, analysis, site) {
-            out.push([a.before_index, scan_answered_at_edge(&code)]);
+            out.push([a.before_index, scan_answered_at_edge(settings, &code)]);
         }
     }
     return out;

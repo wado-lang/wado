@@ -539,7 +539,7 @@ pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_sc
         let site = if met_site.rule_index == rule { ctx.predicate_site() } else { *met_site };
         if in_scan {
             if let Some(c) = scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site) {
-                gates.push([a.source.action_id, scan_answered_at_edge(&c)]);
+                gates.push([a.source.action_id, scan_answered_at_edge(&ctx.settings, &c)]);
             }
         } else if let Some(c) = predicate_condition_for(a, &ctx.settings, &ctx.analysis, &site) {
             need_predicate_fn(a, ctx);

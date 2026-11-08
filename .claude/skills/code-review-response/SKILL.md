@@ -46,7 +46,9 @@ check is reported as unverified, never as fact. Record which of these each
 finding was:
 
 - Real → fix the cause. When the reviewer's patch is wrong, fix it anyway; the
-  value was in the claim, not the suggestion.
+  value was in the claim, not the suggestion. A wrong answer is fixed however
+  large the fix or unlikely the input: neither its size nor its value is a
+  question for the user.
 - Grounded in a project rule the code breaks → fix it, and cite the rule.
 - Real, but on an input no producer or caller supplies → skip, or state it as
   a contract or an assert. An error path for such an input is never read.
