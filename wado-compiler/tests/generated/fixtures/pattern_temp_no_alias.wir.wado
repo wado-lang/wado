@@ -691,18 +691,18 @@ fn "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_wri
     let $local_2: ref null "core:prelude/list.wado//List<i32>";
     let $vc_payload_1: ref "core:prelude/list.wado//List<i32>";
     let ys: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_s_held_23: ref null "core:prelude/list.wado//List<i32>";
-    $sroa_s_held_23 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
-    $load_1 = local.tee $vc_payload_1((if @likely(ref.is_null(local.tee $sroa_s_held_23($inline_pattern_temp_no_alias_wado_Slot__take_after_call_2: block -> ref null "core:prelude/list.wado//List<i32>" {
-        if ref.is_null(local.tee $local_2((if ref.is_null($sroa_s_held_23) -> ref null "core:prelude/list.wado//List<i32>" {
-            $sroa_s_held_23;
+    let $sroa_s_held_24: ref null "core:prelude/list.wado//List<i32>";
+    $sroa_s_held_24 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
+    $array_clone_src_1 = local.tee $vc_payload_1((if @likely(ref.is_null(local.tee $sroa_s_held_24($inline_pattern_temp_no_alias_wado_Slot__take_after_call_2: block -> ref null "core:prelude/list.wado//List<i32>" {
+        if ref.is_null(local.tee $local_2((if ref.is_null($sroa_s_held_24) -> ref null "core:prelude/list.wado//List<i32>" {
+            $sroa_s_held_24;
         } else {
-            $vc_payload_1 = ref.as_non_null($sroa_s_held_23);
+            $vc_payload_1 = ref.as_non_null($sroa_s_held_24);
             struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
         }))) == 0 {
             $vc_payload_1 = ref.as_non_null($local_2);
-            if ref.is_null($sroa_s_held_23) == 0 {
-                if @unlikely(local.tee $load_1(local.tee ys(ref.as_non_null($sroa_s_held_23)).used) >= builtin::array_len(ys.repr)) {
+            if ref.is_null($sroa_s_held_24) == 0 {
+                if @unlikely(local.tee $load_1(local.tee ys(ref.as_non_null($sroa_s_held_24)).used) >= builtin::array_len(ys.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(ys);
                 }
@@ -715,13 +715,15 @@ fn "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_wri
         }
         break $inline_pattern_temp_no_alias_wado_Slot__take_after_call_2: ref.null none;
     })) == 0) -> ref "core:prelude/list.wado//List<i32>" {
-        ref.as_non_null($sroa_s_held_23);
+        ref.as_non_null($sroa_s_held_24);
     } else {
         cold_path;
         "core:rt/unreachable"();
         unreachable;
-    })).used;
-    if @unlikely(local.tee $load_1(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_1 = $vc_payload_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 }.used) != 1) {
+    })).repr;
+    $load_1 = $vc_payload_1.used;
+    builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_src_1, 0, $load_1);
+    if @unlikely($load_1 != 1) {
         cold_path;
         "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_write_to_the_same_storage$cold0"($load_1);
         unreachable;

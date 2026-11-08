@@ -877,14 +877,16 @@ global global:core:builtin::$unit_case$bug_refutable_pattern_under_reference_pay
 
 fn "bug_refutable_pattern_under_reference_payload.wado/struct_payload"(pair) {
     let $load_1: ref "core:prelude/types.wado//Option<i64>";
-    let id: ref null "core:prelude//$Cell<i32>";
-    let v: ref null "core:prelude//$Cell<i64>";
-    let $local_3: ref "bug_refutable_pattern_under_reference_payload.wado//Pair";
+    let id: ref "core:prelude//$Cell<i32>";
+    let v: ref "core:prelude//$Cell<i64>";
+    let $twin_1: ref null "core:prelude//$Cell<i32>";
+    let $twin_2: ref null "core:prelude//$Cell<i64>";
+    let $local_5: ref "bug_refutable_pattern_under_reference_payload.wado//Pair";
     let $pattern_temp_0: ref "tuple//[&i32, &i64]";
     id = local.tee $pattern_temp_0((if (if ref.is_null(pair) == 0 -> i32 {
-        id = struct.new "core:prelude//$Cell<i32>" { value: local.tee $local_3(ref.as_non_null(pair)).id };
-        if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_1($local_3.inner)) -> i32 {
-            v = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
+        $twin_1 = struct.new "core:prelude//$Cell<i32>" { value: local.tee $local_5(ref.as_non_null(pair)).id };
+        if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_1($local_5.inner)) -> i32 {
+            $twin_2 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
             1;
         } else {
             0;
@@ -892,7 +894,7 @@ fn "bug_refutable_pattern_under_reference_payload.wado/struct_payload"(pair) {
     } else {
         0;
     }) -> ref "tuple//[&i32, &i64]" {
-        struct.new "tuple//[&i32, &i64]" { 0: ref.as_non_null(id), 1: ref.as_non_null(v) };
+        struct.new "tuple//[&i32, &i64]" { 0: ref.as_non_null($twin_1), 1: ref.as_non_null($twin_2) };
     } else {
         return -1_i64;
     })).0;
@@ -903,16 +905,19 @@ fn "bug_refutable_pattern_under_reference_payload.wado/struct_payload"(pair) {
 fn "bug_refutable_pattern_under_reference_payload.wado/nested_tuple"(pair) {
     let $load_1: ref "tuple//[i32, core:prelude/types.wado/Option<i64>]";
     let $load_3: ref "core:prelude/types.wado//Option<i64>";
-    let a: ref null "core:prelude//$Cell<i32>";
-    let b: ref null "core:prelude//$Cell<i32>";
-    let v: ref null "core:prelude//$Cell<i64>";
-    let $local_4: ref "tuple//[i32, [i32,core:prelude/types.wado/Option<i64>]]";
+    let a: ref "core:prelude//$Cell<i32>";
+    let b: ref "core:prelude//$Cell<i32>";
+    let v: ref "core:prelude//$Cell<i64>";
+    let $twin_1: ref null "core:prelude//$Cell<i32>";
+    let $twin_2: ref null "core:prelude//$Cell<i32>";
+    let $twin_3: ref null "core:prelude//$Cell<i64>";
+    let $local_7: ref "tuple//[i32, [i32,core:prelude/types.wado/Option<i64>]]";
     let $pattern_temp_0: ref "tuple//[&i32, &i32, &i64]";
     a = local.tee $pattern_temp_0((if (if ref.is_null(pair) == 0 -> i32 {
-        a = struct.new "core:prelude//$Cell<i32>" { value: local.tee $local_4(ref.as_non_null(pair)).0 };
-        b = struct.new "core:prelude//$Cell<i32>" { value: local.tee $load_1($local_4.1).0 };
+        $twin_1 = struct.new "core:prelude//$Cell<i32>" { value: local.tee $local_7(ref.as_non_null(pair)).0 };
+        $twin_2 = struct.new "core:prelude//$Cell<i32>" { value: local.tee $load_1($local_7.1).0 };
         if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_3($load_1.1)) -> i32 {
-            v = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
+            $twin_3 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
             1;
         } else {
             0;
@@ -920,7 +925,7 @@ fn "bug_refutable_pattern_under_reference_payload.wado/nested_tuple"(pair) {
     } else {
         0;
     }) -> ref "tuple//[&i32, &i32, &i64]" {
-        struct.new "tuple//[&i32, &i32, &i64]" { 0: ref.as_non_null(a), 1: ref.as_non_null(b), 2: ref.as_non_null(v) };
+        struct.new "tuple//[&i32, &i32, &i64]" { 0: ref.as_non_null($twin_1), 1: ref.as_non_null($twin_2), 2: ref.as_non_null($twin_3) };
     } else {
         return -1_i64;
     })).0;
@@ -935,13 +940,13 @@ fn "bug_refutable_pattern_under_reference_payload.wado/$test_0_a_tuple_behind_a_
     let $v1_1: ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]";
     let $v2_2: ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]";
     let $v3: i64;
-    let v_12: ref null "core:prelude//$Cell<i64>";
-    let v_15: ref null "core:prelude//$Cell<i64>";
-    let v_18: ref null "core:prelude//$Cell<i64>";
+    let $twin_1_13: ref null "core:prelude//$Cell<i64>";
+    let $twin_1_17: ref null "core:prelude//$Cell<i64>";
+    let $twin_1_21: ref null "core:prelude//$Cell<i64>";
     if @unlikely(local.tee $v3($inline_tuple_payload_0: block -> i64 {
         break $inline_tuple_payload_0: (if (if ref.is_null(local.tee $v2_2(ref.as_non_null(local.tee $v1_1(struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 1, 1: ref.as_non_null(local.tee $v0_0(struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: 3_i64 })) })))) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_1($v2_2.1)) -> i32 {
-                v_12 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
+                $twin_1_13 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
                 1;
             } else {
                 0;
@@ -949,7 +954,7 @@ fn "bug_refutable_pattern_under_reference_payload.wado/$test_0_a_tuple_behind_a_
         } else {
             0;
         }) -> ref "core:prelude//$Cell<i64>" {
-            ref.as_non_null(v_12);
+            ref.as_non_null($twin_1_13);
         } else {
             break $inline_tuple_payload_0: -1_i64;
         }).value;
@@ -972,7 +977,7 @@ tuple_payload(Option::Some(&[1, Option::Some(3 as i64)])): "), used: 60 }, s4: s
     if @unlikely(local.tee $v3($inline_tuple_payload_1: block -> i64 {
         break $inline_tuple_payload_1: (if (if ref.is_null(local.tee $v2_2(ref.as_non_null(local.tee $v1_1(struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 1, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0 })))) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_1($v2_2.1)) -> i32 {
-                v_15 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
+                $twin_1_17 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
                 1;
             } else {
                 0;
@@ -980,7 +985,7 @@ tuple_payload(Option::Some(&[1, Option::Some(3 as i64)])): "), used: 60 }, s4: s
         } else {
             0;
         }) -> ref "core:prelude//$Cell<i64>" {
-            ref.as_non_null(v_15);
+            ref.as_non_null($twin_1_17);
         } else {
             break $inline_tuple_payload_1: -1_i64;
         }).value;
@@ -1000,7 +1005,7 @@ tuple_payload(Option::Some(&[1, null])): "), used: 42 }, s3: struct.new "core:pr
     if @unlikely(local.tee $v3($inline_tuple_payload_2: block -> i64 {
         break $inline_tuple_payload_2: (if (if ref.is_null(ref.null none) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_1(ref.null none.1)) -> i32 {
-                v_18 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
+                $twin_1_21 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_1).payload_0 };
                 1;
             } else {
                 0;
@@ -1008,7 +1013,7 @@ tuple_payload(Option::Some(&[1, null])): "), used: 42 }, s3: struct.new "core:pr
         } else {
             0;
         }) -> ref "core:prelude//$Cell<i64>" {
-            ref.as_non_null(v_18);
+            ref.as_non_null($twin_1_21);
         } else {
             break $inline_tuple_payload_2: -1_i64;
         }).value;
@@ -1059,25 +1064,25 @@ fn "bug_refutable_pattern_under_reference_payload.wado/$test_5_what_an_iterator_
     let $load_3: ref "core:prelude/types.wado//Option<i64>";
     let pairs_0: ref "core:prelude/list.wado//List<[i32,core:prelude/types.wado/Option<i64>]>";
     let $v1_1: i64;
-    let v_11: ref null "core:prelude//$Cell<i64>";
-    let ref_val_18: ref "tuple//[i32, core:prelude/types.wado/Option<i64>]";
-    let v_31: ref null "core:prelude//$Cell<i64>";
-    let v_51: ref null "core:prelude//$Cell<i64>";
-    let $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_69: ref "Array<[i32,core:prelude/types.wado/Option<i64>]>";
-    let $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70: i32;
+    let $twin_2_12: ref null "core:prelude//$Cell<i64>";
+    let ref_val_19: ref "tuple//[i32, core:prelude/types.wado/Option<i64>]";
+    let $twin_2_33: ref null "core:prelude//$Cell<i64>";
+    let $twin_2_54: ref null "core:prelude//$Cell<i64>";
+    let $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_72: ref "Array<[i32,core:prelude/types.wado/Option<i64>]>";
+    let $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73: i32;
     pairs_0 = struct.new "core:prelude/list.wado//List<[i32,core:prelude/types.wado/Option<i64>]>" { repr: array.new_fixed<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">(struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 1, 1: struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: 3_i64 } }, struct.new "tuple//[i32, core:prelude/types.wado/Option<i64>]" { 0: 2, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0 }), used: 2 };
     if @unlikely(local.tee $v1_1($inline_found_spec0_0: block -> i64 {
         let $match_scrut_0: ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]";
         break $inline_found_spec0_0: (if (if ref.is_null(local.tee $match_scrut_0($inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1: block -> ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]" {
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_69 = pairs_0.repr;
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 = 0;
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_72 = pairs_0.repr;
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 = 0;
             b23: block {
                 l24: loop {
-                    break_if b23 $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 >= 2;
-                    ref_val_18 = builtin::array_get_value<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">($sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_69, $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70);
-                    $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 = $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 + 1;
-                    if ref_val_18.0 == 1 {
-                        break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1: ref_val_18;
+                    break_if b23 $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 >= 2;
+                    ref_val_19 = builtin::array_get_value<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">($sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_72, $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73);
+                    $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 = $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 + 1;
+                    if ref_val_19.0 == 1 {
+                        break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1: ref_val_19;
                     }
                     continue l24;
                 };
@@ -1085,7 +1090,7 @@ fn "bug_refutable_pattern_under_reference_payload.wado/$test_5_what_an_iterator_
             break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1: ref.null none;
         })) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_3($match_scrut_0.1)) -> i32 {
-                v_11 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
+                $twin_2_12 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
                 1;
             } else {
                 0;
@@ -1093,7 +1098,7 @@ fn "bug_refutable_pattern_under_reference_payload.wado/$test_5_what_an_iterator_
         } else {
             0;
         }) -> ref "core:prelude//$Cell<i64>" {
-            ref.as_non_null(v_11);
+            ref.as_non_null($twin_2_12);
         } else {
             break $inline_found_spec0_0: -1_i64;
         }).value;
@@ -1111,15 +1116,15 @@ found(&pairs, 1): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
     }
     if @unlikely(local.tee $v1_1($inline_found_spec1_3: block -> i64 {
         break $inline_found_spec1_3: (if (if ref.is_null(local.tee $match_scrut_0($inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec1_sroa_pred__capture_0__4: block -> ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]" {
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_69 = pairs_0.repr;
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 = 0;
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_72 = pairs_0.repr;
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 = 0;
             b30: block {
                 l31: loop {
-                    break_if b30 $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 >= 2;
-                    ref_val_18 = builtin::array_get_value<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">($sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_69, $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70);
-                    $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 = $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 + 1;
-                    if ref_val_18.0 == 2 {
-                        break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec1_sroa_pred__capture_0__4: ref_val_18;
+                    break_if b30 $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 >= 2;
+                    ref_val_19 = builtin::array_get_value<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">($sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_72, $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73);
+                    $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 = $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 + 1;
+                    if ref_val_19.0 == 2 {
+                        break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec1_sroa_pred__capture_0__4: ref_val_19;
                     }
                     continue l31;
                 };
@@ -1127,7 +1132,7 @@ found(&pairs, 1): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
             break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec1_sroa_pred__capture_0__4: ref.null none;
         })) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_3($match_scrut_0.1)) -> i32 {
-                v_31 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
+                $twin_2_33 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
                 1;
             } else {
                 0;
@@ -1135,7 +1140,7 @@ found(&pairs, 1): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
         } else {
             0;
         }) -> ref "core:prelude//$Cell<i64>" {
-            ref.as_non_null(v_31);
+            ref.as_non_null($twin_2_33);
         } else {
             break $inline_found_spec1_3: -1_i64;
         }).value;
@@ -1152,15 +1157,15 @@ found(&pairs, 2): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
     }
     if @unlikely(local.tee $v1_1($inline_found_spec2_6: block -> i64 {
         break $inline_found_spec2_6: (if (if ref.is_null(local.tee $match_scrut_0($inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec2_sroa_pred__capture_0__7: block -> ref null "tuple//[i32, core:prelude/types.wado/Option<i64>]" {
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_69 = pairs_0.repr;
-            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 = 0;
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_72 = pairs_0.repr;
+            $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 = 0;
             b37: block {
                 l38: loop {
-                    break_if b37 $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 >= 2;
-                    ref_val_18 = builtin::array_get_value<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">($sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_69, $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70);
-                    $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 = $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_70 + 1;
-                    if ref_val_18.0 == 3 {
-                        break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec2_sroa_pred__capture_0__7: ref_val_18;
+                    break_if b37 $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 >= 2;
+                    ref_val_19 = builtin::array_get_value<ref "tuple//[i32, core:prelude/types.wado/Option<i64>]">($sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_repr_72, $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73);
+                    $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 = $sroa_$temp_inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec0_sroa_pred__capture_0__1_0_index_73 + 1;
+                    if ref_val_19.0 == 3 {
+                        break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec2_sroa_pred__capture_0__7: ref_val_19;
                     }
                     continue l38;
                 };
@@ -1168,7 +1173,7 @@ found(&pairs, 2): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
             break $inline_core_prelude_slice_wado_SliceRefIter__i32_core_prelude_types_wado_Option_i64____core_prelude_traits_wado_Iterator__find__Closure_0_spec2_sroa_pred__capture_0__7: ref.null none;
         })) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $load_3($match_scrut_0.1)) -> i32 {
-                v_51 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
+                $twin_2_54 = struct.new "core:prelude//$Cell<i64>" { value: ref.cast "core:prelude/types.wado//Option<i64>::Some"($load_3).payload_0 };
                 1;
             } else {
                 0;
@@ -1176,7 +1181,7 @@ found(&pairs, 2): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
         } else {
             0;
         }) -> ref "core:prelude//$Cell<i64>" {
-            ref.as_non_null(v_51);
+            ref.as_non_null($twin_2_54);
         } else {
             break $inline_found_spec2_6: -1_i64;
         }).value;
