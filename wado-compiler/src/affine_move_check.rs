@@ -291,10 +291,18 @@ struct Checker<'a> {
     in_fallback: Option<NotedFallback>,
     /// The regions opened so far, which number the next.
     regions_opened: u32,
-    /// The regions open where each affine expression was last walked: what a
-    /// temporary it evaluates to lives as long as, though a value carrying a
-    /// borrow of it is traced after some of them close.
-    walked_in: IndexMap<AstId, Vec<Region>>,
+    /// Where each affine temporary was last walked: what it lives as long as,
+    /// though a value carrying a borrow of it is traced after that may close.
+    walked_in: IndexMap<AstId, WalkedIn>,
+}
+
+/// The innermost regions open where a temporary was walked.
+#[derive(Clone, Copy)]
+struct WalkedIn {
+    /// A statement or a loop iteration.
+    statement: Option<Region>,
+    /// A scope, where a `let` keeps it borrowed.
+    scope: Option<Region>,
 }
 
 struct NotedFallback {
@@ -932,23 +940,23 @@ impl MoveWalker<'_, '_> {
         }
     }
 
-    /// Refuse the value a block, `if` or `match` ends with once a temporary it
-    /// refers into dropped. Nothing holds the value, so its use is the read.
-    fn refuse_dangling_value(&mut self, expr: &Expr) {
+    /// Refuse the value the block form `expr`, a `construct`, ends with once a
+    /// temporary it refers into dropped. Nothing holds the value, so its use is
+    /// the read.
+    fn refuse_dangling_value(&mut self, expr: &Expr, construct: &str) {
         let gone = self.owners_of(expr).iter().find_map(|(_, site)| {
             let region = site.region.filter(|_| site.affine)?;
             self.temporary_gone(region)
                 .map(|gone| (site.name.clone(), gone))
         });
         if let Some((owner, gone)) = gone {
-            let span = expr.span();
             self.report(
                 MoveError::DanglingReference {
-                    holder: format!("the value at {}:{}", span.line, span.column),
+                    holder: format!("the value of this {construct}"),
                     owner,
                     gone,
                 },
-                span,
+                expr.span(),
             );
         }
     }
@@ -1249,15 +1257,23 @@ impl MoveWalker<'_, '_> {
         self.visit(expr, self.modes.of(expr));
     }
 
-    /// Visit `expr` in a position of `mode`. A place the modes move moves
+    /// Visit `expr` in a position of `mode`, whose value is read.
+    fn visit(&mut self, expr: &Expr, mode: OperandMode) {
+        self.walk_value(expr, mode);
+        if let Some(construct) = block_form(expr) {
+            self.refuse_dangling_value(expr, construct);
+        }
+    }
+
+    /// Visit `expr`, whose value nothing reads: an expression statement's.
+    fn visit_discarded(&mut self, expr: &Expr) {
+        self.walk_value(expr, self.modes.of(expr));
+    }
+
+    /// Walk `expr` in a position of `mode`. A place the modes move moves
     /// unless `mode` reads it, and is read anywhere else; drop elaboration
     /// takes ownership at the same places.
-    fn visit(&mut self, expr: &Expr, mode: OperandMode) {
-        if self.expr_is_affine(expr.id()) {
-            self.checker
-                .walked_in
-                .insert(expr.id(), self.regions.clone());
-        }
+    fn walk_value(&mut self, expr: &Expr, mode: OperandMode) {
         let consumes = mode == OperandMode::Consume;
         if let Some(place) = self.place_path(expr) {
             if consumes && self.modes.moves(expr, &self.facts()) {
@@ -1267,8 +1283,23 @@ impl MoveWalker<'_, '_> {
             }
             return;
         }
+        let affine = self.expr_is_affine(expr.id());
+        if affine {
+            let innermost = |scope: bool| {
+                self.regions
+                    .iter()
+                    .rev()
+                    .find(|region| (region.kind == RegionKind::Scope) == scope)
+                    .copied()
+            };
+            let walked_in = WalkedIn {
+                statement: innermost(false),
+                scope: innermost(true),
+            };
+            self.checker.walked_in.insert(expr.id(), walked_in);
+        }
         if consumes
-            && self.expr_is_affine(expr.id())
+            && affine
             && let Some(base) = self.out_of_reference(expr)
         {
             self.visit(base, OperandMode::Borrow);
@@ -1338,16 +1369,6 @@ impl MoveWalker<'_, '_> {
             | Expr::Ident(_)
             | Expr::Literal(_)
             | Expr::Error(_) => self.visit_operands(expr),
-        }
-        if matches!(
-            expr,
-            Expr::Block(_)
-                | Expr::LabeledBlock(_)
-                | Expr::If(_)
-                | Expr::Match(_)
-                | Expr::WithHandler(_)
-        ) {
-            self.refuse_dangling_value(expr);
         }
     }
 
@@ -1816,16 +1837,17 @@ impl MoveWalker<'_, '_> {
     /// the innermost statement or loop iteration it was walked in, or the
     /// innermost scope where a `let` keeps the borrow.
     fn temporary_owner(&self, expr: &Expr, writes: bool) -> (Owner, OwnerSite) {
-        let scope = self.modes.extended(expr);
-        let region = *self
+        let walked_in = self
             .checker
             .walked_in
             .get(&expr.id())
-            .expect("a temporary is walked before a borrow of it is traced")
-            .iter()
-            .rev()
-            .find(|region| (region.kind == RegionKind::Scope) == scope)
-            .expect("a temporary is borrowed inside a statement of a scope");
+            .expect("a temporary is walked before a borrow of it is traced");
+        let region = if self.modes.extended(expr) {
+            walked_in.scope
+        } else {
+            walked_in.statement
+        }
+        .expect("a temporary is borrowed inside a statement of a scope");
         let span = expr.span();
         let owner = Owner {
             def: expr.id(),
@@ -2054,7 +2076,7 @@ impl MoveWalker<'_, '_> {
                 false
             }
             Stmt::Expr(e) => {
-                self.visit_at(&e.expr);
+                self.visit_discarded(&e.expr);
                 false
             }
             Stmt::Return(r) => {
@@ -2374,6 +2396,42 @@ fn keeps_whole(pattern: &Pattern) -> bool {
         | Pattern::Literal(_)
         | Pattern::Range { .. }
         | Pattern::Error(_) => false,
+    }
+}
+
+/// What `expr` is named in a diagnostic, if it is a form whose value its last
+/// statement computes, after that statement's temporaries drop.
+fn block_form(expr: &Expr) -> Option<&'static str> {
+    match expr {
+        Expr::Block(_) => Some("block"),
+        Expr::LabeledBlock(_) => Some("labeled block"),
+        Expr::If(_) => Some("`if`"),
+        Expr::Match(_) => Some("`match`"),
+        Expr::WithHandler(_) => Some("`with`"),
+        Expr::Ident(_)
+        | Expr::Literal(_)
+        | Expr::Binary(_)
+        | Expr::Unary(_)
+        | Expr::Assign(_)
+        | Expr::CompoundAssign(_)
+        | Expr::ComparisonChain(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::Matches(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::TaggedTemplate(_)
+        | Expr::Cast(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::TryOp(_)
+        | Expr::Spread(..)
+        | Expr::Range(_)
+        | Expr::Error(_) => None,
     }
 }
 

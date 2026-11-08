@@ -2081,9 +2081,20 @@ impl LetStorage {
 pub struct TirStmt {
     pub kind: TirStmtKind,
     pub span: Span,
-    /// Whether it is one of the source's statements, which own the temporaries
-    /// evaluated in them; the statements a desugaring adds own none.
-    pub source: bool,
+    /// Which of the source's statements it is, deciding what it owns of the
+    /// temporaries evaluated in it; `None` for one a desugaring adds, which
+    /// owns none. A pass that replaces a statement carries it over.
+    pub source: Option<SourceStmt>,
+}
+
+/// A statement of the source, as the owner of the temporaries evaluated in it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceStmt {
+    /// Owns them until it ends.
+    Plain,
+    /// A `let`, which owns them until it ends, but for the ones it keeps
+    /// borrowed: those are its scope's.
+    Let,
 }
 
 impl TirStmt {
@@ -2091,14 +2102,14 @@ impl TirStmt {
         Self {
             kind,
             span,
-            source: false,
+            source: None,
         }
     }
 
     #[must_use]
-    pub fn of_source(self) -> Self {
+    pub fn of_source(self, source: SourceStmt) -> Self {
         Self {
-            source: true,
+            source: Some(source),
             ..self
         }
     }

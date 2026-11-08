@@ -247,10 +247,11 @@ An owner stops holding a value at the first of these:
   `let _ = make();`), and its statement ends. A `with` owns a handler it is
   given by value the same way. A temporary a `let` keeps borrowed is the
   exception, below.
-- It is a temporary in a loop's head, and its iteration ends, after the body.
-  The head runs once per iteration: a `while` condition or let chain, or a
-  C-style `for` condition. A `for` update is a statement of its own. A for-of
-  evaluates its iterable once, as part of the for-of statement.
+- It is a temporary in a loop's head, and its iteration ends: after the body,
+  and in a C-style `for` after the update too. The head runs once per
+  iteration: a `while` condition or let chain, or a C-style `for` condition. A
+  `for` update is a statement of its own. A for-of evaluates its iterable once,
+  as part of the for-of statement.
 - An assignment replaces it: `x = value` drops what `x` held, and a store into a
   field or an element drops what the slot held.
 - It is the part of a by-value pattern that no binding takes. It drops as the

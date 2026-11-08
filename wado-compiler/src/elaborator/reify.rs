@@ -95,8 +95,8 @@ use crate::synthesis::common::{
     ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
-    EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
-    TirTypeParam, agree_branch_types,
+    EffectRef, ExitScope, SourceStmt, StructDef, TemplateId, TirEffectOp, TirField, TirImpl,
+    TirParam, TirTypeParam, agree_branch_types,
 };
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
@@ -2041,7 +2041,7 @@ impl<'a> Reify<'a> {
             let reified = tail
                 .then(|| self.reify_tail_stmt(s, ctx, expected_type, tail_value))
                 .flatten()
-                .map(TirStmt::of_source)
+                .map(|reified| reified.of_source(SourceStmt::Plain))
                 .or_else(|| self.reify_stmt(s, ctx));
             stmts.extend(reified);
         }
@@ -2090,7 +2090,18 @@ impl<'a> Reify<'a> {
                     labeled_block.span,
                 )
             }
-            _ => return None,
+            ast::Stmt::Let(_)
+            | ast::Stmt::Return(_)
+            | ast::Stmt::TaskReturn(_)
+            | ast::Stmt::While(_)
+            | ast::Stmt::For(_)
+            | ast::Stmt::ForOf(_)
+            | ast::Stmt::Loop(_)
+            | ast::Stmt::Break(_)
+            | ast::Stmt::Continue(_)
+            | ast::Stmt::Assert(_)
+            | ast::Stmt::Item(_)
+            | ast::Stmt::Error(_) => return None,
         })
     }
 
@@ -2362,7 +2373,11 @@ impl<'a> Reify<'a> {
                 unreachable!("reify does not run on modules with syntax errors")
             }
         };
-        Some(reified.of_source())
+        Some(reified.of_source(if matches!(stmt, ast::Stmt::Let(_)) {
+            SourceStmt::Let
+        } else {
+            SourceStmt::Plain
+        }))
     }
 
     /// Reify `let pat[: T] = expr;`.
@@ -4133,7 +4148,7 @@ impl<'a> Reify<'a> {
     ) -> Option<TirStmt> {
         update.map(|u| {
             let tir = self.reify_expr(u, ctx, None);
-            TirStmt::new(TirStmtKind::Expr(tir), u.span()).of_source()
+            TirStmt::new(TirStmtKind::Expr(tir), u.span()).of_source(SourceStmt::Plain)
         })
     }
 

@@ -53,3 +53,16 @@ test "a for condition" {
     }
     assert LOG == ["body 0", "drop 0", "body 1", "drop 1", "drop 2"] as List<String>;
 }
+
+fn step(i: i32) -> i32 {
+    LOG.push(`update ${i}`);
+    return i + 1;
+}
+
+test "a for condition outlives the update" {
+    LOG = [];
+    for let mut i = 0; id(&make(i)).n < 1; i = step(i) {
+        LOG.push(`body ${i}`);
+    }
+    assert LOG == ["body 0", "update 0", "drop 0", "drop 1"] as List<String>;
+}
