@@ -48,7 +48,7 @@ pub(super) struct LabeledBlockFusionRule<'t> {
 
 /// What case an exit's value builds, for a labeled block of one type: a
 /// variant built in place, or a promoted `null` where the block's type gives
-/// it a case. Every rule here reads an exit through it.
+/// it a case. Fusion and threading both read a variant exit through it.
 #[derive(Clone, Copy)]
 struct ExitCases {
     null_case: Option<u32>,
@@ -336,7 +336,7 @@ fn check_fusion_preconditions_if_variant_test(
         return None;
     }
 
-    // --- LabeledBlock only breaks to L with null or VariantConstruct ---
+    // --- Every break to L builds a case ---
     let cases = ExitCases::of(types, body.exprs[lv].type_id);
     let (payload_type, exits) =
         check_lb_breaks_and_get_payload(body, lb_block, &label, case_index, cases)?;
@@ -454,7 +454,7 @@ fn check_fusion_preconditions_match(
     // At most one payload binding slot.
     let pattern_payload_binding = single_payload_binding(body, bindings)?;
 
-    // --- LabeledBlock only breaks to L with null or VariantConstruct ---
+    // --- Every break to L builds a case ---
     let cases = ExitCases::of(types, body.exprs[lv].type_id);
     let (payload_type, exits) =
         check_lb_breaks_and_get_payload(body, lb_block, &label, case_index, cases)?;
