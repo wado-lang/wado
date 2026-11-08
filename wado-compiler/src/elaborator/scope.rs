@@ -1302,9 +1302,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let ctx = &mut self.annotate_ctx.trait_ctx;
             let binder = BinderInScope::declared(ctx.type_params.len() as u32, resolved_arg, param);
             // The impl's own parameter keeps the name, but the trait's mark
-            // still reaches what it binds.
+            // and bounds still reach what it binds.
             if ctx.type_params.contains_key(&param.name) {
-                ctx.shadowed.push((param.name.clone(), binder, Vec::new()));
+                ctx.shadowed.push((param.name.clone(), binder, bounds));
                 continue;
             }
             self.bind_param(&param.name, binder, bounds);

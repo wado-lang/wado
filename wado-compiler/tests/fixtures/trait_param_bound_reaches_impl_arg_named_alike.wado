@@ -1,0 +1,57 @@
+// A trait parameter's bound reaches the impl argument that fills it, whatever
+// the impl's own parameters are called. `Pair`'s `T` is spelled like the
+// trait's, `Quad`'s `V` is not; both answer `U: Tag` alike.
+use { println, Stdout } from "core:cli";
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+struct I {
+    n: i32,
+}
+
+impl Tag for I {
+    fn tag(&self) -> i32 {
+        return self.n;
+    }
+}
+
+fn need<X: Tag>(x: X) -> i32 {
+    return x.tag();
+}
+
+trait Tr<T: Tag> {
+    fn go(&self) -> i32;
+}
+
+struct Pair<T, U> {
+    a: T,
+    u: U,
+}
+
+impl<T, U> Tr<U> for Pair<T, U> {
+    fn go(&self) -> i32 {
+        return need(self.u) + 1;
+    }
+}
+
+struct Quad<V, U> {
+    a: V,
+    u: U,
+}
+
+impl<V, U> Tr<U> for Quad<V, U> {
+    fn go(&self) -> i32 {
+        return need(self.u) + 2;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Pair { a: 0, u: I { n: 10 } }.go()} ${Quad { a: 0, u: I { n: 20 } }.go()}`);
+}
+
+__DATA__
+{
+    "stdout": "11 22\n"
+}
