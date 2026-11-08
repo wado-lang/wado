@@ -2,6 +2,7 @@
 //! by the grammar Draft 2020-12 cites for it.
 
 use { Uri } from "core:uri";
+use { validate_ecma262_syntax } from "lib:re";
 
 /// A format Jade asserts.
 internal enum Format {
@@ -20,6 +21,7 @@ internal enum Format {
     UriTemplate,
     JsonPointer,
     RelativeJsonPointer,
+    Regex,
 }
 
 impl Format {
@@ -41,6 +43,7 @@ impl Format {
             "uri-template" => Option::Some(UriTemplate),
             "json-pointer" => Option::Some(JsonPointer),
             "relative-json-pointer" => Option::Some(RelativeJsonPointer),
+            "regex" => Option::Some(Regex),
             _ => null,
         };
     }
@@ -62,6 +65,7 @@ impl Format {
             UriTemplate => "uri-template",
             JsonPointer => "json-pointer",
             RelativeJsonPointer => "relative-json-pointer",
+            Regex => "regex",
         };
     }
 
@@ -107,6 +111,9 @@ impl Format {
                 let mut s = Scan::of(text);
                 relative_json_pointer(&mut s);
             },
+            // ECMA-262's syntax, which a regular expression Re cannot match
+            // still has.
+            Regex => validate_ecma262_syntax(text) matches { Ok(_) },
         };
     }
 }

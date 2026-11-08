@@ -34,6 +34,13 @@ test "an iri admits a private-use character in its query alone" {
     assert admits("iri", "http://example.com/?q=\u{F0000}");
 }
 
+test "a regex is ECMA-262's, whether or not Re can match it" {
+    // The JSON text escapes each backslash.
+    assert admits("regex", #"(a)(?<=a)\\1"#);
+    assert !admits("regex", #"(?<=a)\\1"#);
+    assert !admits("regex", #"(?i)a"#);
+}
+
 test "an iri admits no noncharacter at the end of a plane" {
     assert admits("iri", "http://example.com/\u{1FFFD}");
     assert !admits("iri", "http://example.com/\u{1FFFE}");
