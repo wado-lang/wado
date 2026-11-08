@@ -895,7 +895,9 @@ impl MoveWalker<'_, '_> {
         };
         let gone = owners.iter().find_map(|(owner, site)| {
             let gone = || match site.region {
-                Some(region) => self.temporary_gone(region),
+                Some(region) => self
+                    .temporary_gone(region)
+                    .or_else(|| self.disturbed_since(holder, owner)),
                 None => self.owner_gone(holder, owner),
             };
             site.affine
@@ -927,6 +929,13 @@ impl MoveWalker<'_, '_> {
         if let Some(moved_at) = self.moved_overlap(owner.def, &path) {
             return Some(Gone::Moved(moved_at));
         }
+        self.disturbed_since(holder, owner)
+    }
+
+    /// The `&mut` use, not through `holder`, that may have moved what `holder`
+    /// reads through `owner` out since it took the reference.
+    fn disturbed_since(&self, holder: AstId, owner: &Owner) -> Option<Gone> {
+        let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
         let since = self.disturbances.get(&owner.def)?.get(owner.disturbed..)?;
         since
             .iter()
@@ -939,7 +948,8 @@ impl MoveWalker<'_, '_> {
     }
 
     /// A `&mut` use of the place `expr` writes through: of the local it is
-    /// rooted in, and of each affine local that local writes through to.
+    /// rooted in, and of each affine local or temporary that local writes
+    /// through to.
     fn disturb(&mut self, expr: &Expr) {
         let Some(root) = write_root(expr) else {
             return;
@@ -951,21 +961,23 @@ impl MoveWalker<'_, '_> {
             .place_path(expr)
             .map(|place| place.owned_fields())
             .unwrap_or_default();
-        let mut places = vec![(via, path)];
+        let mut places = vec![(via, path, false)];
         if let Some(owners) = self.flow.holders.get(&via) {
             places.extend(
                 owners
                     .iter()
                     .filter(|(_, site)| site.writes)
-                    .map(|(owner, _)| (owner.def, owner.path.clone())),
+                    .map(|(owner, site)| (owner.def, owner.path.clone(), site.region.is_some())),
             );
         }
-        for (def, path) in places {
-            if !self.is_affine_local(def) {
-                continue;
-            }
-            if !self.is_own_local(def) {
-                self.disturbed_captures.insert(def);
+        for (def, path, temporary) in places {
+            if !temporary {
+                if !self.is_affine_local(def) {
+                    continue;
+                }
+                if !self.is_own_local(def) {
+                    self.disturbed_captures.insert(def);
+                }
             }
             self.disturbances.entry(def).or_default().push(Disturbance {
                 via,
@@ -1325,10 +1337,12 @@ impl MoveWalker<'_, '_> {
         let mut inner = self.sub_walker();
         inner.closure_locals = Some(locals);
         inner.own_regions_from = inner.checker.regions_opened;
-        inner.in_region(false, |inner| inner.visit_at(&closure.body));
-        if !matches!(closure.body, Expr::Block(_)) {
-            inner.refuse_returned(&closure.body);
-        }
+        inner.in_region(false, |inner| {
+            inner.visit_at(&closure.body);
+            if !matches!(closure.body, Expr::Block(_)) {
+                inner.refuse_returned(&closure.body);
+            }
+        });
         let mut outside = outside_params;
         outside.extend(
             inner
@@ -1763,7 +1777,7 @@ impl MoveWalker<'_, '_> {
             def: expr.id(),
             path: Vec::new(),
             instance: region.serial,
-            disturbed: 0,
+            disturbed: self.disturbed_count(expr.id()),
         };
         let site = OwnerSite {
             name: format!("the temporary at {}:{}", span.line, span.column),

@@ -968,6 +968,14 @@ impl TirExpr {
         self.marks.set(marks);
     }
 
+    /// Replace `self` with `with`, the same value spelled another way, which
+    /// keeps what the ownership walk decided about it.
+    pub fn rewrite(&mut self, with: TirExpr) {
+        let marks = self.marks();
+        *self = with;
+        self.marks.set(marks);
+    }
+
     /// The place `self` moves out of, or `self` where it moves nothing.
     pub fn unmoved(&self) -> &Self {
         match &self.kind {

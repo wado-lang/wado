@@ -1513,7 +1513,7 @@ impl Monomorphizer {
         if let Some(converted) =
             self.cast_for_implicit_from(expr, substitution, type_table, local_count, locals)
         {
-            *expr = converted;
+            expr.rewrite(converted);
             return;
         }
 
@@ -3991,7 +3991,7 @@ impl Monomorphizer {
             },
             span,
         ));
-        *expr = TirExpr::new(
+        expr.rewrite(TirExpr::new(
             TirExprKind::LabeledBlock {
                 label: outer_label,
                 block: TirBlock::new(block_stmts, span),
@@ -3999,7 +3999,7 @@ impl Monomorphizer {
             },
             result_type,
             span,
-        );
+        ));
     }
 
     /// The whole tuple a pack stands for. An enclosing unroll pins

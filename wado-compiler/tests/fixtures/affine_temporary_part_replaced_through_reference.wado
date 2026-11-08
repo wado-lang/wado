@@ -1,0 +1,31 @@
+// A `&mut` use of a temporary through a reference into it may replace a part
+// of it, as one of a local may, so a reference into that part is not read after.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+affine struct Holder {
+    part: Tok,
+}
+
+impl Holder {
+    fn reset(&mut self) {
+        self.part = Tok { n: 0 };
+    }
+}
+
+test {
+    let h = &mut Holder { part: Tok { n: 1 } };
+    let r = &h.part;
+    h.reset();
+    assert r.n == 1;
+}
+
+__DATA__
+{"compile_error": ":27:12: analysis error: `r` refers into the temporary at 24:18, which a `&mut` use at 26:5 may have moved out of"}

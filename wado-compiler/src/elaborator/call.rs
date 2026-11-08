@@ -2313,11 +2313,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    let checked = self.static_param_types_at(
-                        param_types.clone(),
-                        &impl_type_args_inferred,
-                        &method_type_args,
-                    );
+                    // The resolution read the parameters at the receiver's
+                    // arguments, so only the method's own slots are left, bound
+                    // by identity: by index they would reach the caller's
+                    // parameters the receiver's arguments brought in.
+                    let checked: Vec<TypeId> = param_types
+                        .iter()
+                        .map(|&t| {
+                            self.fill_static_method_slots(method_ref.method_id, &method_type_args, t)
+                        })
+                        .collect();
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
                     if func_ref.monomorph_info.is_some()
                         && self.report_value_for_reference(

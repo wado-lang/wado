@@ -68,7 +68,8 @@ impl TirOptVisitor for ListViewExpander<'_> {
             &mut tt,
             expr.span,
         );
-        *expr = ref_expr(lowered, expr.type_id, expr.span);
+        let rewritten = ref_expr(lowered, expr.type_id, expr.span);
+        expr.rewrite(rewritten);
         true
     }
 }

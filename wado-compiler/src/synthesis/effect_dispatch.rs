@@ -2837,7 +2837,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     };
 
     if let Some(new) = new_call {
-        *expr = new;
+        expr.rewrite(new);
     }
 }
 
