@@ -461,13 +461,7 @@ fn captured_field(op: &Op, ctx: &EmitContext, want_node: bool) -> Option<String>
 /// runs after `elements[before - 1]` and before `elements[before]`). No-op
 /// unless action execution is on. Predicates emit an inline runtime guard
 /// (a false one fails the parse).
-pub fn gen_alt_actions_at(
-    w: &mut CodeWriter,
-    actions: &List<AltAction>,
-    before: i32,
-    ctx: &mut EmitContext,
-    at_alt_end: bool = false,
-) {
+pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ctx: &mut EmitContext) {
     if !ctx.settings.emit_actions {
         return;
     }
@@ -476,14 +470,14 @@ pub fn gen_alt_actions_at(
             continue;
         }
         match a.kind {
-            Action => gen_action_body(w, &a.source, ctx, at_alt_end),
+            Action => gen_action_body(w, &a.source, ctx),
             Predicate => {
                 if ctx.cursor.is_predicate_gated(a.source.action_id) {
                     ctx.cursor.mark_action_seen(a.source.action_id);
                 } else if predicate_selects_alternative(before, ctx) {
                     warn_unsupported_prediction_predicate(&a.source, ctx);
                 } else {
-                    gen_predicate_guard(w, &a.source, ctx, at_alt_end);
+                    gen_predicate_guard(w, &a.source, ctx);
                 }
             },
         }
@@ -841,21 +835,16 @@ pub fn emit_alt_exit(w: &mut CodeWriter, ctx: &EmitContext) {
 /// rule's environment — its own `vals` local (`$v`) and child bindings
 /// (`$a.v`). A reference the translator cannot emit yet is a loud
 /// `UnsupportedAction` diagnostic rather than invalid `$x`.
-pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitContext, at_alt_end: bool) {
+pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitContext) {
     ctx.cursor.mark_action_seen(src.action_id);
-    if let Some(code) = translate_action_or_warn(src, false, ctx, at_alt_end) {
+    if let Some(code) = translate_action_or_warn(src, false, ctx) {
         emit_action_stmt(w, &code);
     }
 }
 
 /// Translate an action (a statement list) or a predicate condition (an
 /// expression) to Wado, warning (loud) and returning `null` on failure.
-fn translate_action_or_warn(
-    src: &ActionSource,
-    is_predicate: bool,
-    ctx: &mut EmitContext,
-    at_alt_end: bool,
-) -> Option<String> {
+fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut EmitContext) -> Option<String> {
     if body_names_unwired_base(&src.text, &ctx.settings) {
         // A refused base already reported the cause; an undeclared one has not.
         if !ctx.settings.parser_superclass_declared {
@@ -883,7 +872,6 @@ fn translate_action_or_warn(
             ctx.cursor.alt_bindings(),
             &ctx.settings.grammar_name,
             &ctx.settings.action_members,
-            at_alt_end,
         );
     } else {
         translate_action(
@@ -896,7 +884,6 @@ fn translate_action_or_warn(
             &ctx.settings.grammar_name,
             &ctx.settings.action_members,
             ctx.cursor.expected_names(),
-            at_alt_end,
         );
     };
     return match translated {
@@ -932,9 +919,9 @@ pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &EmitContex
 /// rule fails into normal recovery. This serves mid-alt predicates and
 /// single-alt-rule gates, where a false predicate is a parse failure at that
 /// point; a predicate choosing between alternatives gates the prediction.
-fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitContext, at_alt_end: bool) {
+fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitContext) {
     ctx.cursor.mark_action_seen(src.action_id);
-    let cond = match translate_action_or_warn(src, true, ctx, at_alt_end) {
+    let cond = match translate_action_or_warn(src, true, ctx) {
         Some(c) => c,
         None => {
             return;

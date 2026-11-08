@@ -35,7 +35,9 @@ A language-independent scanner (skipping strings and comments) finds `$ident(.id
 
 A rule declaring any of args / `returns` / `locals` gets a generated value struct, threaded through its parse function and returned to callers. Fields are default-initialized; rule args become extra parameters. A caller binds the returned value struct to a local when an action references it, so `$a.v` resolves to that local. Rules with no declarations keep a unit return, so actionless grammars stay byte-identical, and scan functions are unaffected (no values or actions during scan). Left-recursive rules keep the left operand's values in a local across the precedence-climbing loop; the corpus's `$ctx`-cast LR-binary idiom maps onto the same locals. General `$ctx`-mediated typed child access needs a typed CST and is a later item.
 
-A cast `$ctx` member reaching a name the enclosing alternative already binds needs no typed CST: `((XContext)$ctx).INC()` names the alternative's own `INC` token, so it resolves to whatever `$INC` resolves to there, and `!= null` on it becomes the token-presence test. A name the alternative does not bind stays a loud error rather than a guess.
+A `$ctx` token accessor tested against `null` needs no typed CST: `$ctx.INC()` or `((XContext)$ctx).INC()` reads what `$INC` reads, so `!= null` on it becomes the token-presence test, and it counts as a read of the `INC` binding. Where `INC` occurs more than once in that context (the rule's, or a labeled alternative's for its cast), ANTLR4's accessor returns a list, which is never null. Any other use of an accessor stays a loud error rather than a guess.
+
+A label's `.text` that never matched reads `"null"`, which prints as Java's `null` does. A comparison asks whether the text is there first: Java's `==` compares references, and a text read is a fresh `String`, so `==` holds only where both sides are missing; `.equals` traps on a missing receiver and is false on a missing argument.
 
 ### The value channel is the context object
 

@@ -20,6 +20,7 @@ use {
 use { rule_is_left_recursive } from "./lr_util.wado";
 use { push_unique } from "./list_util.wado";
 use { skip_ws } from "./g4/scan.wado";
+use { is_ident_char } from "./text.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
@@ -250,21 +251,65 @@ pub fn rule_binding_reads(rule: &ParserRule, rules: &List<ParserRule>) -> Option
     return Option::Some(reads);
 }
 
-/// The bindings the rule's bodies name with a `$` reference, which unlike
+/// The bindings the rule's bodies name (`named_bindings`), which unlike
 /// `rule_binding_reads` leaves out a child `$ctx` reaches.
 pub fn rule_named_bindings(rule: &ParserRule) -> List<String> {
     let mut named: List<String> = [];
     for let body of &rule_action_bodies(rule) {
-        for let r of &find_attr_refs(body) {
-            push_unique(&mut named, binding_name(&r.name));
+        for let base of named_bindings(body) {
+            push_unique(&mut named, base);
         }
     }
     return named;
 }
 
-/// Whether `body` names the binding `base` with a `$` reference.
+/// Whether `body` names the binding `base` (`named_bindings`).
 pub fn body_names_binding<S: AsStrSlice, S1: AsStrSlice>(body: S, base: S1) -> bool {
-    return find_attr_refs(body).iter_ref().any(|r| binding_name(&r.name) == base.as_str_slice());
+    return named_bindings(body).contains_str(base);
+}
+
+/// The bindings `body` names: each `$` reference's, and the token each `$ctx`
+/// token accessor reads (`$ctx.ID()`, `((XContext)$ctx).ID()`), which the
+/// token's binding answers.
+fn named_bindings<S: AsStrSlice>(body: S) -> List<String> {
+    let src = body.as_str_slice();
+    let mut out: List<String> = [];
+    for let r of &find_attr_refs(src) {
+        push_unique(&mut out, binding_name(&r.name));
+        if r.name == "ctx" && let Some(token) = ctx_token_accessor(&src, r) {
+            push_unique(&mut out, binding_name(&token));
+        }
+    }
+    return out;
+}
+
+/// The token a call on the `$ctx` reference `r` reads: `.ID()` straight after
+/// it, or after the `)` closing a cast around it. A token name is upper-led; a
+/// lower-led accessor reaches a rule child.
+fn ctx_token_accessor(src: &StrSlice, r: &AttrRef) -> Option<String> {
+    let n = src.len();
+    let [name, after_name] = if let Some(m) = &r.member {
+        [*m, r.end];
+    } else {
+        let mut i = skip_ws(src, r.end, n);
+        while i < n && src.byte_at(i) == b')' {
+            i = skip_ws(src, i + 1, n);
+        }
+        if i >= n || src.byte_at(i) != b'.' {
+            return null;
+        }
+        let start = skip_ws(src, i + 1, n);
+        let mut end = start;
+        while end < n && is_ident_char(src.byte_at(end) as char) {
+            end += 1;
+        }
+        [src.slice(start, end).to_string(), end];
+    };
+    let open = skip_ws(src, after_name, n);
+    if name.is_empty() || !name.chars().next().unwrap().is_ascii_uppercase() || open >= n || src.byte_at(open) != b'(' {
+        return null;
+    }
+    return Option::Some(name);
 }
 
 /// Whether a body running inside `elem` names the binding `base`.
@@ -659,6 +704,37 @@ pub fn token_null_test<S: AsStrSlice>(
         return Option::Some(if negated { "false" } else { "true" });
     }
     return Option::Some(if negated { `${b.field} >= 0` } else { `${b.field} < 0` });
+}
+
+/// The condition under which the `.text` that `ref_text` reads is there, or
+/// `null` where `ref_text` reads no label's text. A label that never matched
+/// reads `"null"` as text, which prints as the jar's `null` but compares as a
+/// string, so a comparison asks this first.
+pub fn text_presence<S: AsStrSlice>(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    ref_text: S,
+    bindings: &List<AltBinding>,
+) -> Option<String> {
+    let Ok(resolved) = resolve_attrs(ref_text, rule, rules, bindings) else {
+        return null;
+    };
+    if resolved.len() != 1 || !resolved[0].member matches { Some("text") } {
+        return null;
+    }
+    let is_token = match resolved[0].target {
+        TokenLabel | TokenRef => true,
+        RuleLabel | RuleRef => false,
+        _ => {
+            return null;
+        },
+    };
+    let b = binding_for(bindings, is_token, &binding_name(&resolved[0].name));
+    return match b.reach {
+        Bound => Option::Some("true"),
+        Shared => Option::Some(if is_token { `${b.field} >= 0` } else { `${b.field} matches { Some(_) }` }),
+        Unmatched => Option::Some("false"),
+    };
 }
 
 /// A token member read on a token-index expression `idx`. `.index` is `idx`

@@ -176,7 +176,7 @@ use {
 } from "./parser_runtime_gen.wado";
 use { gen_parser_super_interface } from "./superclass.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
-use { AltBinding, LabelReach } from "./attr_resolve.wado";
+use { AltBinding, LabelReach, unmatched_bindings } from "./attr_resolve.wado";
 use {
     NO_KINDS,
     build_lookahead_condition,
@@ -3728,7 +3728,7 @@ fn gen_alt_elements(
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
     }
-    gen_alt_actions_at(w, actions, elements.len(), ctx, true);
+    gen_alt_actions_at(w, actions, elements.len(), ctx);
     if let Some(a) = after_action {
         gen_prequel_in_scope(w, a, &ctx.current_rule_name(), false, ctx);
     }
@@ -3776,7 +3776,7 @@ fn gen_elements_with_non_greedy(
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
     }
-    gen_alt_actions_at(w, actions, elements.len(), ctx, true);
+    gen_alt_actions_at(w, actions, elements.len(), ctx);
 }
 
 /// Compute the `follow` to pass to `gen_op_repeat_with_follow_override`
@@ -4554,7 +4554,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
         gen_alt_actions_at(w, actions, i + 1, ctx);
         gen_op(w, &ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
     }
-    gen_alt_actions_at(w, actions, ops.len() + 1, ctx, true);
+    gen_alt_actions_at(w, actions, ops.len() + 1, ctx);
     ctx.cursor.set_alt_bindings(outer);
     w.line("p.b.finish_node(p.last_end());");
     if emits_vals {
@@ -5334,7 +5334,7 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
             &NO_KINDS;
         });
     }
-    gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx, true);
+    gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx);
     ctx.cursor.leave_group_body(outer_choice);
     w.end();
 }
@@ -5348,10 +5348,11 @@ fn gen_prequel_action<S: AsStrSlice>(
     at_entry: bool,
     ctx: &mut EmitContext,
 ) {
-    // A prequel stands outside every alternative, so it reaches a label only
-    // through the captures the rule's value struct keeps.
+    // A prequel stands outside every alternative: `@init` runs before any label
+    // binds, and `@after` reaches one only through the captures the rule's
+    // value struct keeps.
     let outer = *ctx.cursor.alt_bindings();
-    ctx.cursor.set_alt_bindings([]);
+    ctx.cursor.set_alt_bindings(if at_entry { unmatched_bindings(ctx.current_rule()) } else { [] });
     gen_prequel_in_scope(w, src, rule_name, at_entry, ctx);
     ctx.cursor.set_alt_bindings(outer);
 }
@@ -5366,7 +5367,7 @@ fn gen_prequel_in_scope<S: AsStrSlice>(
     ctx: &mut EmitContext,
 ) {
     ctx.cursor.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
-    gen_action_body(w, src, ctx, !at_entry);
+    gen_action_body(w, src, ctx);
     ctx.cursor.set_expected_names(String::new());
 }
 
@@ -5623,7 +5624,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
                 gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
             }
         }
-        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
+        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx);
     }
     ctx.cursor.leave_group_body(outer_choice);
     if !s.shapes.is_empty() {
