@@ -284,7 +284,7 @@ fn carried(
     if op == "Gemm" {
         let [_, _, trans_a, _] = gemm_options(node).unwrap();
         // A bias with rows of its own adds them where no merge put them.
-        let bias_rows = node.inputs.len() > 2 && node.inputs[2] != ""
+        let bias_rows = node.has_operand(2)
             && shapes[node.inputs[2]] matches { b && b.rank() == 2 && !b.axes[0].extent.is_one() };
         if trans_a || bias_rows {
             return reads();

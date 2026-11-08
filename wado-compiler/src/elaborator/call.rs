@@ -2320,7 +2320,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let checked: Vec<TypeId> = param_types
                         .iter()
                         .map(|&t| {
-                            self.fill_static_method_slots(method_ref.method_id, &method_type_args, t)
+                            self.fill_static_method_slots(
+                                method_ref.method_id,
+                                &method_type_args,
+                                t,
+                            )
                         })
                         .collect();
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
