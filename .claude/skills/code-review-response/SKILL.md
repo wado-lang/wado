@@ -51,18 +51,10 @@ claim about an external tool is checked like any other. A finding you could not
 check is reported as unverified, never as fact. Record which of these each
 finding was:
 
-<<<<<<< HEAD
-- Real → fix the cause. When the reviewer's patch is wrong, fix it anyway; the
-  value was in the claim, not the suggestion. A wrong answer is fixed however
-  large the fix or unlikely the input: neither its size nor its value is a
-  question for the user.
-||||||| 43e4ebb4
-- Real → fix the cause. When the reviewer's patch is wrong, fix it anyway; the
-  value was in the claim, not the suggestion.
-=======
 - Real, on a path a caller reaches → fix the cause. When the reviewer's patch is
-  wrong, fix it anyway; the value was in the claim, not the suggestion.
->>>>>>> origin/main
+  wrong, fix it anyway; the value was in the claim, not the suggestion. A wrong
+  answer is fixed however large the fix or unlikely the input: neither its size
+  nor its value is a question for the user.
 - Grounded in a project rule the code breaks → fix it, and cite the rule.
 - Real only on a path nothing reaches, such as an input no producer or caller
   supplies → not worth fixing. Make the path fail where it begins, with an
