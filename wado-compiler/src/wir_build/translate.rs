@@ -17,7 +17,7 @@ use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    MangledName, closure_call_wrapper_name, closure_inspect_wrapper_name, multi_value_split_local,
+    CELL_FIELD, MangledName, closure_call_wrapper_name, closure_inspect_wrapper_name, multi_value_split_local,
 };
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
@@ -646,7 +646,7 @@ fn build_fn_canonical_dispatch_body(
         };
         WirInstr::StructGet {
             type_id: box_wir_type_id.clone(),
-            field_name: crate::name::CELL_FIELD.to_string(),
+            field_name: CELL_FIELD.to_string(),
             expr: Box::new(WirInstr::LocalGet {
                 name: self_param_name,
                 result_ty: WirType::Ref {
