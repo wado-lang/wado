@@ -471,10 +471,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
         // `Receiver::Ref` without re-inspecting the string.
         let mut matched_ref_kind: Option<RefKind> = None;
-        let is_ref = matches!(
-            self.tysys.type_table.borrow().get(receiver),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        );
+        let is_ref = self.tysys.type_table.borrow().is_reference(receiver);
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
@@ -2836,9 +2833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The newtype `target`'s own key, where an impl block on the newtype itself
     /// declares `method`: that declaration shadows the one its base supplies.
     fn own_newtype_static(&self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
-        let ResolvedType::Newtype { def, .. } =
-            *self.tysys.type_table.borrow().get_unerased(target)
-        else {
+        let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(target) else {
             return None;
         };
         let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);

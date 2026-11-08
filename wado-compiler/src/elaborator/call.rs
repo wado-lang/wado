@@ -556,11 +556,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if binding.is_mut {
             return;
         }
-        let is_mut_ref = matches!(
-            self.tysys.type_table.borrow().get(binding.type_id),
-            ResolvedType::MutRef(_)
-        );
-        if is_mut_ref {
+        if self.tysys.type_table.borrow().is_mut_ref(binding.type_id) {
             return;
         }
         let _ = self.emit(TypeError::ClosureMutBindingRequired {
@@ -704,13 +700,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .tuples_holding(declared, &open);
-        let declared_key = self.tysys.type_table.borrow().type_key(declared);
         let mut replacements = IndexMap::default();
         // A tuple parameter itself stays, for the unifier to splice the pack
         // across its argument's elements.
-        for (key, tuple) in held.into_iter().filter(|&(key, _)| key != declared_key) {
+        for tuple in held.into_iter().filter(|&tuple| tuple != declared) {
             let var = self.mint_infer_var();
-            replacements.insert(key, var);
+            replacements.insert(tuple, var);
             stand_ins.push((var, tuple));
         }
         let checked = self
@@ -1178,14 +1173,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let (newtype_def, base) = {
             let table = self.tysys.type_table.borrow();
-            let ResolvedType::Newtype { def, .. } = table.get_unerased(named) else {
+            let ResolvedType::Newtype { def, .. } = table.get(named) else {
                 unreachable!("`named` is a newtype");
             };
             (*def, table.reflect_structure_head(named))
         };
         let expected = expected.map(|ty| {
             let table = self.tysys.type_table.borrow();
-            match table.get_unerased(ty) {
+            match table.get(ty) {
                 ResolvedType::Newtype { def, .. } if *def == newtype_def => {
                     table.reflect_structure_head(ty)
                 }
@@ -1321,7 +1316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && tt
                     .nominal_type_args(receiver)
                     .is_none_or(|args| args.is_empty());
-            if tt.same_type(arg, receiver) || bare_generic_of_arg {
+            if arg == receiver || bare_generic_of_arg {
                 (DesugarKind::NewtypeFromCollapse, arg)
             } else if tt.newtype_chain_holds(arg, receiver) {
                 (DesugarKind::NewtypeFromUnwrap, receiver)
@@ -1403,19 +1398,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .ok_or(WrappedCase::NotAVariant)?;
             (tt.nominal_type_args(target).unwrap_or_default(), info)
         };
-        let [source_key, unit_key] = {
-            let tt = self.tysys.type_table.borrow();
-            [tt.type_key(source), tt.type_key(TypeTable::UNIT)]
-        };
         let carrying: Vec<(usize, &str)> = info
             .cases
             .iter()
             .enumerate()
-            .filter(|(_, case)| self.tysys.type_table.borrow().type_key(case.payload) != unit_key)
-            .filter(|(_, case)| {
-                let payload = self.tysys.substitute_type_params(case.payload, &args);
-                self.tysys.type_table.borrow().type_key(payload) == source_key
-            })
+            .filter(|(_, case)| case.payload != TypeTable::UNIT)
+            .filter(|(_, case)| self.tysys.substitute_type_params(case.payload, &args) == source)
             .map(|(index, case)| (index, case.name.as_str()))
             .collect();
         match carrying.as_slice() {

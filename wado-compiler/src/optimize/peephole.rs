@@ -25,7 +25,7 @@ use super::gate::{FunctionGate, GatedPass};
 use super::identity_cast::{FieldThroughRefRule, IdentityCastRule, IdentityDerefRule};
 use super::if_chain_to_match::IfChainToMatchRule;
 use super::known_case::KnownCaseRule;
-use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
+use super::labeled_block_fusion::{LabeledBlockFusionRule, build_slot_temp_sroa};
 use super::match_to_bitset::MatchToBitsetRule;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
@@ -123,7 +123,7 @@ pub(super) fn run_peephole(
                 .map(|b| build_ref_elim(b, LazyHeapFrame::new(effects, params)))
         });
         // Adjacent-use box-local elision runs post-inline only (it collapses the
-        // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
+        // cells `sroa_param` / `inline` expose). Its stats come from
         // the pristine post-inline body; the escape set (`address_taken`) is read
         // off the function before its body is borrowed.
         let elide_box_rule = (!pre_inline)
@@ -142,8 +142,7 @@ pub(super) fn run_peephole(
         // One rule, two entry points: `apply_block` fuses the value-discarding
         // if-let shape, `apply_expr` threads the value-producing `match LB`
         // (`?`) shape. Both only exist post-inline.
-        let labeled_block_fusion_rule =
-            (!pre_inline).then(|| build_labeled_block_fusion(type_table));
+        let labeled_block_fusion_rule = (!pre_inline).then_some(LabeledBlockFusionRule);
         // Scalarizes the `[tag, slots…]` temp fusion leaves behind — the
         // value-producing `let x = f()?` consumer it cannot relocate. Ordered
         // after fusion, which produces the better code where it applies and

@@ -17,7 +17,7 @@ use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::rarity::Mark;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::TypeId;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::{compiler_trace, nir_arena};
@@ -830,7 +830,7 @@ impl<'a> Interpreter<'a> {
                 return;
             };
             let (local_index, value) = (*local_index, *value);
-            let lattice = if body.declares_without_value(self.type_table, *type_id, value) {
+            let lattice = if body.declares_without_value(*type_id, value) {
                 Lattice::Unevaluated
             } else {
                 self.operand_to_lattice(body, value)
@@ -1100,10 +1100,7 @@ fn place_roots_at_reference(body: &Body, place: Operand, type_table: &TypeTable)
                 None => return false,
             },
             _ => {
-                return matches!(
-                    type_table.get(body.exprs[e].type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                );
+                return type_table.is_reference(body.exprs[e].type_id);
             }
         }
     }

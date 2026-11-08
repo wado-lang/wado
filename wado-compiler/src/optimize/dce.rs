@@ -120,8 +120,8 @@ impl DceAnalysis {
     /// that pulls a struct's field types into the reachable set and by the retain
     /// that drops the rest. A generic declaration survives while any instance
     /// of it does.
-    fn keeps_struct(&self, s: &NirStruct, type_table: &TypeTable) -> bool {
-        match s.instance(type_table) {
+    fn keeps_struct(&self, s: &NirStruct) -> bool {
+        match s.instance() {
             Some(instance) => self.structs.contains(&instance),
             None => self.struct_heads.contains(&s.def),
         }
@@ -962,7 +962,7 @@ impl<'a> DceWalker<'a> {
             } if !type_args.is_empty() => {
                 let module_source = self.type_table.struct_head_module(*def);
                 let name = &self.type_table.struct_mangled_name(*def, type_args);
-                // Monomorphized struct method (e.g. `Box<i32>::get`):
+                // Monomorphized struct method (e.g. `Pair<i32>::get`):
                 // monomorphized functions live in the *using* module, so
                 // route the callee id through `current_module`.
                 let mangled_func_name = MethodName::format_local(
@@ -975,21 +975,6 @@ impl<'a> DceWalker<'a> {
                     mangled_func_name,
                 ));
                 self.analysis.callees.insert(callee_id);
-
-                // For internal Box<T> types (primitive boxing), the method is
-                // actually defined on the inner type (e.g., i32^Ord::cmp, not
-                // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
-                // method target as reachable.
-                let boxed = self.type_table.is_compiler_struct(*def, CompilerItem::Box);
-                if boxed && let Some(info) = func.method_info.clone() {
-                    let original_method_id = FunctionId::Method(MethodName::new(
-                        func.module_source.clone(),
-                        info.fq_struct_name(),
-                        info.trait_name.clone(),
-                        info.method_name,
-                    ));
-                    self.analysis.callees.insert(original_method_id);
-                }
             }
             ResolvedType::Variant { def, type_args } if !type_args.is_empty() => {
                 let name = self.type_table.decl_name(def).to_string();
@@ -1191,9 +1176,7 @@ impl DceWalker<'_> {
             params,
             return_type,
             ..
-        } = self
-            .type_table
-            .get(self.type_table.peel_refs_and_box(recv_ty))
+        } = self.type_table.get(self.type_table.peel_refs(recv_ty))
         {
             self.analysis
                 .inspect_signatures
@@ -1464,23 +1447,10 @@ impl DceAnalysis {
     }
 }
 
-/// Variant declarations that outlive their uses, both for
-/// `optimize::sroa_variant_return`: `Option`, whose slots the pass mints after
-/// the early DCE, and any variant a function was scalarized *from* — scalarizing
-/// every use away is what makes a declaration look unreachable, and the pass
-/// re-derives its layout to recognise its own earlier work. A kept declaration
-/// keeps its payload types too, or `register_mono_variants` panics.
-fn variant_decls_kept_past_use(project: &NirPackage, type_table: &TypeTable) -> IndexSet<DefId> {
-    project
-        .functions
-        .iter()
-        .filter_map(|f| f.borrow().scalarized_from)
-        .filter_map(|t| match type_table.get(t) {
-            ResolvedType::Variant { def, .. } => Some(*def),
-            _ => None,
-        })
-        .chain(type_table.compiler_item_def(CompilerItem::Option))
-        .collect()
+/// Whether variant declaration `def` outlives its uses: `Option` does, whose
+/// slots `optimize::sroa_variant_return` mints after the early DCE.
+fn kept_past_use(def: DefId, type_table: &TypeTable) -> bool {
+    type_table.compiler_item_def(CompilerItem::Option) == Some(def)
 }
 
 /// Populate `analysis.types` and the declaration views over it. A type is
@@ -1532,6 +1502,14 @@ fn populate_type_reachability(
                 }
             }
         }
+        // The variant every scalarized return came from:
+        // `optimize::sroa_variant_return` recognises its earlier work by that
+        // type's layout, so the type and every declaration it names survive.
+        for func_rc in &project.functions {
+            if let Some(t) = func_rc.borrow().scalarized_from {
+                analysis.types.insert(t);
+            }
+        }
 
         // Reachable globals' declared type + initializer types. At NIR
         // level non-constant initializers have already been extracted
@@ -1576,10 +1554,6 @@ fn populate_type_reachability(
     }
 
     // Phase 2: Transitive closure - include struct fields, variant payloads, and type dependencies
-    // Loop-invariant: it reads `project` and the type table, neither of which
-    // the loop mutates. Recomputing it per round put a whole-program walk inside
-    // the pass's hot spot. `remove_unreachable_types` hoists it the same way.
-    let kept_past_use = variant_decls_kept_past_use(project, &project.type_table.borrow());
     let instance_payloads = variant_instance_payloads(project);
 
     let mut changed = true;
@@ -1598,7 +1572,7 @@ fn populate_type_reachability(
 
         // A struct that survives the sweep keeps its field types.
         for tir_struct in &project.structs {
-            if analysis.keeps_struct(tir_struct, &type_table) {
+            if analysis.keeps_struct(tir_struct) {
                 for field in &tir_struct.fields {
                     collect_type_transitive(field.type_id, &type_table, &mut analysis.types);
                 }
@@ -1619,7 +1593,8 @@ fn populate_type_reachability(
         // its last use keeps payloads alive. The same predicate gates the
         // `project.variants` retain in `remove_unreachable_types`.
         for variant in &project.variants {
-            if analysis.nominal_defs.contains(&variant.def) || kept_past_use.contains(&variant.def)
+            if analysis.nominal_defs.contains(&variant.def)
+                || kept_past_use(variant.def, &type_table)
             {
                 for case in &variant.cases {
                     collect_type_transitive(case.payload, &type_table, &mut analysis.types);
@@ -1776,22 +1751,12 @@ fn collect_type_dependencies(
 /// `analysis` is precomputed by [`analyze_dce`] — this function only
 /// retains entries matching its precomputed indexes.
 pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
-    {
-        let type_table = project.type_table.borrow();
-        project
-            .structs
-            .retain(|s| analysis.keeps_struct(s, &type_table));
-    }
-    // Loop-invariant, and the loop it would otherwise sit in is this pass's hot
-    // spot: it reads `project` and the type table, neither of which the retains
-    // below mutate.
-    let kept_past_use = {
-        let type_table = project.type_table.borrow();
-        variant_decls_kept_past_use(project, &type_table)
-    };
+    project.structs.retain(|s| analysis.keeps_struct(s));
+    let type_table = project.type_table.borrow();
     project
         .variants
-        .retain(|v| analysis.nominal_defs.contains(&v.def) || kept_past_use.contains(&v.def));
+        .retain(|v| analysis.nominal_defs.contains(&v.def) || kept_past_use(v.def, &type_table));
+    drop(type_table);
     project
         .enums
         .retain(|e| analysis.nominal_defs.contains(&e.def));
@@ -1799,16 +1764,7 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
-    // Plus the variant every scalarized return came from: dropping its `TypeId`
-    // would make `optimize::sroa_variant_return` unable to resolve the layout it
-    // recognises its own earlier work by.
-    let mut keep = analysis.types.clone();
-    for func_rc in &project.functions {
-        if let Some(t) = func_rc.borrow().scalarized_from {
-            keep.insert(t);
-        }
-    }
-    project.type_table.borrow_mut().retain(&keep);
+    project.type_table.borrow_mut().retain(&analysis.types);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 use crate::ast::{AttrArg, Attribute};
 use crate::attribute::{SIDE_EFFECT, STORAGE};
 use crate::hashmap::IndexSet;
-use crate::lower::plan::value_copy::place::{is_reference, may_carry_storage};
+use crate::lower::plan::value_copy::place::may_carry_storage;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
@@ -308,8 +308,8 @@ impl<'a> ParamShape<'a> {
         Self {
             name,
             carries_storage: may_carry_storage(ty, type_table),
-            is_reference: is_reference(ty, type_table),
-            is_mut_ref: matches!(type_table.get(ty), ResolvedType::MutRef(_)),
+            is_reference: type_table.is_reference(ty),
+            is_mut_ref: type_table.is_mut_ref(ty),
             is_array: is_array(ty, type_table),
             is_integer: type_table.is_integer(ty),
         }

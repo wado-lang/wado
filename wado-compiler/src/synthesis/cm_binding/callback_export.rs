@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::iter;
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{callback_export_name, cm_callback_func_name};
 use crate::package::Package;
 use crate::synthesis::common::{
@@ -11,14 +11,14 @@ use crate::synthesis::common::{
     synth_param, synth_span,
 };
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId};
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 use crate::world_registry::CallbackExport;
 
 use super::entry_type_table;
 use super::import_adapter::make_binding_function;
 
-/// The closure types the imports are passed, one slot per type.
-pub(super) type Callbacks = IndexMap<TypeKey, TypeId>;
+/// The closure types the imports are passed.
+pub(super) type Callbacks = IndexSet<TypeId>;
 
 /// Add an export for each boundary signature among `callbacks` to the entry
 /// module.
@@ -26,7 +26,7 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
     let type_table = entry_type_table(project);
     let mut exports: IndexMap<String, CallbackExport> = IndexMap::default();
     let mut functions = Vec::new();
-    for &closure in callbacks.values() {
+    for &closure in callbacks {
         let params = closure_params(&type_table.borrow(), closure);
         let boundary: Vec<Boundary> = params
             .iter()
@@ -163,10 +163,8 @@ fn lift_arg(type_table: &RefCell<TypeTable>, value: TirExpr, param: TypeId) -> T
     if type_table.borrow().is_unrestricted_handle(param) {
         return handle_from_f64(value, param);
     }
-    let table = type_table.borrow();
-    if table.same_type(value.type_id, param) {
+    if value.type_id == param {
         return value;
     }
-    drop(table);
     cast(value, param)
 }

@@ -275,9 +275,8 @@ pub(super) fn internal_tag_faults(
             continue;
         };
         let cases = &tysys.data.variant_cases[&tysys.def_at(decl.id)].cases;
-        let unit = tysys.type_table.borrow().type_key(TypeTable::UNIT);
         for (case, data) in decl.cases.iter().zip(cases) {
-            if tysys.type_table.borrow().type_key(data.payload) == unit {
+            if data.payload == TypeTable::UNIT {
                 continue;
             }
             let case_path = format!("{}::{}", decl.name, case.name);

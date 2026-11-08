@@ -4,7 +4,7 @@
 use crate::flat_package::FlatPackage;
 use crate::tir::{
     FunctionKind, MonomorphInfo, ReturnAbi, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirLocal, TirPattern, TirStmt, TirStmtKind, TypeId,
+    TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTypeParam, TirVariantDecl, TypeId,
 };
 
 /// Trait for mutable traversal of TIR trees.
@@ -72,11 +72,8 @@ pub trait TirMutVisitor {
             kind,
             return_abi,
         } = func;
-        for param in type_params.iter_mut().chain(impl_type_params) {
-            if let Some(default) = &mut param.default {
-                self.visit_type_id(default);
-            }
-        }
+        self.walk_type_params(type_params);
+        self.walk_type_params(impl_type_params);
         if let Some(info) = monomorph_info {
             self.walk_monomorph_info(info);
         }
@@ -113,6 +110,58 @@ pub trait TirMutVisitor {
     fn walk_global(&mut self, global: &mut TirGlobal) {
         self.visit_type_id(&mut global.ty);
         self.visit_expr(global.init.slot_expr_mut());
+    }
+
+    fn walk_struct(&mut self, decl: &mut TirStruct) {
+        let TirStruct {
+            def: _,
+            type_args,
+            name: _,
+            module_source: _,
+            visibility: _,
+            type_params,
+            monomorph_info,
+            fields,
+            span: _,
+            wire_name_policy: _,
+        } = decl;
+        self.visit_type_ids(type_args);
+        self.walk_type_params(type_params);
+        if let Some(info) = monomorph_info {
+            self.walk_monomorph_info(info);
+        }
+        for field in fields {
+            self.visit_type_id(&mut field.type_id);
+            if let Some(default) = &mut field.default_expr {
+                self.visit_expr(default);
+            }
+        }
+    }
+
+    fn walk_variant_decl(&mut self, decl: &mut TirVariantDecl) {
+        let TirVariantDecl {
+            def: _,
+            name: _,
+            module_source: _,
+            visibility: _,
+            type_params,
+            cases,
+            span: _,
+            wire_name_policy: _,
+            wire_tag: _,
+        } = decl;
+        self.walk_type_params(type_params);
+        for case in cases {
+            self.visit_type_id(&mut case.payload);
+        }
+    }
+
+    fn walk_type_params(&mut self, type_params: &mut [TirTypeParam]) {
+        for param in type_params {
+            if let Some(default) = &mut param.default {
+                self.visit_type_id(default);
+            }
+        }
     }
 
     fn walk_monomorph_info(&mut self, info: &mut MonomorphInfo) {

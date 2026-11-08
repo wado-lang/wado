@@ -35,7 +35,7 @@ impl Interpreter<'_> {
                 // storage rather than a copy of it, and the engine has no
                 // reference values — handing it the referent's value would let
                 // a later read through the handle see a copy.
-                if self.type_table.is_reference_shaped(*type_id) {
+                if self.type_table.is_reference(*type_id) {
                     return PatternMatch::Unknown;
                 }
                 binds.push((*local_index, value.clone()));

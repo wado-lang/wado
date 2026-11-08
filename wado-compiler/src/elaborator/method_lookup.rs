@@ -335,10 +335,8 @@ impl TypeSystem {
     /// mark promotes it to.
     pub(crate) fn mut_self_receiver_needs_box(&self, type_id: TypeId) -> bool {
         let table = self.type_table.borrow();
-        !matches!(
-            table.get(type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) && table.is_boxed_reference_target(table.representation_head(type_id))
+        !table.is_reference(type_id)
+            && table.is_boxed_reference_target(table.representation_head(type_id))
     }
 
     /// Whether the impl block `def` reaches a receiver with these type arguments,
@@ -1129,7 +1127,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             let ResolvedType::Newtype { base_type, .. } =
-                self.tysys.type_table.borrow().get_unerased(link).clone()
+                self.tysys.type_table.borrow().get(link).clone()
             else {
                 return false;
             };
@@ -1204,11 +1202,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && trait_arg.is_none_or(|arg| {
                     // An unwritten argument is the trait's default, `Self`.
                     let defaulted = s.tysys.signatures.impl_sig(def).trait_type_args.is_empty();
-                    let tt = s.tysys.type_table.borrow();
                     if defaulted {
-                        tt.same_type(arg, ty)
+                        arg == ty
                     } else {
-                        drop(tt);
                         s.impl_takes_key(def, arg)
                     }
                 })
@@ -1263,8 +1259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .first()
             .copied();
         let tt = self.tysys.type_table.borrow();
-        written
-            .is_some_and(|written| tt.param_slot(written).is_some() || tt.same_type(written, key))
+        written.is_some_and(|written| tt.param_slot(written).is_some() || written == key)
     }
 
     /// Check the bounds impl `def` places on its parameters still open, once
@@ -1604,14 +1599,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A pack left answering for itself is unanswered, whatever a caller's
         // pack of the same name interns to. One spread over the caller's own
         // (`[..Bs]`) is the caller forwarding it, settled as the caller's.
-        let scope_ids = self.scope_type_param_ids();
+        let scope = self.scope_type_param_ids();
         let table = self.tysys.type_table.borrow();
-        let scope = table.type_keys(&scope_ids);
-        let in_scope = |t: TypeId| scope.contains(&table.type_key(t));
+        let in_scope = |t: TypeId| scope.contains(&t);
         let open: Vec<String> = reached_packs
             .into_iter()
             .filter(|&(_, slot, arg)| {
-                table.same_type(arg, slot)
+                arg == slot
                     || (self.tysys.is_unbound_type_param(arg) && !in_scope(arg))
                     || table.any_type_pack(arg, &|pack| !in_scope(pack))
             })
@@ -3912,8 +3906,7 @@ pub(super) fn adjusted_receiver_type(
     let held = type_table.borrow().ref_layers(receiver, layers);
     let fits = {
         let tt = type_table.borrow();
-        tt.ref_depth(held) == layers
-            && (!mutable || matches!(tt.get(held), ResolvedType::MutRef(_)))
+        tt.ref_depth(held) == layers && (!mutable || tt.is_mut_ref(held))
     };
     if fits {
         return held;

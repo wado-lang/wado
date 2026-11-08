@@ -1115,7 +1115,7 @@ pub(super) fn operand_values_may_trap(body: &Body, node: NodeRef) -> bool {
 ///
 /// A `FieldAccess` traps only on a null receiver, and every type a field access
 /// can name is a non-null heap value in NIR — a struct, a tuple, a reference, or
-/// a generic struct instance (`Box` / `List` / user generic). `Option` is the
+/// a generic struct instance (a cell / `List` / user generic). `Option` is the
 /// one nullable type, and it is read via `VariantPayload`, never `FieldAccess`;
 /// its null niche is a WIR representation, chosen after the NIR optimizer has
 /// run.
@@ -1274,7 +1274,7 @@ impl MutRefAliases {
     ) -> Self {
         let mut map = Self::default();
         for (i, l) in locals.iter().enumerate().skip(param_count) {
-            if matches!(type_table.get(l.type_id), ResolvedType::MutRef(_)) {
+            if type_table.is_mut_ref(l.type_id) {
                 map.entries.entry(i as u32).or_default();
             }
         }
@@ -1457,17 +1457,13 @@ impl RootMutation {
 }
 
 fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(body.exprs[e].type_id),
-        ResolvedType::MutRef(_)
-    )
+    type_table.is_mut_ref(body.exprs[e].type_id)
 }
 
 /// Report every local root the node `id` itself may mutate, the caller's walk
 /// driving traversal into children. The one shared witness→root dispatch, with a
-/// single bodyless-callee fallback. That fallback trusts the call site's declared
-/// `mut` bit, since the `&mut`-type test misses a boxed argument: `&mut scalar`
-/// arrives `Box`-typed with `is_mut` still set.
+/// single bodyless-callee fallback: an argument's declared `mut` bit, and a
+/// receiver's type.
 pub(super) fn for_each_mutated_root(
     body: &Body,
     id: ExprId,
@@ -1477,8 +1473,8 @@ pub(super) fn for_each_mutated_root(
     sink: &mut impl FnMut(RootMutation),
 ) {
     let through_storage = |sink: &mut dyn FnMut(RootMutation), e: ExprId| {
-        // A rootless chain here is a fresh temporary (e.g. a `Box { … }`
-        // literal receiver): mutating it cannot touch a named local.
+        // A rootless chain here is a fresh temporary (a struct literal
+        // receiver, say): mutating it cannot touch a named local.
         if let Some(root) = storage_root(body, e) {
             aliases.expand(root, &mut |r| sink(RootMutation::Through(r)));
         }
@@ -1511,12 +1507,6 @@ pub(super) fn for_each_mutated_root(
                 through_storage(sink, expr);
             }
         }
-        // The elaborator guarantees a `&mut self` receiver is `&mut`-typed or
-        // an explicit `MutRef` at reification, but the boxing rewrite erases
-        // the `&mut`/`&` wrapper distinction for boxed-scalar receivers (see
-        // the `mutation.rs` module doc), so a mutating receiver can appear as
-        // a shared `Ref` here. `through_storage` sees through either wrapper
-        // to the storage root, which is what soundness requires.
         Witness::Receiver { expr, verdict } => {
             if verdict.unwrap_or_else(|| is_mut_ref_typed(body, expr, type_table)) {
                 through_storage(sink, expr);

@@ -777,7 +777,7 @@ impl Semantics {
             if self
                 .expr_types(base)
                 .into_iter()
-                .any(|ty| self.types.is_reference_shaped(ty))
+                .any(|ty| self.types.is_reference(ty))
             {
                 break;
             }

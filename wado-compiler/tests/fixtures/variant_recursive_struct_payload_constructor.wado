@@ -16,11 +16,8 @@
 //
 // Before the fix, the elaborator silently used
 // `self.current_module_source` for the missing import, creating a
-// `ResolvedType::Struct` whose `module_source` did not match the
-// registered key in WIR build's `struct_type_map`. WIR build then
-// fell back to `WirType::AbstractRef`, and `TirExprKind::StructLiteral`
-// translation panicked at the `let WirType::Ref { type_id, .. }`
-// guard.
+// `ResolvedType::Struct` of a module that declares no such struct,
+// which WIR build never registered.
 //
 // After the fix, `resolve_struct_literal` emits a
 // `TypeError::UnknownType` diagnostic and compilation fails cleanly

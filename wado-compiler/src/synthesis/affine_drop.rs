@@ -37,7 +37,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeMemo, TypeTable};
+use crate::type_table::{TypeMemo, TypeTable};
 
 /// An affine local a scope declared.
 #[derive(Clone)]
@@ -87,7 +87,7 @@ struct Cx<'a> {
     /// The enclosing loops and labeled blocks, innermost last.
     targets: Vec<BreakTarget>,
     /// The holders whose drop is being expanded, outermost first.
-    expanding: Vec<TypeKey>,
+    expanding: Vec<TypeId>,
     glue: &'a mut DropGlue,
     /// The module of the function being elaborated.
     module: ModuleSource,
@@ -250,9 +250,8 @@ struct AffineTypes<'a> {
 impl<'a> AffineTypes<'a> {
     /// Whether `type_id` is, or holds at any depth, an affine value.
     fn carried_by(&self, type_id: TypeId) -> bool {
-        let key = self.tt.borrow().type_key(type_id);
         self.answers
-            .get_or_compute(key, || holds_affine(self, type_id))
+            .get_or_compute(type_id, || holds_affine(self, type_id))
     }
 
     /// Whether `type_id` is a template, whose fields alias its holes: a hole
@@ -405,10 +404,6 @@ impl<'a> AffineTypes<'a> {
 }
 
 impl HeldTypes for AffineTypes<'_> {
-    fn key(&self, type_id: TypeId) -> TypeKey {
-        self.tt.borrow().type_key(type_id)
-    }
-
     fn held(&self, type_id: TypeId) -> Held {
         match self.layout(type_id) {
             Layout::Resource
@@ -974,11 +969,10 @@ fn panic_with(message: String, cx: &Cx) -> TirExpr {
 /// Drop each part of `scrutinee`, a holder of type `type_id`, and not the
 /// holder as a whole.
 fn drop_parts(scrutinee: TirExpr, type_id: TypeId, parts: Parts, cx: &mut Cx) -> Vec<TirStmt> {
-    let key = cx.affine_types.tt.borrow().type_key(type_id);
-    if cx.expanding.contains(&key) {
+    if cx.expanding.contains(&type_id) {
         return drop_through_glue(scrutinee, type_id, cx);
     }
-    cx.expanding.push(key);
+    cx.expanding.push(type_id);
     let stmts = match parts {
         Parts::Fields(fields) => drop_projected(scrutinee, &fields, cx),
         Parts::Cases(cases) => drop_variant(scrutinee, type_id, &cases, cx),

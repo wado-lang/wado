@@ -721,9 +721,8 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         }
         // Infer T from the first non-self argument's inner type. For
         // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
-        // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
-        let peeled = self.type_table.peel_refs(first_arg.expr.type_id);
-        let arg_type = self.type_table.as_box(peeled).unwrap_or(peeled);
+        // so unwrap references to reach T.
+        let arg_type = self.type_table.peel_refs(first_arg.expr.type_id);
         // Only set if `arg_type` is concrete (not a type param) and is not
         // already an impl-level type arg of the receiver (e.g. `List<String>`'s
         // `String`), which would double-count during instantiation.
@@ -1238,7 +1237,6 @@ impl Monomorphizer {
                 type_id: self.substitute_type(param.type_id, substitution, type_table),
                 local_index: param.local_index,
                 is_mut: param.is_mut,
-                is_mut_ref: false,
                 span: param.span,
             })
             .collect();

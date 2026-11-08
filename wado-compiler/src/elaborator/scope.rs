@@ -15,7 +15,6 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{TraitRef, TypeId};
-use crate::type_table::TypeKey;
 
 use super::coercion::PendingLiterals;
 use super::sem::decls::PendingBounds;
@@ -309,7 +308,7 @@ pub(super) struct TraitContext {
     pub(super) assoc_type_bindings: AssocBindings,
     /// The bounds each generic associated type's parameter in scope carries,
     /// by its identity, instantiated where the frame stands.
-    pub(super) assoc_param_bounds: IndexMap<TypeKey, Vec<FqTraitName>>,
+    pub(super) assoc_param_bounds: IndexMap<TypeId, Vec<FqTraitName>>,
     /// Current `Self` type in scope (the type being implemented in an impl block).
     pub(super) self_type: Option<TypeId>,
     /// The trait `Self` is being elaborated against — the trait an `impl` block
@@ -1035,15 +1034,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Have the family parameter `param` carry `refs` in this frame, by its
     /// identity.
     pub(super) fn give_assoc_param_bounds(&mut self, param: TypeId, refs: &[TraitRef]) {
-        let (key, named) = {
+        let named: Vec<FqTraitName> = {
             let table = RefCell::borrow(&self.tysys.type_table);
-            let named: Vec<FqTraitName> = refs.iter().map(|r| table.trait_ref_name(r)).collect();
-            (table.type_key(param), named)
+            refs.iter().map(|r| table.trait_ref_name(r)).collect()
         };
         self.annotate_ctx
             .trait_ctx
             .assoc_param_bounds
-            .insert(key, named);
+            .insert(param, named);
     }
 
     /// The bounds `owning_trait`'s associated type `assoc` declares on each of

@@ -1,4 +1,4 @@
-//! Interprocedural confinement analysis over pre-boxing TIR (WEP 2026-05-21).
+//! Interprocedural confinement analysis over TIR (WEP 2026-05-21).
 //!
 //! A by-value parameter is *confined* when the callee keeps nothing of it past
 //! the call, so a caller passing a still-live value into it needs no defensive
@@ -579,11 +579,7 @@ fn body_defies_model(body: &TirBlock) -> bool {
 }
 
 fn carries_identity(type_id: TypeId, needs: &CopyNeeds) -> bool {
-    needs.of(type_id)
-        || matches!(
-            needs.type_table.get(type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
+    needs.of(type_id) || needs.type_table.is_reference(type_id)
 }
 
 /// Whether what the reference `type_id` points to hands on an identity: an

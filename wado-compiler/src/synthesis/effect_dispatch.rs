@@ -33,7 +33,7 @@ use crate::tir::{
     positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 use crate::world_registry::GuestCallback;
 use crate::{Span, hashmap, tir, token};
 
@@ -48,47 +48,19 @@ type EffectKey = DeclaredHead;
 /// global / wrapper triple, with the declaration's operation types substituted.
 /// A non-generic effect has empty `type_args` and so keeps one set per
 /// declaration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InstantiationKey {
     pub effect: DeclaredHead,
-    /// What substitution and naming read.
     pub type_args: Vec<TypeId>,
-    /// What the key compares: two ids may resolve to one type.
-    type_keys: Vec<TypeKey>,
 }
 
 impl InstantiationKey {
-    fn new(effect: DeclaredHead, type_args: Vec<TypeId>, type_table: &TypeTable) -> Self {
-        let type_keys = type_table.type_keys(&type_args);
-        Self {
-            effect,
-            type_args,
-            type_keys,
-        }
-    }
-
     /// A non-generic declaration's one instantiation.
     fn monomorphic(effect: DeclaredHead) -> Self {
         Self {
             effect,
             type_args: Vec::new(),
-            type_keys: Vec::new(),
         }
-    }
-}
-
-impl PartialEq for InstantiationKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.effect == other.effect && self.type_keys == other.type_keys
-    }
-}
-
-impl Eq for InstantiationKey {}
-
-impl std::hash::Hash for InstantiationKey {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.effect.hash(state);
-        self.type_keys.hash(state);
     }
 }
 
@@ -186,11 +158,10 @@ impl TirRefVisitor for InstalledInstantiationCollector<'_> {
                     "the elaborator rejects installing an effect at an argument \
                      monomorphization has yet to fill"
                 );
-                self.installed.insert(InstantiationKey::new(
-                    binding.effect.clone(),
-                    binding.trait_type_args.clone(),
-                    self.type_table,
-                ));
+                self.installed.insert(InstantiationKey {
+                    effect: binding.effect.clone(),
+                    type_args: binding.trait_type_args.clone(),
+                });
             }
         }
         self.walk_expr(expr);
@@ -661,7 +632,6 @@ fn build_dispatch_wrapper_function(
             type_id: p.type_id,
             local_index,
             is_mut: false,
-            is_mut_ref: false,
             span,
         });
     }
@@ -1563,11 +1533,10 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         let effect = &binding.effect;
         let interface_name = effect.name();
         let trait_type_args = binding.trait_type_args.clone();
-        let key = InstantiationKey::new(
-            effect.clone(),
-            trait_type_args.clone(),
-            &env.type_table.borrow(),
-        );
+        let key = InstantiationKey {
+            effect: effect.clone(),
+            type_args: trait_type_args.clone(),
+        };
         let plan = env.plans.get(&key).unwrap_or_else(|| {
             panic!(
                 "effect-dispatch synthesis: no DispatchPlan for \
@@ -2569,7 +2538,7 @@ fn rewrite_calls_in_functions(
 
 /// `(resource, cm_name) → [(type_args, wrapper_name)]`.
 /// Outlives its pass: an instance minted later routes through the same wrappers.
-pub type ResourceWrapperIndex = IndexMap<(DefId, String), Vec<(Vec<TypeKey>, String)>>;
+pub type ResourceWrapperIndex = IndexMap<(DefId, String), Vec<(Vec<TypeId>, String)>>;
 
 /// `op → wrapper_name` for user-effect calls (e.g. `Counter::next()`).
 type EffectOpWrappers = IndexMap<DefId, String>;
@@ -2596,7 +2565,7 @@ fn build_wrapper_indexes(
                     cm_to_wrappers
                         .entry((effect.def(), cm_name.clone()))
                         .or_default()
-                        .push((key.type_keys.clone(), wrapper_name.clone()));
+                        .push((key.type_args.clone(), wrapper_name.clone()));
                 }
                 // Resource ops without `cm_name` aren't reachable from
                 // user-side calls (no canonical attribute → no
@@ -2684,8 +2653,7 @@ fn pick_resource_wrapper(
 ) -> Option<String> {
     let candidates = ctx.cm_to_wrappers.get(&(resource, cm_name.to_string()))?;
     // Exact instantiation match first.
-    let call_type_keys = ctx.type_table.borrow().type_keys(call_type_args);
-    if let Some((_, name)) = candidates.iter().find(|(keys, _)| *keys == call_type_keys) {
+    if let Some((_, name)) = candidates.iter().find(|(args, _)| args == call_type_args) {
         return Some(name.clone());
     }
     // Single-instantiation fallback: when the call site couldn't
@@ -3166,11 +3134,10 @@ fn build_handler_impl_index(
             out.insert(
                 tir_impl.def,
                 HandlerImplInfo {
-                    instantiation: InstantiationKey::new(
-                        effect.clone(),
-                        tir_impl.trait_type_args.clone(),
-                        &type_table,
-                    ),
+                    instantiation: InstantiationKey {
+                        effect: effect.clone(),
+                        type_args: tir_impl.trait_type_args.clone(),
+                    },
                     names_open_instantiation: tir_impl
                         .trait_type_args
                         .iter()

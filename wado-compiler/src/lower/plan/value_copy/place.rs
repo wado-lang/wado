@@ -294,7 +294,7 @@ impl<'a> Resolver<'a> {
         self.builtins.part_of_params(&**func).is_some_and(|params| {
             params
                 .iter()
-                .any(|&p| !is_reference(arg_at(func, args, p).type_id, self.type_table))
+                .any(|&p| !self.type_table.is_reference(arg_at(func, args, p).type_id))
         })
     }
 
@@ -329,10 +329,7 @@ impl<'a> Resolver<'a> {
                         index: *field_index,
                     },
                 );
-                // `is_reference`, not a `ResolvedType` match: `boxing` has
-                // already rewritten some `&T` onto `Box<T>` in place, and which
-                // ones it reached says nothing about whether the field is a reference.
-                if !is_reference(expr.type_id, self.type_table) {
+                if !self.type_table.is_reference(expr.type_id) {
                     return names;
                 }
                 match names {
@@ -643,27 +640,76 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
     }
 }
 
+/// What a place is, as far as taking its address goes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PlaceKind {
+    /// A local, or what `*r` reads: storage of its own.
+    Storage,
+    /// A struct field or a tuple element.
+    Field,
+    /// Any other value: a payload, a call's result.
+    Value,
+}
+
+impl PlaceKind {
+    #[must_use]
+    pub fn of(place: &TirExpr) -> Self {
+        match &place.kind {
+            TirExprKind::Local { .. }
+            | TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                ..
+            } => Self::Storage,
+            TirExprKind::FieldAccess { .. } => Self::Field,
+            _ => Self::Value,
+        }
+    }
+}
+
+/// What `&place` lowers to.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PlaceRef {
+    /// The handle of the object the place holds.
+    Handle,
+    /// The cell that is the place's storage: the one boxing moves a local
+    /// into, or the one `*r` reads through.
+    Storage,
+    /// The cell the field holds its value in.
+    FieldCell,
+    /// A new cell holding a copy of the value, naming nothing the place's
+    /// root owns.
+    NewCell,
+}
+
+impl PlaceRef {
+    /// `&` of a place of `kind` holding a `ty`.
+    #[must_use]
+    pub fn of(kind: PlaceKind, ty: TypeId, type_table: &TypeTable) -> Self {
+        if !type_table.is_boxed_reference_target(ty) {
+            return Self::Handle;
+        }
+        match kind {
+            PlaceKind::Storage => Self::Storage,
+            PlaceKind::Field if type_table.boxes_slot(ty) => Self::FieldCell,
+            PlaceKind::Field | PlaceKind::Value => Self::NewCell,
+        }
+    }
+
+    #[must_use]
+    pub fn of_place(place: &TirExpr, type_table: &TypeTable) -> Self {
+        Self::of(PlaceKind::of(place), place.type_id, type_table)
+    }
+}
+
 /// The type a [`Selector::Field`] is keyed by. Minted here alone, so a callee
-/// recording a write and a caller looking it up cannot spell the key apart.
-/// `Box<T>` peels with `Ref`/`MutRef`, since a caller's address-taken local is
-/// boxed by the time this walk runs and the callee's `&mut T` never is. A
+/// recording a write and a caller looking it up cannot spell the key apart. A
 /// newtype peels to its representation head, since it names its base's storage:
 /// `List<u8>::index_assign` records under `List`, and a `ByteList` handle must
 /// find it there.
 #[must_use]
 pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
-    let peeled = type_table.peel_refs_and_box(base_type);
-    type_table.peel_refs_and_box(type_table.representation_head(peeled))
-}
-
-/// A name for storage someone else owns, as the type table spells it here —
-/// after `boxing::prepare_types`, where a `&primitive` reads as its `Box<T>`.
-#[must_use]
-pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    ) || type_table.is_reference_shaped(type_id)
+    let peeled = type_table.peel_refs(base_type);
+    type_table.peel_refs(type_table.representation_head(peeled))
 }
 
 /// Whether this parameter hands the body storage the caller still reaches, to
@@ -671,7 +717,7 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// confined: passed uncopied and copied before a write, and handed back only as
 /// a projection the caller copies where it takes it over.
 pub fn names_caller_storage(param: &TirParam, type_table: &TypeTable) -> bool {
-    param.is_mut_ref || is_reference(param.type_id, type_table)
+    type_table.is_reference(param.type_id)
 }
 
 /// The parameter bound to `local`, by position.
@@ -699,7 +745,7 @@ pub fn arg_at<'e>(func: &FunctionRef, args: &'e [CallArg], param: usize) -> &'e 
 /// none of its own, so a reader of it gets an independent value.
 #[must_use]
 pub fn carries_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
-    is_reference(type_id, type_table) || needs_value_copy(type_id, type_table)
+    type_table.is_reference(type_id) || needs_value_copy(type_id, type_table)
 }
 
 /// [`carries_storage`] asked before monomorphization. A type parameter is
@@ -708,17 +754,6 @@ pub fn carries_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
 pub fn may_carry_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
     carries_storage(type_id, type_table)
         || matches!(type_table.get(type_id), ResolvedType::TypeParam { .. })
-}
-
-/// A handle a callee can write through. A shared `&` cannot be; a box carries
-/// either spelling and answers for both.
-#[must_use]
-pub fn could_write_through(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_id) {
-        ResolvedType::MutRef(_) => true,
-        ResolvedType::Ref(_) => false,
-        _ => type_table.is_reference_shaped(type_id),
-    }
 }
 
 /// Records what every binder in a body hands out.
@@ -743,7 +778,7 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
                 // associated type can still carry the unresolved projection
                 // as its own `type_id` where the local's declared type is
                 // already the monomorphized reference.
-                let names = if is_reference(*type_id, self.resolver.type_table) {
+                let names = if self.resolver.type_table.is_reference(*type_id) {
                     self.resolver.names(value)
                 } else {
                     Names::Place(Place::local(*local_index))
@@ -763,7 +798,7 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
         match &expr.kind {
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::Local { index, .. } = &target.kind
-                    && is_reference(target.type_id, self.resolver.type_table)
+                    && self.resolver.type_table.is_reference(target.type_id)
                 {
                     let names = self.resolver.names(value);
                     self.resolver.bindings.set(*index, names);

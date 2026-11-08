@@ -447,7 +447,7 @@ fn try_fold_short_fill(instr: &mut WirInstr, null: &Nullability) -> bool {
 
 /// `struct.get(struct.new(…), f)` → `f`'s operand: the struct is fresh, so
 /// nothing wrote the field since. A reference into a variant payload leaves
-/// this behind, a `Box<T>` built and read back at once, often as the tail of a
+/// this behind, a cell built and read back at once, often as the tail of a
 /// `Seq` behind the case check. The other operands are dropped, so each must be
 /// side-effect free and unable to trap.
 fn try_fold_get_of_new(instr: &mut WirInstr, null: &Nullability, types: &[WirTypeDef]) -> bool {
