@@ -1483,29 +1483,29 @@ impl AtnPredictor {
     ) -> [i32, i32] with E
         contract self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor"
     {
-        if self.floor > 0 {
+        let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
+        let mut asked: List<i32> = [];
+        let mut floor = self.floor;
+        loop {
             let alt = atn_predict_above(
                 &mut ATN_DFA,
                 sim,
                 decision,
                 &self.stack,
-                self.floor,
+                floor,
                 tokens,
                 pos,
                 eof,
                 min_prec,
-                met,
-                own,
+                &mut preds,
+                &mut asked,
                 ask,
             );
-            if alt != ATN_READS_HIDDEN {
-                return [alt, self.floor];
+            if floor == 0 || alt != ATN_READS_HIDDEN {
+                return [alt, floor];
             }
+            floor = 0;
         }
-        return [
-            atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, own, ask),
-            0,
-        ];
     }
 
     fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
@@ -2147,11 +2147,11 @@ fn atn_past_edge(arena: &mut CtxArena, next: &AtnConfig, label: i32, preds: &Atn
     if label == ATN_ACTION_EDGE {
         return AtnConfig { ..*next, alt: next.alt + ATN_PASSED_ACTION };
     }
-    if preds.failed.contains(&label) {
-        return AtnConfig { ..*next, alt: next.alt + ATN_FAILED_ALT };
-    }
     if preds.own.contains(&label) && next.pctx != preds.origin {
         return *next;
+    }
+    if preds.failed.contains(&label) {
+        return AtnConfig { ..*next, alt: next.alt + ATN_FAILED_ALT };
     }
     if preds.met.contains(&label) {
         return AtnConfig { ..*next, guard: arena.guard_with(next.guard, label) };
@@ -2363,7 +2363,21 @@ internal fn atn_predict_with_stack(
     ask: fn(i32) -> bool = atn_unasked,
 ) -> i32 {
     let mut dfa = AtnDfa::new();
-    return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, met, own, ask);
+    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
+    return atn_predict_above(
+        &mut dfa,
+        sim,
+        decision,
+        rule_stack,
+        0,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        &mut preds,
+        &mut [],
+        ask,
+    );
 }
 
 fn atn_predict_above<effect E>(
@@ -2376,12 +2390,10 @@ fn atn_predict_above<effect E>(
     start_pos: i32,
     eof: i32,
     min_prec: i32,
-    met: &List<i32>,
-    own: &List<i32>,
+    preds: &mut AtnPreds,
+    asked: &mut List<i32>,
     ask: fn(i32) -> bool with E,
 ) -> i32 with E {
-    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
-    let mut asked: List<i32> = [];
     loop {
         let mut held: List<i32> = [];
         let [alt, _] = atn_walk(
@@ -2394,22 +2406,21 @@ fn atn_predict_above<effect E>(
             start_pos,
             eof,
             min_prec,
-            &preds,
+            preds,
             &mut held,
         );
         held.sort();
-        let mut fresh = false;
+        let known_failed = preds.failed.len();
         for let label of held {
             if asked.contains(&label) {
                 continue;
             }
             asked.push(label);
-            fresh = true;
             if !ask(label) {
                 preds.failed.push(label);
             }
         }
-        if !fresh {
+        if preds.failed.len() == known_failed {
             return alt;
         }
         preds.failed.sort();
@@ -3630,7 +3641,7 @@ fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
         sg_2: {
             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_2; }
             pos += 1;
-            atn.stack.push(19);
+            atn.stack.push(18);
             pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
             atn.stack.pop();
             if pos < 0 { break sg_2; }
@@ -3643,7 +3654,7 @@ fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
         sg_3_done: {
             sg_3: {
                 pos += 1;
-                atn.stack.push(19);
+                atn.stack.push(18);
                 pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_3; }
@@ -3663,7 +3674,7 @@ fn scan_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
         sg_4: {
             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_4; }
             pos += 1;
-            atn.stack.push(28);
+            atn.stack.push(26);
             pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
             atn.stack.pop();
             if pos < 0 { break sg_4; }
@@ -3676,7 +3687,7 @@ fn scan_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
         sg_5_done: {
             sg_5: {
                 pos += 1;
-                atn.stack.push(28);
+                atn.stack.push(26);
                 pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_5; }
@@ -3757,7 +3768,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
             _first_iter: {
                 p.expect(TK_AND, &SYNC_0, false);
                 p.site = 2;
-                p.atn_ret_pending = 19;
+                p.atn_ret_pending = 18;
                 _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
             }
             loop {
@@ -3771,7 +3782,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                         sg_0: {
                             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_0; }
                             pos += 1;
-                            p.atn.stack.push(19);
+                            p.atn.stack.push(18);
                             pos = scan_expression(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
                             p.atn.stack.pop();
                             if pos < 0 { break sg_0; }
@@ -3785,7 +3796,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 if rep_scan_pos < 0 { break; }
                 p.expect(TK_AND, &SYNC_0, false);
                 p.site = 2;
-                p.atn_ret_pending = 19;
+                p.atn_ret_pending = 18;
                 _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
             }
             p.b.finish_node(p.last_end());
@@ -3795,7 +3806,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
             _first_iter_2: {
                 p.expect(TK_OR, &SYNC_0, false);
                 p.site = 4;
-                p.atn_ret_pending = 28;
+                p.atn_ret_pending = 26;
                 _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
             }
             loop {
@@ -3809,7 +3820,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                         sg_1: {
                             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_1; }
                             pos += 1;
-                            p.atn.stack.push(28);
+                            p.atn.stack.push(26);
                             pos = scan_expression(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
                             p.atn.stack.pop();
                             if pos < 0 { break sg_1; }
@@ -3823,7 +3834,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 if rep_scan_pos_2 < 0 { break; }
                 p.expect(TK_OR, &SYNC_0, false);
                 p.site = 4;
-                p.atn_ret_pending = 28;
+                p.atn_ret_pending = 26;
                 _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
             }
             p.b.finish_node(p.last_end());
@@ -3910,7 +3921,7 @@ global FOLLOW_SETS: List<List<i32>> = [[1], [12], [2]];
 global FOLLOW_MASK_0: i64 = 513;
 global FOLLOW_MASK_1: i64 = 515;
 
-global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x01\x00\x04\x00\x1f\x00\x07\x00\x00\x00\x02\x00\x0a\x00\x14\x00\x1d\x00\x02\x03\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x04\x05\x01\x01\x01\x01\x08\x09\x01\x04\x05\x01\x01\x01\x01\x08\x09\x01\x00\x00\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x05\x05\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x03\x00\x05\x00\x09\x00\x0b\x00\x06\x00\x07\x00\x01\x00\x04\x00\x0a\x00\x04\x00\x0e\x00\x17\x00\x0c\x00\x02\x00\x0b\x00\x0f\x00\x11\x00\x15\x00\x12\x00\x13\x00\x01\x00\x10\x00\x0f\x00\x16\x00\x0d\x00\x18\x00\x1a\x00\x1e\x00\x1b\x00\x1c\x00\x01\x00\x19\x00\x18\x00\x1f\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"));
+global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x01\x00\x04\x00\x1d\x00\x07\x00\x00\x00\x02\x00\x0a\x00\x13\x00\x1b\x00\x02\x03\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x07\x04\x05\x01\x01\x01\x01\x08\x09\x04\x05\x01\x01\x01\x01\x08\x09\x01\x00\x00\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x05\x05\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x03\x00\x05\x00\x09\x00\x0b\x00\x06\x00\x07\x00\x01\x00\x04\x00\x0a\x00\x04\x00\x0e\x00\x16\x00\x0c\x00\x02\x00\x0b\x00\x10\x00\x14\x00\x11\x00\x12\x00\x01\x00\x0f\x00\x0e\x00\x15\x00\x0d\x00\x18\x00\x1c\x00\x19\x00\x1a\x00\x01\x00\x17\x00\x16\x00\x1d\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"));
 
 fn atn_lr_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {
     if pos < tokens.len() && tokens[pos] < 7 {
