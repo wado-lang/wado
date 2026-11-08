@@ -51,7 +51,16 @@ use { fill_of } from "./fold.wado";
 use { IfBranch, SpelledAttention, branches, branches_of, is_alias, lowerings } from "./lowering.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { BinaryOp, UnaryOp } from "./runtime/tensor.wado";
-use { RowRefusal, SLOTS, elementwise, folded_rows, graph_operands, judged_rows, keeps_lifted } from "./rows.wado";
+use {
+    RowRefusal,
+    SLOTS,
+    elementwise,
+    folded_rows,
+    graph_operands,
+    judged_rows,
+    keeps_lifted,
+    lifted_operands,
+} from "./rows.wado";
 use { expected } from "./safetensors.wado";
 use {
     ATTENTION_BIAS,
@@ -3077,9 +3086,7 @@ fn lifted_call(
             ),
         );
     }
-    let read: List<String> = graph_operands(node).into_iter().filter(|i| i < node.inputs.len()).map(|i| node.inputs[i]).filter(
-        |t| exprs.lifted.contains(t),
-    ).collect();
+    let read = lifted_operands(node, &exprs.lifted);
     if read.is_empty() {
         return Result::Ok(null);
     }

@@ -107,6 +107,13 @@ pub fn graph_operands(node: &Node) -> List<i32> {
     };
 }
 
+/// The tensors among `node`'s operands that each row's lengths computed.
+pub fn lifted_operands(node: &Node, lifted: &HashSet<String>) -> List<String> {
+    return graph_operands(node).into_iter().filter(|i| i < node.inputs.len()).map(|i| node.inputs[i]).filter(
+        |t| lifted.contains(t),
+    ).collect();
+}
+
 /// A tensor of `shape` held with the rows ahead, as an elementwise operand
 /// into `out`, its rows folded into `out`'s axis `rows`: the rows there, and 1
 /// at each axis before. `null` where it holds more than one element at or
@@ -353,11 +360,7 @@ impl Judge {
             }
             return self.value(&delta);
         }
-        let read: List<String> = graph_operands(node).into_iter().filter(|i| i < node.inputs.len()).map(
-            |i| node.inputs[i],
-        ).filter(
-            |t| lifted.contains(t),
-        ).collect();
+        let read = lifted_operands(node, lifted);
         if !read.is_empty() {
             if !keeps_lifted(node, checked, &read) {
                 return lifted_read(lifted, &read[0]);
