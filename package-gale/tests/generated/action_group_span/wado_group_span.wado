@@ -1764,7 +1764,7 @@ fn _parse_whole__inner(p: &mut Parser) -> WholeVals {
     vals._span_hi_r = p.pos - 1;
     p.expect(TK_B, &EMPTY_SYNC, true);
     if !p.speculating {
-         p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
+         p.emit((if r matches { None } { "null" } else { p.text_between(vals._span_lo_r, vals._span_hi_r) })) 
     }
     return vals;
 }
@@ -1858,7 +1858,7 @@ fn _parse_loop_span__inner(p: &mut Parser, follow: i64 = 0) -> LoopSpanVals {
         p.expect(TK_B, &SYNC_1, true);
     }
     if !p.speculating {
-         p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
+         p.emit((if r matches { None } { "null" } else { p.text_between(vals._span_lo_r, vals._span_hi_r) })) 
     }
     return vals;
 }
@@ -1904,7 +1904,7 @@ fn _parse_deep__inner(p: &mut Parser, follow: i64 = 0) -> DeepVals {
     }
     p.expect(TK_D, &EMPTY_SYNC, true);
     if !p.speculating {
-         p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
+         p.emit((if r matches { None } { "null" } else { p.text_between(vals._span_lo_r, vals._span_hi_r) })) 
     }
     return vals;
 }
