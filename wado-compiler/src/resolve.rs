@@ -110,6 +110,9 @@ pub struct Resolutions {
     effect_binders: hashmap::IndexSet<AstId>,
     /// The binders written `<F: fn(...)>`, each the signature it names.
     fn_bound_binders: IndexMap<AstId, ast::FunctionType>,
+    /// Each `impl` block's reference site for the head of the type it is for,
+    /// keyed by the block, where that type has a head.
+    impl_heads: IndexMap<AstId, AstId>,
 }
 
 /// What every module can see, by layer.
@@ -289,6 +292,7 @@ impl Resolutions {
         let mut redeclarations = Vec::new();
         let mut effect_binders = hashmap::IndexSet::default();
         let mut fn_bound_binders = IndexMap::default();
+        let mut impl_heads = IndexMap::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
                 module: module_source,
@@ -305,6 +309,7 @@ impl Resolutions {
                 redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
                 fn_bound_binders: &mut fn_bound_binders,
+                impl_heads: &mut impl_heads,
                 derived_names: Vec::new(),
                 pattern_site: PatternSite::Test,
                 pattern_names: None,
@@ -328,6 +333,17 @@ impl Resolutions {
             redeclarations,
             effect_binders,
             fn_bound_binders,
+            impl_heads,
+        }
+    }
+
+    /// The declaration `Self` stands for inside the `impl` block `impl_`: the
+    /// one the head of the type it is for names, past any reference.
+    #[must_use]
+    pub fn impl_self_decl(&self, impl_: AstId) -> Option<DefId> {
+        match self.get(*self.impl_heads.get(&impl_)?) {
+            Resolution::Def(def) => Some(def),
+            Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
         }
     }
 
@@ -703,6 +719,7 @@ struct Resolver<'a> {
     binders: Vec<IndexMap<String, AstId>>,
     effect_binders: &'a mut hashmap::IndexSet<AstId>,
     fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
+    impl_heads: &'a mut IndexMap<AstId, AstId>,
     /// Items declared inside the function body being walked, innermost block
     /// last. Filled as the walk passes each declaration, because a local item
     /// is visible only after it — like a `let`, and unlike a module-level
@@ -774,6 +791,22 @@ impl Resolver<'_> {
     fn namespace_member(&self, namespace: &str, member: &str) -> Resolution {
         namespace_member(self.symbols, self.defs, self.module, namespace, member)
             .map_or(Resolution::Unresolved, Resolution::Def)
+    }
+
+    /// Record what `namespace::member`, written at `site` as a type or a bound,
+    /// refers to. A namespace import registers each member under its
+    /// `ns$member` alias, and that is the only spelling naming the declaration
+    /// behind it. A binder namespace (`T::Assoc`) is an associated-type
+    /// projection, which names no declaration — and neither does a namespace
+    /// reaching no member. Resolving the bare member in the writing module
+    /// instead would confidently answer with a different declaration that
+    /// happens to share the name.
+    fn record_qualified(&mut self, site: AstId, namespace: &str, member: &str) {
+        let answer = match self.binder(namespace) {
+            Some(base) => Resolution::Projection(base),
+            None => self.namespace_member(namespace, member),
+        };
+        self.record(site, &namespace_member_alias(namespace, member), answer);
     }
 
     fn resolve_name(&self, name: &str) -> Resolution {
@@ -1129,7 +1162,12 @@ impl AstVisitor<'_> for Resolver<'_> {
             Item::Newtype(n) => (&n.type_params, None),
             Item::BuiltinTypeDecl(d) => (&d.type_params, None),
             Item::Resource(r) => (&r.type_params, Some(r.id)),
-            Item::Impl(i) => (&i.type_params, Some(i.id)),
+            Item::Impl(i) => {
+                if let Some(head) = head_site(&i.ty) {
+                    self.impl_heads.insert(i.id, head);
+                }
+                (&i.type_params, Some(i.id))
+            }
             Item::Trait(t) => {
                 // Inside a trait, `Self` is bounded by that trait. The
                 // elaborator mints that bound rather than the programmer, and a
@@ -1350,7 +1388,10 @@ impl AstVisitor<'_> for Resolver<'_> {
     /// supertrait bound carries a resolved site just like a written one.
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
-            self.record_name(bound.id, &bound.name);
+            match &bound.namespace {
+                Some(ns) => self.record_qualified(bound.id, ns, &bound.name),
+                None => self.record_name(bound.id, &bound.name),
+            }
             for assoc in &bound.assoc_types {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
@@ -1441,23 +1482,7 @@ impl AstVisitor<'_> for Resolver<'_> {
                 }
             }
             Type::NamespacedGeneric(ns) => {
-                // `ns::Type` and `T::Assoc` both land here. A namespace import
-                // registers each member under its `ns$member` alias, and that
-                // is the only spelling naming the declaration behind
-                // `ns::Type`. A binder namespace is an associated-type
-                // projection, which names no declaration — and neither does a
-                // namespace reaching no member. Resolving the bare member in
-                // the writing module instead would confidently answer with a
-                // different declaration that happens to share the name.
-                let answer = match self.binder(&ns.namespace) {
-                    Some(base) => Resolution::Projection(base),
-                    None => self.namespace_member(&ns.namespace, &ns.name),
-                };
-                self.record(
-                    ns.id,
-                    &namespace_member_alias(&ns.namespace, &ns.name),
-                    answer,
-                );
+                self.record_qualified(ns.id, &ns.namespace, &ns.name);
                 for arg in &ns.args {
                     self.visit_type(arg);
                 }

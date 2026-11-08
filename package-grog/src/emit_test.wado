@@ -17,6 +17,22 @@ test "nested declarations flatten by path" {
     assert out.contains("pub kind: OuterInnerKind = OuterInnerKind::A,");
 }
 
+test "a repeated message field is read one value at a time" {
+    let out = generate("syntax = \"proto3\"; message M { repeated M children = 3; repeated int32 n = 4; }");
+    assert out.contains("use { LinearBuffer } from \"core:linear\";");
+    assert out.contains("pub fn children_of(input: LinearBuffer) -> grog::Messages<M> {");
+    assert out.contains("return grog::each::<M>(input, 3, grog::WireType::Len);");
+    assert !out.contains("fn n_of");
+    assert !generate("syntax = \"proto3\"; message M { repeated int32 n = 4; }").contains("core:linear");
+}
+
+test "a message named as an import is suffixed" {
+    let out = generate("syntax = \"proto3\"; message TreeMap {} message LinearBuffer { repeated TreeMap m = 1; }");
+    assert out.contains("pub struct TreeMap_ {");
+    assert out.contains("pub struct LinearBuffer_ {");
+    assert out.contains("pub fn m_of(input: LinearBuffer) -> grog::Messages<TreeMap_> {");
+}
+
 test "a map is a TreeMap" {
     let out = generate(
         "syntax = \"proto3\"; message M { map<sint32, M> children = 1; map<string, E> e = 2; } enum E { Z = 0; }",
@@ -239,7 +255,7 @@ impl grog::Message for Point {
         w.raw(&self.unknown_fields);
     }
 
-    fn merge_field(&mut self, number: i32, r: &mut grog::Reader) -> Result<bool, grog::DecodeError> {
+    fn merge_field<B: grog::Input>(&mut self, number: i32, r: &mut grog::Reader<B>) -> Result<bool, grog::DecodeError> {
         match number {
             1 => {
                 let Some(v) = r.scalar::<grog::Int32>()? else {

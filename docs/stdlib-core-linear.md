@@ -130,6 +130,21 @@ The bytes from `start` to `end` as `U`s, read little-endian at any
 alignment, copied into a `List`: a part of a file `read_linear` read,
 decoded with no copy of the bytes before it.
 
+#### `pub fn to_string_of(&self, start: i32, end: i32) -> Result<String, Utf8Error>`
+
+- `contract 0 <= start <= end <= self.len()`
+
+The bytes from `start` to `end` as text, copied once into a `String`.
+
+#### `pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8>`
+
+- `contract expected >= 0`
+
+Every byte `stream` delivers until its writer drops. A host copy lands
+in the array's own block, so no byte passes through the GC heap; a
+handler's items are copied in. The block takes `expected` bytes up
+front and grows only for a stream that runs past them.
+
 #### `impl IndexValue<i32> for LinearArray<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
@@ -137,3 +152,50 @@ decoded with no copy of the bytes before it.
 #### `impl IndexAssign<i32> for LinearArray<T>`
 
 ##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
+
+### `pub affine struct LinearBuffer`
+
+Bytes in linear memory, read from a stream a part at a time, or held whole:
+what a parser reads a stream through with no byte lifted into the GC heap.
+`bytes()` holds what was read, and the part not yet consumed begins at
+`start()`. Both change only where `fill` reads more or `consume` drops some.
+
+_Fields are private._
+
+#### `pub fn of(bytes: LinearArray<u8>) -> LinearBuffer`
+
+A buffer holding `bytes` and nothing more to read.
+
+#### `pub fn of_stream(stream: Stream<u8>) -> LinearBuffer`
+
+A buffer reading `stream`, which it drops once the stream ends or the
+buffer drops.
+
+#### `pub fn bytes(&self) -> &LinearArray<u8>`
+
+What was read, from `start()` on not yet consumed.
+
+#### `pub fn start(&self) -> i32`
+
+Where in `bytes()` the part not yet consumed begins.
+
+#### `pub fn len(&self) -> i32`
+
+The bytes read and not yet consumed.
+
+#### `pub fn position(&self) -> i64`
+
+How far into the stream `start()` is.
+
+#### `pub fn fill(&mut self, n: i32) -> bool`
+
+- `contract n >= 0`
+
+Read until `n` bytes are not yet consumed, or the stream ends. Answers
+whether `n` are.
+
+#### `pub fn consume(&mut self, n: i32)`
+
+- `contract 0 <= n <= self.bytes.len - self.start`
+
+Drop the next `n` bytes.

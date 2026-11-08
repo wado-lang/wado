@@ -42,7 +42,7 @@ impl TirOptVisitor for ListViewExpander<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         let changed = opt_walk_expr(self, expr);
         let kind = std::mem::replace(&mut expr.kind, TirExprKind::Unit);
-        let TirExprKind::ListViewOf { value } = kind else {
+        let TirExprKind::ListViewOf { value, answering } = kind else {
             expr.kind = kind;
             return changed;
         };
@@ -54,10 +54,9 @@ impl TirOptVisitor for ListViewExpander<'_> {
         let list_arg = tt
             .compiler_trait_fq(CompilerItem::ListArg)
             .with_args(vec![tt.fq_type_name(element)]);
-        let value_type = value.type_id;
         let lowered = trait_call_on_type(
             *value,
-            value_type,
+            answering,
             &list_arg,
             "lowered",
             view,

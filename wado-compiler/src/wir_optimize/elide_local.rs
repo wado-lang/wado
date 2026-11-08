@@ -4,7 +4,8 @@
 //! becomes nothing when `v` is side-effect-free, else a bare `Drop(v)`, and a
 //! `LocalTee(x, v)` becomes `v`. So does a `LocalSet` of an `x` read only by its
 //! own values, which liveness keeps live around a loop that feeds `x` to
-//! itself. Runs to a fixed point, since eliding one write can strand another.
+//! itself, where those values vanish with the store. Runs to a fixed point,
+//! since eliding one write can strand another.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage};
@@ -81,11 +82,16 @@ impl WirMutVisitor for ElideDeadStores<'_> {
 /// effects and traps, which Wado's semantics keep even for an unused binding.
 fn discard(value: &mut WirInstr, null: &Nullability) -> WirInstr {
     let value = std::mem::replace(value, WirInstr::Nop);
-    if is_side_effect_free(&value) && !may_trap_in(&value, null) {
+    if vanishes(&value, null) {
         WirInstr::Nop
     } else {
         WirInstr::Drop(Box::new(value))
     }
+}
+
+/// Whether discarding `value` leaves nothing of it.
+fn vanishes(value: &WirInstr, null: &Nullability) -> bool {
+    is_side_effect_free(value) && !may_trap_in(value, null)
 }
 
 struct ElideWriteOnly<'a> {
@@ -99,13 +105,17 @@ struct ElideWriteOnly<'a> {
 }
 
 impl ElideWriteOnly<'_> {
-    /// Is `name` read anywhere outside `own_value` (this store's RHS)?
-    /// A store whose only reads sit in its own RHS is still write-only:
-    /// dropping it drops those reads with it.
+    /// Is `name` read anywhere that discarding this store of `own_value` keeps?
+    /// A store whose only reads sit in its own RHS is still write-only when
+    /// the RHS vanishes with it. A kept RHS keeps its reads, which see this
+    /// store's earlier rounds around a loop.
     fn is_read_elsewhere(&self, name: &str, own_value: &WirInstr) -> bool {
         let total = self.read_counts.get(name).copied().unwrap_or(0);
         if total == 0 {
             return false;
+        }
+        if !vanishes(own_value, self.null) {
+            return true;
         }
         let mut own_counts: IndexMap<String, u32> = IndexMap::default();
         count_local_gets(own_value, &mut own_counts);
@@ -128,8 +138,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
         // they were before lowering. At WIR level every effect a call had is
         // already its own node, so a `is_side_effect_free` sub-tree is dead.
         if let WirInstr::Drop(value) = instr
-            && is_side_effect_free(value)
-            && !may_trap_in(value, self.null)
+            && vanishes(value, self.null)
         {
             *instr = WirInstr::Nop;
             self.changed = true;

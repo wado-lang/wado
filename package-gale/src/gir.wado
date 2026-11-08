@@ -364,19 +364,52 @@ pub struct LeftRecursiveRule {
     /// whose static `scan_X_lr_*` fast path stays byte-identical.
     pub atn_class: bool = false,
     /// Under `atn: "verify"`, the simulator checks each pick of the static
-    /// loop, which `auto` would hand it along with the atom choice.
+    /// loop. A mid operand's continuation gate stands in for the full context
+    /// the simulator reads, so every static loop no predicate gates is
+    /// checked, not only one whose atom choice `auto` hands it.
     pub loop_checked: bool = false,
-    /// True when an alternative's mid-operand self-reference climbs a
-    /// delimiter the alternative itself needs (`e 'between' e 'and' e`).
-    /// ANTLR4 parses that operand as `e[0]` and stops it by prediction; the
-    /// equivalent here lets it climb and gates each loop iteration on the
-    /// caller's continuation surviving, which this flag turns on. No ATN.
-    pub mid_operand_gated: bool = false,
+    /// What each gated mid operand leaves behind, indexed by `LrCont::Rest`.
+    pub cont_rests: List<LrContRest> = [],
 }
 
-/// `lr_cont_mask` of a trailing operand: whatever the invocation it ends must
-/// leave behind, it must too.
-pub global LR_CONT_FORWARD: i32 = -2;
+impl LeftRecursiveRule {
+    /// True when a mid-operand self-reference could climb past what its
+    /// alternative needs (`e 'between' e 'and' e`). ANTLR4 parses that
+    /// operand as `e[0]` and stops it by prediction; the equivalent here lets
+    /// it climb and stops it at the last iteration boundary where the caller's
+    /// continuation holds. No ATN.
+    pub fn mid_operand_gated(&self) -> bool {
+        return !self.cont_rests.is_empty();
+    }
+}
+
+/// The continuation a self-reference hands its callee's LR loop as `lr_cont`.
+pub variant LrCont {
+    /// The callee's default: nothing to leave behind.
+    Unset,
+    /// A trailing operand ends the invocation it sits in, so it leaves behind
+    /// whatever that invocation must.
+    Forward,
+    /// A mid operand: the rest of its alternative, then whatever the
+    /// invocation must leave behind. That rest may hold another operand of the
+    /// rule, so only scanning it says where the operand may stop.
+    Rest(i32),
+}
+
+/// The elements of `body` from `from` on, which a mid operand at `from - 1`
+/// must leave behind.
+pub struct LrContRest {
+    pub body: LrRestBody,
+    pub from: i32,
+}
+
+/// The walk a mid operand sits in.
+pub variant LrRestBody {
+    /// `atom.scan_alts[a]`.
+    Atom(i32),
+    /// `lr_alts[i].scan_suffix`.
+    Suffix(i32),
+}
 
 /// One left-recursive alternative, with the prefix self-reference
 /// stripped and replaced by precedence-climbing semantics.
@@ -829,12 +862,11 @@ pub struct RuleCallOp {
     /// `parse_<rule>(p)` / `scan_<rule>(tokens, pos)` (both signatures
     /// accept a defaulted `min_prec = 0`).
     pub min_prec_arg: Option<i32>,
-    /// Follow-mask id for the continuation a mid-operand self-reference must
-    /// leave behind. Passed as the callee's own `lr_cont` argument, never as
-    /// `follow_arg` — every caller sets that one, and the LR loop must not
-    /// read a caller's continuation as this. `LR_CONT_FORWARD` on a trailing
-    /// operand, which hands on its caller's own; -1 for every other call.
-    pub lr_cont_mask: i32 = -1,
+    /// The continuation a self-reference operand must leave behind. Passed as
+    /// the callee's own `lr_cont` argument, never as `follow_arg` — every
+    /// caller sets that one, and the LR loop must not read a caller's
+    /// continuation as this.
+    pub lr_cont: LrCont = LrCont::Unset,
     /// Dedupped field name in the enclosing alt's struct.
     pub field: String,
     /// Pre-dedup base name (the surface RuleRef's `field_name`).
@@ -1312,9 +1344,9 @@ pub struct ScanRuleCallElement {
     pub target_snake: String,
     /// Scan-side mirror of `RuleCallOp.follow_arg`. See `FollowArg`.
     pub follow_arg: FollowArg,
-    /// Scan-side mirror of `RuleCallOp.lr_cont_mask`, so the scan's LR loop
+    /// Scan-side mirror of `RuleCallOp.lr_cont`, so the scan's LR loop
     /// climbs exactly as far as the parse's does.
-    pub lr_cont_mask: i32 = -1,
+    pub lr_cont: LrCont = LrCont::Unset,
     /// Scan-side mirror of `RuleCallOp.min_prec_arg`; `None` passes 0.
     pub min_prec_arg: Option<i32>,
     /// Scan-side mirror of `RuleCallOp.atn_call_site`: the originating surface

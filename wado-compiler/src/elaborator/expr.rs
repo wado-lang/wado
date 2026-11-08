@@ -1271,7 +1271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            self.record_type_name_reference(owner.id, &owner.name);
+            self.record_type_name_reference(owner.id);
             self.record_reference_to_def(member.id, assoc.decl);
             // Not an l-value.
             self.resolve_associated_const_body(&assoc, ctx);
@@ -3964,9 +3964,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_else(|| raw.clone())
         });
 
-        // Record use→def reference for the struct type name.
-        if let (Some(name_id), Some(written)) = (struct_lit.name_id, name.as_ref()) {
-            self.record_type_name_reference(name_id, written);
+        if let Some(name_id) = struct_lit.name_id {
+            self.record_type_name_reference(name_id);
         }
 
         // Which declaration the written name means is the resolve pass's

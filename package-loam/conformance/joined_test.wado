@@ -1,0 +1,44 @@
+//! An attention matched as the composite whose past is held outside the cache,
+//! at a length its capacity holds exactly.
+
+use { Cpu, Tensor } from "lib:loam";
+use { HeldKey1, HeldKey3, HeldValue3, K1, K2, Model, P, Params, Q0, Q1, Q2, V1, V2, compute } from "./joined.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
+
+test "the new position joins a past at its capacity" {
+    let held_key: Tensor<f32, [Q0, HeldKey1, P, HeldKey3]> = Tensor {
+        data: List::<f32>::filled(16, 0.0),
+        extents: [1, 2, 4, 2],
+    };
+    let held_value: Tensor<f32, [Q0, HeldKey1, P, HeldValue3]> = Tensor {
+        data: List::<f32>::filled(16, 0.0),
+        extents: [1, 2, 4, 2],
+    };
+    let o = compute(
+        &mut Cpu {},
+        &Tensor::<f32, [Q0, Q1, Q2]> {
+            data: [0.0, 0.0, 0.0, 0.0],
+            extents: [1, 1, 4],
+        },
+        &Tensor::<f32, [Q0, K1, K2]> {
+            data: [1.0, 2.0, 3.0, 4.0],
+            extents: [1, 1, 4],
+        },
+        &Tensor::<f32, [Q0, V1, V2]> {
+            data: [5.0, 10.0, 15.0, 20.0],
+            extents: [1, 1, 4],
+        },
+        &held_key,
+        &held_value,
+        &mut Model::new(Params::embedded(&mut Cpu {})),
+    );
+    assert o.joined_key.extents == [1, 2, 5, 2] as List<i32>;
+    assert [o.joined_key.data[8], o.joined_key.data[9], o.joined_key.data[18], o.joined_key.data[19]] == [
+        1.0, 2.0, 3.0, 4.0,
+    ];
+    // Every score is 0, so each head weighs its five positions alike.
+    assert o.Out.data == [1.0, 2.0, 3.0, 4.0];
+}

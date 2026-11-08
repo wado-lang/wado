@@ -81,6 +81,13 @@ impl Route {
     }
 }
 
+pub(super) fn unsupported_reason() -> Option<String> {
+    match sandbox::availability() {
+        sandbox::Availability::Available => None,
+        sandbox::Availability::Unsupported(reason) => Some(reason),
+    }
+}
+
 struct Started {
     spawned: sandbox::Spawned,
     stdout: Route,

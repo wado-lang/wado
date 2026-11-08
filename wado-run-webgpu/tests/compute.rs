@@ -353,7 +353,7 @@ fn assert_loam_conformance(program: &str, lines: usize) {
 /// a prompt whose parts grow to fit a binding.
 #[test]
 fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
-    assert_loam_conformance("webgpu_attention.wado", 11);
+    assert_loam_conformance("webgpu_attention.wado", 13);
 }
 
 /// Graphs built through `Graph` compute on the device what they compute on the

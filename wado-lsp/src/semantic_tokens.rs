@@ -505,7 +505,9 @@ impl AstVisitor<'_> for SpanCollector {
 
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
+            // Both segments of `ns::Trait`, as for a namespaced type.
             self.spans.insert(bound.span.start, token_type::TYPE);
+            self.spans.insert(bound.name_span.start, token_type::TYPE);
             // `Output` in `Builder<Output = T>` names an associated type.
             for assoc in &bound.assoc_types {
                 self.spans.insert(assoc.span.start, token_type::TYPE);
@@ -1199,6 +1201,29 @@ mod tests {
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 1, "ns"), token_type::TYPE);
         assert_eq!(kind_of(&tokens, src, 1, "Value"), token_type::TYPE);
+    }
+
+    #[test]
+    fn a_namespaced_bound_is_a_type_on_both_segments() {
+        let src = "fn f<\n    T: geo::Show,\n>(t: &T) {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "geo"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 1, "Show"), token_type::TYPE);
+    }
+
+    /// The bound's reference to its trait sits on the trait's name, so the
+    /// namespace keeps the class its position gives it.
+    #[test]
+    fn a_resolved_namespaced_bound_is_an_interface_after_a_type() {
+        let lib = "pub trait Show {\n    fn show(&self) -> i32;\n}\n";
+        let src = "use geo from \"./lib.wado\";\nfn f<\n    T: geo::Show,\n>(t: &T) {}\n";
+        let host = in_memory_host(&[("./lib.wado", lib), ("/test.wado", src)]);
+        let sem =
+            futures::executor::block_on(wado_compiler::semantics(src, &host, Some("/test.wado")));
+        assert!(sem.is_complete());
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "geo"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 2, "Show"), token_type::INTERFACE);
     }
 
     /// `::<` is a turbofish, so the name before it is the callee, not the

@@ -1,6 +1,6 @@
 //! Writes `tests/generated/<file>_test.wado` for each file of the JSON Schema
-//! Test Suite's Draft 2020-12 tests: each test held to the validity the suite
-//! gives it. A case that refers to a schema outside its own document is left
+//! Test Suite's Draft 2020-12 tests, and for the optional ones Jade implements:
+//! each test held to the validity the suite gives it. A case that refers to a schema outside its own document is left
 //! out, as is every case of a file that needs one, since a remote `$ref` is
 //! resolved only through a loader the caller passes. The suite is read as data.
 //!
@@ -25,6 +25,9 @@ global SKIPPED_FILES: List<[String, String]> = [
     ["vocabulary.json", "every case names a remote meta-schema in `$schema`"],
 ];
 
+/// The files of `optional/` whose behaviour Jade implements.
+global OPTIONAL_FILES: List<String> = ["optional/bignum.json", "optional/float-overflow.json"];
+
 /// The keywords whose value is an instance rather than a schema, so an `$id`
 /// or a `$ref` inside one is data.
 global VALUE_KEYWORDS: List<String> = ["const", "enum", "default", "examples"];
@@ -41,6 +44,7 @@ export fn run() with (Stdout, Preopens) {
         }
     }
     files.sort();
+    files.extend(&OPTIONAL_FILES);
     for let file of files {
         if let Some(why) = skip_reason(&file) {
             println(`left out ${file}: ${why}`);
@@ -48,7 +52,7 @@ export fn run() with (Stdout, Preopens) {
         }
         let text = fs::read_to_string(fs::join(&SUITE, &file)).unwrap();
         let doc = Document::parse(text).unwrap();
-        let stem = fs::file_stem(&file).unwrap().to_string().replace("-", "_");
+        let stem = fs::file_stem(&file.replace("/", "_")).unwrap().to_string().replace("-", "_");
         fs::write(fs::join(&OUT, `${stem}_test.wado`), &test_file(&file, &doc.root())).unwrap();
     }
 }
@@ -79,14 +83,14 @@ fn test_file(file: &String, cases: &Node) -> String {
             skipped.push(`//   ${description}: refers to ${remote.join(", ")}`);
             continue;
         }
-        let schema_text = to_string(&schema).unwrap();
+        let schema_text = json(&schema);
         for let t of c.get("tests").unwrap().items() {
             let base = `${description}: ${t.get("description").unwrap().as_str().unwrap()}`;
             let mut name = base;
             for let mut n = 2; !names.insert(name); n += 1 {
                 name = `${base} (${n})`;
             }
-            let data = to_string(&t.get("data").unwrap()).unwrap();
+            let data = json(&t.get("data").unwrap());
             let valid = t.get("valid").unwrap().as_bool().unwrap();
             tests.push_str(`
 test ${to_string(&name).unwrap()} {
@@ -104,11 +108,37 @@ test ${to_string(&name).unwrap()} {
         out.push_str(skipped.join("\n"));
         out.push_str("\n");
     }
-    out.push_str(`
+    if !tests.is_empty() {
+        out.push_str(`
 use { check } from "../suite.wado";
 `);
-    out.push_str(tests);
+        out.push_str(tests);
+    }
     return out;
+}
+
+/// `node` as JSON text, its numbers exact: `core:json` writes only those an
+/// f64 holds.
+fn json(node: &Node) -> String {
+    return match node.kind() {
+        Number => {
+            let n = node.as_number().unwrap();
+            if n.is_f64() {
+                to_string(&n).unwrap();
+            } else {
+                `${n}`;
+            }
+        },
+        Array => {
+            let items: List<String> = node.items().map(|v| json(&v)).collect();
+            `[${items.join(",")}]`;
+        },
+        Object => {
+            let members: List<String> = node.entries().map(|m| `${to_string(&m.0).unwrap()}:${json(&m.1)}`).collect();
+            `{${members.join(",")}}`;
+        },
+        Null | Bool | String => to_string(node).unwrap(),
+    };
 }
 
 /// `text` as a Wado raw string. `core:json` escapes every control character,

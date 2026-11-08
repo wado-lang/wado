@@ -15,18 +15,18 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
 #[cfg(unix)]
-use crate::sandbox;
-
-#[cfg(unix)]
 mod posix;
 #[cfg(test)]
 mod tests;
-#[cfg(unix)]
-pub use posix::ChildHandle;
-
-/// No child runs on a host that cannot confine one.
 #[cfg(not(unix))]
-pub enum ChildHandle {}
+mod unsupported;
+
+#[cfg(unix)]
+use posix as platform;
+#[cfg(not(unix))]
+use unsupported as platform;
+
+pub use platform::ChildHandle;
 
 wasmtime::component::bindgen!({
     inline: "package wado:process-host; world host { import core:process/process@0.1.0; }",
@@ -55,6 +55,7 @@ struct Shared {
     answer: Answer,
     /// The warnings already printed, so a guest that retries a program warns
     /// once.
+    #[cfg_attr(not(unix), expect(dead_code, reason = "only a spawn reads it"))]
     warned: Mutex<BTreeSet<String>>,
 }
 
@@ -84,6 +85,7 @@ impl fmt::Display for Unavailable {
 }
 
 /// What a child may reach beyond the baseline.
+#[cfg_attr(not(unix), expect(dead_code, reason = "only a spawn reads it"))]
 struct Grants {
     /// The guest's directories in preopen order: the first is where a child
     /// starts unless the guest names another.
@@ -94,6 +96,7 @@ struct Grants {
     trace: Trace,
 }
 
+#[cfg_attr(not(unix), expect(dead_code, reason = "only a spawn reads it"))]
 struct Grant {
     path: PathBuf,
     dir: Arc<File>,
@@ -141,7 +144,7 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
             fix: Some("run without `--deny-process`".to_owned()),
         }));
     };
-    if let Some(reason) = unsupported_reason() {
+    if let Some(reason) = platform::unsupported_reason() {
         return Ok(Answer::Unsupported(Unavailable { reason, fix: None }));
     }
     let mut dirs = Vec::with_capacity(preopened_dirs.len());
@@ -167,22 +170,6 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
     Ok(Answer::Available(Grants { dirs, read, trace }))
 }
 
-#[cfg(unix)]
-fn unsupported_reason() -> Option<String> {
-    match sandbox::availability() {
-        sandbox::Availability::Available => None,
-        sandbox::Availability::Unsupported(reason) => Some(reason),
-    }
-}
-
-#[cfg(not(unix))]
-fn unsupported_reason() -> Option<String> {
-    Some(format!(
-        "{} cannot confine a child; run wado in WSL2",
-        std::env::consts::OS
-    ))
-}
-
 /// Where the guest's own standard streams go, which is where a child's
 /// inherited ones go.
 pub enum GuestStdio {
@@ -198,6 +185,7 @@ pub enum GuestStdio {
 /// A store's spawning state.
 pub struct ProcessCtx {
     spawning: Spawning,
+    #[cfg_attr(not(unix), expect(dead_code, reason = "only a spawn reads it"))]
     stdio: GuestStdio,
 }
 
@@ -235,20 +223,12 @@ impl types::Host for ProcessView<'_> {}
 
 impl types::HostChild for ProcessView<'_> {
     fn terminate(&mut self, child: Resource<ChildHandle>) -> wasmtime::Result<()> {
-        let handle = self.table.get(&child)?;
-        #[cfg(unix)]
-        handle.terminate();
-        #[cfg(not(unix))]
-        match *handle {}
+        self.table.get(&child)?.terminate();
         Ok(())
     }
 
     fn kill(&mut self, child: Resource<ChildHandle>) -> wasmtime::Result<()> {
-        let handle = self.table.get(&child)?;
-        #[cfg(unix)]
-        handle.kill();
-        #[cfg(not(unix))]
-        match *handle {}
+        self.table.get(&child)?.kill();
         Ok(())
     }
 
@@ -274,14 +254,7 @@ impl<U> process::HostWithStore<U> for ProcessHost {
         cmd: Command,
         cwd: Option<Resource<Descriptor>>,
     ) -> wasmtime::Result<Result<Spawned, ErrorCode>> {
-        #[cfg(unix)]
-        return posix::spawn(store, cmd, cwd);
-        #[cfg(not(unix))]
-        {
-            let view = store.get();
-            view.ctx.grants()?;
-            unreachable!("a host that cannot confine a child answers `unsupported`")
-        }
+        platform::spawn(store, cmd, cwd)
     }
 }
 

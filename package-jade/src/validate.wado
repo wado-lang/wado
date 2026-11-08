@@ -6,6 +6,7 @@ use { Uri } from "core:uri";
 use { percent_decode } from "core:url";
 use { Regex } from "lib:re";
 use { Document, Node } from "./document.wado";
+use { Divisor, Number } from "./number.wado";
 use { JsonTypes, Schema, SchemaError, pointer_token, type_names } from "./schema.wado";
 
 /// The base URI of a schema that declares no `$id`.
@@ -149,13 +150,8 @@ impl Validator {
     /// The keywords that assert on the instance's value: `type`, `const`,
     /// `enum`, and those on a number or a string.
     fn assert_value(&self, n: &Compiled, inst: &Node, ip: &String, run: &mut Run) {
-        if let Some(types) = n.type && !has_type(inst, types) {
-            let message = if types == JsonTypes::none() {
-                "no value is valid against an empty `type`";
-            } else {
-                `must be ${type_names(types).join(" or ")}`;
-            };
-            run.fail(ip, &n.at, "type", message);
+        if n.type != JsonTypes::none() && !has_type(inst, n.type) {
+            run.fail(ip, &n.at, "type", `must be ${type_names(n.type).join(" or ")}`);
         }
         if let Some(c) = &n.const && *inst != c.root() {
             run.fail(ip, &n.at, "const", "must equal the constant");
@@ -163,20 +159,20 @@ impl Validator {
         if let Some(values) = &n.enum && !values.iter_ref().any(|v| *inst == v.root()) {
             run.fail(ip, &n.at, "enum", "must equal one of the values");
         }
-        if let Some(x) = inst.as_f64() {
-            if let Some(m) = &n.multiple_of && !is_multiple(&decimal(x), m) {
+        if let Some(x) = inst.as_number() {
+            if let Some(m) = &n.multiple_of && !m.divides(&x) {
                 run.fail(ip, &n.at, "multipleOf", "must be a multiple");
             }
-            if let Some(m) = n.minimum && x < m {
+            if let Some(m) = &n.minimum && x < *m {
                 run.fail(ip, &n.at, "minimum", `must be at least ${m}`);
             }
-            if let Some(m) = n.exclusive_minimum && x <= m {
+            if let Some(m) = &n.exclusive_minimum && x <= *m {
                 run.fail(ip, &n.at, "exclusiveMinimum", `must be greater than ${m}`);
             }
-            if let Some(m) = n.maximum && x > m {
+            if let Some(m) = &n.maximum && x > *m {
                 run.fail(ip, &n.at, "maximum", `must be at most ${m}`);
             }
-            if let Some(m) = n.exclusive_maximum && x >= m {
+            if let Some(m) = &n.exclusive_maximum && x >= *m {
                 run.fail(ip, &n.at, "exclusiveMaximum", `must be less than ${m}`);
             }
         }
@@ -386,7 +382,7 @@ struct Compiled {
     always: Option<bool> = null,
     reference: Option<i32> = null,
     dynamic_ref: Option<DynamicRef> = null,
-    type: Option<JsonTypes> = null,
+    type: JsonTypes = JsonTypes::none(),
     const: Option<Document> = null,
     enum: Option<List<Document>> = null,
     all_of: List<i32> = [],
@@ -396,11 +392,11 @@ struct Compiled {
     if: Option<i32> = null,
     then: Option<i32> = null,
     else: Option<i32> = null,
-    multiple_of: Option<Decimal> = null,
-    minimum: Option<f64> = null,
-    exclusive_minimum: Option<f64> = null,
-    maximum: Option<f64> = null,
-    exclusive_maximum: Option<f64> = null,
+    multiple_of: Option<Divisor> = null,
+    minimum: Option<Number> = null,
+    exclusive_minimum: Option<Number> = null,
+    maximum: Option<Number> = null,
+    exclusive_maximum: Option<Number> = null,
     min_length: Option<i32> = null,
     max_length: Option<i32> = null,
     pattern: Option<Regex> = null,
@@ -557,8 +553,8 @@ impl Compiler {
         node.if = self.add_some(&o.if, `${at}/if`, &uri, r)?;
         node.then = self.add_some(&o.then, `${at}/then`, &uri, r)?;
         node.else = self.add_some(&o.else, `${at}/else`, &uri, r)?;
-        if let Some(m) = o.multiple_of {
-            node.multiple_of = Option::Some(decimal(m));
+        if let Some(m) = &o.multiple_of {
+            node.multiple_of = Option::Some(Divisor::of(m));
         }
         node.minimum = o.minimum;
         node.exclusive_minimum = o.exclusive_minimum;
@@ -693,70 +689,11 @@ fn has_type(inst: &Node, types: JsonTypes) -> bool {
         Object => JsonTypes::Object,
         Array => JsonTypes::Array,
         String => JsonTypes::String,
-        Number => {
-            let x = inst.as_f64().unwrap();
-            if x == f64::trunc(x) {
-                JsonTypes::Number | JsonTypes::Integer;
-            } else {
-                JsonTypes::Number;
-            }
+        Number => if inst.as_number().unwrap().is_integer() {
+            JsonTypes::Number | JsonTypes::Integer;
+        } else {
+            JsonTypes::Number;
         },
     };
     return types & t != JsonTypes::none();
-}
-
-/// A number as `digits × 10^exp`, from the shortest decimal that reads back as
-/// it, so `multipleOf` divides the numbers as written. `digits` has no
-/// trailing zero unless it is zero.
-struct Decimal {
-    digits: u64,
-    exp: i32,
-}
-
-fn decimal(x: f64) -> Decimal {
-    let text = `${f64::abs(x):e}`;
-    let e = text.find("e").unwrap();
-    let mut exp = i32::from_str(text.substr_bytes(e + 1, text.len())).unwrap();
-    let mut digits: u64 = 0;
-    let mut fraction = false;
-    for let c of text.substr_bytes(0, e).bytes() {
-        if c == b'.' {
-            fraction = true;
-            continue;
-        }
-        digits = digits * 10 + (c - b'0') as u64;
-        if fraction {
-            exp -= 1;
-        }
-    }
-    while digits != 0 && digits % 10 == 0 {
-        digits /= 10;
-        exp += 1;
-    }
-    return Decimal { digits, exp };
-}
-
-/// Whether `x` is an integer multiple of `m`. When `x.exp < m.exp`, the
-/// quotient would need `x.digits` to end in a zero, which it does not.
-fn is_multiple(x: &Decimal, m: &Decimal) -> bool
-    contract m.digits > 0
-{
-    if x.digits == 0 {
-        return true;
-    }
-    if x.exp < m.exp {
-        return false;
-    }
-    let b = m.digits as u128;
-    let mut r = x.digits as u128 % b;
-    let mut power = 10 as u128 % b;
-    let mut e = x.exp - m.exp;
-    while e > 0 {
-        if e & 1 == 1 {
-            r = r * power % b;
-        }
-        power = power * power % b;
-        e >>= 1;
-    }
-    return r == 0;
 }

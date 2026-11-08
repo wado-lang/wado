@@ -43,12 +43,12 @@ runs.
   on the host, since WGSL stores none. Indices are small, and a gather uploads
   them as `u32` when it runs. The index `arg_max` ranks stays on the device as
   an f32, so a token a loop feeds back needs no read back.
-- `group_query_attention`, which Gemma 3 has and GPT-2 does not, is three
-  dispatches. One appends the new keys, turned by the rotary tables, and values
-  to the attention cache. The cache holds a power of two of positions, so a step
-  writes only its own positions and binds what the step before bound. The next
-  attends each query row over each part of 4 positions in a workgroup of its
-  own, 64 lanes splitting each position's dot. The last joins a row's parts,
+- `group_query_attention`, which Gemma 3 names and GPT-2 spells in parts, is
+  three dispatches. One appends the new keys, turned by the rotary tables, and
+  values to the attention cache. The cache holds a power of two of positions, so
+  a step writes only its own positions and binds what the step before bound. The
+  next attends each query row over each part of 4 positions in a workgroup of
+  its own, 64 lanes splitting each position's dot. The last joins a row's parts,
   rescaling each to the row's greatest score. Gemma's step over one token has 4
   query rows, so a workgroup a row left the device idle and grew slower with the
   sequence: at 600 positions a token took 1.9 times as long as with parts of 64
@@ -149,7 +149,7 @@ no contraction, so a product's epilogue stays elementwise.
 
 `select` picks between two f32 values by a condition. As an elementwise step
 over a condition operand, read as 1.0 or 0.0, it fuses into a product's
-epilogue and into a row group. GPT-2's attention mask is one.
+epilogue and into a row group.
 
 #### A linear layer is one product over the leading axes
 
@@ -222,6 +222,24 @@ views. Around the layers were six more: the two embeddings, their sum, the
 last normalization, the head, and the mask. The tiny GPT-2's five layers took
 56 a pass, and GPT-2 (124M)'s twelve took 126.
 
+With its attention matched as the composite, a step of GPT-2 (124M) takes nine:
+
+| Dispatch            | Nodes it covers                          |
+| ------------------- | ---------------------------------------- |
+| Layer normalization | 9 nodes                                  |
+| QKV product         | `Gemm` and its bias                      |
+| Append              | the new keys and values, into the cache  |
+| Attend              | scores, mask, softmax and values, a part |
+| Join                | a row's parts, and the merged heads      |
+| Projection          | `Gemm`, its bias, and the residual `Add` |
+| Layer normalization | 9 nodes                                  |
+| Feed-forward up     | `Gemm`, its bias, and the GELU           |
+| Feed-forward down   | `Gemm`, its bias, and the residual `Add` |
+
+Six more run around the twelve layers: the two before them, the last
+normalization, the head, and `arg_max`'s two. That is 114 a token, where the
+parts took 178 on the same run.
+
 ## Measurements
 
 `example/gpt2-124m/webgpu.wado` continued "Hello, my name is" with eight
@@ -240,7 +258,7 @@ programs.
 
 | Model        | Backend                          | Time a token, onnxruntime on the CPU as 1 | Dispatches a token | Read backs a token |
 | ------------ | -------------------------------- | ----------------------------------------- | ------------------ | ------------------ |
-| GPT-2 (124M) | `WebGpuBackend`, `compute`       | 1.6                                       | 180                | 1                  |
+| GPT-2 (124M) | `WebGpuBackend`, `compute`       | 0.25                                      | 114                | 1                  |
 | GPT-2 (124M) | `WebGpuBackend`, the kernel pass | 0.63                                      | 164                | 2                  |
 | GPT-2 (124M) | `Cpu`, `compute`                 | 7.8                                       |                    |                    |
 | GPT-2 (124M) | `Cpu`, the kernel pass           | 4.1                                       |                    |                    |

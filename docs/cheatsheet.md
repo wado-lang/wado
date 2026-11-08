@@ -47,6 +47,7 @@ Namespace imports make all pub symbols from the source module directly available
 use geo from "./geo.wado";
 let p = geo::Point::new(1, 2);      // access via namespace
 impl geo::Show for Local { ... }    // and on either side of an impl head
+fn shown<T: geo::Show>(t: &T) { ... }  // and in a bound
 ```
 
 ### Generated Imports
@@ -2037,7 +2038,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:linear`](./stdlib-core-linear.md) — `LinearArray<T: AnyBits>`, plain
   data in linear memory outside the GC heap, freed where it drops; a
   synchronous import's `list<T>` of numbers is a `&ListView<T>`, which a
-  `List<T>` converts to by copying and a `&LinearArray<T>` by lending its block
+  `List<T>` converts to by copying and a `&LinearArray<T>` by lending its block;
+  `LinearBuffer` reads a `Stream<u8>` into linear memory as far as a parser asks
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
 - [`core:uri`](./stdlib-core-uri.md) — RFC 3986 URI references as
   identifiers, any scheme: parse, resolve against a base, write back

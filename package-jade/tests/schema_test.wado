@@ -1,4 +1,4 @@
-use { Document, JsonTypes, Schema, SchemaObject, pointer_token } from "../src/lib.wado";
+use { Document, JsonTypes, Number, Schema, SchemaObject, pointer_token } from "../src/lib.wado";
 use { to_string } from "core:json";
 use { HashMap } from "core:collections";
 
@@ -28,11 +28,11 @@ test "one type is a string, more an array" {
     let Schema::Object(o) = Schema::parse(`{"type": ["number", "boolean"]}`).unwrap() else {
         unreachable();
     };
-    assert o.type == Option::Some(JsonTypes::Number | JsonTypes::Boolean);
+    assert o.type == JsonTypes::Number | JsonTypes::Boolean;
 }
 
-test "an empty type array is kept, as it admits nothing" {
-    assert reread(`{"type": []}`) == `{"type":[]}`;
+test "type names at least one type" {
+    assert error_of(`{"type": []}`) == "/type: must name at least one type";
     assert error_of(`{"type": 1}`) == "/type: must be a type name or an array of them";
 }
 
@@ -72,6 +72,14 @@ test "a value the meta-schema rejects is an error at its pointer" {
     assert error_of(`{"dependentRequired": {"p": ["q", "q"]}}`) == "/dependentRequired/p/1: repeats a name";
 }
 
+test "$schema names Draft 2020-12's meta-schema, at a schema resource's root" {
+    let draft = "https://json-schema.org/draft/2020-12/schema";
+    assert reread(`{"$schema": "${draft}#"}`) == `{"$schema":"${draft}#"}`;
+    assert error_of(`{"$schema": "http://json-schema.org/draft-07/schema#"}`) == "/$schema: must name Draft 2020-12's meta-schema, the only one Jade can validate against";
+    assert error_of(`{"items": {"$schema": "${draft}"}}`) == "/items/$schema: may appear only at a schema resource's root";
+    assert reread(`{"items": {"$id": "i", "$schema": "${draft}"}}`) == `{"items":{"$schema":"${draft}","$id":"i"}}`;
+}
+
 test "x-wado-format is an annotation, read as any other" {
     assert reread(`{"x-wado-format": 1}`) == `{"x-wado-format":1}`;
 }
@@ -81,10 +89,13 @@ test "a schema built breaking a keyword's rule is not written" {
     extra["type"] = Document::string("integer");
     let collides = to_string(&SchemaObject { extra }).unwrap_err();
     assert `${collides}` == "/type: is a keyword Draft 2020-12 defines";
-    let zero = to_string(&SchemaObject { multiple_of: Option::Some(0.0) }).unwrap_err();
+    let zero = to_string(&SchemaObject { multiple_of: Option::Some(Number::from(0.0)) }).unwrap_err();
     assert `${zero}` == "/multipleOf: must be greater than 0";
     let negative = to_string(&SchemaObject { min_length: Option::Some(-1) }).unwrap_err();
     assert `${negative}` == "/minLength: must be a non-negative integer";
+    let inner = Schema::Object(SchemaObject { dialect: Option::Some(Schema::DRAFT) });
+    let nested = to_string(&SchemaObject { items: Option::Some(inner) }).unwrap_err();
+    assert `${nested}` == "/items/$schema: may appear only at a schema resource's root";
 }
 
 test "a pointer token escapes ~ and /" {

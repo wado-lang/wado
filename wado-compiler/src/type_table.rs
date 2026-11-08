@@ -2987,6 +2987,23 @@ impl TypeTable {
         depth
     }
 
+    /// The types a value of `type_id` passes for through its references,
+    /// outermost first, each with the dereferences reaching it: every layer,
+    /// and after a `&mut` layer the `&` to its pointee. `&&mut X` →
+    /// `(0, &&mut X)`, `(1, &mut X)`, `(1, &X)`, `(2, X)`.
+    pub fn reference_layers(&mut self, mut type_id: TypeId) -> Vec<(usize, TypeId)> {
+        let mut layers = vec![(0, type_id)];
+        while let Some(pointee) = self.ref_pointee(type_id) {
+            let depth = layers.last().expect("the first layer is pushed").0;
+            if self.ref_kind(type_id) == Some(RefKind::Mut) {
+                layers.push((depth, self.make_ref(pointee)));
+            }
+            layers.push((depth + 1, pointee));
+            type_id = pointee;
+        }
+        layers
+    }
+
     /// `type_id` with its outer references stripped until at most `layers`
     /// hold the pointee: `&&mut X` at 1 → `&mut X`, the layer holding it.
     pub fn ref_layers(&self, mut type_id: TypeId, layers: usize) -> TypeId {

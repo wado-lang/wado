@@ -584,11 +584,12 @@ impl Graph for WebGpuBackend {
 
     /// The backend's attention kernels, and the decomposition where they
     /// cannot run it. A shared past holds `past_length` valid positions, the
-    /// kernels attend over those and the new ones, as many columns of the bias,
-    /// and the present is the past's buffer with the new ones written after
-    /// the valid ones. Past the valid ones a causal attention reads none, so
-    /// the kernels compute what the decomposition does.
-    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+    /// kernels attend over those and the new ones, or the first `reach` of
+    /// them, as many columns of the bias, and the present is the past's buffer
+    /// with the new ones written after the valid ones. Past the valid ones a
+    /// causal attention reads none, so the kernels compute what the
+    /// decomposition does.
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
         q: &Placed<f32, [B, S, Q]>,
         k: &Placed<f32, [B, S, K]>,
@@ -596,9 +597,10 @@ impl Graph for WebGpuBackend {
         past_k: &Placed<f32, [B, H, P, D]>,
         past_v: &Placed<f32, [B, H, P, D]>,
         past_length: Option<&Placed<i64, []>>,
+        reach: Option<&Placed<i64, []>>,
         cos: Option<&Placed<f32, [Pos, Half]>>,
         sin: Option<&Placed<f32, [Pos, Half]>>,
-        bias: Option<&Placed<f32, [BB, BH, S, T]>>,
+        bias: Option<&Placed<f32, [BB, BH, BS, T]>>,
         options: &Attention,
     ) -> [Placed<f32, [B, S, Q]>, Placed<f32, [B, H, T, D]>, Placed<f32, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let shared = past_length matches { Some(_) };
@@ -625,6 +627,10 @@ impl Graph for WebGpuBackend {
                 Some(b) => Option::Some(self.device_view(b)),
                 None => null,
             };
+            let attended = match reach {
+                Some(l) => self.host(l).data[0] as i32,
+                None => valid + query.extents[1],
+            };
             if let Some([out, present_k, present_v]) = self.attended(
                 &query,
                 &self.device_view(k),
@@ -632,6 +638,7 @@ impl Graph for WebGpuBackend {
                 &held_k,
                 &held_v,
                 valid,
+                attended,
                 shared,
                 &rotary,
                 &biased,
@@ -645,7 +652,7 @@ impl Graph for WebGpuBackend {
                 ];
             }
         }
-        return decomposed_attention::<WebGpuBackend, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        return decomposed_attention::<WebGpuBackend, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
             self,
             q,
             k,
@@ -653,6 +660,7 @@ impl Graph for WebGpuBackend {
             past_k,
             past_v,
             past_length,
+            reach,
             cos,
             sin,
             bias,

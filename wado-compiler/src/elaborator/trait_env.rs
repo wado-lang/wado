@@ -2209,7 +2209,7 @@ fn check_bounds_name_traits(
                     self.unknown.push((
                         self.module.clone(),
                         TypeError::UnknownBound {
-                            name: bound.name.clone(),
+                            name: bound.written_name(),
                             span: bound.span,
                         },
                     ));

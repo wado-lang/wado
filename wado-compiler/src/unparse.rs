@@ -1153,7 +1153,7 @@ impl<'a> Unparser<'a> {
                 // come back out parens-grouped.
                 s.unparse_fn_signature_in_bound(sig);
             } else {
-                s.output.push_str(&bound.name);
+                s.output.push_str(&bound.written_name());
                 unparse_bound_arguments_into(bound, &mut s.output);
             }
         });
@@ -4028,7 +4028,7 @@ fn unparse_trait_bounds_into(bounds: &[TraitBound], o: &mut String) {
         if let Some(sig) = &bound.fn_signature {
             unparse_fn_signature_in_bound_into(sig, o);
         } else {
-            o.push_str(&bound.name);
+            o.push_str(&bound.written_name());
             unparse_bound_arguments_into(bound, o);
         }
     }
@@ -4842,7 +4842,7 @@ impl<'a> TirUnparser<'a> {
             // A move is how the source reads the place, so it has no spelling.
             TirExprKind::Move { expr: inner } => self.unparse_expr(inner),
             // The conversion is implicit, so the source spells only the value.
-            TirExprKind::ListViewOf { value } | TirExprKind::Widen { value } => {
+            TirExprKind::ListViewOf { value, .. } | TirExprKind::Widen { value } => {
                 self.unparse_expr(value);
             }
             TirExprKind::Call {

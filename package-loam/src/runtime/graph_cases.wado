@@ -204,13 +204,14 @@ pub fn attending<affine G: Graph>(
     bias: &G::Tensor<f32, [Bt, Ht, St, Tt]>,
     options: &Attention,
 ) -> [G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>] with _ {
-    return g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+    return g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
         &inputs.0,
         &inputs.1,
         &inputs.2,
         &past.0,
         &past.1,
         Option::Some(&past.2),
+        null,
         Option::Some(&rotation.0),
         Option::Some(&rotation.1),
         Option::Some(bias),
@@ -370,29 +371,34 @@ pub fn repeating_attention<affine G: Graph>(
         Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(past)),
     ];
     let first = scalar(g, 1 as i64);
-    let last = g.repeated(count, &start, |step, state| {
-        let attended = f32_of::<G, [Bt, St, Qt]>(g, &state[0]);
-        let keys = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[1]);
-        let values = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[2]);
-        let length = g.binary(Binary::Add, &first, step);
-        let [out, present_k, present_v] = g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht>(
-            &attended,
-            k,
-            v,
-            &keys,
-            &values,
-            Option::Some(&length),
-            null,
-            null,
-            null,
-            &LOOPED_ATTENTION,
-        );
-        return [
-            Any::F32(g.relabeled::<f32, [Bt, St, Qt], Untyped>(&out)),
-            Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(&present_k)),
-            Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(&present_v)),
-        ];
-    });
+    let last = g.repeated(
+        count,
+        &start,
+        |step, state| {
+            let attended = f32_of::<G, [Bt, St, Qt]>(g, &state[0]);
+            let keys = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[1]);
+            let values = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[2]);
+            let length = g.binary(Binary::Add, &first, step);
+            let [out, present_k, present_v] = g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht, St>(
+                &attended,
+                k,
+                v,
+                &keys,
+                &values,
+                Option::Some(&length),
+                null,
+                null,
+                null,
+                null,
+                &LOOPED_ATTENTION,
+            );
+            return [
+                Any::F32(g.relabeled::<f32, [Bt, St, Qt], Untyped>(&out)),
+                Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(&present_k)),
+                Any::F32(g.relabeled::<f32, [Bt, Ht, Pt, Dt], Untyped>(&present_v)),
+            ];
+        },
+    );
     return f32_of::<G, [Bt, St, Qt]>(g, &last[0]);
 }
 

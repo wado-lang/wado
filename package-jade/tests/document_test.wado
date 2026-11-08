@@ -1,4 +1,5 @@
 use { Document, NodeKind } from "../src/document.wado";
+use { Number } from "../src/number.wado";
 use { to_string } from "core:json";
 use { DeserializeError, Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
 
@@ -17,7 +18,7 @@ test "a node answers its kind, its value and its members" {
     let root = doc.root();
     assert root.kind() == NodeKind::Object;
     assert root.len() == 4;
-    assert root.get("n").unwrap().as_f64() == Option::Some(2.0);
+    assert root.get("n").unwrap().as_number() == Option::Some(Number::from(2.0));
     assert root.get("s").unwrap().as_str().unwrap() == "hi";
     assert root.get("b").unwrap().as_bool() == Option::Some(true);
     assert root.get("missing") matches { None };
@@ -41,7 +42,7 @@ test "a subtree becomes a document of its own" {
     items.next();
     let sub = items.next().unwrap().to_document();
     assert to_string(&sub).unwrap() == `{"a":["x",2]}`;
-    assert items.next().unwrap().as_f64() == Option::Some(3.0);
+    assert items.next().unwrap().as_number() == Option::Some(Number::from(3.0));
 }
 
 test "equality compares numbers by value and objects by members" {
@@ -68,7 +69,7 @@ struct Chain {
 test "a document is built from a string or from what core:json writes" {
     assert to_string(&Document::string("a")).unwrap() == `"a"`;
     assert to_string(&Document::of(&[1, 2]).unwrap()).unwrap() == `[1,2]`;
-    assert Document::of(&2.5).unwrap().root().as_f64() == Option::Some(2.5);
+    assert Document::of(&2.5).unwrap().root().as_number() == Option::Some(Number::from(2.5));
     let mut chain = Chain { next: null };
     for let _ of 0..<200 {
         chain = Chain { next: Option::Some(chain) };
@@ -103,7 +104,9 @@ test "malformed text is an error" {
     assert Document::parse(`nul`).is_err();
     assert Document::parse(`1 2`).is_err();
     assert Document::parse(#`"\uD800"`#).is_err();
-    assert Document::parse(`1e400`).is_err();
+    for let number of ["01", "-", "1.", "1e", ".5", "+1", "1.5.3", "1.2.e", "1e400.5"] as List<String> {
+        assert Document::parse(number).is_err();
+    }
 }
 
 test "text ending inside a container is an error where it ends" {

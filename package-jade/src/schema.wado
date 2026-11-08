@@ -4,6 +4,7 @@
 use { Serialize, SerializeError, SerializeMap, Serializer } from "core:serde";
 use { HashMap, HashSet } from "core:collections";
 use { Document, Node } from "./document.wado";
+use { Number } from "./number.wado";
 
 /// A JSON Schema: `true` admits every instance, `false` none, and an object
 /// asserts its keywords.
@@ -48,8 +49,9 @@ pub struct SchemaObject {
     pub comment: Option<String> = null,
     pub title: Option<String> = null,
     pub description: Option<String> = null,
-    /// Empty when `type` is the empty array, which admits nothing.
-    pub type: Option<JsonTypes> = null,
+    /// `none()` when absent, as the meta-schema requires `type` to name at
+    /// least one type.
+    pub type: JsonTypes = JsonTypes::none(),
     pub format: Option<String> = null,
     pub content_encoding: Option<String> = null,
     pub content_media_type: Option<String> = null,
@@ -63,11 +65,11 @@ pub struct SchemaObject {
     pub if: Option<Schema> = null,
     pub then: Option<Schema> = null,
     pub else: Option<Schema> = null,
-    pub multiple_of: Option<f64> = null,
-    pub minimum: Option<f64> = null,
-    pub exclusive_minimum: Option<f64> = null,
-    pub maximum: Option<f64> = null,
-    pub exclusive_maximum: Option<f64> = null,
+    pub multiple_of: Option<Number> = null,
+    pub minimum: Option<Number> = null,
+    pub exclusive_minimum: Option<Number> = null,
+    pub maximum: Option<Number> = null,
+    pub exclusive_maximum: Option<Number> = null,
     pub min_length: Option<i32> = null,
     pub max_length: Option<i32> = null,
     pub pattern: Option<String> = null,
@@ -134,7 +136,7 @@ impl Schema {
 impl SchemaObject {
     /// A schema admitting one JSON type.
     pub fn of_type(t: JsonTypes) -> SchemaObject {
-        return SchemaObject { type: Option::Some(t) };
+        return SchemaObject { type: t };
     }
 
     /// A schema admitting the single value `value`.
@@ -153,20 +155,25 @@ impl SchemaObject {
         k.some("$comment", &self.comment)?;
         k.some("title", &self.title)?;
         k.some("description", &self.description)?;
-        k.some("type", &self.type.map(|types| TypeKeyword { types }))?;
+        let types: Option<TypeKeyword> = if self.type == JsonTypes::none() {
+            null;
+        } else {
+            Option::Some(TypeKeyword { types: self.type });
+        };
+        k.some("type", &types)?;
         k.some("format", &self.format)?;
         k.some("contentEncoding", &self.content_encoding)?;
         k.some("contentMediaType", &self.content_media_type)?;
-        k.some("contentSchema", &self.content_schema)?;
+        k.schema("contentSchema", &self.content_schema)?;
         k.some("const", &self.const)?;
         k.some("enum", &self.enum)?;
-        k.list("allOf", &self.all_of)?;
-        k.list("anyOf", &self.any_of)?;
-        k.list("oneOf", &self.one_of)?;
-        k.some("not", &self.not)?;
-        k.some("if", &self.if)?;
-        k.some("then", &self.then)?;
-        k.some("else", &self.else)?;
+        k.schema_list("allOf", &self.all_of)?;
+        k.schema_list("anyOf", &self.any_of)?;
+        k.schema_list("oneOf", &self.one_of)?;
+        k.schema("not", &self.not)?;
+        k.schema("if", &self.if)?;
+        k.schema("then", &self.then)?;
+        k.schema("else", &self.else)?;
         k.some("multipleOf", &self.multiple_of)?;
         k.some("minimum", &self.minimum)?;
         k.some("exclusiveMinimum", &self.exclusive_minimum)?;
@@ -175,38 +182,52 @@ impl SchemaObject {
         k.some("minLength", &self.min_length)?;
         k.some("maxLength", &self.max_length)?;
         k.some("pattern", &self.pattern)?;
-        k.some("items", &self.items)?;
-        k.list("prefixItems", &self.prefix_items)?;
-        k.some("contains", &self.contains)?;
+        k.schema("items", &self.items)?;
+        k.schema_list("prefixItems", &self.prefix_items)?;
+        k.schema("contains", &self.contains)?;
         k.some("minContains", &self.min_contains)?;
         k.some("maxContains", &self.max_contains)?;
         k.some("minItems", &self.min_items)?;
         k.some("maxItems", &self.max_items)?;
         k.flag("uniqueItems", self.unique_items)?;
-        k.some("unevaluatedItems", &self.unevaluated_items)?;
-        k.map("properties", &self.properties)?;
-        k.map("patternProperties", &self.pattern_properties)?;
+        k.schema("unevaluatedItems", &self.unevaluated_items)?;
+        k.schema_map("properties", &self.properties)?;
+        k.schema_map("patternProperties", &self.pattern_properties)?;
         k.list("required", &self.required)?;
         k.map("dependentRequired", &self.dependent_required)?;
-        k.map("dependentSchemas", &self.dependent_schemas)?;
-        k.some("additionalProperties", &self.additional_properties)?;
-        k.some("propertyNames", &self.property_names)?;
+        k.schema_map("dependentSchemas", &self.dependent_schemas)?;
+        k.schema("additionalProperties", &self.additional_properties)?;
+        k.schema("propertyNames", &self.property_names)?;
         k.some("minProperties", &self.min_properties)?;
         k.some("maxProperties", &self.max_properties)?;
-        k.some("unevaluatedProperties", &self.unevaluated_properties)?;
+        k.schema("unevaluatedProperties", &self.unevaluated_properties)?;
         k.some("default", &self.default)?;
         k.list("examples", &self.examples)?;
         k.flag("deprecated", self.deprecated)?;
         k.flag("readOnly", self.read_only)?;
         k.flag("writeOnly", self.write_only)?;
-        k.map("$defs", &self.defs)?;
+        k.schema_map("$defs", &self.defs)?;
         return Result::Ok(());
     }
 
     /// Breaks none of the rules Draft 2020-12's meta-schema states on this
-    /// object's own keywords, at the JSON Pointer `at` to it. Each subschema is
-    /// checked where it is read, written or compiled.
+    /// object's own keywords, nor Core's on where its subschemas' `$schema`
+    /// goes, at the JSON Pointer `at` to it. Each subschema is checked where it
+    /// is read, written or compiled.
     internal fn check(&self, at: &String) -> Result<(), SchemaError> {
+        // Core §8.1.1: a schema must validate against the meta-schema
+        // `$schema` names, and Jade holds only Draft 2020-12's.
+        if let Some(dialect) = &self.dialect && *dialect != Schema::DRAFT && *dialect != `${Schema::DRAFT}#` {
+            return fail(
+                &`${*at}/$schema`,
+                "must name Draft 2020-12's meta-schema, the only one Jade can validate against",
+            );
+        }
+        let mut dialects = DialectCheck { at: *at };
+        self.each_keyword(&mut dialects).unwrap();
+        if let Some(e) = dialects.error {
+            return Result::Err(e);
+        }
         if let Some(id) = &self.id && let Some(hash) = id.find("#") && hash != id.len() - 1 {
             return fail(&`${*at}/$id`, "must have an empty fragment or none");
         }
@@ -222,7 +243,7 @@ impl SchemaObject {
                 );
             }
         }
-        if let Some(m) = self.multiple_of && !(m > 0.0) {
+        if let Some(m) = &self.multiple_of && *m <= Number::from(0.0) {
             return fail(&`${*at}/multipleOf`, "must be greater than 0");
         }
         let counts: List<[String, Option<i32>]> = [
@@ -317,6 +338,64 @@ trait KeywordSink with () {
     fn flag(&mut self, key: String, value: bool) -> Result<(), SerializeError> {
         if value {
             return self.put(key, &true);
+        }
+        return Result::Ok(());
+    }
+
+    fn schema(&mut self, key: String, value: &Option<Schema>) -> Result<(), SerializeError> {
+        return self.some(key, value);
+    }
+
+    fn schema_list(&mut self, key: String, value: &List<Schema>) -> Result<(), SerializeError> {
+        return self.list(key, value);
+    }
+
+    fn schema_map(&mut self, key: String, value: &HashMap<String, Schema>) -> Result<(), SerializeError> {
+        return self.map(key, value);
+    }
+}
+
+/// Finds the first subschema carrying `$schema` without `$id`. Core §8.1.1
+/// lets `$schema` appear only at a schema resource's root, which the subschema
+/// cannot tell of itself.
+struct DialectCheck {
+    at: String,
+    error: Option<SchemaError> = null,
+}
+
+impl DialectCheck {
+    fn visit(&mut self, s: &Schema, at: String) {
+        if self.error matches { None } && let Object(o) = s && o.dialect matches { Some(_) } && o.id matches { None } {
+            self.error = Option::Some(SchemaError {
+                pointer: `${at}/$schema`,
+                message: "may appear only at a schema resource's root",
+            });
+        }
+    }
+}
+
+impl KeywordSink for DialectCheck {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+
+    fn schema(&mut self, key: String, value: &Option<Schema>) -> Result<(), SerializeError> {
+        if let Some(s) = value {
+            self.visit(s, `${self.at}/${key}`);
+        }
+        return Result::Ok(());
+    }
+
+    fn schema_list(&mut self, key: String, value: &List<Schema>) -> Result<(), SerializeError> {
+        for let [i, s] of value.iter_ref().enumerate() {
+            self.visit(s, `${self.at}/${key}/${i}`);
+        }
+        return Result::Ok(());
+    }
+
+    fn schema_map(&mut self, key: String, value: &HashMap<String, Schema>) -> Result<(), SerializeError> {
+        for let [k, s] of value.entries() {
+            self.visit(s, `${self.at}/${key}/${pointer_token(k)}`);
         }
         return Result::Ok(());
     }
@@ -418,7 +497,7 @@ internal fn type_names(types: JsonTypes) -> List<String> {
     return names;
 }
 
-/// `type`'s value: one name as a string, any other number as an array of them.
+/// `type`'s value: one name as a string, more as an array of them.
 struct TypeKeyword {
     types: JsonTypes,
 }
@@ -491,7 +570,7 @@ fn read_object(node: &Node, at: &String) -> Result<SchemaObject, SchemaError> {
             "$defs" => s.defs = read_map(v, &here, "schemas", read_schema)?,
             "title" => s.title = Option::Some(read_string(v, &here)?),
             "description" => s.description = Option::Some(read_string(v, &here)?),
-            "type" => s.type = Option::Some(read_types(v, &here)?),
+            "type" => s.type = read_types(v, &here)?,
             "format" => s.format = Option::Some(read_string(v, &here)?),
             "contentEncoding" => s.content_encoding = Option::Some(read_string(v, &here)?),
             "contentMediaType" => s.content_media_type = Option::Some(read_string(v, &here)?),
@@ -558,8 +637,8 @@ fn read_bool(v: &Node, at: &String) -> Result<bool, SchemaError> {
     return fail(at, "must be a boolean");
 }
 
-fn read_number(v: &Node, at: &String) -> Result<f64, SchemaError> {
-    if let Some(n) = v.as_f64() {
+fn read_number(v: &Node, at: &String) -> Result<Number, SchemaError> {
+    if let Some(n) = v.as_number() {
         return Result::Ok(n);
     }
     return fail(at, "must be a number");
@@ -567,10 +646,11 @@ fn read_number(v: &Node, at: &String) -> Result<f64, SchemaError> {
 
 /// An integer, which may be spelled with a fraction of zero. A count past
 /// `i32::MAX` is held at `i32::MAX`, which no list or string length reaches
-/// either; `SchemaObject::check` rejects a negative one.
+/// either, and one below `i32::MIN` at `i32::MIN`; `SchemaObject::check`
+/// rejects a negative one.
 fn read_count(v: &Node, at: &String) -> Result<i32, SchemaError> {
-    if let Some(n) = v.as_f64() && n == f64::trunc(n) {
-        return Result::Ok(if n > i32::MAX as f64 { i32::MAX } else { n as i32 });
+    if let Some(n) = v.as_number() && n.is_integer() {
+        return Result::Ok(n.to_f64() as i32);
     }
     return fail(at, "must be a non-negative integer");
 }
@@ -592,6 +672,9 @@ fn read_types(v: &Node, at: &String) -> Result<JsonTypes, SchemaError> {
     }
     if !v.kind() matches { Array } {
         return fail(at, "must be a type name or an array of them");
+    }
+    if v.len() == 0 {
+        return fail(at, "must name at least one type");
     }
     let mut types = JsonTypes::none();
     for let [i, item] of v.items().enumerate() {

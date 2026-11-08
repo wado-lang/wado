@@ -1,0 +1,13 @@
+// A bound naming no trait of the namespace is reported as written.
+use geo from "./sub/spec_modules_geo.wado";
+
+fn shown<T: geo::Nope>(t: &T) -> i32 {
+    return 0;
+}
+
+test {
+    assert shown(&1) == 0;
+}
+
+__DATA__
+{"compile_error": "'geo::Nope' is not a declared trait"}

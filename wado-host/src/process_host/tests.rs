@@ -3,11 +3,12 @@ use std::collections::BTreeSet;
 #[cfg(unix)]
 use std::path::{Path, PathBuf};
 
+use super::platform::unsupported_reason;
 #[cfg(unix)]
 use super::posix::{refusals_warning, refused_warning};
 #[cfg(unix)]
 use super::types::ExitStatus;
-use super::{Answer, ProcessGrant, Trace, answer, unsupported_reason};
+use super::{Answer, ProcessGrant, Trace, answer};
 #[cfg(unix)]
 use crate::sandbox::{Access as Reach, Refusal};
 

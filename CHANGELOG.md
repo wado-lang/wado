@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.0.38](https://github.com/wado-lang/wado/compare/v0.0.37...v0.0.38) - 2026-11-06
+## [v0.0.38](https://github.com/wado-lang/wado/compare/v0.0.37...v0.0.38) - 2026-11-07
 
 - perf(nir): pass a &S read past an early exit as its fields, so f64::from_str allocates no StrSlice by @gfx in https://github.com/wado-lang/wado/pull/2381
 - docs(benchmark): publish the 2026-10-18 results by @gfx in https://github.com/wado-lang/wado/pull/2383
@@ -173,6 +173,9 @@
 - fix(EMI): keep a write-only parameter in dead argument elimination by @gfx in https://github.com/wado-lang/wado/pull/2564
 - feat(loam): the decoding loop runs on the device, one read back for all its tokens by @gfx in https://github.com/wado-lang/wado/pull/2565
 - feat(pgo)!: keep a profile applying across version bumps and file moves by @gfx in https://github.com/wado-lang/wado/pull/2566
+- feat(jade): validate documents against JSON Schema Draft 2020-12 by @gfx in https://github.com/wado-lang/wado/pull/2567
+- perf(pgo): make the profiled build faster than no-pgo on most benchmarks by @gfx in https://github.com/wado-lang/wado/pull/2569
+- fix(release): build `wado` for Windows, and publish a release only once every build succeeds by @gfx in https://github.com/wado-lang/wado/pull/2570
 
 ## [v0.0.37](https://github.com/wado-lang/wado/compare/v0.0.36...v0.0.37) - 2026-10-18
 

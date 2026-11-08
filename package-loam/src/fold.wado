@@ -292,7 +292,7 @@ fn shape_of(node: &Node, known: &HashMap<String, Known>, shapes: &HashMap<String
     let input = node.inputs[0];
     let extents: List<Poly> = match known.get(input) {
         Some(k) => k.extents.into_iter().map(|e| Poly::constant(e as i64)).collect(),
-        None => shapes.get(input).unwrap().axes.into_iter().map(|a| a.extent.poly()).collect(),
+        None => shapes[input].polys(),
     };
     let rank = extents.len() as i64;
     let start = clamped(int_attr(node, "start", 0)?, rank, 0, rank);

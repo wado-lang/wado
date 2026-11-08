@@ -82,6 +82,8 @@ struct Case {
     half: i32,
     biased: bool,
     options: Attention,
+    /// The positions attended, where fewer than all.
+    reach: Option<i32> = null,
 }
 
 fn tensor<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
@@ -135,6 +137,45 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             half: 0,
             biased: false,
             options: Attention { heads: 4, kv_heads: 2, scale: 0.35, softcap: 2.0, window: 40, causal: true },
+        },
+        // As GPT-2 spells it: the scale divides, and a hidden position keeps a
+        // score the bias then adds to.
+        Case {
+            name: "spelled",
+            seq: 3,
+            past: 4,
+            half: 0,
+            biased: true,
+            options: Attention {
+                heads: 2,
+                kv_heads: 2,
+                scale: 2.8,
+                divides: true,
+                softcap: -1.0,
+                window: -1,
+                causal: true,
+                hidden: Option::Some(f32::MIN),
+            },
+        },
+        // A hidden score near the valid ones weighs a position, so only `reach`
+        // keeps a query from the padding.
+        Case {
+            name: "reached",
+            seq: 3,
+            past: 4,
+            half: 0,
+            biased: true,
+            reach: Option::Some(6),
+            options: Attention {
+                heads: 2,
+                kv_heads: 2,
+                scale: 2.8,
+                divides: true,
+                softcap: -1.0,
+                window: -1,
+                causal: true,
+                hidden: Option::Some(-2.0),
+            },
         },
     ];
     for let c of cases {
@@ -206,6 +247,10 @@ fn attended(
     let sin: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 7);
     let bias: Tensor<f32, [One, One, Seq, Total]> = tensor([1, 1, c.seq, total], 8);
     let turned = c.half > 0;
+    let positions_attended = Tensor::<i64, []> {
+        data: [c.reach.unwrap_or(total) as i64],
+        extents: [],
+    };
     let on_cpu = Cpu {}.group_query_attention(
         &q,
         &k,
@@ -213,6 +258,7 @@ fn attended(
         &past_k,
         &past_v,
         null,
+        if c.reach matches { Some(_) } { Option::Some(&positions_attended) } else { null },
         if turned { Option::Some(&cos) } else { null },
         if turned { Option::Some(&sin) } else { null },
         if c.biased { Option::Some(&bias) } else { null },
@@ -229,6 +275,7 @@ fn attended(
         gpu.upload(&sin),
         gpu.upload(&bias),
     ];
+    let greach = gpu.upload(&positions_attended);
     let on_gpu = gpu.group_query_attention(
         &gq,
         &gk,
@@ -236,6 +283,7 @@ fn attended(
         &gpk,
         &gpv,
         null,
+        if c.reach matches { Some(_) } { Option::Some(&greach) } else { null },
         if turned { Option::Some(&gcos) } else { null },
         if turned { Option::Some(&gsin) } else { null },
         if c.biased { Option::Some(&gbias) } else { null },
@@ -276,12 +324,13 @@ fn step(
     let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, seq, options.heads * d], seed);
     let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 1);
     let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 2);
-    let on_cpu = Cpu {}.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One>(
+    let on_cpu = Cpu {}.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
         &q,
         &k,
         &v,
         &before.on_cpu.0,
         &before.on_cpu.1,
+        null,
         null,
         Option::Some(cos),
         Option::Some(sin),
@@ -304,12 +353,13 @@ fn step(
     let past_k = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.0, extents);
     let past_v = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.1, extents);
     let made = gpu.bind_groups();
-    let on_gpu = gpu.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One>(
+    let on_gpu = gpu.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
         &gq,
         &gk,
         &gv,
         &past_k,
         &past_v,
+        null,
         null,
         Option::Some(&gcos),
         Option::Some(&gsin),

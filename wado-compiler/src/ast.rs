@@ -1169,7 +1169,7 @@ pub fn walk_generic_params<'ast, V: AstVisitor<'ast>>(v: &mut V, params: &'ast [
 
 pub fn walk_trait_bounds<'ast, V: AstVisitor<'ast>>(v: &mut V, bounds: &'ast [TraitBound]) {
     for bound in bounds {
-        v.visit_id(bound.id, bound.span);
+        v.visit_id(bound.id, bound.name_span);
         for arg in &bound.type_args {
             v.visit_type(arg);
         }
@@ -1209,7 +1209,7 @@ pub fn walk_type<'ast, V: AstVisitor<'ast>>(v: &mut V, ty: &'ast Type) {
             }
         }
         Type::NamespacedGeneric(t) => {
-            v.visit_id(t.id, t.span);
+            v.visit_id(t.id, t.name_span);
             for a in &t.args {
                 v.visit_type(a);
             }
@@ -4651,7 +4651,11 @@ pub struct TraitBound {
     /// Distinct from the referenced trait's declaration id: one bound is one
     /// reference site, and two modules' `T: Greet` are two of them.
     pub id: AstId,
+    /// The namespace import the trait is named through: `geo` in `geo::Show`.
+    pub namespace: Option<String>,
     pub name: String,
+    /// Where `name` is written; `span` covers the namespace too.
+    pub name_span: Span,
     /// The trait's own arguments, positionally (`String` in `Eq<String>`). A
     /// position the bound leaves out takes the trait's declared default.
     pub type_args: Vec<Type>,
@@ -4674,6 +4678,14 @@ impl TraitBound {
     /// none: it is already realised in the bounded parameter's own type.
     pub fn names_a_trait(&self) -> bool {
         self.fn_signature.is_none()
+    }
+
+    /// The trait's name as written, with the namespace it is named through.
+    pub fn written_name(&self) -> String {
+        match &self.namespace {
+            Some(namespace) => format!("{namespace}::{}", self.name),
+            None => self.name.clone(),
+        }
     }
 
     /// Whether any type the bound writes is rooted at `Self`, so reading it

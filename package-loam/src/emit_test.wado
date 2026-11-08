@@ -1232,7 +1232,7 @@ test "a build takes a padded past to its attention as a buffer of fixed capacity
         Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T32)
     }`;
     let built = build_of(&generate(source).unwrap());
-    assert built.contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, &Attention {");
+    assert built.contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, &Attention {");
 }
 
 test "compute holds a cache at the capacity of the total, its past's length what the graph owes it" {

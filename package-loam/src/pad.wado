@@ -5,9 +5,9 @@
 
 use { HashMap } from "core:collections";
 use { GROUP_QUERY_ATTENTION, Graph, Node } from "./graph.wado";
-use { Checked, attention_options, split_axis } from "./infer.wado";
+use { Checked, attention_options, owed_presumed, split_axis } from "./infer.wado";
 use { branches } from "./lowering.wado";
-use { Condition, Poly, equalities } from "./poly.wado";
+use { Poly, equalities } from "./poly.wado";
 use { Shape, short_of } from "./shape.wado";
 
 /// Why an operator keeps a length from being padded.
@@ -151,19 +151,6 @@ fn shrinking(node: &Node, checked: &Checked) -> List<String> {
         }
     }
     return read;
-}
-
-/// `extent` as `Poly::presumed` reads it, where `checked` owes every
-/// condition that reading takes.
-fn owed_presumed(extent: &Poly, checked: &Checked) -> Option<Poly> {
-    let mut conditions: List<Condition> = [];
-    let presumed = extent.presumed(&mut conditions)?;
-    for let c of conditions {
-        if !checked.owed.into_iter().any(|o| o.slack == c.slack) {
-            return null;
-        }
-    }
-    return Option::Some(presumed);
 }
 
 /// The symbols `node` keeps from being padded, and why, where it keeps any.
