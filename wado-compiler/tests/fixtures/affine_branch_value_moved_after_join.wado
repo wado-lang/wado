@@ -1,0 +1,30 @@
+// A move a branch did not see is excused only where another branch made it: a
+// move past the join still ends what the yielded reference reads.
+
+affine struct T {
+    v: i32,
+}
+
+impl Drop for T {
+    fn drop(self) {
+    }
+}
+
+fn consume(t: T) -> i32 {
+    return t.v;
+}
+
+fn read(t: &T) -> i32 {
+    return t.v;
+}
+
+fn pick(flag: bool) -> i32 {
+    let t = T { v: 1 };
+    let u = T { v: 2 };
+    let r = if flag { &t } else { consume(t); &u };
+    consume(u);
+    return read(r);
+}
+
+__DATA__
+{"compile_error": ":26:17: analysis error: `r` refers into `u`, which moved at 25:13"}

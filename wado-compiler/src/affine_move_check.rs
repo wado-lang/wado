@@ -588,6 +588,9 @@ struct OwnerSite {
     /// Why the object the value names left the local, once an assignment
     /// refilled or replaced the place holding it.
     gone: Option<Gone>,
+    /// The moves a join merged in from paths other than the one the value
+    /// came by, which never reached what it refers into.
+    moved_elsewhere: Vec<Span>,
 }
 
 impl OwnerSite {
@@ -711,6 +714,10 @@ struct MoveWalker<'a, 'c> {
     closure_owners: IndexMap<AstId, Owners>,
     /// What the `break` values of each labeled block refer into.
     break_owners: IndexMap<String, Owners>,
+    /// What the value each branch of an `if`, a `match` or a labeled block
+    /// yields refers into, settled where the branch ends, by the branch's
+    /// block or arm body.
+    settled: IndexMap<AstId, Owners>,
     /// The state each enclosing loop's `break`s and `continue`s carry to where
     /// they jump, innermost last.
     loops: Vec<LoopJumps>,
@@ -770,6 +777,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             disturbed_captures: IndexSet::default(),
             closure_owners: IndexMap::default(),
             break_owners: IndexMap::default(),
+            settled: IndexMap::default(),
             loops: Vec::new(),
             labels: Vec::new(),
             suppress: 0,
@@ -833,12 +841,20 @@ impl MoveWalker<'_, '_> {
     /// The moved place overlapping `def.path`, if any: the place itself, one
     /// inside it, or one holding it.
     fn moved_overlap(&self, def: AstId, path: &[&str]) -> Option<Span> {
+        self.moves_overlapping(def, path).next()
+    }
+
+    /// Where each move of a place of `def` overlapping `path` happened.
+    fn moves_overlapping<'s>(
+        &'s self,
+        def: AstId,
+        path: &'s [&str],
+    ) -> impl Iterator<Item = Span> + 's {
         self.flow
             .moved
             .iter()
-            .find_map(|((moved_def, moved_path), span)| {
-                let overlaps = *moved_def == def && paths_overlap(moved_path, path);
-                overlaps.then_some(*span)
+            .filter_map(move |((moved_def, moved_path), span)| {
+                (*moved_def == def && paths_overlap(moved_path, path)).then_some(*span)
             })
     }
 
@@ -961,21 +977,77 @@ impl MoveWalker<'_, '_> {
             Some(region) => self
                 .temporary_gone(region)
                 .or_else(|| self.disturbed_since(holder, owner)),
-            None => self.owner_gone(holder, owner),
+            None => self.owner_gone(holder, owner, &site.moved_elsewhere),
         })?;
         Some((site.name.clone(), gone))
     }
 
+    /// `owners`, judged where the value carrying them is formed: one gone here
+    /// stays gone, and only a `&mut` use from here on disturbs the rest.
+    fn settle(&self, owners: Owners, holder: AstId) -> Owners {
+        let mut settled = Owners::default();
+        for (mut owner, mut site) in owners {
+            match self.site_gone(holder, &owner, &site) {
+                Some((_, gone)) => site.gone = Some(gone),
+                None => owner.disturbed = self.disturbed_count(owner.def),
+            }
+            merge_owners(&mut settled, Owners::from_iter([(owner, site)]));
+        }
+        settled
+    }
+
+    /// `owners`, settled where a branch ended, past the join of that branch
+    /// with the others: what the others moved or disturbed, they did on a
+    /// path the value did not come by.
+    fn past_join(&self, owners: Owners) -> Owners {
+        let mut joined = Owners::default();
+        for (mut owner, mut site) in owners {
+            if site.gone.is_none() {
+                let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
+                site.moved_elsewhere
+                    .extend(self.moves_overlapping(owner.def, &path));
+                owner.disturbed = self.disturbed_count(owner.def);
+            }
+            merge_owners(&mut joined, Owners::from_iter([(owner, site)]));
+        }
+        joined
+    }
+
+    /// Settle what the branch `id` names yields, `owners`, where it ends. One
+    /// that `diverged` yields nothing.
+    fn settle_branch(&mut self, id: AstId, diverged: bool, owners: impl FnOnce(&Self) -> Owners) {
+        self.settled.shift_remove(&id);
+        let settled = if diverged {
+            Owners::default()
+        } else {
+            self.settle(owners(self), id)
+        };
+        self.settled.insert(id, settled);
+    }
+
+    /// Carry the branches `ids` settled past their join.
+    fn join_branches(&mut self, ids: impl IntoIterator<Item = AstId>) {
+        for id in ids {
+            if let Some(owners) = self.settled.shift_remove(&id) {
+                let joined = self.past_join(owners);
+                self.settled.insert(id, joined);
+            }
+        }
+    }
+
     /// Why `owner` no longer holds what `holder` reads through it, if it does
     /// not.
-    fn owner_gone(&self, holder: AstId, owner: &Owner) -> Option<Gone> {
+    fn owner_gone(&self, holder: AstId, owner: &Owner, moved_elsewhere: &[Span]) -> Option<Gone> {
         if self.instance(owner.def) != owner.instance
             || self.ended.get(&owner.def) == Some(&owner.instance)
         {
             return Some(Gone::Ended);
         }
         let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
-        if let Some(moved_at) = self.moved_overlap(owner.def, &path) {
+        if let Some(moved_at) = self
+            .moves_overlapping(owner.def, &path)
+            .find(|span| !moved_elsewhere.contains(span))
+        {
             return Some(Gone::Moved(moved_at));
         }
         self.disturbed_since(holder, owner)
@@ -1460,6 +1532,7 @@ impl MoveWalker<'_, '_> {
                 span: closure.span,
                 writes,
                 gone: None,
+                moved_elsewhere: Vec::new(),
             };
             if site.matters() {
                 owners.insert(self.owner(def, Vec::new()), site);
@@ -1668,13 +1741,13 @@ impl MoveWalker<'_, '_> {
         let mut owners = Owners::default();
         match expr {
             Expr::Ident(_) | Expr::FieldAccess(_) | Expr::Index(_) => match place_root(expr) {
+                // The value is formed at this read, which a `&mut` use through
+                // the holder before it does not disturb.
                 Some(root) => {
-                    if let Some(held) = self
-                        .sem()
-                        .referenced_symbol(root.id)
-                        .and_then(|def| self.flow.holders.get(&def))
+                    if let Some(def) = self.sem().referenced_symbol(root.id)
+                        && let Some(held) = self.flow.holders.get(&def)
                     {
-                        owners.clone_from(held);
+                        owners = self.settle(held.clone(), def);
                     }
                 }
                 None => match expr {
@@ -1828,6 +1901,7 @@ impl MoveWalker<'_, '_> {
                         affine: self.is_affine_local(def),
                         writes,
                         gone: None,
+                        moved_elsewhere: Vec::new(),
                     };
                     if site.matters() {
                         owners.insert(self.owner(def, place.owned_fields()), site);
@@ -1867,6 +1941,7 @@ impl MoveWalker<'_, '_> {
             affine: true,
             writes,
             gone: None,
+            moved_elsewhere: Vec::new(),
         };
         (owner, site)
     }
@@ -1886,6 +1961,9 @@ impl MoveWalker<'_, '_> {
 
     /// What the value a block ends with refers into.
     fn block_owners(&self, block: &Block) -> Owners {
+        if let Some(settled) = self.settled.get(&block.id) {
+            return settled.clone();
+        }
         match block.stmts.last() {
             Some(Stmt::Expr(e)) => self.owners_of(&e.expr),
             Some(Stmt::If(s)) => self.if_owners(&s.then_block, s.else_block.as_ref()),
@@ -1906,7 +1984,11 @@ impl MoveWalker<'_, '_> {
     fn arms_owners(&self, arms: &[ast::MatchArm]) -> Owners {
         let mut owners = Owners::default();
         for arm in arms {
-            merge_owners(&mut owners, self.owners_of(&arm.body));
+            let arm_owners = match self.settled.get(&arm.body.id()) {
+                Some(settled) => settled.clone(),
+                None => self.owners_of(&arm.body),
+            };
+            merge_owners(&mut owners, arm_owners);
         }
         owners
     }
@@ -2122,7 +2204,7 @@ impl MoveWalker<'_, '_> {
                 if let Some(value) = &b.value {
                     self.visit_at(value);
                     if let Some(label) = &b.label {
-                        let owners = self.owners_of(value);
+                        let owners = self.settle(self.owners_of(value), value.id());
                         merge_owners(self.break_owners.entry(label.clone()).or_default(), owners);
                     }
                 }
@@ -2227,9 +2309,16 @@ impl MoveWalker<'_, '_> {
     fn visit_labeled_block(&mut self, label: &str, block: &Block) -> bool {
         self.labels.push((label.to_string(), None));
         let diverged = self.visit_block(block);
+        self.settle_branch(block.id, diverged, |walker| walker.block_owners(block));
         let (_, broken) = self.labels.pop().expect("pushed above");
         let end = (!diverged).then(|| std::mem::take(&mut self.flow));
-        self.continue_from(end, broken)
+        let all_diverge = self.continue_from(end, broken);
+        self.join_branches([block.id]);
+        if let Some(broken) = self.break_owners.shift_remove(label) {
+            let joined = self.past_join(broken);
+            self.break_owners.insert(label.to_string(), joined);
+        }
+        all_diverge
     }
 
     /// Continues from where the construct falls through, `end`, joined with
@@ -2281,13 +2370,20 @@ impl MoveWalker<'_, '_> {
             walker.visit_condition(condition);
             walker.visit_block(then_block)
         });
+        self.settle_branch(then_block.id, then_div, |walker| {
+            walker.block_owners(then_block)
+        });
         let then_flow = std::mem::replace(&mut self.flow, unmatched);
         let else_div = else_block.is_some_and(|eb| self.visit_block(eb));
+        if let Some(eb) = else_block {
+            self.settle_branch(eb.id, else_div, |walker| walker.block_owners(eb));
+        }
         match (then_div, else_div) {
             (false, false) => self.flow.merge(then_flow),
             (false, true) => self.flow = then_flow,
             (true, _) => {}
         }
+        self.join_branches([then_block.id].into_iter().chain(else_block.map(|eb| eb.id)));
         then_div && else_div
     }
 
@@ -2325,12 +2421,16 @@ impl MoveWalker<'_, '_> {
                 }
                 walker.visit_expr_diverges(&arm.body)
             });
+            self.settle_branch(arm.body.id(), diverged, |walker| {
+                walker.owners_of(&arm.body)
+            });
             if !diverged {
                 all_diverge = false;
                 merged.merge(std::mem::take(&mut self.flow));
             }
         }
         self.flow = merged;
+        self.join_branches(arms.iter().map(|arm| arm.body.id()));
         all_diverge
     }
 
