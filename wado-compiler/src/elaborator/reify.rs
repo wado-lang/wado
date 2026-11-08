@@ -752,6 +752,12 @@ impl<'a> Reify<'a> {
         self.ask_ownership(|modes, facts| modes.moves(expr, facts))
     }
 
+    /// Whether `expr` is a temporary a `let` of the body being reified keeps
+    /// borrowed.
+    fn extends(&self, expr: &ast::Expr) -> bool {
+        self.ask_ownership(|modes, _| modes.extended(expr))
+    }
+
     /// Whether the body being reified takes ownership of the value of `expr`,
     /// so a local reify binds it to moves where `expr` stood.
     fn takes(&self, expr: &ast::Expr) -> bool {
@@ -2510,6 +2516,9 @@ impl<'a> Reify<'a> {
             },
         );
         let tir = if self.moves(expr) { tir.moved() } else { tir };
+        if self.extends(expr) {
+            tir.mark(|marks| marks.extended = true);
+        }
         let span = tir.span;
         if let Some(ListViewConversion {
             view,

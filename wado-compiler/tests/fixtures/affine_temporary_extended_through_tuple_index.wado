@@ -1,0 +1,28 @@
+// A constant index into a tuple is its field, so a `let` keeps the tuple it
+// borrows an element of as it does through `.0`.
+
+global mut DROPPED: List<i32> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPPED.push(self.n);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+test {
+    blk: {
+        let a = &[make(1), make(2)][1];
+        let b = &[make(3)].0;
+        assert DROPPED.is_empty();
+        assert [a.n, b.n] == [2, 3];
+    }
+    assert DROPPED == [3, 1, 2] as List<i32>;
+}

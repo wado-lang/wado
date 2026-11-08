@@ -941,6 +941,9 @@ pub struct ExprMarks {
     /// A by-value argument whose storage the call's evaluation may write before
     /// the callee is done with it: a confined parameter still copies it.
     pub written: bool,
+    /// A temporary a `let` keeps borrowed ([`crate::ownership::Modes::extended`]),
+    /// which drops as the `let`'s scope ends rather than its statement.
+    pub extended: bool,
 }
 
 impl TirExpr {
@@ -961,6 +964,14 @@ impl TirExpr {
     pub fn mark(&self, set: impl FnOnce(&mut ExprMarks)) {
         let mut marks = self.marks.get();
         set(&mut marks);
+        self.marks.set(marks);
+    }
+
+    /// Replace `self` with `with`, the same value spelled another way, which
+    /// keeps what the ownership walk decided about it.
+    pub fn rewrite(&mut self, with: TirExpr) {
+        let marks = self.marks();
+        *self = with;
         self.marks.set(marks);
     }
 

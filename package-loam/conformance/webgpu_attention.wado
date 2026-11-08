@@ -23,7 +23,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Attention, Cpu, Graph, Holds, Placed, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { Attention, Cpu, Graph, Holds, Placed, Slots, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 
 struct Batch {
@@ -247,9 +247,9 @@ fn attended(
     let sin: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 7);
     let bias: Tensor<f32, [One, One, Seq, Total]> = tensor([1, 1, c.seq, total], 8);
     let turned = c.half > 0;
-    let positions_attended = Tensor::<i64, []> {
+    let positions_attended = Tensor::<i64, [Slots]> {
         data: [c.reach.unwrap_or(total) as i64],
-        extents: [],
+        extents: [1],
     };
     let on_cpu = Cpu {}.group_query_attention(
         &q,

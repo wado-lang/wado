@@ -1,0 +1,219 @@
+//! A tiny GPT-2 over a batch of rows, its lengths held at a capacity. Its
+//! projections merge the rows and positions for a `Gemm` and split them back,
+//! which puts each row's padding between the rows while they are merged. Each
+//! row computes what it computes alone, at lengths shared or its own.
+
+use { Cpu, Slots, Tensor, capacity_of, resized } from "lib:loam";
+use { assert_close } from "./oracle.wado";
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        type: "onnx",
+        generator: { module: "lib:loam" },
+    };
+
+/// The logits for each of `rows` after the `past` positions `cache` holds in
+/// each, and the cache grown by theirs.
+fn run(
+    rows: List<List<i64>>,
+    past: i32,
+    cache: &merged::Cache<Cpu>,
+    model: &mut merged::Model<Cpu>,
+) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, merged::Cache<Cpu>] {
+    let s = rows[0].len();
+    let mut ids: List<i64> = [];
+    for let row of &rows {
+        ids.extend(row);
+    }
+    let o = merged::compute(
+        &mut Cpu {},
+        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: ids,
+            extents: [rows.len(), s],
+        },
+        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: List::<i64>::filled(rows.len() * (past + s), 1),
+            extents: [rows.len(), past + s],
+        },
+        &Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [past > 0],
+            extents: [1],
+        },
+        cache,
+        model,
+    );
+    return [o.logits, o.cache];
+}
+
+/// Row `r` of `t`'s first axis.
+fn row_of<Axes>(t: &Tensor<f32, Axes>, r: i32) -> List<f32> {
+    let size = t.data.len() / t.extents[0];
+    return t.data[r * size..<(r + 1) * size].to_list();
+}
+
+test "each row of a batch computes the logits it computes alone, its prompt and each step after it" {
+    let cpu = &mut Cpu {};
+    let mut model = merged::Model::new(merged::Params::embedded(cpu));
+    let prompts: List<List<i64>> = [
+        [1, 5, 42, 7, 9],
+        [3, 8, 2, 77, 15],
+    ];
+    let steps: List<List<i64>> = [
+        [11, 13],
+        [12, 21],
+    ];
+    let mut both = merged::Cache::empty(cpu, 2);
+    let mut alone: List<merged::Cache<Cpu>> = [
+        merged::Cache::empty(cpu, 1),
+        merged::Cache::empty(cpu, 1),
+    ];
+    let mut past = 0;
+    let mut padded = false;
+    for let at of 0..<steps[0].len() + 1 {
+        let rows: List<List<i64>> = if at == 0 {
+            prompts;
+        } else {
+            [
+                [steps[0][at - 1]],
+                [steps[1][at - 1]],
+            ];
+        };
+        let [logits, grown] = run(rows, past, &both, &mut model);
+        for let r of 0..<rows.len() {
+            let [own, own_grown] = run([rows[r]], past, &alone[r], &mut model);
+            assert_close(&row_of(&logits, r), &own.data);
+            alone[r] = own_grown;
+        }
+        past += rows[0].len();
+        assert grown.past_key_values_0_key.extents == [2, 4, capacity_of(past), 8] as List<i32>;
+        padded = padded || capacity_of(past) > past;
+        both = grown;
+    }
+    assert padded, "some pass holds padding between the rows";
+}
+
+/// Each of `lengths` as a length of its row.
+fn each_row(lengths: &List<i32>) -> Tensor<i64, [Slots]> {
+    return Tensor {
+        data: lengths.into_iter().map(|l| l as i64).collect(),
+        extents: [lengths.len()],
+    };
+}
+
+/// `tokens`, a list per row each `width` long, padded with 0 past each row's.
+fn padded_rows(tokens: &List<List<i64>>, width: i32) -> List<i64> {
+    let mut data: List<i64> = [];
+    for let row of tokens {
+        data.extend(row);
+        data.extend(&List::<i64>::filled(width - row.len(), 0));
+    }
+    return data;
+}
+
+/// `cache`, of two rows, each past held at `capacity` positions.
+fn held_at(cache: &merged::Cache<Cpu>, capacity: i32) -> merged::Cache<Cpu> {
+    return merged::Cache {
+        past_key_values_0_key: resized(&cache.past_key_values_0_key, [2, 4, capacity, 8]),
+        past_key_values_0_value: resized(&cache.past_key_values_0_value, [2, 4, capacity, 8]),
+        past_key_values_1_key: resized(&cache.past_key_values_1_key, [2, 4, capacity, 8]),
+        past_key_values_1_value: resized(&cache.past_key_values_1_value, [2, 4, capacity, 8]),
+        past_key_values_2_key: resized(&cache.past_key_values_2_key, [2, 4, capacity, 8]),
+        past_key_values_2_value: resized(&cache.past_key_values_2_value, [2, 4, capacity, 8]),
+        past_key_values_3_key: resized(&cache.past_key_values_3_key, [2, 4, capacity, 8]),
+        past_key_values_3_value: resized(&cache.past_key_values_3_value, [2, 4, capacity, 8]),
+        past_key_values_4_key: resized(&cache.past_key_values_4_key, [2, 4, capacity, 8]),
+        past_key_values_4_value: resized(&cache.past_key_values_4_value, [2, 4, capacity, 8]),
+    };
+}
+
+/// Position `p` of row `r` of `t`, of axes rows, positions and logits.
+fn position_of<Axes>(t: &Tensor<f32, Axes>, r: i32, p: i32) -> List<f32> {
+    let width = t.extents[2];
+    let at = (r * t.extents[1] + p) * width;
+    return t.data[at..<at + width].to_list();
+}
+
+test "rows of their own lengths in one buffer each compute the logits they compute alone, their prompts and each step after" {
+    let cpu = &mut Cpu {};
+    let params = merged::Params::embedded(cpu);
+    let mut model = merged::Model::new(merged::Params::embedded(cpu));
+    let prompts: List<List<i64>> = [
+        [1, 5, 42, 7, 9],
+        [3, 8, 2],
+    ];
+    let steps: List<List<i64>> = [
+        [11, 13],
+        [12, 21],
+    ];
+    // Each row's prompt, padded to the longest, with no past.
+    let mut lengths: List<i32> = prompts.into_iter().map(|p| p.len()).collect();
+    let width = 5;
+    let o = merged::build(
+        cpu,
+        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: padded_rows(&prompts, width),
+            extents: [2, width],
+        },
+        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: padded_rows(&prompts.into_iter().map(|p| List::<i64>::filled(p.len(), 1)).collect(), width),
+            extents: [2, width],
+        },
+        &Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [false],
+            extents: [1],
+        },
+        &merged::Cache::empty(cpu, 2),
+        &merged::Lengths {
+            dim_sequence_length: each_row(&lengths),
+            dim_past_sequence_length: each_row(&[0, 0]),
+        },
+        &merged::Chosen { use_cache_branch: Option::Some(false) },
+        &params,
+    );
+    let mut alone: List<merged::Cache<Cpu>> = [];
+    for let r of 0..<2 {
+        let [own, own_cache] = run([prompts[r]], 0, &merged::Cache::empty(cpu, 1), &mut model);
+        for let p of 0..<lengths[r] {
+            assert_close(&position_of(&o.logits, r, p), &position_of(&own, 0, p));
+        }
+        alone.push(own_cache);
+    }
+    // The steps write each row's token after its own past, in one buffer.
+    let capacity = 8;
+    let mut both = held_at(&o.cache, capacity);
+    for let at of 0..<steps[0].len() {
+        let pasts = lengths;
+        lengths = pasts.into_iter().map(|l| l + 1).collect();
+        let tokens: List<List<i64>> = [
+            [steps[0][at]],
+            [steps[1][at]],
+        ];
+        let o = merged::build(
+            cpu,
+            &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+                data: [steps[0][at], steps[1][at]],
+                extents: [2, 1],
+            },
+            &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+                data: padded_rows(&lengths.into_iter().map(|l| List::<i64>::filled(l, 1)).collect(), capacity),
+                extents: [2, capacity],
+            },
+            &Tensor::<bool, [merged::UseCacheBranch0]> {
+                data: [true],
+                extents: [1],
+            },
+            &both,
+            &merged::Lengths {
+                dim_sequence_length: each_row(&[1, 1]),
+                dim_past_sequence_length: each_row(&pasts),
+            },
+            &merged::Chosen { use_cache_branch: Option::Some(true) },
+            &params,
+        );
+        for let r of 0..<2 {
+            let [own, own_cache] = run([tokens[r]], pasts[r], &alone[r], &mut model);
+            assert_close(&position_of(&o.logits, r, 0), &own.data);
+            alone[r] = own_cache;
+        }
+        both = o.cache;
+    }
+}

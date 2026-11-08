@@ -42,6 +42,10 @@ pub(super) struct StaticQuery<'a> {
     /// off — the qualified spelling infers one at the call — so the fact is
     /// carried rather than re-derived from [`Self::receiver_type`].
     pub(super) receiver_args: &'a [TypeId],
+    /// The method's own type arguments. They fill its slots in the pass that
+    /// fills the receiver's: a later pass by identity would also reach a
+    /// caller's parameter the receiver's arguments brought in at the same slot.
+    pub(super) method_args: &'a [TypeId],
     /// The trait a qualified spelling names (`Tagged::<V>::tag(5)`). Only its
     /// impls answer: the receiver's own declaration of the name is a different
     /// method, and a case it declares shadows nothing the trait supplies.
@@ -59,6 +63,7 @@ impl<'a> StaticQuery<'a> {
             arg_types: &[],
             receiver_type: None,
             receiver_args: &[],
+            method_args: &[],
             required_trait: None,
         }
     }
@@ -273,6 +278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             arg_types,
             receiver_type,
             receiver_args,
+            method_args,
             required_trait,
         } = query;
         // One vantage: the key the caller resolved, else the one its reference
@@ -342,7 +348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 &candidate,
                 receiver_type,
-                receiver_args,
+                (receiver_args, method_args),
             ),
             Selection::Ambiguous(alternatives) => {
                 return StaticLookup::Ambiguous(alternatives);
@@ -402,6 +408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     arg_types: &base_arg_types,
                     receiver_type: base_type.or(receiver_type),
                     receiver_args,
+                    method_args,
                     required_trait,
                     ..StaticQuery::of(&base_name, method_name)
                 });
@@ -620,7 +627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         candidate: &Candidate,
         receiver_type: Option<TypeId>,
-        receiver_args: &[TypeId],
+        (receiver_args, method_args): (&[TypeId], &[TypeId]),
     ) -> Option<StaticLookup> {
         let defs = self.tysys.resolutions.defs();
         let module = match &candidate.supply {
@@ -665,6 +672,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_name,
                     method_ref,
                     receiver_type,
+                    method_args,
                 )
                 .map(|callee| StaticLookup::Found(Box::new(callee)))
             }
@@ -672,7 +680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 candidate.method_id,
                 method_ref,
                 receiver_type,
-                receiver_args,
+                (receiver_args, method_args),
             ),
         }
     }
@@ -692,17 +700,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         method_ref: StaticMethodRef,
         receiver_type: Option<TypeId>,
+        method_args: &[TypeId],
     ) -> Option<StaticCallee> {
         let declaring = self.tysys.signatures.trait_sig(trait_decl)?;
         let sig = declaring.method(method_name)?.sig.clone();
         let mut params = CalleeParams::of_signature(Some(&sig));
         params.defaults_module = Some(declaring.module.clone());
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        if let Some(receiver_type) = receiver_type {
-            let frame: Vec<TypeId> = std::iter::once(receiver_type)
-                .chain(self.tysys.trait_args_of_impl(impl_def))
+        if receiver_type.is_some() || !method_args.is_empty() {
+            let frame: Vec<TypeId> = receiver_type
+                .into_iter()
+                .flat_map(|receiver_type| {
+                    std::iter::once(receiver_type).chain(self.tysys.trait_args_of_impl(impl_def))
+                })
                 .collect();
-            let instantiated = sig.instantiate_call(&self.tysys.type_table, &frame, &[]);
+            let instantiated = sig.instantiate_call(&self.tysys.type_table, &frame, method_args);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }
@@ -995,7 +1007,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         def: DefId,
         method_ref: StaticMethodRef,
         receiver_type: Option<TypeId>,
-        receiver_args: &[TypeId],
+        (receiver_args, method_args): (&[TypeId], &[TypeId]),
     ) -> Option<StaticLookup> {
         // `None` falls through to the next rung: a declaration the signature table
         // does not answer for is one this rung cannot resolve.
@@ -1004,16 +1016,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         // The declaring slots take the receiver's arguments, never the receiver itself:
         // only a trait's frame leads with `Self` (`Stream::<u8>::new()` once broke on it).
-        if sig.declaring_slot_count > 0
-            && let Some(args) =
-                self.tysys
-                    .receiver_args_at_impl(receiver_type, receiver_args, sig.declaring_impl)
-        {
+        let args = if sig.declaring_slot_count > 0 {
+            self.tysys
+                .receiver_args_at_impl(receiver_type, receiver_args, sig.declaring_impl)
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        if !args.is_empty() || !method_args.is_empty() {
             let declaring = sig
                 .declaring_impl
                 .map(|impl_def| self.tysys.signatures.impl_sig(impl_def));
             let instantiated =
-                sig.instantiate_call_with(&self.tysys.type_table, declaring, &args, &[]);
+                sig.instantiate_call_with(&self.tysys.type_table, declaring, &args, method_args);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }

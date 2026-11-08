@@ -1,0 +1,34 @@
+// What `?` unwraps and what a cast converts are temporaries like a call's
+// result, so a borrow of either that a call kept cannot be read after its
+// statement.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+type Alias = Tok;
+
+fn make(n: i32) -> Result<Tok, String> {
+    return Ok(Tok { n });
+}
+
+fn id(t: &Alias) -> &Alias {
+    return t;
+}
+
+fn tried() -> Result<i32, String> {
+    let r = id(&(make(1)? as Alias));
+    return Ok(r.n);
+}
+
+test {
+    assert tried().unwrap() == 1;
+}
+
+__DATA__
+{"compile_error": ":26:15: analysis error: `r` refers into the temporary at 25:18, which dropped as its statement ended"}

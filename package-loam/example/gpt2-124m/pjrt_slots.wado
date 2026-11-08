@@ -1,0 +1,17 @@
+//! `slots.wado` on a PJRT plugin's device:
+//!
+//!     wado run-pjrt -O2 --plugin libpjrt_cpu.so pjrt_slots.wado
+
+use { Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { PjrtHost } from "core:pjrt";
+use { MonotonicClock } from "wasi:clocks";
+use { PjrtBackend } from "lib:loam";
+use { measured, read_checkpoint } from "./slots.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, PjrtHost) {
+    let Some(checkpoint) = read_checkpoint() else {
+        return;
+    };
+    measured(PjrtBackend::new(), &checkpoint);
+}

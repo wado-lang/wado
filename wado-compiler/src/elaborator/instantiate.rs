@@ -188,6 +188,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.answer_frame_projections(substituted)
     }
 
+    /// A static method's parameter types at a call: the impl's type parameters
+    /// number first and the method's own after them, so the method's arguments
+    /// alone would fill the impl's slots.
+    pub(super) fn static_param_types_at(
+        &mut self,
+        param_types: Vec<TypeId>,
+        impl_args: &[TypeId],
+        method_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        if impl_args.is_empty() && method_args.is_empty() {
+            return param_types;
+        }
+        let combined: Vec<TypeId> = impl_args.iter().chain(method_args).copied().collect();
+        param_types
+            .iter()
+            .map(|&t| self.substitute_in_frame(t, &combined))
+            .collect()
+    }
+
     /// [`Self::substitute_in_frame`] for a substitution bound by name.
     pub(super) fn substitute_ctx_in_frame(
         &mut self,

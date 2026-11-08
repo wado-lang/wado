@@ -1,0 +1,32 @@
+// A struct literal evaluates its fields as written, in any order, and a `let`
+// keeps each temporary they borrow until its scope ends.
+
+global mut DROPPED: List<i32> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPPED.push(self.n);
+    }
+}
+
+struct Pair {
+    a: &Tok,
+    b: &Tok,
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+test {
+    blk: {
+        let p = Pair { b: &make(6), a: &make(5) };
+        assert DROPPED.is_empty();
+        assert [p.a.n, p.b.n] == [5, 6];
+    }
+    assert DROPPED == [5, 6] as List<i32>;
+}

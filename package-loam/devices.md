@@ -304,6 +304,13 @@ each symbolic axis whether it can promise that, at build time:
   length.
 - A merge of a padded axis with an axis after it keeps the valid elements a
   prefix.
+- A merge of a padded axis behind an axis before it, as GPT-2's projections
+  merge the rows and positions for a `Gemm`, puts each row's padding between
+  the rows. The merged axis may pass through operations that compute each of
+  its elements apart: an elementwise operation, a transpose, and a product
+  that keeps it among its left operand's rows. A regrouping that splits it
+  back as it was merged restores the prefix. Anything else that reads it, or a
+  graph output that keeps it merged, makes the generator refuse the length.
 - An extent that may fall as a length rises, such as a `Range` by the length,
   would hold fewer elements at the capacity than at the length, so the
   generator refuses to pad that length.
@@ -311,23 +318,34 @@ each symbolic axis whether it can promise that, at build time:
   the generator refuses the lengths it reads.
 - A length the graph owes equal to a sum with a refused length is refused
   too, since its capacity would not match the refused length's exact extent.
-- Any other operation that reads across a padded axis, such as a merge with an
-  axis before it, which would interleave the padding, makes the generator
-  refuse to pad that axis. It then compiles one program per length of that
-  axis, and `loam dump` says which node refused.
+- Any other operation that reads across a padded axis, such as a split of it
+  into axes it never lines up with, makes the generator refuse to pad that
+  axis. It then compiles one program per length of that axis, and `loam dump`
+  says which node refused.
 
 A valid length is one per row of the batch axis, since the rows of one pass are
 different requests (see
 [Requests share a pass through slots](#requests-share-a-pass-through-slots)).
 So each mask, count and write above reads its row's own.
 
+The rows run along the first axis of every input that pads a length behind it.
+A value computed from each row's lengths, as GPT-2's position ids are, holds
+the rows of `[Slots]` ahead of its axes. An elementwise operation, a reshape
+and a gather by it keep them there, and an elementwise operation whose output
+has the batch axis folds them into it. A `Slice` from a valid length gathers
+each row's window from that row's start. Where a node takes one length for
+every row, as a `ReduceMean`'s divisor does, reads how many rows the batch
+holds, or reads such a value any other way, the rows share their lengths, and
+`loam dump` says which node made them.
+
 The generated module takes them so:
 
-- `build` takes `lengths: &Lengths<G>`, a value of `[]` for each padded length
-  it reads as a value. A build that reads none takes no `lengths`. Every
-  extent the inputs give is a capacity. A condition the graph owes over a
-  padded length is not checked there, since a capacity need not meet what its
-  length meets.
+- `build` takes `lengths: &Lengths<G>`, a value for each padded length it reads
+  as a value: of `[Slots]` where each row holds its own, either one per row or
+  one every row shares, and of `[]` where the rows share them. A build that
+  reads none takes no `lengths`. Every extent the inputs give is a capacity. A
+  condition the graph owes over a padded length is not checked there, since a
+  capacity need not meet what its length meets.
 - `compute` takes the inputs on the host. It checks them, and what the graph
   owes, against their own lengths. It pads each padded length to its
   capacity, `capacity_of` of it, builds, and cuts the outputs back to their
@@ -360,14 +378,26 @@ it. A graph that owes its past's length no such equality gets no `compute`.
 ### Requests share a pass through slots
 
 A pass has a fixed number of slots, and each slot is one row of the batch
-axis. Each slot has its own cache, position and valid length, which are
-inputs, and an inactive slot is masked. A step advances every active slot in
-one pass, so the device reads each weight once for all of them.
+axis. Each slot has its own cache, position and valid length, and a step
+advances every slot in one pass, so the device reads each weight once for all
+of them.
 
-A prompt runs in a program of its own, of its own capacity. It writes its keys
-and values into its slot's cache by `dynamic_update_slice` at the slot's index.
-Which request takes which slot, and when a prompt runs, is the caller's
-scheduling. Loam provides the pieces and does not schedule.
+Where the rows hold their lengths apart and one past grows through a step, the
+`decode` option also offers `decode_rows` and `Requests`:
+
+- `decode_rows` is `decode` at a past for each row. The mask's extent is one
+  capacity for every row, and each row's lengths are its own past's. A row's
+  draws are keyed as row 0 at its own position, so a request draws in a slot
+  what it draws alone.
+- `Requests::new` holds `slots` empty slots of `capacity` positions.
+- `place` runs a request's prompt alone through `compute`, writes its cache into
+  its slot's row, and returns its first token.
+- `decode` runs every slot's steps in one call, an empty slot's among them,
+  whose tokens belong to no request.
+- `release` empties a slot.
+
+Which request takes which slot, and when, is the caller's scheduling. Loam
+provides the pieces and does not schedule.
 
 ONNX exports already carry what a row needs. `GroupQueryAttention` takes a
 length for each row, and other decoders take an attention mask and position ids
@@ -386,6 +416,7 @@ how many positions past its own its cache holds for the steps to come.
   top-p, drawn from a table the host writes once a call. Each entry is
   `core:prng`'s `Squares64` of the seed, the position and the row, so a call's
   splitting of its steps changes no draw, and no device's random source is read.
+  Rows at positions of their own are each keyed as row 0.
 - On PJRT the steps are a `while` loop in one program, with one execution and
   one read back for all of them.
 - On WebGPU the steps are the pass's launches encoded once per step in one pass.
@@ -420,8 +451,8 @@ and a program for each shape class it has met. The caller owns it, and
 - Dropping the model frees the weights, the programs and their memory
   together. A backend holds nothing past a call, so one backend serves any
   number of models without a key to tell their programs apart.
-- `Model` is shared by every request; `Cache` is one request's. Slots (step 7)
-  and the weights an expert routing loads stay in the model.
+- `Model` is shared by every request; `Cache` is one request's, or a row each
+  in `Requests`. The weights an expert routing loads stay in the model.
 - On `Cpu` a program is empty, since `Cpu` computes `build` directly and stays
   the reference.
 
@@ -446,7 +477,7 @@ and a program for each shape class it has met. The caller owns it, and
 4. [x] The WebGPU compiler.
 5. [x] Attention matched from its parts.
 6. [x] The loop on the device.
-7. [ ] Slots. Finished when the tokens per second at several numbers of slots
+7. [x] Slots. Finished when the tokens per second at several numbers of slots
    are recorded on the CPU plugin and on `WebGpuBackend`, each request's
    tokens unchanged from its run alone.
 8. [ ] A TPU. Finished when Gemma 3 picks onnxruntime's tokens on a TPU VM, and
@@ -521,6 +552,35 @@ steps a call. Over 100 tokens:
 [The benchmarks](./benchmark/README.md#gemma-3-270m) time the first prompt
 against onnxruntime on CUDA and on WebGPU, and against llama.cpp.
 
+### GPT-2 in slots
+
+GPT-2 (124M) placing a different prompt in each slot and decoding 31 greedy
+tokens in every slot with one call of `Requests::decode`, at `-O2`. Each
+request picks the tokens it picks alone, through `compute` and `decode`, on
+both devices. WebGPU is an RTX 4060 Ti under Vulkan on the release build of
+`wado-run-webgpu`, and PJRT the `dev` build on XLA's CPU plugin. The second of
+two runs is timed, so no compile is included:
+
+| Slots | Tokens a second, PJRT at one slot as 1 | WebGPU |
+| ----- | -------------------------------------- | ------ |
+| 1     | 1                                      | 5.52   |
+| 2     | 1.79                                   | 10.8   |
+| 4     | 2.83                                   | 19.6   |
+| 8     | 4.17                                   | 22.6   |
+
+On WebGPU a step in two slots takes as long as in one: each row's last logits
+are gathered, and its attention runs in the kernels, on the device at the
+row's own past, so a step reads nothing back.
+
+`example/gpt2-124m/slots.wado` is the program, which `pjrt_slots.wado` and
+`webgpu_slots.wado` run:
+
+```sh
+cd package-loam/example/gpt2-124m
+wado run-pjrt -O2 --plugin libpjrt_cpu.so pjrt_slots.wado
+wado run-webgpu -O2 webgpu_slots.wado
+```
+
 ### A loop's submissions
 
 Gemma 3 (270M) over 8 tokens a prompt on the same device, under the `dev` build,
@@ -578,8 +638,8 @@ model, and it does not price 94 and 93 of each program's operations
 
 ## Known gaps
 
-- A valid length is one value for every row, which is a batch of one, until
-  slots (step 7) give each row its own.
+- Where a node takes one length for every row, the rows share their lengths,
+  and the module offers no `Requests`.
 - Only GPT-2's spelling of attention is matched. Any other, a mask that is no
   causal table among them, stays operations, which write the scores.
 - `build` cannot check what the graph owes over a padded length, which only

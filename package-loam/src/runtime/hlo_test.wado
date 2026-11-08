@@ -6,6 +6,7 @@ use {
     GatherDims,
     Graph,
     ScatterDims,
+    Slots,
     Unary,
     WindowReduce,
     assembled,
@@ -18,8 +19,13 @@ use {
     range_i64,
     reduce_mean,
     resized,
+    row_binary,
+    row_from_end,
+    row_quotient,
+    row_range,
     softmax,
     strided_gather,
+    written_at,
 } from "./hlo.wado";
 use { Attention, Cpu, Tensor } from "./tensor.wado";
 
@@ -89,8 +95,55 @@ test "masking replaces each position along the axis from the length on" {
         data: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
         extents: [2, 3],
     };
-    let m = masked::<Cpu, f32, [A, B]>(g, &x, 1, &value(2), -1.0);
+    let m = masked::<Cpu, f32, [A, B]>(g, &x, 1, &each_row([2]), null, -1.0);
     assert m.data == [1.0, 2.0, -1.0, 4.0, 5.0, -1.0] as List<f32>;
+}
+
+/// Each row's own length.
+fn each_row(v: List<i64>) -> Tensor<i64, [Slots]> {
+    return Tensor {
+        data: v,
+        extents: [v.len()],
+    };
+}
+
+test "masking by each row's length replaces each row's positions from its own on" {
+    let g = &mut Cpu {};
+    let x = Tensor::<f32, [A, B]> {
+        data: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        extents: [2, 3],
+    };
+    let m = masked::<Cpu, f32, [A, B]>(g, &x, 1, &each_row([1, 3]), Option::Some(0), -1.0);
+    assert m.data == [1.0, -1.0, -1.0, 4.0, 5.0, 6.0] as List<f32>;
+    // Rows that run along the last axis.
+    let across = masked::<Cpu, f32, [A, B]>(g, &x, 0, &each_row([1, 2, 0]), Option::Some(1), -1.0);
+    assert across.data == [1.0, 2.0, -1.0, -1.0, 5.0, -1.0] as List<f32>;
+}
+
+test "length arithmetic of each row takes a length every row shares as each row's" {
+    let g = &mut Cpu {};
+    let shared_two = each_row([2]);
+    assert row_binary(g, Binary::Add, &each_row([1, 5]), &shared_two).data == [3, 7] as List<i64>;
+    assert row_quotient(g, &each_row([-7, 7]), &shared_two, false).data == [-4, 3] as List<i64>;
+    assert row_quotient(g, &each_row([-7, 7]), &shared_two, true).data == [-3, 4] as List<i64>;
+    assert row_from_end(g, &each_row([-1, 1]), &each_row([4, 6])).data == [3, 1] as List<i64>;
+    let positions = row_range::<Cpu, A>(g, &each_row([0, 3]), 2, &each_row([1]));
+    assert positions.data == [0, 1, 3, 4] as List<i64>;
+    assert positions.extents == [2, 2] as List<i32>;
+}
+
+test "a write at each row's length writes each row from its own" {
+    let g = &mut Cpu {};
+    let a = Tensor::<i64, [A, B]> {
+        data: [1, 0, 0, 0, 1, 2, 3, 0],
+        extents: [2, 4],
+    };
+    let b = Tensor::<i64, [A, B]> {
+        data: [7, 8],
+        extents: [2, 1],
+    };
+    let w = written_at::<Cpu, i64, [A, B], [A, B]>(g, &a, &b, 1, &each_row([1, 3]), Option::Some(0));
+    assert w.data == [1, 7, 0, 0, 1, 2, 3, 8] as List<i64>;
 }
 
 test "a join at a length writes the second part from that length on" {
@@ -103,7 +156,7 @@ test "a join at a length writes the second part from that length on" {
         data: [3, 4, 0, 0],
         extents: [4],
     };
-    let j = joined_at::<Cpu, i64, [A], [A], [A]>(g, &a, &b, 0, &value(2));
+    let j = joined_at::<Cpu, i64, [A], [A], [A]>(g, &a, &b, 0, &each_row([2]), null);
     assert j.data == [1, 2, 3, 4, 0, 0, 0, 0] as List<i64>;
 }
 
@@ -156,10 +209,22 @@ test "a strided gather takes each element its start and step reach, back to fron
         data: [0, 1, 2, 3, 10, 11, 12, 13],
         extents: [2, 4],
     };
-    let forward = strided_gather::<Cpu, i64, [A, B], [A, C]>(g, &x, 1, &value(1), 2, 2);
+    let forward = strided_gather::<Cpu, i64, [A, B], [A, C]>(g, &x, 1, &each_row([1]), null, 2, 2);
     assert forward.extents == [2, 2] as List<i32> && forward.data == [1, 3, 11, 13] as List<i64>;
-    let back = strided_gather::<Cpu, i64, [A, B], [C, B]>(g, &x, 0, &value(1), 2, -1);
+    let back = strided_gather::<Cpu, i64, [A, B], [C, B]>(g, &x, 0, &each_row([1]), null, 2, -1);
     assert back.data == [10, 11, 12, 13, 0, 1, 2, 3] as List<i64>;
+}
+
+test "a strided gather takes each row's window from that row's own start" {
+    let g = &mut Cpu {};
+    // Rows along axis 1, positions along axis 2, so the rows lead nothing.
+    let x = Tensor::<i64, [A, B, C]> {
+        data: [0, 1, 2, 3, 10, 11, 12, 13, 100, 101, 102, 103, 110, 111, 112, 113],
+        extents: [2, 2, 4],
+    };
+    let windows = strided_gather::<Cpu, i64, [A, B, C], [A, B, C]>(g, &x, 2, &each_row([2, 0]), Option::Some(1), 2, 1);
+    assert windows.extents == [2, 2, 2] as List<i32>;
+    assert windows.data == [2, 3, 10, 11, 102, 103, 110, 111] as List<i64>;
 }
 
 test "a capacity is the next power of two or one and a half of it, and 0 its own" {
@@ -818,8 +883,8 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             &v,
             &past_k,
             &past_v,
-            Option::Some(&value(past as i64)),
-            Option::Some(&value((past + s) as i64)),
+            Option::Some(&each_row([past as i64])),
+            Option::Some(&each_row([(past + s) as i64])),
             Option::Some(&cos),
             Option::Some(&sin),
             null,
@@ -830,6 +895,100 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
         assert prefix(g, &got.1, 2, past + s).data == want.1.data;
         assert prefix(g, &got.2, 2, past + s).data == want.2.data;
     }
+}
+
+/// Rows whose pasts hold different numbers of valid positions in one buffer,
+/// each against the same attention over its row alone.
+test "each row attends over its own past, and writes its new positions after it" {
+    let [batch, s, heads, kv, capacity, d, positions] = [2, 2, 4, 2, 8, 4, 8];
+    let pasts: List<i64> = [1, 4];
+    let g = &mut Cpu {};
+    let q = Tensor::<f32, [Bt, St, Qt]> {
+        data: noise(batch * s * heads * d, 1),
+        extents: [batch, s, heads * d],
+    };
+    let k = Tensor::<f32, [Bt, St, Kt]> {
+        data: noise(batch * s * kv * d, 2),
+        extents: [batch, s, kv * d],
+    };
+    let v = Tensor::<f32, [Bt, St, Kt]> {
+        data: noise(batch * s * kv * d, 3),
+        extents: [batch, s, kv * d],
+    };
+    let past_k = Tensor::<f32, [Bt, Ht, Pt, Dt]> {
+        data: noise(batch * kv * capacity * d, 4),
+        extents: [batch, kv, capacity, d],
+    };
+    let past_v = Tensor::<f32, [Bt, Ht, Pt, Dt]> {
+        data: noise(batch * kv * capacity * d, 5),
+        extents: [batch, kv, capacity, d],
+    };
+    let cos = Tensor::<f32, [Pos, Half]> {
+        data: noise(positions * d / 2, 6),
+        extents: [positions, d / 2],
+    };
+    let sin = Tensor::<f32, [Pos, Half]> {
+        data: noise(positions * d / 2, 7),
+        extents: [positions, d / 2],
+    };
+    let reaches: List<i64> = pasts.into_iter().map(|p| p + s as i64).collect();
+    for let options of [
+        Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
+        Attention { heads, kv_heads: kv, scale: 0.5, softcap: 2.0, window: 2, causal: true },
+        Attention {
+            heads,
+            kv_heads: kv,
+            scale: 2.0,
+            divides: true,
+            softcap: 0.0,
+            window: -1,
+            causal: true,
+            hidden: Option::Some(-4.0),
+        },
+    ] as List<Attention> {
+        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+            g,
+            &q,
+            &k,
+            &v,
+            &past_k,
+            &past_v,
+            Option::Some(&each_row(pasts)),
+            Option::Some(&each_row(reaches)),
+            Option::Some(&cos),
+            Option::Some(&sin),
+            null,
+            &options,
+        );
+        for let r of 0..<batch {
+            let want = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+                g,
+                &row_of(g, &q, r),
+                &row_of(g, &k, r),
+                &row_of(g, &v, r),
+                &row_of(g, &past_k, r),
+                &row_of(g, &past_v, r),
+                Option::Some(&each_row([pasts[r]])),
+                Option::Some(&each_row([reaches[r]])),
+                Option::Some(&cos),
+                Option::Some(&sin),
+                null,
+                &options,
+            );
+            assert_near(&row_of(g, &got.0, r).data, &want.0.data);
+            assert row_of(g, &got.1, r).data == want.1.data;
+            assert row_of(g, &got.2, r).data == want.2.data;
+        }
+    }
+}
+
+/// `x`'s row `r` along its first axis.
+fn row_of<Axes>(g: &mut Cpu, x: &Tensor<f32, Axes>, r: i32) -> Tensor<f32, Axes> {
+    let mut start = List::<i32>::filled(x.extents.len(), 0);
+    start[0] = r;
+    let mut limits = x.extents;
+    limits[0] = r + 1;
+    return g.slice(x, start, limits, List::<i32>::filled(x.extents.len(), 1));
 }
 
 /// `x`'s first `n` positions along `axis`.

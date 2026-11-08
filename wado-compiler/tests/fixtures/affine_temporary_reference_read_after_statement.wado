@@ -1,0 +1,27 @@
+// A temporary only a call's operand borrows drops when its statement ends, as
+// in Rust, so what the call kept of the borrow cannot be read after it.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn id(t: &Tok) -> &Tok {
+    return t;
+}
+
+test {
+    let r = id(&make(1));
+    assert r.n == 1;
+}
+
+__DATA__
+{"compile_error": ":23:12: analysis error: `r` refers into the temporary at 22:17, which dropped as its statement ended"}

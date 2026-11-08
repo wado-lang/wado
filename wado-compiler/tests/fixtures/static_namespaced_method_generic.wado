@@ -1,0 +1,19 @@
+//! A generic static of a generic type, reached through a namespace import,
+//! binds the impl's parameter and its own each from their arguments, as the
+//! spelling by the imported name does.
+
+use lib from "./sub/static_namespaced_method_generic.wado";
+use { Params } from "./sub/static_namespaced_method_generic.wado";
+
+fn named<D>(backend: &D) -> i32 {
+    return Params::load(backend, &"x").n;
+}
+
+fn spaced<D>(backend: &D) -> i32 {
+    return lib::Params::load(backend, &"x").n;
+}
+
+test {
+    assert named(&1) == 1;
+    assert spaced(&1) == 1;
+}

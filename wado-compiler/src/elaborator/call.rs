@@ -1986,16 +1986,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let mut substituted: Vec<TypeId> = if generic {
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    raw_param_types
-                        .iter()
-                        .map(|&t| self.substitute_in_frame(t, &combined_type_args))
-                        .collect()
-                } else {
-                    raw_param_types
-                };
+                let mut substituted = self.static_param_types_at(
+                    raw_param_types,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                );
                 let block = resolved
                     .found()
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
@@ -2196,6 +2191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_types: &args,
                         receiver_type: ns_receiver_type,
                         receiver_args: &impl_type_args_inferred,
+                        method_args: &method_type_args,
                         ..StaticQuery::of(type_name, method_name)
                     });
                     if self.report_unanswered_static(&resolved, method_name, call.span) {
@@ -2273,11 +2269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type = self.fill_static_method_slots(
-                        method_ref.method_id,
-                        &method_type_args,
-                        resolved.return_type(),
-                    );
+                    let mut return_type = resolved.return_type();
                     if let Some(key) = &ns_key {
                         self.retype_static_to_newtype(
                             key,
@@ -2337,15 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    let checked: Vec<TypeId> = if method_type_args.is_empty() {
-                        param_types.clone()
-                    } else {
-                        param_types
-                            .iter()
-                            .map(|&t| self.substitute_in_frame(t, &method_type_args))
-                            .collect()
-                    };
-                    self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    self.recoerce_literal_args(&call.args, &mut args, &param_types);
                     if func_ref.monomorph_info.is_some()
                         && self.report_value_for_reference(
                             &param_types,
@@ -2361,7 +2345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
-                            &checked,
+                            &param_types,
                             &args,
                             &arg_sites,
                             &param_defaults,
@@ -2383,7 +2367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_default_walk(
                         call.id,
                         &args,
-                        &checked,
+                        &param_types,
                         &param_defaults,
                         defaults_module.clone(),
                         &type_bindings,
