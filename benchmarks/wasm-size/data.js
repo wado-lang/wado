@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794122785904,
+  "lastUpdate": 1794123747253,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75649,6 +75649,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3ae59e88c8977539db4f2f3157de7047d2ae653c"
         },
         "date": 1794122784893,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404722,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "33143edb96f16c19396109ea0548614b8b942f6a",
+          "message": "Merge pull request #2581 from wado-lang/loam/slots\n\nfeat(loam): serve requests side by side in slots, each row at its own lengths",
+          "timestamp": "2026-11-08T16:12:08+09:00",
+          "tree_id": "f57d578c806dd2fa52d87d8b94091a26839416a3",
+          "url": "https://github.com/wado-lang/wado/commit/33143edb96f16c19396109ea0548614b8b942f6a"
+        },
+        "date": 1794123746474,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
