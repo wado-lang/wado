@@ -262,9 +262,14 @@ impl Prepared {
         );
     }
 
+    /// The lengths that grow, as the graph owes them, that `build` pads.
+    fn padded_grown(&self) -> List<[Grown, Option<Poly>]> {
+        return self.grown.into_iter().filter(|o| self.padded.contains(&o.0.symbol)).collect();
+    }
+
     /// `judged_rows` of the lengths `build` pads.
     fn rows(&self, graph: &Graph, checked: &Checked) -> Result<Option<Axis>, RowRefusal> {
-        let grown: List<String> = self.grown.into_iter().map(|o| o.0.symbol).filter(|s| self.padded.contains(&s)).collect();
+        let grown: List<String> = self.padded_grown().into_iter().map(|o| o.0.symbol).collect();
         return judged_rows(graph, checked, &self.padded, &grown);
     }
 
@@ -276,7 +281,7 @@ impl Prepared {
             &self.names,
             |input, axis| `backend.extents_of(${*input})[${axis}]`,
         );
-        let mut symbols = held_symbols.padded(&self.padded, &self.grown, &self.conditions, &self.names);
+        let mut symbols = held_symbols.padded(&self.padded, &self.padded_grown(), &self.conditions, &self.names);
         if let Some(r) = rows {
             symbols.rows = Option::Some(r.name);
             symbols.counting = r.extent.poly().symbols();
@@ -937,13 +942,14 @@ impl Symbols {
 
     /// The symbols as `build` reads them where `padded` names a symbol: its
     /// extent the capacity, and its value `lengths`'s field of the symbol's name.
-    /// A grown one's past holds the present's capacity, so its extent is what
-    /// `owed` leaves of that beside the other lengths, where an input outside
-    /// the cache does not carry it. Each of `conditions` is read from `chosen`.
+    /// The past of each of `grown`, the padded ones that grow, holds the
+    /// present's capacity, so its extent is what the graph owes it leaves of that
+    /// beside the other lengths, where an input outside the cache does not carry
+    /// it. Each of `conditions` is read from `chosen`.
     fn padded(
         &self,
         padded: &List<String>,
-        owed: &List<[Grown, Option<Poly>]>,
+        grown: &List<[Grown, Option<Poly>]>,
         conditions: &List<String>,
         names: &Names,
     ) -> Symbols {
@@ -954,11 +960,10 @@ impl Symbols {
         for let symbol of *padded {
             symbols.lengths[symbol] = `lengths.${self.idents[symbol]}`;
         }
-        let grown: List<[Grown, Option<Poly>]> = owed.into_iter().filter(|o| padded.contains(&o.0.symbol)).map(|o| *o).collect();
-        for let [g, _] of &grown {
+        for let [g, _] of *grown {
             symbols.grown.insert(g.symbol);
         }
-        symbols.derive_owed(&grown);
+        symbols.derive_owed(grown);
         return symbols;
     }
 

@@ -341,8 +341,7 @@ fn refused_by(node: &Node, checked: &Checked) -> Option<[List<String>, Why]> {
         return refusing(read, Why::Acausal);
     }
     let windowed = op == "Conv" || op == "MaxPool";
-    // A folded operand stage 0 gives no axes holds no padding.
-    if !(windowed || op == "Split") || !shapes.contains_key(node.inputs[0]) {
+    if !(windowed || op == "Split") {
         return null;
     }
     let x = shapes[node.inputs[0]];
