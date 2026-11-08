@@ -1000,6 +1000,8 @@ internal global ATN_TR_RULE: i32 = 4;
 internal global ATN_TR_PRECEDENCE: i32 = 5;
 internal global ATN_TR_SET: i32 = 6;
 
+internal global ATN_ACTION_EDGE: i32 = 16777214;
+
 global mut ATN_SIMS_DECODED: i32 = 0;
 
 internal struct AtnSim {
@@ -1184,7 +1186,7 @@ global ATN_NODE_PAIR_STRIDE: i64 = 1073741824;
 global ATN_DFA_NODE_CAP: i32 = 4000000;
 
 global CFG_KEY_PR_SLOT: i32 = 2048;
-global CFG_KEY_ALT_SLOT: i32 = 2048;
+global CFG_KEY_ALT_SLOT: i32 = 4096;
 global CFG_KEY_STATE_SLOT: i32 = 1048576;
 
 global CTX_BOUNDARY: i32 = -3;
@@ -1196,6 +1198,7 @@ global CTX_UNKNOWN: i32 = 1;
 
 global ATN_READS_HIDDEN: i32 = -6;
 internal global ATN_FAILED_ALT: i32 = 1024;
+global ATN_PASSED_ACTION: i32 = 2048;
 
 global ATN_DFA_UNDECIDED: i32 = -7;
 global ATN_DFA_DEAD: i32 = -8;
@@ -1800,7 +1803,7 @@ fn atn_closure(
         if guard > ATN_CLOSURE_GUARD {
             break;
         }
-        if c.state == lr_loop_unconsumed && sim.tr_kind[sim.state_tr_start[c.state] + c.alt] == ATN_TR_PRECEDENCE {
+        if c.state == lr_loop_unconsumed && sim.tr_kind[sim.state_tr_start[c.state] + c.alt % ATN_FAILED_ALT] == ATN_TR_PRECEDENCE {
             continue;
         }
         let res = scratch.cset.add(arena, c.state, c.alt, c.pr, c.pctx);
@@ -1828,16 +1831,12 @@ fn atn_expand(
 ) {
     let work = &mut scratch.work;
     let rset = &mut scratch.rset;
-    if cur.state == ATN_ACCEPT_EOF {
-        rset.add(arena, cur.state, cur.alt, cur.pr, cur.pctx);
+    if cur.state == ATN_ACCEPT_EOF || atn_state_consumes(sim, cur.state) {
+        rset.add(arena, cur.state, atn_settled_alt(cur.alt), cur.pr, cur.pctx);
         return;
     }
     if sim.state_kind[cur.state] == ATN_RULE_STOP {
         atn_pop(arena, cur, scratch);
-        return;
-    }
-    if atn_state_consumes(sim, cur.state) {
-        rset.add(arena, cur.state, cur.alt, cur.pr, cur.pctx);
         return;
     }
     let pctx = atn_collapse_into_caller_loop(sim, arena, cur, work, &mut scratch.hidden_alts);
@@ -1850,12 +1849,7 @@ fn atn_expand(
         let k = sim.tr_kind[start + j];
         let target = sim.tr_target[start + j];
         if k == ATN_TR_EPSILON {
-            let pred = sim.tr_label[start + j];
-            let alt = if pred >= 0 && cur.alt < ATN_FAILED_ALT && false_preds.contains(&pred) {
-                cur.alt + ATN_FAILED_ALT;
-            } else {
-                cur.alt;
-            };
+            let alt = atn_alt_past_guard(cur.alt, sim.tr_label[start + j], false_preds);
             work.push(AtnConfig { state: target, alt, pctx, pr: cur.pr });
         } else if k == ATN_TR_PRECEDENCE {
             if sim.tr_prec[start + j] >= cur.pr {
@@ -1875,6 +1869,23 @@ fn atn_expand(
     }
 }
 
+fn atn_alt_past_guard(alt: i32, label: i32, false_preds: &List<i32>) -> i32 {
+    if label < 0 || alt >= ATN_FAILED_ALT {
+        return alt;
+    }
+    if label == ATN_ACTION_EDGE {
+        return alt + ATN_PASSED_ACTION;
+    }
+    if false_preds.contains(&label) {
+        return alt + ATN_FAILED_ALT;
+    }
+    return alt;
+}
+
+fn atn_settled_alt(alt: i32) -> i32 {
+    return if alt >= ATN_PASSED_ACTION { alt - ATN_PASSED_ACTION } else { alt };
+}
+
 fn atn_collapse_into_caller_loop(
     sim: &AtnSim,
     arena: &mut CtxArena,
@@ -1888,9 +1899,10 @@ fn atn_collapse_into_caller_loop(
     let s = arena.node_start[cur.pctx];
     let n = arena.node_len[cur.pctx];
     let mut collapses = false;
+    let settled = atn_settled_alt(cur.alt);
     for let mut e = s; e < s + n; e += 1 {
-        if arena.ret[e] == CTX_HIDDEN_RETURN && !hidden_alts.contains(&cur.alt) {
-            hidden_alts.push(cur.alt);
+        if arena.ret[e] == CTX_HIDDEN_RETURN && !hidden_alts.contains(&settled) {
+            hidden_alts.push(settled);
         }
         collapses = collapses || atn_edge_collapses(sim, arena, e, cur);
     }
@@ -1919,15 +1931,16 @@ fn atn_edge_collapses(sim: &AtnSim, arena: &CtxArena, e: i32, cur: &AtnConfig) -
 fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
     let s = arena.node_start[cur.pctx];
     let n = arena.node_len[cur.pctx];
+    let settled = atn_settled_alt(cur.alt);
     for let mut e = s; e < s + n; e += 1 {
         let r = arena.ret[e];
         if r == CTX_BOUNDARY {
-            scratch.rset.add(arena, ATN_ACCEPT_EOF, cur.alt, cur.pr, CTX_EMPTY);
+            scratch.rset.add(arena, ATN_ACCEPT_EOF, settled, cur.pr, CTX_EMPTY);
         } else if r == CTX_UNKNOWN_RETURN {
-            scratch.rset.add(arena, cur.state, cur.alt, cur.pr, CTX_UNKNOWN);
+            scratch.rset.add(arena, cur.state, settled, cur.pr, CTX_UNKNOWN);
         } else if r == CTX_HIDDEN_RETURN {
-            if !scratch.hidden_alts.contains(&cur.alt) {
-                scratch.hidden_alts.push(cur.alt);
+            if !scratch.hidden_alts.contains(&settled) {
+                scratch.hidden_alts.push(settled);
             }
         } else {
             scratch.work.push(AtnConfig { state: r, alt: cur.alt, pctx: arena.parent[e], pr: arena.rpr[e] });

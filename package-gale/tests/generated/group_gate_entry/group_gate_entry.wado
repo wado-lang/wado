@@ -1909,17 +1909,40 @@ fn _parse_shape_opt__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_A {
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-        if p.peek_kind() == TK_A && p.peek_at(1) == TK_B && p.peek_at(2) == TK_A && pred_0(p) {
+        let mut opt_enter: bool = false;
+        if p.peek_kind() == TK_A {
+            opt_enter_scan: {
+                p.scan_gate._scan_edge = p.pos;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_3_done: {
+                    sg_3: {
+                        if !(p.scan_gate._scan_edge != pos || ( false )) { break sg_3; }
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_3; }
+                        pos += 1;
+                        if pos < tokens.len() && tokens[pos] == TK_B {
+                            pos += 1;
+                        }
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_3; }
+                        pos += 1;
+                        break sg_3_done;
+                    }
+                    break opt_enter_scan;
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
+                pos += 1;
+                opt_enter = true;
+            }
+        }
+        if opt_enter && (p.peek_kind() == TK_A && pred_0(p)) {
             p.site = 0;
             _parse_ra(p);
             if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
             if p.peek_kind() == TK_B {
                 p.take();
             }
-            p.expect(TK_A, &SYNC_1, false);
-        } else if p.peek_kind() == TK_A && p.peek_at(1) == TK_A && pred_0(p) {
-            p.site = 0;
-            _parse_ra(p);
             p.expect(TK_A, &SYNC_1, false);
         }
         p.expect(TK_A, &SYNC_4, false);
