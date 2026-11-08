@@ -45,7 +45,9 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
         .into_iter()
         .map(|(type_id, fq, shape)| (ctx.reserve_wado_type(type_id, fq), shape))
         .collect();
-    let cells: Vec<(WirTypeId, TypeId)> = cell_payloads(&package.type_table.borrow())
+    let cells: Vec<(WirTypeId, TypeId)> = cell_payloads(&package.type_table.borrow(), |t| {
+        ctx.wado_types.contains_key(&t)
+    })
         .into_iter()
         .map(|(name, payload)| {
             let id = ctx.reserve_type(wir_type_key(&ModuleSource::prelude(), &name));
@@ -142,10 +144,56 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
             ),
         );
     }
+    drop_unbuildable(&mut found, &package.type_table.borrow());
     found
         .into_iter()
         .map(|(type_id, (fq, shape))| (type_id, fq, shape))
         .collect()
+}
+
+/// Drop each tuple, array and variant with a part no WIR type lowers, until
+/// none is left. No value of such a type is ever built: it reaches the table
+/// only as a type argument a mangled name spells, like `ReflectEnum::Members`
+/// at a call that survives `-O0`, and no declaration lowers its struct
+/// instances.
+fn drop_unbuildable(found: &mut IndexMap<TypeId, (String, Shape<'_>)>, tt: &TypeTable) {
+    loop {
+        let unbuildable: Vec<TypeId> = found
+            .iter()
+            .filter(|(_, (_, shape))| {
+                let parts: Vec<TypeId> = match shape {
+                    Shape::Struct(_) | Shape::Enum(_) => Vec::new(),
+                    Shape::Tuple(elems) => elems.clone(),
+                    Shape::Array(elem) => vec![*elem],
+                    Shape::Variant { cases, .. } => cases.iter().map(|&(_, p)| p).collect(),
+                };
+                !parts
+                    .into_iter()
+                    .all(|p| buildable(tt, p, |t| found.contains_key(&t)))
+            })
+            .map(|(&type_id, _)| type_id)
+            .collect();
+        if unbuildable.is_empty() {
+            return;
+        }
+        for type_id in unbuildable {
+            found.shift_remove(&type_id);
+        }
+    }
+}
+
+/// Whether a value of `ty` can be built, given which nominal and composite
+/// types have a WIR type.
+fn buildable(tt: &TypeTable, ty: TypeId, registered: impl Fn(TypeId) -> bool + Copy) -> bool {
+    match tt.get(ty) {
+        ResolvedType::Struct { .. }
+        | ResolvedType::Tuple(_)
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Enum { .. } => registered(ty),
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => buildable(tt, *inner, registered),
+        _ => true,
+    }
 }
 
 /// Whether `def` applied to `type_args` is an instance of a variant the
@@ -158,11 +206,15 @@ fn is_variant_instance(package: &NirPackage, def: DefId, type_args: &[TypeId]) -
 
 /// Each concrete cell's WIR struct name, with the payload it holds. Cells of
 /// one payload representation share the struct.
-fn cell_payloads(type_table: &TypeTable) -> IndexMap<String, TypeId> {
+fn cell_payloads(
+    type_table: &TypeTable,
+    registered: impl Fn(TypeId) -> bool + Copy,
+) -> IndexMap<String, TypeId> {
     let mut cells: IndexMap<String, TypeId> = IndexMap::default();
     for cell in type_table.iter_type_ids() {
         if let Some(payload) = type_table.cell_payload(cell)
             && type_table.is_concrete(cell)
+            && buildable(type_table, payload, registered)
         {
             cells
                 .entry(type_table.cell_struct_name(cell))
