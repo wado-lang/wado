@@ -246,7 +246,7 @@ impl<'a> WirUnparser<'a> {
         self.write_indent();
         self.write("struct ");
         self.write(&s.name.fq);
-        self.write(" {");
+        self.write(if s.fields.is_empty() { " {}" } else { " {" });
 
         self.unparse_type_comment(type_idx);
 
@@ -258,7 +258,6 @@ impl<'a> WirUnparser<'a> {
         }
 
         if s.fields.is_empty() {
-            self.write("}");
             self.newline();
         } else {
             self.newline();
@@ -2424,5 +2423,31 @@ fn format_abstract_heap_type(ht: &WirAbstractHeapType) -> &'static str {
         WirAbstractHeapType::None => "none",
         WirAbstractHeapType::NoFunc => "nofunc",
         WirAbstractHeapType::Extern => "extern",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wir::{WirMeta, WirName};
+
+    #[test]
+    fn an_empty_struct_closes_before_its_comment() {
+        let mut package = WirPackage::empty();
+        package.types.push(WirTypeDef::Struct(WirStructType {
+            name: WirName {
+                fq: "app//Unit".to_string(),
+            },
+            fields: Vec::new(),
+            meta: WirMeta::default(),
+            generic_origin: None,
+            newtype_origin: None,
+            supertype: None,
+        }));
+        assert!(
+            unparse_wir(&package).contains("struct app//Unit {}  // TypeId(0)\n"),
+            "{}",
+            unparse_wir(&package)
+        );
     }
 }
