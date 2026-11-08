@@ -266,7 +266,8 @@ whose atom choice `"auto"` routes. The lookahead DFA and LR table `"auto"` reads
 there are checked the same way. Where the decision meets a predicate, the
 simulator is handed the predicate's verdict, and what the predicate prints for
 the check is taken back out of the output. On input that has no parse, a check
-can panic where both sides are recovering. It is for testing the static path
+panics where the static path picks otherwise than the simulator before the
+parse fails, and can where both sides are recovering. It is for testing the static path
 against the simulator over real inputs, not for use.
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also

@@ -1016,7 +1016,8 @@ pub fn atn_verified_against_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// Emit `ATN_VERIFIED`, which asks the simulator under no predicate, and
 /// `ATN_VERIFIED_AGAINST`, which takes its verdict. Where no alternative
 /// survives under the parse's stack, as in a scan of an alternative that is
-/// about to fail, the decision is moot and nothing is checked.
+/// about to fail, or none whose predicates hold (a verdict of -1), the
+/// decision is moot and nothing is checked.
 pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
     w.begin(
         `fn ${ATN_VERIFIED}(decision: i32, picker: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
@@ -1029,7 +1030,7 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         `fn ${ATN_VERIFIED_AGAINST}(decision: i32, picker: i32, pos: i32, verdict: [i32, bool], alt: i32) -> i32`,
     );
     w.line("let [simulated, viable] = verdict;");
-    w.begin("if viable && simulated != alt");
+    w.begin("if viable && simulated >= 0 && simulated != alt");
     w.begin("let by = match picker");
     for let picker of ATN_PICKERS {
         w.line(`${atn_picker_code(&picker)} => "${atn_picker_name(picker)}",`);

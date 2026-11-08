@@ -1084,6 +1084,30 @@ a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and 
 ";
 }
 
+// The first loop's iteration ends with a checked `?`, emitted into the loop's
+// own scope, so each check's locals must be the loop's alone. The trees are
+// the jar's.
+test "atn verify checks a repeat nested in a checked loop's iteration" {
+    let g4 = "grammar D;
+s : '{' l? '}' EOF ;
+l : (';' w)* d w (';' w d?)* ;
+d : ID ':' ID w ;
+w : C* ;
+ID : [a-z]+ ;
+C : '#' ;
+WS : ' ' -> skip ;
+";
+    assert parses(
+        g4,
+        "s",
+        ["{ a : b }", "{ ; a : b # ; c : d ; }", "{ a : b ; ; }"],
+        &GenerateOptions { atn: AtnMode::Verify },
+    ) == "{ a : b } => (s { (l (d a : b w) w) })
+{ ; a : b # ; c : d ; } => (s { (l ; w (d a : b (w #)) w ; w (d c : d w) ; w) })
+{ a : b ; ; } => (s { (l (d a : b w) w ; w ; w) })
+";
+}
+
 // `ID e?` ends an atom, so its `?` competes with the loop's `args` and with
 // the caller's FOLLOW. On the last two inputs the jar enters it and `never`
 // does not. The trees are the jar's.
@@ -1465,7 +1489,7 @@ WS : ' ' -> skip ;
     let inputs: List<String> = [
         "A a", "B a", "C a", "D a", "F a", "G a", "H a", "I a", "I a b", "J a", "K a", "K a b", "M a",
     ];
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let atn of [AtnMode::Never, AtnMode::Auto, AtnMode::Always] {
         assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => error
 B a => error
 C a => error
@@ -1481,6 +1505,26 @@ K a b => (s K (o a b))
 M a => error
 ";
     }
+    // On `A a` and `C a` the jar enters `u` and fails at the predicate, and
+    // `never` leaves it and fails at `'a'`, so `verify` panics there.
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let source = gen_with(g4, &verify).source;
+    for let input of ["A a", "C a"] {
+        let out = eval_beside(source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+        assert out.stderr.contains(": the repeat picks 1, the simulator 0"), out.stderr;
+    }
+    assert parses(g4, "s", ["B a", "D a", "F a", "G a", "H a", "I a", "I a b", "J a", "K a", "K a b", "M a"], &verify) == "B a => error
+D a => error
+F a => (s F (f a))
+G a => (s G (h a))
+H a => error
+I a => error
+I a b => (s I (m u a b))
+J a => error
+K a => error
+K a b => (s K (o a b))
+M a => error
+";
     // `( | u)` enters `u` only through the simulator.
     let lazy = "grammar T;
 s : e EOF ;

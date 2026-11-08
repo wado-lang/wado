@@ -4873,7 +4873,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         }
         w.begin("loop");
         w.line("if p.recovering { break; }");
-        let at = begin_iteration_check(w, r, ctx, nc, "");
+        let at = begin_iteration_check(w, r, ctx, "");
         if ctx.current_rule_reads_follow() {
             gen_caller_follow_gate(w, r);
         }
@@ -4915,7 +4915,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         follow_gate,
     );
     if let Optional = r.kind {
-        let at = begin_iteration_check(w, r, ctx, nc, "");
+        let at = begin_iteration_check(w, r, ctx, "");
         gen_op_optional(w, r, ctx, nc, follow_gate);
         gen_exit_check_or_entered(w, r, ctx, &at);
         return;
@@ -4927,7 +4927,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         gen_loop_back_sync(w, ctx, r);
     }
     w.begin(`while !p.recovering && ${and_operand(cond)}`);
-    let at = begin_iteration_check(w, r, ctx, nc, "");
+    let at = begin_iteration_check(w, r, ctx, "");
     gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
     gen_loop_back_sync(w, ctx, r);
     end_iteration_check(w, r, ctx, &at);
@@ -6026,7 +6026,7 @@ fn gen_op_repeat_with_follow_override(
             let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, PickSide::Parse);
             gen_optional_present(w, &rep_op.body, "", &enters, ctx, &NO_KINDS);
         } else {
-            let at = begin_iteration_check(w, rep_op, ctx, name_counts, "");
+            let at = begin_iteration_check(w, rep_op, ctx, "");
             gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
             gen_exit_check_or_entered(w, rep_op, ctx, &at);
         }
@@ -6489,7 +6489,7 @@ fn gen_op_repeat_star_plus_greedy(
         let plus_flag = if is_plus { begin_plus_flag(w, name_counts) } else { String::new() };
         w.begin("loop");
         w.line("if p.recovering { break; }");
-        let at = begin_iteration_check(w, rep_op, ctx, name_counts, &plus_flag);
+        let at = begin_iteration_check(w, rep_op, ctx, &plus_flag);
         if repeat_speculates(rep_op, inner, is_plus, ctx) {
             gen_rep_speculative_iteration(w, &body, rep_op, inner, ctx, name_counts);
         } else {
@@ -6500,7 +6500,7 @@ fn gen_op_repeat_star_plus_greedy(
     } else if is_plus && body matches { Storable(_) } {
         let plus_flag = begin_plus_flag(w, name_counts);
         w.begin(`while !p.recovering && (${plus_flag} || ${body_guard_cond(rep_op, ctx)})`);
-        let at = begin_iteration_check(w, rep_op, ctx, name_counts, &plus_flag);
+        let at = begin_iteration_check(w, rep_op, ctx, &plus_flag);
         gen_iter_caller_follow_gate(w, rep_op, &plus_flag);
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, GroupEntry::Looped(plus_flag));
         end_iteration_check(w, rep_op, ctx, &at);
@@ -6512,7 +6512,7 @@ fn gen_op_repeat_star_plus_greedy(
             gen_loop_back_sync(w, ctx, rep_op);
         }
         w.begin(`while !p.recovering && ${and_operand(body_guard_cond(rep_op, ctx))}`);
-        let at = begin_iteration_check(w, rep_op, ctx, name_counts, "");
+        let at = begin_iteration_check(w, rep_op, ctx, "");
         gen_caller_follow_gate(w, rep_op);
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, looped(), null, &admits_kinds(&rep_op.body_admits));
         end_iteration_check(w, rep_op, ctx, &at);
@@ -6533,18 +6533,20 @@ struct IterationCheck {
 }
 
 /// Begin the check of a looped iteration of `rep_op`, or `null` where the
-/// loop is not checked.
+/// loop is not checked. The locals are named by the decision: a loop's
+/// iteration is emitted into the loop's own scope under a name table of its
+/// own, so a checked `?` in it would take the loop's names otherwise.
 fn begin_iteration_check<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
     ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
     plus_flag: S,
 ) -> Option<IterationCheck> {
     if !repeat_checked(rep_op, ctx) {
         return null;
     }
-    let at = dedup_name("_rc_at", name_counts);
+    let decision = repeat_check_decision(rep_op, ctx);
+    let at = `_rc_at_${decision}`;
     if plus_flag.is_empty() {
         w.line(`let ${at} = p.pos;`);
     } else {
@@ -6554,9 +6556,8 @@ fn begin_iteration_check<S: AsStrSlice>(
     if met.is_empty() {
         return Option::Some(IterationCheck { at, verdict: null });
     }
-    let verdict = dedup_name("_rc_verdict", name_counts);
+    let verdict = `_rc_verdict_${decision}`;
     w.line(`let mut ${verdict}: [i32, bool] = [-1, false];`);
-    let decision = repeat_check_decision(rep_op, ctx);
     gen_kept_block(w, `${at} >= 0`, [`${verdict} = ${atn_gated_verdict(decision, &met, &at, ctx)};`], true);
     return Option::Some(IterationCheck { at, verdict: Option::Some(verdict) });
 }
