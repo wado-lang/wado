@@ -246,6 +246,32 @@ test "a document the loader cannot supply is an error naming it" {
     assert f.error == "no https://x.test/gone.json";
 }
 
+test "the documents fetched before a loader fails stay in the set" {
+    let root = uri("https://x.test/root.json");
+    let mut set = SchemaSet::new();
+    set.insert(root, Schema::parse(#"{"allOf": [{"$ref": "int.json"}, {"$ref": "gone.json"}]}"#).unwrap());
+    let mut fetched: List<String> = [];
+    let mut recording = |u: &Uri| {
+        fetched.push(`${*u}`);
+        return served(u);
+    };
+    assert set.load(&root, recording) matches { Err(Failed(_)) };
+    assert set.load(&root, recording) matches { Err(Failed(_)) };
+    assert fetched == ["https://x.test/int.json", "https://x.test/gone.json", "https://x.test/gone.json"];
+}
+
+test "a fetched document that holds no subschema a reference names is an error" {
+    let root = uri("https://x.test/root.json");
+    let mut set = SchemaSet::new();
+    set.insert(root, Schema::parse(##"{"$ref": "int.json#/$defs/i"}"##).unwrap());
+    let e = set.load(&root, served).unwrap_err();
+    let Invalid(i) = e else {
+        panic(`${e}`);
+    };
+    assert i.uri matches { Some(u) && `${u}` == "https://x.test/root.json" };
+    assert i.pointer == "/$ref";
+}
+
 test "Draft 2020-12's meta-schemas are held without being supplied" {
     let schema = ##"{"$ref": "https://json-schema.org/draft/2020-12/schema"}"##;
     assert errors(schema, #"{"type": "string", "properties": {"a": {"minimum": 1}}}"#).is_empty();

@@ -1,48 +1,27 @@
 //! The harness the generated JSON Schema Test Suite tests call.
 
-use fs from "core:fs";
-use { Preopens } from "core:fs";
 use { Uri } from "core:uri";
 use { Document, Schema, SchemaSet, Validator } from "../src/lib.wado";
 use { DEFAULT_BASE } from "../src/validate.wado";
 
-/// Where the suite serves the documents of its `remotes/` directory.
-global REMOTE_BASE: String = "http://localhost:1234/";
-
-/// The copies of the remote documents the generated tests refer to.
-global REMOTES: String = "tests/generated/remotes";
-
 /// Holds `data` to the validity `valid` against `schema`, both JSON text. A
-/// document `schema` refers to is loaded from the copies of the suite's
-/// remotes.
-pub fn check(schema: String, data: String, valid: bool) with Preopens {
+/// document `schema` refers to is loaded from `remotes`, each as its URI and
+/// its text.
+pub fn check(schema: String, data: String, valid: bool, remotes: List<[String, String]> = []) {
     let base = Uri::from_str(&DEFAULT_BASE).unwrap();
     let mut set = SchemaSet::new();
     set.insert(base, Schema::parse(schema).unwrap());
-    set.load(&base, |u| serve(&REMOTES, u)).unwrap();
+    set.load(&base, |u| {
+        let name = `${*u}`;
+        for let [uri, text] of &remotes {
+            if *uri == name {
+                return Result::<Schema, String>::Ok(Schema::parse(*text).unwrap());
+            }
+        }
+        return Result::Err("not embedded; run `mise run suite-jade`");
+    }).unwrap();
     let validator = Validator::compile_in(&set, &base).unwrap();
     let doc = Document::parse(data).unwrap();
     let result = validator.validate(&doc.root());
     assert result matches { Ok(_) } == valid, `${result:?}`;
-}
-
-/// The schema the suite serves at `uri`, read from `remotes`, a directory
-/// laid out as the suite's `remotes/` is.
-pub fn serve(remotes: &String, uri: &Uri) -> Result<Schema, String> with Preopens {
-    let unserved = `refers to ${*uri}, which the suite does not serve`;
-    let Some(path) = remote_path(uri) else {
-        return Result::Err(unserved);
-    };
-    let Ok(text) = fs::read_to_string(fs::join(remotes, &path)) else {
-        return Result::Err(unserved);
-    };
-    let Ok(schema) = Schema::parse(text) else {
-        return Result::Err(`refers to ${*uri}, which is no Draft 2020-12 schema`);
-    };
-    return Result::Ok(schema);
-}
-
-/// Where under `remotes/` the suite serves `uri` from.
-pub fn remote_path(uri: &Uri) -> Option<String> {
-    return `${*uri}`.strip_prefix(&REMOTE_BASE).map(|p| p.to_string());
 }
