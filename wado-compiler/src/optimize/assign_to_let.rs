@@ -12,6 +12,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLocal, NirParam};
 use crate::nir_arena::{BlockId, Body, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
+use crate::type_table::TypeTable;
 
 use super::arena_query::operand_read_locals;
 
@@ -20,8 +21,9 @@ pub(super) fn promote_lone_assignments(
     body: &mut Body,
     locals: &[NirLocal],
     params: &[NirParam],
+    type_table: &TypeTable,
 ) -> bool {
-    let Assignees { lone, declarations } = lone_assignees(body, params);
+    let Assignees { lone, declarations } = lone_assignees(body, params, type_table);
     if lone.is_empty() {
         return false;
     }
@@ -127,7 +129,7 @@ struct Assignees {
 
 /// The locals one assignment writes as a whole and nothing binds a value to:
 /// no `let` but one declaring it without a value, no pattern or parameter.
-fn lone_assignees(body: &Body, params: &[NirParam]) -> Assignees {
+fn lone_assignees(body: &Body, params: &[NirParam], type_table: &TypeTable) -> Assignees {
     let mut bound: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
     let mut declarations: IndexMap<u32, StmtId> = IndexMap::default();
     let mut assignments: IndexMap<u32, usize> = IndexMap::default();
@@ -139,7 +141,7 @@ fn lone_assignees(body: &Body, params: &[NirParam]) -> Assignees {
                 type_id,
                 ..
             } = &body.stmts[s].kind
-                && (!body.declares_without_value(*type_id, *value)
+                && (!body.declares_without_value(type_table, *type_id, *value)
                     || declarations.insert(*local_index, s).is_some())
             {
                 bound.insert(*local_index);

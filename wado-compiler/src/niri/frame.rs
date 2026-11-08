@@ -343,7 +343,7 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                if body.declares_without_value(*type_id, value) {
+                if body.declares_without_value(self.type_table, *type_id, value) {
                     self.bind_local(index, Lattice::Unevaluated);
                     return Flow::Fallthrough(Lattice::Unevaluated);
                 }

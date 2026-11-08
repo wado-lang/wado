@@ -851,8 +851,14 @@ impl Body {
     /// Whether a `let` of `type_id` binding `value` declares its local without
     /// a value, as `let x: T;` does: the unit it binds is no value of `T`, and
     /// the slot holds `T`'s Wasm default until its first assignment.
-    pub fn declares_without_value(&self, type_id: TypeId, value: Operand) -> bool {
-        type_id != TypeTable::UNIT && self.operand_type(value) == TypeTable::UNIT
+    pub fn declares_without_value(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+        value: Operand,
+    ) -> bool {
+        let unit = |id| type_table.same_type(id, TypeTable::UNIT);
+        !unit(type_id) && unit(self.operand_type(value))
     }
 
     /// The local a bare skeleton `Local` operand reads, with its node. `None` for

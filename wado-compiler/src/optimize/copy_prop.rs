@@ -137,6 +137,7 @@ fn field_chain_root(body: &Body, e: ExprId) -> Option<u32> {
 fn analyze_copy_binding(
     body: &Body,
     stmt: StmtId,
+    type_table: &TypeTable,
     copy_value_id: Option<FuncId>,
 ) -> Option<CopyBinding> {
     let StmtKind::Let {
@@ -155,7 +156,7 @@ fn analyze_copy_binding(
     // drops the assignment a short-circuit skipped, an assert's failure report
     // still reads the slot, and forwarding the unit there left the call one
     // argument short.
-    if body.declares_without_value(let_type_id, value) {
+    if body.declares_without_value(type_table, let_type_id, value) {
         return None;
     }
     // `let x = Operand::Value(v)`: a copy of a promoted operand. Forward `x`'s
@@ -435,7 +436,7 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
             }
             _ => {}
         }
-        if let Some(mut binding) = analyze_copy_binding(body, stmt, ctx.copy_value_id) {
+        if let Some(mut binding) = analyze_copy_binding(body, stmt, ctx.type_table, ctx.copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable iff every read of the target sits after the
             // binding AND the source is not mutated in those statements (a

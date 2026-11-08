@@ -1001,7 +1001,7 @@ impl ConstFoldVisitor<'_> {
             }
             _ => return,
         };
-        let lat = if body.declares_without_value(type_id, value) {
+        let lat = if body.declares_without_value(self.interpreter.type_table(), type_id, value) {
             Lattice::Unevaluated
         } else {
             operand_lattice(&self.interpreter, body, value)

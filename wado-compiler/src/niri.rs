@@ -731,6 +731,11 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    #[must_use]
+    pub fn type_table(&self) -> &'a TypeTable {
+        self.type_table
+    }
+
     /// What is left of the CTFE work budget: a declined fold and an exhausted
     /// budget look alike from outside.
     #[must_use]
@@ -825,7 +830,7 @@ impl<'a> Interpreter<'a> {
                 return;
             };
             let (local_index, value) = (*local_index, *value);
-            let lattice = if body.declares_without_value(*type_id, value) {
+            let lattice = if body.declares_without_value(self.type_table, *type_id, value) {
                 Lattice::Unevaluated
             } else {
                 self.operand_to_lattice(body, value)
