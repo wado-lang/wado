@@ -112,7 +112,7 @@ enum Stdio {
 }
 
 /// What a [`GuestState`]'s `wasi:random/insecure` and `insecure-seed` answer.
-pub enum InsecureRandom {
+enum InsecureRandom {
     /// The host's randomness. `insecure-seed` seeds a hash map's protection
     /// against denial of service, so a guest serving untrusted input needs it
     /// unpredictable.
@@ -178,6 +178,9 @@ impl GuestState {
     /// deadlock the caller, who only reads the pipes back after the
     /// guest's `Store` is done with them.
     ///
+    /// A test serves no untrusted input, so its insecure randomness is
+    /// [`InsecureRandom::Zeroed`].
+    ///
     /// # Errors
     ///
     /// Returns an error if a preopened directory cannot be opened.
@@ -185,7 +188,6 @@ impl GuestState {
         preopened_dirs: &[(String, String)],
         args: &[String],
         process: ProcessGrant,
-        insecure_random: InsecureRandom,
     ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
@@ -197,7 +199,7 @@ impl GuestState {
                 stdout: stdout.clone(),
                 stderr: stderr.clone(),
             },
-            insecure_random,
+            InsecureRandom::Zeroed,
         );
         Ok((state, stdout, stderr))
     }
