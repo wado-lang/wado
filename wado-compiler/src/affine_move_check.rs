@@ -627,16 +627,6 @@ struct Disturbance {
 /// What a value refers into.
 type Owners = IndexMap<Owner, OwnerSite>;
 
-/// `owners`, each updated by `update` and keyed by the owner it leaves.
-fn rekey(owners: Owners, mut update: impl FnMut(&mut Owner, &mut OwnerSite)) -> Owners {
-    let mut rekeyed = Owners::default();
-    for (mut owner, mut site) in owners {
-        update(&mut owner, &mut site);
-        merge_owners(&mut rekeyed, Owners::from_iter([(owner, site)]));
-    }
-    rekeyed
-}
-
 /// `from` added to `into`. An owner both refer into is gone where either has
 /// it gone, and past only the events both are past.
 fn merge_owners(into: &mut Owners, from: Owners) {
@@ -645,7 +635,8 @@ fn merge_owners(into: &mut Owners, from: Owners) {
             indexmap::map::Entry::Occupied(mut kept) => {
                 let kept = kept.get_mut();
                 kept.gone = kept.gone.or(site.gone);
-                kept.elsewhere.retain(|serial| site.elsewhere.contains(serial));
+                kept.elsewhere
+                    .retain(|serial| site.elsewhere.contains(serial));
             }
             indexmap::map::Entry::Vacant(slot) => {
                 slot.insert(site);
@@ -736,7 +727,11 @@ impl Flow {
 /// not see it or already had it past.
 fn join_owners(mut a: Owners, a_flow: &Flow, mut b: Owners, b_flow: &Flow) -> Owners {
     let past = |own: &Flow, other: &Flow, def: AstId| -> IndexSet<u32> {
-        other.events(def).difference(&own.events(def)).copied().collect()
+        other
+            .events(def)
+            .difference(&own.events(def))
+            .copied()
+            .collect()
     };
     let owners: IndexSet<Owner> = a.keys().chain(b.keys()).cloned().collect();
     owners
@@ -744,10 +739,16 @@ fn join_owners(mut a: Owners, a_flow: &Flow, mut b: Owners, b_flow: &Flow) -> Ow
         .map(|owner| {
             let site = match (a.shift_remove(&owner), b.shift_remove(&owner)) {
                 (Some(mut on_a), Some(on_b)) => {
-                    let past_a: IndexSet<u32> =
-                        on_a.elsewhere.union(&past(a_flow, b_flow, owner.def)).copied().collect();
-                    let past_b: IndexSet<u32> =
-                        on_b.elsewhere.union(&past(b_flow, a_flow, owner.def)).copied().collect();
+                    let past_a: IndexSet<u32> = on_a
+                        .elsewhere
+                        .union(&past(a_flow, b_flow, owner.def))
+                        .copied()
+                        .collect();
+                    let past_b: IndexSet<u32> = on_b
+                        .elsewhere
+                        .union(&past(b_flow, a_flow, owner.def))
+                        .copied()
+                        .collect();
                     on_a.elsewhere = past_a.intersection(&past_b).copied().collect();
                     on_a.gone = on_a.gone.or(on_b.gone);
                     on_a
@@ -947,7 +948,9 @@ impl MoveWalker<'_, '_> {
     /// The moved place overlapping `def.path`, if any: the place itself, one
     /// inside it, or one holding it.
     fn moved_overlap(&self, def: AstId, path: &[&str]) -> Option<Span> {
-        self.moves_overlapping(def, path).next().map(|event| event.span)
+        self.moves_overlapping(def, path)
+            .next()
+            .map(|event| event.span)
     }
 
     /// Each move of a place of `def` overlapping `path`.
@@ -1099,12 +1102,15 @@ impl MoveWalker<'_, '_> {
     /// `owners`, read out of `holder` here: one gone here stays gone, and only
     /// a `&mut` use from here on disturbs the rest.
     fn settle(&self, owners: Owners, holder: AstId) -> Owners {
-        rekey(owners, |owner, site| {
-            match self.site_gone(holder, owner, site) {
+        let mut settled = Owners::default();
+        for (mut owner, mut site) in owners {
+            match self.site_gone(holder, &owner, &site) {
                 Some((_, gone)) => site.gone = Some(gone),
                 None => owner.since = self.checker.events,
             }
-        })
+            merge_owners(&mut settled, Owners::from_iter([(owner, site)]));
+        }
+        settled
     }
 
     /// Record on this path what the value of the branch, labeled block or
@@ -1399,7 +1405,11 @@ impl MoveWalker<'_, '_> {
         });
         let instance = self.instance(def);
         // A value formed on this path is read through as one held is.
-        let owner_sets = self.flow.holders.values_mut().chain(self.flow.formed.values_mut());
+        let owner_sets = self
+            .flow
+            .holders
+            .values_mut()
+            .chain(self.flow.formed.values_mut());
         for (owner, site) in owner_sets.flat_map(|owners| owners.iter_mut()) {
             if owner.def != def || owner.instance != instance || site.gone.is_some() {
                 continue;
@@ -2292,27 +2302,23 @@ impl MoveWalker<'_, '_> {
             }
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
             Stmt::Break(b) => {
+                // A jump with no target is a type error the language service
+                // still walks.
+                let labeled = b
+                    .label
+                    .as_ref()
+                    .and_then(|label| self.labels.iter().rposition(|(name, ..)| name == label));
                 if let Some(value) = &b.value {
                     self.visit_at(value);
-                    let block = b.label.as_ref().and_then(|label| {
-                        let found = self.labels.iter().rev().find(|(name, ..)| name == label);
-                        found.map(|(_, block, _)| *block)
-                    });
-                    if let Some(block) = block {
+                    if let Some(at) = labeled {
+                        let block = self.labels[at].1;
                         self.form(block, |walker| walker.owners_of(value));
                     }
                 }
-                // A jump with no target is a type error the language service
-                // still walks.
                 let flow = self.flow.clone();
-                let target = match &b.label {
-                    Some(label) => self
-                        .labels
-                        .iter_mut()
-                        .rev()
-                        .find(|(name, ..)| name == label)
-                        .map(|(.., end)| end),
-                    None => self.loops.last_mut().map(|jumps| &mut jumps.breaks),
+                let target = match (&b.label, labeled) {
+                    (Some(_), at) => at.map(|at| &mut self.labels[at].2),
+                    (None, _) => self.loops.last_mut().map(|jumps| &mut jumps.breaks),
                 };
                 if let Some(target) = target {
                     reach(target, flow);
@@ -2402,7 +2408,6 @@ impl MoveWalker<'_, '_> {
     /// it lands.
     fn visit_labeled_block(&mut self, label: &str, block: &Block) -> bool {
         self.labels.push((label.to_string(), block.id, None));
-        self.flow.formed.shift_remove(&block.id);
         let diverged = self.visit_block(block);
         if !diverged {
             self.form(block.id, |walker| walker.block_owners(block));
