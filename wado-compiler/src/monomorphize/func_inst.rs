@@ -1142,9 +1142,9 @@ impl Monomorphizer {
             }
         }
 
-        for (param, &arg) in generic.type_params.iter().zip(key.method_type_args.iter()) {
-            substitution.insert(param.id.expect("a method's own parameter binds a type"), arg);
-        }
+        // The arguments fill only the parameters binding a type.
+        let own = generic.type_params.iter().filter_map(|param| param.id);
+        substitution.extend(own.zip(key.method_type_args.iter().copied()));
 
         // A `T^Trait::method` receiver is written by name (the param named
         // `base_struct_name`). Method params are inserted last so an

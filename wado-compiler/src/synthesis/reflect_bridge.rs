@@ -162,8 +162,8 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
         let substitution: TypeArgMap = decl
             .type_params
             .iter()
-            .zip(&type_args)
-            .filter_map(|(param, &arg)| Some((param.id?, arg)))
+            .filter_map(|param| param.id)
+            .zip(type_args.iter().copied())
             .collect();
         if substitution.is_empty() {
             continue;

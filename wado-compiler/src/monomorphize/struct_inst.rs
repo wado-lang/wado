@@ -23,8 +23,8 @@ impl Monomorphizer {
         let substitution: TypeArgMap = generic
             .type_params
             .iter()
-            .zip(key.impl_type_args.iter())
-            .filter_map(|(param, &arg)| Some((param.id?, arg)))
+            .filter_map(|param| param.id)
+            .zip(key.impl_type_args.iter().copied())
             .collect();
 
         // Record this monomorphized struct's associated-type resolutions so
