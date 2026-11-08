@@ -79,6 +79,13 @@ generic-struct machinery unchanged: the monomorphizer already treats any
 `TirStruct` with non-empty type params as a template to expand, regardless of
 whether reify or this WEP's eager annotate-time emission produced it.
 
+## Roadmap
+
+1. **`Self` in a local struct of a trait default method.** Each inheriting impl
+   gets a struct of its own, whose `Self` field is that impl's type. Done when
+   `error_local_struct_self_in_trait_default.wado` compiles and prints `3 14`
+   at every optimization level, as a fixture that is no longer an error.
+
 ## Known gaps
 
 ### Cases of a local `enum`, `variant` or `flags`
@@ -128,5 +135,4 @@ compiler resolves `Self` in the struct's field types to the type the `impl` is
 for instead. In a generic `impl` that type names the impl's parameter, and in a
 trait default method it is the trait's own `Self`. The struct is emitted once,
 so it cannot vary with either, and such a field is refused as an outer
-parameter would be. Before the refusal, a trait default method with one
-implementor compiled, and one with two emitted an invalid module at `-O0`.
+parameter would be. The trait default method's case is on the roadmap.
