@@ -126,9 +126,9 @@ pub fn create_serve_engine(
 /// A store whose guest's stdout/stderr are captured into in-memory pipes instead
 /// of inherited — used by `wado test` so a test's own prints can be attributed
 /// to its result instead of racing directly onto the host's real stdout/stderr.
-/// Only a test, which serves no untrusted input, may make its insecure
-/// randomness [`InsecureRandom::Fixed`]. `eval` is the test's handle on
-/// `core:eval`, which only a test links.
+/// A test serves no untrusted input, so its insecure randomness is
+/// [`InsecureRandom::Zeroed`]. `eval` is the test's handle on `core:eval`,
+/// which only a test links.
 ///
 /// # Errors
 ///
@@ -139,13 +139,12 @@ pub fn create_test_store(
     program: &str,
     eval: EvalSession,
     process: ProcessGrant,
-    insecure_random: InsecureRandom,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
     let (guest, stdout, stderr) = GuestState::new_capturing_stdio(
         preopened_dirs,
         &[program.to_owned()],
         process,
-        insecure_random,
+        InsecureRandom::Zeroed,
     )?;
     let state = WasiState {
         eval: Some(eval),

@@ -117,10 +117,10 @@ pub enum InsecureRandom {
     /// against denial of service, so a guest serving untrusted input needs it
     /// unpredictable.
     Host,
-    /// The same on every run, so what a test's run measures (fuel, coverage, a
-    /// profile) is a function of the program: `HashMap::new` hashes under
+    /// Zeros, so a test's outcome, and what its run measures (fuel, coverage, a
+    /// profile), is a function of the program: `HashMap::new` hashes under
     /// `insecure-seed`, and a seed changes how far its probes go.
-    Fixed,
+    Zeroed,
 }
 
 /// The store data every guest has.
@@ -228,8 +228,8 @@ impl GuestState {
         let mut builder = WasiCtx::builder();
         match insecure_random {
             InsecureRandom::Host => {}
-            InsecureRandom::Fixed => {
-                random::fixed_seed(&mut builder);
+            InsecureRandom::Zeroed => {
+                random::zeroed(&mut builder);
             }
         }
         let guest_stdio = match stdio {

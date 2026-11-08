@@ -1657,6 +1657,36 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
     assert!(!tmp.path().join("build").exists());
 }
 
+/// `wasi:random/insecure` and `insecure-seed` answer zeros under `wado test`,
+/// so a test that hashes, or draws them, depends on nothing its compile did not
+/// read.
+#[test]
+fn test_test_answers_insecure_randomness_with_zeros_and_caches_the_pass() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("random_test.wado");
+    std::fs::write(
+        &main,
+        r#"use { Insecure, InsecureSeed } from "wasi:random";
+use { HashMap } from "core:collections";
+
+test "zeros" {
+    let mut m = HashMap::<String, i32>::new();
+    m["k"] = 1;
+    assert m["k"] == 1;
+    let [k0, k1] = InsecureSeed::get_insecure_seed();
+    assert k0 == 0 && k1 == 0;
+    assert Insecure::get_insecure_random_u64() == 0;
+    assert Insecure::get_insecure_random_bytes(4) == b"\x00\x00\x00\x00";
+}
+"#,
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(&main).assert().success();
+
+    run().stdout(predicate::str::contains("cached:").not());
+    run().stdout(predicate::str::contains("cached:  1 files"));
+}
+
 /// The compile looked for a `wado-workspace.toml` above the package and found
 /// none, so one appearing there is a changed input.
 #[test]
