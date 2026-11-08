@@ -1206,6 +1206,307 @@ b => (s (r b))
 ";
 }
 
+// Prediction evaluates a predicate exactly where it reaches one before
+// consuming a token. Behind a nullable prefix it does; past a consumed token,
+// in a rule the decision scans into, it does not. The trees are the jar's.
+test "prediction answers a predicate behind a nullable prefix" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        let options = GenerateOptions { atn };
+        assert parses("grammar Q;
+s : r EOF ;
+r : '-'? {false}? 'a' | 'a' ;
+WS : ' ' -> skip ;
+", "s", ["a", "- a"], &options) == "a => (s (r a))
+- a => error
+";
+        assert parses("grammar L;
+s : e ('+' ID)? EOF ;
+e : e '-'? {false}? '+' e | e '*' e | ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["a + b", "a - + b", "a * b + c"], &options) == "a + b => (s (e a) + b)
+a - + b => error
+a * b + c => (s (e (e a) * (e b)) + c)
+";
+        // `w w` matches nothing however often `w` repeats on the path.
+        assert parses("grammar W;
+s : r EOF ;
+r : u {false}? 'a' | 'a' ;
+u : w w ;
+w : ;
+WS : ' ' -> skip ;
+", "s", ["a"], &options) == "a => (s (r a))\n";
+    }
+}
+
+test "prediction answers a predicate inside a group" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(
+            "grammar G;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF | 'G' r7 EOF | 'H' r8 EOF
+  | 'I' r9 EOF | 'J' r10 EOF ;
+r1 : ({false}? 'a' | 'b')+ 'x' | 'a' 'x' ;
+r2 : ({false}? 'a' 'x' | 'b')? 'z' | 'a' 'x' 'z' ;
+r3 : ('a' {false}? 'b' | 'c') 'x' | 'a' 'b' 'x' 'y' ;
+r4 : (('-'? {false}? 'a' | 'b') | 'c') 'x' | 'a' 'x' ;
+r5 : u 'd' | 'a' 'c' 'd' 'e'? ;
+u : ({false}? 'a' 'b'? 'c')? ;
+r6 : ('-'? {false}? 'a' | 'a') 'x' ;
+r7 : ({false}? 'a')? 'x' | 'a' 'x' ;
+r8 : v 'd' | 'a' 'z' 'c' 'd' 'e'? ;
+v : (({false}? 'a' 'z')? 'b'? 'c')? ;
+r9 : ('-'? {false}? 'a' | 'a') 'x' | 'a' 'x' 'y' ;
+r10 : ('-'? {false}? 'a')* 'a'? 'b' ;
+WS : ' ' -> skip ;
+",
+            "s",
+            [
+                "A a x", "A b a x", "B a x z", "B b z", "C a b x", "C a b x y", "D a x", "D - a x", "E a c d", "E d",
+                "F a x", "F - a x", "G a x", "G x", "H a z c d", "H b c d", "I a x", "I a x y", "J a b", "J b",
+            ],
+            &GenerateOptions { atn },
+        ) == "A a x => (s A (r1 a x))
+A b a x => error
+B a x z => (s B (r2 a x z))
+B b z => (s B (r2 b z))
+C a b x => error
+C a b x y => (s C (r3 a b x y))
+D a x => (s D (r4 a x))
+D - a x => error
+E a c d => (s E (r5 a c d))
+E d => (s E (r5 u d))
+F a x => (s F (r6 a x))
+F - a x => error
+G a x => (s G (r7 a x))
+G x => (s G (r7 x))
+H a z c d => (s H (r8 a z c d))
+H b c d => (s H (r8 (v b c) d))
+I a x => (s I (r9 a x))
+I a x y => (s I (r9 a x y))
+J a b => (s J (r10 a b))
+J b => (s J (r10 b))
+";
+    }
+}
+
+test "prediction walks past a call to a rule that matches nothing" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(
+            "grammar G;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF ;
+r1 : w 'a' 'b' | 'a' 'c' ;
+r2 : w 'a' | 'b' ;
+r3 : w 'a' | 'a' ;
+r4 : (w | 'b') 'a' 'b' | 'a' 'c' ;
+w : ;
+WS : ' ' -> skip ;
+",
+            "s",
+            ["A a b", "A a c", "B a", "C a", "D a b", "D b a b", "D a c"],
+            &GenerateOptions { atn },
+        ) == "A a b => (s A (r1 w a b))
+A a c => (s A (r1 a c))
+B a => (s B (r2 w a))
+C a => (s C (r3 w a))
+D a b => (s D (r4 w a b))
+D b a b => (s D (r4 b a b))
+D a c => (s D (r4 a c))
+";
+    }
+}
+
+test "prediction leaves a predicate behind a called rule's action to the parse" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar G;
+s : r EOF ;
+r : u {false}? 'a' | 'a' ;
+u : {} ;
+WS : ' ' -> skip ;
+", "s", ["a"], &GenerateOptions { atn }) == "a => error
+";
+    }
+}
+
+test "the simulator answers a called rule's predicate behind a nullable prefix" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar Q;
+s : r EOF ;
+r : q 'x' | 'a' 'y' | 'a' 'x' ;
+q : '-'? {false}? 'a' | 'b' ;
+WS : ' ' -> skip ;
+", "s", ["a x", "b x", "- a x"], &GenerateOptions { atn }) == "a x => (s (r a x))
+b x => (s (r (q b) x))
+- a x => error
+";
+    }
+}
+
+test "an optional enters only where entering leaves a viable parse, whatever decides its body" {
+    let g4 = "grammar T;
+s : 'A' ('-'? 'a')? 'a' EOF
+  | 'B' ('-'? {false}? 'a')? 'a' EOF
+  | 'C' ('-'? {false}? 'a' 'b' | 'a' 'd')? 'a' 'c' EOF
+  | 'D' ('-'? 'a' 'b' | 'a' 'd')? 'a' 'c' EOF ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = ["A a", "A a a", "A - a a", "B a", "B - a a", "C a c", "C a d a c", "D a c", "D a b a c"];
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A a)
+A a a => (s A a a)
+A - a a => (s A - a a)
+B a => (s B a)
+B - a a => error
+C a c => (s C a c)
+C a d a c => (s C a d a c)
+D a c => (s D a c)
+D a b a c => (s D a b a c)
+";
+    }
+}
+
+test "prediction answers a predicate only on the paths that reach it without running an action" {
+    let g4 = "grammar T;
+s : 'A' a EOF | 'B' b EOF | 'C' c EOF | 'D' d EOF | 'F' f EOF | 'G' h EOF
+  | 'H' k EOF | 'I' m EOF | 'J' n EOF | 'K' o EOF | 'M' g EOF ;
+a : (u | ) {false}? 'a' | 'a' ;
+b : ({} | ) {false}? 'a' | 'a' ;
+c : u? {false}? 'a' | 'a' ;
+d : w {false}? 'a' | 'a' ;
+f : (v | ) {false}? 'a' | 'a' ;
+h : ({false}? u | ) {false}? 'a' | 'a' ;
+k : {} {false}? 'a' | 'a' ;
+m : u ({false}? 'a' | 'a' 'b') | 'a' 'c' ;
+n : u ({false}? 'a') | 'a' ;
+o : {} ({false}? 'a' | 'a' 'b') | 'a' ;
+g : ({false}? 'a' | 'a' 'b') ;
+u : {} ;
+w : {} | ;
+v : ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = [
+        "A a", "B a", "C a", "D a", "F a", "G a", "H a", "I a", "I a b", "J a", "K a", "K a b", "M a",
+    ];
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => error
+B a => error
+C a => error
+D a => error
+F a => (s F (f a))
+G a => (s G (h a))
+H a => error
+I a => error
+I a b => (s I (m u a b))
+J a => error
+K a => error
+K a b => (s K (o a b))
+M a => error
+";
+    }
+    // `( | u)` enters `u` only through the simulator.
+    let lazy = "grammar T;
+s : e EOF ;
+e : ( | u) {false}? 'a' | 'a' ;
+u : {} ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(lazy, "s", ["a"], &GenerateOptions { atn }) == "a => error\n";
+    }
+}
+
+test "prediction answers a predicate its caller places past the rule's end" {
+    let g4 = "grammar T;
+s : 'x' q {_input.LA(2) == B}? A .* EOF ;
+q : .*? ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = ["x a a b", "x a b", "x a a a b", "x a a"];
+    for let atn of [AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "x a a b => (s x (q a) a b)
+x a b => (s x q a b)
+x a a a b => (s x (q a a) a b)
+x a a => error
+";
+    }
+    let nullable_first = "grammar T;
+s : 'x' q {_input.LA(2) == B}? A .* EOF ;
+q : | A ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    // `atn: "never"` takes `A` by length, predicate or not.
+    for let atn of [AtnMode::Auto, AtnMode::Always] {
+        assert parses(nullable_first, "s", ["x a a b", "x a b"], &GenerateOptions { atn }) == "x a a b => (s x (q a) a b)
+x a b => (s x q a b)
+";
+    }
+}
+
+// A wildcard leaves FOLLOW inexact only for the rules it may follow: `q`'s is
+// `{A}` whatever `.*` follows, so the empty alternative still meets `A`.
+test "a nullable alternative meets its FOLLOW in a grammar with a wildcard elsewhere" {
+    let direct = "grammar T;
+s : 'x' q A .* EOF ;
+q : | A ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    let nested = "grammar V;
+s : r .* EOF ;
+r : 'x' q A ;
+q : A? ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = ["x a b", "x a a b", "x a a", "x a"];
+    // `atn: "never"` takes `A` by length, so `direct` traps under "verify".
+    for let atn of [AtnMode::Auto, AtnMode::Always] {
+        assert parses(direct, "s", inputs, &GenerateOptions { atn }) == "x a b => (s x q a b)
+x a a b => (s x q a a b)
+x a a => (s x q a a)
+x a => (s x q a)
+";
+    }
+    for let atn of [AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(nested, "s", inputs, &GenerateOptions { atn }) == "x a b => (s (r x q a) b)
+x a a b => (s (r x (q a) a) b)
+x a a => (s (r x (q a) a))
+x a => (s (r x q a))
+";
+    }
+}
+
+test "prediction leaves a predicate past a consumed token to the parse" {
+    for let atn of [AtnMode::Never, AtnMode::Verify] {
+        let options = GenerateOptions { atn };
+        assert parses("grammar G;
+s : x EOF ;
+x : 'a' q | 'a' 'b' 'c' ;
+q : {false}? 'b' 'c' | 'd' ;
+WS : ' ' -> skip ;
+", "s", ["a b c", "a d"], &options) == "a b c => error
+a d => (s (x a (q d)))
+";
+        assert parses("grammar M;
+s : e EOF ;
+e : e 'x' e p | e '+' e | ID ;
+p : {false}? '+' ID | 'z' ;
+ID : [a-y]+ ;
+WS : ' ' -> skip ;
+", "s", ["a x b + c z", "a x b z", "a x b + c + d", "a x b z + c"], &options) == "a x b + c z => (s (e (e a) x (e (e b) + (e c)) (p z)))
+a x b z => (s (e (e a) x (e b) (p z)))
+a x b + c + d => error
+a x b z + c => (s (e (e (e a) x (e b) (p z)) + (e c)))
+";
+    }
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;
@@ -3616,7 +3917,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ");
     assert out.contains("let _sd_p_0 = "), "the grammar must reach a tournament";
     assert !out.contains("else { -1 }"), "the gate is tested twice";
-    assert out.contains("if gate.no_struct != 0 { return -1; }"), "the candidate scan tests the gate";
+    assert out.contains("if !(gate._scan_edge != pos || gate.no_struct == 0) { return -1; }"), "the candidate scan tests the gate where its decision starts";
 }
 
 test "a single-token rule with a gated alternative keeps the gate in its scan" {
@@ -3629,6 +3930,21 @@ test "a single-token rule with a gated alternative keeps the gate in its scan" {
 start : LB {noStruct = 1;} body {noStruct = 0;} RB EOF | body EOF ;
 body : r xs RB | ID xs ;
 r : {noStruct == 0}? ID | RB ;
+xs : LB+ ;
+ID : 'x' ; LB : '(' ; RB : ')' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+", "start", ["(x()", "x()"]);
+    assert got == "(x() => (start ( (body x (xs ()) ))\nx() => (start (body (r x) (xs () )))\n";
+}
+
+test "a member named as the scan edge keeps both fields" {
+    let got = parses("grammar T;
+@parser::members {
+    int _scan_edge = 0;
+}
+start : LB {_scan_edge = 1;} body {_scan_edge = 0;} RB EOF | body EOF ;
+body : r xs RB | ID xs ;
+r : {_scan_edge == 0}? ID | RB ;
 xs : LB+ ;
 ID : 'x' ; LB : '(' ; RB : ')' ;
 WS : [ \\t\\r\\n]+ -> skip ;
@@ -3720,6 +4036,134 @@ ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["a b"]);
     assert got == "a b => (s (e a) (e b)) [3 13 ]\n";
+}
+
+test "a returns or locals initializer holds when the rule is entered" {
+    let got = parses("grammar T;
+s : r {System.out.print($r.v + \" \" + $r.n);} EOF ;
+r returns [int v = 5, int n] locals [int k = 2] : 'a' {$n = $k;} ;
+WS : ' ' -> skip ;
+", "s", ["a"]);
+    assert got == "a => (s (r a)) [5 2]\n";
+}
+
+// A predicate reading the invocation it sits in is ignored where prediction
+// meets it in another (`doc/predicates.md`). The outer `r` has cleared its `x`
+// by the time it reaches `r?`; the second `r` of `s` is met through the first's
+// empty alternative, and the first's `d` is not its own.
+test "prediction ignores a context-dependent predicate outside its own invocation" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        let options = GenerateOptions { atn };
+        assert parses("grammar T;
+s : r EOF ;
+r locals [int x = 1] : {$x > 0}? 'a' {$x = 0;} r? ;
+WS : ' ' -> skip ;
+", "s", ["a a"], &options) == "a a => (s (r a (r a)))\n";
+        assert parses("grammar T;
+s : r[0] r[1] EOF ;
+r[int d] : {$d > 0}? 'a' | ;
+WS : ' ' -> skip ;
+", "s", ["a", "a a"], &options) == "a => (s r (r a))\na a => error\n";
+    }
+}
+
+test "a label read where its alternative did not bind it" {
+    let got = parses("grammar T;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF ;
+r1 : (x='b')? 'a' {String s = $x.text; System.out.println(\"r1 \" + \"null\".equals(s) + \" \" + (s == null));} ;
+r2 : x='-'? 'a' {System.out.println(\"r2 \" + ($x == (null)) + \" \" + ((null) != $x));} ;
+r3 : ID* 'a' {System.out.println(\"r3 \" + ($ctx.ID() != null));} ;
+r4 : ID 'a' | ID 'c' | INT 'b' {System.out.println(\"r4 \" + ($ctx.ID() != null));} ;
+INT : [0-9]+ ;
+ID : [d-w]+ ;
+WS : ' ' -> skip ;
+", "s", ["A a", "B a", "C a", "D 1 b"]);
+    assert got == "A a => (s A (r1 a)) [r1 false true\n]
+B a => (s B (r2 a)) [r2 true false\n]
+C a => (s C (r3 a)) [r3 true\n]
+D 1 b => (s D (r4 1 b)) [r4 false\n]
+";
+}
+
+test "@after reads a label of whichever alternative ran" {
+    let got = parses("grammar T;
+s : 'E' r5 EOF ;
+r5 @after {System.out.println(\"r5 \" + $y.v);} : (y=q)? 'a' | 'b' ;
+q returns [int v] : INT {$v = $INT.int;} ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["E 7 a"]);
+    assert got == "E 7 a => (s E (r5 (q 7) a)) [r5 7\n]\n";
+}
+
+test "@after reads a token-set label" {
+    let got = parses("grammar T;
+s : r EOF ;
+r @after {System.out.println(\"x \" + $x.text);} : x=(A|B) | C ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+", "s", ["b"]);
+    assert got == "b => (s (r b)) [x b\n]\n";
+}
+
+test "a left-recursive suffix binds its token-set label" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e (x=('b'|'c'))? '+' {System.out.println(\"e \" + $x.text);} | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["1 b +"]);
+    assert got == "1 b + => (s (e (e 1) b +)) [e b\n]\n";
+}
+
+// The `.` suffix sends the loop to the simulator, whose table holds no
+// predicate: `op`'s decides between the two suffixes `+` opens.
+test "the left-recursion loop's simulator pick answers the predicates past the operand" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar T;
+s : e EOF ;
+e : e op 'b' | e . 'b' | INT ;
+op : {false}? '+' | '-' ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["1 + b", "1 - b", "1 + b - b"], &GenerateOptions { atn }) == "1 + b => (s (e (e 1) + b))
+1 - b => (s (e (e 1) (op -) b))
+1 + b - b => (s (e (e (e 1) + b) (op -) b))
+";
+    }
+}
+
+// The jar never enters the gated suffix, so `s` takes the `+ 2` itself.
+test "a predicate past the operand gates the left-recursive suffix in the simulator" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar T;
+s : e ('+' INT)? EOF ;
+e : e {false}? '+' INT | e . 'z' | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["1 + 2"], &GenerateOptions { atn }) == "1 + 2 => (s (e 1) + 2)\n";
+    }
+}
+
+// An action only hides the predicates behind it from the paths that run it: a
+// path still empty there reaches the predicate past the group.
+test "an action in one alternative leaves the others' predicates in view" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar T;
+s : 'G' r7 EOF | 'H' r8 EOF ;
+r7 : ({} 'b' | 'c' | ) {false}? 'a' | 'a' ;
+r8 : ({} ({false}? 'a')?) 'b' | 'a' 'b' ;
+WS : ' ' -> skip ;
+", "s", ["G a", "H a b"], &GenerateOptions { atn }) == "G a => (s G (r7 a))\nH a b => error\n";
+    }
+}
+
+test "each left-recursive suffix starts from the initializer" {
+    let got = parses("grammar T;
+s : e EOF ;
+e returns [int v = 5] : e '+' e {System.out.print($v + \" \"); $v = 0;} | INT {System.out.print($v + \" \"); $v = 1;} ;
+INT : [0-9]+ ;
+", "s", ["1+2+3"]);
+    assert got == "1+2+3 => (s (e (e (e 1) + (e 2)) + (e 3))) [5 5 5 5 5 ]\n";
 }
 
 test "a `<` in a call argument is a comparison, not a bracket" {
@@ -4694,12 +5138,192 @@ a?b?c:d:e => (s (e (e a) ? (e (e b) ? (e c) : (e d)) : (e e)))
 ";
 }
 
+// The left operand binds the label before the suffix rebinds it, so the
+// predicate between reads the left operand.
+test "a left-recursive alternative reusing its operand label reads the left operand first" {
+    let g4 = "grammar L;
+s : e EOF {System.out.println($e.v);} ;
+e returns [int v] : a=e '+' {$a.v < 5}? a=e {$v = $a.v + 100;} | INT {$v = $INT.int;} ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", ["1 + 2", "7 + 2", "1 + 2 + 3"], &GenerateOptions { atn }) == "1 + 2 => (s (e (e 1) + (e 2))) [102\n]
+7 + 2 => error [0\n]
+1 + 2 + 3 => error [0\n]
+";
+    }
+    let text = "grammar M;
+s : e EOF ;
+e : a=e '+' {$a.text.equals(\"1\")}? a=e {System.out.println($a.text);} | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(text, "s", ["1 + 2", "7 + 2", "1 + 2 + 3"], &GenerateOptions { atn }) == "1 + 2 => (s (e (e 1) + (e 2))) [2\n]
+7 + 2 => error
+1 + 2 + 3 => error [2\n]
+";
+    }
+}
+
+test "an action reads the text of a left-recursive alternative's left operand" {
+    let got = parses("grammar N;
+s : e EOF ;
+e : a=e '+' b=e {System.out.println($a.text + \" \" + $a.ctx.toStringTree(this));} | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["1 + 2 + 3"]);
+    assert got == "1 + 2 + 3 => (s (e (e (e 1) + (e 2)) + (e 3))) [1 (e 1)\n1+2 (e (e 1) + (e 2))\n]\n";
+}
+
 test "a label on a negated token or set binds the token it matched" {
     let got = parses("grammar T;
 s : x=~A y=~(A|B) z=. EOF { System.out.print($x.text + $y.text + $z.text); } ;
 A : 'a' ; B : 'b' ; C : 'c' ;
 ", "s", ["ccc", "cca"]);
     assert got == "ccc => (s c c c) [ccc]\ncca => (s c c a) [cca]\n";
+}
+
+// A label belongs to the whole alternative, as a field of ANTLR4's context does:
+// one bound inside a group, an optional or a loop reads as null where it did not
+// match, and the last binding wins.
+test "an action reads a label bound anywhere in its alternative" {
+    let g4 = "grammar T;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF
+  | 'G' r7 EOF | 'H' r8 EOF | 'I' r9 EOF | 'J' r10 EOF | 'K' r11 EOF | 'L' r12 EOF | 'M' r13 EOF
+  | 'N' r14 EOF | 'O' r15 EOF | 'P' r16 EOF | 'Q' r17 EOF | 'R' r18 EOF | 'S' r19 EOF ;
+r1 : x='-'? {$x == null}? 'a' | '-' 'a' 'b' ;
+r12 : x='-'? {$x == null}? 'a' | '-' 'a' ;
+r13 : ( x='-'? {$x == null}? 'a' | '-' 'a' ) {System.out.println(\"r13 \" + $x.text);} ;
+r14 : {$x != null}? x='-' 'a' | '-' 'a' 'b' | '-' ;
+r15 : ('a' 'b' 'c' 'd' 'e' 'f')? z=w {!\"z\".equals($z.text)}? 'a' 'b' 'c' 'd' 'e' 'g' ;
+r16 : (y=q)? 'a' {System.out.println(\"r16 \" + $y.ctx);} ;
+r17 : (x=('b'|'c'))? 'a' {System.out.println(\"r17 \" + $x.text);} ;
+r18 @after {System.out.println(\"r18 \" + $y.v);} : (y=q)? 'a' ;
+r19 : x='z'? x=('b'|'c') 'a' {System.out.println(\"r19 \" + $x.text);} ;
+r2 : (x='-')? 'a' {System.out.println(\"r2 \" + $x.text + \" \" + $x.line + \" \" + $x.index + \" \" + ($x != null));} ;
+r3 : X ( X Y {System.out.println(\"r3 \" + $X.text);} ) ;
+r4 : (y=q)? 'a' {System.out.println(\"r4 \" + $y.text);} ;
+r5 : (x='-' | x='+') 'a' {System.out.println(\"r5 \" + $x.text);} ;
+r6 : (x='-')* 'a' {System.out.println(\"r6 \" + $x.text);} ;
+r7 : X X {System.out.println(\"r7 \" + $X.text);} ;
+r8 : {System.out.println(\"r8 \" + $x.text);} x=X {System.out.println(\"r8 \" + $x.text);} ;
+r9 : (x=X {System.out.println(\"r9 \" + $x.text);} | Y {System.out.println(\"r9 \" + $x.text);}) ;
+r10 : (y=q)+ {System.out.println(\"r10 \" + $y.text + \" \" + $y.v);} ;
+r11 : y=q y=q {System.out.println(\"r11 \" + $y.text + \" \" + $y.v);} ;
+q returns [int v] : X {$v = $X.int;} ;
+w : ;
+X : [0-9]+ ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = [
+        "A a", "A - a", "A - a b", "B a", "B - a", "C 1 2 y", "D a", "D 7 a", "E - a", "E + a", "F a", "F - - a",
+        "G 1 2", "H 1", "I 1", "I y", "J 1 2 3", "K 1 2", "L a", "L - a", "M a", "M - a", "N - a", "N - a b", "N -",
+        "O a b c d e f a b c d e g", "O a b c d e g", "P a", "Q a", "Q b a", "R 7 a", "S b a", "S z c a",
+    ];
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A (r1 a))
+A - a => error
+A - a b => (s A (r1 - a b))
+B a => (s B (r2 a)) [r2 null 0 0 false\n]
+B - a => (s B (r2 - a)) [r2 - 1 1 true\n]
+C 1 2 y => (s C (r3 1 2 y)) [r3 2\n]
+D a => (s D (r4 a)) [r4 null\n]
+D 7 a => (s D (r4 (q 7) a)) [r4 7\n]
+E - a => (s E (r5 - a)) [r5 -\n]
+E + a => (s E (r5 + a)) [r5 +\n]
+F a => (s F (r6 a)) [r6 null\n]
+F - - a => (s F (r6 - - a)) [r6 -\n]
+G 1 2 => (s G (r7 1 2)) [r7 2\n]
+H 1 => (s H (r8 1)) [r8 null\nr8 1\n]
+I 1 => (s I (r9 1)) [r9 1\n]
+I y => (s I (r9 y)) [r9 null\n]
+J 1 2 3 => (s J (r10 (q 1) (q 2) (q 3))) [r10 3 3\n]
+K 1 2 => (s K (r11 (q 1) (q 2))) [r11 2 2\n]
+L a => (s L (r12 a))
+L - a => error
+M a => (s M (r13 a)) [r13 null\n]
+M - a => error
+N - a => error
+N - a b => (s N (r14 - a b))
+N - => (s N (r14 -))
+O a b c d e f a b c d e g => (s O (r15 a b c d e f w a b c d e g))
+O a b c d e g => (s O (r15 w a b c d e g))
+P a => (s P (r16 a)) [r16 null\n]
+Q a => (s Q (r17 a)) [r17 null\n]
+Q b a => (s Q (r17 b a)) [r17 b\n]
+R 7 a => (s R (r18 (q 7) a)) [r18 7\n]
+S b a => (s S (r19 b a)) [r19 b\n]
+S z c a => (s S (r19 z c a)) [r19 c\n]
+";
+    }
+}
+
+test "an action asks whether a token matched as the jar answers" {
+    let g4 = "grammar T;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' e EOF | 'G' r7 EOF | 'H' r8 EOF | 'I' r9 EOF ;
+r1 : ID? 'a' {System.out.println(\"r1 \" + (((R1Context)$ctx).ID() != null) + \" \" + $ID.text);} ;
+r2 : {System.out.println(\"r2 \" + (((R2Context)$ctx).ID() != null));} ID 'a' {System.out.println(\"r2 \" + (((R2Context)$ctx).ID() == null));} ;
+r3 : ID? ID {System.out.println(\"r3 \" + (((R3Context)$ctx).ID() != null));} ;
+r4 : ID? 'a' {System.out.println(\"r4 \" + (((AltaContext)$ctx).ID() != null));} # Alta | 'x' ID ID # Altb ;
+r5 @init {System.out.println(\"r5 \" + ($ctx.ID() != null));} @after {System.out.println(\"r5 \" + ($ctx.ID() != null));} : ID? 'a' {System.out.println(\"r5 \" + ($ctx.ID() != null));} ;
+e : e '+' ID? {System.out.println(\"e \" + (((EContext)$ctx).ID() != null));} | INT ;
+r7 : x='-'? 'a' {System.out.println(\"r7 \" + (($x) == null) + \" \" + ((($x)) != null));} ;
+r8 : (x='b')? (y='c')? 'a' {System.out.println(\"r8 \" + ($x.text == null) + \" \" + ($x.text != null) + \" \" + ($x.text == $y.text) + \" \" + ($x.text != \"b\") + \" \" + \"c\".equals($y.text) + \" \" + ($x.text == \"null\"));} ;
+r9 : (x='b')? 'a' {System.out.println(\"r9 \" + $x.text.equals(\"b\"));} ;
+INT : [0-9]+ ;
+ID : [d-w]+ ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = [
+        "A a", "A d a", "B d a", "C d", "C d e", "D a", "D d a", "E a", "E d a", "F 1 +", "F 1 + d", "G a", "G - a",
+        "H a", "H b a", "H c a", "H b c a", "I b a",
+    ];
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A (r1 a)) [r1 false null\n]
+A d a => (s A (r1 d a)) [r1 true d\n]
+B d a => (s B (r2 d a)) [r2 false\nr2 false\n]
+C d => (s C (r3 d)) [r3 true\n]
+C d e => (s C (r3 d e)) [r3 true\n]
+D a => (s D (r4 a)) [r4 false\n]
+D d a => (s D (r4 d a)) [r4 true\n]
+E a => (s E (r5 a)) [r5 false\nr5 false\nr5 false\n]
+E d a => (s E (r5 d a)) [r5 false\nr5 true\nr5 true\n]
+F 1 + => (s F (e (e 1) +)) [e false\n]
+F 1 + d => (s F (e (e 1) + d)) [e true\n]
+G a => (s G (r7 a)) [r7 true false\n]
+G - a => (s G (r7 - a)) [r7 false true\n]
+H a => (s H (r8 a)) [r8 true false true true false false\n]
+H b a => (s H (r8 b a)) [r8 false true false true false false\n]
+H c a => (s H (r8 c a)) [r8 true false false true true false\n]
+H b c a => (s H (r8 b c a)) [r8 false true false true true false\n]
+I b a => (s I (r9 b a)) [r9 true\n]
+";
+    }
+}
+
+// The jar throws a NullPointerException calling a method on the text of a
+// token label that did not match; the parser generated here traps.
+test "an action calling a method on an unmatched label's text traps" {
+    let source = gen_source("grammar T;
+s : (x='b')? 'a' {System.out.println($x.text.equals(\"b\"));} EOF ;
+WS : ' ' -> skip ;
+");
+    assert !eval_beside(source, wado`show("a", parse_s("a"));\n`, SHOW_FN).status matches { Exited(0) };
+}
+
+// The jar throws a NullPointerException reading a member of a rule label that
+// did not match; the parser generated here traps.
+test "an action reading a value of an unmatched rule label traps" {
+    let source = gen_source("grammar T;
+s : (y=q)? 'a' {System.out.println($y.v);} EOF ;
+q returns [int v] : 'b' {$v = 3;} ;
+WS : ' ' -> skip ;
+");
+    assert run_beside(source, wado`show("b a", parse_s("b a"));\n`, SHOW_FN).stdout == "b a => (s (q b) a) [3\n]\n";
+    assert !eval_beside(source, wado`show("a", parse_s("a"));\n`, SHOW_FN).status matches { Exited(0) };
 }
 
 test "a fragment two rules share matches in each" {
@@ -5711,7 +6335,7 @@ fn dump_source<S: AsStrSlice>(input: S) -> String {
 
 test "the dump lowers through the emitter's primed context" {
     let [_, ctx] = dump_pipeline("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
-    assert ctx.follow.is_exact(), "the dump must install FOLLOW before lowering, as `generate` does";
+    assert ctx.follow.is_exact("a"), "the dump must install FOLLOW before lowering, as `generate` does";
 }
 
 // `--atn` reports the same grammar the GIR dump does, so it reports the same
@@ -6413,8 +7037,8 @@ test "scan_gate_fields: a write through a receiver disqualifies the field" {
     assert f.is_empty();
 }
 
-// Lowering puts no gates on a group alternative's scan body, so the scan cannot
-// run its actions however simply they are written.
+// The shapes an optional group is predicted by run no gate, so a scan cannot
+// follow the group's actions however simply they are written.
 test "scan_gate_fields: a write inside a group disqualifies the field" {
     let f = gate_fields_of(&gate_source(
         "other = 1;",

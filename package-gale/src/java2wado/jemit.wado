@@ -4,7 +4,7 @@
 //! `@members` methods (see `action.md`). A method call or constant that
 //! resolves to nothing real is a loud error, not a silently broken emit.
 
-use { ParserRule, Alternative, AttrDecl, GrammarOption, Visibility } from "../ir.wado";
+use { ParserRule, Alternative, AttrDecl, Element, GrammarOption, Visibility } from "../ir.wado";
 use {
     lexer_matched_text_expr,
     lexer_cursor_column_expr,
@@ -13,8 +13,10 @@ use {
     LexerAttrEnv,
     AttrUse,
     resolve_attr_ref,
-    binding_name,
     rule_binding_for,
+    token_null_test,
+    text_presence,
+    binding_name,
     ref_is_call_ctx,
     ref_is_ctx_to_string_tree,
     RULE_START_TOK_LOCAL,
@@ -39,10 +41,6 @@ pub struct JEnv {
     /// The rendered expected-token set at this site — a generation-time
     /// constant in Gale. Empty where codegen cannot answer, which reports.
     pub expected: String = "",
-    /// Whether every element the alternative binds has matched by this action's
-    /// position. `((XContext)$ctx).TOK()` is null before its element, so the
-    /// presence test only folds to a constant where this holds.
-    pub at_alt_end: bool = false,
     /// True inside a lexer action / predicate body, where the recognizer API is
     /// the lexer's: `getText()` is the matched slice rather than a rule's token
     /// span, and a `$`-attribute resolves against the match fn's cursor.
@@ -60,6 +58,10 @@ pub struct JEnv {
     pub locals: List<String> = [],
     /// Those of `locals` whose Java type is `String`.
     pub string_locals: List<String> = [],
+    /// Those of `string_locals` that may hold Java's `null`: each carries its
+    /// presence in a `bool` beside it (`present_local`), since the text a Wado
+    /// `String` holds cannot say so.
+    pub nullable_locals: List<String> = [],
     /// The enclosing rule's argument names, in their surface spelling. Java
     /// reaches an argument bare; Gale stores it in the value channel, so the
     /// bare name resolves to `$name` rather than to the generated parameter.
@@ -288,6 +290,7 @@ pub fn emit_java_stmts(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
+    let env = &with_nullable_locals(rule, rules, stmts, bindings, env);
     let mut out = String::from("");
     for let mut i = 0; i < stmts.len(); i += 1 {
         if i > 0 {
@@ -296,6 +299,109 @@ pub fn emit_java_stmts(
         out.push_str(&emit_stmt(rule, rules, &stmts[i], vals_in_scope, bindings, env)?);
     }
     return Result::Ok(out);
+}
+
+/// `env` with `nullable_locals` filled: each `String` local some statement
+/// stores a value in that may be `null`, to a fixed point, since one such
+/// local makes another it is copied into one too.
+fn with_nullable_locals(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    stmts: &List<JStmt>,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> JEnv {
+    let mut scoped = *env;
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for let st of stmts {
+            let Some([name, value]) = local_store(st) else {
+                continue;
+            };
+            if scoped.string_locals.contains(&name)
+                && !scoped.nullable_locals.contains(&name)
+                && value_presence(rule, rules, &value, bindings, &scoped) matches { Some(_) } {
+                scoped.nullable_locals.push(name);
+                grew = true;
+            }
+        }
+    }
+    return scoped;
+}
+
+/// The local `st` stores a whole value in, beside that value: a declaration's
+/// initializer or a plain `=`.
+fn local_store(st: &JStmt) -> Option<[String, JExpr]> {
+    return match st {
+        Local(l) => l.init.map(|init| [l.name, init]),
+        Assign(a) && a.op == "=" => match &a.target {
+            Name(n) => Option::Some([*n, a.value]),
+            _ => null,
+        },
+        _ => null,
+    };
+}
+
+/// Refuse to hand a method a `String` that may be Java's `null`: its parameter
+/// is a Wado `String`, which cannot carry that.
+fn refuse_nullable_args(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    args: &List<JExpr>,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Result<(), String> {
+    for let a of args {
+        if value_presence(rule, rules, a, bindings, env) matches { Some(_) } {
+            return Result::Err(
+                "java2wado: a method argument that may be null is unsupported: a String parameter cannot hold null",
+            );
+        }
+    }
+    return Result::Ok(());
+}
+
+/// The `bool` local carrying whether the nullable `String` local `name` holds
+/// a value.
+fn present_local<S: AsStrSlice>(name: S) -> String {
+    return escape_ident(`${name}__present`);
+}
+
+/// Where the `String` value `e` may be Java's `null`, the condition under which
+/// it is not; `null` where it always holds a value. A label's text that may not
+/// have matched, the `null` literal, and a nullable local are the ones that may.
+fn value_presence(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Option<String> {
+    let presence = match without_parens(e) {
+        Name(n) && *n == "null" => Option::Some("false"),
+        Name(n) && env.nullable_locals.contains(n) => Option::Some(present_local(n)),
+        _ => text_presence_of(rule, rules, e, bindings),
+    };
+    return match presence {
+        Some(p) && p == "true" => null,
+        _ => presence,
+    };
+}
+
+/// A `String` value as Wado holds it: Java's `null` reads as its text.
+fn string_value(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    vals_in_scope: bool,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Result<String, String> {
+    if name_is(without_parens(e), "null") {
+        return Result::Ok("\"null\"");
+    }
+    return emit_expr(rule, rules, e, vals_in_scope, bindings, env);
 }
 
 fn emit_stmt(
@@ -314,8 +420,33 @@ fn emit_stmt(
         Local(l) => emit_local(rule, rules, l, vals_in_scope, bindings, env),
         Assign(a) => {
             let target = emit_assign_target(rule, rules, a, vals_in_scope, bindings, env)?;
-            let value = emit_expr(rule, rules, &a.value, vals_in_scope, bindings, env)?;
-            Result::Ok(`${target} ${a.op} ${value};`);
+            let stored = local_store(s);
+            let value = match &stored {
+                Some([name, v]) && env.string_locals.contains(name) => string_value(
+                    rule,
+                    rules,
+                    v,
+                    vals_in_scope,
+                    bindings,
+                    env,
+                )?,
+                _ => {
+                    if value_presence(rule, rules, &a.value, bindings, env) matches { Some(_) } {
+                        return Result::Err(
+                            "java2wado: storing a String that may be null outside a local is unsupported",
+                        );
+                    }
+                    emit_expr(rule, rules, &a.value, vals_in_scope, bindings, env)?;
+                },
+            };
+            let store = `${target} ${a.op} ${value};`;
+            match stored {
+                Some([name, v]) && env.nullable_locals.contains(&name) => {
+                    let present = value_presence(rule, rules, &v, bindings, env).unwrap_or("true");
+                    Result::Ok(`${store} ${present_local(&name)} = ${present};`);
+                },
+                _ => Result::Ok(store),
+            }
         },
         Return(v) => match v {
             Some(e) => {
@@ -372,13 +503,20 @@ fn emit_local(
             return Result::Err(`java2wado: unsupported local type '${l.ty}'`);
         },
     };
-    let init = match &l.init {
-        Some(e) => emit_expr(rule, rules, e, vals_in_scope, bindings, env)?,
-        None => {
-            return Result::Err(`java2wado: local '${l.name}' needs an initializer`);
-        },
+    let Some(e) = &l.init else {
+        return Result::Err(`java2wado: local '${l.name}' needs an initializer`);
     };
-    return Result::Ok(`let mut ${escape_ident(&l.name)}: ${ty} = ${init};`);
+    let init = if env.string_locals.contains(&l.name) {
+        string_value(rule, rules, e, vals_in_scope, bindings, env)?;
+    } else {
+        emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
+    };
+    let decl = `let mut ${escape_ident(&l.name)}: ${ty} = ${init};`;
+    if !env.nullable_locals.contains(&l.name) {
+        return Result::Ok(decl);
+    }
+    let present = value_presence(rule, rules, e, bindings, env).unwrap_or("true");
+    return Result::Ok(`${decl} let mut ${present_local(&l.name)}: bool = ${present};`);
 }
 
 /// Emit `System.out.print`/`println` as `<this>.emit(<template>)`, rendering the
@@ -475,12 +613,31 @@ pub fn emit_expr(
         Binary(b) => {
             if b.op == "+" {
                 emit_plus(rule, rules, e, vals_in_scope, bindings, env);
-            } else if let Some(folded) = fold_ctx_token_null_test(b, bindings, env) {
-                Result::Ok(folded);
+            } else if let Some(test) = token_presence_test(rule, rules, b, bindings, env) {
+                Result::Ok(test);
             } else {
                 let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings, env)?;
                 let r = emit_expr(rule, rules, &b.rhs, vals_in_scope, bindings, env)?;
-                Result::Ok(`${l} ${b.op} ${r}`);
+                let presence = [
+                    text_presence_of(rule, rules, &b.lhs, bindings),
+                    text_presence_of(rule, rules, &b.rhs, bindings),
+                ];
+                let folded = match text_identity(&presence) {
+                    Some(same) && b.op == "==" => same,
+                    Some(same) && b.op == "!=" => `!${same}`,
+                    _ => {
+                        return Result::Ok(`${l} ${b.op} ${r}`);
+                    },
+                };
+                // The fold still evaluates each operand, in Java's order.
+                let mut evaluated = String::new();
+                if has_call(&b.lhs) {
+                    evaluated.push_str(`let _ = ${l}; `);
+                }
+                if has_call(&b.rhs) {
+                    evaluated.push_str(`let _ = ${r}; `);
+                }
+                Result::Ok(if evaluated.is_empty() { folded } else { `(eq: { ${evaluated}${folded} })` });
             }
         },
     };
@@ -548,7 +705,10 @@ fn emit_call(
     let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, env)?;
     return match &c.callee {
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
-        Name(n) => emit_recognizer_call(env, n, &args_w),
+        Name(n) => {
+            refuse_nullable_args(rule, rules, &c.args, bindings, env)?;
+            emit_recognizer_call(env, n, &args_w);
+        },
         _ => Result::Err("java2wado: unsupported call target"),
     };
 }
@@ -574,42 +734,193 @@ fn emit_recognizer_call<S: AsStrSlice, S1: AsStrSlice>(env: &JEnv, name: S, args
     return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${args_w})`);
 }
 
-/// `((XContext)$ctx).TOK() != null` asks whether the alternative has matched
-/// that token *by this point* — a constant only past the last element, where a
-/// token the alternative binds has certainly matched. Before then the answer
-/// depends on the action's position, which is not folded.
-fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<AltBinding>, env: &JEnv) -> Option<String> {
-    if !env.at_alt_end {
-        return null;
-    }
+/// `<token> == null` / `!= null`, either way round and through parens, where
+/// the token is a label or reference (`$x`) or a context's accessor for one
+/// (`$ctx.ID()`). The accessor reads what `$ID` does, unless the name repeats
+/// in that context: ANTLR4 then returns a list, which is never null.
+fn token_presence_test(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    b: &JBinary,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Option<String> {
     if b.op != "!=" && b.op != "==" {
         return null;
     }
-    if !name_is(&b.rhs, "null") {
-        return null;
-    }
-    let call = if let Call(c) = &b.lhs {
-        *c;
+    let negated = b.op == "!=";
+    let operand = if name_is(without_parens(&b.rhs), "null") {
+        &b.lhs;
+    } else if name_is(without_parens(&b.lhs), "null") {
+        &b.rhs;
     } else {
         return null;
     };
-    if !call.args.is_empty() {
-        return null;
-    }
-    let m = if let Member(mm) = &call.callee {
-        *mm;
-    } else {
-        return null;
+    let reference = match without_parens(operand) {
+        Attr(text) => {
+            if let Some(p) = text_presence(rule, rules, text, bindings) {
+                return Option::Some(if negated { p } else { `!(${p})` });
+            }
+            *text;
+        },
+        Call(c) && c.args.is_empty() => {
+            let Some(name) = ctx_token_accessor(&c.callee) else {
+                return null;
+            };
+            let count = ctx_token_count(rule, &c.callee, &name);
+            if count == 0 {
+                return null;
+            }
+            if count > 1 {
+                return Option::Some(if negated { "true" } else { "false" });
+            }
+            if !bindings.iter_ref().any(|bound| bound.binds(true, &binding_name(&name))) {
+                return Option::Some(if negated { "false" } else { "true" });
+            }
+            `$${name}`;
+        },
+        Name(n) && env.string_locals.contains(n) => {
+            let present = value_presence(rule, rules, operand, bindings, env).unwrap_or("true");
+            return Option::Some(if negated { present } else { `!(${present})` });
+        },
+        _ => {
+            return null;
+        },
     };
-    if !is_ctx_expr(&m.recv) || !token_is_bound(bindings, &m.name) {
-        return null;
-    }
-    return Option::Some(if b.op == "!=" { "true" } else { "false" });
+    return token_null_test(rule, rules, &reference, bindings, negated);
 }
 
-/// Whether the current alternative binds a token named `name`.
-fn token_is_bound<S: AsStrSlice>(bindings: &List<AltBinding>, name: S) -> bool {
-    return bindings.iter_ref().any(|b: &AltBinding| b.is_token && b.base == binding_name(name));
+/// The token `callee` names when it is a `$ctx` accessor: `$ctx.ID`, which
+/// the `$`-scanner reads as one reference, or one on a cast.
+fn ctx_token_accessor(callee: &JExpr) -> Option<String> {
+    return match callee {
+        Attr(t) => t.strip_prefix("$ctx.").map(|name| name.to_string()),
+        Member(m) && is_ctx_expr(&m.recv) => Option::Some(m.name),
+        _ => null,
+    };
+}
+
+/// The condition under which the label text `e` reads is there
+/// (`text_presence`), or `null` where `e` reads none.
+fn text_presence_of(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    bindings: &List<AltBinding>,
+) -> Option<String> {
+    return match without_parens(e) {
+        Attr(text) => text_presence(rule, rules, text, bindings),
+        _ => null,
+    };
+}
+
+/// Java's `==` where a side reads a label's text (`presence`, either side):
+/// a read returns a fresh `String`, so the two are the same reference only
+/// where both are `null`. `null` where neither side reads one.
+fn text_identity(presence: &[Option<String>, Option<String>]) -> Option<String> {
+    return match presence {
+        [Some(l), Some(r)] => Option::Some(`(!(${*l}) && !(${*r}))`),
+        [Some(_), None] | [None, Some(_)] => Option::Some("false"),
+        [None, None] => null,
+    };
+}
+
+/// Java's `l.equals(r)`, where `r` may be a label text that is not there
+/// (`r_present`): a missing one equals nothing.
+fn text_equals<S: AsStrSlice, S1: AsStrSlice>(r_present: &Option<String>, l: S, r: S1) -> String {
+    return match r_present {
+        Some(p) && *p != "true" => `(${*p} && ${l} == ${r})`,
+        _ => `(${l} == ${r})`,
+    };
+}
+
+/// Whether evaluating `e` calls a method, the one way a Java expression of the
+/// subset has an effect.
+fn has_call(e: &JExpr) -> bool {
+    return match e {
+        Call(_) => true,
+        Member(m) => has_call(&m.recv),
+        Cast(c) => has_call(&c.operand),
+        Unary(u) => has_call(&u.operand),
+        Binary(b) => has_call(&b.lhs) || has_call(&b.rhs),
+        Paren(p) => has_call(&p.inner),
+        Int(_) | Str(_) | Bool(_) | Attr(_) | Name(_) => false,
+    };
+}
+
+fn without_parens(e: &JExpr) -> &JExpr {
+    return match e {
+        Paren(p) => without_parens(&p.inner),
+        _ => e,
+    };
+}
+
+/// How often token `name` can occur in one match of the context `ctx` is cast
+/// to: a labeled alternative's own (`#add` → `AddContext`) or, uncast, the
+/// rule's, whose alternatives exclude each other.
+fn ctx_token_count(rule: &ParserRule, accessor: &JExpr, name: &String) -> i32 {
+    let class = match accessor {
+        Member(m) => ctx_cast_class(&m.recv),
+        _ => null,
+    };
+    let mut count = 0;
+    for let alt of &rule.alternatives {
+        let in_context = match [&class, &alt.label] {
+            [Some(c), Some(label)] => *c == `${capitalized(label)}Context`,
+            _ => true,
+        };
+        if in_context {
+            count = i32::max(count, token_occurrences(&alt.elements, name));
+        }
+    }
+    return count;
+}
+
+/// ANTLR4 names a labeled alternative's context class by the label with its
+/// first letter raised, and leaves the rest as written.
+fn capitalized(label: &String) -> String {
+    let mut chars = label.chars();
+    let first = chars.next().expect("an alternative label is a name");
+    let mut out = String::new();
+    out.push(first.to_ascii_uppercase());
+    out.push_str(&label.substr_bytes(first.len_utf8(), label.len()));
+    return out;
+}
+
+/// The class `e` casts `$ctx` to (`((AddContext)$ctx)`), or `null` uncast.
+fn ctx_cast_class(e: &JExpr) -> Option<String> {
+    return match e {
+        Paren(p) => ctx_cast_class(&p.inner),
+        Cast(c) => Option::Some(c.ty),
+        _ => null,
+    };
+}
+
+fn token_occurrences(elements: &List<Element>, name: &String) -> i32 {
+    let mut count = 0;
+    for let e of elements {
+        count += token_occurrences_in(e, name);
+    }
+    return count;
+}
+
+/// How often token `name` can occur in one match of `e`, where a loop's body
+/// counts as twice: more than once is all the accessor's shape asks.
+fn token_occurrences_in(e: &Element, name: &String) -> i32 {
+    return match e {
+        TokenRef(t) => if t.name == *name { 1 } else { 0 },
+        Label(l) => token_occurrences_in(&l.element, name),
+        Repeat(r) => {
+            let once = token_occurrences_in(&r.element, name);
+            if r.kind matches { Optional } {
+                once;
+            } else {
+                2 * once;
+            }
+        },
+        Group(g) => g.alternatives.iter_ref().fold(0, |n, a| i32::max(n, token_occurrences(&a.elements, name))),
+        RuleRef(_) | Literal(_) | Wildcard(_) | Not(_) => 0,
+    };
 }
 
 /// Whether `e` reduces (through parens and casts) to the `$ctx` special — the
@@ -678,6 +989,7 @@ fn emit_member_call<S: AsStrSlice>(
     // `this.m()` is the bare `m()` under another spelling, recognizer API
     // included: `this.getText()` in a lexer is the matched slice, not a token's.
     if name_is(&m.recv, "this") {
+        refuse_nullable_args(rule, rules, raw_args, bindings, env)?;
         return emit_recognizer_call(env, &meth, args_w);
     }
     if meth == "getText" {
@@ -698,10 +1010,16 @@ fn emit_member_call<S: AsStrSlice>(
             return Result::Err("java2wado: .equals() with no argument");
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-        let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, env)?;
-        return Result::Ok(`(${r} == ${a})`);
+        let a = string_value(rule, rules, &raw_args[0], vals_in_scope, bindings, env)?;
+        // A missing receiver throws in the jar; a missing argument equals nothing.
+        let eq = text_equals(&value_presence(rule, rules, &raw_args[0], bindings, env), &r, &a);
+        return Result::Ok(match value_presence(rule, rules, &m.recv, bindings, env) {
+            Some(p) => `(if ${p} { ${eq} } else { panic("NullPointerException") })`,
+            None => eq,
+        });
     }
     check_member_call_reachable(env, &meth)?;
+    refuse_nullable_args(rule, rules, raw_args, bindings, env)?;
     let recv_w = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${args_w})`);
 }
@@ -761,6 +1079,9 @@ fn name_expr<S: AsStrSlice>(
         Unknown => if env.lexer {
             builtin::cold_path();
             Result::Err(`java2wado: unsupported lexer name '${name}': not a @members field`);
+        } else if is_upper_ident(name) {
+            // The parser class's own token-type constant, reached unqualified.
+            Result::Ok(`TK_${name}`);
         } else {
             Result::Ok(name.to_string());
         },
@@ -848,8 +1169,8 @@ fn is_system_out(e: &JExpr) -> bool {
     };
 }
 
-/// An all-uppercase identifier (`NL`, `ELSE`, `LL_EXACT`): a token-type constant
-/// when qualified (`TParser.NL`). Digits and `_` allowed; needs one A-Z.
+/// An all-uppercase identifier (`NL`, `ELSE`, `LL_EXACT`): a token-type constant,
+/// qualified (`TParser.NL`) or not. Digits and `_` allowed; needs one A-Z.
 fn is_upper_ident<S: AsStrSlice>(name: S) -> bool {
     let mut has_alpha = false;
     for let c of name.chars() {
@@ -911,7 +1232,7 @@ fn attr_is_string(rule: &ParserRule, rules: &List<ParserRule>, text: &String, bi
         return true;
     }
     for let b of bindings {
-        if !b.is_token && b.base == label {
+        if b.binds(false, &label) {
             for let r of rules {
                 if r.name == b.ref_name {
                     return declares_string(&r.returns_decls, &member);

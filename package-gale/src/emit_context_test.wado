@@ -5,17 +5,21 @@ use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry } from "./table_registry.wado";
 use { ParserPlan } from "./parser_plan.wado";
+use { decision_predicates } from "./gate_conditions.wado";
 use { Diagnostics, admits_is_untestable, admits_or_everything, admits_or_untestable } from "./gir.wado";
 
 fn mk_ctx() -> EmitContext {
     let rules: List<ParserRule> = [];
+    let mut analysis = GrammarAnalysis::new(&rules);
+    let decisions = decision_predicates(&GenSettings {}, &mut analysis);
     return EmitContext::new(
-        GrammarAnalysis::new(&rules),
+        analysis,
         GenSettings {},
         RuleFollow::unknown(),
         TableRegistry::new(),
         Diagnostics {},
         ParserPlan {},
+        decisions,
     );
 }
 

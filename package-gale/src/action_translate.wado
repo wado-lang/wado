@@ -20,6 +20,7 @@ use {
 use { rule_is_left_recursive } from "./lr_util.wado";
 use { push_unique } from "./list_util.wado";
 use { skip_ws } from "./g4/scan.wado";
+use { is_ident_char } from "./text.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
@@ -127,11 +128,31 @@ fn swallow_trailing_call(src: &StrSlice, end: i32) -> i32 {
 
 /// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
 /// correctly), falling back to `base` when the reference is not in the map.
-fn binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, is_token: bool, base: S) -> String {
-    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == base.as_str_slice()) {
-        Some(b) => b.field,
-        None => base.to_string(),
+fn binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, is_token: bool, base: S) -> AltBinding {
+    return match bindings.iter_ref().find(|b: &AltBinding| b.binds(is_token, &base)) {
+        Some(b) => *b,
+        None => AltBinding {
+            is_token,
+            base: base.to_string(),
+            field: base.to_string(),
+        },
     };
+}
+
+/// A rule call's result as a value, which traps where the jar throws
+/// `NullPointerException`: on a call that never ran. A shared label holds an
+/// `Option` for that.
+fn rule_value(b: &AltBinding) -> String {
+    return match b.reach {
+        Bound => b.field,
+        Shared => `${b.field}.unwrap()`,
+        Unmatched => "unreachable()",
+    };
+}
+
+/// The name a rule call's `.text` / `.ctx` captures are kept under.
+fn rule_capture(b: &AltBinding) -> String {
+    return if b.reach matches { Shared } { b.capture } else { b.field };
 }
 
 /// The rule's first token index, captured at rule entry; read by a `$text` /
@@ -201,7 +222,7 @@ pub global LR_ACC_LOCAL: String = "_lr_acc";
 /// named `name` — the same lookup the identity translator uses for `$rule`.
 /// Shared with java2wado's ctx-child accessor (`((Ctx)$ctx).<rule>(k)`).
 pub fn rule_binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, name: S) -> String {
-    return binding_for(bindings, false, &binding_name(name));
+    return rule_value(&binding_for(bindings, false, &binding_name(name)));
 }
 
 /// Whether any of `rule`'s actions references a rule-span special (`$text`,
@@ -228,6 +249,74 @@ pub fn rule_binding_reads(rule: &ParserRule, rules: &List<ParserRule>) -> Option
         }
     }
     return Option::Some(reads);
+}
+
+/// The bindings the rule's bodies name (`named_bindings`), which unlike
+/// `rule_binding_reads` leaves out a child `$ctx` reaches.
+pub fn rule_named_bindings(rule: &ParserRule) -> List<String> {
+    let mut named: List<String> = [];
+    for let body of &rule_action_bodies(rule) {
+        for let base of named_bindings(body) {
+            push_unique(&mut named, base);
+        }
+    }
+    return named;
+}
+
+/// Whether `body` names the binding `base` (`named_bindings`).
+pub fn body_names_binding<S: AsStrSlice, S1: AsStrSlice>(body: S, base: S1) -> bool {
+    return named_bindings(body).contains_str(base);
+}
+
+/// The bindings `body` names: each `$` reference's, and the token each `$ctx`
+/// token accessor reads (`$ctx.ID()`, `((XContext)$ctx).ID()`), which the
+/// token's binding answers.
+fn named_bindings<S: AsStrSlice>(body: S) -> List<String> {
+    let src = body.as_str_slice();
+    let mut out: List<String> = [];
+    for let r of &find_attr_refs(src) {
+        push_unique(&mut out, binding_name(&r.name));
+        if r.name == "ctx" && let Some(token) = ctx_token_accessor(&src, r) {
+            push_unique(&mut out, binding_name(&token));
+        }
+    }
+    return out;
+}
+
+/// The token a call on the `$ctx` reference `r` reads: `.ID()` straight after
+/// it, or after the `)` closing a cast around it. A token name is upper-led; a
+/// lower-led accessor reaches a rule child.
+fn ctx_token_accessor(src: &StrSlice, r: &AttrRef) -> Option<String> {
+    let n = src.len();
+    let [name, after_name] = if let Some(m) = &r.member {
+        [*m, r.end];
+    } else {
+        let mut i = skip_ws(src, r.end, n);
+        while i < n && src.byte_at(i) == b')' {
+            i = skip_ws(src, i + 1, n);
+        }
+        if i >= n || src.byte_at(i) != b'.' {
+            return null;
+        }
+        let start = skip_ws(src, i + 1, n);
+        let mut end = start;
+        while end < n && is_ident_char(src.byte_at(end) as char) {
+            end += 1;
+        }
+        [src.slice(start, end).to_string(), end];
+    };
+    let open = skip_ws(src, after_name, n);
+    if name.is_empty() || !name.chars().next().unwrap().is_ascii_uppercase() || open >= n || src.byte_at(open) != b'(' {
+        return null;
+    }
+    return Option::Some(name);
+}
+
+/// Whether a body running inside `elem` names the binding `base`.
+pub fn element_names_binding<S: AsStrSlice>(elem: &Element, base: S) -> bool {
+    let mut bodies: List<String> = [];
+    push_element_action_bodies(elem, &mut bodies);
+    return bodies.iter_ref().any(|b| body_names_binding(b, &base));
 }
 
 /// Every action and predicate body running in the rule's own frame: its
@@ -573,7 +662,79 @@ pub fn binding_name<S: AsStrSlice>(name: S) -> String {
 /// A token reference resolves to its bound stream index; a member reads that
 /// token through the context API.
 fn token_member_expr<S: AsStrSlice>(r: &ResolvedAttr, bindings: &List<AltBinding>, handle: S) -> Result<String, String> {
-    return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member, handle);
+    let b = binding_for(bindings, true, &binding_name(&r.name));
+    let read = token_member_of(&b.field, &r.member, handle)?;
+    // The jar reads a member of a token that never matched as `null`, and as
+    // `0` where the member is a number.
+    let unset = match r.member {
+        None => "-1",
+        Some("text") => "\"null\"",
+        Some(_) => "0",
+    };
+    return Result::Ok(match b.reach {
+        Bound => read,
+        Shared => if r.member matches { None | Some("channel") } {
+            read;
+        } else {
+            `(if ${b.field} < 0 { ${unset} } else { ${read} })`;
+        },
+        Unmatched => unset,
+    });
+}
+
+/// `$x == null` (or `!=`, with `negated`) on a token reference, or `null` where
+/// `ref_text` names anything else. A token that never matched is index `-1`.
+pub fn token_null_test<S: AsStrSlice>(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    ref_text: S,
+    bindings: &List<AltBinding>,
+    negated: bool,
+) -> Option<String> {
+    let Ok(resolved) = resolve_attrs(ref_text, rule, rules, bindings) else {
+        return null;
+    };
+    if resolved.len() != 1
+        || resolved[0].member matches { Some(_) }
+        || !resolved[0].target matches { TokenLabel | TokenRef } {
+        return null;
+    }
+    let b = binding_for(bindings, true, &binding_name(&resolved[0].name));
+    if b.reach matches { Unmatched } {
+        return Option::Some(if negated { "false" } else { "true" });
+    }
+    return Option::Some(if negated { `${b.field} >= 0` } else { `${b.field} < 0` });
+}
+
+/// The condition under which the `.text` that `ref_text` reads is there, or
+/// `null` where `ref_text` reads no label's text. A label that never matched
+/// reads `"null"` as text, which prints as the jar's `null` but compares as a
+/// string, so a comparison asks this first.
+pub fn text_presence<S: AsStrSlice>(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    ref_text: S,
+    bindings: &List<AltBinding>,
+) -> Option<String> {
+    let Ok(resolved) = resolve_attrs(ref_text, rule, rules, bindings) else {
+        return null;
+    };
+    if resolved.len() != 1 || !resolved[0].member matches { Some("text") } {
+        return null;
+    }
+    let is_token = match resolved[0].target {
+        TokenLabel | TokenRef => true,
+        RuleLabel | RuleRef => false,
+        _ => {
+            return null;
+        },
+    };
+    let b = binding_for(bindings, is_token, &binding_name(&resolved[0].name));
+    return match b.reach {
+        Bound => Option::Some("true"),
+        Shared => Option::Some(if is_token { `${b.field} >= 0` } else { `${b.field} matches { Some(_) }` }),
+        Unmatched => Option::Some("false"),
+    };
 }
 
 /// A token member read on a token-index expression `idx`. `.index` is `idx`
@@ -603,18 +764,27 @@ fn rule_member_expr<S: AsStrSlice>(
     bindings: &List<AltBinding>,
     handle: S,
 ) -> Result<String, String> {
-    let binding = binding_for(bindings, false, &binding_name(&r.name));
-    // `.text` is the invocation's own span, not a value-channel field.
-    if let Some(m) = &r.member && *m == "text" {
-        return Result::Ok(
-            `${handle}.text_between(${rule_span_lo_ref(&binding)}, ${rule_span_hi_ref(&binding)})`,
-        );
+    let b = binding_for(bindings, false, &binding_name(&r.name));
+    let capture = rule_capture(&b);
+    // `.text` is the invocation's own span and `.ctx` its tree, not
+    // value-channel fields. Only `toStringTree` is modelled on ANTLR's context
+    // object, so `.ctx` resolves straight to the rendering (java2wado drops the
+    // call above it).
+    let captured = match &r.member {
+        Some(m) && *m == "text" => Option::Some(
+            `${handle}.text_between(${rule_span_lo_ref(&capture)}, ${rule_span_hi_ref(&capture)})`,
+        ),
+        Some(m) && *m == "ctx" => Option::Some(`${handle}.rule_tree_at(${rule_node_ref(&capture)})`),
+        _ => null,
+    };
+    if let Some(read) = captured {
+        return Result::Ok(match b.reach {
+            Bound => read,
+            Shared => `(if ${b.field} matches { None } { "null" } else { ${read} })`,
+            Unmatched => "\"null\"",
+        });
     }
-    // Only `toStringTree` is modelled on ANTLR's context object, so `.ctx`
-    // resolves straight to the rendering (java2wado drops the call above it).
-    if let Some(m) = &r.member && *m == "ctx" {
-        return Result::Ok(`${handle}.rule_tree_at(${rule_node_ref(&binding)})`);
-    }
+    let binding = rule_value(&b);
     let target = match rules.iter_ref().find(|c| c.name == r.rule_name) {
         Some(t) => t,
         None => {
@@ -630,7 +800,9 @@ fn rule_member_expr<S: AsStrSlice>(
     }
     return match &r.member {
         Some(m) => {
-            if field_default(target, m) matches { Some(_) } {
+            if b.reach matches { Unmatched } {
+                Result::Ok(binding);
+            } else if field_default(target, m) matches { Some(_) } {
                 Result::Ok(`${binding}.${*m}`);
             } else {
                 Result::Err(`$${r.name}.${*m}: not an emittable value-channel field of '${r.rule_name}'`);

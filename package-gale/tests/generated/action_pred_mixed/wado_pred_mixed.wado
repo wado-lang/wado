@@ -1130,6 +1130,7 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
+    scan_gate: ScanGate = ScanGate {},
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1554,9 +1555,9 @@ fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_s__alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_s__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
-    if !true { return -1; }
+    if !(gate._scan_edge != pos || true) { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
@@ -1574,7 +1575,7 @@ fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_s__alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_s__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1591,8 +1592,10 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     if kind == TK_A {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = scan_s__alt_1(_sd_tokens, _sd_pos);
-        let _sd_p_0 = scan_s__alt_0(_sd_tokens, _sd_pos);
+        p.scan_gate._scan_edge = p.pos;
+        let _sd_p_1 = scan_s__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        p.scan_gate._scan_edge = p.pos;
+        let _sd_p_0 = scan_s__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -1686,4 +1689,8 @@ global SYNC_0: List<i32> = [2];
 global SYNC_1: List<i32> = [4];
 global SYNC_2: List<i32> = [1];
 global EXPECTED_2: List<i32> = [TK_A];
+
+struct ScanGate {
+    _scan_edge: i32 = -1,
+}
 

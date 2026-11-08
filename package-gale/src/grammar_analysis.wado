@@ -76,6 +76,16 @@ pub struct GrammarAnalysis {
     /// By snake name, the kinds of each rule whose scan is one token test.
     one_token_rules: HashMap<String, List<i32>>,
     predicate_fn_owners: HashMap<i32, i32>,
+    left_edges: Option<RuleLeftEdges> = null,
+}
+
+/// What prediction meets entering each rule before it consumes a token, by
+/// rule index, as `gate_conditions` derives it once per grammar.
+pub struct RuleLeftEdges {
+    /// Whether the rule can match nothing without running an action.
+    pub empties_freely: List<bool>,
+    /// The predicates at its left edge, each beside the rule it sits in.
+    pub predicates: List<List<[AltAction, i32]>>,
 }
 
 /// By action id, the id of the grammar's first predicate with the same text:
@@ -163,6 +173,16 @@ impl GrammarAnalysis {
     /// cross-rule members against a referenced rule's `returns`).
     pub fn parser_rules(&self) -> &List<ParserRule> {
         return &self.parser_rules;
+    }
+
+    pub fn left_edges(&self) -> &Option<RuleLeftEdges> {
+        return &self.left_edges;
+    }
+
+    pub fn set_left_edges(&mut self, edges: RuleLeftEdges)
+        contract self.left_edges matches { None }, "a grammar's left edges are derived once"
+    {
+        self.left_edges = Option::Some(edges);
     }
 
     /// Index of a parser rule by name (position in `parser_rules`), or -1.

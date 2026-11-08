@@ -107,8 +107,7 @@ pull request. An exact test leaves a threshold nothing to catch for fuel, and
 the wasm-size threshold, which failed a pull request at 130%, goes with it.
 
 `mise run update-baselines` rewrites it together with the stdlib coverage
-baseline, since a change to the compiler or the stdlib moves either. A change
-that moves fuel commits the result, so the diff shows its cost.
+baseline, since a change to the compiler or the stdlib moves either.
 
 The wall-clock series on gh-pages stops. Its history stays where it is.
 

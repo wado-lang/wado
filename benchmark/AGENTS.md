@@ -12,8 +12,7 @@ Two measures live here, and they answer different questions:
   `-O2` is a performance claim: fuel does not depend on the host, so CI holds
   every pull request to the `-O2` series in `benchmark/fuel.json` exactly
   (`mise run test-fuel`). gh-pages records `-O1`, `-O2` and `-O3` per commit,
-  the other two for reference. A change that moves `-O2` commits the result of
-  `mise run update-baselines`. Fuel leaves out GC and other host work by
+  the other two for reference. Fuel leaves out GC and other host work by
   design: the wall clock is what shows them.
 
 Report a change between two measurements with an improvement as `+%` and a
@@ -21,8 +20,6 @@ regression as `-%`, whichever way the raw number moved.
 
 Each benchmark's `#[workload]` test trains the profile in its `pgo/`.
 `wado test --pgo benchmark package-gale-highlight-html` records them again.
-Applied profiles change fuel, so a re-recording also commits the result of
-`mise run update-baselines`.
 
 Read the `wado-performance` skill before measuring a change, and its section
 "A/B-ing a stdlib change" before comparing two versions of `wado-compiler/lib`.

@@ -8,6 +8,11 @@
 //! `@after` pair that scopes one. Anything else leaves the gate unsimulated, as
 //! it was before this existed.
 //!
+//! A scan answers a predicate only where prediction would: at the position the
+//! decision it serves started from (`scan_edge_field`), which the parse seeds
+//! as it seeds the members. Past a consumed token the predicate holds, and the
+//! parse answers it when it gets there.
+//!
 //! Every body here is the translator's, never the grammar text. Java and Wado
 //! spell a member write differently and identically once translated, so one
 //! recogniser answers for both and the member is already named the way the
@@ -25,6 +30,17 @@ use { dedup_append_arr, push_unique } from "./list_util.wado";
 pub global SCAN_GATE_HANDLE: String = "gate";
 pub global SCAN_GATE_FIELD: String = "scan_gate";
 pub global SCAN_GATE_TYPE: String = "ScanGate";
+
+/// The gate's field holding where the decision the scan serves started, which
+/// is the one position its predicates are answered at: `_scan_edge`, lengthened
+/// past every simulated member, since a Java member may be named so too.
+pub fn scan_edge_field(fields: &List<String>) -> String {
+    let mut name = "_scan_edge";
+    while fields.contains(&name) {
+        name.push_str("_");
+    }
+    return name;
+}
 
 /// `<parser handle>.<member> = <int literal>`, with an optional trailing `;` and
 /// any surrounding whitespace — the whole body, not a prefix of it. Returns the
@@ -260,7 +276,8 @@ fn statements<S: AsStrSlice>(text: S) -> List<String> {
 ///
 /// "Every body" is the whole grammar: a rule's `@init` / `@after` reach a gate
 /// field as much as an alternative's action does, and a group's alternatives
-/// carry actions the parse runs where lowering puts no gate on the scan.
+/// carry actions the parse runs where the shapes an optional group is
+/// predicted by run no gate.
 pub fn scan_gate_fields(grammar: &Grammar, bodies: &HashMap<i32, String>) -> List<String> {
     let mut simulable: List<String> = [];
     let mut refused = Refusals {};
@@ -285,10 +302,6 @@ pub fn scan_gate_fields(grammar: &Grammar, bodies: &HashMap<i32, String>) -> Lis
                     },
                 }
             }
-            // An inline group's own alternatives carry actions too, and the
-            // parse runs them. Lowering puts no gates on a group alternative's
-            // scan body, so the scan cannot — a field written in there is one
-            // the two sides would disagree about however it is written.
             reject_nested_writes(&alt.elements, &mut refused);
         }
     }
@@ -317,8 +330,9 @@ impl Refusals {
 }
 
 /// Every name an action inside a nested group mentions, added to the refused
-/// set: lowering puts no gate on a group alternative's scan body, so the scan
-/// cannot run any of them.
+/// set. The parse runs those actions, but the shapes an optional group is
+/// predicted by (`gen_shape_entry_conditions`) run no gate, so a field written
+/// there is one the two sides would disagree about however it is written.
 fn reject_nested_writes(elements: &List<Element>, refused: &mut Refusals) {
     for let e of elements {
         reject_element_writes(e, refused);

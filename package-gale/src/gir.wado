@@ -165,6 +165,8 @@ pub variant DiagnosticSite {
     Optional(String),
     /// A parser action / predicate body, by action id.
     Action(i32),
+    /// A `returns` / `locals` initializer, by the attribute's name.
+    AttrInit(String),
     /// A lexer action body, by action id. `rule` stays empty — a lexer rule
     /// is not a parser rule and must not inline under one.
     LexerAction(i32),
@@ -195,6 +197,7 @@ impl DiagnosticOwner {
             SimpleCstGroup => `SimpleCst group in rule '${self.rule}'`,
             Optional(field) => `optional '${*field}' in rule '${self.rule}'`,
             Action(id) => `action ${*id}`,
+            AttrInit(name) => `initializer of '${*name}' in rule '${self.rule}'`,
             LexerAction(id) => `lexer action ${*id}`,
             Host(name) => *name,
         };
@@ -1230,7 +1233,7 @@ pub struct OptionalLookaheadShape {
     pub sig: List<List<i32>>,
     /// Scan of exactly this shape's body, used in place of `sig` when
     /// the strategy is `scan_guarded`.
-    pub scan_body: ScanBody = ScanBody { elements: [] },
+    pub scan_body: ScanBody,
 }
 
 /// How a `(...)` group is realised in the CST and at parse time.
@@ -1266,6 +1269,8 @@ pub struct SimpleCstShape {
 
 pub struct TokenOnlyShape {
     pub field: String,
+    /// The name `field` was deduplicated from, which a label reference reads.
+    pub dedup_base: String,
 }
 
 pub struct SingleAltShape {
@@ -1298,15 +1303,17 @@ pub struct GeneralShape {
 /// parse side but drops the storage decisions.
 pub struct ScanBody {
     pub elements: List<ScanElement>,
-    /// The gate actions this alternative runs as the scan walks it. Empty
-    /// unless the grammar has a simulable gate member, which keeps every other
-    /// grammar's scan byte-identical.
-    pub gates: List<ScanGate> = [],
+    /// What the scan runs between elements: the alternative's predicates past
+    /// its left edge and its gate actions. Empty unless the grammar has a
+    /// simulable gate member or a scan answers a predicate, which keeps every
+    /// other grammar's scan byte-identical. No default: a body built without
+    /// its alternative's gates scans past a predicate prediction answers.
+    pub gates: List<ScanGate>,
     /// The alt-initial gate this body has to clear, rendered against the scan's
     /// copy of the members, or `""` for none. Its parse-side twin is
     /// `alt_initial_gate_conditions`; the two must agree or the tournament
     /// commits to a length the parse refuses.
-    pub gate_cond: String = "",
+    pub gate_cond: String,
 }
 
 pub variant ScanElement {
@@ -1324,16 +1331,28 @@ pub variant ScanElement {
     OptionalLookahead(ScanOptionalLookaheadElement),
 }
 
-/// A gate action the scan runs as it walks, so a tournament measuring a stretch
-/// that crosses one measures it under the gate the parse will apply. Positioned
-/// into `elements` the way `AltAction` is into the surface elements, and held in
-/// a sidecar for the same reason: it consumes nothing, and every index-based
-/// analysis over the element sequence stays unchanged. See `scan_gate.wado`.
+/// What the scan runs between elements as it walks. Positioned into `elements`
+/// the way `AltAction` is into the surface elements, and held in a sidecar for
+/// the same reason: it consumes nothing, and every index-based analysis over
+/// the element sequence stays unchanged. See `scan_gate.wado`.
 pub struct ScanGate {
-    pub field: String,
-    pub value: i32,
+    pub step: ScanGateStep,
     /// Runs after `elements[before_index - 1]` and before `elements[before_index]`.
     pub before_index: i32,
+}
+
+pub variant ScanGateStep {
+    /// A gate action: the member takes the value, so a tournament measuring a
+    /// stretch that crosses one measures it under the gate the parse will apply.
+    Assign([String, i32]),
+    /// A predicate, rendered against the scan's copy of the members. It holds
+    /// unless the scan meets it where the decision started: prediction answers a
+    /// predicate it reaches before consuming a token, and no other.
+    Check(String),
+    /// Where the condition holds, a path past an action that matched nothing:
+    /// prediction answers no predicate on it, so the scan stops answering at
+    /// the edge.
+    Escape(String),
 }
 
 pub struct ScanTokenElement {
@@ -1435,6 +1454,10 @@ pub struct ScanOptionalLookaheadElement {
     /// through to the next rather than skipping the whole optional — matching
     /// the parse side. See `OptionalShapeLookaheadStrategy::scan_guarded`.
     pub scan_guarded: bool = false,
+    /// The optional as a plain repeat, stamped where it stands as any repeat
+    /// is. Where what follows it contests its entry, a shape's signature cannot
+    /// tell entering from skipping, so both sides ask its probe instead.
+    pub as_repeat: Option<ScanRepeatElement> = null,
 }
 
 // ==========================================================================

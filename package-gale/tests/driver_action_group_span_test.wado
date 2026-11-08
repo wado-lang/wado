@@ -15,8 +15,8 @@ test "a prequel reads the span of a call inside a group" {
 test "an @init reads the span of a call it runs before" {
     let r = gs::parse_before("aa");
     assert r.ok(), "clean parse";
-    // ANTLR's `$r` is null there; the unassigned range renders as empty text.
-    assert r.output.is_empty();
+    // ANTLR's `$r` is null there, and its text reads `"null"`.
+    assert r.output == "null";
 }
 
 test "an @after reads the span of a call inside a loop" {

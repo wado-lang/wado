@@ -7,7 +7,9 @@ description: The rules for opening a PR you must read before creating or editing
 
 If even one question you put to the user is still unanswered, stop here. Do not
 open a pull request, do not edit one, do not write a title or a description.
-End the turn by asking for the answer.
+End the turn by asking each question again in full: what it is about, the
+options, and your recommendation. The user may not remember it, and "the open
+question" or a count of them gives nothing to answer.
 
 A pull request never goes out with an open question behind it. "The rest is
 ready" is not a reason to proceed, and neither is a question that looks minor:
@@ -46,13 +48,6 @@ inside it.
 
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.
-
-If the branch touches what the stdlib tests or the benchmarks compile or run
-on, run `mise run update-baselines` and commit the update: the compiler, the
-stdlib, `benchmark/`, a `package-*` a benchmark imports (Gale), or wasmtime in
-`Cargo.lock`. CI fails on any difference from either baseline: the stdlib
-coverage, a region a test now reaches included, and the fuel benchmarks.
-`wado-compiler/lib/AGENTS.md` says what the coverage baseline may change.
 
 ## Title
 
@@ -108,6 +103,12 @@ and cut every sentence a reader would skip.
 ## Just before opening
 
 Check mergeability again, as above: `main` moves while these steps run.
+
+Then run `mise run update-baselines` and commit the update. This is the only
+step that updates the baselines. CI fails on any difference from either one:
+the stdlib coverage, a region a test now reaches included, and the fuel
+benchmarks. `wado-compiler/lib/AGENTS.md` says what the coverage baseline may
+change.
 
 ## After opening
 
