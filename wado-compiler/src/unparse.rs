@@ -2448,9 +2448,13 @@ impl<'a> Unparser<'a> {
         self.output.push_str("if ");
         self.unparse_condition(&i.condition);
         self.output.push_str(" { ");
-        self.unparse_expr(then_expr);
+        self.with_parens_if(expr_stmt_needs_parens(then_expr), |s| {
+            s.unparse_expr(then_expr)
+        });
         self.output.push_str(" } else { ");
-        self.unparse_expr(else_expr);
+        self.with_parens_if(expr_stmt_needs_parens(else_expr), |s| {
+            s.unparse_expr(else_expr)
+        });
         self.output.push_str(" }");
 
         if self.added_since(snap).contains('\n') || self.exceeds_width_since(snap) {

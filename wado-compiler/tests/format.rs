@@ -4270,6 +4270,10 @@ fn test_format_keeps_parens_around_a_statement_keyword_expression() {
         );
         assert_format_preserves_ast(&source);
     }
+    // An arm of a one-line `if` is a statement too.
+    assert_format_preserves_ast(
+        "fn run() {\n    let y = if c { (match x { _ => 1 }) + 2 } else { 3 };\n}\n",
+    );
 }
 
 /// `#[side_effect(negative = p)]` names a parameter, so the value stays an
