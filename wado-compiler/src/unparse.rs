@@ -3357,17 +3357,11 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
 /// whole `with` is the statement `with` parses to.
 fn expr_stmt_needs_parens(expr: &Expr) -> bool {
     !matches!(expr, Expr::WithHandler(_))
-        && prints_first(expr, &|e| {
-            is_anonymous_struct_literal(e)
-                || matches!(
-                    e,
-                    Expr::If(_) | Expr::Match(_) | Expr::LabeledBlock(_) | Expr::WithHandler(_)
-                )
+        && prints_first(expr, &|e| match e {
+            Expr::If(_) | Expr::Match(_) | Expr::LabeledBlock(_) | Expr::WithHandler(_) => true,
+            Expr::StructLiteral(s) => s.name.is_none(),
+            _ => false,
         })
-}
-
-fn is_anonymous_struct_literal(expr: &Expr) -> bool {
-    matches!(expr, Expr::StructLiteral(s) if s.name.is_none())
 }
 
 /// Whether `expr`, or the operand it prints first and bare, is one `opens`
