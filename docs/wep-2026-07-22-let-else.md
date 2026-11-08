@@ -77,9 +77,10 @@ let PAT = EXPR else { ELSE };
 let [b₁, …, bₙ] = match EXPR { PAT′ => [b₁′, …, bₙ′], _ => { ELSE } };
 ```
 
-With one binding the `let` binds it bare, and with none the `match` is the
-statement. Either way the desugaring is one statement, so a temporary the
-initializer holds drops where the `let` ends, as any `let`'s does.
+With one binding the `let` binds it bare, and with none it binds `_`. Either way
+the desugaring is one `let`, so a temporary the initializer holds drops where
+the `let` ends, and one it keeps borrowed drops with its scope, as any `let`'s
+does.
 
 The else block is resolved/reified before the pattern bindings enter scope, so
 it cannot reference them. The scrutinee, else block, pattern and twins take

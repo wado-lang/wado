@@ -2188,8 +2188,11 @@ impl<'a> Reify<'a> {
             })
             .collect();
         let (handed, pattern) = match reads.len() {
-            0 => (TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span), None),
-            1 => (reads.remove(0), bound.pop()),
+            0 => (
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                TirPattern::Wildcard,
+            ),
+            1 => (reads.remove(0), bound.remove(0)),
             _ => {
                 let types = reads.iter().map(|read| read.type_id).collect();
                 let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(types);
@@ -2199,7 +2202,7 @@ impl<'a> Reify<'a> {
                         tuple_type,
                         span,
                     ),
-                    Some(TirPattern::Tuple(bound, false)),
+                    TirPattern::Tuple(bound, false),
                 )
             }
         };
@@ -2230,11 +2233,7 @@ impl<'a> Reify<'a> {
             handed_type,
             span,
         );
-        let kind = match pattern {
-            Some(pattern) => TirStmtKind::LetDestructure { pattern, value },
-            None => TirStmtKind::Expr(value),
-        };
-        TirStmt::new(kind, span)
+        TirStmt::new(TirStmtKind::LetDestructure { pattern, value }, span)
     }
 
     /// Reify a statement of the source, as the one statement that owns what it

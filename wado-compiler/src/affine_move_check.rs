@@ -166,24 +166,24 @@ impl From<AffineMoveError> for Diagnostic {
                 Code::TypeMismatch,
                 match gone {
                     Gone::Moved(at) => format!(
-                        "`{holder}` refers into {owner}, which moved at {}:{}",
+                        "{holder} refers into {owner}, which moved at {}:{}",
                         at.line, at.column,
                     ),
                     Gone::Ended => {
-                        format!("`{holder}` refers into {owner}, which dropped as its scope ended")
+                        format!("{holder} refers into {owner}, which dropped as its scope ended")
                     }
                     Gone::StatementEnded => format!(
-                        "`{holder}` refers into {owner}, which dropped as its statement ended"
+                        "{holder} refers into {owner}, which dropped as its statement ended"
                     ),
                     Gone::IterationEnded => format!(
-                        "`{holder}` refers into {owner}, which dropped as its iteration ended"
+                        "{holder} refers into {owner}, which dropped as its iteration ended"
                     ),
                     Gone::Disturbed(at) => format!(
-                        "`{holder}` refers into {owner}, which a `&mut` use at {}:{} may have moved out of",
+                        "{holder} refers into {owner}, which a `&mut` use at {}:{} may have moved out of",
                         at.line, at.column,
                     ),
                     Gone::Replaced(at) => format!(
-                        "`{holder}` refers into {owner}, which the assignment at {}:{} replaced",
+                        "{holder} refers into {owner}, which the assignment at {}:{} replaced",
                         at.line, at.column,
                     ),
                 },
@@ -233,6 +233,7 @@ pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
             fallbacks: &fallbacks,
             in_fallback: None,
             regions_opened: 0,
+            walked_in: IndexMap::default(),
         };
         for item in &module.items {
             checker.check_item(item);
@@ -290,6 +291,10 @@ struct Checker<'a> {
     in_fallback: Option<NotedFallback>,
     /// The regions opened so far, which number the next.
     regions_opened: u32,
+    /// The regions open where each affine expression was last walked: what a
+    /// temporary it evaluates to lives as long as, though a value carrying a
+    /// borrow of it is traced after some of them close.
+    walked_in: IndexMap<AstId, Vec<Region>>,
 }
 
 struct NotedFallback {
@@ -918,11 +923,32 @@ impl MoveWalker<'_, '_> {
         if let Some((owner, gone)) = gone {
             self.report(
                 MoveError::DanglingReference {
-                    holder: ident.name.clone(),
+                    holder: format!("`{}`", ident.name),
                     owner,
                     gone,
                 },
                 ident.span,
+            );
+        }
+    }
+
+    /// Refuse the value a block, `if` or `match` ends with once a temporary it
+    /// refers into dropped. Nothing holds the value, so its use is the read.
+    fn refuse_dangling_value(&mut self, expr: &Expr) {
+        let gone = self.owners_of(expr).iter().find_map(|(_, site)| {
+            let region = site.region.filter(|_| site.affine)?;
+            self.temporary_gone(region)
+                .map(|gone| (site.name.clone(), gone))
+        });
+        if let Some((owner, gone)) = gone {
+            let span = expr.span();
+            self.report(
+                MoveError::DanglingReference {
+                    holder: format!("the value at {}:{}", span.line, span.column),
+                    owner,
+                    gone,
+                },
+                span,
             );
         }
     }
@@ -1227,6 +1253,11 @@ impl MoveWalker<'_, '_> {
     /// unless `mode` reads it, and is read anywhere else; drop elaboration
     /// takes ownership at the same places.
     fn visit(&mut self, expr: &Expr, mode: OperandMode) {
+        if self.expr_is_affine(expr.id()) {
+            self.checker
+                .walked_in
+                .insert(expr.id(), self.regions.clone());
+        }
         let consumes = mode == OperandMode::Consume;
         if let Some(place) = self.place_path(expr) {
             if consumes && self.modes.moves(expr, &self.facts()) {
@@ -1248,9 +1279,11 @@ impl MoveWalker<'_, '_> {
         match expr {
             Expr::Block(block) => {
                 self.visit_block(block);
+                self.refuse_dangling_value(expr);
             }
             Expr::LabeledBlock(lb) => {
                 self.visit_labeled_block(&lb.label, &lb.block);
+                self.refuse_dangling_value(expr);
             }
             Expr::If(if_expr) => {
                 self.visit_if(
@@ -1258,9 +1291,11 @@ impl MoveWalker<'_, '_> {
                     &if_expr.then_block,
                     if_expr.else_block.as_ref(),
                 );
+                self.refuse_dangling_value(expr);
             }
             Expr::Match(m) => {
                 self.visit_match(&m.expr, &m.arms);
+                self.refuse_dangling_value(expr);
             }
             Expr::Closure(closure) => self.visit_closure(closure),
             Expr::Assign(a) => self.visit_assign(a),
@@ -1279,6 +1314,7 @@ impl MoveWalker<'_, '_> {
             Expr::WithHandler(w) => {
                 self.visit_operands(expr);
                 self.visit_block(&w.body);
+                self.refuse_dangling_value(expr);
             }
             Expr::StructLiteral(s) => {
                 if let Some(spread) = s.spreads.first()
@@ -1772,12 +1808,15 @@ impl MoveWalker<'_, '_> {
     }
 
     /// The temporary `expr` as the owner of a borrow of it, living as long as
-    /// the innermost statement or loop iteration, or the innermost scope where
-    /// a `let` keeps the borrow.
+    /// the innermost statement or loop iteration it was walked in, or the
+    /// innermost scope where a `let` keeps the borrow.
     fn temporary_owner(&self, expr: &Expr, writes: bool) -> (Owner, OwnerSite) {
         let scope = self.modes.extended(expr);
         let region = *self
-            .regions
+            .checker
+            .walked_in
+            .get(&expr.id())
+            .expect("a temporary is walked before a borrow of it is traced")
             .iter()
             .rev()
             .find(|region| (region.kind == RegionKind::Scope) == scope)

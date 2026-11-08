@@ -1,0 +1,39 @@
+// A block's last statement owns the temporaries it evaluates, so a reference
+// into one cannot be the block's value: the temporary drops before anything
+// reads the value. A match arm without braces is no statement of its own.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn id(t: &Tok) -> &Tok {
+    return t;
+}
+
+fn read(t: &Tok) -> i32 {
+    return t.n;
+}
+
+fn bare_arm(c: i32) -> i32 {
+    return read(match c { _ => id(&make(1)) });
+}
+
+fn braced_arm(c: i32) -> i32 {
+    return read(match c { _ => { id(&make(2)) } });
+}
+
+test {
+    assert bare_arm(0) + braced_arm(0) == 3;
+}
+
+__DATA__
+{"compile_error": ":31:17: analysis error: the value at 31:17 refers into the temporary at 31:38, which dropped as its statement ended"}

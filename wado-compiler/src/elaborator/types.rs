@@ -3965,6 +3965,10 @@ impl FunctionContext {
     /// and reify both call it, which keeps their local indices in step.
     pub(super) fn twin_locals(&mut self, first: u32) -> u32 {
         let twins = self.next_local;
+        assert!(
+            (first..twins).all(|index| !self.address_taken_locals.contains(&index)),
+            "a pattern takes no reference to a local it binds"
+        );
         for index in first..twins {
             let type_id = self.locals[index as usize].type_id;
             self.add_local(minted_name("twin", index), type_id, false, None);

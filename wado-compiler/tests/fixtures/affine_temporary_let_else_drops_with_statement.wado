@@ -36,6 +36,22 @@ fn kept() {
     LOG.push(`read ${t.n}`);
 }
 
+fn kept_unbound(n: i32) {
+    let Some(_) = &some_tok(n) else { return; };
+    LOG.push(`read ${n}`);
+}
+
+fn kept_refuted() {
+    let None = &some_tok(4) else { LOG.push("else"); return; };
+}
+
+test "a temporary a `let` binding nothing keeps borrowed" {
+    LOG = [];
+    kept_unbound(3);
+    kept_refuted();
+    assert LOG == ["read 3", "drop 3", "else", "drop 4"] as List<String>;
+}
+
 test "a temporary a call's operand borrows" {
     LOG = [];
     bound();
