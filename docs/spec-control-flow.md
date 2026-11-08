@@ -12,9 +12,8 @@ The condition of an `if`, a `while`, or a C-style `for` is a `bool` or a
 converts to a `bool`.
 
 A condition, a `match` scrutinee and a for-of iterable take no bare struct
-literal, since the `{` after one opens the body. Inside parentheses, brackets,
-call arguments, a block, or a `match`'s arms, a struct literal is written as
-anywhere else.
+literal, since the `{` after one opens the body. Inside any parentheses,
+brackets or braces they open, a struct literal is written as anywhere else.
 
 <!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
 

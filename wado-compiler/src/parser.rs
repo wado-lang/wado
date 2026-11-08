@@ -46,11 +46,12 @@ pub struct Parser {
     pending_gt: Option<Token>,
     /// The half [`Self::advance`] last consumed, which it hands back.
     consumed_gt: Option<Token>,
-    /// When true, `Name {` is not parsed as a struct literal. This is set in
-    /// expression contexts where a block `{` follows the expression (e.g.,
-    /// if/while/match conditions), preventing ambiguity between struct literals
-    /// and blocks.
-    restrict_struct_literals: bool,
+    /// How many delimiters (`(`, `[`, `{`) the tokens consumed so far left open.
+    delimiter_depth: u32,
+    /// The [`Self::delimiter_depth`] at which a `{` is not read as a struct literal: a
+    /// condition's own, where it opens the body that follows. A delimiter the
+    /// condition opens lifts it, since no body can start inside one.
+    struct_literals_restricted_at: Option<u32>,
     /// The text lexed, passed from the lexer.
     source: Arc<str>,
     /// Shebang line, passed from the lexer.
@@ -213,6 +214,7 @@ type ParseResult<T> = Result<T, ParseError>;
 #[derive(Debug, Clone, Copy)]
 struct ParserCheckpoint {
     pos: usize,
+    delimiter_depth: u32,
     comment_cursor: usize,
     next_ast_id: u32,
     pending_gt: Option<Span>,
@@ -316,7 +318,8 @@ impl Parser {
             pos: 0,
             pending_gt: None,
             consumed_gt: None,
-            restrict_struct_literals: false,
+            delimiter_depth: 0,
+            struct_literals_restricted_at: None,
             source,
             shebang,
             data_section,
@@ -494,6 +497,7 @@ impl Parser {
     fn checkpoint(&self) -> ParserCheckpoint {
         ParserCheckpoint {
             pos: self.pos,
+            delimiter_depth: self.delimiter_depth,
             comment_cursor: self.comment_cursor,
             next_ast_id: self.next_ast_id,
             pending_gt: self.pending_gt.as_ref().map(|half| half.span),
@@ -523,6 +527,7 @@ impl Parser {
 
     fn restore(&mut self, cp: ParserCheckpoint) {
         self.pos = cp.pos;
+        self.delimiter_depth = cp.delimiter_depth;
         self.comment_cursor = cp.comment_cursor;
         self.trivia
             .discard_from(AstId::new(self.ast_id_space, cp.next_ast_id));
@@ -553,18 +558,22 @@ impl Parser {
     /// Parse an expression with struct literals restricted. Used in contexts
     /// where the expression is followed by a block `{` (if/while/match conditions).
     fn parse_expr_no_struct_literal(&mut self) -> ParseResult<Expr> {
-        self.with_struct_literals(false, Self::parse_expr)
+        self.restricting_struct_literals(Self::parse_expr)
     }
 
-    /// Run `parse` with struct literals `allowed` or restricted. A delimiter the
-    /// parser opens (parentheses, brackets, a block's or a `match`'s braces)
-    /// allows them again: inside it, no `{` can be taken for the body that
-    /// follows a condition.
-    fn with_struct_literals<T>(&mut self, allowed: bool, parse: impl FnOnce(&mut Self) -> T) -> T {
-        let saved = std::mem::replace(&mut self.restrict_struct_literals, !allowed);
+    /// Run `parse` with struct literals restricted at the current depth.
+    fn restricting_struct_literals<T>(&mut self, parse: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = self
+            .struct_literals_restricted_at
+            .replace(self.delimiter_depth);
         let result = parse(self);
-        self.restrict_struct_literals = saved;
+        self.struct_literals_restricted_at = saved;
         result
+    }
+
+    /// Whether a `{` here may not start a struct literal.
+    fn struct_literals_restricted(&self) -> bool {
+        self.struct_literals_restricted_at == Some(self.delimiter_depth)
     }
 
     /// Check if `Name {` should be parsed as a struct literal by looking at
@@ -828,6 +837,16 @@ impl Parser {
         self.consumed_gt = None;
         if !self.is_at_end() {
             self.pos += 1;
+            match self.tokens[self.pos - 1].kind {
+                TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => {
+                    self.delimiter_depth += 1;
+                }
+                // Recovery may skip an opening delimiter its closing one follows.
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    self.delimiter_depth = self.delimiter_depth.saturating_sub(1);
+                }
+                _ => {}
+            }
         }
         &self.tokens[self.pos - 1]
     }
@@ -2907,10 +2926,6 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> ParseResult<Block> {
-        self.with_struct_literals(true, Self::parse_block_allowing_struct_literals)
-    }
-
-    fn parse_block_allowing_struct_literals(&mut self) -> ParseResult<Block> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::LBrace)?;
@@ -3480,7 +3495,7 @@ impl Parser {
     /// inside one by parenthesizing it. Struct literals are suppressed so that
     /// `{` is recognized as the then-block.
     fn parse_chain_operand(&mut self) -> ParseResult<Expr> {
-        self.with_struct_literals(false, Self::parse_comparison_expr)
+        self.restricting_struct_literals(Self::parse_comparison_expr)
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
@@ -4456,8 +4471,7 @@ impl Parser {
                 TokenKind::LParen => {
                     let callee_span = expr.span();
                     self.advance();
-                    let (args, has_trailing_comma) =
-                        self.with_struct_literals(true, Self::parse_arg_list)?;
+                    let (args, has_trailing_comma) = self.parse_arg_list()?;
                     let rparen_span = self.peek().span;
                     self.expect(&TokenKind::RParen)?;
                     let merged_span = callee_span.merge(&rparen_span);
@@ -4497,8 +4511,7 @@ impl Parser {
                         if self.check(&TokenKind::LParen) {
                             // Call-site turbofish: foo::<T>(x)
                             self.advance(); // consume (
-                            let (args, has_trailing_comma) =
-                                self.with_struct_literals(true, Self::parse_arg_list)?;
+                            let (args, has_trailing_comma) = self.parse_arg_list()?;
                             let rparen_span = self.peek().span;
                             self.expect(&TokenKind::RParen)?;
                             let merged_span = callee_span.merge(&rparen_span);
@@ -4511,7 +4524,7 @@ impl Parser {
                                 span: merged_span,
                             }));
                         } else if self.check(&TokenKind::LBrace)
-                            && !self.restrict_struct_literals
+                            && !self.struct_literals_restricted()
                             && self.looks_like_struct_literal_content()
                             && let Expr::Ident(ident) = &expr
                         {
@@ -4951,7 +4964,7 @@ impl Parser {
         // a bare-name struct literal (if/while/match conditions) to avoid the
         // `{`-introduces-a-block ambiguity.
         if self.check(&TokenKind::LBrace)
-            && !self.restrict_struct_literals
+            && !self.struct_literals_restricted()
             && self.looks_like_struct_literal_content()
         {
             return self.parse_struct_literal(Some((qualified_name, Vec::new())), path_span);
@@ -5002,7 +5015,7 @@ impl Parser {
                     span: start_span.merge(&end_span),
                 })));
             } else if self.check(&TokenKind::LBrace)
-                && !self.restrict_struct_literals
+                && !self.struct_literals_restricted()
                 && self.looks_like_struct_literal_content()
             {
                 // Struct literal: `Name { field: value, ... }`
@@ -5044,7 +5057,7 @@ impl Parser {
             TokenKind::LParen => self.parse_paren_or_unit_expr(start_span),
             TokenKind::LBracket => {
                 self.advance();
-                self.with_struct_literals(true, |s| s.parse_tuple_literal(start_span))
+                self.parse_tuple_literal(start_span)
             }
             TokenKind::Pipe => self.parse_closure(),
             TokenKind::Or => self.parse_zero_arg_closure_expr(start_span),
@@ -5054,7 +5067,7 @@ impl Parser {
             // it must not be eaten as an expression. Falling through to the
             // `_ => expected expression` arm leaves the `{` for the body parser
             // and lets operand recovery resync cleanly.
-            TokenKind::LBrace if !self.restrict_struct_literals => {
+            TokenKind::LBrace if !self.struct_literals_restricted() => {
                 self.parse_implicit_struct_literal_expr(start_span)
             }
             TokenKind::If => self.parse_if_expr(),
@@ -5096,7 +5109,7 @@ impl Parser {
                 span: start_span,
             }));
         }
-        let expr = self.with_struct_literals(true, Self::parse_expr)?;
+        let expr = self.parse_expr()?;
         let end_span = self.expect(&TokenKind::RParen)?.span;
         Ok(expr.with_span(start_span.merge(&end_span)))
     }
@@ -5444,17 +5457,14 @@ impl Parser {
         // Expect opening brace
         self.expect(&TokenKind::LBrace)?;
 
-        let arms = self.with_struct_literals(true, |s| {
-            let mut arms = Vec::new();
-            while !s.check(&TokenKind::RBrace) {
-                arms.push(s.parse_match_arm()?);
-                // Trailing comma is optional
-                if s.check(&TokenKind::Comma) {
-                    s.advance();
-                }
+        let mut arms = Vec::new();
+        while !self.check(&TokenKind::RBrace) {
+            arms.push(self.parse_match_arm()?);
+            // Trailing comma is optional
+            if self.check(&TokenKind::Comma) {
+                self.advance();
             }
-            Ok(arms)
-        })?;
+        }
 
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 

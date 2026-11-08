@@ -4062,8 +4062,11 @@ impl FunctionContext {
                 .unwrap()
                 .get_mut(name)
                 .expect("the pattern bound `name` in the current scope");
-            assert_eq!(local.index, *index);
-            local.is_mut = true;
+            // A name the pattern binds twice, an error reported already, is
+            // in scope as its last binding.
+            if local.index == *index {
+                local.is_mut = true;
+            }
         }
     }
 
