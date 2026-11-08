@@ -1607,7 +1607,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMem
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_end = scan_a__walk(tokens, pos, gate, memo, min_prec);

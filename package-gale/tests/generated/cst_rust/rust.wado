@@ -1441,7 +1441,8 @@ global ATN_DFA_NODE_CAP: i32 = 4000000;
 
 global CFG_KEY_PR_SLOT: i32 = 2048;
 global CFG_KEY_ALT_SLOT: i32 = 4096;
-global CFG_KEY_GUARD_SLOT: i32 = 4096;
+global CFG_KEY_GUARD_SLOT: i32 = 65536;
+global ATN_DFA_GUARD_CAP: i32 = 32768;
 global CFG_KEY_STATE_SLOT: i32 = 1048576;
 global ATN_NO_GUARD: i32 = 0;
 
@@ -1512,9 +1513,10 @@ impl AtnPredictor {
         eof: i32,
         min_prec: i32,
         met: &List<i32>,
+        own: &List<i32>,
         ask: fn(i32) -> bool with E,
     ) -> i32 with E {
-        let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, met, ask);
+        let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, met, own, ask);
         self.read_down_to(reach);
         return alt;
     }
@@ -1532,6 +1534,7 @@ impl AtnPredictor {
         eof: i32,
         min_prec: i32,
         met: &List<i32>,
+        own: &List<i32>,
         ask: fn(i32) -> bool with E,
     ) -> [i32, i32] with E
         contract self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor"
@@ -1548,13 +1551,17 @@ impl AtnPredictor {
                 eof,
                 min_prec,
                 met,
+                own,
                 ask,
             );
             if alt != ATN_READS_HIDDEN {
                 return [alt, self.floor];
             }
         }
-        return [atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, ask), 0];
+        return [
+            atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, own, ask),
+            0,
+        ];
     }
 
     fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
@@ -1732,10 +1739,12 @@ struct AtnConfig {
 
 internal struct AtnPreds {
     met: List<i32>,
+    own: List<i32>,
     failed: List<i32>,
+    origin: i32 = -1,
 }
 
-internal global ATN_NO_PREDS: AtnPreds = AtnPreds { met: [], failed: [] };
+internal global ATN_NO_PREDS: AtnPreds = AtnPreds { met: [], own: [], failed: [] };
 
 internal fn atn_unasked(_label: i32) -> bool {
     return true;
@@ -1778,7 +1787,7 @@ impl CtxArena {
             return known;
         }
         let g = self.guard_label.len();
-        assert g < CFG_KEY_GUARD_SLOT, "a decision's guards fit the config key";
+        assert g < CFG_KEY_GUARD_SLOT, "one prediction's guards fit the config key";
         self.guard_label.push(label);
         self.guard_rest.push(guard);
         self.guard_index.set(k, g);
@@ -2197,6 +2206,9 @@ fn atn_past_edge(arena: &mut CtxArena, next: &AtnConfig, label: i32, preds: &Atn
     if preds.failed.contains(&label) {
         return AtnConfig { ..*next, alt: next.alt + ATN_FAILED_ALT };
     }
+    if preds.own.contains(&label) && next.pctx != preds.origin {
+        return *next;
+    }
     if preds.met.contains(&label) {
         return AtnConfig { ..*next, guard: arena.guard_with(next.guard, label) };
     }
@@ -2378,7 +2390,17 @@ internal fn atn_predict_once(
         atn.read_down_to(atn.verdict_reach[v]);
         return atn.verdict_alt[v];
     }
-    let [alt, reach] = atn.predict_reaching(sim, decision, tokens, pos, eof, min_prec, &ATN_NO_PREDS.met, atn_unasked);
+    let [alt, reach] = atn.predict_reaching(
+        sim,
+        decision,
+        tokens,
+        pos,
+        eof,
+        min_prec,
+        &ATN_NO_PREDS.met,
+        &ATN_NO_PREDS.own,
+        atn_unasked,
+    );
     atn.read_down_to(reach);
     atn.record_verdict(decision, pos, min_prec, depth, alt, reach);
     return alt;
@@ -2393,10 +2415,11 @@ internal fn atn_predict_with_stack(
     eof: i32,
     min_prec: i32 = 0,
     met: &List<i32> = &ATN_NO_PREDS.met,
+    own: &List<i32> = &ATN_NO_PREDS.own,
     ask: fn(i32) -> bool = atn_unasked,
 ) -> i32 {
     let mut dfa = AtnDfa::new();
-    return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, met, ask);
+    return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, met, own, ask);
 }
 
 fn atn_predict_above<effect E>(
@@ -2410,9 +2433,10 @@ fn atn_predict_above<effect E>(
     eof: i32,
     min_prec: i32,
     met: &List<i32>,
+    own: &List<i32>,
     ask: fn(i32) -> bool with E,
 ) -> i32 with E {
-    let mut preds = AtnPreds { met: *met, failed: [] };
+    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
     let mut asked: List<i32> = [];
     loop {
         let mut held: List<i32> = [];
@@ -2479,7 +2503,7 @@ fn atn_walk(
     dfa.make_room(sim);
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
     dfa.arena.open_budget();
-    let mut s = dfa.start_state(sim, decision, caller, min_prec, preds);
+    let mut s = dfa.start_state(sim, decision, caller, min_prec, &AtnPreds { ..*preds, origin: caller });
     let mut fallback = -1;
     let mut pos = start_pos;
     loop {
@@ -2488,7 +2512,9 @@ fn atn_walk(
             return [fallback, false];
         }
         if verdict != ATN_DFA_UNDECIDED {
-            dfa.arena.push_held_guards(&dfa.state_configs[s], held);
+            if verdict != ATN_READS_HIDDEN {
+                dfa.arena.push_held_guards(&dfa.state_configs[s], held);
+            }
             return [verdict, true];
         }
         fallback = dfa.state_first[s];
@@ -2534,7 +2560,9 @@ impl AtnDfa {
             self.sim_serial = sim.serial;
         }
         assert self.sim_serial == sim.serial, "a DFA caches the predictions of one ATN";
-        if self.arena.closure_cut_short || self.arena.node_count() >= ATN_DFA_NODE_CAP {
+        if self.arena.closure_cut_short
+            || self.arena.node_count() >= ATN_DFA_NODE_CAP
+            || self.arena.guard_label.len() >= ATN_DFA_GUARD_CAP {
             *self = AtnDfa::new();
             self.sim_serial = sim.serial;
         }
@@ -2547,6 +2575,8 @@ impl AtnDfa {
         self.seeds.keys.push(caller);
         self.seeds.keys.push(min_prec);
         self.seeds.keys.extend(&preds.met);
+        self.seeds.keys.push(ATN_DFA_START_KEY);
+        self.seeds.keys.extend(&preds.own);
         self.seeds.keys.push(ATN_DFA_START_KEY);
         self.seeds.keys.extend(&preds.failed);
         let known = self.seeds.find(from);
@@ -7600,7 +7630,7 @@ fn scan_self_param(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -9151,7 +9181,7 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -9503,7 +9533,7 @@ fn scan_where_clause_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -9836,7 +9866,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
     }
     if _kind_set_75(kind) {
         if kind == TK_POUND {
-            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -9850,7 +9880,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
         } else if kind == TK_KW_LET {
             return scan_statement__alt_2(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_15(kind) {
-            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -9864,7 +9894,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
         } else if _kind_set_76(kind) {
             return scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_77(kind) {
-            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -9967,7 +9997,7 @@ fn scan_expression_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let _atn_alt = atn.predict(&ATN_SIM, 164, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 164, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -9989,7 +10019,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_83(kind) {
         if kind == TK_POUND {
-            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -9998,7 +10028,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
             }
             return scan_expression__alt_0(tokens, start, gate, atn, memo, min_prec, follow);
         } else if kind == TK_KW_ASYNC {
-            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -10018,7 +10048,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     }
     if _kind_set_86(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -10033,7 +10063,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
             }
             return scan_expression__alt_40(tokens, start, gate, atn, memo, min_prec, follow);
         } else if kind == TK_KW_SELFTYPE {
-            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -10051,7 +10081,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     if _kind_set_81(kind) {
         let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
         if la_1 == TK_KW_RAW {
-            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -10101,7 +10131,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     }
     if kind == TK_DOTDOT {
         pos = start + 1;
-        if atn.predict(&ATN_SIM, 173, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+        if atn.predict(&ATN_SIM, 173, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
             let sp = pos;
             let sp_gate = *gate;
             atn.stack.push(1796);
@@ -10127,10 +10157,10 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     }
     if kind == TK_KW_CONTINUE {
         pos = start + 1;
-        if atn.predict(&ATN_SIM, 174, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+        if atn.predict(&ATN_SIM, 174, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
             pos += 1;
         }
-        if atn.predict(&ATN_SIM, 175, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+        if atn.predict(&ATN_SIM, 175, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
             let sp = pos;
             let sp_gate = *gate;
             atn.stack.push(1810);
@@ -10145,10 +10175,10 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     }
     if kind == TK_KW_BREAK {
         pos = start + 1;
-        if atn.predict(&ATN_SIM, 176, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+        if atn.predict(&ATN_SIM, 176, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
             pos += 1;
         }
-        if atn.predict(&ATN_SIM, 177, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+        if atn.predict(&ATN_SIM, 177, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
             let sp = pos;
             let sp_gate = *gate;
             atn.stack.push(1820);
@@ -10163,7 +10193,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     }
     if kind == TK_KW_RETURN {
         pos = start + 1;
-        if atn.predict(&ATN_SIM, 178, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+        if atn.predict(&ATN_SIM, 178, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
             let sp = pos;
             let sp_gate = *gate;
             atn.stack.push(1826);
@@ -10177,7 +10207,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
         return pos;
     }
     if kind == TK_LPAREN {
-        let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+        let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
         if _atn_alt < 0 {
             return -1;
         }
@@ -10475,7 +10505,7 @@ fn scan_expression_lr_24(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
     pos += 1;
-    if atn.predict(&ATN_SIM, 190, tokens, pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+    if atn.predict(&ATN_SIM, 190, tokens, pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
         let sp = pos;
         let sp_gate = *gate;
         atn.stack.push(1991);
@@ -10528,7 +10558,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -10837,7 +10867,7 @@ fn scan_statements(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_93(kind) {
         if _kind_set_55(kind) {
-            let _atn_alt = atn.predict(&ATN_SIM, 199, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 199, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -10891,7 +10921,7 @@ fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_55(kind) {
-        let _atn_alt = atn.predict(&ATN_SIM, 203, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+        let _atn_alt = atn.predict(&ATN_SIM, 203, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
         if _atn_alt < 0 {
             return -1;
         }
@@ -12430,7 +12460,7 @@ fn scan_match_arm_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let _atn_alt = atn.predict(&ATN_SIM, 256, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
+            let _atn_alt = atn.predict(&ATN_SIM, 256, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() });
             if _atn_alt < 0 {
                 return -1;
             }
@@ -12451,7 +12481,7 @@ fn scan_match_arm(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -13393,7 +13423,7 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnP
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -13833,7 +13863,7 @@ fn scan_maybe_named_param(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -14482,7 +14512,7 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mu
     if memo_at >= 0 {
         let memo_edge = gate._scan_edge;
         *gate = memo.gate_of(memo_at);
-        gate._scan_edge = memo_edge;
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
     let memo_callers = atn.hide_callers();
@@ -20558,7 +20588,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     }
     if _kind_set_75(kind) {
         if kind == TK_POUND {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -20581,7 +20611,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             p.atn_ret_pending = 1693;
             return _parse_let_statement(p, follow);
         } else if _kind_set_15(kind) {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -20604,7 +20634,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             p.atn_ret_pending = 1691;
             return _parse_item(p);
         } else if _kind_set_77(kind) {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -20721,7 +20751,7 @@ fn _parse_expression_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> 
     p.site = 226;
     p.atn_ret_pending = 1742;
     _parse_expression_with_block(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_13)));
-    if p.atn.predict(&ATN_SIM, 165, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+    if p.atn.predict(&ATN_SIM, 165, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
         p.expect(TK_SEMI, &EMPTY_SYNC, true);
     }
     return;
@@ -20733,7 +20763,7 @@ fn scan_expression_statement__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sc
     pos = scan_expression_with_block(tokens, pos, gate, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_13)));
     atn.stack.pop();
     if pos < 0 { return -1; }
-    if atn.predict(&ATN_SIM, 165, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+    if atn.predict(&ATN_SIM, 165, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
         pos += 1;
     }
     return pos;
@@ -20744,7 +20774,7 @@ fn _parse_expression_statement__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     let kind = p.peek_kind();
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 164, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 164, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -21311,7 +21341,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     let kind = p.peek_kind();
     if _kind_set_83(kind) {
         if kind == TK_POUND {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -21321,7 +21351,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             }
             return _parse_expression__inner_alt_0(p, min_prec, follow);
         } else if kind == TK_KW_ASYNC {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -21345,7 +21375,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if _kind_set_86(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -21361,7 +21391,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             }
             return _parse_expression__inner_alt_40(p, min_prec, follow);
         } else if kind == TK_KW_SELFTYPE {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -21379,7 +21409,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if _kind_set_81(kind) {
         if p.peek_at(1) == TK_KW_RAW {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -21436,7 +21466,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_DOTDOT {
         p.b.set_alt(25);
         p.take();
-        if p.atn.predict(&ATN_SIM, 173, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        if p.atn.predict(&ATN_SIM, 173, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
             p.site = 273;
             p.atn_ret_pending = 1796;
             _parse_expression(p, follow);
@@ -21454,10 +21484,10 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_CONTINUE {
         p.b.set_alt(30);
         p.take();
-        if p.atn.predict(&ATN_SIM, 174, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        if p.atn.predict(&ATN_SIM, 174, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
             p.expect(TK_LIFETIME_OR_LABEL, &SYNC_102, true);
         }
-        if p.atn.predict(&ATN_SIM, 175, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        if p.atn.predict(&ATN_SIM, 175, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
             p.site = 282;
             p.atn_ret_pending = 1810;
             _parse_expression(p, follow);
@@ -21467,10 +21497,10 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_BREAK {
         p.b.set_alt(31);
         p.take();
-        if p.atn.predict(&ATN_SIM, 176, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        if p.atn.predict(&ATN_SIM, 176, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
             p.expect(TK_LIFETIME_OR_LABEL, &SYNC_102, true);
         }
-        if p.atn.predict(&ATN_SIM, 177, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        if p.atn.predict(&ATN_SIM, 177, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
             p.site = 283;
             p.atn_ret_pending = 1820;
             _parse_expression(p, follow);
@@ -21480,7 +21510,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_RETURN {
         p.b.set_alt(32);
         p.take();
-        if p.atn.predict(&ATN_SIM, 178, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        if p.atn.predict(&ATN_SIM, 178, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
             p.site = 284;
             p.atn_ret_pending = 1826;
             _parse_expression(p, follow);
@@ -21488,7 +21518,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
         return;
     }
     if kind == TK_LPAREN {
-        let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+        let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return;
@@ -21778,7 +21808,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
             p.b.start_node_at(_cp, RK_EXPRESSION, _start);
             p.b.set_alt(24);
             p.take();
-            if p.atn.predict(&ATN_SIM, 190, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+            if p.atn.predict(&ATN_SIM, 190, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
                 p.site = 272;
                 p.atn_ret_pending = 1991;
                 _parse_expression(p, follow);
@@ -22297,7 +22327,7 @@ fn _parse_statements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
         p.atn_ret_pending = 2066;
         _parse_statement(p, 0);
     }
-    if p.atn.predict(&ATN_SIM, 201, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+    if p.atn.predict(&ATN_SIM, 201, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
         p.site = 310;
         p.atn_ret_pending = 2072;
         _parse_expression(p, follow);
@@ -22354,7 +22384,7 @@ fn scan_statements__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
             *gate = dc_30_gate;
         }
     }
-    if atn.predict(&ATN_SIM, 201, tokens, pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
+    if atn.predict(&ATN_SIM, 201, tokens, pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => (gate._scan_edge != pos || gate.no_struct == 0), 3 => (gate._scan_edge != pos || gate.no_struct == 0), _ => unreachable() }) == 0 {
         let sp = pos;
         let sp_gate = *gate;
         atn.stack.push(2072);
@@ -22382,7 +22412,7 @@ fn _parse_statements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     let kind = p.peek_kind();
     if _kind_set_93(kind) {
         if _kind_set_55(kind) {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 199, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 199, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;
@@ -22620,7 +22650,7 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> ArrayElement
     vals = alt_done: {
         let kind = p.peek_kind();
         if _kind_set_55(kind) {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 203, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 203, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return vals;
@@ -24986,7 +25016,7 @@ fn _parse_match_arm_expression__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     let kind = p.peek_kind();
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let _atn_alt = p.atn.predict(&ATN_SIM, 256, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            let _atn_alt = p.atn.predict(&ATN_SIM, 256, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
             if _atn_alt < 0 {
                 p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
                 return;

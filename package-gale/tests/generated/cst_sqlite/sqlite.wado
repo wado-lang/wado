@@ -1418,7 +1418,8 @@ global ATN_DFA_NODE_CAP: i32 = 4000000;
 
 global CFG_KEY_PR_SLOT: i32 = 2048;
 global CFG_KEY_ALT_SLOT: i32 = 4096;
-global CFG_KEY_GUARD_SLOT: i32 = 4096;
+global CFG_KEY_GUARD_SLOT: i32 = 65536;
+global ATN_DFA_GUARD_CAP: i32 = 32768;
 global CFG_KEY_STATE_SLOT: i32 = 1048576;
 global ATN_NO_GUARD: i32 = 0;
 
@@ -1489,9 +1490,10 @@ impl AtnPredictor {
         eof: i32,
         min_prec: i32,
         met: &List<i32>,
+        own: &List<i32>,
         ask: fn(i32) -> bool with E,
     ) -> i32 with E {
-        let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, met, ask);
+        let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, met, own, ask);
         self.read_down_to(reach);
         return alt;
     }
@@ -1509,6 +1511,7 @@ impl AtnPredictor {
         eof: i32,
         min_prec: i32,
         met: &List<i32>,
+        own: &List<i32>,
         ask: fn(i32) -> bool with E,
     ) -> [i32, i32] with E
         contract self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor"
@@ -1525,13 +1528,17 @@ impl AtnPredictor {
                 eof,
                 min_prec,
                 met,
+                own,
                 ask,
             );
             if alt != ATN_READS_HIDDEN {
                 return [alt, self.floor];
             }
         }
-        return [atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, ask), 0];
+        return [
+            atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, own, ask),
+            0,
+        ];
     }
 
     fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
@@ -1709,10 +1716,12 @@ struct AtnConfig {
 
 internal struct AtnPreds {
     met: List<i32>,
+    own: List<i32>,
     failed: List<i32>,
+    origin: i32 = -1,
 }
 
-internal global ATN_NO_PREDS: AtnPreds = AtnPreds { met: [], failed: [] };
+internal global ATN_NO_PREDS: AtnPreds = AtnPreds { met: [], own: [], failed: [] };
 
 internal fn atn_unasked(_label: i32) -> bool {
     return true;
@@ -1755,7 +1764,7 @@ impl CtxArena {
             return known;
         }
         let g = self.guard_label.len();
-        assert g < CFG_KEY_GUARD_SLOT, "a decision's guards fit the config key";
+        assert g < CFG_KEY_GUARD_SLOT, "one prediction's guards fit the config key";
         self.guard_label.push(label);
         self.guard_rest.push(guard);
         self.guard_index.set(k, g);
@@ -2174,6 +2183,9 @@ fn atn_past_edge(arena: &mut CtxArena, next: &AtnConfig, label: i32, preds: &Atn
     if preds.failed.contains(&label) {
         return AtnConfig { ..*next, alt: next.alt + ATN_FAILED_ALT };
     }
+    if preds.own.contains(&label) && next.pctx != preds.origin {
+        return *next;
+    }
     if preds.met.contains(&label) {
         return AtnConfig { ..*next, guard: arena.guard_with(next.guard, label) };
     }
@@ -2355,7 +2367,17 @@ internal fn atn_predict_once(
         atn.read_down_to(atn.verdict_reach[v]);
         return atn.verdict_alt[v];
     }
-    let [alt, reach] = atn.predict_reaching(sim, decision, tokens, pos, eof, min_prec, &ATN_NO_PREDS.met, atn_unasked);
+    let [alt, reach] = atn.predict_reaching(
+        sim,
+        decision,
+        tokens,
+        pos,
+        eof,
+        min_prec,
+        &ATN_NO_PREDS.met,
+        &ATN_NO_PREDS.own,
+        atn_unasked,
+    );
     atn.read_down_to(reach);
     atn.record_verdict(decision, pos, min_prec, depth, alt, reach);
     return alt;
@@ -2370,10 +2392,11 @@ internal fn atn_predict_with_stack(
     eof: i32,
     min_prec: i32 = 0,
     met: &List<i32> = &ATN_NO_PREDS.met,
+    own: &List<i32> = &ATN_NO_PREDS.own,
     ask: fn(i32) -> bool = atn_unasked,
 ) -> i32 {
     let mut dfa = AtnDfa::new();
-    return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, met, ask);
+    return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, met, own, ask);
 }
 
 fn atn_predict_above<effect E>(
@@ -2387,9 +2410,10 @@ fn atn_predict_above<effect E>(
     eof: i32,
     min_prec: i32,
     met: &List<i32>,
+    own: &List<i32>,
     ask: fn(i32) -> bool with E,
 ) -> i32 with E {
-    let mut preds = AtnPreds { met: *met, failed: [] };
+    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
     let mut asked: List<i32> = [];
     loop {
         let mut held: List<i32> = [];
@@ -2456,7 +2480,7 @@ fn atn_walk(
     dfa.make_room(sim);
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
     dfa.arena.open_budget();
-    let mut s = dfa.start_state(sim, decision, caller, min_prec, preds);
+    let mut s = dfa.start_state(sim, decision, caller, min_prec, &AtnPreds { ..*preds, origin: caller });
     let mut fallback = -1;
     let mut pos = start_pos;
     loop {
@@ -2465,7 +2489,9 @@ fn atn_walk(
             return [fallback, false];
         }
         if verdict != ATN_DFA_UNDECIDED {
-            dfa.arena.push_held_guards(&dfa.state_configs[s], held);
+            if verdict != ATN_READS_HIDDEN {
+                dfa.arena.push_held_guards(&dfa.state_configs[s], held);
+            }
             return [verdict, true];
         }
         fallback = dfa.state_first[s];
@@ -2511,7 +2537,9 @@ impl AtnDfa {
             self.sim_serial = sim.serial;
         }
         assert self.sim_serial == sim.serial, "a DFA caches the predictions of one ATN";
-        if self.arena.closure_cut_short || self.arena.node_count() >= ATN_DFA_NODE_CAP {
+        if self.arena.closure_cut_short
+            || self.arena.node_count() >= ATN_DFA_NODE_CAP
+            || self.arena.guard_label.len() >= ATN_DFA_GUARD_CAP {
             *self = AtnDfa::new();
             self.sim_serial = sim.serial;
         }
@@ -2524,6 +2552,8 @@ impl AtnDfa {
         self.seeds.keys.push(caller);
         self.seeds.keys.push(min_prec);
         self.seeds.keys.extend(&preds.met);
+        self.seeds.keys.push(ATN_DFA_START_KEY);
+        self.seeds.keys.extend(&preds.own);
         self.seeds.keys.push(ATN_DFA_START_KEY);
         self.seeds.keys.extend(&preds.failed);
         let known = self.seeds.find(from);
@@ -19782,7 +19812,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                     if p.peek_kind() == TK_K_NOT {
                         p.take();
                     }
-                    let _ = p.expect_set(&SYNC_82, &EXPECTED_82);
+                    p.expect_set(&SYNC_82, &EXPECTED_82);
                     p.site = 232;
                     p.atn_ret_pending = 1965;
                     _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_52)), 0, lr_frame(0, min_prec, follow, lr_cont));
@@ -20094,7 +20124,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                         if p.peek_kind() == TK_K_NOT {
                             p.take();
                         }
-                        let _ = p.expect_set(&SYNC_82, &EXPECTED_82);
+                        p.expect_set(&SYNC_82, &EXPECTED_82);
                         p.site = 232;
                         p.atn_ret_pending = 1965;
                         _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_52)), 0, lr_frame(0, min_prec, follow, lr_cont));
