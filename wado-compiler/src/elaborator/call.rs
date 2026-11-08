@@ -2172,6 +2172,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_types: &args,
                         receiver_type: ns_receiver_type,
                         receiver_args: &impl_type_args_inferred,
+                        method_args: &method_type_args,
                         ..StaticQuery::of(type_name, method_name)
                     });
                     if self.report_unanswered_static(&resolved, method_name, call.span) {
@@ -2249,11 +2250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type = self.fill_static_method_slots(
-                        method_ref.method_id,
-                        &method_type_args,
-                        resolved.return_type(),
-                    );
+                    let mut return_type = resolved.return_type();
                     if let Some(key) = &ns_key {
                         self.retype_static_to_newtype(
                             key,
@@ -2313,21 +2310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    // The resolution read the parameters at the receiver's
-                    // arguments, so only the method's own slots are left, bound
-                    // by identity: by index they would reach the caller's
-                    // parameters the receiver's arguments brought in.
-                    let checked: Vec<TypeId> = param_types
-                        .iter()
-                        .map(|&t| {
-                            self.fill_static_method_slots(
-                                method_ref.method_id,
-                                &method_type_args,
-                                t,
-                            )
-                        })
-                        .collect();
-                    self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    self.recoerce_literal_args(&call.args, &mut args, &param_types);
                     if func_ref.monomorph_info.is_some()
                         && self.report_value_for_reference(
                             &param_types,
@@ -2343,7 +2326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
-                            &checked,
+                            &param_types,
                             &args,
                             &arg_sites,
                             &param_defaults,
@@ -2365,7 +2348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_default_walk(
                         call.id,
                         &args,
-                        &checked,
+                        &param_types,
                         &param_defaults,
                         defaults_module.clone(),
                         &type_bindings,

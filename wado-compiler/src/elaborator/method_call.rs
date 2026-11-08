@@ -2308,6 +2308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_key: Some(&receiver_key),
                 arg_types: &args,
                 receiver_type: Some(target_type_id),
+                method_args: &method_type_args,
                 required_trait,
                 ..StaticQuery::of(&struct_name, &static_call.method)
             },
@@ -2325,7 +2326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_call.method,
         );
 
-        let mut return_type = resolution.return_type;
+        let return_type = resolution.return_type;
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -2353,8 +2354,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return TypeTable::ERROR;
         }
-
-        return_type = self.fill_static_method_slots(declaration, &method_type_args, return_type);
 
         // The receiver as the match above resolved it, which carries the
         // declaring module. Re-deriving it from `struct_name` asks the call
@@ -2646,29 +2645,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .substitute(pt, &mut tt)
             })
             .collect()
-    }
-
-    /// A static call's `return_type` with the method's own parameters filled
-    /// by `method_type_args`. The resolution read it at the receiver's
-    /// arguments, so the declaring block's slots are already filled; filling
-    /// them again by index rewrites the caller's own parameters those arguments
-    /// carry, as `Pair::empty()` at `Pair<String, T>` once became
-    /// `Pair<String, String>` in `fn make<T>`.
-    pub(super) fn fill_static_method_slots(
-        &mut self,
-        method: Option<DefId>,
-        method_type_args: &[TypeId],
-        return_type: TypeId,
-    ) -> TypeId {
-        let own_slots = method
-            .and_then(|def| self.tysys.signatures.method_sig(def))
-            .map(MethodSig::own_type_param_ids)
-            .unwrap_or_default();
-        let subst_ctx = SubstitutionContext::new().bind(&own_slots, method_type_args);
-        if subst_ctx.is_empty() {
-            return return_type;
-        }
-        self.substitute_ctx_in_frame(&subst_ctx, return_type)
     }
 
     /// Whether `args` arguments fill a callee declaring `params` parameters,
@@ -3477,6 +3453,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 arg_types: args,
                 receiver_type: newtype_dispatch.as_ref().map(|(newtype, _, _)| *newtype),
                 receiver_args: impl_type_args,
+                method_args: method_type_args,
                 ..StaticQuery::of(struct_name, method_name)
             },
             span,
@@ -3536,8 +3513,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_fq = concrete_head.unwrap_or(actual_struct_fq);
         self.enforce_static_block_bounds(self.tysys.block_of(&method_ref), impl_type_args, span);
 
-        let mut return_type =
-            self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
+        let mut return_type = resolution.return_type;
         self.retype_static_to_newtype(
             &self.impl_target(struct_name),
             self.tysys.block_of(&method_ref),
