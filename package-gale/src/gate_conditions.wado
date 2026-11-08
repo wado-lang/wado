@@ -191,7 +191,15 @@ pub fn decision_predicates(settings: &GenSettings, analysis: &mut GrammarAnalysi
                 let mut lr_loop: List<MetPredicate> = [];
                 for let alt of &rule.alternatives {
                     if alt_is_left_recursive(alt, &rule.name) {
-                        let _ = predicates_met_at(&alt.elements, &alt.actions, 1, &site, analysis, &mut [], &mut lr_loop);
+                        let _ = predicates_met_at(
+                            &alt.elements,
+                            &alt.actions,
+                            1,
+                            &site,
+                            analysis,
+                            &mut [],
+                            &mut lr_loop,
+                        );
                     }
                 }
                 extend_met(&mut lr_loop, &exit);

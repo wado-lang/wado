@@ -142,7 +142,10 @@ impl AtnPredictor {
                 return [alt, self.floor];
             }
         }
-        return [atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, own, ask), 0];
+        return [
+            atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, own, ask),
+            0,
+        ];
     }
 
     fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
@@ -971,7 +974,17 @@ internal fn atn_predict_once(
         atn.read_down_to(atn.verdict_reach[v]);
         return atn.verdict_alt[v];
     }
-    let [alt, reach] = atn.predict_reaching(sim, decision, tokens, pos, eof, min_prec, &ATN_NO_PREDS.met, &ATN_NO_PREDS.own, atn_unasked);
+    let [alt, reach] = atn.predict_reaching(
+        sim,
+        decision,
+        tokens,
+        pos,
+        eof,
+        min_prec,
+        &ATN_NO_PREDS.met,
+        &ATN_NO_PREDS.own,
+        atn_unasked,
+    );
     atn.read_down_to(reach);
     atn.record_verdict(decision, pos, min_prec, depth, alt, reach);
     return alt;

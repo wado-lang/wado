@@ -354,7 +354,9 @@ fn refuse_nullable_args(
 ) -> Result<(), String> {
     for let a of args {
         if value_presence(rule, rules, a, bindings, env) matches { Some(_) } {
-            return Result::Err("java2wado: a method argument that may be null is unsupported: a String parameter cannot hold null");
+            return Result::Err(
+                "java2wado: a method argument that may be null is unsupported: a String parameter cannot hold null",
+            );
         }
     }
     return Result::Ok(());
@@ -420,10 +422,19 @@ fn emit_stmt(
             let target = emit_assign_target(rule, rules, a, vals_in_scope, bindings, env)?;
             let stored = local_store(s);
             let value = match &stored {
-                Some([name, v]) && env.string_locals.contains(name) => string_value(rule, rules, v, vals_in_scope, bindings, env)?,
+                Some([name, v]) && env.string_locals.contains(name) => string_value(
+                    rule,
+                    rules,
+                    v,
+                    vals_in_scope,
+                    bindings,
+                    env,
+                )?,
                 _ => {
                     if value_presence(rule, rules, &a.value, bindings, env) matches { Some(_) } {
-                        return Result::Err("java2wado: storing a String that may be null outside a local is unsupported");
+                        return Result::Err(
+                            "java2wado: storing a String that may be null outside a local is unsupported",
+                        );
                     }
                     emit_expr(rule, rules, &a.value, vals_in_scope, bindings, env)?;
                 },
@@ -901,7 +912,11 @@ fn token_occurrences_in(e: &Element, name: &String) -> i32 {
         Label(l) => token_occurrences_in(&l.element, name),
         Repeat(r) => {
             let once = token_occurrences_in(&r.element, name);
-            if r.kind matches { Optional } { once } else { 2 * once };
+            if r.kind matches { Optional } {
+                once;
+            } else {
+                2 * once;
+            }
         },
         Group(g) => g.alternatives.iter_ref().fold(0, |n, a| i32::max(n, token_occurrences(&a.elements, name))),
         RuleRef(_) | Literal(_) | Wildcard(_) | Not(_) => 0,

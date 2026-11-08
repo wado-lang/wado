@@ -5460,7 +5460,11 @@ fn gen_prequel_action<S: AsStrSlice>(
     // binds, and `@after` reaches one only through the captures the rule's
     // value struct keeps.
     let outer = *ctx.cursor.alt_bindings();
-    ctx.cursor.set_alt_bindings(if at_entry { unmatched_bindings(ctx.current_rule()) } else { after_label_bindings(ctx) });
+    ctx.cursor.set_alt_bindings(if at_entry {
+        unmatched_bindings(ctx.current_rule());
+    } else {
+        after_label_bindings(ctx);
+    });
     gen_prequel_in_scope(w, src, rule_name, at_entry, ctx);
     ctx.cursor.set_alt_bindings(outer);
 }

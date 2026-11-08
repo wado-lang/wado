@@ -364,7 +364,11 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
         gen_vals_fields(w, &rule.locals_decls);
         gen_capture_fields(w, ctx.plan.rule_captures(&rule.name));
         for let label of &ctx.plan.rule_captures(&rule.name).labels {
-            w.line(`${after_label_field(&label.base)}: ${after_label_type(label, ctx)} = ${if label.is_token { "-1" } else { "null" }},`);
+            w.line(`${after_label_field(&label.base)}: ${after_label_type(label, ctx)} = ${if label.is_token {
+                "-1";
+            } else {
+                "null";
+            }},`);
         }
         w.end();
         w.blank();
@@ -603,7 +607,10 @@ pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_sc
         let own = !met_site.foreign && met_site.rule_index == rule;
         let site = if own { ctx.predicate_site() } else { *met_site };
         let cond = if in_scan {
-            scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site).map(|c| scan_answered_at_edge(&ctx.settings, &c));
+            scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site).map(|c| scan_answered_at_edge(
+                &ctx.settings,
+                &c,
+            ));
         } else {
             predicate_condition_for(a, &ctx.settings, &ctx.analysis, &site);
         };
@@ -923,7 +930,12 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Em
     return translate_body_or_warn(&src.text, &action_owner(src.action_id, ctx), is_predicate, ctx);
 }
 
-fn translate_body_or_warn(text: &String, owner: &DiagnosticOwner, is_predicate: bool, ctx: &mut EmitContext) -> Option<String> {
+fn translate_body_or_warn(
+    text: &String,
+    owner: &DiagnosticOwner,
+    is_predicate: bool,
+    ctx: &mut EmitContext,
+) -> Option<String> {
     if body_names_unwired_base(text, &ctx.settings) {
         // A refused base already reported the cause; an undeclared one has not.
         if !ctx.settings.parser_superclass_declared {
