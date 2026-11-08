@@ -249,16 +249,21 @@ impl NirRefVisitor for ParamUsageScan<'_> {
     }
 }
 
-/// The local a place names, seen through a `&`/`&mut` that wraps it: its
-/// expression, for the type the place carries, and its index.
-fn local_place(body: &Body, e: ExprId) -> Option<(ExprId, u32)> {
-    let place = match &body.exprs[e].kind {
+/// The place `e` names, seen through a `&`/`&mut` that wraps it.
+fn place_of(body: &Body, e: ExprId) -> Option<ExprId> {
+    match &body.exprs[e].kind {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => inner.as_expr()?,
-        _ => e,
-    };
+        } => inner.as_expr(),
+        _ => Some(e),
+    }
+}
+
+/// The local a place names, seen through a `&`/`&mut` that wraps it: its
+/// expression, for the type the place carries, and its index.
+fn local_place(body: &Body, e: ExprId) -> Option<(ExprId, u32)> {
+    let place = place_of(body, e)?;
     match &body.exprs[place].kind {
         ExprKind::Local { index, .. } => Some((place, *index)),
         _ => None,
@@ -921,15 +926,8 @@ fn names_reachable_object(body: &Body, value: ExprId, type_table: &TypeTable) ->
     if !is_gc_heap_type(type_id, type_table) {
         return false;
     }
-    let place = match &body.exprs[value].kind {
-        ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } => match inner.as_expr() {
-            Some(inner) => inner,
-            None => return false,
-        },
-        _ => value,
+    let Some(place) = place_of(body, value) else {
+        return false;
     };
     match &body.exprs[place].kind {
         ExprKind::FieldAccess { .. }
