@@ -9,6 +9,7 @@ test "by int: int by int" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":2}"#,
         #"10"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "by int: int by int fail" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":2}"#,
         #"7"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "by int: ignores non-numbers" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":2}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "by number: zero is multiple of anything" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":1.5}"#,
         #"0"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "by number: 4.5 is multiple of 1.5" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":1.5}"#,
         #"4.5"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "by number: -4.5 is multiple of 1.5" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":1.5}"#,
         #"-4.5"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "by number: 35 is not multiple of 1.5" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":1.5}"#,
         #"35"#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "by small number: 0.0075 is multiple of 0.0001" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":0.0001}"#,
         #"0.0075"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "by small number: 0.00751 is not multiple of 0.0001" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":0.0001}"#,
         #"0.00751"#,
         false,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "by very small number: 4e-8 is multiple of 1e-8" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":0.00000001}"#,
         #"0.00000004"#,
         true,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "by very small number: 1.5e-8 is not multiple of 1e-8" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","multipleOf":0.00000001}"#,
         #"0.000000015"#,
         false,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "float division = inf: always invalid, but naive implementations may raise 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer","multipleOf":0.123456789}"#,
         #"100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"#,
         false,
+        [],
     );
 }
 
@@ -105,5 +117,6 @@ test "small multiple of large integer: any integer is a multiple of 1e-8" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer","multipleOf":0.00000001}"#,
         #"12391239123"#,
         true,
+        [],
     );
 }

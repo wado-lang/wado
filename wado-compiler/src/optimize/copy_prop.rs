@@ -137,6 +137,7 @@ fn field_chain_root(body: &Body, e: ExprId) -> Option<u32> {
 fn analyze_copy_binding(
     body: &Body,
     stmt: StmtId,
+    type_table: &TypeTable,
     copy_value_id: Option<FuncId>,
 ) -> Option<CopyBinding> {
     let StmtKind::Let {
@@ -151,6 +152,12 @@ fn analyze_copy_binding(
     };
     let (local_index, value, skip_value_copy, let_type_id) =
         (*local_index, *value, *skip_value_copy, *let_type_id);
+    // `let x: T;` binds a unit that is no value of `T`, and a read may still
+    // reach the slot unassigned: an assert's failure report reads an operand a
+    // short-circuit skipped.
+    if body.declares_without_value(type_table, let_type_id, value) {
+        return None;
+    }
     // `let x = Operand::Value(v)`: a copy of a promoted operand. Forward `x`'s
     // reads to it (the value is pooled-immutable, so it is always stable). This
     // is independent of `skip_value_copy` — the source is a value, not a place.
@@ -428,7 +435,9 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
             }
             _ => {}
         }
-        if let Some(mut binding) = analyze_copy_binding(body, stmt, ctx.copy_value_id) {
+        if let Some(mut binding) =
+            analyze_copy_binding(body, stmt, ctx.type_table, ctx.copy_value_id)
+        {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable iff every read of the target sits after the
             // binding AND the source is not mutated in those statements (a

@@ -14,9 +14,10 @@ use super::assign_to_let::promote_lone_assignments;
 use super::gate::{FunctionGate, GatedPass};
 
 /// Flatten every block a statement evaluates first, across the package, then
-/// turn the lone assignment of each local no `let` binds into its `let`
-/// ([`promote_lone_assignments`]): an argument's in-place binding is one, and
-/// flattening is what lays it out as a statement.
+/// turn the lone assignment of each local no `let` binds a value to into its
+/// `let` ([`promote_lone_assignments`]): an argument's in-place binding and a
+/// power-assert capture are such, and flattening is what lays them out as
+/// statements.
 ///
 /// Its own pass between the post-inline peephole and `sroa`, never a peephole
 /// rule: the session's pristine-map rules (`ref_elim`, `elide_box_local`,
@@ -26,6 +27,7 @@ use super::gate::{FunctionGate, GatedPass};
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
     let functions = &project.functions;
+    let type_table = &*project.type_table.borrow();
     gate.run_gated_par(
         GatedPass::LetBlockFlatten,
         functions.len(),
@@ -41,7 +43,7 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
                 return false;
             };
             let flattened = Engine::new(body, buffers, locals, params).run(&[&rule]);
-            promote_lone_assignments(body, locals, params) || flattened
+            promote_lone_assignments(body, locals, params, type_table) || flattened
         },
     )
 }

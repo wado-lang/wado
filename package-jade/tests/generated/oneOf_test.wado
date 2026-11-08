@@ -9,6 +9,7 @@ test "oneOf: first oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "oneOf: second oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"2.5"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "oneOf: both oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"3"#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "oneOf: neither oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"1.5"#,
         false,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "oneOf with base schema: mismatch base schema" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","oneOf":[{"minLength":2},{"maxLength":4}]}"#,
         #"3"#,
         false,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "oneOf with base schema: one oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","oneOf":[{"minLength":2},{"maxLength":4}]}"#,
         #""foobar""#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "oneOf with base schema: both oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","oneOf":[{"minLength":2},{"maxLength":4}]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "oneOf with boolean schemas, all true: any value is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[true,true,true]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "oneOf with boolean schemas, one true: any value is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[true,false,false]}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "oneOf with boolean schemas, more than one true: any value is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[true,true,false]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "oneOf with boolean schemas, all false: any value is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[false,false,false]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "oneOf complex types: first oneOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "oneOf complex types: second oneOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":"baz"}"#,
         true,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "oneOf complex types: both oneOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":"baz","bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "oneOf complex types: neither oneOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":2,"bar":"quux"}"#,
         false,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "oneOf with empty schema: one valid - valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"type":"number"},{}]}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "oneOf with empty schema: both valid - invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"type":"number"},{}]}"#,
         #"123"#,
         false,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "oneOf with required: both invalid - invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","oneOf":[{"required":["foo","bar"]},{"required":["foo","baz"]}]}"#,
         #"{"bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "oneOf with required: first valid - valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","oneOf":[{"required":["foo","bar"]},{"required":["foo","baz"]}]}"#,
         #"{"foo":1,"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "oneOf with required: second valid - valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","oneOf":[{"required":["foo","bar"]},{"required":["foo","baz"]}]}"#,
         #"{"foo":1,"baz":3}"#,
         true,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "oneOf with required: both valid - invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","oneOf":[{"required":["foo","bar"]},{"required":["foo","baz"]}]}"#,
         #"{"foo":1,"bar":2,"baz":3}"#,
         false,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "oneOf with missing optional property: first oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":true,"baz":true},"required":["bar"]},{"properties":{"foo":true},"required":["foo"]}]}"#,
         #"{"bar":8}"#,
         true,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "oneOf with missing optional property: second oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":true,"baz":true},"required":["bar"]},{"properties":{"foo":true},"required":["foo"]}]}"#,
         #"{"foo":"foo"}"#,
         true,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "oneOf with missing optional property: both oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":true,"baz":true},"required":["bar"]},{"properties":{"foo":true},"required":["foo"]}]}"#,
         #"{"foo":"foo","bar":8}"#,
         false,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "oneOf with missing optional property: neither oneOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"properties":{"bar":true,"baz":true},"required":["bar"]},{"properties":{"foo":true},"required":["foo"]}]}"#,
         #"{"baz":"quux"}"#,
         false,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "nested oneOf, to check validation semantics: null is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"oneOf":[{"type":"null"}]}]}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -217,5 +243,6 @@ test "nested oneOf, to check validation semantics: anything non-null is invalid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"oneOf":[{"type":"null"}]}]}"#,
         #"123"#,
         false,
+        [],
     );
 }

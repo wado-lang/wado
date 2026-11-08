@@ -9,6 +9,7 @@ test "minimum validation: above the minimum is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":1.1}"#,
         #"2.6"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "minimum validation: boundary point is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":1.1}"#,
         #"1.1"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "minimum validation: below the minimum is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":1.1}"#,
         #"0.6"#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "minimum validation: ignores non-numbers" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":1.1}"#,
         #""x""#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "minimum validation with signed integer: negative above the minimum is vali
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":-2}"#,
         #"-1"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "minimum validation with signed integer: positive above the minimum is vali
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":-2}"#,
         #"0"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "minimum validation with signed integer: boundary point is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":-2}"#,
         #"-2"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "minimum validation with signed integer: boundary point with float is valid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":-2}"#,
         #"-2"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "minimum validation with signed integer: float below the minimum is invalid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":-2}"#,
         #"-2.0001"#,
         false,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "minimum validation with signed integer: int below the minimum is invalid" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":-2}"#,
         #"-3"#,
         false,
+        [],
     );
 }
 
@@ -89,5 +99,6 @@ test "minimum validation with signed integer: ignores non-numbers" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","minimum":-2}"#,
         #""x""#,
         true,
+        [],
     );
 }

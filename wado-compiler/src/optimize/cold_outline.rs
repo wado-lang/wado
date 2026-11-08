@@ -161,7 +161,24 @@ fn find_region(
             continue;
         };
         let region: Vec<StmtId> = run.iter().copied().filter(|&s| s != marker).collect();
-        if buys_nothing(body, &type_table, &runs, &region, params) {
+        if region.is_empty() {
+            continue;
+        }
+        // A region that holds no more than the call replacing it stays, which
+        // is also what makes a second scan a fixed point. Weighing rather than
+        // counting statements is what sees a lone `panic(…)` whose argument
+        // builds a message. The helper takes the frame's parameters and then
+        // the locals it is handed: the parameters alone bound the call below
+        // without walking the body for those locals.
+        let size = region_size(body, &type_table, &runs, &region);
+        if size <= call_site_size(params) {
+            continue;
+        }
+        let Some(args) = free_vars(body, &region, params as u32, under_loop, &func, &type_table)
+        else {
+            continue;
+        };
+        if size <= call_site_size(params + args.len()) {
             continue;
         }
         compiler_trace!(
@@ -169,28 +186,25 @@ fn find_region(
             "{}: region of {} stmt(s), {} to hold",
             func.name,
             region.len(),
-            region_size(body, &type_table, &runs, &region),
+            size,
         );
-        if let Some(args) = free_vars(body, &region, params as u32, under_loop, &func, &type_table)
-        {
-            // A region ending in a `-> !` call cannot fall through, so the
-            // helper inherits that: the call left behind still tells every
-            // later pass the branch never continues.
-            let diverges = region.last().is_some_and(|&s| match &body.stmts[s].kind {
-                StmtKind::Expr(op) => op
-                    .as_expr()
-                    .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
-                _ => false,
-            });
-            return Some(Region {
-                block,
-                start,
-                marker,
-                args,
-                return_type: if diverges { exits.never } else { exits.unit },
-                stmts: region,
-            });
-        }
+        // A region ending in a `-> !` call cannot fall through, so the helper
+        // inherits that: the call left behind still tells every later pass the
+        // branch never continues.
+        let diverges = region.last().is_some_and(|&s| match &body.stmts[s].kind {
+            StmtKind::Expr(op) => op
+                .as_expr()
+                .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
+            _ => false,
+        });
+        return Some(Region {
+            block,
+            start,
+            marker,
+            args,
+            return_type: if diverges { exits.never } else { exits.unit },
+            stmts: region,
+        });
     }
     None
 }
@@ -240,19 +254,6 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
         body.for_each_child(node, |c| stack.push((c, inner)));
     }
     out
-}
-
-/// Whether the region holds no more than the call that would replace it, which
-/// is also what makes a second scan a fixed point. Weighing rather than counting
-/// statements is what sees a lone `panic(…)` whose argument builds a message.
-fn buys_nothing(
-    body: &Body,
-    type_table: &TypeTable,
-    runs: &RareRuns,
-    region: &[StmtId],
-    param_count: usize,
-) -> bool {
-    region.is_empty() || region_size(body, type_table, runs, region) <= call_site_size(param_count)
 }
 
 /// How one local the region mentions gets to the helper.

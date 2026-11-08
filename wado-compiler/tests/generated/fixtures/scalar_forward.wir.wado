@@ -63,9 +63,9 @@ type "functype//scalar_forward.wado/$template_segment$scalar_forward.wado/$tmpl$
 
 type "functype//scalar_forward.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//scalar_forward.wado/run$cold2" = fn(i32);  // TypeId(19)
+type "functype//scalar_forward.wado/run$cold0" = fn(i32);  // TypeId(19)
 
-type "functype//scalar_forward.wado/run$cold4" = fn(i32);  // TypeId(20)
+type "functype//scalar_forward.wado/run$cold1" = fn(i32);  // TypeId(20)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(21)
 
@@ -148,12 +148,12 @@ fn "scalar_forward.wado/run"() with Stdout {
     builtin::array_set<i32>($sroa_arr_repr_128, 1, value_46);
     if @unlikely(local.tee value_46(builtin::array_get_value<i32>($sroa_arr_repr_128, 0)) != 6) {
         cold_path;
-        "scalar_forward.wado/run$cold4"(value_46);
+        "scalar_forward.wado/run$cold1"(value_46);
         unreachable;
     }
     if @unlikely(local.tee value_46(builtin::array_get_value<i32>($sroa_arr_repr_128, 1)) != 16) {
         cold_path;
-        "scalar_forward.wado/run$cold2"(value_46);
+        "scalar_forward.wado/run$cold0"(value_46);
         unreachable;
     }
     s = block -> ref "core:prelude/string.wado//String" {
@@ -192,7 +192,7 @@ fn "scalar_forward.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "scalar_forward.wado/run$cold2"($v0) with Stdout {
+fn "scalar_forward.wado/run$cold0"($v0) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
     "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<scalar_forward.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "scalar_forward.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at scalar_forward.wado:21
 condition: arr[1] == 16
@@ -202,7 +202,7 @@ arr[1]: "), used: 82 }, s1: struct.new "core:prelude/string.wado//String" { repr
     unreachable;
 }
 
-fn "scalar_forward.wado/run$cold4"($v0) with Stdout {
+fn "scalar_forward.wado/run$cold1"($v0) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
     "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<scalar_forward.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "scalar_forward.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at scalar_forward.wado:20
 condition: arr[0] == 6

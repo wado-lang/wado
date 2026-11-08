@@ -1424,8 +1424,8 @@ impl TirRefVisitor for LocalCollector<'_> {
         self.walk_pattern(pattern);
     }
 
-    /// A slot a producer preallocates and assigns — a power-assert capture, a
-    /// minted temporary — is declared by that assignment and nothing else.
+    /// A slot a producer preallocates and assigns, a minted temporary, is
+    /// declared by that assignment and nothing else.
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Assign { target, value } = &expr.kind
             && let TirExprKind::Local { index, .. } = &target.kind

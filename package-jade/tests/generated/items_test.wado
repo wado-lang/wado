@@ -9,6 +9,7 @@ test "a schema given for items: valid items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"integer"}}"#,
         #"[1,2,3]"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "a schema given for items: wrong type of items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"integer"}}"#,
         #"[1,"x"]"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "a schema given for items: ignores non-arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"integer"}}"#,
         #"{"foo":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "a schema given for items: JavaScript pseudo-array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"integer"}}"#,
         #"{"0":"invalid","length":1}"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "items with boolean schema (true): any array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":true}"#,
         #"[1,"foo",true]"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "items with boolean schema (true): empty array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":true}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "items with boolean schema (false): any non-empty array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":false}"#,
         #"[1,"foo",true]"#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "items with boolean schema (false): empty array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "items and subitems: valid items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"item":{"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/sub-item"},{"$ref":"#/$defs/sub-item"}]},"sub-item":{"type":"object","required":["foo"]}},"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"}]}"##,
         #"[[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}]]"#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "items and subitems: too many items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"item":{"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/sub-item"},{"$ref":"#/$defs/sub-item"}]},"sub-item":{"type":"object","required":["foo"]}},"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"}]}"##,
         #"[[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}]]"#,
         false,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "items and subitems: too many sub-items" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"item":{"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/sub-item"},{"$ref":"#/$defs/sub-item"}]},"sub-item":{"type":"object","required":["foo"]}},"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"}]}"##,
         #"[[{"foo":null},{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}]]"#,
         false,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "items and subitems: wrong item" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"item":{"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/sub-item"},{"$ref":"#/$defs/sub-item"}]},"sub-item":{"type":"object","required":["foo"]}},"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"}]}"##,
         #"[{"foo":null},[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}]]"#,
         false,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "items and subitems: wrong sub-item" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"item":{"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/sub-item"},{"$ref":"#/$defs/sub-item"}]},"sub-item":{"type":"object","required":["foo"]}},"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"}]}"##,
         #"[[{},{"foo":null}],[{"foo":null},{"foo":null}],[{"foo":null},{"foo":null}]]"#,
         false,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "items and subitems: fewer items is valid" {
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"item":{"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/sub-item"},{"$ref":"#/$defs/sub-item"}]},"sub-item":{"type":"object","required":["foo"]}},"type":"array","items":false,"prefixItems":[{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"},{"$ref":"#/$defs/item"}]}"##,
         #"[[{"foo":null}],[{"foo":null}]]"#,
         true,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "nested items: valid nested array" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"array","items":{"type":"array","items":{"type":"array","items":{"type":"array","items":{"type":"number"}}}}}"#,
         #"[[[[1]],[[2],[3]]],[[[4],[5],[6]]]]"#,
         true,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "nested items: nested array with invalid type" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"array","items":{"type":"array","items":{"type":"array","items":{"type":"array","items":{"type":"number"}}}}}"#,
         #"[[[["1"]],[[2],[3]]],[[[4],[5],[6]]]]"#,
         false,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "nested items: not deep enough" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"array","items":{"type":"array","items":{"type":"array","items":{"type":"array","items":{"type":"number"}}}}}"#,
         #"[[[1],[2],[3]],[[4],[5],[6]]]"#,
         false,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "prefixItems with no additional items allowed: empty array" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{},{},{}],"items":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "prefixItems with no additional items allowed: fewer number of items presen
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{},{},{}],"items":false}"#,
         #"[1]"#,
         true,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "prefixItems with no additional items allowed: fewer number of items presen
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{},{},{}],"items":false}"#,
         #"[1,2]"#,
         true,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "prefixItems with no additional items allowed: equal number of items presen
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{},{},{}],"items":false}"#,
         #"[1,2,3]"#,
         true,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "prefixItems with no additional items allowed: additional items are not per
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{},{},{}],"items":false}"#,
         #"[1,2,3,4]"#,
         false,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "items does not look in applicators, valid case: prefixItems in allOf does 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"prefixItems":[{"minimum":3}]}],"items":{"minimum":5}}"#,
         #"[3,5]"#,
         false,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "items does not look in applicators, valid case: prefixItems in allOf does 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","allOf":[{"prefixItems":[{"minimum":3}]}],"items":{"minimum":5}}"#,
         #"[5,5]"#,
         true,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "prefixItems validation adjusts the starting index for items: valid items" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"string"}],"items":{"type":"integer"}}"#,
         #"["x",2,3]"#,
         true,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "prefixItems validation adjusts the starting index for items: wrong type of
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"string"}],"items":{"type":"integer"}}"#,
         #"["x","y"]"#,
         false,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "items with heterogeneous array: heterogeneous invalid instance" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{}],"items":false}"#,
         #"["foo","bar",37]"#,
         false,
+        [],
     );
 }
 
@@ -225,6 +252,7 @@ test "items with heterogeneous array: valid instance" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{}],"items":false}"#,
         #"[null]"#,
         true,
+        [],
     );
 }
 
@@ -233,5 +261,6 @@ test "items with null instance elements: allows null elements" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"type":"null"}}"#,
         #"[null]"#,
         true,
+        [],
     );
 }

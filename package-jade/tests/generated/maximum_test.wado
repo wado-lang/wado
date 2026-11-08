@@ -9,6 +9,7 @@ test "maximum validation: below the maximum is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":3}"#,
         #"2.6"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "maximum validation: boundary point is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":3}"#,
         #"3"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "maximum validation: above the maximum is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":3}"#,
         #"3.5"#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "maximum validation: ignores non-numbers" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":3}"#,
         #""x""#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "maximum validation with unsigned integer: below the maximum is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":300}"#,
         #"299.97"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "maximum validation with unsigned integer: boundary point integer is valid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":300}"#,
         #"300"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "maximum validation with unsigned integer: boundary point float is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":300}"#,
         #"300"#,
         true,
+        [],
     );
 }
 
@@ -65,5 +72,6 @@ test "maximum validation with unsigned integer: above the maximum is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maximum":300}"#,
         #"300.5"#,
         false,
+        [],
     );
 }

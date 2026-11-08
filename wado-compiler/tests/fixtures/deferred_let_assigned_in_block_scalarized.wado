@@ -1,0 +1,31 @@
+// A local declared without a value and assigned once, inside a block that
+// runs before every read of it, optimizes as a `let` binding it there would:
+// the struct scalarizes. A contract check and a power-assert capture bind
+// their locals in this shape.
+use { println, Stdout } from "core:cli";
+
+struct Span {
+    start: i32,
+    end: i32,
+}
+
+export fn run() with Stdout {
+    let s: Span;
+    let wide = check: {
+        s = Span { start: builtin::black_box(3), end: builtin::black_box(7) };
+        break check: s.end - s.start > 2;
+    };
+    if !wide {
+        println(`${s.start}`);
+    }
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_pass": {"O2": ["nir/let_block_flatten"]},
+    "wir_not_expect:O2": [
+        "struct.new \"deferred_let_assigned_in_block_scalarized.wado//Span\""
+    ]
+}
