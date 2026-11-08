@@ -954,16 +954,23 @@ impl Alternative {
     }
 
     /// The predicates ahead of the alternative's first action, wherever they
-    /// sit: prediction meets one through any prefix that matched nothing.
-    pub fn predicates_before_actions(&self) -> List<AltAction> {
+    /// sit, then that action: prediction meets a predicate through any prefix
+    /// that matched nothing, and none on a path past an action.
+    pub fn prediction_guards(&self) -> List<AltAction> {
         let mut out: List<AltAction> = [];
         for let a of &self.actions {
+            out.push(*a);
             if a.kind matches { Action } {
                 break;
             }
-            out.push(*a);
         }
         return out;
+    }
+
+    /// The predicates prediction answers at the alternative's left edge, where
+    /// a dispatch gates it: those placed there ahead of its first action.
+    pub fn edge_gates(&self) -> List<AltAction> {
+        return self.prediction_guards().into_iter().filter(|a| a.before_index == 0 && a.kind matches { Predicate }).collect();
     }
 }
 

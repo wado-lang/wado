@@ -4474,8 +4474,8 @@ WS : ' ' -> skip ;
 
 /// The action id of the predicate opening `rule`'s alternative `index`.
 fn left_edge_pred_id(g: &Grammar, rule: i32, index: i32) -> i32 {
-    let opening = g.parser_rules[rule].alternatives[index].predicates_before_actions()[0];
-    assert opening.before_index == 0;
+    let opening = g.parser_rules[rule].alternatives[index].prediction_guards()[0];
+    assert opening.before_index == 0 && opening.kind matches { Predicate };
     return opening.source.action_id;
 }
 

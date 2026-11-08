@@ -465,22 +465,22 @@ pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before:
     if !ctx.settings.emit_actions {
         return;
     }
+    let mut behind_action = false;
     for let a of actions {
-        if a.before_index != before {
-            continue;
+        let here = a.before_index == before;
+        let is_action = a.kind matches { Action };
+        if here && is_action {
+            gen_action_body(w, &a.source, ctx);
+        } else if here {
+            if ctx.cursor.is_predicate_gated(a.source.action_id) {
+                ctx.cursor.mark_action_seen(a.source.action_id);
+            } else if !behind_action && predicate_selects_alternative(before, ctx) {
+                warn_unsupported_prediction_predicate(&a.source, ctx);
+            } else {
+                gen_predicate_guard(w, &a.source, ctx);
+            }
         }
-        match a.kind {
-            Action => gen_action_body(w, &a.source, ctx),
-            Predicate => {
-                if ctx.cursor.is_predicate_gated(a.source.action_id) {
-                    ctx.cursor.mark_action_seen(a.source.action_id);
-                } else if predicate_selects_alternative(before, ctx) {
-                    warn_unsupported_prediction_predicate(&a.source, ctx);
-                } else {
-                    gen_predicate_guard(w, &a.source, ctx);
-                }
-            },
-        }
+        behind_action = behind_action || is_action;
     }
 }
 
@@ -553,7 +553,7 @@ pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut EmitContext) -> 
         return [];
     }
     let mut conds: List<String> = [];
-    for let a of &alt.actions {
+    for let a of &alt.edge_gates() {
         if let Some(c) = ctx.gate_condition(a) {
             mark_gate_predicate(a, ctx);
             conds.push(c);
@@ -690,7 +690,7 @@ pub fn mark_gated_predicates(
 /// Register `alt`'s gateable alt-initial predicates as gated, so the dispatch
 /// carries them as its condition and the body does not repeat them as a guard.
 fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut EmitContext) {
-    for let a of &alt.actions {
+    for let a of &alt.edge_gates() {
         if ctx.gate_condition(a) matches { Some(_) } {
             mark_gate_predicate(a, ctx);
         }
@@ -719,7 +719,7 @@ pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut EmitContext) {
     if !ctx.settings.emit_actions {
         return;
     }
-    for let a of &alt.actions {
+    for let a of &alt.edge_gates() {
         if ctx.gate_condition(a) matches { Some(_) } {
             ctx.cursor.mark_predicate_gated(a.source.action_id);
         }
@@ -754,7 +754,7 @@ pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut EmitContext) -> S
         return String::new();
     }
     let mut conds: List<String> = [];
-    for let a of &alt.actions {
+    for let a of &alt.edge_gates() {
         if let Some(c) = ctx.gate_condition(a) {
             need_predicate_fn(a, ctx);
             conds.push(c);
@@ -908,8 +908,8 @@ fn rule_captures_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
 /// `$stop`. Placed at every shape's body entry (single-alt inner, multi-alt
 /// inner, `_alt_<n>` helpers, LR inner/atom), so span specials resolve
 /// uniformly regardless of dispatch.
-pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &EmitContext) {
-    if ctx.settings.emit_actions && rule_captures_span(rule, ctx.analysis.parser_rules()) {
+pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &EmitContext, needed: bool = false) {
+    if ctx.settings.emit_actions && (needed || rule_captures_span(rule, ctx.analysis.parser_rules())) {
         w.line(`let ${RULE_START_TOK_LOCAL} = p.pos;`);
     }
 }

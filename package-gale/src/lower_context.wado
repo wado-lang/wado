@@ -13,8 +13,10 @@ use { TableRegistry } from "./table_registry.wado";
 use {
     DecisionPredicates,
     PredicateSite,
+    ScanEscapes,
     alt_has_gate,
     alt_scan_checks,
+    alt_scan_escapes,
     alt_scan_gate_conditions,
     decision_predicates,
     predicates_met_entering,
@@ -243,6 +245,13 @@ impl LowerContext {
     pub fn alt_scan_checks(&mut self, alt: &Alternative, from: i32) -> List<[i32, String]> {
         let site = self.predicate_site();
         return alt_scan_checks(alt, &self.settings, &mut self.analysis, &site, from);
+    }
+
+    /// `gate_conditions::alt_scan_escapes` for an alternative of the rule being
+    /// lowered.
+    pub fn alt_scan_escapes(&mut self, alt: &Alternative, from: i32) -> ScanEscapes {
+        let site = self.predicate_site();
+        return alt_scan_escapes(alt, &self.settings, &mut self.analysis, &site, from);
     }
 
     /// `rule_overlap::rule_overlap_groups` for the rule being lowered.

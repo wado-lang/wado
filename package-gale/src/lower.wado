@@ -1821,20 +1821,33 @@ fn scan_gates_for(alt: &Alternative, ctx: &mut LowerContext, from: i32 = 0) -> L
     if !ctx.settings.emit_scan_gate() {
         return [];
     }
-    let mut gates: List<ScanGate> = [];
-    for let [before_index, cond] of ctx.alt_scan_checks(alt, from) {
-        gates.push(ScanGate { step: ScanGateStep::Check(cond), before_index: before_index - from });
-    }
+    let checks = ctx.alt_scan_checks(alt, from);
+    let escapes = ctx.alt_scan_escapes(alt, from);
     let settings = &ctx.settings;
-    for let a of &alt.actions {
-        if a.kind matches { Predicate } || a.before_index < from {
-            continue;
-        }
-        let body = settings.gate_body(a.source.action_id);
-        if let Some(hit) = gate_assignment(&body) {
-            if settings.scan_gate_fields.contains(&hit.0) {
-                gates.push(ScanGate { step: ScanGateStep::Assign(hit), before_index: a.before_index - from });
+    let mut gates: List<ScanGate> = [];
+    for let at of from..=alt.elements.len() {
+        let mut push = |step: ScanGateStep| gates.push(ScanGate { step, before_index: at - from });
+        for let [i, cond] of &escapes.after_elements {
+            if *i == at {
+                push(ScanGateStep::Escape(*cond));
             }
+        }
+        for let [i, cond] of &checks {
+            if *i == at {
+                push(ScanGateStep::Check(*cond));
+            }
+        }
+        for let a of &alt.actions {
+            if a.kind matches { Predicate } || a.before_index != at {
+                continue;
+            }
+            let body = settings.gate_body(a.source.action_id);
+            if let Some(hit) = gate_assignment(&body) && settings.scan_gate_fields.contains(&hit.0) {
+                push(ScanGateStep::Assign(hit));
+            }
+        }
+        if let Some([i, cond]) = escapes.at_action && i == at {
+            push(ScanGateStep::Escape(cond));
         }
     }
     return gates;
@@ -2578,7 +2591,7 @@ fn lower_scan_shape_body(shape: &List<i32>, alt: &Alternative, ctx: &mut LowerCo
     let elements = &alt.elements;
     let mut body_elems: List<ScanElement> = [];
     let mut gates = scan_gates_for(alt, ctx);
-    assert gates.iter_ref().all(|g| g.step matches { Check(_) }), "a write inside a group is never simulated";
+    assert !gates.iter_ref().any(|g| g.step matches { Assign(_) }), "a write inside a group is never simulated";
     let mut placed = 0;
     for let mut k = 0; k < shape.len(); k += 1 {
         let idx = shape[k];
@@ -3329,7 +3342,8 @@ fn empty_direct_dispatch() -> MultiAltDispatch {
 /// the matched token off the runtime stack and writes it into the
 /// outer `field` slot.
 fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, ctx: &mut LowerContext) -> Op {
-    let field = dedup_name(&token_group_field_name(alts), name_counts);
+    let dedup_base = token_group_field_name(alts);
+    let field = dedup_name(&dedup_base, name_counts);
 
     let mut bodies: List<AltBody> = [];
     let mut scan_bodies: List<ScanBody> = [];
@@ -3357,7 +3371,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
     }
     let dispatch = build_direct_dispatch(alts, &first_sets, ctx);
     return Op::Group(GroupOp {
-        shape: GroupShape::TokenOnly(TokenOnlyShape { field: field }),
+        shape: GroupShape::TokenOnly(TokenOnlyShape { field, dedup_base }),
         alts: bodies,
         scan_group: group_op_scan_group(&scan_bodies, alts, &null, ctx),
         dispatch: dispatch,
@@ -4974,8 +4988,8 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 /// * `Group` shapes carry their outer field inside the shape payload
 ///   (`TokenOnly.field`, `SimpleCst.field`, etc.); the `Transparent`
 ///   shape has no field of its own and the label passes through to
-///   the inner op. Group payloads have no `dedup_base` —
-///   `new_dedup_base` is unused for this arm.
+///   the inner op. Only `TokenOnly`, a leaf to emit, carries a
+///   `dedup_base`.
 /// * `ListLabel` carries `dedup_base` itself; rebinding the outer
 ///   field here updates `dedup_base` to `new_dedup_base` for the same
 ///   reason as the leaf arms.
@@ -5011,7 +5025,7 @@ pub fn rebind_op_field<S: AsStrSlice, S1: AsStrSlice>(op: Op, new_field: S, new_
             Op::Repeat(rep);
         },
         Group(mut g) => {
-            g.shape = rebind_group_shape(g.shape, new_field);
+            g.shape = rebind_group_shape(g.shape, new_field, new_dedup_base);
             Op::Group(g);
         },
         ListLabel(mut ll) => {
@@ -5022,11 +5036,12 @@ pub fn rebind_op_field<S: AsStrSlice, S1: AsStrSlice>(op: Op, new_field: S, new_
     };
 }
 
-fn rebind_group_shape<S: AsStrSlice>(shape: GroupShape, new_field: S) -> GroupShape {
+fn rebind_group_shape<S: AsStrSlice, S1: AsStrSlice>(shape: GroupShape, new_field: S, new_dedup_base: S1) -> GroupShape {
     return match shape {
         Transparent => GroupShape::Transparent,
         TokenOnly(mut to) => {
             to.field = new_field.to_string();
+            to.dedup_base = new_dedup_base.to_string();
             GroupShape::TokenOnly(to);
         },
         SimpleCst(mut scst) => {

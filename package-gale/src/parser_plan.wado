@@ -342,6 +342,17 @@ fn rule_captures_of(grammar: &Grammar, lowered: &LoweredGrammar) -> HashMap<Stri
                 push_unique(&mut c.nodes, call.1);
             }
         }
+        if let LeftRecursive(l) = &lowered.parser_rules[i] {
+            for let lr of &l.lr_alts {
+                let left_operand = &lr.prefix_self_ref.name;
+                if body_reads_any(&bodies, left_operand, false) {
+                    push_unique(&mut c.spans, *left_operand);
+                }
+                if body_reads_any(&bodies, left_operand, true) {
+                    push_unique(&mut c.nodes, *left_operand);
+                }
+            }
+        }
         if !c.is_empty() {
             captures[rule.name] = c;
         }

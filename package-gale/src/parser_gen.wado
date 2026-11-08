@@ -18,7 +18,6 @@ use {
 use {
     group_field_base_name,
     single_alt_group_field_name,
-    token_group_field_name,
     general_group_field_name,
     gen_visibility_comment,
     all_alts_are_single_token,
@@ -123,6 +122,7 @@ use {
 } from "./gir.wado";
 
 use {
+    RULE_START_TOK_LOCAL,
     vals_struct_name,
     rule_threads_args,
     rule_node_ref,
@@ -2933,6 +2933,10 @@ fn gen_scan_gates_before<S: AsStrSlice>(
                 assert proven_run == 0, "a check compares `pos` with the edge, so no proven token waits behind it";
                 w.line(`if ${negate_cond(ctx.scan_gate_cond(&cond))} { ${fail_stmt} }`);
             },
+            // A proven token waiting means the walk has consumed one.
+            Escape(cond) => if proven_run == 0 {
+                w.line(`if ${ctx.scan_gate_cond(&cond)} { ${ctx.scan_gate_member(&ctx.settings.scan_edge_field)} = -1; }`);
+            },
         }
     }
 }
@@ -3613,7 +3617,7 @@ fn collect_label_sites(op: &Op, at: i32, nested: bool, out: &mut List<LabelSite>
         },
         Group(g) => if let TokenOnly(to) = &g.shape {
             out.push(LabelSite {
-                binding: AltBinding { is_token: true, base: to.field, field: to.field },
+                binding: AltBinding { is_token: true, base: to.dedup_base, field: to.field },
                 at,
                 nested,
             });
@@ -3640,6 +3644,7 @@ fn enter_alt_label_scope(
     actions: &List<AltAction>,
     first_element: i32,
     ctx: &mut EmitContext,
+    left_operand: Option<String> = null,
 ) -> List<AltBinding>
     contract elements.len() == first_element + ops.len()
 {
@@ -3678,11 +3683,35 @@ fn enter_alt_label_scope(
         for let mut k = 2; bindings.iter_ref().any(|b| b.field == s.field); k += 1 {
             s.field = `${first}_${k}`;
         }
-        w.line(`let mut ${s.field}: ${shared_label_type(&s, ctx)} = ${if s.is_token { "-1" } else { "null" }};`);
+        let holds_left_operand = left_operand matches { Some(name) && name == s.base };
+        let init = if s.is_token {
+            "-1"
+        } else if holds_left_operand {
+            `Option::Some(${s.base})`
+        } else {
+            "null"
+        };
+        w.line(`let mut ${s.field}: ${shared_label_type(&s, ctx)} = ${init};`);
+        if holds_left_operand {
+            capture_left_operand(w, &s.capture, ctx);
+        }
         bindings.push(s);
     }
     ctx.cursor.set_alt_bindings(bindings);
     return outer;
+}
+
+/// Record the left operand of a left-recursive continuation as `field`'s
+/// capture: its tokens run from the rule's first to the one before the
+/// continuation, and its node is the row after the wrap opened at `_cp`.
+fn capture_left_operand(w: &mut CodeWriter, field: &String, ctx: &EmitContext) {
+    if ctx.captures_span(field) {
+        w.line(`${rule_span_lo_ref(field)} = ${RULE_START_TOK_LOCAL};`);
+        w.line(`${rule_span_hi_ref(field)} = p.pos - 1;`);
+    }
+    if ctx.captures_node(field) {
+        w.line(`${rule_node_ref(field)} = _cp + 1;`);
+    }
 }
 
 fn shared_label_type(label: &AltBinding, ctx: &EmitContext) -> String {
@@ -4316,7 +4345,8 @@ fn gen_lr_fn<S: AsStrSlice>(
         let mut_kw = if entry_needs_mut { "mut " } else { "" };
         w.line(`let ${mut_kw}vals = ${vals_struct_name(rule)} {};`);
     }
-    emit_span_capture(w, rule, ctx);
+    let left_operand_text = lr_alts.iter_ref().any(|a| ctx.captures_span(&a.prefix_self_ref.name));
+    emit_span_capture(w, rule, ctx, left_operand_text);
     if ctx.settings.emit_actions {
         emit_arg_stores(w, rule, ctx);
         if let Some(a) = &rule.init_action {
@@ -4554,6 +4584,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     if emits_vals {
         w.line(`let ${lr.prefix_self_ref.name} = _lr_acc;`);
         w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
+        capture_left_operand(w, &lr.prefix_self_ref.name, ctx);
     }
     // Interleave the alt's actions with the suffix ops. The LR rewrite strips
     // the leading self-ref (element 0), so an action at surface `before_index b`
@@ -4565,8 +4596,18 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     let ops = &lr.suffix.ops;
     // The suffix ops give the right operand's binding; the stripped leading
     // self-ref (`$l`) falls back to `prefix_self_ref.name`, which is exactly
-    // the `let {name} = _lr_acc;` bound above.
-    let outer = enter_alt_label_scope(w, &rule.alternatives[lr.alt_index].elements, ops, actions, 1, ctx);
+    // the `let {name} = _lr_acc;` bound above. A label the right operand
+    // rebinds holds the left operand until then.
+    let left_operand: Option<String> = if emits_vals { Option::Some(lr.prefix_self_ref.name) } else { null };
+    let outer = enter_alt_label_scope(
+        w,
+        &rule.alternatives[lr.alt_index].elements,
+        ops,
+        actions,
+        1,
+        ctx,
+        left_operand,
+    );
     let first_proven = element_proven_first(actions, proven_first, 1);
     for let mut i = 0; i < ops.len(); i += 1 {
         gen_alt_actions_at(w, actions, i + 1, ctx);
@@ -5390,7 +5431,7 @@ fn gen_prequel_in_scope<S: AsStrSlice>(
 }
 
 fn prequel_expected_names<S: AsStrSlice>(rule_name: S, at_entry: bool, ctx: &mut EmitContext) -> String {
-    if !ctx.follow.is_exact() {
+    if !ctx.follow.is_exact(rule_name) {
         return String::new();
     }
     let follow = ctx.follow.for_probe(rule_name);
@@ -5806,11 +5847,9 @@ fn gen_consume_token_group_op(
     name_counts: &mut List<[String, i32]>,
     proven: &List<i32>,
 ) {
-    let base = token_group_field_name(alts);
-    let _ = dedup_name(&base, name_counts);
+    let _ = dedup_name(&to.dedup_base, name_counts);
     let kinds = ctx.analysis.single_token_kinds(alts);
-    // A label on the set names its field, so the field is what a `$` reads.
-    let bind = leaf_binding(ctx, &to.field, &to.field);
+    let bind = leaf_binding(ctx, &to.dedup_base, &to.field);
     if proves(proven, &kinds) {
         w.line(`${bind}p.take();`);
         return;
@@ -7632,7 +7671,8 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut EmitConte
 }
 
 /// The branch body for alternatives sharing a first token: scan them all from
-/// the same start and commit to the winner.
+/// the same start and commit to the winner. Where a predicate can refuse every
+/// one (`refusable`), the winner may be none, which is no viable alternative.
 fn gen_group_scan_dispatch(
     w: &mut CodeWriter,
     alts: &List<Alternative>,
@@ -7643,12 +7683,18 @@ fn gen_group_scan_dispatch(
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
     decided: Option<String> = null,
+    refusable: bool = false,
 ) {
     let winner_var = if let Some(var) = decided {
         var;
     } else {
         gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts);
     };
+    if refusable {
+        w.begin(`if ${winner_var} < 0`);
+        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+        w.else_begin("else");
+    }
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_index = sorted_group[k];
         open_winner_arm(w, &winner_var, sorted_group, k);
@@ -7658,6 +7704,9 @@ fn gen_group_scan_dispatch(
         }
     }
     w.end();
+    if refusable {
+        w.end();
+    }
 }
 
 /// What the dispatch owes a token none of the alternatives admits. `Guaranteed`
@@ -7891,9 +7940,18 @@ fn gen_group_branch_body(
         let var = dedup_name("gd_atn", name_counts);
         let met = *ctx.decisions.at_site(site);
         w.line(`let ${var} = ${atn_predict_call(dec, &met, PickSide::Parse, ctx)};`);
-        gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
-            var,
-        ));
+        gen_group_scan_dispatch(
+            w,
+            alts,
+            g_op_alts,
+            g_op_scan_alts,
+            &sorted_group,
+            kind,
+            ctx,
+            name_counts,
+            Option::Some(var),
+            !met.is_empty(),
+        );
         return;
     }
     assert group_all_scannable(&sorted_group, alts, ctx);
@@ -7901,9 +7959,19 @@ fn gen_group_branch_body(
     if let Checks(dec) = atn {
         emit_atn_check(w, &AtnCheck { decision: dec, numbers: sorted_group }, &winner, &sorted_group, ctx);
     }
-    gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
-        winner,
-    ));
+    let refusable = sorted_group.iter_ref().any(|i| scan_body_is_gated(&g_op_scan_alts[*i]));
+    gen_group_scan_dispatch(
+        w,
+        alts,
+        g_op_alts,
+        g_op_scan_alts,
+        &sorted_group,
+        kind,
+        ctx,
+        name_counts,
+        Option::Some(winner),
+        refusable,
+    );
 }
 
 /// The LR loop's pick at decision `decision`, over `tokens` at `pos`, through

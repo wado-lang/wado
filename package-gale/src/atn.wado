@@ -42,6 +42,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
     ATN_TR_SET,
+    ATN_ACTION_EDGE,
 } from "./runtime/atn.wado";
 use { ATN_FAILED_ALT } from "./runtime/atn_predict.wado";
 use { HashMap } from "core:collections";
@@ -439,9 +440,9 @@ fn build_alternation(
     }
     for let mut i = 0; i < alts.len(); i += 1 {
         let operand_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
-        let preds = alts[i].predicates_before_actions();
-        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, operand_prec, &preds);
-        b.add_eps(start, guard_with(b, &predicates_before(&preds, 0), rule, seg.0));
+        let guards = alts[i].prediction_guards();
+        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, operand_prec, &guards);
+        b.add_eps(start, guard_with(b, &guards_before(&guards, 0), rule, seg.0));
         b.add_eps(seg.1, end);
     }
     if alts.is_empty() {
@@ -487,15 +488,18 @@ fn terminal_leaf_site(elem: &Element) -> i32 {
     };
 }
 
-/// The state ahead of `entry` that passes `preds` in turn: one epsilon edge per
-/// predicate, each labelled with the predicate's action id. Prediction closes
-/// an edge whose predicate is false at the decision, and every other reader
-/// sees a plain epsilon.
-fn guard_with(b: &mut AtnBuilder, preds: &List<AltAction>, rule: i32, entry: i32) -> i32 {
+/// The state ahead of `entry` that passes `guards` in turn: one epsilon edge
+/// each, labelled with a predicate's action id or `ATN_ACTION_EDGE`. Prediction
+/// closes an edge whose predicate is false at the decision unless the path
+/// crossed an action edge, and every other reader sees a plain epsilon.
+fn guard_with(b: &mut AtnBuilder, guards: &List<AltAction>, rule: i32, entry: i32) -> i32 {
     let mut at = entry;
-    for let mut k = preds.len() - 1; k >= 0; k -= 1 {
+    for let mut k = guards.len() - 1; k >= 0; k -= 1 {
+        let g = &guards[k];
+        let label = if g.kind matches { Action } { ATN_ACTION_EDGE } else { g.source.action_id };
+        assert g.source.action_id < ATN_ACTION_EDGE, "an action id must not collide with the action edge's label";
         let s = b.new_state(ATN_BASIC, rule);
-        b.add_trans(s, AtnTransition { kind: ATN_TR_EPSILON, target: at, label: preds[k].source.action_id });
+        b.add_trans(s, AtnTransition { kind: ATN_TR_EPSILON, target: at, label });
         at = s;
     }
     return at;
@@ -504,15 +508,16 @@ fn guard_with(b: &mut AtnBuilder, preds: &List<AltAction>, rule: i32, entry: i32
 /// Build a sequence of elements, threading each element's exit into the
 /// next element's entry. Returns `[entry, exit]`. A positive `operand_prec`
 /// makes the last element a prefix alternative's self-ref at that precedence.
-/// Each of `preds` past the left edge guards the element it sits before, or
-/// the exit: prediction answers it where every element ahead matched nothing.
+/// Each of `guards` past the left edge guards the element it sits before, or
+/// the exit: prediction answers a predicate where every element ahead matched
+/// nothing.
 fn build_sequence(
     b: &mut AtnBuilder,
     elements: &List<Element>,
     rule: i32,
     rule_index: &HashMap<String, i32>,
     operand_prec: i32 = 0,
-    preds: &List<AltAction> = &NO_PREDICATES,
+    guards: &List<AltAction> = &NO_GUARDS,
 ) -> [i32, i32] {
     if elements.is_empty() {
         let entry = b.new_state(ATN_BASIC, rule);
@@ -529,14 +534,14 @@ fn build_sequence(
         };
         if i == 0 {
             entry = seg.0;
-        } else if preds.is_empty() {
+        } else if guards.is_empty() {
             b.add_eps(cursor, seg.0);
         } else {
-            b.add_eps(cursor, guard_with(b, &predicates_before(preds, i), rule, seg.0));
+            b.add_eps(cursor, guard_with(b, &guards_before(guards, i), rule, seg.0));
         }
         cursor = seg.1;
     }
-    let tail = predicates_before(preds, elements.len());
+    let tail = guards_before(guards, elements.len());
     if !tail.is_empty() {
         let exit = b.new_state(ATN_BASIC, rule);
         b.add_eps(cursor, guard_with(b, &tail, rule, exit));
@@ -545,10 +550,10 @@ fn build_sequence(
     return [entry, cursor];
 }
 
-global NO_PREDICATES: List<AltAction> = [];
+global NO_GUARDS: List<AltAction> = [];
 
-fn predicates_before(preds: &List<AltAction>, index: i32) -> List<AltAction> {
-    return preds.iter_ref().filter(|a| a.before_index == index).map(|a| *a).collect();
+fn guards_before(guards: &List<AltAction>, index: i32) -> List<AltAction> {
+    return guards.iter_ref().filter(|a| a.before_index == index).map(|a| *a).collect();
 }
 
 /// Build a single element, returning its `[entry, exit]` state pair.
@@ -904,6 +909,8 @@ pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
                 detail = ` rule=${t.label} follow=s${t.follow} prec=${t.prec}`;
             } else if t.kind == ATN_TR_PRECEDENCE {
                 detail = ` prec=${t.prec}`;
+            } else if t.kind == ATN_TR_EPSILON && t.label == ATN_ACTION_EDGE {
+                detail = " action";
             } else if t.kind == ATN_TR_EPSILON && t.label >= 0 {
                 detail = ` pred=${t.label}`;
             }

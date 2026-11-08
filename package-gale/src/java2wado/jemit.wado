@@ -891,6 +891,9 @@ fn name_expr<S: AsStrSlice>(
         Unknown => if env.lexer {
             builtin::cold_path();
             Result::Err(`java2wado: unsupported lexer name '${name}': not a @members field`);
+        } else if is_upper_ident(name) {
+            // The parser class's own token-type constant, reached unqualified.
+            Result::Ok(`TK_${name}`);
         } else {
             Result::Ok(name.to_string());
         },
@@ -978,8 +981,8 @@ fn is_system_out(e: &JExpr) -> bool {
     };
 }
 
-/// An all-uppercase identifier (`NL`, `ELSE`, `LL_EXACT`): a token-type constant
-/// when qualified (`TParser.NL`). Digits and `_` allowed; needs one A-Z.
+/// An all-uppercase identifier (`NL`, `ELSE`, `LL_EXACT`): a token-type constant,
+/// qualified (`TParser.NL`) or not. Digits and `_` allowed; needs one A-Z.
 fn is_upper_ident<S: AsStrSlice>(name: S) -> bool {
     let mut has_alpha = false;
     for let c of name.chars() {

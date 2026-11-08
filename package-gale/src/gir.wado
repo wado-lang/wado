@@ -1266,6 +1266,8 @@ pub struct SimpleCstShape {
 
 pub struct TokenOnlyShape {
     pub field: String,
+    /// The name `field` was deduplicated from, which a label reference reads.
+    pub dedup_base: String,
 }
 
 pub struct SingleAltShape {
@@ -1344,6 +1346,10 @@ pub variant ScanGateStep {
     /// unless the scan meets it where the decision started: prediction answers a
     /// predicate it reaches before consuming a token, and no other.
     Check(String),
+    /// Where the condition holds, a path past an action that matched nothing:
+    /// prediction answers no predicate on it, so the scan stops answering at
+    /// the edge.
+    Escape(String),
 }
 
 pub struct ScanTokenElement {
