@@ -4,7 +4,7 @@
 
 use { HashMap, HashSet } from "core:collections";
 use { Extent } from "./extent.wado";
-use { GROUP_QUERY_ATTENTION, Graph, Node, case_named, settled } from "./graph.wado";
+use { GROUP_QUERY_ATTENTION, Graph, Node, settled } from "./graph.wado";
 use {
     ATTENTION_BIAS,
     Checked,
@@ -15,6 +15,7 @@ use {
     concat_axis,
     gather_axis,
     gemm_options,
+    is_elementwise,
     is_reduction,
     range_bounds,
     reduced_axes,
@@ -23,7 +24,6 @@ use {
 } from "./infer.wado";
 use { SpelledAttention, branches, lowerings } from "./lowering.wado";
 use { Poly } from "./poly.wado";
-use { BinaryOp, UnaryOp } from "./runtime/tensor.wado";
 use { Axis, Shape } from "./shape.wado";
 
 /// The name of the length that counts the rows the lengths hold, which no
@@ -147,7 +147,7 @@ pub fn folded_rows(shape: &Shape, out: &Shape, rows: &String) -> Option<Shape> {
 /// apart: an elementwise operation, a regrouping, or a gather by them.
 pub fn keeps_lifted(node: &Node, checked: &Checked, read: &List<String>) -> bool {
     let op = node.op;
-    return elementwise(node)
+    return is_elementwise(node)
         || op == "Reshape"
         || op == "Flatten"
         || op == "Unsqueeze"
@@ -155,15 +155,6 @@ pub fn keeps_lifted(node: &Node, checked: &Checked, read: &List<String>) -> bool
         || op == "Gather"
             && !read.contains(&node.inputs[0])
             && settled(gather_axis(node, checked.shapes[node.inputs[0]].rank())) == 0;
-}
-
-/// Whether `node` computes each element from its operands' at that position.
-pub fn elementwise(node: &Node) -> bool {
-    let op = node.op;
-    return op == "Where"
-        || op == "Cast"
-        || case_named::<UnaryOp>(&op) matches { Some(_) }
-        || case_named::<BinaryOp>(&op) matches { Some(_) } && node.attr("axis") matches { None };
 }
 
 /// The rows' own lengths as one batch reads them: along `rows`, counted by
@@ -365,7 +356,7 @@ impl Judge {
             if !keeps_lifted(node, checked, &read) {
                 return lifted_read(lifted, &read[0]);
             }
-            if !elementwise(node) || !out.axes.into_iter().any(|a| a.name == self.rows) {
+            if !is_elementwise(node) || !out.axes.into_iter().any(|a| a.name == self.rows) {
                 lifted.insert(node.outputs[0]);
             } else {
                 for let tensor of read {

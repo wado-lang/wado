@@ -695,7 +695,11 @@ fn row_lengths(
 ) -> List<i32> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let mut lengths = List::<i32>::with_capacity(rows);
     let held = match length {
-        Some(l) => Option::Some(g.host(l).data),
+        Some(l) => {
+            let data = g.host(l).data;
+            assert data.len() == 1 || data.len() == rows, "a length holds one for every row, or one they share";
+            Option::Some(data);
+        },
         None => null,
     };
     for let row of 0..<rows {

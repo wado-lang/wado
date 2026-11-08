@@ -2089,6 +2089,15 @@ pub fn is_unary_elementwise(op: &String) -> bool {
     return *op == "Identity" || *op == "Cast" || is_unary_operator(op);
 }
 
+/// Whether `node` computes each element from its operands' at that position,
+/// which numpy's broadcast aligns at their ends.
+pub fn is_elementwise(node: &Node) -> bool {
+    let op = node.op;
+    return is_unary_elementwise(&op)
+        || is_binary_elementwise(&op) && node.attr("axis") matches { None }
+        || op == "Where";
+}
+
 /// Operand `index`'s shape. `operands_given` proved it defined, and a folded one
 /// is materialized before any rule reads it.
 fn operand_at(node: &Node, shapes: &HashMap<String, Shape>, index: i32) -> Shape {

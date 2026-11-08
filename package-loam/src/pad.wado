@@ -4,11 +4,12 @@
 //! devices.md § "An extent that varies is a capacity".
 
 use { HashMap } from "core:collections";
-use { GROUP_QUERY_ATTENTION, Graph, Node, is_binary_elementwise } from "./graph.wado";
+use { GROUP_QUERY_ATTENTION, Graph, Node } from "./graph.wado";
 use {
     Checked,
     attention_options,
     gemm_options,
+    is_elementwise,
     is_unary_elementwise,
     owed_presumed,
     split_axis,
@@ -212,11 +213,11 @@ fn carried(
     let op = node.op;
     let shapes = &checked.shapes;
     if op == "Reshape" || op == "Flatten" || op == "Squeeze" || op == "Unsqueeze" {
-        // A folded operand stage 0 gives no axes holds no padding.
-        let Some(x) = shapes.get(node.inputs[0]) else {
-            return Result::Ok(null);
-        };
-        return regrouped(&x, merged.get(node.inputs[0]).map(|m| m.merges), &shapes[node.outputs[0]]);
+        return regrouped(
+            &shapes[node.inputs[0]],
+            merged.get(node.inputs[0]).map(|m| m.merges),
+            &shapes[node.outputs[0]],
+        );
     }
     let mut operands: List<[i32, Merges]> = [];
     for let [at, t] of node.inputs.into_iter().enumerate() {
@@ -246,7 +247,7 @@ fn carried(
         }
         return Result::Ok(Option::Some(merges));
     }
-    if is_binary_elementwise(&op) && node.attr("axis") matches { None } || op == "Where" {
+    if is_elementwise(node) {
         // Numpy's broadcast aligns the operands at their ends.
         for let k of 0..<out.rank() {
             let mut agreed: Option<Option<List<Poly>>> = null;
