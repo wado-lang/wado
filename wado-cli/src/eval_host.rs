@@ -1,5 +1,5 @@
 //! The `wado test` host for `core:eval`: compile a source string as a command,
-//! run it with nothing but stdout, stderr, exit and a zeroed insecure
+//! run it with nothing but stdout, stderr, exit and a fixed-seed insecure
 //! `wasi:random`, and cache the outcome.
 //!
 //! See WEP 2026-09-26 (Eval).
@@ -669,7 +669,7 @@ async fn run(engine: &Engine, linker: &Linker<Program>, wasm: &[u8], fuel: u64) 
     let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
     let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
     let mut builder = WasiCtx::builder();
-    random::zeroed(&mut builder);
+    random::fixed(&mut builder);
     builder.stdout(stdout.clone());
     builder.stderr(stderr.clone());
     let mut store = Store::new(

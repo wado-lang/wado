@@ -31,7 +31,7 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
   per-invocation cache state (`metadata.rs`). `wado` feeds the pipeline its own
   generator provider; `local.rs` feeds it the generators a fixture names,
   each compiled after its own invocations have run.
-- `random.rs` — the zeroed `wasi:random/insecure` and `insecure-seed` that
+- `random.rs` — the fixed-seed `wasi:random/insecure` and `insecure-seed` that
   a Kiln generator, a `core:eval` program and a test get, so each stays a
   function of its input.
 - `sync.rs` — how production code locks a mutex and joins a task or thread. A

@@ -117,10 +117,11 @@ enum InsecureRandom {
     /// against denial of service, so a guest serving untrusted input needs it
     /// unpredictable.
     Host,
-    /// Zeros, so a test's outcome, and what its run measures (fuel, coverage, a
-    /// profile), is a function of the program: `HashMap::new` hashes under
-    /// `insecure-seed`, and a seed changes how far its probes go.
-    Zeroed,
+    /// The same on every run, so a test's outcome, and what its run measures
+    /// (fuel, coverage, a profile), is a function of the program:
+    /// `HashMap::new` hashes under `insecure-seed`, and a seed changes how far
+    /// its probes go.
+    Fixed,
 }
 
 /// The store data every guest has.
@@ -179,7 +180,7 @@ impl GuestState {
     /// guest's `Store` is done with them.
     ///
     /// A test serves no untrusted input, so its insecure randomness is
-    /// [`InsecureRandom::Zeroed`].
+    /// [`InsecureRandom::Fixed`].
     ///
     /// # Errors
     ///
@@ -199,7 +200,7 @@ impl GuestState {
                 stdout: stdout.clone(),
                 stderr: stderr.clone(),
             },
-            InsecureRandom::Zeroed,
+            InsecureRandom::Fixed,
         );
         Ok((state, stdout, stderr))
     }
@@ -230,8 +231,8 @@ impl GuestState {
         let mut builder = WasiCtx::builder();
         match insecure_random {
             InsecureRandom::Host => {}
-            InsecureRandom::Zeroed => {
-                random::zeroed(&mut builder);
+            InsecureRandom::Fixed => {
+                random::fixed(&mut builder);
             }
         }
         let guest_stdio = match stdio {
