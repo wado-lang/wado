@@ -1709,11 +1709,11 @@ fn plan_clones<'s>(
         );
         let id = FuncId::new(next_id);
         next_id += 1;
-        // A clone reached by another path whose signature has since moved
-        // keeps the key; this one is minted beside it.
-        if cached.is_none() {
-            state.clones.insert(key.clone(), id);
-        }
+        // A cached clone whose signature has since moved no longer serves a
+        // call to the callee, so this one takes its key. Left with the key, it
+        // sends every later call through a recursion to a fresh clone, whose
+        // body calls the callee again, round after round.
+        state.clones.insert(key.clone(), id);
         state.specs.insert(id, key);
         minted_from.insert(id, site.callee);
         state.per_callee.insert(site.callee, ordinal + 1);
