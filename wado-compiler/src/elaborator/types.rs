@@ -250,12 +250,7 @@ impl VariantCaseData {
 /// Variant info: module source, type parameters, and cases
 #[derive(Clone)]
 pub(crate) struct VariantInfo {
-    /// Canonical type name (original declaration name, not import alias).
-    /// `pub(crate)` alongside `module_source` so the Semantics-based effect
-    /// checker can key its payload map by the declaration, now that the
-    /// registry no longer spells one out in its key.
-    pub(crate) name: String,
-    pub(crate) module_source: ModuleSource,
+    pub(super) module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
     /// The declaration's real type parameters, like
@@ -298,7 +293,6 @@ impl VariantInfo {
         type_param_type_ids: Vec<TypeId>,
     ) -> Self {
         Self {
-            name: decl.name.clone(),
             module_source,
             defined_at: decl.id,
             type_params: RealTypeParams::of(&decl.type_params),

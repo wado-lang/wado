@@ -924,7 +924,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // above — so the registered `TypeId`s remain valid.
                 (*snap_state.tysys.builtin_registry).clone()
             } else {
-                BuiltinRegistry::build_from_stdlib(&type_table)
+                BuiltinRegistry::build(&modules[&ModuleSource::builtin()], &type_table)
             };
             // Stdlib wasm assets (e.g. `core:libm.wat`) are already in
             // `snapshot.state.tysys.builtin_registry`.

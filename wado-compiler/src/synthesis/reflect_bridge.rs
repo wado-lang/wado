@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeArgMap, TypeId};
@@ -113,7 +114,7 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
     // The subject's mangle is the bridge's identity, so a type interned twice
     // collapses onto one helper.
     let mut seen_subjects: hashmap::IndexSet<String> = hashmap::IndexSet::default();
-    let instances: Vec<(TypeId, String, ModuleSource, Vec<TypeId>)> = {
+    let instances: Vec<(TypeId, DefId, Vec<TypeId>)> = {
         let mut tt = flat.type_table.borrow_mut();
         let variants: Vec<TypeId> = tt
             .iter_type_ids()
@@ -139,26 +140,17 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                 }
                 seen_subjects
                     .insert(tt.mangle_type_arg_for_generic(id))
-                    .then(|| {
-                        (
-                            id,
-                            tt.decl_name(def).to_string(),
-                            tt.def_module(def).clone(),
-                            type_args,
-                        )
-                    })
+                    .then_some((id, def, type_args))
             })
             .collect()
     };
 
-    for (subject, name, module_source, type_args) in instances {
-        let Some(decl) = flat
+    for (subject, def, type_args) in instances {
+        let decl = flat
             .variants
             .iter()
-            .find(|v| v.name == name && v.module_source == module_source)
-        else {
-            continue;
-        };
+            .find(|v| v.def == def)
+            .expect("a variant instance's declaration is in the package");
         let substitution: TypeArgMap = decl
             .type_params
             .iter()
@@ -197,7 +189,7 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
             subject,
             span,
         ));
-        push_helpers(helpers, &module_source, generated);
+        push_helpers(helpers, &decl.module_source, generated);
     }
 }
 
