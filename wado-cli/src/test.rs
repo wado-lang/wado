@@ -36,7 +36,7 @@ use crate::knobs::{
 use crate::manifest::package_root;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
-use crate::runtime::{self, InsecureRandom, ProfileMode, WasiState};
+use crate::runtime::{self, ProfileMode, WasiState};
 use crate::test_cache::{self, Tally, TestCache};
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
@@ -1140,8 +1140,11 @@ fn load_module(
                     let plans = read_from_component(&artifact.wasm)?;
                     Some((Arc::clone(run), run.register(&artifact.path, &plans)?))
                 });
+            // A file without tests runs nothing, so what it imports cannot
+            // decide its outcome.
             let cache_reads = artifact.reads.filter(|_| {
-                test_cache::cacheable(component_ty.imports(&engine).map(|(name, _)| name))
+                tests.is_empty()
+                    || test_cache::cacheable(component_ty.imports(&engine).map(|(name, _)| name))
             });
             reporter.on_load(
                 &artifact.path,
@@ -1395,9 +1398,9 @@ async fn run_load_stage(
             } => {
                 tally.ok += 1;
                 if module.tests.is_empty() {
-                    // Reported as `skip` on every run, never as `cached`.
                     tally.skip += 1;
-                } else if let Some(reads) = cache_reads {
+                }
+                if let Some(reads) = cache_reads {
                     tally
                         .cacheable
                         .push((module.path.clone(), reads, module.tests.len()));
@@ -1797,11 +1800,6 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             Arc::clone(&clock),
         ),
         module.process.clone(),
-        if module.coverage.is_some() || module.engine.get_consume_fuel() {
-            InsecureRandom::Fixed
-        } else {
-            InsecureRandom::Host
-        },
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),

@@ -112,14 +112,15 @@ enum Stdio {
 }
 
 /// What a [`GuestState`]'s `wasi:random/insecure` and `insecure-seed` answer.
-pub enum InsecureRandom {
+enum InsecureRandom {
     /// The host's randomness. `insecure-seed` seeds a hash map's protection
     /// against denial of service, so a guest serving untrusted input needs it
     /// unpredictable.
     Host,
-    /// The same on every run, so what a test's run measures (fuel, coverage, a
-    /// profile) is a function of the program: `HashMap::new` hashes under
-    /// `insecure-seed`, and a seed changes how far its probes go.
+    /// The same on every run, so a test's outcome, and what its run measures
+    /// (fuel, coverage, a profile), is a function of the program:
+    /// `HashMap::new` hashes under `insecure-seed`, and a seed changes how far
+    /// its probes go.
     Fixed,
 }
 
@@ -178,6 +179,9 @@ impl GuestState {
     /// deadlock the caller, who only reads the pipes back after the
     /// guest's `Store` is done with them.
     ///
+    /// A test serves no untrusted input, so its insecure randomness is
+    /// [`InsecureRandom::Fixed`].
+    ///
     /// # Errors
     ///
     /// Returns an error if a preopened directory cannot be opened.
@@ -185,7 +189,6 @@ impl GuestState {
         preopened_dirs: &[(String, String)],
         args: &[String],
         process: ProcessGrant,
-        insecure_random: InsecureRandom,
     ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
@@ -197,7 +200,7 @@ impl GuestState {
                 stdout: stdout.clone(),
                 stderr: stderr.clone(),
             },
-            insecure_random,
+            InsecureRandom::Fixed,
         );
         Ok((state, stdout, stderr))
     }

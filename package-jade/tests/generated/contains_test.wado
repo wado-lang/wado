@@ -9,7 +9,6 @@ test "contains keyword validation: array with item matching schema (5) is valid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"minimum":5}}"#,
         #"[3,4,5]"#,
         true,
-        [],
     );
 }
 
@@ -18,7 +17,6 @@ test "contains keyword validation: array with item matching schema (6) is valid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"minimum":5}}"#,
         #"[3,4,6]"#,
         true,
-        [],
     );
 }
 
@@ -27,7 +25,6 @@ test "contains keyword validation: array with two items matching schema (5, 6) i
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"minimum":5}}"#,
         #"[3,4,5,6]"#,
         true,
-        [],
     );
 }
 
@@ -36,7 +33,6 @@ test "contains keyword validation: array without items matching schema is invali
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"minimum":5}}"#,
         #"[2,3,4]"#,
         false,
-        [],
     );
 }
 
@@ -45,7 +41,6 @@ test "contains keyword validation: empty array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"minimum":5}}"#,
         #"[]"#,
         false,
-        [],
     );
 }
 
@@ -54,7 +49,6 @@ test "contains keyword validation: not array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"minimum":5}}"#,
         #"{}"#,
         true,
-        [],
     );
 }
 
@@ -63,7 +57,6 @@ test "contains keyword with const keyword: array with item 5 is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":5}}"#,
         #"[3,4,5]"#,
         true,
-        [],
     );
 }
 
@@ -72,7 +65,6 @@ test "contains keyword with const keyword: array with two items 5 is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":5}}"#,
         #"[3,4,5,5]"#,
         true,
-        [],
     );
 }
 
@@ -81,7 +73,6 @@ test "contains keyword with const keyword: array without item 5 is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":5}}"#,
         #"[1,2,3,4]"#,
         false,
-        [],
     );
 }
 
@@ -90,7 +81,6 @@ test "contains keyword with boolean schema true: any non-empty array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":true}"#,
         #"["foo"]"#,
         true,
-        [],
     );
 }
 
@@ -99,7 +89,6 @@ test "contains keyword with boolean schema true: empty array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":true}"#,
         #"[]"#,
         false,
-        [],
     );
 }
 
@@ -108,7 +97,6 @@ test "contains keyword with boolean schema false: any non-empty array is invalid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":false}"#,
         #"["foo"]"#,
         false,
-        [],
     );
 }
 
@@ -117,7 +105,6 @@ test "contains keyword with boolean schema false: empty array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":false}"#,
         #"[]"#,
         false,
-        [],
     );
 }
 
@@ -126,7 +113,6 @@ test "contains keyword with boolean schema false: non-arrays are valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":false}"#,
         #""contains does not apply to strings""#,
         true,
-        [],
     );
 }
 
@@ -135,7 +121,6 @@ test "items + contains: matches items, does not match contains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"multipleOf":2},"contains":{"multipleOf":3}}"#,
         #"[2,4,8]"#,
         false,
-        [],
     );
 }
 
@@ -144,7 +129,6 @@ test "items + contains: does not match items, matches contains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"multipleOf":2},"contains":{"multipleOf":3}}"#,
         #"[3,6,9]"#,
         false,
-        [],
     );
 }
 
@@ -153,7 +137,6 @@ test "items + contains: matches both items and contains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"multipleOf":2},"contains":{"multipleOf":3}}"#,
         #"[6,12]"#,
         true,
-        [],
     );
 }
 
@@ -162,7 +145,6 @@ test "items + contains: matches neither items nor contains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","items":{"multipleOf":2},"contains":{"multipleOf":3}}"#,
         #"[1,5]"#,
         false,
-        [],
     );
 }
 
@@ -171,7 +153,6 @@ test "contains with false if subschema: any non-empty array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"if":false,"else":true}}"#,
         #"["foo"]"#,
         true,
-        [],
     );
 }
 
@@ -180,7 +161,6 @@ test "contains with false if subschema: empty array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"if":false,"else":true}}"#,
         #"[]"#,
         false,
-        [],
     );
 }
 
@@ -189,6 +169,5 @@ test "contains with null instance elements: allows null items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"type":"null"}}"#,
         #"[null]"#,
         true,
-        [],
     );
 }
