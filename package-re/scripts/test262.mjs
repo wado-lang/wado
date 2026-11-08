@@ -1,10 +1,11 @@
 // Writes tests/generated/test262_test.wado: each pattern test262 says the
 // grammar rejects, as a parse-phase SyntaxError, and that Node's RegExp
-// rejects with the `u` flag too, held to Re's rejecting it. test262 is read as
-// data: the literal a test evaluates, and the metadata that says it must fail.
-// Node only confirms that the `u` grammar is the one rejecting it, since a
-// test without the flag may fail for want of Annex B instead. A property
-// `core:icu` knows is held to Re's accepting it instead.
+// rejects with the `u` flag too, held to both Re and validate_ecma262_syntax
+// rejecting it. test262 is read as data: the literal a test evaluates, and the
+// metadata that says it must fail. Node only confirms that the `u` grammar is
+// the one rejecting it, since a test without the flag may fail for want of
+// Annex B instead. A property `core:icu` knows is held to both accepting it
+// instead.
 //
 // Run from the repository root, with vendor/test262 checked out:
 // mise run test262-re
@@ -57,7 +58,7 @@ const lines = [
   "// RegExp rejects with the `u` flag too. Regenerate with `mise run test262-re`;",
   "// do not edit.",
   "",
-  'use { Regex } from "../../src/lib.wado";',
+  'use { Regex, validate_ecma262_syntax } from "../../src/lib.wado";',
 ];
 for (const dir of dirs) {
   for (const path of files(join(corpus, dir))) {
@@ -70,11 +71,13 @@ for (const dir of dirs) {
       continue;
     }
     const name = relative(corpus, path);
-    if (knownToIcu(name)) {
-      lines.push("", `// core:icu knows the property, so Re accepts it.`, `test ${wado(name)} {`, `    assert Regex::new(${wadoPattern(pattern)}).is_ok();`, "}");
-    } else {
-      lines.push("", `test ${wado(name)} {`, `    assert Regex::new(${wadoPattern(pattern)}).is_err();`, "}");
+    const known = knownToIcu(name);
+    const verdict = known ? "is_ok" : "is_err";
+    const p = wadoPattern(pattern);
+    if (known) {
+      lines.push("", `// core:icu knows the property, so Re accepts it.`);
     }
+    lines.push("", `test ${wado(name)} {`, `    assert Regex::new(${p}).${verdict}();`, `    assert validate_ecma262_syntax(${p}).${verdict}();`, "}");
   }
 }
 writeFileSync(join(root, "tests/generated/test262_test.wado"), `${lines.join("\n")}\n`);
