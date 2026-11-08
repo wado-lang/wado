@@ -2246,28 +2246,21 @@ impl<'a> Reify<'a> {
             handed_type,
             span,
         );
-        // One binding takes the payload as the pattern binding it stands for
-        // would: shared while immutable, copied where it may be written.
+        // One binding is a `let` of its own, which the value-copy analysis
+        // shares with the scrutinee where no write reaches it.
         let kind = match pattern {
             TirPattern::Binding {
                 name,
                 local_index,
                 type_id,
-            } => {
-                let is_mut = ctx.locals[local_index as usize].is_mut;
-                TirStmtKind::Let {
-                    name,
-                    local_index,
-                    is_mut,
-                    type_id,
-                    value,
-                    storage: if is_mut {
-                        LetStorage::Planned
-                    } else {
-                        LetStorage::Aliased
-                    },
-                }
-            }
+            } => TirStmtKind::Let {
+                name,
+                local_index,
+                is_mut: ctx.locals[local_index as usize].is_mut,
+                type_id,
+                value,
+                storage: LetStorage::Planned,
+            },
             pattern => TirStmtKind::LetDestructure { pattern, value },
         };
         TirStmt::new(kind, span)
