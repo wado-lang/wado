@@ -259,7 +259,7 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
     fn extend(&mut self, expr: &Expr, place: bool) {
         match expr {
             Expr::Unary(u) if matches!(u.op, UnaryOp::Ref | UnaryOp::MutRef) => {
-                self.extend(&u.expr, true)
+                self.extend(&u.expr, true);
             }
             Expr::Unary(u) if place && u.op == UnaryOp::Deref => self.extend(&u.expr, true),
             Expr::FieldAccess(fa) if place => self.extend(&fa.expr, true),
@@ -274,7 +274,7 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
             }
             // A constant index into a tuple is its field.
             Expr::Index(ix) if place && self.facts.indexes_tuple(&ix.expr) => {
-                self.extend(&ix.expr, true)
+                self.extend(&ix.expr, true);
             }
             // An element is a place in what it is read from, not a temporary.
             Expr::Index(_) => {}
