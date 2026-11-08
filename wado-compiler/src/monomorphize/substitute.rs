@@ -144,7 +144,9 @@ impl Monomorphizer {
                         .copied()
                         .or_else(|| substitution.get(&pack).copied())
                         .unwrap_or_else(|| {
-                            panic!("TypePack `..{pack_name}` ({pack:?}) not found in substitution map")
+                            panic!(
+                                "TypePack `..{pack_name}` ({pack:?}) not found in substitution map"
+                            )
                         });
                     match mapped_elem {
                         // Mapped pack: substitute `elem` once per source
@@ -180,10 +182,14 @@ impl Monomorphizer {
                 if substitution.is_empty() {
                     return type_id;
                 }
-                let mut indexed_args: Vec<(TypeParamId, TypeId)> =
-                    substitution.iter().map(|(&param, &tid)| (param, tid)).collect();
-                indexed_args.sort_by_key(|(param, _)| param.index);
-                let args: Vec<TypeId> = indexed_args.into_iter().map(|(_, tid)| tid).collect();
+                // The declaration's own type stands for it at its own parameters.
+                let mut own: Vec<(TypeParamId, TypeId)> = substitution
+                    .iter()
+                    .filter(|(param, _)| param.owner == def)
+                    .map(|(&param, &tid)| (param, tid))
+                    .collect();
+                own.sort_by_key(|(param, _)| param.index);
+                let args: Vec<TypeId> = own.into_iter().map(|(_, tid)| tid).collect();
                 type_table
                     .find_generic_instance(def, &args)
                     .unwrap_or(type_id)

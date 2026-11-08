@@ -1952,8 +1952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type =
-                                self.substitute_in_frame(*ftype, decl, &type_args);
+                            let concrete_type = self.substitute_in_frame(*ftype, decl, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }

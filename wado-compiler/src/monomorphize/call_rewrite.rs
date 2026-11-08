@@ -134,7 +134,11 @@ fn instance_arg(
     key: &InstantiationKey,
     param: TypeParamId,
 ) -> Option<TypeId> {
-    if template.impl_type_params.iter().any(|p| p.id == Some(param)) {
+    if template
+        .impl_type_params
+        .iter()
+        .any(|p| p.id == Some(param))
+    {
         return key.impl_type_args.get(param.index as usize).copied();
     }
     let at = template

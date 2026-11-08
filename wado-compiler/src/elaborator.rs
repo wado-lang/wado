@@ -1822,8 +1822,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (decl_id, type_params, methods, is_resource) in decl_ops {
             let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
             let owner = defs.def_at(decl_id);
-            let ops =
-                self.resolve_effect_ops(owner, &type_params, &methods, is_resource.then_some(owner));
+            let ops = self.resolve_effect_ops(
+                owner,
+                &type_params,
+                &methods,
+                is_resource.then_some(owner),
+            );
             for method in &methods {
                 let op = defs.def_at(method.id);
                 self.sem

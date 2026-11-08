@@ -3016,7 +3016,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (slot, ty, scope) in written {
             let resolved =
                 self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
-            slots.insert(TypeParamId { owner: decl, index: slot }, resolved);
+            slots.insert(
+                TypeParamId {
+                    owner: decl,
+                    index: slot,
+                },
+                resolved,
+            );
         }
         slots
     }

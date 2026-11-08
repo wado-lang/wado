@@ -2284,11 +2284,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // for itself.
             let bound = match receiver_type_id {
                 Some(recv_id) => recv_id,
-                None => scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(impl_ref.0, name.clone(), slot),
+                None => scope.tysys.type_table.borrow_mut().make_type_param(
+                    impl_ref.0,
+                    name.clone(),
+                    slot,
+                ),
             };
             Self::bind_type_param(
                 &mut scope,

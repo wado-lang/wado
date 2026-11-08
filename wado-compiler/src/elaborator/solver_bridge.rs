@@ -2026,37 +2026,37 @@ impl SolverBridge {
                 .flatten()
                 .map(|declared| self.lowering.bound_named(declared, &param));
             let scoped = binder.bounds.iter().map(|scoped| {
-                    let self_type = scoped
-                        .self_binding
-                        .filter(|_| scoped.bound.writes_self())
-                        .map(|binding| self.lowering.type_id(&table, binding.type_id, &placed))
-                        .transpose();
-                    // A bound naming no trait was reported where it is written.
-                    tysys
-                        .resolutions
-                        .bound_decl(&scoped.bound)
-                        .ok_or(Unsaid::Failed)
-                        .and_then(|def| {
-                            let self_type = self_type?;
-                            let space = Written {
-                                resolutions: &tysys.resolutions,
-                                param: &param,
-                                declaring: &declaring,
-                                self_type: self_type.as_ref(),
-                            };
-                            let args = said(
-                                scoped
-                                    .bound
-                                    .type_args
-                                    .iter()
-                                    .map(|arg| self.lowering.ast_type(arg, &space)),
-                            )?;
-                            Ok(ParamBound {
-                                trait_: self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?,
-                                args,
-                            })
+                let self_type = scoped
+                    .self_binding
+                    .filter(|_| scoped.bound.writes_self())
+                    .map(|binding| self.lowering.type_id(&table, binding.type_id, &placed))
+                    .transpose();
+                // A bound naming no trait was reported where it is written.
+                tysys
+                    .resolutions
+                    .bound_decl(&scoped.bound)
+                    .ok_or(Unsaid::Failed)
+                    .and_then(|def| {
+                        let self_type = self_type?;
+                        let space = Written {
+                            resolutions: &tysys.resolutions,
+                            param: &param,
+                            declaring: &declaring,
+                            self_type: self_type.as_ref(),
+                        };
+                        let args = said(
+                            scoped
+                                .bound
+                                .type_args
+                                .iter()
+                                .map(|arg| self.lowering.ast_type(arg, &space)),
+                        )?;
+                        Ok(ParamBound {
+                            trait_: self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?,
+                            args,
                         })
-                });
+                    })
+            });
             let mut ids = Vec::new();
             if !binder.is_affine
                 && let Some(copyable) = self.program.copyable

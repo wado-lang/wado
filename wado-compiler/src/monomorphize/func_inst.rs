@@ -14,8 +14,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole,
-    transpose_tuple_expr,
+    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};

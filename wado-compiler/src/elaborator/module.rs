@@ -257,12 +257,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_def = method_scope.tysys.def_at(method.id);
                     for (i, param) in method.type_params.iter().enumerate() {
                         let idx = (offset + i) as u32;
-                        let type_id = method_scope.tysys.type_table.borrow_mut().make_declared_param(
-                            method_def,
-                            param.name.clone(),
-                            idx,
-                            param.is_pack,
-                        );
+                        let type_id = method_scope
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_declared_param(
+                                method_def,
+                                param.name.clone(),
+                                idx,
+                                param.is_pack,
+                            );
                         method_scope.bind_param(
                             &param.name,
                             BinderInScope::declared(idx, type_id, param),

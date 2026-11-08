@@ -32,8 +32,7 @@ use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
     RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr,
     TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId,
-    positional_substitution,
-    projection_arguments, range_item, solve_row,
+    positional_substitution, projection_arguments, range_item, solve_row,
 };
 
 #[derive(Debug, Clone)]
@@ -1123,7 +1122,8 @@ impl TypeTable {
 
     fn collect_type_params(&self, id: TypeId, found: &mut TypeArgMap) {
         match self.get(id) {
-            ResolvedType::TypeParam { id: param, .. } | ResolvedType::TypePack { id: param, .. } => {
+            ResolvedType::TypeParam { id: param, .. }
+            | ResolvedType::TypePack { id: param, .. } => {
                 found.insert(*param, id);
             }
             // Its walk's unroll answers it, at the walk's slot.
@@ -2568,7 +2568,10 @@ impl TypeTable {
             // parameters, which are free there as they are outside any template.
             ResolvedType::TypeParam { id, .. } => {
                 return open.last().is_some_and(|(template, _)| {
-                    assert_eq!(id.owner, *template, "a member mentions its template's parameters");
+                    assert_eq!(
+                        id.owner, *template,
+                        "a member mentions its template's parameters"
+                    );
                     !params.is_empty() && params[id.index as usize]
                 });
             }
@@ -2692,7 +2695,10 @@ impl TypeTable {
     ) -> bool {
         let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
             ResolvedType::TypeParam { id, .. } => frame.and_then(|(template, args)| {
-                assert_eq!(id.owner, template, "a member names its template's parameters");
+                assert_eq!(
+                    id.owner, template,
+                    "a member names its template's parameters"
+                );
                 args.get(id.index as usize).copied()
             }),
             _ => Some(ty),
@@ -2777,12 +2783,10 @@ impl TypeTable {
             | ResolvedType::Unknown
             | ResolvedType::Error => return true,
         };
-        members
-            .into_iter()
-            .any(|member| {
-                let frame = template.as_ref().map(|(def, args)| (*def, args.as_slice()));
-                self.reaches_in(member, target, frame, walked)
-            })
+        members.into_iter().any(|member| {
+            let frame = template.as_ref().map(|(def, args)| (*def, args.as_slice()));
+            self.reaches_in(member, target, frame, walked)
+        })
     }
 
     /// The interned type of variant `def` itself, applied to no arguments.
@@ -3476,12 +3480,7 @@ impl TypeTable {
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
     /// parameter as its argument in `args`, which name a prefix of them.
-    fn frame_slots(
-        &self,
-        frame: &TraitFrame,
-        base: TypeId,
-        args: &[TypeId],
-    ) -> TypeArgMap {
+    fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
         assert!(
             args.len() <= frame.params.len(),
             "a trait is reached at no more arguments than it has parameters"
@@ -3497,8 +3496,9 @@ impl TypeTable {
 
     /// Which parameter `param`, a declaration's own parameter, is.
     pub fn declared_param(&self, param: TypeId) -> TypeParamId {
-        self.type_param_id(param)
-            .unwrap_or_else(|| unreachable!("expected a type parameter, found {:?}", self.get(param)))
+        self.type_param_id(param).unwrap_or_else(|| {
+            unreachable!("expected a type parameter, found {:?}", self.get(param))
+        })
     }
 
     /// `args` filling `params`, a declaration's own parameters, pairwise.
@@ -3975,12 +3975,10 @@ impl TypeTable {
                 .all(|(_, entry)| entry.answer == last.answer)
                 .then_some((trait_decl, last));
         };
-        let mut answers = candidates
-            .iter()
-            .map(|(_, entry)| {
-                let slots = self.entry_slots(entry, base_decl, &frame)?;
-                Some(self.substitute_type_params(entry.answer, &slots))
-            });
+        let mut answers = candidates.iter().map(|(_, entry)| {
+            let slots = self.entry_slots(entry, base_decl, &frame)?;
+            Some(self.substitute_type_params(entry.answer, &slots))
+        });
         let first = answers.next()??;
         answers
             .all(|answer| answer == Some(first))
@@ -4265,7 +4263,12 @@ impl TypeTable {
 
     /// [`Self::substitute_type_params`] with `args` filling `owner`'s
     /// parameters in declaration order.
-    pub fn substitute_positional(&mut self, type_id: TypeId, owner: DefId, args: &[TypeId]) -> TypeId {
+    pub fn substitute_positional(
+        &mut self,
+        type_id: TypeId,
+        owner: DefId,
+        args: &[TypeId],
+    ) -> TypeId {
         self.substitute_type_params(type_id, &positional_substitution(owner, args))
     }
 
@@ -6541,11 +6544,7 @@ impl TypeTable {
     /// [`Self::bind_type_params`] for one pattern, where a tuple pattern may
     /// spread a pack (`[A, ..F]`): the pack takes the elements its neighbours
     /// leave, as one tuple.
-    fn bind_projection_pattern(
-        &mut self,
-        pattern: TypeId,
-        concrete: TypeId,
-    ) -> Option<TypeArgMap> {
+    fn bind_projection_pattern(&mut self, pattern: TypeId, concrete: TypeId) -> Option<TypeArgMap> {
         let (Some(written), Some(elements)) = (self.as_tuple(pattern), self.as_tuple(concrete))
         else {
             return self.bind_type_params(&[pattern], &[concrete]);
@@ -6633,10 +6632,10 @@ impl TypeTable {
         };
         let mut seen = IndexSet::default();
         names_a_head
-            && target
-                .args
-                .iter()
-                .all(|&arg| self.type_param_id(arg).is_some_and(|param| seen.insert(param)))
+            && target.args.iter().all(|&arg| {
+                self.type_param_id(arg)
+                    .is_some_and(|param| seen.insert(param))
+            })
     }
 
     /// Every recorded impl block reaching only some instances of its head.
@@ -6836,7 +6835,12 @@ impl TypeTable {
         self.unify_apart((Side::Left, a), (Side::Right, b), &mut subst)
     }
 
-    fn unify_apart(&self, a: Term, b: Term, subst: &mut IndexMap<(Side, TypeParamId), Term>) -> bool {
+    fn unify_apart(
+        &self,
+        a: Term,
+        b: Term,
+        subst: &mut IndexMap<(Side, TypeParamId), Term>,
+    ) -> bool {
         let (a, b) = (self.walk_term(a, subst), self.walk_term(b, subst));
         let var = |(side, id): Term| self.type_param_id(id).map(|param| (side, param));
         match (var(a), var(b)) {

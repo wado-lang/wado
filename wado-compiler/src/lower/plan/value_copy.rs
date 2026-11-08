@@ -20,6 +20,7 @@ pub mod synthesize;
 
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -28,7 +29,6 @@ use crate::tir::{
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
     TypeId, TypeParamId,
 };
-use crate::defs::DefId;
 use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
@@ -416,7 +416,10 @@ impl EnvFrame<'_> {
     /// What this frame gives `param`, where `param` is its template's.
     fn arg(&self, param: TypeParamId) -> Option<TypeId> {
         let template = self.template?;
-        assert_eq!(param.owner, template, "a member names its template's parameters");
+        assert_eq!(
+            param.owner, template,
+            "a member names its template's parameters"
+        );
         self.args.get(param.index as usize).copied()
     }
 }
@@ -549,9 +552,9 @@ fn needs_copy_walked(
         // A bare param with no frame is an unmonomorphized template
         // body — no copy decision applies.
         ResolvedType::TypeParam { id, .. } => env.is_some_and(|frame| {
-            frame
-                .arg(*id)
-                .is_some_and(|arg| needs_copy_in_env(arg, frame.parent, type_table, depth + 1, walk))
+            frame.arg(*id).is_some_and(|arg| {
+                needs_copy_in_env(arg, frame.parent, type_table, depth + 1, walk)
+            })
         }),
         // The raw GC array is a value type: assignment / parameter
         // passing / return deep-copies it, like every other value.

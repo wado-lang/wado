@@ -10342,7 +10342,12 @@ fn call_with_params(
         .iter()
         .filter_map(|param| {
             let id = param.id?;
-            Some(type_table.make_declared_param(id.owner, param.name.clone(), id.index, param.is_pack))
+            Some(type_table.make_declared_param(
+                id.owner,
+                param.name.clone(),
+                id.index,
+                param.is_pack,
+            ))
         })
         .collect();
     assert_eq!(func.type_params.len(), callee.type_params.len());

@@ -848,9 +848,7 @@ mod tests {
     /// concrete `u8` position binds nothing, so `V` keeps its own slot.
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
         let def = DefId::for_test(1);
-        let v = table
-            .borrow_mut()
-            .make_type_param(def, "V".to_string(), 1);
+        let v = table.borrow_mut().make_type_param(def, "V".to_string(), 1);
         table.borrow_mut().record_impl_target(
             def,
             TypeTable::UNKNOWN,

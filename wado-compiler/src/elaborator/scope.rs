@@ -352,7 +352,10 @@ impl TraitContext {
     /// `K` is that same binder, not a second one shadowing it.
     pub(super) fn binders(&self) -> Vec<FrameBinder<'_>> {
         let named = self.type_params.iter().map(|(name, binder)| {
-            let bounds = self.type_param_bounds.get(name).map_or(&[][..], Vec::as_slice);
+            let bounds = self
+                .type_param_bounds
+                .get(name)
+                .map_or(&[][..], Vec::as_slice);
             (binder, bounds)
         });
         let shadowed = self
@@ -383,7 +386,10 @@ impl TraitContext {
             return;
         }
         if let Some(shadowed) = self.type_params.insert(name.to_string(), binder) {
-            let bounds = self.type_param_bounds.shift_remove(name).unwrap_or_default();
+            let bounds = self
+                .type_param_bounds
+                .shift_remove(name)
+                .unwrap_or_default();
             self.shadowed.push((name.to_string(), shadowed, bounds));
         }
     }

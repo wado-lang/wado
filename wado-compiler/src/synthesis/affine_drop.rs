@@ -368,7 +368,11 @@ impl<'a> AffineTypes<'a> {
                 cases
                     .into_iter()
                     .map(|(name, index, payload)| {
-                        (name, index, tt.substitute_positional(payload, variant, &args))
+                        (
+                            name,
+                            index,
+                            tt.substitute_positional(payload, variant, &args),
+                        )
                     })
                     .collect(),
             )

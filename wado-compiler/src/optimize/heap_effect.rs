@@ -782,7 +782,10 @@ impl HeapEffects<'_> {
         }
         let arg_of = |param: TypeId| {
             let id = tt.type_param_id(param)?;
-            assert_eq!(id.owner, variant, "a payload names its variant's parameters");
+            assert_eq!(
+                id.owner, variant,
+                "a payload names its variant's parameters"
+            );
             args.get(id.index as usize).copied()
         };
         match tt.get(payload) {

@@ -187,9 +187,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: DefId,
         type_args: &[TypeId],
     ) -> TypeId {
-        let substituted = self
-            .tysys
-            .substitute_type_params(type_id, owner, type_args);
+        let substituted = self.tysys.substitute_type_params(type_id, owner, type_args);
         self.answer_frame_projections(substituted)
     }
 

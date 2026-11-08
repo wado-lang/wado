@@ -364,11 +364,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Block `impl_def`'s slots bound by its target matching `handler_type`;
     /// `None` where the target names another instance (`Ctx<u8>` for a
     /// `Ctx<i32>` handler).
-    fn handler_slots(
-        &self,
-        impl_def: DefId,
-        handler_type: TypeId,
-    ) -> Option<TypeArgMap> {
+    fn handler_slots(&self, impl_def: DefId, handler_type: TypeId) -> Option<TypeArgMap> {
         let mut tt = self.tysys.type_table.borrow_mut();
         let target = tt.impl_target_whole(impl_def);
         let mut slots = tt.bind_type_params(&[target], &[handler_type])?;

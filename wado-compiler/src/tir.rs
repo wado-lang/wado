@@ -725,7 +725,10 @@ pub enum ResolvedType {
     /// inside that item it is opaque: nothing but itself is assignable to it.
     /// It appears only within the item that binds it; a *use* of a polymorphic
     /// signature instantiates these into [`ResolvedType::InferVar`]s.
-    TypeParam { id: TypeParamId, name: String },
+    TypeParam {
+        id: TypeParamId,
+        name: String,
+    },
     /// Inference variable — a *flexible* variable standing for a type the
     /// solver has yet to determine. Minted when a use site instantiates a
     /// polymorphic signature: where a rigid parameter rejects anything but

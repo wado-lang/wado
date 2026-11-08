@@ -3514,10 +3514,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         if param.is_pack {
             let owner = owner.expect("a declaration with a pack parameter has a def");
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_type_pack(owner, param.name.clone(), index as u32)
+            self.tysys.type_table.borrow_mut().make_type_pack(
+                owner,
+                param.name.clone(),
+                index as u32,
+            )
         } else {
             self.mint_infer_var_named(&param.name)
         }
@@ -4753,7 +4754,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|&arg| table.substitute_type_params(arg, &slots))
             .collect();
         for index in out.len() as u32..sig.method_slot_base {
-            let Some(&id) = ids.iter().find(|&&id| table.declared_param(id).index == index) else {
+            let Some(&id) = ids
+                .iter()
+                .find(|&&id| table.declared_param(id).index == index)
+            else {
                 break;
             };
             out.push(slots[&table.declared_param(id)]);
@@ -5029,7 +5033,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .zip(&inst.vars)
             .enumerate()
             .map(|(i, (&slot, &var))| {
-                let written = case.written.get(i).is_some_and(|&t| t != TypeTable::UNKNOWN);
+                let written = case
+                    .written
+                    .get(i)
+                    .is_some_and(|&t| t != TypeTable::UNKNOWN);
                 let param = self.tysys.type_table.borrow().declared_param(slot);
                 from_payload
                     .as_ref()

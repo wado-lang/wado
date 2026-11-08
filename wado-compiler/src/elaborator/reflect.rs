@@ -268,7 +268,6 @@ const TEMPLATE_PACK_BOUND: PackBound = PackBound {
     note: None,
 };
 
-
 /// The dispatch record's per-parameter mutability. A reflect member takes
 /// either one never-`mut` argument — the subject of `discriminant(&self)` /
 /// `bits(&self)`, the raw scalar of `from_<value>(raw)` — or none.

@@ -695,12 +695,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                     self.bind_blanket_target_param(impl_def, named, impl_declared_params, &slots)
                 }
                 ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) => self
-                    .bind_ref_target_param(
-                        impl_def,
-                        boxed.as_ref(),
-                        impl_declared_params,
-                        &slots,
-                    ),
+                    .bind_ref_target_param(impl_def, boxed.as_ref(), impl_declared_params, &slots),
                 ast::Type::Tuple(elements) => {
                     self.bind_tuple_pack_params(impl_def, elements, impl_declared_params, &slots)
                 }
@@ -1834,11 +1829,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.clear_binders();
 
         let trait_def = scope.tysys.def_at(id);
-        let self_slot = scope
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_type_param(trait_def, "Self".to_string(), 0);
+        let self_slot =
+            scope
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_type_param(trait_def, "Self".to_string(), 0);
         // Before the parameters, since each one's bounds pin the `Self` they
         // mean, and inside the declaration that is this trait.
         let declaring = SelfBinding {
