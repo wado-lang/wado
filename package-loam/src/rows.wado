@@ -1,0 +1,541 @@
+//! Whether each row of a batch holds lengths of its own in what `emit` writes:
+//! the axis the rows run along, or why they share their lengths. Emission and
+//! `loam dump` read the one answer, and `build` writes each node as it says.
+
+use { HashMap, HashSet } from "core:collections";
+use { Extent } from "./extent.wado";
+use { GROUP_QUERY_ATTENTION, Graph, Node, case_named, settled } from "./graph.wado";
+use {
+    ATTENTION_BIAS,
+    Checked,
+    ROTARY_COS,
+    ROTARY_SIN,
+    arg_max_axis,
+    attention_options,
+    concat_axis,
+    gather_axis,
+    gemm_options,
+    is_reduction,
+    range_bounds,
+    reduced_axes,
+    slice_cuts,
+    softmax_lane,
+} from "./infer.wado";
+use { SpelledAttention, branches, lowerings } from "./lowering.wado";
+use { Poly } from "./poly.wado";
+use { BinaryOp, UnaryOp } from "./runtime/tensor.wado";
+use { Axis, Shape } from "./shape.wado";
+
+/// The name of the length that counts the rows the lengths hold, which no
+/// `dim_param` of a model spells.
+pub global SLOTS: String = "$slots";
+
+/// Why the rows of a batch share their lengths: the node refusing each row its
+/// own, by its first output and its operator, where one does.
+pub struct RowRefusal {
+    pub node: Option<[String, String]> = null,
+    pub why: String,
+}
+
+impl Display for RowRefusal {
+    fn fmt(&self, f: &mut Formatter) {
+        match &self.node {
+            Some([output, op]) => f.write_str(`refused at ${*output} = ${*op}: ${self.why}`),
+            None => f.write_str(&self.why),
+        }
+    }
+}
+
+/// The axis the rows of a batch run along where each row holds lengths of its
+/// own: the first of every input padding one of `padded` behind it. `null`
+/// where no input pads one, or that axis holds one row and no more. `grown`
+/// are the padded lengths a past grows along.
+pub fn judged_rows(
+    graph: &Graph,
+    checked: &Checked,
+    padded: &List<String>,
+    grown: &List<String>,
+) -> Result<Option<Axis>, RowRefusal> {
+    let pads = |axis: &Axis| axis.extent.poly().symbols().into_iter().any(|s| padded.contains(&s));
+    let mut rows: Option<Axis> = null;
+    for let vi of &graph.inputs {
+        let axes = checked.shapes[vi.name].axes;
+        if !axes.into_iter().skip(1).any(|a| pads(&a)) {
+            continue;
+        }
+        let first = axes[0];
+        if let Some(r) = rows && r.name != first.name {
+            return Result::Err(
+                RowRefusal { why: `the inputs padding a length lead with two axes, ${r.name} and ${first.name}` },
+            );
+        }
+        rows = Option::Some(first);
+        if first.extent matches { Static(1) } {
+            return Result::Ok(null);
+        }
+    }
+    let Some(axis) = rows else {
+        return Result::Ok(null);
+    };
+    let judge = Judge { rows: axis.name, counting: axis.extent.poly().symbols(), padded: *padded, grown: *grown };
+    let mut lifted = HashSet::<String>::new();
+    judge.scope(graph, checked, &mut lifted, null, &[])?;
+    for let vi of &graph.outputs {
+        if lifted.contains(vi.name) {
+            return Result::Err(RowRefusal { why: `the pass returns ${vi.name}, which each row's lengths computed` });
+        }
+    }
+    return Result::Ok(rows);
+}
+
+/// The operands of `node` its operations read as tensors. The rest are
+/// extents, positions or axes, which the build reads from the folded values.
+pub fn graph_operands(node: &Node) -> List<i32> {
+    if node.op == GROUP_QUERY_ATTENTION {
+        let mut read: List<i32> = [0, 1, 2, 3, 4];
+        if settled(attention_options(node)).rotary {
+            read.push(ROTARY_COS);
+            read.push(ROTARY_SIN);
+        }
+        read.push(ATTENTION_BIAS);
+        return read;
+    }
+    return match node.op.as_str_slice() {
+        "ConstantOfShape" | "Range" => [],
+        "Reshape" | "Squeeze" | "Unsqueeze" | "Slice" | "Expand" | "Split" | "ReduceSum" | "ReduceMean" | "If" => [0],
+        _ => (0..<node.inputs.len()).collect(),
+    };
+}
+
+/// A tensor of `shape` held with the rows ahead, as an elementwise operand
+/// into `out`, its rows folded into `out`'s axis `rows`: the rows there, and 1
+/// at each axis before. `null` where it holds more than one element at or
+/// before that axis.
+pub fn folded_rows(shape: &Shape, out: &Shape, rows: &String) -> Option<Shape> {
+    let offset = out.rank() - shape.rank();
+    let mut axes: List<Axis> = [];
+    let mut at = -1;
+    for let [p, axis] of out.axes.into_iter().enumerate() {
+        if axis.name == *rows {
+            at = p;
+        }
+        if p < offset {
+            axes.push(Axis { name: axis.name, extent: Extent::Static(1) });
+            continue;
+        }
+        let own = shape.axes[p - offset];
+        if at < 0 || p == at {
+            if !own.extent matches { Static(1) } {
+                return null;
+            }
+        }
+        axes.push(own);
+    }
+    assert at >= 0, "an operand folds its rows into an axis of the output";
+    axes[at] = Axis { name: out.axes[at].name, extent: Extent::symbol(&SLOTS) };
+    return Option::Some(Shape { axes });
+}
+
+/// Whether `node`, reading the tensors each row's lengths computed, keeps them
+/// apart: an elementwise operation, a regrouping, or a gather by them.
+pub fn keeps_lifted(node: &Node, checked: &Checked, read: &List<String>) -> bool {
+    let op = node.op;
+    return elementwise(node)
+        || op == "Reshape"
+        || op == "Flatten"
+        || op == "Unsqueeze"
+        || op == "Squeeze"
+        || op == "Gather"
+            && !read.contains(&node.inputs[0])
+            && settled(gather_axis(node, checked.shapes[node.inputs[0]].rank())) == 0;
+}
+
+/// Whether `node` computes each element from its operands' at that position.
+pub fn elementwise(node: &Node) -> bool {
+    let op = node.op;
+    return op == "Where"
+        || op == "Cast"
+        || case_named::<UnaryOp>(&op) matches { Some(_) }
+        || case_named::<BinaryOp>(&op) matches { Some(_) } && node.attr("axis") matches { None };
+}
+
+/// The rows' own lengths as one batch reads them: along `rows`, counted by
+/// `counting`, each of `padded` a valid length.
+struct Judge {
+    rows: String,
+    counting: List<String>,
+    padded: List<String>,
+    grown: List<String>,
+}
+
+/// The refusal at `node`, where `why` gives one.
+fn refused_at(node: &Node, why: Option<String>) -> Result<(), RowRefusal> {
+    if let Some(w) = why {
+        return Result::Err(RowRefusal { node: Option::Some([node.outputs[0], node.op]), why: w });
+    }
+    return Result::Ok(());
+}
+
+/// Why a node cannot read `tensor`: each row's lengths computed it.
+fn lifted_read(lifted: &HashSet<String>, tensor: &String) -> Option<String> {
+    if lifted.contains(*tensor) {
+        return Option::Some(`it reads ${*tensor}, which each row's lengths computed`);
+    }
+    return null;
+}
+
+impl Judge {
+    /// Each node of `graph`, `lifted` the tensors each row's lengths computed,
+    /// and what the scope returns. `around` is the `If` whose branch it is, and
+    /// `enclosing` the scopes around it, whose folded tensors it may read.
+    fn scope(
+        &self,
+        graph: &Graph,
+        checked: &Checked,
+        lifted: &mut HashSet<String>,
+        around: Option<[String, String]>,
+        enclosing: &List<&Checked>,
+    ) -> Result<(), RowRefusal> {
+        let mut scopes = *enclosing;
+        scopes.push(checked);
+        let mut transposed = HashMap::<String, String>::new();
+        let lowered = lowerings(graph, checked);
+        for let [at, node] of graph.nodes.into_iter().enumerate() {
+            let read = match lowered[at] {
+                Folded | Attended => [] as List<String>,
+                Attention(a) => a.operands(),
+                _ => graph_operands(&node).into_iter().filter(|i| node.has_operand(i)).map(|i| node.inputs[i]).collect(),
+            };
+            for let tensor of read {
+                refused_at(&node, self.literal(&scopes, &tensor))?;
+            }
+            match lowered[at] {
+                Folded | Attended => {
+                },
+                Transposed => {
+                    transposed[node.outputs[0]] = node.inputs[0];
+                    refused_at(&node, lifted_read(lifted, &node.inputs[0]))?;
+                },
+                Alias => {
+                    if lifted.contains(node.inputs[0]) {
+                        lifted.insert(node.outputs[0]);
+                    }
+                },
+                Branch => {
+                    refused_at(&node, lifted_read(lifted, &node.inputs[0]))?;
+                    for let b of branches(&node, checked) {
+                        let mut inner = *lifted;
+                        self.scope(&b.graph, &b.checked, &mut inner, Option::Some([node.outputs[0], node.op]), &scopes)?;
+                        for let vi of &b.graph.outputs {
+                            if inner.contains(vi.name) {
+                                return refused_at(
+                                    &node,
+                                    Option::Some(`its branch yields ${vi.name}, which each row's lengths computed`),
+                                );
+                            }
+                        }
+                    }
+                },
+                Operation => refused_at(&node, self.operation(&node, checked, lifted, &transposed, graph.opset))?,
+                Attention(a) => {
+                    for let tensor of a.operands() {
+                        refused_at(&node, lifted_read(lifted, &tensor))?;
+                    }
+                    refused_at(&node, self.attention(&a, checked))?;
+                },
+            }
+        }
+        for let vi of &graph.outputs {
+            if let Some(why) = self.literal(&scopes, &vi.name) {
+                return Result::Err(RowRefusal { node: around, why });
+            }
+        }
+        return Result::Ok(());
+    }
+
+    /// Whether `p` reads a valid length.
+    fn reads(&self, p: &Poly) -> bool {
+        return p.symbols().into_iter().any(|s| self.padded.contains(&s));
+    }
+
+    /// Why `p` cannot be each row's own: it reads how many rows there are.
+    fn value(&self, p: &Poly) -> Option<String> {
+        if p.symbols().into_iter().any(|s| self.counting.contains(&s) && self.padded.contains(&s)) {
+            return Option::Some(`it reads how many rows ${self.rows} holds, which no row holds apart`);
+        }
+        return null;
+    }
+
+    /// Why an operation taking one `p` for every row cannot take it.
+    fn scalar(&self, p: &Poly, why: String) -> Option<String> {
+        if self.reads(p) {
+            return Option::Some(why);
+        }
+        return null;
+    }
+
+    /// Where `p` reads a valid length, the axis of `shape` the rows run along,
+    /// or why it reads one over no such axis.
+    fn rows_axis(&self, shape: &Shape, p: &Poly) -> Result<Option<i32>, String> {
+        if !self.reads(p) {
+            return Result::Ok(null);
+        }
+        let Some(at) = shape.axes.position(|a| a.name == self.rows) else {
+            return Result::Err(`it reads a valid length over no axis of the rows, ${self.rows}`);
+        };
+        return Result::Ok(Option::Some(at));
+    }
+
+    /// Why `p` cannot be read along `shape`, each row its own.
+    fn along(&self, p: &Poly, shape: &Shape) -> Option<String> {
+        if let Err(why) = self.rows_axis(shape, p) {
+            return Option::Some(why);
+        }
+        return self.value(p);
+    }
+
+    /// Why a tensor of `shape` cannot be masked past each row's valid length
+    /// along `axis`, where one enters that axis's extent.
+    fn masked(&self, shape: &Shape, axis: i32) -> Option<String> {
+        let extent = shape.axes[axis].extent.poly();
+        if !self.reads(&extent) {
+            return null;
+        }
+        return self.along(&extent, shape);
+    }
+
+    /// Why an attention of query axes `query` cannot take `p` as each row's.
+    fn operand(&self, p: &Poly, query: &Shape) -> Option<String> {
+        return match self.rows_axis(query, p) {
+            Err(why) => Option::Some(why),
+            Ok(Some(at)) && at != 0 => Option::Some(
+                "it attends with each row's lengths, and its query's rows are not its first axis",
+            ),
+            Ok(Some(_)) => self.value(p),
+            Ok(None) => null,
+        };
+    }
+
+    /// Why `tensor`, read as a tensor, cannot be spelled in any of `scopes`: a
+    /// folded tensor one of whose elements reads a valid length takes one for
+    /// every row.
+    fn literal(&self, scopes: &List<&Checked>, tensor: &String) -> Option<String> {
+        for let checked of *scopes {
+            if let Some(known) = checked.known.get(*tensor)
+                && checked.shapes.contains_key(*tensor)
+                && known.elements matches { Symbolic(v) && v.into_iter().any(|p| self.reads(&p)) } {
+                return Option::Some(`it reads ${*tensor}, folded from a valid length, which takes one for every row`);
+            }
+        }
+        return null;
+    }
+
+    /// Why `node`, an operation, refuses each row its own lengths. A tensor it
+    /// computes from them joins `lifted`.
+    fn operation(
+        &self,
+        node: &Node,
+        checked: &Checked,
+        lifted: &mut HashSet<String>,
+        transposed: &HashMap<String, String>,
+        opset: Option<i64>,
+    ) -> Option<String> {
+        let shapes = &checked.shapes;
+        let out = shapes[node.outputs[0]];
+        if node.op == "Range" {
+            let [start, _, delta] = settled(range_bounds(node, &checked.known));
+            if !self.reads(&start) && !self.reads(&delta) {
+                return null;
+            }
+            lifted.insert(node.outputs[0]);
+            if let Some(why) = self.value(&start) {
+                return Option::Some(why);
+            }
+            return self.value(&delta);
+        }
+        let read: List<String> = graph_operands(node).into_iter().filter(|i| i < node.inputs.len()).map(
+            |i| node.inputs[i],
+        ).filter(
+            |t| lifted.contains(t),
+        ).collect();
+        if !read.is_empty() {
+            if !keeps_lifted(node, checked, &read) {
+                return lifted_read(lifted, &read[0]);
+            }
+            if !elementwise(node) || !out.axes.into_iter().any(|a| a.name == self.rows) {
+                lifted.insert(node.outputs[0]);
+            } else {
+                for let tensor of read {
+                    if folded_rows(&shapes[tensor], &out, &self.rows) matches { None } {
+                        return Option::Some(
+                            `it meets the rows of ${self.rows} with ${tensor}, which holds more than one element ahead of them`,
+                        );
+                    }
+                }
+            }
+            if node.op == "Gather" {
+                return self.gathered(node, checked);
+            }
+            return null;
+        }
+        if node.op == GROUP_QUERY_ATTENTION {
+            return self.operand(&shapes[node.inputs[3]].axes[2].extent.poly(), &shapes[node.inputs[0]]);
+        }
+        return self.built(node, checked, transposed, opset);
+    }
+
+    /// Why a `Gather` cannot take its axis's length: one for every row.
+    fn gathered(&self, node: &Node, checked: &Checked) -> Option<String> {
+        let data = checked.shapes[node.inputs[0]];
+        let axis = settled(gather_axis(node, data.rank()));
+        return self.scalar(
+            &data.axes[axis].extent.poly(),
+            "it gathers along a valid length, which takes one for every row",
+        );
+    }
+
+    /// Why the operations `build` adds for `node` refuse each row its own
+    /// lengths, where no tensor they read is each row's.
+    fn built(
+        &self,
+        node: &Node,
+        checked: &Checked,
+        transposed: &HashMap<String, String>,
+        opset: Option<i64>,
+    ) -> Option<String> {
+        let shapes = &checked.shapes;
+        let op = node.op;
+        let out = shapes[node.outputs[0]];
+        if op == "Slice" {
+            let mut x = shapes[node.inputs[0]];
+            for let cut of settled(slice_cuts(node, &checked.known, &x)) {
+                if !self.reads(&cut.start) || cut.extent.poly().as_constant() == Option::Some(0) {
+                    continue;
+                }
+                match self.rows_axis(&x, &cut.start) {
+                    Err(why) => {
+                        return Option::Some(why);
+                    },
+                    Ok(Some(at)) && at == cut.axis => {
+                        return Option::Some("it slices the rows from a valid length of their own");
+                    },
+                    _ => {
+                    },
+                }
+                if let Some(why) = self.value(&cut.start) {
+                    return Option::Some(why);
+                }
+                x.axes[cut.axis] = out.axes[cut.axis];
+            }
+            return null;
+        }
+        if op == "Gather" {
+            return self.gathered(node, checked);
+        }
+        if op == "Softmax" {
+            let lane = settled(softmax_lane(node, out.rank(), opset));
+            let normalized: List<i32> = if lane.flattened { (lane.axis..<out.rank()).collect() } else { [lane.axis] };
+            return self.first_masked(&out, &normalized);
+        }
+        if is_reduction(&op) {
+            let x = shapes[node.inputs[0]];
+            let reduced = settled(reduced_axes(node, &checked.known, x.rank()));
+            if let Some(why) = self.first_masked(&x, &reduced) {
+                return Option::Some(why);
+            }
+            if op != "ReduceMean" {
+                return null;
+            }
+            let mut count = Poly::constant(1);
+            for let d of reduced {
+                count = count.try_mul(&x.axes[d].extent.poly()).expect("a count of elements is within i64");
+            }
+            return self.scalar(&count, "it averages over a valid length, which takes one for every row");
+        }
+        if op == "ArgMax" {
+            let x = shapes[node.inputs[0]];
+            return self.masked(&x, settled(arg_max_axis(node, x.rank())));
+        }
+        if op == "Concat" {
+            return self.joined(node, checked);
+        }
+        if op == "MatMul" {
+            let left = shapes[node.inputs[0]];
+            let last = left.rank() - 1;
+            if let Some(weight) = transposed.get(node.inputs[1]) {
+                return self.contracted(&left, last, &shapes[weight], 1);
+            }
+            let right = shapes[node.inputs[1]];
+            if right.rank() <= 2 || left.rank() == 1 {
+                return self.contracted(&left, last, &right, if right.rank() == 1 { 0 } else { right.rank() - 2 });
+            }
+            let batch = out.rank() - 2;
+            let under_batch = |matrix: &Shape| {
+                let mut axes = out.axes[0..<batch].to_list();
+                axes.extend(&matrix.axes[matrix.rank() - 2..<matrix.rank()].to_list());
+                return Shape { axes };
+            };
+            return self.contracted(&under_batch(&left), batch + 1, &under_batch(&right), batch);
+        }
+        if op == "Gemm" {
+            let [_, _, trans_a, trans_b] = settled(gemm_options(node));
+            return self.contracted(
+                &shapes[node.inputs[0]],
+                if trans_a { 0 } else { 1 },
+                &shapes[node.inputs[1]],
+                if trans_b { 1 } else { 0 },
+            );
+        }
+        return null;
+    }
+
+    /// Why a tensor of `shape` cannot be masked along each of `axes`.
+    fn first_masked(&self, shape: &Shape, axes: &List<i32>) -> Option<String> {
+        for let axis of *axes {
+            if let Some(why) = self.masked(shape, axis) {
+                return Option::Some(why);
+            }
+        }
+        return null;
+    }
+
+    /// Why a product contracting `left`'s axis `l` with `right`'s `r` cannot
+    /// mask both past each row's valid length.
+    fn contracted(&self, left: &Shape, l: i32, right: &Shape, r: i32) -> Option<String> {
+        if let Some(why) = self.masked(left, l) {
+            return Option::Some(why);
+        }
+        return self.masked(right, r);
+    }
+
+    /// Why a `Concat` cannot join its operands, each written after the valid
+    /// length of the join so far, or into a past growing along its axis.
+    fn joined(&self, node: &Node, checked: &Checked) -> Option<String> {
+        let shapes = &checked.shapes;
+        let out = shapes[node.outputs[0]];
+        let axis = settled(concat_axis(node, out.rank()));
+        let past = shapes[node.inputs[0]];
+        let mut length = past.axes[axis].extent.poly();
+        if self.grown.into_iter().any(|g| length == Poly::symbol(&g)) {
+            return self.along(&length, &past);
+        }
+        for let input of node.inputs[1..<node.inputs.len()].to_list() {
+            if self.reads(&length) && let Some(why) = self.along(&length, &out) {
+                return Option::Some(why);
+            }
+            length = length.try_add(&shapes[input].axes[axis].extent.poly()).expect("a joined extent is within i64");
+        }
+        return null;
+    }
+
+    /// Why a spelled attention cannot take each row's past and present lengths.
+    fn attention(&self, a: &SpelledAttention, checked: &Checked) -> Option<String> {
+        let q = checked.shapes[a.query];
+        if let Some([past_k, _]) = &a.past {
+            if let Some(why) = self.operand(&checked.shapes[*past_k].axes[2].extent.poly(), &q) {
+                return Option::Some(why);
+            }
+        }
+        return self.operand(&checked.shapes[a.present_value].axes[2].extent.poly(), &q);
+    }
+}

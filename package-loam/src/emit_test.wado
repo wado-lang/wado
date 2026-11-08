@@ -1355,6 +1355,43 @@ test "the rows share their lengths where a tensor each row's lengths computed me
     assert shared_rows(source) == "refused at Y = Softmax: it reads F, which each row's lengths computed";
 }
 
+test "the rows share their lengths where a node gathers along one" {
+    let source = `g (float[B, N] X, int64[2] I) => (float[B, 2] Y) {
+        Y = Gather<axis = 1>(X, I)
+    }`;
+    assert shared_rows(source) == "refused at Y = Gather: it gathers along a valid length, which takes one for every row";
+}
+
+test "the rows share their lengths where a node reads a valid length over no axis of the rows" {
+    let source = `g (float[B, N] X, float[N] Z) => (float[B, N] W, float[N] Y) {
+        W = Softmax<axis = 1>(X)
+        Y = Softmax<axis = 0>(Z)
+    }`;
+    assert shared_rows(source) == "refused at Y = Softmax: it reads a valid length over no axis of the rows, B";
+}
+
+test "the rows share their lengths where a node reads a tensor folded from one" {
+    let source = `g (float[B, N] X) => (float[2] Y) {
+        S = Shape(X)
+        Y = Cast<to = 1>(S)
+    }`;
+    assert shared_rows(source) == "refused at Y = Cast: it reads S, folded from a valid length, which takes one for every row";
+}
+
+test "the rows share their lengths where the pass returns what each row's lengths computed" {
+    let source = `g (int64[B, S] I, float[B, 1, P, 8] PK) => (int64[S] Pos) {
+        Ds = Shape(I)
+        Dp = Shape(PK)
+        One = Constant<value = int64 {1}>()
+        Two = Constant<value = int64 {2}>()
+        Past = Gather<axis = 0>(Dp, Two)
+        Len = Gather<axis = 0>(Ds, One)
+        Total = Add(Past, Len)
+        Pos = Range(Past, Total, One)
+    }`;
+    assert shared_rows(source) == "the pass returns Pos, which each row's lengths computed";
+}
+
 test "compute holds a cache at the capacity of the total, its past's length what the graph owes it" {
     let source = `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] "past_key_values.0.key", float[1, 1, P, 8] "past_key_values.0.value", int64[1, T] M)
         => (float[1, S, 8] Y, float[1, 1, T, 8] "present.0.key", float[1, 1, T, 8] "present.0.value") {
@@ -1821,8 +1858,8 @@ test "every local the entries bind is a name no graph tensor takes" {
             tensors.insert(vi.name);
         }
     }
-    for let node of graph.nodes {
-        for let t of node.outputs {
+    for let n of graph.nodes {
+        for let t of n.outputs {
             tensors.insert(t);
         }
     }
