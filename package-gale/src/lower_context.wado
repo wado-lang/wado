@@ -226,7 +226,7 @@ impl LowerContext {
     pub fn simulator_takes_contested(&self, site: i32) -> bool {
         return match self.settings.atn {
             Always => true,
-            Auto => !self.decisions.at_site(site).is_empty(),
+            Auto => self.settings.emit_actions && !self.decisions.at_site(site).is_empty(),
             Never | Verify => false,
         };
     }

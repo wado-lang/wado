@@ -124,7 +124,7 @@ pub fn alt_meets_gate(
     };
     let mut met: List<MetPredicate> = [];
     let _ = met_at(&alt.elements, &alt.actions, 0, site, analysis, edges, &mut met);
-    return met.iter_ref().any(|m| gate_condition_for(&m.0, settings, analysis, &m.1) matches { Some(_) });
+    return met.iter_ref().any(|m| predicate_condition_for(&m.0, settings, analysis, &m.1) matches { Some(_) });
 }
 
 /// A predicate prediction meets at a decision, beside the site it renders in.
