@@ -1,0 +1,23 @@
+// A binding of `let ... else` that is never written shares the payload it
+// binds, as the same binding in a `match` arm does: lowering copies nothing.
+
+struct Shape {
+    axes: List<String>,
+}
+
+fn axis_count(o: &Option<Shape>) -> i32 {
+    let Some(s) = *o else {
+        return 0;
+    };
+    return s.axes.len();
+}
+
+test {
+    let o = builtin::black_box(Option::Some(Shape { axes: ["P", "Q"] }));
+    assert axis_count(&o) == 2;
+}
+
+__DATA__
+{
+    "wir_not_expect:O0": ["$value_copy$"]
+}

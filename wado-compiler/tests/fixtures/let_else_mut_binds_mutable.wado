@@ -14,7 +14,19 @@ fn bump(o: Option<P>) -> i32 {
     return x.v;
 }
 
+// The payload is the caller's, so writing the binding copies it.
+fn bump_borrowed(o: &Option<P>) -> i32 {
+    let Some(mut x) = *o else {
+        return 0;
+    };
+    x.v = 9;
+    return x.v;
+}
+
 test {
     assert bump(Some(P { v: 1 })) == 6;
     assert bump(null) == 0;
+    let o = Option::Some(P { v: 1 });
+    assert bump_borrowed(&o) == 9;
+    assert o.unwrap().v == 1;
 }
