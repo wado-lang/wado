@@ -17,6 +17,9 @@ internal enum Format {
     Iri,
     IriReference,
     Uuid,
+    UriTemplate,
+    JsonPointer,
+    RelativeJsonPointer,
 }
 
 impl Format {
@@ -35,6 +38,9 @@ impl Format {
             "iri" => Option::Some(Iri),
             "iri-reference" => Option::Some(IriReference),
             "uuid" => Option::Some(Uuid),
+            "uri-template" => Option::Some(UriTemplate),
+            "json-pointer" => Option::Some(JsonPointer),
+            "relative-json-pointer" => Option::Some(RelativeJsonPointer),
             _ => null,
         };
     }
@@ -53,6 +59,9 @@ impl Format {
             Iri => "iri",
             IriReference => "iri-reference",
             Uuid => "uuid",
+            UriTemplate => "uri-template",
+            JsonPointer => "json-pointer",
+            RelativeJsonPointer => "relative-json-pointer",
         };
     }
 
@@ -86,8 +95,156 @@ impl Format {
             Iri => is_iri_reference(text) && has_scheme(text),
             IriReference => is_iri_reference(text),
             Uuid => is_uuid(text),
+            UriTemplate => {
+                let mut s = Scan::of(text);
+                uri_template(&mut s);
+            },
+            JsonPointer => {
+                let mut s = Scan::of(text);
+                json_pointer(&mut s);
+            },
+            RelativeJsonPointer => {
+                let mut s = Scan::of(text);
+                relative_json_pointer(&mut s);
+            },
         };
     }
+}
+
+/// RFC 6901's `json-pointer`, to the end: `*( "/" reference-token )`, where a
+/// `~` must be `~0` or `~1`.
+fn json_pointer(s: &mut Scan) -> bool {
+    while s.eat('/') {
+        while !s.done() && s.chars[s.at] != '/' {
+            if s.eat('~') {
+                if !s.eat('0') && !s.eat('1') {
+                    return false;
+                }
+            } else {
+                s.at += 1;
+            }
+        }
+    }
+    return s.done();
+}
+
+/// Relative JSON Pointer's `non-negative-integer ( json-pointer / "#" )`, in
+/// the draft Draft 2020-12 cites, which has no index manipulation.
+fn relative_json_pointer(s: &mut Scan) -> bool {
+    if s.eat('0') {
+        if !s.done() && s.chars[s.at].is_ascii_digit() {
+            return false;
+        }
+    } else if !s.some_digits() {
+        return false;
+    }
+    if s.eat('#') {
+        return s.done();
+    }
+    return json_pointer(s);
+}
+
+/// RFC 6570's `URI-Template`, to the end: literals, and expressions with an
+/// optional operator and a list of variables, each with an optional prefix
+/// length or explode.
+fn uri_template(s: &mut Scan) -> bool {
+    while !s.done() {
+        let c = s.chars[s.at];
+        s.at += 1;
+        if c == '{' {
+            if !expression(s) {
+                return false;
+            }
+        } else if c == '%' {
+            if !hex_pair(s) {
+                return false;
+            }
+        } else if !is_template_literal(c) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// An `expression` after its `{`, through its `}`.
+fn expression(s: &mut Scan) -> bool {
+    if !s.done() && "+#./;?&=,!@|".contains_char(s.chars[s.at]) {
+        s.at += 1;
+    }
+    loop {
+        if !varname(s) {
+            return false;
+        }
+        if s.eat(':') {
+            // max-length = %x31-39 0*3DIGIT
+            if s.done() || s.chars[s.at] == '0' {
+                return false;
+            }
+            let start = s.at;
+            while s.at - start < 4 && s.digit() matches { Some(_) } {
+            }
+            if s.at == start {
+                return false;
+            }
+        } else {
+            s.eat('*');
+        }
+        if s.eat('}') {
+            return true;
+        }
+        if !s.eat(',') {
+            return false;
+        }
+    }
+}
+
+/// `varname = varchar *( ["."] varchar )`, each `varchar` a letter, a digit,
+/// `_` or a percent-encoded octet.
+fn varname(s: &mut Scan) -> bool {
+    let mut after_dot = true;
+    let mut any = false;
+    while !s.done() {
+        let c = s.chars[s.at];
+        if c.is_ascii_alphanumeric() || c == '_' {
+            s.at += 1;
+        } else if c == '%' {
+            s.at += 1;
+            if !hex_pair(s) {
+                return false;
+            }
+        } else if c == '.' && !after_dot {
+            s.at += 1;
+            after_dot = true;
+            continue;
+        } else {
+            break;
+        }
+        after_dot = false;
+        any = true;
+    }
+    return any && !after_dot;
+}
+
+fn hex_pair(s: &mut Scan) -> bool {
+    for let _ of 0..<2 {
+        if s.done() || !s.chars[s.at].is_hexdigit() {
+            return false;
+        }
+        s.at += 1;
+    }
+    return true;
+}
+
+/// RFC 6570's `literals`, less `pct-encoded`: any character but a control,
+/// space, `"`, `%`, `<`, `>`, `\`, `^`, `` ` ``, `{`, `|` and `}`, where one
+/// outside ASCII must be a `ucschar` or an `iprivate`. `'` is admitted, as
+/// verified Erratum 6937 corrects the rule to.
+fn is_template_literal(c: char) -> bool {
+    let n = c as u32;
+    if n >= 0x80 {
+        return is_ucschar(c) || is_iprivate(c);
+    }
+    return n > 0x20 && n != 0x7F && !"\"%<>\\^`{|}".contains_char(c);
 }
 
 /// A cursor over the characters of a format value. A letter matches in either
