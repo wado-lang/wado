@@ -1341,6 +1341,29 @@ b x => (s (r (q b) x))
     }
 }
 
+test "an optional enters only where entering leaves a viable parse, whatever decides its body" {
+    let g4 = "grammar T;
+s : 'A' ('-'? 'a')? 'a' EOF
+  | 'B' ('-'? {false}? 'a')? 'a' EOF
+  | 'C' ('-'? {false}? 'a' 'b' | 'a' 'd')? 'a' 'c' EOF
+  | 'D' ('-'? 'a' 'b' | 'a' 'd')? 'a' 'c' EOF ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = ["A a", "A a a", "A - a a", "B a", "B - a a", "C a c", "C a d a c", "D a c", "D a b a c"];
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A a)
+A a a => (s A a a)
+A - a a => (s A - a a)
+B a => (s B a)
+B - a a => error
+C a c => (s C a c)
+C a d a c => (s C a d a c)
+D a c => (s D a c)
+D a b a c => (s D a b a c)
+";
+    }
+}
+
 test "prediction leaves a predicate past a consumed token to the parse" {
     for let atn of [AtnMode::Never, AtnMode::Verify] {
         let options = GenerateOptions { atn };

@@ -2077,6 +2077,38 @@ fn scan_group_element(
     });
 }
 
+/// A repeat body's own group, scanned strict: finding no alternative is the body
+/// not matching, which an optional's probe and an iteration both read. Lenient,
+/// it rewinds and reports a match of nothing, and the probe enters a group none
+/// of whose alternatives fits (`('-'? 'a' 'b' | 'a' 'd')? 'a' 'c'` on `a c`). A
+/// group that can match empty stays lenient, and so does one holding a
+/// non-greedy loop, which a scan measures rather than decides.
+fn strict_repeat_body(body: ScanElement, elem: &Element, ctx: &mut LowerContext) -> ScanElement {
+    let Group(ge) = body else {
+        return body;
+    };
+    let Group(g) = peel_labels(elem) else {
+        unreachable();
+    };
+    if scan_group_is_nullable(&g.alternatives, ctx) || alts_hold_non_greedy(&g.alternatives) {
+        return body;
+    }
+    return ScanElement::Group(ScanGroupElement { ..ge, lenient: false });
+}
+
+fn alts_hold_non_greedy(alts: &List<Alternative>) -> bool {
+    return alts.iter_ref().any(|alt| alt.elements.iter_ref().any(|e| element_holds_non_greedy(e)));
+}
+
+fn element_holds_non_greedy(e: &Element) -> bool {
+    return match e {
+        Repeat(r) => r.non_greedy || element_holds_non_greedy(&r.element),
+        Label(l) => element_holds_non_greedy(&l.element),
+        Group(g) => alts_hold_non_greedy(&g.alternatives),
+        Not(_) | RuleRef(_) | TokenRef(_) | Literal(_) | Wildcard(_) => false,
+    };
+}
+
 /// The scan group a `GroupOp` carries: the bodies lower built, paired here —
 /// and only here — with the classification lower made, so emit can only read
 /// it (invariant 9).
@@ -2230,8 +2262,6 @@ fn lower_scan_repeat(
     gate_caller_follow: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
-    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
-    let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
     // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
@@ -2245,18 +2275,31 @@ fn lower_scan_repeat(
                     && has_nested_optional_in_alt(&g.alternatives[0])
                     && !alt_has_variable_repeat(&g.alternatives[0])
                     && !shape_optional_count_exceeds_cap(&g.alternatives[0].elements) {
-                    return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx);
+                    let plain = lower_scan_plain_repeat(rep, ctx, outer_follow, follow_arg, gate_caller_follow, outer_suffix);
+                    return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx, plain);
                 }
             }
         }
     }
+    return ScanElement::Repeat(lower_scan_plain_repeat(rep, ctx, outer_follow, follow_arg, gate_caller_follow, outer_suffix));
+}
 
+fn lower_scan_plain_repeat(
+    rep: &RepeatElement,
+    ctx: &mut LowerContext,
+    outer_follow: &List<i32>,
+    follow_arg: FollowArg,
+    gate_caller_follow: bool,
+    outer_suffix: &List<Element>,
+) -> ScanRepeatElement {
+    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
+    let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     let mut inner_visiting: List<String> = [];
     let inner_first = ctx.analysis.first_of_element(&rep.element, &mut inner_visiting);
 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
-    let mut body = lower_scan_element(
+    let lowered = lower_scan_element(
         &rep.element,
         ctx,
         &iter_follow,
@@ -2265,6 +2308,7 @@ fn lower_scan_repeat(
         false,
         &inner_suffix,
     );
+    let mut body = strict_repeat_body(lowered, &rep.element, ctx);
     // The standalone `scan_<rule>` walks this copy while the parse function
     // walks `RepeatOp.scan_body`; both must give the body's tail call the same
     // FOLLOW as the parse side, or the scan reports an end the parse walks past
@@ -2278,7 +2322,7 @@ fn lower_scan_repeat(
         ctx.mark_rule_reads_follow();
     }
     let mut body_visiting: List<String> = [];
-    return ScanElement::Repeat(ScanRepeatElement {
+    return ScanRepeatElement {
         kind: rep.kind,
         body,
         inner_admits: repeat_inner_admits(&rep.element, &inner_first, ctx),
@@ -2288,7 +2332,7 @@ fn lower_scan_repeat(
         body_second_position_first: compute_body_second_position_first(&rep.element, ctx),
         body_scannable: ctx.analysis.is_element_scannable(&rep.element, &mut body_visiting),
         atn_decision: rep.atn_decision,
-    });
+    };
 }
 
 /// Rebuild a top-level `ScanElement::Repeat` with a fresh
@@ -2307,7 +2351,7 @@ fn rebind_scan_repeat_caller_follow(
     rule_name: &String = &NO_PROBE_RULE,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
-    if let Repeat(re) = se {
+    let mut rebind = |re: ScanRepeatElement| {
         let caller_follow_second = compute_caller_follow_second(alt_elements, index + 1, ctx);
         let stamps = lower_repeat_exit_stamps(
             re.non_greedy,
@@ -2323,7 +2367,7 @@ fn rebind_scan_repeat_caller_follow(
             rule_name,
             outer_suffix,
         );
-        return ScanElement::Repeat(ScanRepeatElement {
+        return ScanRepeatElement {
             ..re,
             caller_follow_first,
             caller_follow_second,
@@ -2336,7 +2380,13 @@ fn rebind_scan_repeat_caller_follow(
             atn_asked_kinds: stamps.atn_asked_kinds,
             probe_viable: stamps.probe.viable,
             duties: stamps.duties,
-        });
+        };
+    };
+    if let Repeat(re) = se {
+        return ScanElement::Repeat(rebind(re));
+    }
+    if let OptionalLookahead(ole) = se && let Some(re) = ole.as_repeat {
+        return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement { ..ole, as_repeat: Option::Some(rebind(re)) });
     }
     return se;
 }
@@ -2420,7 +2470,7 @@ fn lower_alt_scan_element(
         elem_follow_exact,
         &continuation,
     );
-    if let Repeat(_) = &se {
+    if se matches { Repeat(_) | OptionalLookahead(_) } {
         let basic_follow = ctx.analysis.first_of_elements_from(alt_elements, i + 1);
         se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, reaches_rule_tail, rule_name);
     }
@@ -2485,7 +2535,11 @@ fn surface_contains_variable_repeat(elem: &Element) -> bool {
 /// scan body separately (the optional sub-elements that are "on"
 /// in this shape, unwrapped from their Optional Repeat wrappers,
 /// plus the corresponding inner Group flattening when applicable).
-fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut LowerContext) -> ScanElement {
+fn lower_scan_optional_lookahead_group(
+    alt: &Alternative,
+    ctx: &mut LowerContext,
+    as_repeat: ScanRepeatElement,
+) -> ScanElement {
     let shapes = compute_shapes_for_alt(&alt.elements);
     let mut sigs: List<List<List<i32>>> = [];
     let mut bodies: List<ScanBody> = [];
@@ -2506,6 +2560,7 @@ fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut LowerContext
         sigs: sigs,
         bodies: bodies,
         scan_guarded: scan_guarded,
+        as_repeat: Option::Some(as_repeat),
     });
 }
 
@@ -3122,7 +3177,7 @@ fn lower_group_alt<S: AsStrSlice, S1: AsStrSlice>(
         // surfaces a top-level `ScanElement::Repeat` — so the scan
         // rebind needs an independent check, not an `&&` of the two.
         let op_is_repeat = op_repeat_inner(&op) matches { Some(_) };
-        let se_is_repeat = se matches { Repeat(_) };
+        let se_is_repeat = se matches { Repeat(_) | OptionalLookahead(_) };
         if op_is_repeat || se_is_repeat {
             let basic_follow = ctx.analysis.first_of_elements_from(&alt.elements, i + 1);
             if let Some(rep_op) = op_repeat_inner(&op) {
@@ -3729,7 +3784,7 @@ fn lower_repeat_op<S: AsStrSlice>(
     // `gen_scan_*` walker graph. Uses the same `iter_follow` as the
     // parse side so per-position context (`caller_follow_first`
     // baked on nested `ScanRepeatElement`s) lines up.
-    let mut scan_body = lower_scan_element(
+    let lowered_scan_body = lower_scan_element(
         &rep.element,
         ctx,
         &iter_follow,
@@ -3738,6 +3793,7 @@ fn lower_repeat_op<S: AsStrSlice>(
         false,
         &inner_suffix,
     );
+    let mut scan_body = strict_repeat_body(lowered_scan_body, &rep.element, ctx);
     let mut body = body;
     if let Some(tail) = repeat_body_tail_follow(ctx, rep, follow_arg) {
         body = retarget_loop_tail_follow(body, &tail);

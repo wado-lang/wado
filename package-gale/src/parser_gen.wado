@@ -475,7 +475,7 @@ fn scan_tail_call(body: &ScanBody, ctx: &mut EmitContext) -> Option<ScanRuleCall
     }
     let n = body.elements.len();
     for let i of 0..<n {
-        if probe_scans_rest(&body.elements[i], &body.elements, i + 1, n, ctx) {
+        if probe_scanning_rest(&body.elements[i], &body.elements, i + 1, n, ctx) matches { Some(_) } {
             return null;
         }
     }
@@ -1935,8 +1935,20 @@ fn gen_scan_op_element<S: AsStrSlice>(
         },
         Repeat(re) => gen_scan_op_repeat(w, re, ctx, fail_stmt, known),
         Group(ge) => gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient, known),
-        OptionalLookahead(ole) => gen_scan_op_optional_lookahead(w, ole, ctx),
+        OptionalLookahead(ole) => match contested_shape_repeat(ole, ctx) {
+            Some(re) => gen_scan_op_repeat(w, &re, ctx, fail_stmt, known),
+            None => gen_scan_op_optional_lookahead(w, ole, ctx),
+        },
     }
+}
+
+/// The repeat a shape optional scans as where what follows contests its entry,
+/// so its probe decides, as `optional_probe_decides` has the parse side do.
+fn contested_shape_repeat(ole: &ScanOptionalLookaheadElement, ctx: &mut EmitContext) -> Option<ScanRepeatElement> {
+    return match &ole.as_repeat {
+        Some(re) && scan_optional_probe_decides(re, ctx) => Option::Some(*re),
+        _ => null,
+    };
 }
 
 /// The call scanning what a rule-call scan element calls, `form` taking its
@@ -2790,13 +2802,10 @@ fn gen_scan_op_elements<S: AsStrSlice>(
             proven_run += 1;
         } else {
             flush_proven_run(w, &mut proven_run);
-            if gates.is_empty() && probe_scans_rest(se, scan_elems, i + 1, end, ctx) {
-                let Repeat(re) = se else {
-                    unreachable();
-                };
+            if gates.is_empty() && let Some(re) = probe_scanning_rest(se, scan_elems, i + 1, end, ctx) {
                 let cont_done = `cont_done_${w.next_id()}`;
                 w.line(`let mut ${cont_done} = false;`);
-                gen_scan_optional_probe(w, re, ctx, &cont_done);
+                gen_scan_optional_probe(w, &re, ctx, &cont_done);
                 w.begin(`if !${cont_done}`);
                 gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &k);
                 w.end();
@@ -2809,23 +2818,32 @@ fn gen_scan_op_elements<S: AsStrSlice>(
     flush_proven_run(w, &mut proven_run);
 }
 
-/// Whether `se` is an optional probe whose continuation is exactly
+/// The optional probe `se` scans as, where its continuation is exactly
 /// `scan_elems[from..end]`, so a probe that holds leaves nothing to scan.
-fn probe_scans_rest(
+fn probe_scanning_rest(
     se: &ScanElement,
     scan_elems: &List<ScanElement>,
     from: i32,
     end: i32,
     ctx: &mut EmitContext,
-) -> bool {
-    let Repeat(re) = se else {
-        return false;
+) -> Option<ScanRepeatElement> {
+    let re = match se {
+        Repeat(re) => *re,
+        OptionalLookahead(ole) => {
+            let Some(re) = contested_shape_repeat(ole, ctx) else {
+                return null;
+            };
+            re;
+        },
+        _ => {
+            return null;
+        },
     };
-    if !scan_takes_optional_probe(re, ctx) {
-        return false;
+    if !scan_takes_optional_probe(&re, ctx) {
+        return null;
     }
     let rest: List<ScanElement> = scan_elems.iter_value().skip(from).take(end - from).collect();
-    return re.continuation_scan == rest;
+    return if re.continuation_scan == rest { Option::Some(re) } else { null };
 }
 
 /// Whether an optional's scan runs as a probe of its body and continuation.
@@ -4836,12 +4854,12 @@ fn gen_op_optional(
         w.end();
         return;
     }
-    if let OptionalShapeLookahead(s) = &r.strategy {
-        gen_op_optional_shape_lookahead(w, r, s, ctx, nc, follow_gate);
-        return;
-    }
     if optional_probe_decides(r, ctx) {
         gen_optional_probe_entry(w, r, ctx, nc);
+        return;
+    }
+    if let OptionalShapeLookahead(s) = &r.strategy {
+        gen_op_optional_shape_lookahead(w, r, s, ctx, nc, follow_gate);
         return;
     }
     if r.strategy matches { OptionalScanGuard } {
@@ -6140,11 +6158,10 @@ fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 
 /// Whether the probe decides this greedy `?`. Any body: a token contests a
 /// continuation as a rule call does (`A? . C` on `a c`), and so does a group
-/// (`(S | ID)? m` on `f()`). A shape lookahead decides by its own signatures,
-/// which the scan side reads instead of a repeat.
+/// (`(S | ID)? m` on `f()`), a shape lookahead's included: its signatures
+/// cannot see past the body (`('-'? 'a')? 'a'` on `a`).
 fn optional_probe_decides(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
-    return !r.strategy matches { OptionalShapeLookahead(_) }
-        && r.body_scannable
+    return r.body_scannable
         && r.probe_contested
         && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }

@@ -1445,6 +1445,10 @@ pub struct ScanOptionalLookaheadElement {
     /// through to the next rather than skipping the whole optional — matching
     /// the parse side. See `OptionalShapeLookaheadStrategy::scan_guarded`.
     pub scan_guarded: bool = false,
+    /// The optional as a plain repeat, stamped where it stands as any repeat
+    /// is. Where what follows it contests its entry, a shape's signature cannot
+    /// tell entering from skipping, so both sides ask its probe instead.
+    pub as_repeat: Option<ScanRepeatElement> = null,
 }
 
 // ==========================================================================
