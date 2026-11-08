@@ -27,6 +27,9 @@ pub struct PredicateSite {
     pub rule_index: i32,
     pub vals_in_scope: bool,
     pub bindings: List<AltBinding> = [],
+    /// Ahead of the rule's alternatives, where every label is unmatched
+    /// (`unmatched_bindings`), built only for a body that translates.
+    pub before_alternatives: bool = false,
 }
 
 /// The dispatch-gate condition an alt-initial predicate contributes, or `null`
@@ -73,13 +76,14 @@ pub fn predicate_condition_for(
         return Option::Some(`${pred_fn_name(analysis.predicate_fn_id(a.source.action_id))}(p)`);
     }
     let rules = analysis.parser_rules();
+    let rule = &rules[site.rule_index];
     return match translate_predicate(
         &settings.action_language,
-        &rules[site.rule_index],
+        rule,
         rules,
         &a.source.text,
         site.vals_in_scope,
-        &site.bindings,
+        &if site.before_alternatives { unmatched_bindings(rule) } else { site.bindings },
         &settings.grammar_name,
         &settings.action_members,
         false,
@@ -153,7 +157,7 @@ pub fn decision_predicates(settings: &GenSettings, analysis: &mut GrammarAnalysi
         let site = PredicateSite {
             rule_index: r,
             vals_in_scope: rule_returns_vals(rule),
-            bindings: unmatched_bindings(rule),
+            before_alternatives: true,
         };
         let mut body: List<MetPredicate> = [];
         for let alt of &rule.alternatives {
@@ -285,13 +289,12 @@ fn element_predicates_met(
                 return;
             }
             visited.push(r.name);
-            let callee = analysis.find_rule(&r.name).unwrap();
             let callee_site = PredicateSite {
                 rule_index: analysis.rule_index_of(&r.name),
                 vals_in_scope: false,
-                bindings: unmatched_bindings(callee),
+                before_alternatives: true,
             };
-            for let calt of &callee.alternatives {
+            for let calt of &analysis.find_rule(&r.name).unwrap().alternatives {
                 let _ = predicates_met_at(&calt.elements, &calt.actions, 0, &callee_site, analysis, visited, out);
             }
         },
