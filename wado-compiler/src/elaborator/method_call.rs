@@ -2072,8 +2072,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(receiver) = struct_name_for_lookup.clone()
         {
             let own_ids = sig.own_type_param_ids();
-            let mut infer = InferCtx::new(&self.tysys.type_table, own_ids.clone());
-            for (i, (&param_type, &arg)) in param_types.iter().zip(args.iter()).enumerate() {
+            let declaring_args = self
+                .tysys
+                .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
+                .unwrap_or_default();
+            // Solved for as fresh variables, read with the receiver's arguments
+            // in one pass: `param_types` already holds those arguments, and a
+            // caller's parameter among them is the same type as the slot at its
+            // position. A method with a pack keeps `param_types` and its own
+            // slots: read again from the declaration, a spread over the pack
+            // comes back as a tuple of the receiver's arguments.
+            let inst = (!sig.own_params.iter().any(|p| p.is_pack)).then(|| {
+                self.instantiate(
+                    &own_ids,
+                    &Instantiation {
+                        kind: InstanceKind::Method,
+                        name: &static_call.method,
+                        span: static_call.span,
+                        type_args: &[],
+                        self_binding: None,
+                        impl_args: &[],
+                    },
+                )
+            });
+            let solving = inst.as_ref().map_or_else(|| own_ids.clone(), |inst| inst.vars.clone());
+            let mut solved_for = param_types.clone();
+            if inst.is_some() {
+                let open: Vec<TypeId> = solving
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &slot)| match method_type_args.get(i) {
+                        Some(&written) if written != TypeTable::UNKNOWN => written,
+                        _ => slot,
+                    })
+                    .collect();
+                self.instantiate_static_params(
+                    Some(&sig),
+                    &declaring_args,
+                    &open,
+                    self_in_args,
+                    inherited.then_some(target_type_id),
+                    &mut solved_for,
+                );
+            }
+            let mut infer = InferCtx::new(&self.tysys.type_table, solving.clone());
+            for (i, (&param_type, &arg)) in solved_for.iter().zip(args.iter()).enumerate() {
                 if answers_last(static_call.args.get(i)) {
                     infer.add_deferred(param_type, arg);
                 } else {
@@ -2081,6 +2124,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             let (mut inferred, bindings) = infer.solve_with_bindings();
+            if let Some(inst) = &inst {
+                self.record_instantiation(inst, &inferred);
+            }
+            // A slot left open stays the declaration's own, for the receiver's
+            // substitution to fill where the block declares none.
+            for ((slot, &var), &own) in inferred.iter_mut().zip(&solving).zip(&own_ids) {
+                if *slot == var {
+                    *slot = own;
+                }
+            }
             // A slot the arguments do not pin takes the default its declaration
             // wrote (WEP 2026-04-11), as every other spelling does. Without it
             // a block declaring slots of its own rejected the call the same
@@ -2091,8 +2144,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declaring no slot of its own leaves the method's to its type
             // default, which is not the arguments' to answer.
             // A pack is settled below instead, never a slot to spell.
-            let unanswered = own_ids.iter().enumerate().find(|&(i, id)| {
-                !bindings.contains_key(id)
+            let unanswered = solving.iter().enumerate().find(|&(i, slot)| {
+                !bindings.contains_key(slot)
                     && !sig.own_params[i].is_pack
                     && method_type_args
                         .get(i)
@@ -2113,10 +2166,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             merge_turbofish_type_args(&mut method_type_args, &inferred);
             let reached = self.tysys.packs_args_reach(&param_types, args.len());
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
-            let declaring_args = self
-                .tysys
-                .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
-                .unwrap_or_default();
             self.instantiate_static_params(
                 Some(&sig),
                 &declaring_args,
