@@ -2921,29 +2921,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t))
             });
-        match target {
-            Some(target) => {
-                for &branch in &*branches {
-                    self.solve_infer_holes_against(branch, target);
-                }
+        if let Some(target) = target {
+            for &branch in &*branches {
+                self.solve_infer_holes_against(branch, target);
             }
+        } else {
             // No branch is decided alone, yet each may decide what another
             // leaves open: `Ok(v)` settles `Result`'s `T`, `Err("x")` its `E`.
             // One branch gathers what every other decides, then hands it back.
-            None => {
-                let at = branches
-                    .iter()
-                    .position(|&t| t != TypeTable::NEVER)
-                    .expect("a branch carrying a hole is not `!`");
-                let others = || (0..branches.len()).filter(move |&i| i != at);
-                for i in others() {
-                    let sibling = self.apply_infer_holes(branches[i]);
-                    self.solve_infer_holes_against(branches[at], sibling);
-                }
-                let hub = self.apply_infer_holes(branches[at]);
-                for i in others() {
-                    self.solve_infer_holes_against(branches[i], hub);
-                }
+            let at = branches
+                .iter()
+                .position(|&t| t != TypeTable::NEVER)
+                .expect("a branch carrying a hole is not `!`");
+            let others = || (0..branches.len()).filter(move |&i| i != at);
+            for i in others() {
+                let sibling = self.apply_infer_holes(branches[i]);
+                self.solve_infer_holes_against(branches[at], sibling);
+            }
+            let hub = self.apply_infer_holes(branches[at]);
+            for i in others() {
+                self.solve_infer_holes_against(branches[i], hub);
             }
         }
         for branch in branches {

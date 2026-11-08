@@ -1103,15 +1103,14 @@ impl TypeSystem {
                     .unwrap_or_default();
                 let decl = self.type_def(base);
                 let members = if let Some(templates) = self.struct_field_type_ids_of(base) {
-                    match decl {
-                        Some(decl) => templates
+                    if let Some(decl) = decl {
+                        templates
                             .into_iter()
                             .map(|field_type| self.substitute_type_params(field_type, decl, &args))
-                            .collect(),
-                        None => {
-                            assert!(args.is_empty(), "an anonymous struct takes no arguments");
-                            templates
-                        }
+                            .collect()
+                    } else {
+                        assert!(args.is_empty(), "an anonymous struct takes no arguments");
+                        templates
                     }
                 } else if let Some(payloads) = self.case_payload_types(base) {
                     payloads

@@ -1292,7 +1292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The slot names the pack itself, not a `TypeParam` placeholder: a
             // derivation infers `Option<F>`'s payload from it, and inference
             // binds through the pack.
-            |tt, pack| tt.make_option(pack),
+            TypeTable::make_option,
         )
     }
 
