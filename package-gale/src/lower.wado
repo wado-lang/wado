@@ -2387,6 +2387,7 @@ fn rebind_scan_repeat_caller_follow(
             index,
             ctx,
             reaches_rule_tail,
+            re.gate_caller_follow,
             rule_name,
             outer_suffix,
         );
@@ -4274,7 +4275,9 @@ fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> 
 /// Whether a Repeat's body and what follows it in its alternative can start on
 /// one token, so its first token does not say whether it enters. Past the
 /// alternative's end the caller continues, which is unknown here, so a Repeat
-/// whose rest can match empty counts as contested.
+/// whose rest can match empty counts as contested. That holds as well where the
+/// alternative ends at a left-recursion loop rather than at the rule's tail:
+/// the FOLLOW gate stands in for both there.
 fn repeat_contested(
     body_admits: &Admits,
     caller_follow_first: &List<i32>,
@@ -4282,9 +4285,11 @@ fn repeat_contested(
     index: i32,
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
+    gate_caller_follow: bool,
 ) -> bool {
     return admits_is_everything(body_admits)
         || admits_overlap(body_admits, caller_follow_first)
+        || gate_caller_follow
         || reaches_rule_tail && ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1);
 }
 
@@ -4315,6 +4320,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         index,
         ctx,
         reaches_rule_tail,
+        rep_op.gate_caller_follow,
         rule_name,
         outer_suffix,
     );
@@ -4396,13 +4402,22 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     index: i32,
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
+    gate_caller_follow: bool,
     rule_name: S,
     outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
     let contested_somewhere = ctx.settings.atn matches { Always | Verify }
         && !by_atn
-        && repeat_contested(body_admits, caller_follow_first, alt_elements, index, ctx, reaches_rule_tail);
+        && repeat_contested(
+            body_admits,
+            caller_follow_first,
+            alt_elements,
+            index,
+            ctx,
+            reaches_rule_tail,
+            gate_caller_follow,
+        );
     let contested = contested_somewhere && ctx.settings.atn matches { Always };
     let checked = contested_somewhere
         && !non_greedy

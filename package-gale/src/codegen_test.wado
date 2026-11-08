@@ -1084,6 +1084,31 @@ a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and 
 ";
 }
 
+// `ID e?` ends an atom, so its `?` competes with the loop's `args` and with
+// the caller's FOLLOW. On the last two inputs the jar enters it and `never`
+// does not. The trees are the jar's.
+test "atn verify checks an optional ending a left-recursive atom" {
+    let g4 = "grammar N;
+s : e EOF ;
+e : e '.' ID | 'new' e args | 'new' e | e args | ID e? | args ;
+args : '(' e? ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses(g4, "s", ["a", "a ( )", "new a ( )", "a . b"], &verify) == "a => (s (e a))
+a ( ) => (s (e a (e (args ( )))))
+new a ( ) => (s (e new (e a) (args ( ))))
+a . b => (s (e (e a) . b))
+";
+    let source = gen_with(g4, &verify).source;
+    for let input of ["new a ( ) ( )", "a new b ( ) ( )"] {
+        let out = eval_beside(source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+        assert !out.status matches { Exited(0) }, input;
+        assert out.stderr.contains(": the repeat picks "), out.stderr;
+    }
+}
+
 // The mid operand's rest opens with a group of loop operators, so it climbs
 // only to where the group and the trailing operand still parse. The trees are
 // the jar's.
