@@ -2046,19 +2046,27 @@ fn test_test_keys_its_cache_by_the_compilers_environment() {
 fn test_test_caches_the_compile_of_a_file_without_tests() {
     let tmp = tempfile::tempdir().unwrap();
     let empty = tmp.path().join("empty_test.wado");
+    let helper = tmp.path().join("helper.wado");
+    std::fs::write(&helper, "pub fn g() -> i32 {\n    return 1;\n}\n").unwrap();
     std::fs::write(
         &empty,
-        "use { println, Stdout } from \"core:cli\";\nuse { MonotonicClock } from \"wasi:clocks\";\n\npub fn f() with (Stdout, MonotonicClock) {\n    println(`${MonotonicClock::now()}`);\n}\n",
+        "use { println, Stdout } from \"core:cli\";\nuse { MonotonicClock } from \"wasi:clocks\";\nuse { g } from \"./helper.wado\";\n\npub fn f() with (Stdout, MonotonicClock) {\n    println(`${MonotonicClock::now()} ${g()}`);\n}\n",
     )
     .unwrap();
-    let run = || wado().arg("test").arg(&empty).assert().success();
+    let run = || wado().arg("test").arg(&empty).assert();
 
     run()
+        .success()
         .stdout(predicate::str::contains("skip:"))
         .stdout(predicate::str::contains("cached:").not());
     run()
+        .success()
         .stdout(predicate::str::contains("cached:  1 files"))
         .stdout(predicate::str::contains("skip:").not());
+    std::fs::write(&helper, "pub fn g() -> i32 {\n    return \"one\";\n}\n").unwrap();
+    run()
+        .failure()
+        .stdout(predicate::str::contains("compile: 0 ok, 1 failed"));
 }
 
 #[test]
