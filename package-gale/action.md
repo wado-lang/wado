@@ -49,6 +49,14 @@ The channel therefore opens for a rule that captures anything, not only one decl
 
 A repeat writes its capture once per iteration, so a reference reads the last match — ANTLR's `$x` for a looped label.
 
+### A label belongs to its alternative
+
+ANTLR keeps a label in a field of the rule's context, so the label is the whole alternative's. Bound inside a group, an optional or a loop, it reads as `null` where that element matched nothing. Bound twice, it reads the last binding.
+
+A label bound once at the alternative's top level, ahead of every body naming it, stays a plain `let`. Any other is shared (`LabelReach::Shared`): the alternative declares one local where it starts, `-1` for a token and `null` for a rule call, and every binding assigns it. A shared token label that never matched reads as the jar's does: `.text` is `null`, a number is `0`, and `$x == null` is `x < 0`. A shared rule label holds an `Option`, so `$y.v` traps where the jar throws `NullPointerException`.
+
+A decision ahead of the rule's alternatives finds every label unmatched (`LabelReach::Unmatched`). A decision inside an alternative reads the shared locals as they stand.
+
 ## Runtime context API
 
 Actions and predicates call a small API; both Wado-written and translated bodies target it. Parser side:
@@ -145,7 +153,7 @@ That includes the report: a **required** group whose dispatch takes no alternati
 
 ## Actions inside a group
 
-An action belongs to the alternative it is written in, whether that alternative is a rule's or a group's, and runs when the alternative is taken. One element walker therefore serves every body — rule alternative, group alternative, LR suffix, a transparent group's inlined elements — taking the alternative's actions and its own op bindings, so an action's position and the labels it reads come from the body it sits in rather than the one that encloses it. Under a `Repeat` this runs the action once per iteration, which is what a group under `*` means.
+An action belongs to the alternative it is written in, whether that alternative is a rule's or a group's, and runs when the alternative is taken. One element walker therefore serves every body — rule alternative, group alternative, LR suffix, a transparent group's inlined elements — taking the alternative's actions, so an action's position comes from the body it sits in. The labels it reads are those of the rule alternative enclosing it (see "A label belongs to its alternative"). Under a `Repeat` this runs the action once per iteration, which is what a group under `*` means.
 
 Where a body is emitted as several shape branches (an optional whose absent positions are skipped), only the elements are shape-conditional: an action between them is written in the alternative, not in the optional, so it runs in every branch. An action nested inside the skipped element belongs to that element's own body and goes with it.
 

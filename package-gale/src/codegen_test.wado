@@ -4854,6 +4854,74 @@ A : 'a' ; B : 'b' ; C : 'c' ;
     assert got == "ccc => (s c c c) [ccc]\ncca => (s c c a) [cca]\n";
 }
 
+// A label belongs to the whole alternative, as a field of ANTLR4's context does:
+// one bound inside a group, an optional or a loop reads as null where it did not
+// match, and the last binding wins.
+test "an action reads a label bound anywhere in its alternative" {
+    let g4 = "grammar T;
+s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF
+  | 'G' r7 EOF | 'H' r8 EOF | 'I' r9 EOF | 'J' r10 EOF | 'K' r11 EOF | 'L' r12 EOF | 'M' r13 EOF ;
+r1 : x='-'? {$x == null}? 'a' | '-' 'a' 'b' ;
+r12 : x='-'? {$x == null}? 'a' | '-' 'a' ;
+r13 : ( x='-'? {$x == null}? 'a' | '-' 'a' ) {System.out.println(\"r13 \" + $x.text);} ;
+r2 : (x='-')? 'a' {System.out.println(\"r2 \" + $x.text + \" \" + $x.line + \" \" + $x.index + \" \" + ($x != null));} ;
+r3 : X ( X Y {System.out.println(\"r3 \" + $X.text);} ) ;
+r4 : (y=q)? 'a' {System.out.println(\"r4 \" + $y.text);} ;
+r5 : (x='-' | x='+') 'a' {System.out.println(\"r5 \" + $x.text);} ;
+r6 : (x='-')* 'a' {System.out.println(\"r6 \" + $x.text);} ;
+r7 : X X {System.out.println(\"r7 \" + $X.text);} ;
+r8 : {System.out.println(\"r8 \" + $x.text);} x=X {System.out.println(\"r8 \" + $x.text);} ;
+r9 : (x=X {System.out.println(\"r9 \" + $x.text);} | Y {System.out.println(\"r9 \" + $x.text);}) ;
+r10 : (y=q)+ {System.out.println(\"r10 \" + $y.text + \" \" + $y.v);} ;
+r11 : y=q y=q {System.out.println(\"r11 \" + $y.text + \" \" + $y.v);} ;
+q returns [int v] : X {$v = $X.int;} ;
+X : [0-9]+ ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+";
+    let inputs: List<String> = [
+        "A a", "A - a", "A - a b", "B a", "B - a", "C 1 2 y", "D a", "D 7 a", "E - a", "E + a", "F a", "F - - a",
+        "G 1 2", "H 1", "I 1", "I y", "J 1 2 3", "K 1 2", "L a", "L - a", "M a", "M - a",
+    ];
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A (r1 a))
+A - a => error
+A - a b => (s A (r1 - a b))
+B a => (s B (r2 a)) [r2 null 0 0 false\n]
+B - a => (s B (r2 - a)) [r2 - 1 1 true\n]
+C 1 2 y => (s C (r3 1 2 y)) [r3 2\n]
+D a => (s D (r4 a)) [r4 null\n]
+D 7 a => (s D (r4 (q 7) a)) [r4 7\n]
+E - a => (s E (r5 - a)) [r5 -\n]
+E + a => (s E (r5 + a)) [r5 +\n]
+F a => (s F (r6 a)) [r6 null\n]
+F - - a => (s F (r6 - - a)) [r6 -\n]
+G 1 2 => (s G (r7 1 2)) [r7 2\n]
+H 1 => (s H (r8 1)) [r8 null\nr8 1\n]
+I 1 => (s I (r9 1)) [r9 1\n]
+I y => (s I (r9 y)) [r9 null\n]
+J 1 2 3 => (s J (r10 (q 1) (q 2) (q 3))) [r10 3 3\n]
+K 1 2 => (s K (r11 (q 1) (q 2))) [r11 2 2\n]
+L a => (s L (r12 a))
+L - a => error
+M a => (s M (r13 a)) [r13 null\n]
+M - a => error
+";
+    }
+}
+
+// The jar throws a NullPointerException reading a member of a rule label that
+// did not match; the parser generated here traps.
+test "an action reading a value of an unmatched rule label traps" {
+    let source = gen_source("grammar T;
+s : (y=q)? 'a' {System.out.println($y.v);} EOF ;
+q returns [int v] : 'b' {$v = 3;} ;
+WS : ' ' -> skip ;
+");
+    assert run_beside(source, wado`show("b a", parse_s("b a"));\n`, SHOW_FN).stdout == "b a => (s (q b) a) [3\n]\n";
+    assert !eval_beside(source, wado`show("a", parse_s("a"));\n`, SHOW_FN).status matches { Exited(0) };
+}
+
 test "a fragment two rules share matches in each" {
     let got = lexes("lexer grammar L;
 FLOAT : DIGITS '.' DIGITS? ;

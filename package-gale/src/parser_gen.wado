@@ -128,6 +128,8 @@ use {
     rule_node_ref,
     rule_span_lo_ref,
     rule_span_hi_ref,
+    body_names_binding,
+    element_names_binding,
 } from "./action_translate.wado";
 
 use {
@@ -174,7 +176,7 @@ use {
 } from "./parser_runtime_gen.wado";
 use { gen_parser_super_interface } from "./superclass.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
-use { AltBinding } from "./attr_resolve.wado";
+use { AltBinding, LabelReach } from "./attr_resolve.wado";
 use {
     NO_KINDS,
     build_lookahead_condition,
@@ -570,7 +572,7 @@ fn gen_called_scan_functions(
         chunks.push(null);
     }
     while let Some(i) = ctx.cursor.next_called_scan() {
-        ctx.cursor.set_current_rule_index(i);
+        ctx.enter_rule(i);
         ctx.cursor.set_lr_continuation(lr_continuation_of(&lowered.parser_rules[i]));
         let mut w = CodeWriter::with_capacity(1024);
         gen_scan_function(&mut w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
@@ -2930,7 +2932,7 @@ fn gen_scan_op_elements_in_block<S: AsStrSlice>(
 }
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
-    ctx.cursor.set_current_rule_index(ctx.analysis.rule_index_of(&rule.name));
+    ctx.enter_rule(ctx.analysis.rule_index_of(&rule.name));
     // The canonical name every other rule (and the public input entry)
     // calls. We emit the rule body under `<canonical>__inner` and wrap it
     // with a thin entry that records the rule on the rule stack when its
@@ -3551,39 +3553,123 @@ fn peel_scalar_label(elem: &Element) -> &Element {
     return cur;
 }
 
-/// Collect the actual post-dedup bindings of an alt's ops, so the action
+/// The actual post-dedup bindings of an alt's top-level leaf ops, so the action
 /// translator resolves a `$ref` to its real local even when a token / rule
 /// field-name collision deduped it (`e_2`), and to the rule this alternative
 /// called when the same label names a different one elsewhere (`x=a | x=b`).
-/// Top-level leaf ops only; a `Repeat` / group inner binds in its own block, so
-/// a ref to one falls back to `binding_name` and is reported where it does not
-/// resolve.
 fn collect_alt_bindings(ops: &List<Op>) -> List<AltBinding> {
     let mut out: List<AltBinding> = [];
     for let op of ops {
-        collect_op_binding(op, &mut out);
+        if let Some(b) = leaf_op_binding(op) {
+            out.push(b);
+        }
     }
     return out;
 }
 
-fn collect_op_binding(op: &Op, out: &mut List<AltBinding>) {
-    match *op {
-        Token(t) => out.push(AltBinding { is_token: true, base: t.dedup_base, field: t.field }),
-        Literal(l) => out.push(AltBinding { is_token: true, base: l.dedup_base, field: l.field }),
-        Excluded(e) => out.push(AltBinding { is_token: true, base: e.dedup_base, field: e.field }),
-        Wildcard(wop) => out.push(AltBinding { is_token: true, base: wop.dedup_base, field: wop.field }),
-        RuleCall(rc) => out.push(
+fn leaf_op_binding(op: &Op) -> Option<AltBinding> {
+    return match *op {
+        Token(t) => Option::Some(AltBinding { is_token: true, base: t.dedup_base, field: t.field }),
+        Literal(l) => Option::Some(AltBinding { is_token: true, base: l.dedup_base, field: l.field }),
+        Excluded(e) => Option::Some(AltBinding { is_token: true, base: e.dedup_base, field: e.field }),
+        Wildcard(wop) => Option::Some(AltBinding { is_token: true, base: wop.dedup_base, field: wop.field }),
+        RuleCall(rc) => Option::Some(
             AltBinding { is_token: false, base: rc.dedup_base, field: rc.field, ref_name: rc.target_name },
         ),
-        // A repeat's body binds inside the loop / `if` it is emitted in, out of
-        // scope here — and `A?` may not bind at all, unlike `A`.
-        Repeat(_) => {
-        },
+        Repeat(_) | ListLabel(_) | Group(_) => null,
+    };
+}
+
+/// One place an alternative binds a label: the top-level element it sits in,
+/// and whether inside a group, an optional or a loop there.
+struct LabelSite {
+    binding: AltBinding,
+    at: i32,
+    nested: bool,
+}
+
+fn collect_label_sites(op: &Op, at: i32, nested: bool, out: &mut List<LabelSite>) {
+    match *op {
+        Repeat(r) => collect_label_sites(&r.body, at, true, out),
+        // A list label collects into a list of its own.
         ListLabel(_) => {
         },
-        Group(_) => {
+        Group(g) => if let TokenOnly(to) = &g.shape {
+            out.push(LabelSite {
+                binding: AltBinding { is_token: true, base: to.field, field: to.field },
+                at,
+                nested,
+            });
+        } else {
+            for let alt of &g.alts {
+                for let inner of &alt.ops {
+                    collect_label_sites(inner, at, true, out);
+                }
+            }
         },
+        Token(_) | Literal(_) | Excluded(_) | Wildcard(_) | RuleCall(_) => out.push(
+            LabelSite { binding: leaf_op_binding(op).unwrap(), at, nested },
+        ),
     }
+}
+
+/// Make the bindings an alternative's actions see current, and declare where
+/// it starts the local each shared label writes (`LabelReach::Shared`), and
+/// hand back the bindings to restore once it ends.
+/// `elements[first_element + i]` is `ops[i]`'s.
+fn enter_alt_label_scope(
+    w: &mut CodeWriter,
+    elements: &List<Element>,
+    ops: &List<Op>,
+    actions: &List<AltAction>,
+    first_element: i32,
+    ctx: &mut EmitContext,
+) -> List<AltBinding>
+    contract elements.len() == first_element + ops.len()
+{
+    let outer = *ctx.cursor.alt_bindings();
+    let mut sites: List<LabelSite> = [];
+    for let mut i = 0; i < ops.len(); i += 1 {
+        collect_label_sites(&ops[i], i, false, &mut sites);
+    }
+    let mut shared: List<AltBinding> = [];
+    for let site of &sites {
+        let b = &site.binding;
+        if shared.iter_ref().any(|s| s.is_token == b.is_token && s.base == b.base) || !ctx.names_binding(&b.base) {
+            continue;
+        }
+        let same: List<&LabelSite> = sites.iter_ref().filter(
+            |s| s.binding.is_token == b.is_token && s.binding.base == b.base,
+        ).collect();
+        let read_first = actions.iter_ref().any(
+            |a| a.before_index - first_element <= site.at && body_names_binding(&a.source.text, &b.base),
+        )
+            || (0..<site.at).any(|j| element_names_binding(&elements[first_element + j], &b.base));
+        if same.len() > 1 || same.iter_ref().any(|s| s.nested) || read_first {
+            shared.push(AltBinding { ..*b, reach: LabelReach::Shared, capture: b.field });
+        }
+    }
+    let mut bindings: List<AltBinding> = collect_alt_bindings(ops).into_iter().filter(
+        |b| !shared.iter_ref().any(|s| s.is_token == b.is_token && s.base == b.base),
+    ).collect();
+    for let mut s of shared {
+        let first = s.field;
+        for let mut k = 2; bindings.iter_ref().any(|b| b.field == s.field); k += 1 {
+            s.field = `${first}_${k}`;
+        }
+        w.line(`let mut ${s.field}: ${shared_label_type(&s, ctx)} = ${if s.is_token { "-1" } else { "null" }};`);
+        bindings.push(s);
+    }
+    ctx.cursor.set_alt_bindings(bindings);
+    return outer;
+}
+
+fn shared_label_type(label: &AltBinding, ctx: &EmitContext) -> String {
+    if label.is_token {
+        return "i32";
+    }
+    let callee = ctx.analysis.find_rule(&label.ref_name).expect("a rule call names a parser rule");
+    return `Option<${rule_result_type_for(callee, ctx)}>`;
 }
 
 fn gen_alt_elements(
@@ -3609,9 +3695,11 @@ fn gen_alt_elements(
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn";
-    if ctx.settings.emit_actions {
-        ctx.cursor.set_alt_bindings(collect_alt_bindings(ops));
-    }
+    let outer: List<AltBinding> = if ctx.settings.emit_actions {
+        enter_alt_label_scope(w, elements, ops, actions, 0, ctx);
+    } else {
+        [];
+    };
     let mut name_counts: List<[String, i32]> = [];
     // The emitter walks the surface elements + lowered ops in parallel: the
     // leaves/groups/repeats append to the `TreeBuilder`. The surface elements
@@ -3641,6 +3729,9 @@ fn gen_alt_elements(
         }
     }
     gen_alt_actions_at(w, actions, elements.len(), ctx, true);
+    if ctx.settings.emit_actions {
+        ctx.cursor.set_alt_bindings(outer);
+    }
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
@@ -3660,12 +3751,6 @@ fn gen_elements_with_non_greedy(
 )
     contract ops.len() == elements.len(), "one op per element"
 {
-    // An inlined body's labels bind to its own ops. Restored on the way out so a
-    // nested group does not leave the outer scope pointing at its bindings.
-    let outer_bindings = *ctx.cursor.alt_bindings();
-    if ctx.settings.emit_actions && !actions.is_empty() {
-        ctx.cursor.set_alt_bindings(collect_alt_bindings(ops));
-    }
     let first_proven = element_proven_first(actions, proven_first);
     for let mut i = 0; i < elements.len(); i += 1 {
         gen_alt_actions_at(w, actions, i, ctx);
@@ -3691,9 +3776,6 @@ fn gen_elements_with_non_greedy(
         }
     }
     gen_alt_actions_at(w, actions, elements.len(), ctx, true);
-    if ctx.settings.emit_actions && !actions.is_empty() {
-        ctx.cursor.set_alt_bindings(outer_bindings);
-    }
 }
 
 /// Compute the `follow` to pass to `gen_op_repeat_with_follow_override`
@@ -3834,12 +3916,35 @@ fn call_site_stamps(ctx: &EmitContext, call_site: i32) -> List<String> {
 }
 
 /// A binding exists only for a semantic action to read. A reference reaches it
-/// by its base name, or by the local itself where no binding records it.
-fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field: S1) -> String {
-    if ctx.settings.emit_actions && (ctx.reads_binding(base) || ctx.reads_binding(field)) {
+/// by its base name, or by the local itself where no binding records it. A
+/// shared label assigns the local its alternative declared.
+fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field: S1, is_token: bool = true) -> String {
+    if !ctx.settings.emit_actions {
+        return String::new();
+    }
+    if let Some(label) = ctx.cursor.shared_label(is_token, &base) {
+        return `${label.field} = `;
+    }
+    if ctx.reads_binding(base) || ctx.reads_binding(field) {
         return `let ${field} = `;
     }
     return String::new();
+}
+
+fn shared_rule_label<S: AsStrSlice>(ctx: &EmitContext, base: S) -> Option<AltBinding> {
+    if !ctx.settings.emit_actions {
+        return null;
+    }
+    return match ctx.cursor.shared_label(false, base) {
+        Some(label) => Option::Some(*label),
+        None => null,
+    };
+}
+
+/// A call whose result a shared label holds, which is `null` until one runs.
+fn gen_shared_rule_call(w: &mut CodeWriter, label: &AltBinding, callee: &String, args: &String, ctx: &mut EmitContext) {
+    ctx.cursor.note_ref(callee);
+    w.line(`${label.field} = Option::Some(${callee}(${args}));`);
 }
 
 /// What the first element may take as proven: nothing once an action runs
@@ -3942,13 +4047,19 @@ fn gen_op_leaf(
                 }
             }
             args.extend(&call_args(&r, ctx));
-            let bind = leaf_binding(ctx, &r.dedup_base, &r.field);
-            w.call(CallStmt {
-                pre: call_site_stamps(ctx, r.atn_call_site),
-                form: if bind.is_empty() { CallForm::Discard } else { CallForm::Bind(bind) },
-                callee: `_parse_${r.target_snake}`,
-                args,
-            });
+            let callee = `_parse_${r.target_snake}`;
+            if let Some(label) = shared_rule_label(ctx, &r.dedup_base) {
+                gen_call_site_stamps(w, ctx, r.atn_call_site);
+                gen_shared_rule_call(w, &label, &callee, &args.join(", "), ctx);
+            } else {
+                let bind = leaf_binding(ctx, &r.dedup_base, &r.field, false);
+                w.call(CallStmt {
+                    pre: call_site_stamps(ctx, r.atn_call_site),
+                    form: if bind.is_empty() { CallForm::Discard } else { CallForm::Bind(bind) },
+                    callee,
+                    args,
+                });
+            }
             close_call_capture(w, &span_field);
         },
         Wildcard(wop) => emit_leaf(w, &leaf_binding(ctx, &wop.dedup_base, &wop.field), "p.any()"),
@@ -4440,18 +4551,23 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     // reached here — it is an LR loop-entry decision, not a suffix action.
     let actions = &rule.alternatives[lr.alt_index].actions;
     let ops = &lr.suffix.ops;
-    if ctx.settings.emit_actions {
-        // The suffix ops give the right operand's binding; the stripped leading
-        // self-ref (`$l`) falls back to `prefix_self_ref.name`, which is exactly
-        // the `let {name} = _lr_acc;` bound above.
-        ctx.cursor.set_alt_bindings(collect_alt_bindings(ops));
-    }
+    // The suffix ops give the right operand's binding; the stripped leading
+    // self-ref (`$l`) falls back to `prefix_self_ref.name`, which is exactly
+    // the `let {name} = _lr_acc;` bound above.
+    let outer: List<AltBinding> = if ctx.settings.emit_actions {
+        enter_alt_label_scope(w, &rule.alternatives[lr.alt_index].elements, ops, actions, 1, ctx);
+    } else {
+        [];
+    };
     let first_proven = element_proven_first(actions, proven_first, 1);
     for let mut i = 0; i < ops.len(); i += 1 {
         gen_alt_actions_at(w, actions, i + 1, ctx);
         gen_op(w, &ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
     }
     gen_alt_actions_at(w, actions, ops.len() + 1, ctx, true);
+    if ctx.settings.emit_actions {
+        ctx.cursor.set_alt_bindings(outer);
+    }
     w.line("p.b.finish_node(p.last_end());");
     if emits_vals {
         w.line("_lr_acc = vals;");
@@ -5221,7 +5337,6 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
     w.begin(`if ${optional_entry_test(cond, inner, ctx)}`);
     let mut nc: List<[String, i32]> = [];
     let outer_choice = ctx.cursor.enter_group_body(false);
-    let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
     let first_proven = element_proven_first(&alt.actions, proven_first);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         gen_alt_actions_at(w, &alt.actions, i, ctx);
@@ -5232,7 +5347,6 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
         });
     }
     gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx, true);
-    leave_group_alt_bindings(&outer, &alt.actions, ctx);
     ctx.cursor.leave_group_body(outer_choice);
     w.end();
 }
@@ -5460,23 +5574,6 @@ fn close_call_capture(w: &mut CodeWriter, span_field: &Option<String>) {
     }
 }
 
-/// Scope an inlined group alternative's label bindings to its own ops while its
-/// actions are emitted, and hand back the enclosing body's bindings to restore.
-/// A no-op (and byte-identical) for an alternative carrying no action.
-fn enter_group_alt_bindings(ops: &List<Op>, actions: &List<AltAction>, ctx: &mut EmitContext) -> List<AltBinding> {
-    let outer = *ctx.cursor.alt_bindings();
-    if ctx.settings.emit_actions && !actions.is_empty() {
-        ctx.cursor.set_alt_bindings(collect_alt_bindings(ops));
-    }
-    return outer;
-}
-
-fn leave_group_alt_bindings(outer: &List<AltBinding>, actions: &List<AltAction>, ctx: &mut EmitContext) {
-    if ctx.settings.emit_actions && !actions.is_empty() {
-        ctx.cursor.set_alt_bindings(*outer);
-    }
-}
-
 /// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
 /// case. Mirrors `gen_storable_optional_with_lookahead` exactly except
 /// the inner per-element parse routes through op-driven dispatch
@@ -5513,7 +5610,6 @@ fn gen_op_optional_with_shape_lookahead_storable(
         // the lookahead.
         open_chain_arm(w, ei > 0, `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`);
         let mut nc: List<[String, i32]> = [];
-        let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
         for let mut i = 0; i < elements.len(); i += 1 {
             // The actions are the alternative's, not the skipped element's, so
             // every shape branch runs them; only the element is conditional.
@@ -5523,7 +5619,6 @@ fn gen_op_optional_with_shape_lookahead_storable(
             }
         }
         gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
-        leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
     ctx.cursor.leave_group_body(outer_choice);
     if !s.shapes.is_empty() {
@@ -7502,7 +7597,11 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut EmitConte
     let args = parse_call_args(rc, ctx).join(", ");
     let span_field = open_call_capture(w, op, ctx);
     gen_call_site_stamps(w, ctx, rc.atn_call_site);
-    w.line(`${leaf_binding(ctx, &local_var, &local_var)}_parse_${rc.target_snake}(${args});`);
+    if let Some(label) = shared_rule_label(ctx, &rc.dedup_base) {
+        gen_shared_rule_call(w, &label, &`_parse_${rc.target_snake}`, &args, ctx);
+    } else {
+        w.line(`${leaf_binding(ctx, &local_var, &local_var, false)}_parse_${rc.target_snake}(${args});`);
+    }
     close_call_capture(w, &span_field);
 }
 

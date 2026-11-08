@@ -16,6 +16,7 @@ use {
     action_reads_rule_span,
     rule_action_bodies,
     rule_binding_reads,
+    rule_named_bindings,
 } from "./action_translate.wado";
 use { HashMap, HashSet } from "core:collections";
 
@@ -89,6 +90,8 @@ pub struct ParserPlan {
     rule_captures: HashMap<String, RuleCaptures> = HashMap::new(),
     /// The binding bases each rule's actions read (`rule_binding_reads`).
     binding_reads: List<Option<List<String>>> = [],
+    /// The binding bases each rule's bodies name (`rule_named_bindings`).
+    named_bindings: List<List<String>> = [],
 }
 
 /// Decide the parser `grammar` lowers to.
@@ -130,8 +133,10 @@ pub fn plan_parser(
         }
     }
     let mut binding_reads: List<Option<List<String>>> = [];
+    let mut named_bindings: List<List<String>> = [];
     if settings.emit_actions {
         binding_reads = grammar.parser_rules.iter_ref().map(|r| rule_binding_reads(r, &grammar.parser_rules)).collect();
+        named_bindings = grammar.parser_rules.iter_ref().map(|r| rule_named_bindings(r)).collect();
     }
     return ParserPlan {
         emit_follow: marks.caller_follow_gate,
@@ -157,6 +162,7 @@ pub fn plan_parser(
         recovery: recovery_sets(atn, analysis.eof_kind_id()),
         rule_captures: if settings.emit_actions { rule_captures_of(grammar, lowered) } else { HashMap::new() },
         binding_reads,
+        named_bindings,
     };
 }
 
@@ -283,6 +289,14 @@ impl ParserPlan {
             Some(reads) => reads.contains_str(base),
             None => true,
         };
+    }
+
+    /// Whether a body of rule `rule` names the binding `base` with a `$`
+    /// reference.
+    pub fn names_binding<S: AsStrSlice>(&self, rule: i32, base: S) -> bool
+        contract self.tracks_bindings(), "an emit that reads bindings runs with actions on"
+    {
+        return self.named_bindings[rule].contains_str(base);
     }
 }
 

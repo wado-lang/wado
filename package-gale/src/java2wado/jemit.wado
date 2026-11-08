@@ -15,6 +15,7 @@ use {
     resolve_attr_ref,
     binding_name,
     rule_binding_for,
+    token_null_test,
     ref_is_call_ctx,
     ref_is_ctx_to_string_tree,
     RULE_START_TOK_LOCAL,
@@ -477,6 +478,8 @@ pub fn emit_expr(
                 emit_plus(rule, rules, e, vals_in_scope, bindings, env);
             } else if let Some(folded) = fold_ctx_token_null_test(b, bindings, env) {
                 Result::Ok(folded);
+            } else if let Some(test) = token_label_null_test(rule, rules, b, bindings) {
+                Result::Ok(test);
             } else {
                 let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings, env)?;
                 let r = emit_expr(rule, rules, &b.rhs, vals_in_scope, bindings, env)?;
@@ -605,6 +608,29 @@ fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<AltBinding>, env: &JEnv
         return null;
     }
     return Option::Some(if b.op == "!=" { "true" } else { "false" });
+}
+
+/// `$x == null` / `$x != null` on a token label or reference, either way round.
+fn token_label_null_test(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    b: &JBinary,
+    bindings: &List<AltBinding>,
+) -> Option<String> {
+    if b.op != "!=" && b.op != "==" {
+        return null;
+    }
+    let attr = if name_is(&b.rhs, "null") {
+        &b.lhs;
+    } else if name_is(&b.lhs, "null") {
+        &b.rhs;
+    } else {
+        return null;
+    };
+    let Attr(text) = attr else {
+        return null;
+    };
+    return token_null_test(rule, rules, text, bindings, b.op == "!=");
 }
 
 /// Whether the current alternative binds a token named `name`.

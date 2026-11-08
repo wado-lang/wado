@@ -7,7 +7,7 @@ use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
-use { AltBinding } from "./attr_resolve.wado";
+use { AltBinding, unmatched_bindings } from "./attr_resolve.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this } from "./superclass.wado";
 use { PARSER_HANDLE } from "./ident.wado";
@@ -150,7 +150,11 @@ pub fn decision_predicates(settings: &GenSettings, analysis: &mut GrammarAnalysi
     }
     for let mut r = 0; r < rules.len(); r += 1 {
         let rule = &rules[r];
-        let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(rule) };
+        let site = PredicateSite {
+            rule_index: r,
+            vals_in_scope: rule_returns_vals(rule),
+            bindings: unmatched_bindings(rule),
+        };
         let mut body: List<MetPredicate> = [];
         for let alt of &rule.alternatives {
             let _ = predicates_met_at(&alt.elements, &alt.actions, 0, &site, analysis, &mut [], &mut body);
@@ -281,8 +285,13 @@ fn element_predicates_met(
                 return;
             }
             visited.push(r.name);
-            let callee_site = PredicateSite { rule_index: analysis.rule_index_of(&r.name), vals_in_scope: false };
-            for let calt of &analysis.find_rule(&r.name).unwrap().alternatives {
+            let callee = analysis.find_rule(&r.name).unwrap();
+            let callee_site = PredicateSite {
+                rule_index: analysis.rule_index_of(&r.name),
+                vals_in_scope: false,
+                bindings: unmatched_bindings(callee),
+            };
+            for let calt of &callee.alternatives {
                 let _ = predicates_met_at(&calt.elements, &calt.actions, 0, &callee_site, analysis, visited, out);
             }
         },

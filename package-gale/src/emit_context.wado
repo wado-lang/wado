@@ -19,7 +19,7 @@ use {
     gate_condition_for,
 } from "./gate_conditions.wado";
 use { AmbiguousNode } from "./prediction.wado";
-use { AltBinding } from "./attr_resolve.wado";
+use { AltBinding, unmatched_bindings } from "./attr_resolve.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 use { SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
@@ -190,6 +190,13 @@ impl EmitCursor {
     /// The bindings of the alternative whose actions are being emitted.
     pub fn alt_bindings(&self) -> &List<AltBinding> {
         return &self.alt_bindings;
+    }
+
+    /// The alternative's shared local for a label, where it has one.
+    pub fn shared_label<S: AsStrSlice>(&self, is_token: bool, base: S) -> Option<&AltBinding> {
+        return self.alt_bindings.iter_ref().find(
+            |b| b.reach matches { Shared } && b.is_token == is_token && b.base == base.as_str_slice(),
+        );
     }
 
     /// The rendered expected-token set the action about to be emitted would see.
@@ -497,9 +504,23 @@ impl EmitContext {
         return self.plan.rule_captures(&self.current_rule().name).nodes.contains_str(field);
     }
 
+    /// Make rule `idx` the one being emitted, ahead of every alternative: its
+    /// decision finds each label unmatched.
+    pub fn enter_rule(&mut self, idx: i32) {
+        self.cursor.set_current_rule_index(idx);
+        if self.settings.emit_actions {
+            self.cursor.set_alt_bindings(unmatched_bindings(&self.analysis.parser_rules()[idx]));
+        }
+    }
+
     /// Whether an action of the rule being emitted reads the binding `base`.
     pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
         return self.plan.reads_binding(self.cursor.current_rule_index(), base);
+    }
+
+    /// Whether a body of the rule being emitted names the binding `base`.
+    pub fn names_binding<S: AsStrSlice>(&self, base: S) -> bool {
+        return self.plan.names_binding(self.cursor.current_rule_index(), base);
     }
 
     /// Register a context-free gated predicate's body for a standalone

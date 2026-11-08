@@ -335,8 +335,8 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
 }
 
 /// The captured token range / builder row of each labeled rule call an action
-/// reads. Zero-valued so a read before the call yields the empty span ANTLR's
-/// null `$label` renders as empty text.
+/// reads. A read that may come before the call asks the shared label instead
+/// (`LabelReach::Shared`).
 fn gen_capture_fields(w: &mut CodeWriter, captures: &RuleCaptures) {
     for let f of &captures.spans {
         w.line(`${rule_span_lo_field(f)}: i32 = 0,`);
@@ -447,7 +447,14 @@ fn captured_field(op: &Op, ctx: &EmitContext, want_node: bool) -> Option<String>
         },
     };
     let captured = if want_node { ctx.captures_node(&rc.field) } else { ctx.captures_span(&rc.field) };
-    return if captured { Option::Some(rc.field) } else { null };
+    if !captured {
+        return null;
+    }
+    // Every call a shared label binds captures into one place, so the last wins.
+    return match ctx.cursor.shared_label(false, &rc.dedup_base) {
+        Some(label) => Option::Some(label.capture),
+        None => Option::Some(rc.field),
+    };
 }
 
 /// Emit every retained action / predicate whose position is `before` (it
