@@ -1,17 +1,17 @@
-// Test: Box<T> parameter SROA optimization
-// Verifies that functions taking `ref Box<T>` parameters are rewritten
+// Test: cell parameter SROA optimization
+// Verifies that functions taking `ref $Cell<T>` parameters are rewritten
 // to take the scalar `T` directly, eliminating GC struct allocation at call sites.
 //
-// Box<T> is synthesized by the lower phase to wrap primitives for reference
-// semantics (e.g., Display::fmt receives `&self` → `ref Box<T>`).
-// Template string interpolation is the primary trigger for Box<T> creation.
+// A cell is what a reference to a primitive points at
+// (e.g., Display::fmt receives `&self` → `ref $Cell<T>`).
+// Template string interpolation is the primary trigger for cell creation.
 //
 // bool Display is fully inlined (Formatter::pad with constant string),
-// so no Box<bool> function call exists — only correctness is tested.
+// so no `$Cell<bool>` function call exists — only correctness is tested.
 //
 // `i32`, `u32`, `i64` and `u64` share one decimal path small enough that O2 inlines
 // it away outright, so no call of theirs survives to name a signature on;
-// their absent `Box` is what says the parameter was scalarized.
+// their absent cell is what says the parameter was scalarized.
 
 use { println, Stdout } from "core:cli";
 
@@ -59,7 +59,7 @@ export fn run() with Stdout {
     assert `${bool_val}` == "true";
     assert `${char_val}` == "Z";
 
-    // Format specifiers also go through Box<T> paths
+    // Format specifiers also go through cell paths
     assert `${f64_val:0.2f}` == "2.72";
     assert `${i32_val:x}` == "186a0";
 
@@ -191,9 +191,9 @@ __DATA__
         "f64::fmt_fixed$sroa[self.value]$spec0$sroa[f.buf]\"(self, precision, f) {"
     ],
     "wir_not_expect:O2": [
-        "Box<i32>",
-        "Box<u32>",
-        "Box<i64>",
-        "Box<u64>"
+        "$Cell<i32>",
+        "$Cell<u32>",
+        "$Cell<i64>",
+        "$Cell<u64>"
     ]
 }

@@ -1521,7 +1521,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !inherits
             {
                 let at = self.bound_trait_args(base, &bound, &space, trait_);
-                if !at.is_some_and(|at| self.tysys.type_table.borrow().same_types(&at, wanted)) {
+                if at.as_deref() != Some(wanted) {
                     continue;
                 }
             }

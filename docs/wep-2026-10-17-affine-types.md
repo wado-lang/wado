@@ -982,6 +982,14 @@ the host, and the handle lives until the instance ends.
 A trap unwinds nothing in Wasm, so a resource owned at a panic is held until
 the instance ends. For a stream, the other side hangs.
 
+### Whether a `let` keeps a list it indexes
+
+A `let` keeps a temporary it borrows through a field read, a tuple's constant
+index among them, but not through a list's index: `let r = &make_list()[0];`
+is refused, since the list drops as its statement ends. An index into a list
+is an `IndexRef` call, and a temporary only a call's operand borrows is not
+kept. Whether a list's index should keep it, as a field read does, is open.
+
 ## References
 
 - [SE-0390: Noncopyable structs and enums](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0390-noncopyable-structs-and-enums.md)

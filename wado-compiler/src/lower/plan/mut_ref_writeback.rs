@@ -12,15 +12,13 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
 use crate::tir::{
-    LetStorage, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId,
+    LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-/// Runs before [`super::boxing::prepare_types`], while `&mut T` is still
-/// distinguishable from `&T` and the referent type is readable.
 pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
@@ -31,7 +29,7 @@ pub fn insert_write_backs(
 ) -> Result<(), Bail> {
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
-    let carrying = RefCarrying::new(&flat.structs, &type_table, closure_captures);
+    let carrying = RefCarrying::new(flat, &type_table, closure_captures);
     let replaced = whole_value_writes::compute(flat, call_graph, &carrying);
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
@@ -359,10 +357,7 @@ impl WriteBack<'_> {
         {
             return true;
         }
-        if !matches!(
-            self.type_table.get(sibling.type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
+        if !self.type_table.is_reference(sibling.type_id) {
             return false;
         }
         place_root(sibling) == Some(root)

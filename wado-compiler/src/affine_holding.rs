@@ -6,7 +6,6 @@
 use crate::cut_memo::CutMemo;
 use crate::defs::DefId;
 use crate::tir::TypeId;
-use crate::type_table::TypeKey;
 
 /// What a type holds, one level down.
 pub(crate) enum Held {
@@ -27,9 +26,6 @@ pub(crate) enum Held {
 /// A phase's answer to what a type holds.
 pub(crate) trait HeldTypes {
     fn held(&self, type_id: TypeId) -> Held;
-
-    /// `type_id`'s identity: many ids can name one type.
-    fn key(&self, type_id: TypeId) -> TypeKey;
 }
 
 /// Whether `type_id` is, or holds at any depth, an affine leaf `types` counts.
@@ -47,7 +43,7 @@ struct Walk<'a, T> {
     /// The declarations the walk is inside, each with which of its arguments
     /// hold an affine value, and the arguments.
     open: Vec<Open>,
-    memo: CutMemo<TypeKey>,
+    memo: CutMemo<TypeId>,
 }
 
 struct Open {
@@ -59,22 +55,20 @@ struct Open {
 impl<T: HeldTypes> Walk<'_, T> {
     /// Whether `type_id` is one of `args`, or is inside one of them.
     fn within(&self, type_id: TypeId, args: &[TypeId]) -> bool {
-        let key = self.types.key(type_id);
         args.iter().any(|&arg| {
-            self.types.key(arg) == key
+            arg == type_id
                 || matches!(self.types.held(arg), Held::Members { args, .. } if self.within(type_id, &args))
         })
     }
 
     fn holds(&mut self, type_id: TypeId) -> bool {
-        let key = self.types.key(type_id);
-        if let Some(held) = self.memo.get(&key) {
+        if let Some(held) = self.memo.get(&type_id) {
             return held;
         }
         let depth = self.memo.depth();
         let outer_cuts = self.memo.begin();
         let held = self.walk(type_id);
-        self.memo.end(key, depth, held, outer_cuts);
+        self.memo.end(type_id, depth, held, outer_cuts);
         held
     }
 

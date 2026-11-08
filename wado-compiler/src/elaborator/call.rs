@@ -556,11 +556,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if binding.is_mut {
             return;
         }
-        let is_mut_ref = matches!(
-            self.tysys.type_table.borrow().get(binding.type_id),
-            ResolvedType::MutRef(_)
-        );
-        if is_mut_ref {
+        if self.tysys.type_table.borrow().is_mut_ref(binding.type_id) {
             return;
         }
         let _ = self.emit(TypeError::ClosureMutBindingRequired {
@@ -704,13 +700,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .tuples_holding(declared, &open);
-        let declared_key = self.tysys.type_table.borrow().type_key(declared);
         let mut replacements = IndexMap::default();
         // A tuple parameter itself stays, for the unifier to splice the pack
         // across its argument's elements.
-        for (key, tuple) in held.into_iter().filter(|&(key, _)| key != declared_key) {
+        for tuple in held.into_iter().filter(|&tuple| tuple != declared) {
             let var = self.mint_infer_var();
-            replacements.insert(key, var);
+            replacements.insert(tuple, var);
             stand_ins.push((var, tuple));
         }
         let checked = self
@@ -1178,14 +1173,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let (newtype_def, base) = {
             let table = self.tysys.type_table.borrow();
-            let ResolvedType::Newtype { def, .. } = table.get_unerased(named) else {
+            let ResolvedType::Newtype { def, .. } = table.get(named) else {
                 unreachable!("`named` is a newtype");
             };
             (*def, table.reflect_structure_head(named))
         };
         let expected = expected.map(|ty| {
             let table = self.tysys.type_table.borrow();
-            match table.get_unerased(ty) {
+            match table.get(ty) {
                 ResolvedType::Newtype { def, .. } if *def == newtype_def => {
                     table.reflect_structure_head(ty)
                 }
@@ -1321,7 +1316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && tt
                     .nominal_type_args(receiver)
                     .is_none_or(|args| args.is_empty());
-            if tt.same_type(arg, receiver) || bare_generic_of_arg {
+            if arg == receiver || bare_generic_of_arg {
                 (DesugarKind::NewtypeFromCollapse, arg)
             } else if tt.newtype_chain_holds(arg, receiver) {
                 (DesugarKind::NewtypeFromUnwrap, receiver)
@@ -1403,19 +1398,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .ok_or(WrappedCase::NotAVariant)?;
             (tt.nominal_type_args(target).unwrap_or_default(), info)
         };
-        let [source_key, unit_key] = {
-            let tt = self.tysys.type_table.borrow();
-            [tt.type_key(source), tt.type_key(TypeTable::UNIT)]
-        };
         let carrying: Vec<(usize, &str)> = info
             .cases
             .iter()
             .enumerate()
-            .filter(|(_, case)| self.tysys.type_table.borrow().type_key(case.payload) != unit_key)
-            .filter(|(_, case)| {
-                let payload = self.tysys.substitute_type_params(case.payload, &args);
-                self.tysys.type_table.borrow().type_key(payload) == source_key
-            })
+            .filter(|(_, case)| case.payload != TypeTable::UNIT)
+            .filter(|(_, case)| self.tysys.substitute_type_params(case.payload, &args) == source)
             .map(|(index, case)| (index, case.name.as_str()))
             .collect();
         match carrying.as_slice() {
@@ -1998,16 +1986,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let mut substituted: Vec<TypeId> = if generic {
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    raw_param_types
-                        .iter()
-                        .map(|&t| self.substitute_in_frame(t, &combined_type_args))
-                        .collect()
-                } else {
-                    raw_param_types
-                };
+                let mut substituted = self.static_param_types_at(
+                    raw_param_types,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                );
                 let block = resolved
                     .found()
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
@@ -2208,6 +2191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_types: &args,
                         receiver_type: ns_receiver_type,
                         receiver_args: &impl_type_args_inferred,
+                        method_args: &method_type_args,
                         ..StaticQuery::of(type_name, method_name)
                     });
                     if self.report_unanswered_static(&resolved, method_name, call.span) {
@@ -2285,11 +2269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type = self.fill_static_method_slots(
-                        method_ref.method_id,
-                        &method_type_args,
-                        resolved.return_type(),
-                    );
+                    let mut return_type = resolved.return_type();
                     if let Some(key) = &ns_key {
                         self.retype_static_to_newtype(
                             key,
@@ -2349,15 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    let checked: Vec<TypeId> = if method_type_args.is_empty() {
-                        param_types.clone()
-                    } else {
-                        param_types
-                            .iter()
-                            .map(|&t| self.substitute_in_frame(t, &method_type_args))
-                            .collect()
-                    };
-                    self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    self.recoerce_literal_args(&call.args, &mut args, &param_types);
                     if func_ref.monomorph_info.is_some()
                         && self.report_value_for_reference(
                             &param_types,
@@ -2373,7 +2345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
-                            &checked,
+                            &param_types,
                             &args,
                             &arg_sites,
                             &param_defaults,
@@ -2395,7 +2367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_default_walk(
                         call.id,
                         &args,
-                        &checked,
+                        &param_types,
                         &param_defaults,
                         defaults_module.clone(),
                         &type_bindings,

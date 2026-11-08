@@ -854,19 +854,14 @@ fn analyze_loop(
     if !type_table.is_integer(ty) {
         return None;
     }
-    let key = type_table.type_key(ty);
     // A residual evaluated in `i64`, where no `i32` product or sum wraps, is
     // what reads a strided check or an offset guard. An offset guard also
     // leans on `var >= 0`, so `var + g` stays above `var`.
-    let is_i32 = key == type_table.type_key(TypeTable::I32);
+    let is_i32 = ty == TypeTable::I32;
     if offset != 0 && (!is_i32 || demanded < 0 || !spells_same(type_table, ty, offset)?) {
         return None;
     }
-    let of_ty = |l: u32| {
-        locals
-            .get(l as usize)
-            .is_some_and(|d| type_table.type_key(d.type_id) == key)
-    };
+    let of_ty = |l: u32| locals.get(l as usize).is_some_and(|d| d.type_id == ty);
     // Every local the residual reads, which must hold still across the loop.
     let mut invariant: Vec<u32> = Vec::new();
     // The one local a reloaded bound's length is read off.
@@ -885,7 +880,7 @@ fn analyze_loop(
     let bound_local = |b: BoundKey| match b {
         BoundKey::Local(l) if of_ty(l) => Some(Some(l)),
         BoundKey::Const(c) if spells_same(type_table, ty, c)? => Some(None),
-        BoundKey::Field(..) if type_table.type_key(TypeTable::I32) == key => Some(None),
+        BoundKey::Field(..) if is_i32 => Some(None),
         BoundKey::Local(_) | BoundKey::Const(_) | BoundKey::Field(..) => None,
     };
     invariant.extend(bound_local(h)?);

@@ -39,6 +39,106 @@ test "a regrouping that merges a length behind an axis before it refuses it" {
     assert judged(source) == ["S: refused at Y = Reshape: it merges behind an axis before it"] as List<String>;
 }
 
+test "a length merged behind the rows keeps it padded where each row is computed apart and split back" {
+    // GPT-2's projections: the rows and positions merged for a `Gemm`, then
+    // split back as they were.
+    let source = `g (float[2, S, 4] X) => (float[2, S, 4] Y) <float[4, 4] W, float[4] B, int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        F = Reshape(X, Flat)
+        G = Gemm(F, W, B)
+        H = Relu(G)
+        C = Cast<to = 1>(H)
+        Y = Reshape(C, Back)
+    }`;
+    assert judged(source) == ["S: padded"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where a node reads across the rows" {
+    let source = `g (float[2, S, 4] X) => (float[2, S, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        F = Reshape(X, Flat)
+        G = Softmax<axis = 0>(F)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: refused at G = Softmax: it reads rows a regrouping merged"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where it is split back in another order" {
+    let source = `g (float[2, S, 4] X) => (float[S, 2, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {-1, 2, 4}> {
+        F = Reshape(X, Flat)
+        Y = Reshape(F, Back)
+    }`;
+    assert judged(source) == ["S: refused at Y = Reshape: the regrouping lines up with it at no axis"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where a product contracts the merged axis" {
+    let source = `g (float[2, S, 4] X) => (float[4, 4] Y) <int64[2] Flat = {-1, 4}> {
+        F = Reshape(X, Flat)
+        Y = Gemm<transA = 1>(F, F)
+    }`;
+    assert judged(source) == ["S: refused at Y = Gemm: it reads rows a regrouping merged"] as List<String>;
+}
+
+test "a length merged behind the rows keeps it padded where a product by a vector computes each row apart" {
+    let source = `g (float[2, S, 4] X) => (float[2, S] Y) <float[4] V, int64[2] Flat = {-1, 4}, int64[2] Back = {2, -1}> {
+        F = Reshape(X, Flat)
+        G = MatMul(F, V)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: padded"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where a bias holds rows of its own" {
+    // The bias counts the merged rows, so at a capacity its rows are not the
+    // merged operand's.
+    let source = `g (float[2, S, 4] X) => (float[2, S, 4] Y) <float[4, 4] W, int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        F = Reshape(X, Flat)
+        Dims = Shape(F)
+        Zero = Constant<value_int = 0>()
+        One = Constant<value_int = 1>()
+        Axis = Constant<value_ints = [1]>()
+        N = Gather(Dims, Zero)
+        P = Range(Zero, N, One)
+        Counted = Cast<to = 1>(P)
+        B = Unsqueeze(Counted, Axis)
+        G = Gemm(F, W, B)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: refused at G = Gemm: it reads rows a regrouping merged"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where a product's right operand holds rows of its own" {
+    // The right operand counts the merged rows in its batch axis, so at a
+    // capacity its rows are not the merged operand's.
+    let source = `g (float[2, S, 4] X) => (float[2, S, 1] Y) <float[4, 1] W, int64[3] Flat = {-1, 1, 4}, int64[3] Back = {2, -1, 1}> {
+        F = Reshape(X, Flat)
+        Dims = Shape(F)
+        Zero = Constant<value_int = 0>()
+        One = Constant<value_int = 1>()
+        Axes = Constant<value_ints = [1, 2]>()
+        N = Gather(Dims, Zero)
+        P = Range(Zero, N, One)
+        Counted = Cast<to = 1>(P)
+        C = Unsqueeze(Counted, Axes)
+        R = Mul(C, W)
+        G = MatMul(F, R)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: refused at G = MatMul: it reads rows a regrouping merged"] as List<String>;
+}
+
+test "a branch's merged tensors stay its own where its sibling reuses their names" {
+    let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        Y = If <then_branch = merged () => (float[M, 4] U) {
+            T = Reshape(X, Flat)
+            R = Reshape(T, Back)
+            U = Relu(Z)
+        }, else_branch = kept () => (float[M, 4] U) {
+            T = Relu(Z)
+            U = Softmax<axis = 0>(T)
+        }> (C)
+    }`;
+    assert judged(source) == ["S: padded", "M: padded"] as List<String>;
+}
+
 test "a regrouping that cuts a length into axes it never lines up with refuses it" {
     let source = `g (float[S] X) => (float[?, 2] Y) <int64[2] Shape = {-1, 2}> {
         Y = Reshape(X, Shape)
@@ -158,4 +258,15 @@ test "a branch's nodes are judged as the graph's are" {
         }> (C)
     }`;
     assert judged(source) == ["S: refused at T = Reshape: it merges behind an axis before it", "M: padded"] as List<String>;
+}
+
+test "a branch that passes an outer tensor's merged lengths out refuses them" {
+    let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Flat = {-1, 4}> {
+        F = Reshape(X, Flat)
+        Y = If <then_branch = passed () => (float[?, 4] F) {
+        }, else_branch = kept () => (float[M, 4] E) {
+            E = Relu(Z)
+        }> (C)
+    }`;
+    assert judged(source) == ["S: refused at F = Reshape: it merges behind an axis before it", "M: padded"] as List<String>;
 }

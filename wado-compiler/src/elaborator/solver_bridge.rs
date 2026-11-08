@@ -711,7 +711,7 @@ impl Lowering {
                 said(elems.iter().map(|&a| tuple_elem(a))).map(SolverType::Tuple)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
-                is_mut: matches!(table.get(id), ResolvedType::MutRef(_)),
+                is_mut: table.is_mut_ref(id),
                 inner: Box::new(self.type_id(table, *inner, param)?),
             }),
             ResolvedType::TypeParam { name, index } => placed(name, *index).map(SolverType::Param),
@@ -2015,7 +2015,7 @@ impl SolverBridge {
                 .trait_env
                 .bound_declaring_assoc_type(bounds, assoc, &tysys.resolutions)
         };
-        let placed = place_binder(ctx, &table);
+        let placed = place_binder(ctx);
         let mut env = Env::default();
         let mut unstated = Vec::new();
         for (position, (name, binder)) in ctx.trait_ctx.type_params.iter().enumerate() {
@@ -2024,7 +2024,7 @@ impl SolverBridge {
             let declared = ctx
                 .trait_ctx
                 .assoc_param_bounds
-                .get(&table.type_key(binder.type_id))
+                .get(&binder.type_id)
                 .into_iter()
                 .flatten()
                 .map(|declared| self.lowering.bound_named(declared, &param));
@@ -2095,7 +2095,7 @@ impl SolverBridge {
     /// which stands for many.
     pub(super) fn is_rigid(&self, tysys: &TypeSystem, ctx: &scope::Scope, type_id: TypeId) -> bool {
         let table = tysys.type_table.borrow();
-        let place = place_binder(ctx, &table);
+        let place = place_binder(ctx);
         let rigid = |binder: Binder| {
             if let Binder::Param { name, .. } = binder
                 && matches!(
@@ -2211,7 +2211,7 @@ impl SolverBridge {
             .iter()
             .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
         {
-            self.shapes_in(&table, type_id, &place_binder(ctx, &table), &mut shapes);
+            self.shapes_in(&table, type_id, &place_binder(ctx), &mut shapes);
         }
         let defs = tysys.resolutions.defs();
         let bodies = owed
@@ -2671,21 +2671,16 @@ fn by_position(binder: Binder) -> Option<u32> {
 
 /// [`place_in`] for a binder a resolved type names. A family parameter sits
 /// where the scope binds its identity, under whatever name it is written.
-fn place_binder<'a>(
-    ctx: &'a scope::Scope,
-    table: &'a TypeTable,
-) -> impl Fn(Binder) -> Option<u32> + 'a {
+fn place_binder(ctx: &scope::Scope) -> impl Fn(Binder) -> Option<u32> + '_ {
     let place = place_in(ctx);
     move |binder| match binder {
         Binder::Param { name, .. } => place(name),
-        Binder::Family(id) => {
-            let key = table.type_key(id);
-            ctx.trait_ctx
-                .type_params
-                .values()
-                .position(|bound| table.type_key(bound.type_id) == key)
-                .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
-        }
+        Binder::Family(id) => ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .position(|bound| bound.type_id == id)
+            .map(|i| u32::try_from(i).expect("fewer than 2^32 params")),
     }
 }
 

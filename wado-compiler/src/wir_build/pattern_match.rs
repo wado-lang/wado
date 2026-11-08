@@ -13,11 +13,10 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
-use crate::name::{VARIANT_DISCRIMINANT_FIELD, variant_payload_field, wir_variant_case_key};
+use crate::name::{VARIANT_DISCRIMINANT_FIELD, variant_payload_field};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
 use crate::wir::{WirTypeDef, WirVariantCase, WirVariantType};
 use crate::wir_build::translate::ref_binding_needs_boxing;
-use crate::wir_build::types::variant_type_key;
 use std::assert_matches;
 
 /// Most intervals an or-pattern's test compares one by one. Past it the test
@@ -696,65 +695,46 @@ impl FunctionTranslator<'_, '_> {
     /// isn't a concrete variant or enum the compiler can enumerate here.
     fn total_cases(&self, scrut_type: TypeId) -> Option<usize> {
         match self.type_table.get(scrut_type) {
-            ResolvedType::Variant { .. } => {
-                let key = self.variant_type_key(scrut_type);
-                let variant_type_id = self.ctx.type_map.get(&key)?;
-                let WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize]
-                else {
-                    unreachable!("a variant key registers a variant type")
-                };
-                Some(vt.cases.len())
-            }
+            ResolvedType::Variant { .. } => Some(self.variant_def(scrut_type).1.cases.len()),
             ResolvedType::Enum { def } => self
                 .ctx
                 .package
                 .enums
                 .iter()
-                .find(|e| {
-                    e.name == self.type_table.decl_name(*def)
-                        && e.module_source == *self.type_table.def_module(*def)
-                })
+                .find(|e| e.def == *def)
                 .map(|e| e.cases.len()),
             _ => None,
         }
     }
 
-    /// Key of the WIR variant type a scrutinee lowers to.
-    #[track_caller]
-    fn variant_type_key(&self, type_id: TypeId) -> String {
-        match self.type_table.get(type_id) {
-            ResolvedType::Variant { def, type_args } => {
-                variant_type_key(self.type_table, *def, type_args)
-            }
-            other => panic!("[WIR] expected a variant type, got {other:?}"),
-        }
-    }
-
-    /// The registered WIR variant a scrutinee lowers to, with its type key.
+    /// The registered WIR variant a scrutinee lowers to, with its type id.
     ///
     /// Type checking already proved the scrutinee is this variant. Degrading on
     /// a miss — testing a discriminant nothing wrote, or projecting a payload
     /// out of the base type — is a miscompile the validator rarely catches.
     #[track_caller]
-    fn variant_def(&self, type_id: TypeId) -> (String, &WirVariantType) {
-        let key = self.variant_type_key(type_id);
-        let Some(wir_type_id) = self.ctx.type_map.get(&key) else {
-            panic!("[WIR] variant `{key}` is not registered");
+    fn variant_def(&self, type_id: TypeId) -> (WirTypeId, &WirVariantType) {
+        let variant = self.ref_type_id(type_id);
+        let WirTypeDef::Variant(vt) = &self.ctx.types[variant.index() as usize] else {
+            panic!(
+                "[WIR] `{}` is registered as a non-variant WIR type",
+                variant.fq()
+            );
         };
-        let WirTypeDef::Variant(vt) = &self.ctx.types[wir_type_id.index() as usize] else {
-            panic!("[WIR] `{key}` is registered as a non-variant WIR type");
-        };
-        (key, vt)
+        (variant, vt)
     }
 
     /// The WIR case at the index the elaborator resolved.
     #[track_caller]
-    fn variant_case_at(&self, type_id: TypeId, case_index: u32) -> (String, &WirVariantCase) {
-        let (variant_key, vt) = self.variant_def(type_id);
+    fn variant_case_at(&self, type_id: TypeId, case_index: u32) -> (WirTypeId, &WirVariantCase) {
+        let (variant, vt) = self.variant_def(type_id);
         let Some(case) = vt.cases.get(case_index as usize) else {
-            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
+            panic!(
+                "[WIR] variant `{}` has no case at index {case_index}",
+                variant.fq()
+            );
         };
-        (variant_key, case)
+        (variant, case)
     }
 
     /// The same case, with the name the source wrote checked against it. WIR
@@ -765,14 +745,16 @@ impl FunctionTranslator<'_, '_> {
         type_id: TypeId,
         case_index: u32,
         case_name: &str,
-    ) -> (String, &WirVariantCase) {
-        let (variant_key, case) = self.variant_case_at(type_id, case_index);
+    ) -> (WirTypeId, &WirVariantCase) {
+        let (variant, case) = self.variant_case_at(type_id, case_index);
         assert_eq!(
-            case.name, case_name,
-            "[WIR] variant `{variant_key}` case {case_index} is `{}`, not `{case_name}`",
+            case.name,
+            case_name,
+            "[WIR] variant `{}` case {case_index} is `{}`, not `{case_name}`",
+            variant.fq(),
             case.name
         );
-        (variant_key, case)
+        (variant, case)
     }
 
     /// The WIR struct type of a variant's payload-carrying case.
@@ -780,10 +762,16 @@ impl FunctionTranslator<'_, '_> {
     /// Only a payload case has a subtype of its own; a unit case shares the base
     /// variant struct and is told apart by its discriminant.
     #[track_caller]
-    fn variant_case_type_id(&self, variant_key: &str, case_name: &str) -> WirTypeId {
-        let case_key = wir_variant_case_key(variant_key, case_name);
-        let Some(case_type_id) = self.ctx.type_map.get(&case_key) else {
-            panic!("[WIR] payload case `{case_key}` is not registered");
+    fn variant_case_type_id(&self, variant: &WirTypeId, case_index: u32) -> WirTypeId {
+        let Some(case_type_id) = self
+            .ctx
+            .variant_case_types
+            .get(&(variant.index(), case_index))
+        else {
+            panic!(
+                "[WIR] case {case_index} of `{}` carries no payload",
+                variant.fq()
+            );
         };
         case_type_id.clone()
     }
@@ -828,7 +816,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let scrut_get = self.scrut_get(scrut_local, scrut_type);
 
-                let (variant_key, case) = self.variant_case(scrut_type, *case_index, variant_name);
+                let (variant, case) = self.variant_case(scrut_type, *case_index, variant_name);
                 if case.payload.is_empty() {
                     WirInstr::I32Eq(
                         Box::new(self.variant_discriminant(scrut_type, scrut_get)),
@@ -836,7 +824,7 @@ impl FunctionTranslator<'_, '_> {
                     )
                 } else {
                     WirInstr::RefTest {
-                        type_id: self.variant_case_type_id(&variant_key, variant_name),
+                        type_id: self.variant_case_type_id(&variant, *case_index),
                         nullable: false,
                         expr: Box::new(scrut_get),
                     }
@@ -1052,12 +1040,12 @@ impl FunctionTranslator<'_, '_> {
                     return;
                 }
 
-                let (variant_key, case) = self.variant_case(*enum_type, *case_index, variant_name);
+                let (variant, case) = self.variant_case(*enum_type, *case_index, variant_name);
                 // A unit case carries no payload struct, so its bindings can only
                 // be unit-typed — and unit has no Wasm local to bind.
                 let case_has_payload = !case.payload.is_empty();
                 if case_has_payload {
-                    let case_type_id = self.variant_case_type_id(&variant_key, variant_name);
+                    let case_type_id = self.variant_case_type_id(&variant, *case_index);
                     // Count bindings that actually need the cast result. A
                     // `Wildcard` or literal-shaped sub-pattern doesn't read
                     // any payload field, so it doesn't consume the cast.
@@ -1181,8 +1169,9 @@ impl FunctionTranslator<'_, '_> {
                         assert_matches!(
                             self.wir_type(*type_id),
                             WirType::Unit,
-                            "[WIR] case `{variant_key}::{variant_name}` carries no payload, \
-                             so binding it to a non-unit local has nothing to read"
+                            "[WIR] case `{}::{variant_name}` carries no payload, \
+                             so binding it to a non-unit local has nothing to read",
+                            variant.fq()
                         );
                     }
                 }
@@ -1327,7 +1316,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Store `source` into a pattern `Binding`'s local, coerced first to the
     /// pattern's own type and then, where `boxing` retagged the local to its
-    /// `Box<T>`, wrapped in that box. A unit binding has no Wasm local.
+    /// cell, wrapped in that cell. A unit binding has no Wasm local.
     fn emit_pattern_binding_set(
         &mut self,
         binding: PatId,
@@ -1418,19 +1407,13 @@ impl FunctionTranslator<'_, '_> {
     /// proved the pattern names a field this struct has.
     #[track_caller]
     fn resolve_struct_field_type(&self, struct_type: TypeId, field_name: &str) -> TypeId {
-        let ResolvedType::Struct { def, type_args } = self.type_table.get(struct_type) else {
+        let Some(decl) = self.ctx.struct_decls.of_type(struct_type, self.type_table) else {
             panic!("[WIR] struct pattern on non-struct {struct_type:?}");
         };
-        let name = self.type_table.struct_mangled_name(*def, type_args);
-        let module_source = self.type_table.struct_head_module(*def).clone();
-        self.ctx
-            .package
-            .structs
+        decl.fields
             .iter()
-            .filter(|s| s.module_source == module_source && s.name == name)
-            .flat_map(|s| &s.fields)
             .find(|f| f.name == field_name)
-            .unwrap_or_else(|| panic!("[WIR] struct `{name}` has no field `{field_name}`"))
+            .unwrap_or_else(|| panic!("[WIR] struct `{}` has no field `{field_name}`", decl.name))
             .type_id
     }
 
@@ -1443,10 +1426,10 @@ impl FunctionTranslator<'_, '_> {
         payload: Option<Operand>,
         result_type: TypeId,
     ) -> WirInstr {
-        let (variant_key, case) = self.variant_case(variant_type, case_index, case_name);
+        let (variant, case) = self.variant_case(variant_type, case_index, case_name);
         let carries_payload = !case.payload.is_empty();
         let struct_type_id = if carries_payload {
-            self.variant_case_type_id(&variant_key, case_name)
+            self.variant_case_type_id(&variant, case_index)
         } else {
             self.ref_type_id(result_type)
         };
@@ -1472,16 +1455,15 @@ impl FunctionTranslator<'_, '_> {
         let val = self.translate_operand(inner);
         let inner_ty = self.operand_type_id(inner);
 
-        let (variant_key, case) = self.variant_case_at(inner_ty, case_index);
+        let (variant, case) = self.variant_case_at(inner_ty, case_index);
         if case.payload.is_empty() {
             WirInstr::I32Eq(
                 Box::new(self.variant_discriminant(inner_ty, val)),
                 Box::new(WirInstr::I32Const(case_index as i32)),
             )
         } else {
-            let case_name = case.name.clone();
             WirInstr::RefTest {
-                type_id: self.variant_case_type_id(&variant_key, &case_name),
+                type_id: self.variant_case_type_id(&variant, case_index),
                 nullable: false,
                 expr: Box::new(val),
             }
@@ -1502,12 +1484,8 @@ impl FunctionTranslator<'_, '_> {
         // extract the variant where its payload belongs — a miscompile the Wasm
         // validator only catches when the two happen to differ in shape, and
         // silently wrong output when they do not.
-        let (variant_key, vt) = self.variant_def(inner_ty);
-        let Some(case) = vt.cases.get(case_index as usize) else {
-            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
-        };
-        let case_name = case.name.clone();
-        let case_type_id = self.variant_case_type_id(&variant_key, &case_name);
+        let (variant, _) = self.variant_case_at(inner_ty, case_index);
+        let case_type_id = self.variant_case_type_id(&variant, case_index);
 
         // ref.cast to the case struct, then struct.get the payload field.
         let cast = WirInstr::RefCast {
@@ -1557,9 +1535,7 @@ fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
     }
 }
 
-/// The declared type of a tuple's `i`-th element. Arity is fixed by type
-/// checking, so an out-of-range index is a lowering bug.
-/// `value` wrapped in the `Box<T>` struct `box_wir` references.
+/// `value` wrapped in the cell `box_wir` references.
 fn box_new(box_wir: &WirType, value: WirInstr) -> WirInstr {
     let WirType::Ref { type_id, .. } = box_wir else {
         unreachable!("a box is a struct reference, not {box_wir:?}")

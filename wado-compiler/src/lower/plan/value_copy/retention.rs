@@ -15,10 +15,10 @@
 //! can name the function values that reach one, and per functor type — the join
 //! over every expression minting a value of that type — where it cannot.
 
+use super::analyze::{Slot, SlotTypes};
 use super::callgraph::{CallGraph, body_ids};
 use super::funcset::FuncKeyMap;
-use super::is_reference_type;
-use super::place::unwrap_ref;
+use super::place::{PlaceKind, PlaceRef, field_owner, unwrap_ref};
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
 use crate::cut_memo::CutWalk;
@@ -27,8 +27,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
-    RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, capture_source_locals,
+    RetainInto, RetainSpec, ReturnConvention, StructDef, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -819,7 +819,7 @@ pub fn compute_retention(
         }
     }
 
-    let carrying = RefCarrying::new(&project.structs, &type_table, closure_captures);
+    let carrying = RefCarrying::new(project, &type_table, closure_captures);
     let functor_params: Vec<FunctorParams> = project
         .functions
         .iter()
@@ -987,7 +987,8 @@ fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
 /// `List::push` takes `Sink { r: &Item }` by value: a parameter carries a
 /// reference when its type holds one, not only when it is one.
 pub struct RefCarrying<'a> {
-    structs: &'a [TirStruct],
+    /// The field types of each struct the plan phase sees, by instance.
+    struct_fields: IndexMap<(StructDef, &'a [TypeId]), Vec<TypeId>>,
     type_table: &'a TypeTable,
     captures: &'a ClosureCaptures,
     memo: RefCell<IndexMap<TypeId, bool>>,
@@ -996,12 +997,19 @@ pub struct RefCarrying<'a> {
 impl<'a> RefCarrying<'a> {
     #[must_use]
     pub fn new(
-        structs: &'a [TirStruct],
+        flat: &'a FlatPackage,
         type_table: &'a TypeTable,
         captures: &'a ClosureCaptures,
     ) -> Self {
         Self {
-            structs,
+            struct_fields: flat
+                .structs
+                .iter()
+                .map(|s| {
+                    let fields = s.fields.iter().map(|f| f.type_id).collect();
+                    ((s.def, s.type_args.as_slice()), fields)
+                })
+                .collect(),
             type_table,
             captures,
             memo: RefCell::new(IndexMap::default()),
@@ -1053,14 +1061,8 @@ impl RefCarrying<'_> {
                 let base = *base_type;
                 self.walk(base, walk)
             }
-            ResolvedType::Struct { def, type_args } => {
-                let (def, type_args) = (*def, type_args.clone());
-                let fields = self
-                    .structs
-                    .iter()
-                    .find(|s| s.represents(self.type_table, def, &type_args))
-                    .map(|s| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>());
-                match fields {
+            ResolvedType::Struct { .. } => {
+                match self.field_types(type_id) {
                     Some(fields) => self.any(fields, walk),
                     // A declaration the plan phase cannot see is read as
                     // holding one, which only widens the carrier set.
@@ -1106,6 +1108,55 @@ impl RefCarrying<'_> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. } => false,
         }
+    }
+
+    /// The field types of the struct `ty`, where the plan phase sees its
+    /// declaration.
+    fn field_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let ResolvedType::Struct { def, type_args } = self.type_table.get(ty) else {
+            unreachable!("a struct type")
+        };
+        self.struct_fields
+            .get(&(*def, type_args.as_slice()))
+            .cloned()
+    }
+
+    /// Each binding of `pattern` over `source`, with the type of what it
+    /// carries. That is the binding's own, except where match ergonomics binds
+    /// `&` of a slot the reference copies into a new cell: it carries what the
+    /// slot holds.
+    fn binding_types(&self, pattern: &TirPattern, source: TypeId) -> Vec<(u32, TypeId)> {
+        let tt = self.type_table;
+        let scrutinee = Slot {
+            ty: Some(source),
+            kind: PlaceKind::Storage,
+        };
+        let mut out = Vec::new();
+        analyze::for_each_pattern_binding_in(pattern, scrutinee, self, &mut |local, ty, slot| {
+            let carries = match slot.ty {
+                Some(held)
+                    if !tt.is_reference(held)
+                        && tt.is_reference(ty)
+                        && PlaceRef::of(slot.kind, held, tt) == PlaceRef::NewCell =>
+                {
+                    held
+                }
+                _ => ty,
+            };
+            out.push((local, carries));
+        });
+        out
+    }
+}
+
+impl SlotTypes for RefCarrying<'_> {
+    fn struct_fields(&self, struct_type: TypeId) -> Option<Vec<TypeId>> {
+        self.field_types(field_owner(struct_type, self.type_table))
+    }
+
+    fn tuple_elements(&self, tuple: TypeId) -> Option<Vec<TypeId>> {
+        self.type_table
+            .as_tuple(field_owner(tuple, self.type_table))
     }
 }
 
@@ -1314,7 +1365,7 @@ fn facts_of_body(
         // A reference parameter is only what it points at. What its referent's
         // elements hold is the caller's to account for, not this body's — see
         // `retain_elements_of_a_local_view.wado`.
-        if is_reference_type(*type_id, type_table) {
+        if type_table.is_reference(*type_id) {
             entry.is.insert(position);
         } else if carrying.holds(*type_id) {
             entry.holds.insert(position);
@@ -1388,6 +1439,12 @@ impl StoresWalker<'_> {
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 self.carries.get(index).cloned().unwrap_or_default()
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } if PlaceRef::of_place(place, self.type_table) == PlaceRef::NewCell => {
+                Carried::held(self.carried(place).all())
             }
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
@@ -1493,7 +1550,7 @@ impl StoresWalker<'_> {
         if positions.is_empty() {
             return out;
         }
-        if is_reference_type(type_id, self.type_table) {
+        if self.type_table.is_reference(type_id) {
             out.is = positions;
         } else if self.carrying.holds(type_id) {
             out.holds = positions;
@@ -1789,7 +1846,7 @@ impl StoresWalker<'_> {
     fn lands_in_place(&mut self, place: &TirExpr, carried: &IndexSet<u32>, value_type: TypeId) {
         let escaping = IndexSet::from_iter([value_type]);
         match Self::place_root(place) {
-            Some((root, ty)) if !is_reference_type(ty, self.type_table) => {
+            Some((root, ty)) if !self.type_table.is_reference(ty) => {
                 self.hold_into(root, carried);
             }
             Some((root, _)) => {
@@ -1872,10 +1929,10 @@ impl StoresWalker<'_> {
         if carried.is_empty() {
             return;
         }
-        analyze::for_each_pattern_binding(pattern, &mut |local_index, type_id| {
+        for (local_index, type_id) in self.carrying.binding_types(pattern, source.type_id) {
             let placed = self.placed(type_id, carried.clone());
             self.rebind(local_index, &placed);
-        });
+        }
     }
 
     /// A pattern names a part of its scrutinee, which this walk does not follow

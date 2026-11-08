@@ -1,0 +1,32 @@
+// A `let` keeps a tuple comprehension it borrows, whatever the pack expands to.
+
+global mut DROPPED: List<i32> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPPED.push(self.n);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn summed<..T>(x: [..T]) -> i32 {
+    let t = &[for let v of x { make(1) }];
+    assert DROPPED.is_empty();
+    let mut sum = 0;
+    for let k of t {
+        sum += k.n;
+    }
+    return sum;
+}
+
+test {
+    assert summed([1, 2]) == 2;
+    assert DROPPED == [1, 1] as List<i32>;
+}

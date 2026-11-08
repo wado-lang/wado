@@ -28,7 +28,7 @@ use crate::tir::{
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
     TypeId,
 };
-use crate::type_table::{TypeKey, TypeMemo, TypeTable};
+use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
@@ -178,7 +178,6 @@ pub fn plan(
     flat: &mut FlatPackage,
     builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
-    ref_receiver_methods: FuncKeySet,
     profiler: &dyn SpanEmitter,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
@@ -244,12 +243,18 @@ pub fn plan(
         _ => None,
     };
     let mut mut_receiver_methods = FuncKeySet::default();
+    let mut ref_receiver_methods = FuncKeySet::default();
     let mut list_element_assigns = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
+    let type_table = flat.type_table.borrow();
     for f in &flat.functions {
         let f = f.borrow();
-        if f.params.first().is_some_and(|p| p.is_mut_ref) {
+        let receiver = f.params.first().map(|p| p.type_id);
+        if receiver.is_some_and(|ty| type_table.is_mut_ref(ty)) {
             mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
+        }
+        if receiver.is_some_and(|ty| type_table.is_reference(ty)) {
+            ref_receiver_methods.insert(f.module_source.clone(), f.name.clone());
         }
         if f.def_id.is_some() && f.def_id == list_index_assign {
             list_element_assigns.insert(f.module_source.clone(), f.name.clone());
@@ -257,9 +262,13 @@ pub fn plan(
         mut_ref_params.insert(
             f.module_source.clone(),
             f.name.clone(),
-            f.params.iter().map(|p| p.is_mut_ref).collect(),
+            f.params
+                .iter()
+                .map(|p| type_table.is_mut_ref(p.type_id))
+                .collect(),
         );
     }
+    drop(type_table);
     let returns_receiver_alias = in_span(profiler, "lower/value_copy/receiver_alias", || {
         ownership::compute_receiver_alias(
             flat,
@@ -339,15 +348,6 @@ pub fn hands_out_payload(func: &TirFunction, return_paths: &place::ReturnPaths) 
         .is_some_and(|path| !path.through_ref)
 }
 
-/// Whether `type_id` is spelled `&T` / `&mut T`. Narrower than
-/// [`TypeTable::is_reference_shaped`], which also answers for a boxed reference.
-pub fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    )
-}
-
 /// Whether a value of `type_id` copies on every read and so carries no
 /// storage or reference.
 pub fn is_scalar_type(type_id: TypeId, type_table: &TypeTable) -> bool {
@@ -373,7 +373,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// payload once per path to it, exponentially many in a chain of variants
 /// that each hold the next twice. The depth limit makes the depth part of the
 /// answer.
-type CopyWalk = IndexMap<(TypeKey, usize), bool>;
+type CopyWalk = IndexMap<(TypeId, usize), bool>;
 
 /// [`needs_value_copy`], remembered for each type over one borrow of the type
 /// table: no mutation outlives the borrow, so no answer goes stale. A walk
@@ -393,9 +393,7 @@ impl<'a> CopyNeeds<'a> {
 
     pub fn of(&self, type_id: TypeId) -> bool {
         self.answers
-            .get_or_compute(self.type_table.type_key(type_id), || {
-                needs_value_copy(type_id, self.type_table)
-            })
+            .get_or_compute(type_id, || needs_value_copy(type_id, self.type_table))
     }
 }
 
@@ -456,7 +454,7 @@ fn needs_copy_in_env(
     if env.is_some() {
         return needs_copy_walked(type_id, env, type_table, depth, walk);
     }
-    let key = (type_table.type_key(type_id), depth);
+    let key = (type_id, depth);
     if let Some(&answer) = walk.get(&key) {
         return answer;
     }
@@ -480,17 +478,14 @@ fn needs_copy_walked(
     if type_table.holds_affine_resource(type_id) {
         return false;
     }
-    let is_box = type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
     match type_table.get(type_id) {
-        // Structs need a field-by-field deep copy, except for the `Box<T>`
-        // shortcut whose semantics intentionally share the underlying cell.
-        // An instance is answered without its declaration's fields, which
-        // would need a registry the type table does not keep: a spurious copy
-        // costs, a missed one aliases.
-        ResolvedType::Struct { .. } => !is_box,
+        // Structs need a field-by-field deep copy. An instance is answered
+        // without its declaration's fields, which would need a registry the
+        // type table does not keep: a spurious copy costs, a missed one aliases.
+        ResolvedType::Struct { .. } => true,
         // Empty tuples are unit-shaped; non-empty tuples need element-wise
         // deep copy.
-        ResolvedType::Tuple(elems) => !is_box && !elems.is_empty(),
+        ResolvedType::Tuple(elems) => !elems.is_empty(),
         // A variant is reference-shaped at the WIR level, so copying it
         // shares the payload storage: it needs a deep copy exactly when
         // one of its payloads does.

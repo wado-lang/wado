@@ -2,6 +2,7 @@
 //! [`collect_seed_types`], which names the types those wraps can land on.
 
 use super::ownership::OwnedCalls;
+use super::place::PlaceKind;
 use super::{CopyNeeds, needs_value_copy};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -10,8 +11,8 @@ use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::optimize::pass_dump;
 use crate::tir::{
-    BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    BuiltinDeclarations, FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -305,6 +306,55 @@ pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<
 
 /// Visit every local a pattern binds, with the type it is bound at.
 pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl FnMut(u32, TypeId)) {
+    let scrutinee = Slot {
+        ty: None,
+        kind: PlaceKind::Storage,
+    };
+    for_each_pattern_binding_in(pattern, scrutinee, &UnknownSlots, &mut |local, ty, _| {
+        visit(local, ty);
+    });
+}
+
+/// What a pattern destructures: the type it holds, where known, and the kind
+/// of place a read of it is.
+#[derive(Clone, Copy)]
+pub(crate) struct Slot {
+    pub ty: Option<TypeId>,
+    pub kind: PlaceKind,
+}
+
+/// The types of the slots a struct or tuple pattern destructures.
+pub(crate) trait SlotTypes {
+    /// The field types of the struct a pattern over `struct_type` names.
+    fn struct_fields(&self, struct_type: TypeId) -> Option<Vec<TypeId>>;
+    /// The element types of the tuple a slot of type `tuple` holds.
+    fn tuple_elements(&self, tuple: TypeId) -> Option<Vec<TypeId>>;
+}
+
+struct UnknownSlots;
+
+impl SlotTypes for UnknownSlots {
+    fn struct_fields(&self, _: TypeId) -> Option<Vec<TypeId>> {
+        None
+    }
+
+    fn tuple_elements(&self, _: TypeId) -> Option<Vec<TypeId>> {
+        None
+    }
+}
+
+/// [`for_each_pattern_binding`] over a pattern destructuring `slot`, visiting
+/// each binding with the slot it binds.
+pub(crate) fn for_each_pattern_binding_in(
+    pattern: &TirPattern,
+    slot: Slot,
+    types: &impl SlotTypes,
+    visit: &mut impl FnMut(u32, TypeId, Slot),
+) {
+    let field = |ty: Option<TypeId>| Slot {
+        ty,
+        kind: PlaceKind::Field,
+    };
     match pattern {
         TirPattern::Binding {
             local_index,
@@ -315,20 +365,41 @@ pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl Fn
             local_index,
             type_id,
             ..
-        } => visit(*local_index, *type_id),
-        TirPattern::Tuple(subs, _) | TirPattern::Variant { bindings: subs, .. } => {
-            for sub in subs {
-                for_each_pattern_binding(sub, visit);
+        } => visit(*local_index, *type_id, slot),
+        TirPattern::Tuple(elements, _) => {
+            let element_types = slot.ty.and_then(|ty| types.tuple_elements(ty));
+            for (index, element) in elements.iter().enumerate() {
+                let ty = element_types.as_ref().map(|t| t[index]);
+                for_each_pattern_binding_in(element, field(ty), types, visit);
             }
         }
-        TirPattern::Struct { fields, .. } => {
-            for field in fields {
-                for_each_pattern_binding(&field.pattern, visit);
+        TirPattern::Variant {
+            bindings,
+            payload_type,
+            ..
+        } => {
+            let payload = Slot {
+                ty: Some(*payload_type),
+                kind: PlaceKind::Value,
+            };
+            for binding in bindings {
+                for_each_pattern_binding_in(binding, payload, types, visit);
             }
         }
-        TirPattern::Or(alts) => {
-            for alt in alts {
-                for_each_pattern_binding(alt, visit);
+        TirPattern::Struct {
+            struct_type,
+            fields,
+            ..
+        } => {
+            let field_types = types.struct_fields(*struct_type);
+            for f in fields {
+                let ty = field_types.as_ref().map(|t| t[f.field_index as usize]);
+                for_each_pattern_binding_in(&f.pattern, field(ty), types, visit);
+            }
+        }
+        TirPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                for_each_pattern_binding_in(alternative, slot, types, visit);
             }
         }
         TirPattern::Wildcard
@@ -533,10 +604,7 @@ pub fn source_root(
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
-            if matches!(
-                type_table.get(inner.type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            ) {
+            if type_table.is_reference(inner.type_id) {
                 return ref_targets.referent_root(inner);
             }
             source_root(inner, type_table, ref_targets)

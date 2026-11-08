@@ -1,7 +1,7 @@
 // A by-reference `for` over a `List` of a boxable element allocates nothing
 // per iteration.
 //
-// `&variant` lowers to `Box<T>`, and the box reads the very index the next
+// `&variant` lowers to a cell, and the cell reads the very index the next
 // statement bumps — adjacency cannot move its initializer to the use.
 struct Inner { name: String, ids: List<i32> }
 variant Node { Leaf(Inner), Pair([Inner, Inner]) }

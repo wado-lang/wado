@@ -1,5 +1,5 @@
-// A `&mut` parameter lowers to a `Box<T>` the callee writes the field through,
-// so the read after the call is not the literal the box was built with. Folding
+// A `&mut` parameter points at a cell the callee writes the field through,
+// so the read after the call is not the literal the cell was built with. Folding
 // it to that literal drops the write-back and `scale(2, true)` returns 2.
 //
 // The `println` is what keeps `const_branch_prune` from collapsing the call out

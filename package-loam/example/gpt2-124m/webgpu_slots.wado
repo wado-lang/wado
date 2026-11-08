@@ -1,0 +1,37 @@
+//! `slots.wado` on a WebGPU device:
+//!
+//!     wado run-webgpu -O2 webgpu_slots.wado
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { WebGpuBackend } from "lib:loam";
+use { measured, read_checkpoint } from "./slots.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(checkpoint) = read_checkpoint() else {
+        return;
+    };
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    measured(gpu, &checkpoint);
+}

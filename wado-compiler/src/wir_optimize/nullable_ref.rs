@@ -323,7 +323,7 @@ fn transform_instr(
             }
             // Not a NullableRef case struct or base: recurse into fields.
             // Also strip any RefAsNonNull wrappers from fields whose type was substituted
-            // from non-null to nullable by NullableRef (e.g., Box<T> fields where T = variant).
+            // from non-null to nullable by NullableRef (e.g., a cell's field holding a variant).
             // cast_nonnull_fields in translate.rs inserts RefAsNonNull for non-null struct fields,
             // but after NullableRef the field type becomes nullable, so the wrapper is incorrect
             // and would trap when the value is null (= NullableRef None case).

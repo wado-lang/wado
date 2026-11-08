@@ -1,11 +1,11 @@
 // Precision guard for WIR struct-local elision (elide_single_field_struct /
-// elide_adjacent_box_locals): the `Box<i32>` shell minted for a `&primitive`
+// elide_adjacent_box_locals): the `$Cell<i32>` shell minted for a `&primitive`
 // match-payload binding must keep eliding at O2. The def/use-safety checks
 // added for soundness (dominance, operand invariance, trap-free initializers)
 // must not block this — the pass's primary target.
 //
 // At O0 the box def is present; at O2 it must be gone (the payload read is
-// substituted at the use). The `Box<i32>` allocations in the assert-failure
+// substituted at the use). The `$Cell<i32>` allocations in the assert-failure
 // formatting path are call arguments, not local defs, so the pattern is
 // anchored on the binding (`i = struct.new …`).
 
@@ -32,5 +32,5 @@ __DATA__
 {
     "test": {},
     "wir_pass": {"O2": ["nir/inline", "wir/unwrap_box_locals", "wir/forward_once_read_locals", "wir/fuse_remaining_local_tees"]},
-    "wir_not_expect:O2": ["i = struct.new \"core:prelude/types.wado//Box<i32>\""]
+    "wir_not_expect:O2": ["i = struct.new \"core:prelude//$Cell<i32>\""]
 }

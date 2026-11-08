@@ -472,7 +472,6 @@ fn field_schema_method_fn(
             type_id: param_type,
             local_index: 0,
             is_mut: false,
-            is_mut_ref: false,
             span,
         }],
         return_type,

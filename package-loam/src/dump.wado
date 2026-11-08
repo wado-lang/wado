@@ -7,6 +7,7 @@ use { to_string } from "core:json";
 use { Serialize } from "core:serde";
 use { CodeWriter } from "lib:wadopoet";
 use { Graph, Known, Node, ValueInfo, element_of } from "./graph.wado";
+use { rows_judged } from "./emit.wado";
 use { Checked } from "./infer.wado";
 use { Lowering, branches, lowerings } from "./lowering.wado";
 use { Judged, padding } from "./pad.wado";
@@ -21,6 +22,10 @@ pub struct Report {
     /// Each length the inputs read: padded to a capacity, or the node that
     /// refused it.
     pub padding: List<Judged>,
+    /// Whether each row of a batch holds padded lengths of its own: the axis
+    /// the rows run along, or why they share them. `None` where no input pads
+    /// a length behind its first axis.
+    pub rows: Option<String> = null,
 }
 
 impl Serialize for Report;
@@ -89,6 +94,12 @@ pub fn report(graph: &Graph, checked: &Checked) -> Report {
         opset: graph.opset,
         scope: scope(graph, checked),
         padding: padding(graph, checked),
+        rows: match rows_judged(graph, checked) {
+            Ok(Some(axis)) => Option::Some(`each its own, along ${axis}`),
+            Ok(None) => null,
+            Err(Shared(refusal)) => Option::Some(`shared: ${refusal}`),
+            Err(e) => Option::Some(`${e}`),
+        },
     };
 }
 
@@ -110,6 +121,9 @@ pub fn render_dump(graph: &Graph, checked: &Checked) -> String {
             w.line(`${*judged}`);
         }
         w.dedent();
+    }
+    if let Some(rows) = &r.rows {
+        w.line(`rows: ${*rows}`);
     }
     w.blank();
     w.line(

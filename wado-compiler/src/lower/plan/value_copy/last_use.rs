@@ -10,7 +10,7 @@ use super::ownership::OwnedCalls;
 use super::points_to::{Locations, PointsTo};
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
-use super::{is_reference_type, is_scalar_type, needs_value_copy};
+use super::{is_scalar_type, needs_value_copy};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
@@ -118,7 +118,7 @@ pub fn analyze_ownership(
             .filter(|&l| {
                 func.locals
                     .get(l as usize)
-                    .is_some_and(|local| place::is_reference(local.type_id, type_table))
+                    .is_some_and(|local| type_table.is_reference(local.type_id))
             })
             .collect(),
         field_slots: FieldSlots {
@@ -789,7 +789,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Whether assigning to `place` repoints a slot instead of writing the
-    /// referent where it lies, as `*p = v` to an unboxed `&mut` aggregate does.
+    /// referent where it lies, as `*p = v` to a `&mut` aggregate does, rather
+    /// than a cell's.
     fn rebinds_place(&self, place: &TirExpr) -> bool {
         let TirExprKind::Unary {
             op: TirUnaryOp::Deref,
@@ -798,7 +799,7 @@ impl<'a> Analyzer<'a> {
         else {
             return true;
         };
-        self.type_table.box_payload_of(inner.type_id).is_some()
+        self.type_table.cell_payload(inner.type_id).is_some()
     }
 
     fn record_write(
@@ -954,7 +955,7 @@ fn released_edges(alias_sites: &[(u32, u32, IndexSet<u32>)]) -> IndexSet<(u32, u
 fn is_reference_local(func: &TirFunction, local: u32, type_table: &TypeTable) -> bool {
     func.locals
         .get(local as usize)
-        .is_some_and(|l| is_reference_type(l.type_id, type_table))
+        .is_some_and(|l| type_table.is_reference(l.type_id))
 }
 
 /// Every local holding what `destinations` hold: they themselves, and whatever
@@ -1756,8 +1757,7 @@ impl<'a> Analyzer<'a> {
         };
         // What a reference hands over is the storage it names; any other value lands
         // in the result whole.
-        let Some((ty, fresh)) =
-            result_type.filter(|_| is_reference_type(arg.type_id, self.type_table))
+        let Some((ty, fresh)) = result_type.filter(|_| self.type_table.is_reference(arg.type_id))
         else {
             return landing(true);
         };
@@ -2167,7 +2167,7 @@ impl<'a> Analyzer<'a> {
         else {
             // A reference handed on is written through, confined or not.
             if let TirExprKind::Local { index, .. } = &arg.kind
-                && !place::is_reference(arg.type_id, self.type_table)
+                && !self.type_table.is_reference(arg.type_id)
                 && !ref_receiver
                 && callee.is_some_and(|(c, position)| {
                     self.confined_params.is_confined(c, position as usize)
@@ -3320,7 +3320,7 @@ fn reference_escape(expr: &TirExpr, type_table: &TypeTable) -> Option<(u32, Opti
     ) {
         return None;
     }
-    if !is_reference_type(expr.type_id, type_table) {
+    if !type_table.is_reference(expr.type_id) {
         return None;
     }
     Some((alias_root(expr)?, top_field_of(expr)))
@@ -3683,7 +3683,7 @@ impl MoveEligible {
             read: |local: u32, local_type: Option<TypeId>, moved: bool| {
                 let moved = moved
                     && local_type.is_some_and(|t| {
-                        needs_value_copy(t, type_table) && !place::is_reference(t, type_table)
+                        needs_value_copy(t, type_table) && !type_table.is_reference(t)
                     });
                 reads
                     .entry(local)

@@ -24,7 +24,7 @@ use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
 use crate::parallel::{Executor, lock};
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
 /// `aliased` are locals reachable through another handle, and `alias_groups`
@@ -350,7 +350,7 @@ fn build_mut_escaped(
 
 /// Memoised "a callee receiving this by value or immutable reference cannot
 /// mutate it" predicate. A value is mutable through a call only if it carries
-/// shared mutable state — a `&mut T`, a `Box` / `List` cell, a raw array, a
+/// shared mutable state — a `&mut T`, a cell, a `List`, a raw array, a
 /// resource handle, or an opaque shape. Anything else is deep-copied on
 /// pass-by-value, so no callee reaches the fields the `ValueGraph` forwards.
 pub(super) struct CallImmutability<'a> {
@@ -360,10 +360,9 @@ pub(super) struct CallImmutability<'a> {
     /// type, so the order changes nothing.
     memo: Mutex<IndexMap<TypeId, bool>>,
     /// Per-[`FuncId`]: the function's body provably writes through its receiver
-    /// (param 0). Boxing erases the `&self` / `&mut self` distinction — both
-    /// become a `Box<T>` param (see `lower/plan/boxing`) — so a receiver's
-    /// mutability cannot be read off its type; only the callee body distinguishes
-    /// `bump(&mut self) { *self = … }` from `fmt(&self)`. Computed by fixpoint.
+    /// (param 0). Sharper than the receiver's type: a `&mut self` method whose
+    /// body writes nothing through it leaves the receiver alone. Computed by
+    /// fixpoint.
     receiver_mutating: SecondaryMap<FuncId, bool>,
     /// Per-[`FuncId`]: the function has a body (so a not-mutating verdict is
     /// *proven*, not unknown). A callee that does not resolve here (extern /
@@ -376,7 +375,7 @@ pub(super) struct CallImmutability<'a> {
 
 impl<'a> CallImmutability<'a> {
     pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
-        let struct_fields = StructFieldTypes::new(&project.structs, type_table);
+        let struct_fields = StructFieldTypes::new(&project.structs);
         let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
             compute_receiver_mutating(project, type_table, &first_param_types, exec);
@@ -405,8 +404,8 @@ impl<'a> CallImmutability<'a> {
         if let Some(&cached) = lock(&self.memo).get(&type_id) {
             return cached;
         }
-        // A struct can only reach itself through a `Box`/`List`/reference
-        // field (value types cannot be infinite-sized), all of which return
+        // A struct can only reach itself through a `List` or reference field
+        // (value types cannot be infinite-sized), all of which return
         // `false` before recursing, so a cycle implies an immutable shape.
         if stack.contains(&type_id) {
             return true;
@@ -427,7 +426,7 @@ impl<'a> CallImmutability<'a> {
                 self.walk(base, stack)
             }
             _ if self.type_table.struct_parts(type_id).is_some() => {
-                !is_box_or_list(type_id, self.type_table)
+                !is_list(type_id, self.type_table)
                     && self
                         .struct_fields
                         .of_type(type_id, self.type_table)
@@ -546,21 +545,16 @@ pub(super) fn method_mutates_receiver(
     conservative_on_unknown: bool,
     call_immutability: Option<&CallImmutability>,
 ) -> bool {
-    let receiver_is_mut_ref = matches!(
-        type_table.get(body.exprs[receiver].type_id),
-        ResolvedType::MutRef(_)
-    );
-    // The receiver type alone cannot tell `&self` from `&mut self` once boxing
-    // has made both a `Box<T>` param, so consult the body-derived verdict: a
-    // method that writes through its receiver mutates it, one that does not is
-    // proven safe. A bodyless callee (`None` verdict) falls back to the legacy
-    // `MutRef`-param check (still valid for a genuine `&mut Struct` receiver) or
+    let receiver_is_mut_ref = type_table.is_mut_ref(body.exprs[receiver].type_id);
+    // The body-derived verdict is sharper than the receiver type: a method that
+    // writes through its receiver mutates it, one that does not is proven safe.
+    // A bodyless callee (`None` verdict) falls back to its `&mut` parameter or
     // the conservative default. `call_immutability` is `None` for the
     // copy-propagation caller, which keeps its own type-based receiver guard.
     let callee_mutates = match call_immutability.and_then(|ci| ci.method_writes_receiver(func_id)) {
         Some(writes) => writes,
         None => match first_param_types[func_id] {
-            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+            Some(tp) => type_table.is_mut_ref(tp),
             None => conservative_on_unknown,
         },
     };
@@ -594,10 +588,8 @@ fn compute_receiver_mutating(
             // a by-value `self` writes the callee's own copy, so it neither
             // counts as mutating nor propagates through the fixpoint
             // (`outer(&mut self) { self.helper() }` with a by-value helper
-            // leaves outer's receiver untouched). The pre-boxing
-            // `is_mut_ref` bit stays precise after boxing erases `&mut`
-            // from the parameter type.
-            p0_of[id] = p0.is_mut_ref.then_some(p0.local_index);
+            // leaves outer's receiver untouched).
+            p0_of[id] = p0.writes_caller(type_table).then_some(p0.local_index);
         }
     }
     // Walk each body once to extract a fixpoint-invariant summary: whether it
@@ -687,11 +679,11 @@ fn collect_pattern_locals(body: &Body, pat: PatId, set: &mut IndexSet<u32>, chan
     }
 }
 
-/// Locals whose storage aliases a projection of self (`p0`) through a boxed
-/// handle the syntactic self-write scan misses: the boxing rewrite lowers
-/// `&`/`&mut self.<proj>` to `Box { value: self.<proj> }`, which is then bound
-/// and matched. A least fixpoint over the bindings that hand out such an alias
-/// (a projection of a known self alias, a `Box` literal wrapping one, or a
+/// Locals whose storage aliases a projection of self (`p0`) through a cell the
+/// syntactic self-write scan misses: lowering turns `&`/`&mut self.<proj>` of a
+/// cell target into a cell holding `self.<proj>`, which is then bound and
+/// matched. A least fixpoint over the bindings that hand out such an alias
+/// (a projection of a known self alias, a cell literal wrapping one, or a
 /// match binding of a self-alias scrutinee). Only a later *mutation* of these
 /// counts as a write, so an immutable `&self.field` boxed and read is not
 /// flagged.
@@ -713,7 +705,7 @@ fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet
             ..
         } = &body.exprs[value].kind
         {
-            return type_table.box_payload_of(*struct_type).is_some()
+            return type_table.cell_payload(*struct_type).is_some()
                 && fields.iter().any(|f| {
                     f.value
                         .as_expr()
@@ -815,7 +807,7 @@ fn summarize_receiver_writes(
                         pending.push(*func_id);
                     } else {
                         let inner_mut = match first_param_types[*func_id] {
-                            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+                            Some(tp) => type_table.is_mut_ref(tp),
                             None => true,
                         };
                         if inner_mut {
@@ -837,10 +829,9 @@ fn summarize_receiver_writes(
 }
 
 /// Flag the root of a call argument that hands the callee shared mutable state
-/// by value — a `Box`, `List`, `&mut T` or resource handle — which it can mutate
-/// exactly like a `&mut` place. Boxing lowers `&mut x` to a by-value `Box<x>`,
-/// clearing `is_mut`, so keying on that flag alone would miscompile
-/// `step(&mut pos)`. Keyed on the type, which survives `field_scalarize`.
+/// by value — a cell, `List`, `&mut T` or resource handle — which it can mutate
+/// exactly like a `&mut` place. Keyed on the type, which survives
+/// `field_scalarize`.
 fn collect_ref_arg_escapes(
     body: &Body,
     node: NodeRef,
@@ -964,11 +955,16 @@ fn collect_mut_escaped_node(
 // Alias group analysis (union-find over reference-typed copies)
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// The key of the heap object a local's value may share: a struct handle, or
-/// an aggregate behind a reference. `None` for scalars.
-fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
-    fn key(type_id: TypeId, under_ref: bool, type_table: &TypeTable) -> Option<TypeKey> {
+/// The key of the heap object a local's value may share: a struct handle, a
+/// cell, or an aggregate behind a reference. `None` for scalars.
+fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> {
+    fn key(type_id: TypeId, under_ref: bool, type_table: &TypeTable) -> Option<TypeId> {
         match type_table.get(type_id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                if type_table.cell_payload(type_id).is_some() =>
+            {
+                Some(type_table.cell_key(type_id))
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => key(*inner, true, type_table),
             ResolvedType::Newtype { .. } => key(
                 type_table.representation_head(type_id),
@@ -978,15 +974,13 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             // A value tuple, and a `List`, is copied on assignment, so only a
             // handle to one shares it.
             ResolvedType::Struct { .. } if type_table.is_list(type_id) => {
-                under_ref.then(|| type_table.type_key(type_id))
+                under_ref.then_some(type_id)
             }
-            ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
+            ResolvedType::Struct { .. } => Some(type_id),
             ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
-                under_ref.then(|| type_table.type_key(type_id))
+                under_ref.then_some(type_id)
             }
-            ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => {
-                under_ref.then(|| type_table.type_key(type_id))
-            }
+            ResolvedType::Tuple(_) | ResolvedType::BuiltinArray(_) => under_ref.then_some(type_id),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -1011,7 +1005,7 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
 /// Edges between locals that may share one heap object by
 /// [`shared_object_key`], a star around each key's first-seen local.
 fn same_pointee_reference_edges(locals: &[NirLocal], type_table: &TypeTable) -> Vec<(u32, u32)> {
-    let mut rep: IndexMap<TypeKey, u32> = IndexMap::default();
+    let mut rep: IndexMap<TypeId, u32> = IndexMap::default();
     let mut edges = Vec::new();
     for (i, l) in locals.iter().enumerate() {
         let Some(key) = shared_object_key(l.type_id, type_table) else {
@@ -1060,10 +1054,9 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
     }
 }
 
-/// The two compiler structs whose value is a shared handle rather than a copy.
-fn is_box_or_list(type_id: TypeId, type_table: &TypeTable) -> bool {
-    type_table.is_compiler_struct_instance(type_id, CompilerItem::Box)
-        || type_table.is_compiler_struct_instance(type_id, CompilerItem::List)
+/// The compiler struct whose value is a shared handle rather than a copy.
+fn is_list(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_compiler_struct_instance(type_id, CompilerItem::List)
 }
 
 /// True when copying a `type_id` value between locals aliases them onto one heap
@@ -1073,11 +1066,11 @@ fn is_box_or_list(type_id: TypeId, type_table: &TypeTable) -> bool {
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::Struct { .. } => is_box_or_list(type_id, type_table),
+        ResolvedType::MutRef(_) => type_table.cell_payload(type_id).is_some(),
+        ResolvedType::Struct { .. } => is_list(type_id, type_table),
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never
-        | ResolvedType::MutRef(_)
         | ResolvedType::Enum { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }

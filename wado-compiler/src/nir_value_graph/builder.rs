@@ -12,8 +12,8 @@ use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::tir::ObjectTypes;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::tir::{ObjectTypes, TypeId};
+use crate::type_table::TypeTable;
 
 use super::{HeapVersion, ValueId, ValueKind, ValuePool};
 use crate::nir_value_graph::value_kind_to_const;
@@ -44,7 +44,7 @@ struct HeapState {
     /// whether or not it takes the reference. A type with no entry is at
     /// `reference_any`.
     reference_any: HeapVersion,
-    reference_by_type: IndexMap<TypeKey, HeapVersion>,
+    reference_by_type: IndexMap<TypeId, HeapVersion>,
 }
 
 /// Whose storage a field read reaches: the frame's own, or a reference's
@@ -53,7 +53,7 @@ struct HeapState {
 #[derive(Clone, Copy)]
 enum Holder {
     Frame,
-    Foreign(Option<TypeKey>),
+    Foreign(Option<TypeId>),
 }
 
 impl HeapState {
@@ -78,7 +78,7 @@ impl HeapState {
 
     /// The generation of storage behind a reference to a `key` object, or to
     /// an object of any type.
-    fn reference_version(&self, key: Option<TypeKey>) -> HeapVersion {
+    fn reference_version(&self, key: Option<TypeId>) -> HeapVersion {
         match key {
             Some(k) => self
                 .reference_by_type
@@ -248,7 +248,7 @@ pub(crate) struct HeapSnapshot {
     default_version: HeapVersion,
     escaped_version: HeapVersion,
     reference_any: HeapVersion,
-    reference_by_type: IndexMap<TypeKey, HeapVersion>,
+    reference_by_type: IndexMap<TypeId, HeapVersion>,
 }
 
 /// A snapshot of *all* flow-sensitive builder state at a program point:
@@ -2565,7 +2565,7 @@ mod tests {
     #[test]
     fn unknown_root_read_sees_every_bump_of_its_field() {
         let mut heap = HeapState::new();
-        let key = TypeTable::new().type_key(TypeTable::I32);
+        let key = TypeTable::I32;
         let bumps: [&dyn Fn(&mut HeapState); 5] = [
             &|h| h.bump_slot(3, 0),
             &|h| h.bump_local(5),
@@ -2587,11 +2587,7 @@ mod tests {
     /// of a type it writes, and no other read.
     #[test]
     fn a_reference_bump_reaches_only_reads_of_the_written_type() {
-        let types = TypeTable::new();
-        let (written, other) = (
-            types.type_key(TypeTable::I32),
-            types.type_key(TypeTable::I64),
-        );
+        let (written, other) = (TypeTable::I32, TypeTable::I64);
         let mut heap = HeapState::new();
         let read = |heap: &HeapState, holder| heap.version_of(Some(0), 0, false, holder);
         let before = [

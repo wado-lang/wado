@@ -16,7 +16,7 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKin
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use super::arena_query::storage_root;
 use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
@@ -258,14 +258,14 @@ fn helpers_reaching_variant_copies(
     type_table: &TypeTable,
 ) -> IndexSet<FuncKey> {
     let value_copy_ids = project.value_copy_func_ids();
-    let mut helper_by_type: IndexMap<TypeKey, FuncKey> = IndexMap::default();
+    let mut helper_by_type: IndexMap<TypeId, FuncKey> = IndexMap::default();
     let mut seeds: IndexSet<FuncKey> = IndexSet::default();
     for f in &project.functions {
         let f = f.borrow();
         let (Some(copy_type), Some(id)) = (f.value_copy_type(), f.id) else {
             continue;
         };
-        helper_by_type.insert(type_table.type_key(copy_type), id);
+        helper_by_type.insert(copy_type, id);
         if is_variant_type(copy_type, type_table) {
             seeds.insert(id);
         }
@@ -283,7 +283,7 @@ fn helpers_reaching_variant_copies(
                     callees.insert(*func_id);
                 } else if is_array_clone(*func_id, descriptors)
                     && let Some(elem) = array_clone_element_type(body, e)
-                    && let Some(elem_helper) = helper_by_type.get(&type_table.type_key(elem))
+                    && let Some(elem_helper) = helper_by_type.get(&elem)
                 {
                     callees.insert(*elem_helper);
                 }
@@ -598,10 +598,7 @@ impl Analyzer<'_> {
     fn callee_mutates_self(&self, key: FuncKey) -> Option<bool> {
         let f = self.funcs.get(key.index())?.borrow();
         let p0 = f.params.first()?;
-        Some(matches!(
-            self.type_table.get(p0.type_id),
-            ResolvedType::MutRef(_)
-        ))
+        Some(self.type_table.is_mut_ref(p0.type_id))
     }
 
     /// True when calling `key` (a `&mut self` method) cannot mutate any
@@ -773,10 +770,8 @@ impl ElementClean<'_, '_> {
                             // caller write an element whatever its own body
                             // writes, so what it returns decides too.
                             Some(true) => {
-                                !matches!(
-                                    self.analyzer.type_table.get(body.exprs[id].type_id),
-                                    ResolvedType::MutRef(_)
-                                ) && self.analyzer.is_method_element_immutable(callee)
+                                !self.analyzer.type_table.is_mut_ref(body.exprs[id].type_id)
+                                    && self.analyzer.is_method_element_immutable(callee)
                             }
                             None => false,
                         };
@@ -1355,11 +1350,8 @@ fn is_self_derived(
             // `container_sroa` rewrites it to the builtin. Other array
             // builtins (`array_clone`, `array_new`) and every by-value return
             // (`$value_copy$T`) produce fresh storage.
-            let hands_back_ref = element_accessors.contains(func_id)
-                || matches!(
-                    tt.get(body.exprs[id].type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                );
+            let hands_back_ref =
+                element_accessors.contains(func_id) || tt.is_reference(body.exprs[id].type_id);
             hands_back_ref
                 && args
                     .iter()

@@ -27,7 +27,6 @@ use super::gate::{FunctionGate, GatedPass};
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
     let functions = &project.functions;
-    let type_table = &*project.type_table.borrow();
     gate.run_gated_par(
         GatedPass::LetBlockFlatten,
         functions.len(),
@@ -43,7 +42,7 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
                 return false;
             };
             let flattened = Engine::new(body, buffers, locals, params).run(&[&rule]);
-            promote_lone_assignments(body, locals, params, type_table) || flattened
+            promote_lone_assignments(body, locals, params) || flattened
         },
     )
 }

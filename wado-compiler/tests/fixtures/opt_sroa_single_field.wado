@@ -1,9 +1,9 @@
 // Test: Single-field struct parameter SROA
 // Verifies that functions taking `ref null S` parameters (where S is any
-// single-field struct, not just Box<T>) are rewritten to take the scalar
+// single-field struct, not just a cell) are rewritten to take the scalar
 // field value directly, eliminating GC struct allocation at call sites.
 //
-// This extends the Box<T> parameter SROA to all single-field structs.
+// This extends the cell parameter SROA to all single-field structs.
 
 // `black_box` keeps the constructed values off const-folding's radar so the
 // methods below survive into the WIR to be matched.
@@ -177,7 +177,7 @@ export fn run() with Stdout {
     // Mixed types
     assert mixed_single_fields() == 42;
 
-    // Template string with single-field struct field (exercises Box<T> path too)
+    // Template string with single-field struct field (exercises the cell path too)
     let w2 = Wrapper { inner: builtin::black_box(99) };
     assert `${w2.inner}` == "99";
 

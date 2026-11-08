@@ -1474,7 +1474,6 @@ fn binding_function(
                 local_index,
                 type_id: local.type_id,
                 is_mut: local.is_mut,
-                is_mut_ref: false,
                 span: synth_span(),
             }
         })

@@ -5,7 +5,8 @@
 //! within one. A `return`, `break` or `continue` drops the same way each scope
 //! it leaves. No path is analysed: a local that a path moved is null on that
 //! path. A temporary that is only referenced has no other owner, so it is
-//! spilled into a local that drops when its statement ends.
+//! spilled into a local that drops when its statement ends, or its block where
+//! a `let` keeps the borrow.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -37,7 +38,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeMemo, TypeTable};
+use crate::type_table::{TypeMemo, TypeTable};
 
 /// An affine local a scope declared.
 #[derive(Clone)]
@@ -80,6 +81,10 @@ struct Cx<'a> {
     local_count: Option<&'a mut u32>,
     /// The affine locals each open scope declared, outermost first.
     scopes: Vec<Scope>,
+    /// The scope holding the `let` whose initializer is being elaborated, which
+    /// keeps the temporaries the `let` borrows. A plain block inside it is part
+    /// of that statement, so a `let` it holds answers to the outer one.
+    let_scope: Option<usize>,
     /// The declarations of the temporaries spilled since the statement owning
     /// them began, which go ahead of that statement: its drops read them after
     /// the expression that assigns them, so no block inside it may declare them.
@@ -87,7 +92,7 @@ struct Cx<'a> {
     /// The enclosing loops and labeled blocks, innermost last.
     targets: Vec<BreakTarget>,
     /// The holders whose drop is being expanded, outermost first.
-    expanding: Vec<TypeKey>,
+    expanding: Vec<TypeId>,
     glue: &'a mut DropGlue,
     /// The module of the function being elaborated.
     module: ModuleSource,
@@ -134,6 +139,15 @@ impl Cx<'_> {
         } else {
             Tail::Consumed
         }
+    }
+
+    /// Run `walk` over the initializer of a `let` the innermost scope holds.
+    fn in_let<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = self.let_scope;
+        self.let_scope = outer.or(Some(self.scopes.len() - 1));
+        let result = walk(self);
+        self.let_scope = outer;
+        result
     }
 
     /// Declare `live` in the innermost scope.
@@ -250,9 +264,8 @@ struct AffineTypes<'a> {
 impl<'a> AffineTypes<'a> {
     /// Whether `type_id` is, or holds at any depth, an affine value.
     fn carried_by(&self, type_id: TypeId) -> bool {
-        let key = self.tt.borrow().type_key(type_id);
         self.answers
-            .get_or_compute(key, || holds_affine(self, type_id))
+            .get_or_compute(type_id, || holds_affine(self, type_id))
     }
 
     /// Whether `type_id` is a template, whose fields alias its holes: a hole
@@ -405,10 +418,6 @@ impl<'a> AffineTypes<'a> {
 }
 
 impl HeldTypes for AffineTypes<'_> {
-    fn key(&self, type_id: TypeId) -> TypeKey {
-        self.tt.borrow().type_key(type_id)
-    }
-
     fn held(&self, type_id: TypeId) -> Held {
         match self.layout(type_id) {
             Layout::Resource
@@ -654,6 +663,7 @@ fn build_drop_glue(
         local_base: 0,
         local_count: Some(&mut local_count),
         scopes: Vec::new(),
+        let_scope: None,
         declarations: Vec::new(),
         targets: Vec::new(),
         expanding: Vec::new(),
@@ -726,6 +736,7 @@ fn elaborate_function(func: &mut TirFunction, affine_types: AffineTypes, glue: &
         local_base: 0,
         local_count: Some(local_count),
         scopes: Vec::new(),
+        let_scope: None,
         declarations: Vec::new(),
         targets: Vec::new(),
         expanding: Vec::new(),
@@ -974,11 +985,10 @@ fn panic_with(message: String, cx: &Cx) -> TirExpr {
 /// Drop each part of `scrutinee`, a holder of type `type_id`, and not the
 /// holder as a whole.
 fn drop_parts(scrutinee: TirExpr, type_id: TypeId, parts: Parts, cx: &mut Cx) -> Vec<TirStmt> {
-    let key = cx.affine_types.tt.borrow().type_key(type_id);
-    if cx.expanding.contains(&key) {
+    if cx.expanding.contains(&type_id) {
         return drop_through_glue(scrutinee, type_id, cx);
     }
-    cx.expanding.push(key);
+    cx.expanding.push(type_id);
     let stmts = match parts {
         Parts::Fields(fields) => drop_projected(scrutinee, &fields, cx),
         Parts::Cases(cases) => drop_variant(scrutinee, type_id, &cases, cx),
@@ -1240,6 +1250,11 @@ fn elab_scope(
     cx: &mut Cx,
 ) {
     cx.open_scope(declared, temporaries);
+    let outer_let = if temporaries == TemporaryScope::Statement {
+        cx.let_scope.take()
+    } else {
+        cx.let_scope
+    };
     let stmts = std::mem::take(&mut block.stmts);
     let mut out: Vec<TirStmt> = Vec::new();
     let mut diverged = false;
@@ -1273,6 +1288,7 @@ fn elab_scope(
             out.splice(first_out..first_out, declarations);
         }
     }
+    cx.let_scope = outer_let;
     let scope = cx.scopes.pop().expect("pushed above");
     let (deferred, lives): (Vec<Live>, Vec<Live>) = scope
         .lives
@@ -1388,7 +1404,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
             value,
             storage,
         } => {
-            let value = elab_value_expr(value, cx);
+            let value = cx.in_let(|cx| elab_value_expr(value, cx));
             if cx.carries_affine(type_id) {
                 cx.declare(Live {
                     local: local_index,
@@ -1415,7 +1431,8 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
         TirStmtKind::LetDestructure { pattern, mut value } => {
             let bindings = cx.affine_types.pattern_bindings(&pattern);
             let extracts = !bindings.is_empty();
-            let entry = consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx)
+            let entry = cx
+                .in_let(|cx| consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx))
                 .map_or_else(Vec::new, |place| consume_matched(&pattern, place, cx));
             for live in bindings {
                 cx.declare(live);
@@ -1575,8 +1592,9 @@ fn elab_value_expr(mut expr: TirExpr, cx: &mut Cx) -> TirExpr {
 /// ownership accounting: a missed move drops twice, a missed reference leaks.
 fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     if !consuming && is_temporary(expr, cx) && cx.carries_affine(expr.type_id) {
+        let extended = expr.marks().extended;
         elab_expr(expr, true, cx);
-        spill_temporary(expr, cx);
+        spill_temporary(expr, extended, cx);
         return;
     }
     let type_id = expr.type_id;
@@ -2109,6 +2127,7 @@ fn elab_closure(
         local_base: params.len() as u32,
         local_count: None,
         scopes: Vec::new(),
+        let_scope: None,
         declarations: Vec::new(),
         targets: Vec::new(),
         expanding: Vec::new(),
@@ -2228,7 +2247,7 @@ fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
     if is_temporary(base, cx) {
         elab_expr(base, true, cx);
         let type_id = base.type_id;
-        let (local, name) = spill_as_local(base, cx);
+        let (local, name) = spill_as_local(base, None, cx);
         let value = std::mem::replace(&mut **base, local_ref(local, &name, type_id));
         take_place(expr, cx);
         let TirExprKind::Block(block) = &mut expr.kind else {
@@ -2268,10 +2287,15 @@ fn is_temporary(expr: &TirExpr, cx: &Cx) -> bool {
 
 /// Move the referenced temporary `expr` into a fresh local, in place and so in
 /// evaluation order (`{ $temp = expr; $temp }`), owned until the statement
-/// holding it ends. Returns the local.
-fn spill_temporary(expr: &mut TirExpr, cx: &mut Cx) -> TirExpr {
+/// holding it ends, or the scope holding the `let` that keeps the borrow
+/// (`extended`). Returns the local.
+fn spill_temporary(expr: &mut TirExpr, extended: bool, cx: &mut Cx) -> TirExpr {
     let type_id = expr.type_id;
-    let (local, name) = spill_as_local(expr, cx);
+    let kept_by = extended.then(|| {
+        cx.let_scope
+            .expect("a temporary a `let` keeps is spilled inside its initializer")
+    });
+    let (local, name) = spill_as_local(expr, kept_by, cx);
     let value = std::mem::replace(expr, local_ref(local, &name, type_id));
     wrap_in_block(expr, |read| {
         vec![
@@ -2282,21 +2306,23 @@ fn spill_temporary(expr: &mut TirExpr, cx: &mut Cx) -> TirExpr {
     local_ref(local, &name, type_id)
 }
 
-/// Declare a local owned by the statement holding `expr`, to hold the
-/// temporary `expr` evaluates to; the caller assigns it. It is declared empty
-/// ahead of that statement (see [`Cx::declarations`]).
-fn spill_as_local(expr: &TirExpr, cx: &mut Cx) -> (u32, String) {
+/// Declare a local owned by the statement holding `expr`, or by the scope
+/// `kept_by` names, to hold the temporary `expr` evaluates to; the caller
+/// assigns it. It is declared empty ahead of that statement (see
+/// [`Cx::declarations`]).
+fn spill_as_local(expr: &TirExpr, kept_by: Option<usize>, cx: &mut Cx) -> (u32, String) {
     let type_id = expr.type_id;
     let (local, name) = cx.alloc_local(type_id, "temp");
     cx.locals[(local - cx.local_base) as usize].is_mut = true;
     let empty = TirExpr::new(TirExprKind::Null, type_id, synth_span());
     cx.declarations
         .push(let_mut_stmt(&name, local, type_id, empty));
-    cx.declare(Live {
+    let scope = kept_by.unwrap_or(cx.scopes.len() - 1);
+    cx.scopes[scope].lives.push(Live {
         local,
         name: name.clone(),
         type_id,
-        temporary: true,
+        temporary: kept_by.is_none(),
     });
     (local, name)
 }
@@ -2558,7 +2584,7 @@ fn consumed_scrutinee(
         !consumes || !drop_unbound(pattern, probe.clone(), cx).is_empty()
     });
     elab_expr(scrutinee, true, cx);
-    leaves.then(|| spill_temporary(scrutinee, cx))
+    leaves.then(|| spill_temporary(scrutinee, false, cx))
 }
 
 /// What entering `pattern`, which matched `place`, does to it: the parts no

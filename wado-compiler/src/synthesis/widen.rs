@@ -68,7 +68,7 @@ impl Widener<'_> {
         let from = value.type_id;
         let (from_name, to_name) = {
             let tt = self.tt.borrow();
-            if tt.same_type(from, to) {
+            if from == to {
                 return value;
             }
             (
@@ -335,7 +335,7 @@ impl Widener<'_> {
             unreachable!("only a value holding an `Option<!>` widens")
         };
         self.flat
-            .listed_struct(&tt, *def, type_args)
+            .listed_struct(*def, type_args)
             .expect("monomorphization lists each struct instance")
             .fields
             .iter()

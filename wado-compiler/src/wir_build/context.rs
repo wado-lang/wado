@@ -9,8 +9,8 @@ use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
-use crate::name::{StructName, wir_enum_type_key};
-use crate::nir::{FuncId, FuncRef};
+use crate::nir;
+use crate::nir::{FuncId, FuncRef, StructDecls};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
@@ -21,9 +21,7 @@ use crate::wir::{
     WirImport, WirImportDesc, WirInstr, WirMemory, WirMeta, WirName, WirNames, WirPackage,
     WirStructType, WirType, WirTypeDef, WirTypeId,
 };
-use crate::wir_build::types::variant_type_key;
 use crate::world_registry::WorldSurface;
-use crate::{nir, tir};
 
 /// Base offset for defined function `WirFuncId` indices.
 /// Import functions use indices 0..N, defined functions use `DEFINED_FUNC_BASE + 0..M`.
@@ -33,48 +31,6 @@ pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 
 /// The `$canonical_inspectable_base` vtable slot a `fn(..)^Inspect` stub reads.
 pub const CANONICAL_INSPECT_SLOT: &str = "inspect";
-
-/// A declared type that has no WIR registration yet.
-///
-/// Expected during `register_types`, where the caller takes `placeholder` and
-/// [`super::types::fixup_abstract_struct_fields`] repairs it later. A bug
-/// anywhere after that.
-pub struct UnregisteredType {
-    /// What was looked for, for the panic message.
-    description: String,
-    /// The abstract ref the fixup pass recognises as unresolved.
-    placeholder: WirType,
-}
-
-impl UnregisteredType {
-    fn struct_ref(description: String) -> Self {
-        Self::new(description, WirAbstractHeapType::Struct)
-    }
-
-    fn array_ref(description: String) -> Self {
-        Self::new(description, WirAbstractHeapType::Array)
-    }
-
-    /// An enum is an i32 discriminant, so the placeholder is already the right
-    /// representation and only loses the enum's WIR identity — nothing for the
-    /// fixup pass to repair, hence no abstract ref.
-    fn enum_i32(description: String) -> Self {
-        Self {
-            description,
-            placeholder: WirType::I32,
-        }
-    }
-
-    fn new(description: String, heap_type: WirAbstractHeapType) -> Self {
-        Self {
-            description,
-            placeholder: WirType::AbstractRef {
-                heap_type,
-                nullable: false,
-            },
-        }
-    }
-}
 
 /// A parameter a call site hands over field by field: `ParamAbi::MultiValue`.
 #[derive(Clone, Debug)]
@@ -97,24 +53,24 @@ pub struct WirContext<'a> {
     pub types: Vec<WirTypeDef>,
     /// Map from fully-qualified type name to `WirTypeId`.
     pub type_map: IndexMap<String, WirTypeId>,
-    /// Map from `StructName` to `WirTypeId` (for struct lookup by qualified name).
-    pub struct_type_map: IndexMap<StructName, WirTypeId>,
+    /// The package's concrete struct declarations, by the type each reifies.
+    pub struct_decls: StructDecls<'a>,
+    /// The WIR type each concrete struct, tuple, variant, enum and array type
+    /// lowers to, by its id.
+    pub wado_types: IndexMap<TypeId, WirTypeId>,
     /// `$Resource`, the object an affine resource is: its handle, mutable in
     /// place, so a reference to the resource sees a store through another
     /// (WEP: Affine Types). Set while types register, before any is looked up.
     pub handle_box: Option<WirTypeId>,
+    /// Each cell struct by [`TypeTable::cell_struct_name`].
+    pub cell_type_map: IndexMap<String, WirTypeId>,
     /// What [`TypeTable::holds_affine_resource`] has answered, by type.
     affine: TypeMemo<bool>,
-    /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
-    pub array_type_map: IndexMap<TypeId, WirTypeId>,
-    /// Map from element type name to `WirTypeId` (dedup for arrays).
-    pub array_type_by_name: IndexMap<String, WirTypeId>,
-    /// Map from tuple element `TypeIds` to `WirTypeId`.
-    pub tuple_type_map: IndexMap<Vec<TypeId>, WirTypeId>,
-    /// Map from variant qualified name to `WirTypeId`.
-    pub variant_type_map: IndexMap<String, WirTypeId>,
     /// Variant case type info: case WIR type index → (variant WIR type index, case index).
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
+    /// Each payload case's struct, by its variant's WIR type index and case
+    /// index: the inverse of `variant_case_info`.
+    pub variant_case_types: IndexMap<(u32, u32), WirTypeId>,
 
     /// All function definitions (with optional bodies).
     pub functions: Vec<WirFunction>,
@@ -338,14 +294,13 @@ impl<'a> WirContext<'a> {
             package,
             types: Vec::new(),
             type_map: IndexMap::default(),
-            struct_type_map: IndexMap::default(),
+            struct_decls: StructDecls::new(&package.structs),
+            wado_types: IndexMap::default(),
             handle_box: None,
+            cell_type_map: IndexMap::default(),
             affine: TypeMemo::default(),
-            array_type_map: IndexMap::default(),
-            array_type_by_name: IndexMap::default(),
-            tuple_type_map: IndexMap::default(),
-            variant_type_map: IndexMap::default(),
             variant_case_info: IndexMap::default(),
+            variant_case_types: IndexMap::default(),
             functions: Vec::new(),
             func_map: IndexMap::default(),
             funcid_map: IndexMap::default(),
@@ -385,12 +340,10 @@ impl<'a> WirContext<'a> {
         }
     }
 
-    /// Register a type definition and return its `WirTypeId`.
+    /// Register a type definition and return its `WirTypeId`. A WIR-only type
+    /// (a function type, a closure struct) is named by its shape, so a name
+    /// already registered answers the type registered under it.
     pub fn register_type(&mut self, fq: String, typedef: WirTypeDef) -> WirTypeId {
-        // Dedup: if the same fq name is already registered, return the existing type.
-        // This prevents cm_binding synthesis and WIR build from creating duplicate
-        // struct types for the same logical type (e.g., tuple types that appear in
-        // both the entry module and binding functions).
         if let Some(existing) = self.type_map.get(&fq) {
             return existing.clone();
         }
@@ -402,6 +355,51 @@ impl<'a> WirContext<'a> {
         type_id
     }
 
+    /// A WIR type named `fq`, for [`Self::define_type`] to define once every
+    /// type it may reference has an id.
+    pub fn reserve_type(&mut self, fq: String) -> WirTypeId {
+        assert!(
+            !self.type_map.contains_key(&fq),
+            "one WIR name names one type: `{fq}`"
+        );
+        let placeholder = WirTypeDef::Struct(WirStructType {
+            name: WirName { fq: fq.clone() },
+            fields: Vec::new(),
+            meta: WirMeta::default(),
+            generic_origin: None,
+            newtype_origin: None,
+            supertype: None,
+        });
+        self.register_type(fq, placeholder)
+    }
+
+    /// [`Self::reserve_type`] for the Wado type `type_id`.
+    pub fn reserve_wado_type(&mut self, type_id: TypeId, fq: String) -> WirTypeId {
+        let id = self.reserve_type(fq);
+        let previous = self.wado_types.insert(type_id, id.clone());
+        assert!(previous.is_none(), "a Wado type is reserved once");
+        id
+    }
+
+    pub fn define_type(&mut self, id: &WirTypeId, def: WirTypeDef) {
+        self.types[id.index() as usize] = def;
+    }
+
+    /// The WIR array type of `Array<element>`.
+    #[track_caller]
+    pub fn array_type(&self, type_table: &TypeTable, element: TypeId) -> WirTypeId {
+        let array = type_table.find_builtin_array(element).unwrap_or_else(|| {
+            panic!(
+                "[WIR] `Array<{}>` is not interned",
+                type_table.name(element)
+            )
+        });
+        match self.type_id_to_wir_type(type_table, array) {
+            WirType::Ref { type_id, .. } => type_id,
+            other => unreachable!("an array lowers to a reference, not {other:?}"),
+        }
+    }
+
     /// Register a function type definition and return its `WirTypeId`.
     pub fn register_func_type(
         &mut self,
@@ -409,10 +407,6 @@ impl<'a> WirContext<'a> {
         params: Vec<WirType>,
         results: Vec<WirType>,
     ) -> WirTypeId {
-        // Check if already registered
-        if let Some(existing) = self.type_map.get(&fq) {
-            return existing.clone();
-        }
         self.register_type(
             fq.clone(),
             WirTypeDef::Func(WirFuncType {
@@ -690,46 +684,14 @@ impl<'a> WirContext<'a> {
             .expect("`$Resource` registers before any type is looked up")
     }
 
-    /// Find a registered tuple whose elements have the same WIR types as
-    /// `elements`, ignoring `TypeId` identity. CM binding synthesis interns its
-    /// own `TypeId`s for element types that already have a registered tuple.
-    fn find_tuple_type_by_element_wir_types(
-        &self,
-        type_table: &TypeTable,
-        elements: &[TypeId],
-    ) -> Option<WirTypeId> {
-        // Every unresolved element compares as the same placeholder, so
-        // admitting one would match any tuple unresolved in that position.
-        let elem_wir_types: Vec<WirType> = elements
-            .iter()
-            .map(|e| self.lookup_wir_type(type_table, *e))
-            .collect::<Result<_, _>>()
-            .ok()?;
-        self.tuple_type_map
-            .iter()
-            .find(|(key_elems, _)| {
-                key_elems.len() == elem_wir_types.len()
-                    && key_elems.iter().zip(elem_wir_types.iter()).all(|(k, w)| {
-                        self.lookup_wir_type(type_table, *k)
-                            .is_ok_and(|kw| kw == *w)
-                    })
-            })
-            .map(|(_, type_id)| type_id.clone())
-    }
-
-    /// Convert a TIR `TypeId` to a `WirType`.
-    ///
-    /// A miss means the registrar's key and the key derived here disagree —
-    /// both sides go through `name::wir_*_key` / [`StructName`] so they cannot.
-    /// Degrading to `AbstractRef` instead would be indistinguishable from the
-    /// deliberate one `ResolvedType::Function` produces.
-    ///
-    /// Use [`Self::type_id_to_wir_type_pending`] inside `register_types`.
+    /// Convert a TIR `TypeId` to a `WirType`. Registration reserves every
+    /// concrete type before it defines any, so a miss is a type registration
+    /// never saw.
     #[track_caller]
     pub fn type_id_to_wir_type(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
         let wir = self
             .lookup_wir_type(type_table, type_id)
-            .unwrap_or_else(|pending| panic!("[WIR] {} is not registered", pending.description));
+            .unwrap_or_else(|missing| panic!("[WIR] {missing} is not registered"));
         debug_assert_eq!(
             matches!(wir, WirType::Unit),
             type_table.is_stackless(type_id),
@@ -749,32 +711,11 @@ impl<'a> WirContext<'a> {
         }
     }
 
-    /// [`Self::type_id_to_wir_type`] for use during type registration, where a
-    /// field can name a type a later phase defines — or the struct itself, since
-    /// Wasm GC rec groups permit the cycle. It takes the placeholder, which
-    /// [`super::types::fixup_abstract_struct_fields`] re-resolves.
-    pub fn type_id_to_wir_type_pending(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
-        self.lookup_wir_type(type_table, type_id)
-            .unwrap_or_else(|pending| pending.placeholder)
-    }
-
-    /// The `WirType` of `type_id`, or `None` when it has no WIR registration,
-    /// for a caller that recovers from the miss.
-    pub fn try_type_id_to_wir_type(
-        &self,
-        type_table: &TypeTable,
-        type_id: TypeId,
-    ) -> Option<WirType> {
-        self.lookup_wir_type(type_table, type_id).ok()
-    }
-
     /// Whether a place holding a `type_id` is nullable: it holds an affine
     /// value, which a move empties (WEP: Affine Types).
     pub fn is_affine(&self, type_table: &TypeTable, type_id: TypeId) -> bool {
         self.affine
-            .get_or_compute(type_table.type_key(type_id), || {
-                type_table.holds_affine_resource(type_id)
-            })
+            .get_or_compute(type_id, || type_table.holds_affine_resource(type_id))
     }
 
     /// `ty`, the WIR type of a field, element or payload of type `type_id`, as
@@ -806,28 +747,23 @@ impl<'a> WirContext<'a> {
     /// [`TypeTable::slot_box`] names one.
     pub fn boxed_slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
         match type_table.slot_box(type_id) {
-            Some(wrapper) => self
-                .type_id_to_wir_type_pending(type_table, wrapper)
-                .as_nullable(),
+            Some(wrapper) => self.type_id_to_wir_type(type_table, wrapper).as_nullable(),
             None => ty,
         }
     }
 
-    /// The box a slot holds a `type_id` in, where [`TypeTable::slot_box`]
+    /// The cell a slot holds a `type_id` in, where [`TypeTable::slot_box`]
     /// names one.
     pub fn slot_box(&self, type_table: &TypeTable, type_id: TypeId) -> Option<WirTypeId> {
         let wrapper = type_table.slot_box(type_id)?;
         match self.type_id_to_wir_type(type_table, wrapper) {
             WirType::Ref { type_id, .. } => Some(type_id),
-            other => unreachable!("a slot box is a struct, not {other:?}"),
+            other => unreachable!("a slot cell is a struct, not {other:?}"),
         }
     }
 
-    fn lookup_wir_type(
-        &self,
-        type_table: &TypeTable,
-        type_id: TypeId,
-    ) -> Result<WirType, UnregisteredType> {
+    /// The WIR type `type_id` lowers to, or what is missing from the registry.
+    fn lookup_wir_type(&self, type_table: &TypeTable, type_id: TypeId) -> Result<WirType, String> {
         let wir = self.lookup_wir_shape(type_table, type_id)?;
         Ok(if self.is_affine(type_table, type_id) {
             wir.as_nullable()
@@ -836,11 +772,13 @@ impl<'a> WirContext<'a> {
         })
     }
 
-    fn lookup_wir_shape(
-        &self,
-        type_table: &TypeTable,
-        type_id: TypeId,
-    ) -> Result<WirType, UnregisteredType> {
+    fn wado_type(&self, type_table: &TypeTable, type_id: TypeId) -> Result<&WirTypeId, String> {
+        self.wado_types
+            .get(&type_id)
+            .ok_or_else(|| format!("`{}`", type_table.name(type_id)))
+    }
+
+    fn lookup_wir_shape(&self, type_table: &TypeTable, type_id: TypeId) -> Result<WirType, String> {
         Ok(match type_table.get(type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 PrimitiveType::I8 => WirType::I8,
@@ -871,85 +809,28 @@ impl<'a> WirContext<'a> {
                     Self::ref_to(self.handle_box())
                 }
             }
-            ResolvedType::Struct { def, type_args } => {
-                let lookup_module = if type_table.is_string(type_id) {
-                    ModuleSource::string()
-                } else {
-                    type_table.struct_head_module(*def).clone()
-                };
-                // The WIR struct map is keyed on the mangled spelling: each
-                // instantiation is its own struct type.
-                let lookup_name = StructName::new(
-                    lookup_module,
-                    type_table.struct_mangled_name(*def, type_args),
-                );
-                let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
-                    return Err(UnregisteredType::struct_ref(format!(
-                        "struct `{lookup_name}`"
-                    )));
-                };
-                Self::ref_to(type_id)
-            }
-            ResolvedType::Tuple(elements) => {
-                // CM binding synthesis interns its own `TypeId`s for the same
-                // elements, so a miss falls back to structural matching.
-                let found =
-                    self.tuple_type_map.get(elements).cloned().or_else(|| {
-                        self.find_tuple_type_by_element_wir_types(type_table, elements)
-                    });
-                let Some(type_id) = found else {
-                    return Err(UnregisteredType::struct_ref(format!(
-                        "tuple `{}` (no registered tuple matches its element types either)",
-                        type_table.mangle_type_name(type_id)
-                    )));
-                };
-                Self::ref_to(&type_id)
-            }
-            ResolvedType::BuiltinArray(elem_type_id) => {
-                // Cross-module `TypeId`s for one element resolve by the
-                // element's name, which registration aliases both spellings of.
-                let type_id = self.array_type_map.get(elem_type_id).or_else(|| {
-                    let elem_name = type_table.mangle_type_arg_rowless(*elem_type_id);
-                    self.array_type_by_name.get(&elem_name)
-                });
-                let Some(type_id) = type_id else {
-                    return Err(UnregisteredType::array_ref(format!(
-                        "array of `{}`",
-                        type_table.mangle_type_arg_for_generic(*elem_type_id)
-                    )));
-                };
-                Self::ref_to(type_id)
-            }
-            ResolvedType::Enum { def } => {
-                let key =
-                    wir_enum_type_key(type_table.def_module(*def), type_table.decl_name(*def));
-                let Some(type_id) = self.type_map.get(&key) else {
-                    return Err(UnregisteredType::enum_i32(format!("enum `{key}`")));
-                };
-                WirType::Enum {
-                    type_id: type_id.clone(),
-                }
-            }
-            ResolvedType::Variant { def, type_args } => {
-                let key = variant_type_key(type_table, *def, type_args);
-                let Some(type_id) = self.type_map.get(&key) else {
-                    return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
-                };
-                Self::ref_to(type_id)
-            }
+            ResolvedType::Struct { .. }
+            | ResolvedType::Tuple(_)
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Variant { .. } => Self::ref_to(self.wado_type(type_table, type_id)?),
+            ResolvedType::Enum { .. } => WirType::Enum {
+                type_id: self.wado_type(type_table, type_id)?.clone(),
+            },
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // `&T` = `T` for a GC type. A value type would need a `Box<T>`
-                // cell, but `lower::plan::boxing` already rewrote those ids to
-                // the struct — what reaches here is the kinds it leaves alone:
-                // opaque handles, whose reference is the handle.
-                let inner_wir = self.lookup_wir_type(type_table, *inner)?;
-                if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
-                    panic!(
-                        "[WIR] `&{prim:?}` survived boxing unrewritten; \
-                         `lower::plan::boxing` owns turning it into `Box<{prim:?}>`"
-                    );
+                if type_table.cell_payload(type_id).is_none() {
+                    // `&T` = `T` for an object, whose reference is its handle.
+                    return self.lookup_wir_type(type_table, *inner);
                 }
-                inner_wir
+                let name = type_table.cell_struct_name(type_id);
+                let Some(cell) = self.cell_type_map.get(&name) else {
+                    return Err(format!("cell `{name}`"));
+                };
+                // A reference to an affine value is nullable, as the value is.
+                if self.is_affine(type_table, *inner) {
+                    Self::ref_to(cell).as_nullable()
+                } else {
+                    Self::ref_to(cell)
+                }
             }
             ResolvedType::Function { .. } => {
                 // Function-typed values are canonical closure structs at runtime.
@@ -989,98 +870,6 @@ impl<'a> WirContext<'a> {
             ResolvedType::Error => panic!("error type reached codegen"),
             ResolvedType::Unknown => panic!("unresolved type reached codegen"),
         })
-    }
-
-    /// Find a tuple WIR type that matches the given TIR elements by WIR type compatibility.
-    ///
-    /// When CM binding synthesis creates tuple types, the `TypeIds` may not exactly match
-    /// the ones in `tuple_type_map`. This fallback searches by matching WIR types of elements.
-    pub fn find_tuple_type_for_elements(
-        &self,
-        type_table: &TypeTable,
-        elem_type_ids: &[tir::TypeId],
-    ) -> Option<WirTypeId> {
-        let elem_wir_types: Vec<WirType> = elem_type_ids
-            .iter()
-            .map(|tid| self.type_id_to_wir_type(type_table, *tid))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        // Search tuple_type_map for a matching tuple with same WIR field types
-        for (elem_type_ids, wir_type_id) in &self.tuple_type_map {
-            if elem_type_ids.len() == elem_wir_types.len() {
-                let all_match = elem_type_ids
-                    .iter()
-                    .zip(elem_wir_types.iter())
-                    .all(|(tid, wir)| self.type_id_to_wir_type(type_table, *tid) == *wir);
-                if all_match {
-                    return Some(wir_type_id.clone());
-                }
-            }
-        }
-        None
-    }
-
-    /// Define a new tuple struct for the given elements when no existing match is found.
-    ///
-    /// Creates a WIR struct with fields matching the WIR types of each element.
-    /// Used for CM binding synthesis tuple returns that weren't pre-registered.
-    pub fn define_tuple_struct_for_elements(
-        &mut self,
-        type_table: &TypeTable,
-        elem_type_ids: &[tir::TypeId],
-    ) -> Option<WirTypeId> {
-        let elem_wir_types: Vec<WirType> = elem_type_ids
-            .iter()
-            .map(|tid| self.type_id_to_wir_type(type_table, *tid))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        if elem_wir_types.is_empty() {
-            return None;
-        }
-        let elem_names: Vec<String> = elem_type_ids
-            .iter()
-            .filter(|tid| !matches!(self.type_id_to_wir_type(type_table, **tid), WirType::Unit))
-            .enumerate()
-            .map(|(i, _)| i.to_string())
-            .collect();
-        let display = format!(
-            "tuple/[{}]",
-            elem_names
-                .iter()
-                .zip(elem_wir_types.iter())
-                .map(|(_, t)| format!("{t:?}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        let fields: Vec<WirField> = elem_names
-            .iter()
-            .zip(elem_wir_types.iter())
-            .map(|(name, ty)| WirField {
-                name: name.clone(),
-                ty: ty.clone(),
-                mutable: true,
-            })
-            .collect();
-        let struct_def = WirTypeDef::Struct(WirStructType {
-            name: WirName {
-                fq: display.clone(),
-            },
-            fields,
-            meta: WirMeta::default(),
-            generic_origin: None,
-            newtype_origin: None,
-            supertype: None,
-        });
-        let type_id = self.register_type(display, struct_def);
-        // Register in tuple_type_map using the TIR element TypeIds
-        let filtered_type_ids: Vec<tir::TypeId> = elem_type_ids
-            .iter()
-            .copied()
-            .filter(|tid| !matches!(self.type_id_to_wir_type(type_table, *tid), WirType::Unit))
-            .collect();
-        self.tuple_type_map
-            .insert(filtered_type_ids, type_id.clone());
-        Some(type_id)
     }
 
     /// Consume this context and produce the final `WirPackage`.

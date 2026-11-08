@@ -297,6 +297,11 @@ axes
     );
 }
 
+test "dump reports the axis whose rows each hold lengths of their own" {
+    let report = loam(["dump", "--type", "onnx", "tests/models/tiny-gpt2/merged/model.onnx"]).unwrap();
+    assert report.contains("\nrows: each its own, along BatchSize\n");
+}
+
 test "dump reports as JSON, every node with its lowering" {
     let dir = scratch("dump-json");
     let json = on_graph("dump", &dir, ["--format", "json"]).unwrap();

@@ -2,12 +2,9 @@
 //! is reached through. A callee this analysis cannot read writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{
-    Names, Resolver, ReturnPaths, Selector, carries_storage, could_write_through, field_owner,
-};
+use super::place::{Names, Resolver, ReturnPaths, Selector, carries_storage, field_owner};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::is_reference;
 use crate::module_source::ModuleSource;
 use crate::tir::{BuiltinDeclarations, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId};
 use crate::tir_visitor::TirRefVisitor;
@@ -421,7 +418,7 @@ impl Walker<'_> {
     /// Record a writable handle escaping into an aggregate as a write to what
     /// it references: the aggregate carries it past the expression that took it.
     fn record_handle_escape(&mut self, value: &TirExpr) {
-        if could_write_through(value.type_id, self.type_table) {
+        if self.type_table.is_mut_ref(value.type_id) {
             let names = self.resolver.names(value);
             self.record(&names, WholeOf::Handed(value.type_id));
         }
@@ -498,7 +495,7 @@ impl TirRefVisitor for Walker<'_> {
             // Re-seating a reference writes no storage.
             TirExprKind::Assign { target, .. } => {
                 let reseats = matches!(target.kind, TirExprKind::Local { .. })
-                    && is_reference(target.type_id, self.type_table);
+                    && self.type_table.is_reference(target.type_id);
                 if !reseats {
                     let names = self.resolver.names(target);
                     self.record(&names, WholeOf::CallerStorage);
@@ -513,7 +510,7 @@ impl TirRefVisitor for Walker<'_> {
                 if known {
                     // Every position, not just the writable ones: a callee
                     // writing through a `&T` parameter is one `names_caller_storage`
-                    // admits and `could_write_through` does not.
+                    // admits and `is_mut_ref` does not.
                     let handed = args
                         .iter()
                         .enumerate()
@@ -528,7 +525,7 @@ impl TirRefVisitor for Walker<'_> {
                     for (position, arg) in args
                         .iter()
                         .enumerate()
-                        .filter(|(_, a)| could_write_through(a.expr.type_id, self.type_table))
+                        .filter(|(_, a)| self.type_table.is_mut_ref(a.expr.type_id))
                     {
                         let names = self.resolver.names(&arg.expr);
                         if known {
@@ -545,7 +542,7 @@ impl TirRefVisitor for Walker<'_> {
             TirExprKind::IndirectCall { args, .. } => {
                 for arg in args
                     .iter()
-                    .filter(|a| could_write_through(a.type_id, self.type_table))
+                    .filter(|a| self.type_table.is_mut_ref(a.type_id))
                 {
                     let names = self.resolver.names(arg);
                     self.record(&names, WholeOf::Handed(arg.type_id));

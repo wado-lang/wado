@@ -1,7 +1,7 @@
 // Test: adjacent-use box elision (wir/elide_adjacent_box_locals)
 //
 // Matching a `&variant` binds each primitive payload by reference, which
-// lowering materialises as a `Box<T>` struct built during NIR→WIR lowering
+// lowering materialises as a cell built during NIR→WIR lowering
 // (never visible to the NIR `elide_box_local` pass). When such a binding is only
 // dereferenced and its single use is adjacent to the binding with only pure code
 // in between, the box allocation is redundant: the payload read can move to the
@@ -9,7 +9,7 @@
 //
 // `sum_leaves` walks a `&List<Node>` doing exactly the `match r { Token(i) =>
 // f(*i) }` shape from Gale's `highlight_walk`. The elision must fire (no
-// `Box<i32>` payload allocation survives) while the result stays correct.
+// `$Cell<i32>` payload allocation survives) while the result stays correct.
 
 use { println, Stdout } from "core:cli";
 
@@ -51,6 +51,6 @@ __DATA__
     "wir_pass": {"O2": ["wir/elide_adjacent_box_locals", "wir/unwrap_box_locals"]},
     "wir_scope": "opt_elide_adjacent_box.wado/sum_leaves",
     "wir_not_expect:O2": [
-        "Box<i32>\" { value: ref.cast"
+        "$Cell<i32>\" { value: ref.cast"
     ]
 }

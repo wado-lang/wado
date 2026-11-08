@@ -1,12 +1,18 @@
 ---
 name: code-review-response
-description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify the findings, report the classes they are instances of to the user before fixing, then fix the class rather than the sites named. Put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request, or to the findings of a /code-review run."
+description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify the findings and act only on those worth it, report the classes they are instances of to the user before fixing, then fix the class rather than the sites named. Put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request, or to the findings of a /code-review run."
 ---
 
 # Answering a code review
 
 A finding is a claim, not an instruction. The goal is a better codebase, never a
 cleared comment list.
+
+Act only on a finding worth acting on. A finding is worth it when you can name
+what it gains on a path a caller reaches, such as a wrong answer, a crash, a
+valid program refused, or a secret exposed. A finding whose value is unclear is skipped, however cheap the
+change. A reviewer is often wrong, and acting on every claim is how a branch
+fills with changes nobody needed.
 
 ## Start with the classes, and report them
 
@@ -45,11 +51,14 @@ claim about an external tool is checked like any other. A finding you could not
 check is reported as unverified, never as fact. Record which of these each
 finding was:
 
-- Real → fix the cause. When the reviewer's patch is wrong, fix it anyway; the
-  value was in the claim, not the suggestion.
+- Real, on a path a caller reaches → fix the cause. When the reviewer's patch is
+  wrong, fix it anyway; the value was in the claim, not the suggestion.
 - Grounded in a project rule the code breaks → fix it, and cite the rule.
-- Real, but on an input no producer or caller supplies → skip, or state it as
-  a contract or an assert. An error path for such an input is never read.
+- Real only on a path nothing reaches, such as an input no producer or caller
+  supplies → not worth fixing. Make the path fail where it begins, with an
+  `assert` or `unreachable`, and write no handling for it. An error path for
+  such an input is never read.
+- Real, but with no gain you can name → skip, and say so.
 - Not real, or already recorded as a known gap → skip, and say why.
 - A missing doc comment → skip. A comment is written only for what the code
   cannot say (`AGENTS.md` § General Rules), so its absence is not a defect.
@@ -64,10 +73,13 @@ nor what you have already answered. Neither is evidence of anything.
 
 ## When reviews do not converge
 
-A class that an earlier review on this branch already raised means the analysis
-or the fix was wrong or incomplete. Fixing the new sites repeats that. Analyze
-the class again, find what admits it, and close it so no review can find
-another instance.
+A class that an earlier review on this branch already raised means the way it
+was closed was wrong: the fix patched sites, or the class was drawn too narrow.
+Do not fix the new instance on its own. Analyze the class again from what admits
+it, and close that, so no review can find another instance.
+
+Many findings in one review are a sign of the same thing. Either the classes
+were not found, or most of the findings are not worth acting on.
 
 A review samples; it does not say how many instances remain. While new findings
 keep coming, stop waiting for the next review and take stock of the whole

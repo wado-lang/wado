@@ -17,7 +17,6 @@
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
-use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
     FuncCell, FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam,
@@ -316,16 +315,12 @@ fn free_vars(
             Crossing::Argument
         };
         let type_id = func.locals[idx as usize].type_id;
-        // A boxed local's storage is the box, which the call hands over, so a
+        // A cell local's storage is the cell, which the call hands over, so a
         // write through its address lands where the caller reads it.
-        let storage_in_slot = !type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
+        let storage_in_slot = type_table.cell_payload(type_id).is_none();
         // A reference's pointee is shared, so a write through it lands where
         // the caller reads it too.
-        let value_in_slot = storage_in_slot
-            && !matches!(
-                type_table.get(type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            );
+        let value_in_slot = storage_in_slot && !type_table.is_reference(type_id);
         // One question, asked of every crossing that leaves the storage behind:
         // a write inside the region is one no call carries back.
         if crossing.leaves_storage_behind()

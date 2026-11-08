@@ -29,7 +29,7 @@ use super::arena_query::{
 use crate::ast::Visibility;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
 use crate::nir::aggregate_field_info;
-use crate::nir::{FuncId, NirParam, StructDecls};
+use crate::nir::{FuncId, StructDecls};
 use crate::nir_arena::ArenaCallArg;
 use crate::nir_value_graph::builder::is_const_value;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -179,7 +179,7 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
     let type_table: &TypeTable = &types;
     let shared_escape = SharedEscape::new(project, type_table);
     let funcs = &project.functions;
-    let structs = &StructDecls::new(&project.structs, type_table);
+    let structs = &StructDecls::new(&project.structs);
     let string_inline_max_bytes = project.string_inline_max_bytes;
     // Each visit memoizes its callee verdicts afresh: a memo seeds a cycle with
     // a provisional answer, so one shared across visits would answer by which
@@ -1662,19 +1662,7 @@ impl Gate<'_> {
     /// declares no parameter at all, which is no receiver to answer about.
     fn callee_mutates_self(&self, func_id: FuncId) -> Option<bool> {
         let f = self.func(func_id);
-        Some(self.param_refs_mutably(f.params.first()?))
-    }
-
-    /// Whether `param` writes the caller's argument storage.
-    ///
-    /// The type alone does not answer this. `sroa_param` rewrites a `&mut S`
-    /// parameter whose struct has a single field into that field, leaving a
-    /// parameter that reads as by-value and still references what the caller
-    /// passed — the write that used to travel through `&mut S` travels through
-    /// the field. [`NirParam::is_mut_ref`] is captured before that rewrite (and
-    /// before boxing) and outlives it, so it is the reliable half of the test.
-    fn param_refs_mutably(&self, param: &NirParam) -> bool {
-        param.is_mut_ref || matches!(self.type_table.get(param.type_id), ResolvedType::MutRef(_))
+        Some(f.params.first()?.writes_caller(self.type_table))
     }
 
     /// Whether the callee takes its receiver by `&self` — the only receiver
@@ -1718,7 +1706,7 @@ impl Gate<'_> {
             .func(func_id)
             .params
             .get(param_pos)
-            .is_some_and(|p| self.param_refs_mutably(p));
+            .is_some_and(|p| p.writes_caller(self.type_table));
         !declared_mut && !self.instruction_arg_captures(func_id, arg_ty)
     }
 
@@ -1743,7 +1731,7 @@ impl Gate<'_> {
         let Some(param) = f.params.get(param_pos) else {
             return true;
         };
-        if self.param_refs_mutably(param) {
+        if param.writes_caller(self.type_table) {
             return true;
         }
         f.body
@@ -1805,7 +1793,7 @@ impl Gate<'_> {
                 return false;
             };
             f.body.is_some()
-                && !self.param_refs_mutably(param)
+                && !param.writes_caller(self.type_table)
                 && matches!(self.type_table.get(param.type_id), ResolvedType::Ref(_))
         };
         shared_ref && !self.callee_ref_param_leaks(func_id, pos)
@@ -1866,10 +1854,7 @@ impl Gate<'_> {
         let Some(param) = f.params.get(param_pos) else {
             return false;
         };
-        if matches!(
-            self.type_table.get(param.type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
+        if self.type_table.is_reference(param.type_id) {
             return false;
         }
         let Some(body) = f.body.as_ref() else {
