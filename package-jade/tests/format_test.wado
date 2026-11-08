@@ -40,6 +40,11 @@ test "an iri admits no noncharacter at the end of a plane" {
     assert !admits("iri", "http://example.com/\u{FFFE}");
 }
 
+test "an iri admits no tag character, where plane 14's ucschar range has not begun" {
+    assert !admits("iri", "http://example.com/\u{E0001}");
+    assert admits("iri", "http://example.com/\u{E1000}");
+}
+
 test "a regex is ECMA-262's, whether or not Re can match it" {
     // The JSON text escapes each backslash.
     assert admits("regex", #"(a)(?<=a)\\1"#);

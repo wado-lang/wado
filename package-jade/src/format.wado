@@ -27,25 +27,12 @@ internal enum Format {
 impl Format {
     /// The format `name` names, or none for one Jade does not assert.
     internal fn named(name: &String) -> Option<Format> {
-        return match name.as_str_slice() {
-            "date-time" => Option::Some(DateTime),
-            "date" => Option::Some(Date),
-            "time" => Option::Some(Time),
-            "duration" => Option::Some(Duration),
-            "email" => Option::Some(Email),
-            "ipv4" => Option::Some(Ipv4),
-            "ipv6" => Option::Some(Ipv6),
-            "uri" => Option::Some(Uri),
-            "uri-reference" => Option::Some(UriReference),
-            "iri" => Option::Some(Iri),
-            "iri-reference" => Option::Some(IriReference),
-            "uuid" => Option::Some(Uuid),
-            "uri-template" => Option::Some(UriTemplate),
-            "json-pointer" => Option::Some(JsonPointer),
-            "relative-json-pointer" => Option::Some(RelativeJsonPointer),
-            "regex" => Option::Some(Regex),
-            _ => null,
-        };
+        for let mut i = 0; let Some(format) = ReflectEnum::<Format>::from_discriminant(i); i += 1 {
+            if format.name() == *name {
+                return Option::Some(format);
+            }
+        }
+        return null;
     }
 
     internal fn name(&self) -> String {
@@ -72,45 +59,21 @@ impl Format {
     /// Whether `text` is a value of the format.
     internal fn admits(&self, text: StrSlice) -> bool {
         return match self {
-            DateTime => {
-                let mut s = Scan::of(text);
-                full_date(&mut s) && s.eat('T') && full_time(&mut s) && s.done();
-            },
-            Date => {
-                let mut s = Scan::of(text);
-                full_date(&mut s) && s.done();
-            },
-            Time => {
-                let mut s = Scan::of(text);
-                full_time(&mut s) && s.done();
-            },
-            Duration => is_duration(text),
-            Email => {
-                let mut s = Scan::of(text);
-                mailbox(&mut s) && s.done();
-            },
-            Ipv4 => {
-                let mut s = Scan::of(text);
-                dotted_quad(&mut s, Leading::Unpadded) && s.done();
-            },
+            DateTime => whole(Scan::of(text), |s| full_date(s) && s.eat('T') && full_time(s)),
+            Date => whole(Scan::of(text), full_date),
+            Time => whole(Scan::of(text), full_time),
+            Duration => whole(Scan::of(text), duration),
+            Email => whole(Scan::of(text), mailbox),
+            Ipv4 => whole(Scan::of(text), |s| dotted_quad(s, Leading::Unpadded)),
             Ipv6 => is_ipv6(&Scan::of(text).chars, 1, Leading::Unpadded),
             Uri => is_uri_reference(text) && has_scheme(text),
             UriReference => is_uri_reference(text),
             Iri => is_iri_reference(text) && has_scheme(text),
             IriReference => is_iri_reference(text),
             Uuid => is_uuid(text),
-            UriTemplate => {
-                let mut s = Scan::of(text);
-                uri_template(&mut s);
-            },
-            JsonPointer => {
-                let mut s = Scan::of(text);
-                json_pointer(&mut s);
-            },
-            RelativeJsonPointer => {
-                let mut s = Scan::of(text);
-                relative_json_pointer(&mut s);
-            },
+            UriTemplate => whole(Scan::of(text), uri_template),
+            JsonPointer => whole(Scan::of(text), json_pointer),
+            RelativeJsonPointer => whole(Scan::of(text), relative_json_pointer),
             // The syntax alone: a lookbehind is a regex, though Re cannot
             // match it.
             Regex => validate_ecma262_syntax(text) matches { Ok(_) },
@@ -118,8 +81,14 @@ impl Format {
     }
 }
 
-/// RFC 6901's `json-pointer`, to the end: `*( "/" reference-token )`, where a
-/// `~` must be `~0` or `~1`.
+/// Whether `rule` reads all of `s`. Each rule reads what it can and leaves the
+/// end to this.
+fn whole(mut s: Scan, rule: fn(&mut Scan) -> bool) -> bool {
+    return rule(&mut s) && s.done();
+}
+
+/// RFC 6901's `json-pointer`: `*( "/" reference-token )`, where a `~` must be
+/// `~0` or `~1`.
 fn json_pointer(s: &mut Scan) -> bool {
     while s.eat('/') {
         while !s.done() && s.chars[s.at] != '/' {
@@ -132,7 +101,7 @@ fn json_pointer(s: &mut Scan) -> bool {
             }
         }
     }
-    return s.done();
+    return true;
 }
 
 /// Relative JSON Pointer's `non-negative-integer ( json-pointer / "#" )`, in
@@ -145,13 +114,10 @@ fn relative_json_pointer(s: &mut Scan) -> bool {
     } else if !s.some_digits() {
         return false;
     }
-    if s.eat('#') {
-        return s.done();
-    }
-    return json_pointer(s);
+    return s.eat('#') || json_pointer(s);
 }
 
-/// RFC 6570's `URI-Template`, to the end: literals, and expressions with an
+/// RFC 6570's `URI-Template`: literals, and expressions with an
 /// optional operator and a list of variables, each with an optional prefix
 /// length or explode.
 fn uri_template(s: &mut Scan) -> bool {
@@ -382,8 +348,7 @@ fn groups(chars: &List<char>, from: i32, to: i32, last: bool, leading: Leading) 
         if 1 <= piece.len() && piece.len() <= 4 && piece.iter_ref().all(|c| c.is_hexdigit()) {
             count += 1;
         } else {
-            let mut s = Scan { chars: piece };
-            if !(last && i == to && dotted_quad(&mut s, leading) && s.done()) {
+            if !(last && i == to && whole(Scan { chars: piece }, |s| dotted_quad(s, leading))) {
                 return null;
             }
             count += 2;
@@ -489,8 +454,7 @@ fn address_literal(s: &mut Scan) -> bool {
         // groups of zeros."
         return is_ipv6(&address, 2, Leading::Padded);
     }
-    literal.at = 0;
-    return dotted_quad(&mut literal, Leading::Padded) && literal.done();
+    return whole(Scan { chars: literal.chars }, |s| dotted_quad(s, Leading::Padded));
 }
 
 /// RFC 3339's `full-date`, its day within its month.
@@ -574,15 +538,14 @@ fn full_time(s: &mut Scan) -> bool {
 
 /// RFC 3339 Appendix A's `duration`. A unit may follow only the next larger
 /// one: `dur-year = 1*DIGIT "Y" [dur-month]`, and so on down to seconds.
-fn is_duration(text: StrSlice) -> bool {
-    let mut s = Scan::of(text);
+fn duration(s: &mut Scan) -> bool {
     if !s.eat('P') {
         return false;
     }
-    let date = units(&mut s);
+    let date = units(s);
     let timed = s.eat('T');
-    let time = if timed { units(&mut s) } else { "" };
-    if !s.done() || timed && time.is_empty() {
+    let time = if timed { units(s) } else { "" };
+    if timed && time.is_empty() {
         return false;
     }
     if date == "W" {
@@ -660,9 +623,9 @@ fn is_ucschar(c: char) -> bool {
     if 0xA0 <= n && n <= 0xD7FF || 0xF900 <= n && n <= 0xFDCF || 0xFDF0 <= n && n <= 0xFFEF {
         return true;
     }
-    // %x10000-1FFFD through %xE1000-EFFFD: every plane from 1 to 14, less its
-    // last two code points.
-    return 0x10000 <= n && n < 0xF0000 && n & 0xFFFF <= 0xFFFD;
+    // %x10000-1FFFD through %xD0000-DFFFD: every plane from 1 to 13, less its
+    // last two code points. Plane 14 starts at %xE1000.
+    return 0x10000 <= n && n < 0xF0000 && n & 0xFFFF <= 0xFFFD && !(0xE0000 <= n && n < 0xE1000);
 }
 
 fn is_iprivate(c: char) -> bool {

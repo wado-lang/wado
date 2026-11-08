@@ -260,6 +260,7 @@ test "a syntax error comes before what Re refuses" {
 test "what ECMA-262 admits and Re does not support says so" {
     assert error(#"(?<a>x)|(?<a>y)"#) == "two groups in different alternatives are named `a`, which Re does not support (at byte 8)";
     assert error(#"a{4294967296}"#) == "a count may be at most 4294967295 (at byte 2)";
+    assert error(#"a{5000000000,6000000000}"#) == "a count may be at most 4294967295 (at byte 2)";
 }
 
 fn syntax_error(pattern: String) -> String {

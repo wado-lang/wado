@@ -53,6 +53,8 @@ internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
 
 /// Whether `pattern` is an ECMA-262 `Pattern`, read as the `u` flag reads it.
 /// What Re cannot match, such as a lookahead or a backreference, is Ok here.
+/// Two of Re's own rules still apply: groups nest at most `MAX_NESTING` deep,
+/// and `\p{…}` names what `core:icu` knows.
 pub fn validate_ecma262_syntax<S: AsStrSlice>(pattern: S) -> Result<(), PatternError> {
     read_pattern(pattern.as_str_slice(), Syntax::Plain, [])?;
     return Ok(());
@@ -421,12 +423,13 @@ impl Parser {
         if let Some(m) = max && decimal_order(m.1, min.1) == Ordering::Less {
             return Err(self.error_at(start, "the count's maximum is below its minimum"));
         }
+        let min_value = self.count_value(min);
         let max_value: Option<u32> = if let Some(m) = max {
             Some(self.count_value(m));
         } else {
             null;
         };
-        return Ok(Some([self.count_value(min), max_value]));
+        return Ok(Some([min_value, max_value]));
     }
 
     /// DecimalDigits in a count, and where they start.
