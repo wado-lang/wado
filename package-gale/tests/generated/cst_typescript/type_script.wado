@@ -11115,21 +11115,23 @@ fn scan_property_assignment(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredicto
             }
             return scan_property_assignment__alt_6(tokens, start, atn, memo, follow);
         } else if _kind_set_1(kind) {
-            let mut best: i32 = -1;
-            let try_0_end = scan_property_assignment__alt_0(tokens, start, atn, memo, follow);
-            if try_0_end > best { best = try_0_end; }
-            let try_2_end = scan_property_assignment__alt_2(tokens, start, atn, memo, follow);
-            if try_2_end > best { best = try_2_end; }
-            let try_3_end = scan_property_assignment__alt_3(tokens, start, atn, memo, follow);
-            if try_3_end > best { best = try_3_end; }
-            let try_4_end = scan_property_assignment__alt_4(tokens, start, atn, memo, follow);
-            if try_4_end > best { best = try_4_end; }
-            let try_5_end = scan_property_assignment__alt_5(tokens, start, atn, memo, follow);
-            if try_5_end > best { best = try_5_end; }
-            let try_6_end = scan_property_assignment__alt_6(tokens, start, atn, memo, follow);
-            if try_6_end > best { best = try_6_end; }
-            if best >= 0 { pos = best; return pos; }
-            return -1;
+            let _atn_alt = atn_decide_218(atn, tokens, pos, 0);
+            if _atn_alt == 2 {
+                return scan_property_assignment__alt_2(tokens, start, atn, memo, follow);
+            }
+            if _atn_alt == 3 {
+                return scan_property_assignment__alt_3(tokens, start, atn, memo, follow);
+            }
+            if _atn_alt == 4 {
+                return scan_property_assignment__alt_4(tokens, start, atn, memo, follow);
+            }
+            if _atn_alt == 5 {
+                return scan_property_assignment__alt_5(tokens, start, atn, memo, follow);
+            }
+            if _atn_alt == 0 {
+                return scan_property_assignment__alt_0(tokens, start, atn, memo, follow);
+            }
+            return scan_property_assignment__alt_6(tokens, start, atn, memo, follow);
         } else if kind == TK_Require {
             let mut best: i32 = -1;
             let try_0_end = scan_property_assignment__alt_0(tokens, start, atn, memo, follow);
@@ -20932,53 +20934,24 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: i64 = 0) -> () with
             }
             return _parse_property_assignment__inner_alt_6(p, follow);
         } else if _kind_set_1(kind) {
-            let _sd_tokens = &p.kinds;
-            let _sd_pos = p.pos;
-            let _sd_p_2 = scan_property_assignment__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
-            let _sd_p_3 = scan_property_assignment__alt_3(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
-            let _sd_p_4 = scan_property_assignment__alt_4(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
-            let _sd_p_5 = scan_property_assignment__alt_5(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
-            let _sd_p_0 = scan_property_assignment__alt_0(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
-            let _sd_p_6 = scan_property_assignment__alt_6(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
+            let _atn_alt = p.atn.predict(&ATN_SIM, 218, &p.kinds, p.pos, TK_EOF, 0, &[13, 14], &[], |_pred| match _pred { 13 => pred_13(p), 14 => pred_14(p), _ => unreachable() });
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
             }
-            if _sd_p_2 > _sd_best_p {
-                _sd_best_p = _sd_p_2;
-                _sd_best_i = 2;
-            }
-            if _sd_p_3 > _sd_best_p {
-                _sd_best_p = _sd_p_3;
-                _sd_best_i = 3;
-            }
-            if _sd_p_4 > _sd_best_p {
-                _sd_best_p = _sd_p_4;
-                _sd_best_i = 4;
-            }
-            if _sd_p_5 > _sd_best_p {
-                _sd_best_p = _sd_p_5;
-                _sd_best_i = 5;
-            }
-            if _sd_p_6 > _sd_best_p {
-                _sd_best_p = _sd_p_6;
-                _sd_best_i = 6;
-            }
-            if _sd_best_i == 2 {
+            if _atn_alt == 2 {
                 return _parse_property_assignment__inner_alt_2(p, follow);
             }
-            if _sd_best_i == 3 {
+            if _atn_alt == 3 {
                 return _parse_property_assignment__inner_alt_3(p, follow);
             }
-            if _sd_best_i == 4 {
+            if _atn_alt == 4 {
                 return _parse_property_assignment__inner_alt_4(p, follow);
             }
-            if _sd_best_i == 5 {
+            if _atn_alt == 5 {
                 return _parse_property_assignment__inner_alt_5(p, follow);
             }
-            if _sd_best_i == 0 {
+            if _atn_alt == 0 {
                 return _parse_property_assignment__inner_alt_0(p, follow);
             }
             return _parse_property_assignment__inner_alt_6(p, follow);
