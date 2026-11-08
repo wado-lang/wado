@@ -108,23 +108,53 @@ pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &Gramma
         && alt.edge_gates().iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
-/// Whether prediction entering `alt` meets a predicate that will be rendered:
-/// `alt_has_gate`, and also one inside a group or a callee it opens with.
-pub fn alt_meets_gate(
+/// Who can weigh the predicates prediction meets entering an alternative.
+pub enum MetGates {
+    /// It meets none that renders.
+    None,
+    /// The tournament can: each is an edge gate, or one a scan answers.
+    Tournament,
+    /// Only the simulator can.
+    Simulator,
+}
+
+/// `MetGates` for `alt`: `alt_has_gate`'s predicates, and also those inside a
+/// group or a callee it opens with.
+pub fn alt_met_gates(
     alt: &Alternative,
     settings: &GenSettings,
     analysis: &GrammarAnalysis,
     site: &PredicateSite,
-) -> bool {
+) -> MetGates {
     if !settings.emit_actions {
-        return false;
+        return MetGates::None;
     }
     let Some(edges) = analysis.left_edges() else {
         panic("predicates are tracked to every rule's left edge before any alternative is weighed");
     };
     let mut met: List<MetPredicate> = [];
     let _ = met_at(&alt.elements, &alt.actions, 0, site, analysis, edges, &mut met);
-    return met.iter_ref().any(|m| predicate_condition_for(&m.0, settings, analysis, &m.1) matches { Some(_) });
+    let edge_ids = alt.edge_gates().into_iter().map(|a| a.source.action_id).collect();
+    let mut out = MetGates::None;
+    for let m of &met {
+        if !met_renders(m, settings, analysis) {
+            continue;
+        }
+        let scan_answers = settings.scan_answers_predicates
+            && scan_gate_condition_for(&m.0, settings, analysis, &m.1) matches { Some(_) };
+        if !edge_ids.contains(&m.0.source.action_id) && !scan_answers {
+            return MetGates::Simulator;
+        }
+        out = MetGates::Tournament;
+    }
+    return out;
+}
+
+/// Whether a predicate met at a decision reaches the simulator as a verdict:
+/// it renders, and it reads no values of an invocation the decision is not in.
+pub fn met_renders(m: &MetPredicate, settings: &GenSettings, analysis: &GrammarAnalysis) -> bool {
+    return !(m.1.foreign && !find_attr_refs(&m.0.source.text).is_empty())
+        && predicate_condition_for(&m.0, settings, analysis, &m.1) matches { Some(_) };
 }
 
 /// A predicate prediction meets at a decision, beside the site it renders in.

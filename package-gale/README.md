@@ -265,7 +265,9 @@ the static pick. So does a left-recursion loop's choice of suffix, in a rule
 whose atom choice `"auto"` routes. The lookahead DFA and LR table `"auto"` reads
 there are checked the same way. Where the decision meets a predicate, the
 simulator is handed the predicate's verdict, and what the predicate prints for
-the check is taken back out of the output. On input that has no parse, a check
+the check is taken back out of the output. A predicate that changes the parser's
+state changes it again for the check, so under `"verify"` it can change the
+parse. On input that has no parse, a check
 panics where the static path picks otherwise than the simulator before the
 parse fails, and can where both sides are recovering. It is for testing the
 static path against the simulator over real inputs, not for use. The generated
