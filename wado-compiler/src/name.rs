@@ -1080,17 +1080,6 @@ pub fn template_block_label(serial: u32) -> String {
     minted_name(TEMPLATE_BLOCK, serial)
 }
 
-/// Whether `label` is one [`template_block_label`] minted. Read before any pass
-/// can rename a label.
-#[must_use]
-pub fn is_template_block(label: &str) -> bool {
-    label
-        .strip_prefix(INTERNAL_PREFIX)
-        .and_then(|rest| rest.strip_prefix(TEMPLATE_BLOCK))
-        .and_then(|rest| rest.strip_prefix('_'))
-        .is_some_and(|serial| serial.parse::<u32>().is_ok())
-}
-
 /// The local binding hole `k` of the template [`template_block_label`] labels
 /// with `serial`.
 #[must_use]

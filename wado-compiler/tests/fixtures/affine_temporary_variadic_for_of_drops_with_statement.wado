@@ -1,0 +1,40 @@
+// A variadic for-of is one statement after its expansion too: a temporary its
+// iterable borrows drops as the for-of ends, not with the enclosing iteration.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn pass<..T>(t: &Tok, xs: [..T]) -> [..T] {
+    LOG.push(`pass ${t.n}`);
+    return xs;
+}
+
+fn walk<..T>(xs: [..T]) {
+    let mut i = 0;
+    while i < 1 {
+        for let _v of pass(&make(1), xs) {
+            LOG.push("elem");
+        }
+        LOG.push("after");
+        i += 1;
+    }
+}
+
+test {
+    LOG = [];
+    walk([1, "a"]);
+    assert LOG == ["pass 1", "elem", "elem", "drop 1", "after"] as List<String>;
+}

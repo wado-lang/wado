@@ -1,0 +1,25 @@
+// A constant in a `let ... else` pattern may compute its value through a
+// reference to a local of its own.
+
+struct K {
+}
+
+impl K {
+    const C: i32 = b: {
+        let a = 3;
+        let r = &a;
+        *r
+    };
+}
+
+fn matches_c(o: Option<i32>) -> bool {
+    let Some(K::C) = o else {
+        return false;
+    };
+    return true;
+}
+
+test {
+    assert matches_c(Some(3));
+    assert !matches_c(Some(4));
+}

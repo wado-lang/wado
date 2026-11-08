@@ -1,0 +1,45 @@
+// A for-of evaluates its iterable once, as part of its statement: a temporary
+// the iterable borrows drops when the loop ends, not before the first
+// iteration reads through it.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+affine struct Bag {
+    toks: List<Tok>,
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn bag() -> Bag {
+    return Bag { toks: [make(1), make(2)] };
+}
+
+test "an iterator over a borrowed temporary" {
+    LOG = [];
+    for let t of &bag().toks {
+        LOG.push(`read ${t.n}`);
+    }
+    LOG.push("after");
+    assert LOG == ["read 1", "read 2", "drop 1", "drop 2", "after"] as List<String>;
+}
+
+test "a tuple of borrowed temporaries" {
+    LOG = [];
+    for let t of [&make(1), &make(2)] {
+        LOG.push(`read ${t.n}`);
+    }
+    LOG.push("after");
+    assert LOG == ["read 1", "read 2", "drop 2", "drop 1", "after"] as List<String>;
+}

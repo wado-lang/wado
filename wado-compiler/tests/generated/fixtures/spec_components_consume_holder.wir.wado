@@ -117,7 +117,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 fn "spec_components_consume_holder.wado/$test_0"() {
-    let $cond: bool;
     let $moved_2: ref null "spec_components_consume_holder.wado//Holder";
     let $moved_1: ref null "core:prelude//$Resource";
     $moved_1 = local.tee $moved_2(struct.new "spec_components_consume_holder.wado//Holder" { f: "spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() }).f;
@@ -125,17 +124,16 @@ fn "spec_components_consume_holder.wado/$test_0"() {
     if ref.is_null($moved_2) == 0 {
         $moved_2.f = ref.null none;
     }
-    $cond = "spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"($moved_1).used == 0;
+    if @unlikely(("spec_components_consume_holder.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"($moved_1).used == 0) == 0) {
+        cold_path;
+        "spec_components_consume_holder.wado/$test_0$cold0"();
+        unreachable;
+    }
     if ref.is_null($moved_1) == 0 {
         let $cm_handle_2: i32;
         $cm_handle_2 = $moved_1.value;
         $moved_1.value = 0;
         "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
-    }
-    if @unlikely($cond == 0) {
-        cold_path;
-        "spec_components_consume_holder.wado/$test_0$cold0"();
-        unreachable;
     }
 }
 

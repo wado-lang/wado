@@ -1,0 +1,65 @@
+// A `let ... else` is a statement like any `let`: a temporary only a call's
+// operand borrows drops as it ends, and one it keeps borrowed drops with its
+// scope, after the statements that follow it.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn some_tok(n: i32) -> Option<Tok> {
+    return Some(make(n));
+}
+
+fn number(t: &Tok) -> Option<i32> {
+    return Some(t.n);
+}
+
+fn bound() {
+    let Some(n) = number(&make(1)) else { return; };
+    LOG.push(`bound ${n}`);
+}
+
+fn kept() {
+    let Some(t) = &some_tok(2) else { return; };
+    LOG.push(`read ${t.n}`);
+}
+
+fn kept_unbound(n: i32) {
+    let Some(_) = &some_tok(n) else { return; };
+    LOG.push(`read ${n}`);
+}
+
+fn kept_refuted() {
+    let None = &some_tok(4) else { LOG.push("else"); return; };
+}
+
+test "a temporary a `let` binding nothing keeps borrowed" {
+    LOG = [];
+    kept_unbound(3);
+    kept_refuted();
+    assert LOG == ["read 3", "drop 3", "else", "drop 4"] as List<String>;
+}
+
+test "a temporary a call's operand borrows" {
+    LOG = [];
+    bound();
+    assert LOG == ["drop 1", "bound 1"] as List<String>;
+}
+
+test "a temporary the `let` keeps borrowed" {
+    LOG = [];
+    kept();
+    assert LOG == ["read 2", "drop 2"] as List<String>;
+}

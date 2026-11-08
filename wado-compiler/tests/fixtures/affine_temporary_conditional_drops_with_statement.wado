@@ -1,0 +1,48 @@
+// A temporary in a short-circuit operand or a match guard is its statement's
+// like any other: it drops as the statement ends, and only where it ran.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn id(t: &Tok) -> &Tok {
+    return t;
+}
+
+test "a short-circuit operand that runs" {
+    LOG = [];
+    if builtin::black_box(true) && id(&make(1)).n == 1 {
+        LOG.push("body");
+    }
+    assert LOG == ["body", "drop 1"] as List<String>;
+}
+
+test "a short-circuit operand that does not run" {
+    LOG = [];
+    if builtin::black_box(false) && id(&make(1)).n == 1 {
+        LOG.push("body");
+    }
+    assert LOG.is_empty();
+}
+
+test "a match guard" {
+    LOG = [];
+    match builtin::black_box(2) {
+        n && id(&make(n)).n == 1 => LOG.push("one"),
+        n && id(&make(n)).n == 2 => LOG.push("two"),
+        _ => LOG.push("other"),
+    }
+    assert LOG == ["two", "drop 2", "drop 2"] as List<String>;
+}

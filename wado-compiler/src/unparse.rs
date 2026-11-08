@@ -1684,7 +1684,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_expr_stmt(&mut self, e: &ExprStmt) {
         self.write_indent();
-        self.unparse_expr(&e.expr);
+        self.with_parens_if(expr_stmt_needs_parens(&e.expr), |s| s.unparse_expr(&e.expr));
         self.output.push_str(";\n");
     }
 
@@ -2448,9 +2448,13 @@ impl<'a> Unparser<'a> {
         self.output.push_str("if ");
         self.unparse_condition(&i.condition);
         self.output.push_str(" { ");
-        self.unparse_expr(then_expr);
+        self.with_parens_if(expr_stmt_needs_parens(then_expr), |s| {
+            s.unparse_expr(then_expr);
+        });
         self.output.push_str(" } else { ");
-        self.unparse_expr(else_expr);
+        self.with_parens_if(expr_stmt_needs_parens(else_expr), |s| {
+            s.unparse_expr(else_expr);
+        });
         self.output.push_str(" }");
 
         if self.added_since(snap).contains('\n') || self.exceeds_width_since(snap) {
@@ -3342,42 +3346,65 @@ fn cast_before_lt(operand: &Expr, next: Option<&ChainedComparison>) -> bool {
 }
 
 /// Whether a closure body starts with `with`, which re-parses as the closure's
-/// own effect row. Descends the leftmost operand of each form that prints one
-/// bare; exhaustive, so a new [`Expr`] is decided here rather than defaulted.
+/// own effect row.
 fn closure_body_needs_parens(expr: &Expr) -> bool {
+    prints_first(expr, &|e| matches!(e, Expr::WithHandler(_)))
+}
+
+/// Whether an expression statement starts with `if`, `match`, a label or
+/// `with`, which re-parses as that statement and ends it at its `}`, or with
+/// the `{` of an anonymous struct literal, which no statement starts with. A
+/// whole `with` is the statement `with` parses to.
+fn expr_stmt_needs_parens(expr: &Expr) -> bool {
+    !matches!(expr, Expr::WithHandler(_))
+        && prints_first(expr, &|e| match e {
+            Expr::If(_) | Expr::Match(_) | Expr::LabeledBlock(_) | Expr::WithHandler(_) => true,
+            Expr::StructLiteral(s) => s.name.is_none(),
+            _ => false,
+        })
+}
+
+/// Whether `expr`, or the operand it prints first and bare, is one `opens`
+/// picks. Descends the leftmost operand of each form that prints one bare;
+/// exhaustive, so a new [`Expr`] is decided here rather than defaulted.
+fn prints_first(expr: &Expr, opens: &impl Fn(&Expr) -> bool) -> bool {
+    if opens(expr) {
+        return true;
+    }
     match expr {
-        Expr::WithHandler(_) => true,
-        Expr::Binary(b) => !needs_parens(&b.left, b.op, true) && closure_body_needs_parens(&b.left),
-        Expr::Range(r) => closure_body_needs_parens(&r.start),
+        Expr::Binary(b) => !needs_parens(&b.left, b.op, true) && prints_first(&b.left, opens),
+        Expr::Range(r) => prints_first(&r.start, opens),
         Expr::ComparisonChain(c) => {
-            !cast_before_lt(&c.first, c.comparisons.first()) && closure_body_needs_parens(&c.first)
+            !cast_before_lt(&c.first, c.comparisons.first()) && prints_first(&c.first, opens)
         }
         Expr::Matches(m) => {
-            !matches_scrutinee_needs_parens(&m.expr) && closure_body_needs_parens(&m.expr)
+            !matches_scrutinee_needs_parens(&m.expr) && prints_first(&m.expr, opens)
         }
         Expr::Assign(a) => match &a.target {
-            AssignTarget::Place(target) => closure_body_needs_parens(target),
+            AssignTarget::Place(target) => prints_first(target, opens),
             AssignTarget::Destructuring { .. } => false,
         },
-        Expr::CompoundAssign(c) => closure_body_needs_parens(&c.target),
-        Expr::TaggedTemplate(t) => closure_body_needs_parens(&t.tag),
-        // A postfix or cast operand carries parens from `binds_tighter_than`,
-        // and everything else opens with a keyword, delimiter, or operator.
-        Expr::Ident(_)
+        Expr::CompoundAssign(c) => prints_first(&c.target, opens),
+        Expr::TaggedTemplate(t) => prints_first(&t.tag, opens),
+        Expr::Call(c) => prints_first_bare(&c.callee, OperandSlot::Callee, opens),
+        Expr::MethodCall(m) => prints_first_bare(&m.receiver, OperandSlot::Postfix, opens),
+        Expr::FieldAccess(f) => prints_first_bare(&f.expr, OperandSlot::Postfix, opens),
+        Expr::Index(i) => {
+            i.unchecked.is_none() && prints_first_bare(&i.expr, OperandSlot::Postfix, opens)
+        }
+        Expr::TryOp(t) => prints_first_bare(&t.expr, OperandSlot::Postfix, opens),
+        Expr::Cast(c) => prints_first_bare(&c.expr, OperandSlot::Cast, opens),
+        // Everything else opens with a keyword, delimiter, or operator.
+        Expr::WithHandler(_)
+        | Expr::Ident(_)
         | Expr::Literal(_)
         | Expr::Unary(_)
-        | Expr::Call(_)
-        | Expr::MethodCall(_)
         | Expr::StaticMethodCall(_)
-        | Expr::FieldAccess(_)
-        | Expr::Index(_)
-        | Expr::TryOp(_)
         | Expr::Block(_)
         | Expr::If(_)
         | Expr::Match(_)
         | Expr::Closure(_)
         | Expr::TemplateString(_)
-        | Expr::Cast(_)
         | Expr::StructLiteral(_)
         | Expr::TupleLiteral(_)
         | Expr::TupleComprehension(_)
@@ -3385,6 +3412,11 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         | Expr::Spread(..)
         | Expr::Error(_) => false,
     }
+}
+
+/// [`prints_first`] of an operand in `slot`, which prints first only bare.
+fn prints_first_bare(operand: &Expr, slot: OperandSlot, opens: &impl Fn(&Expr) -> bool) -> bool {
+    binds_tighter_than(operand, slot) && prints_first(operand, opens)
 }
 
 /// Whether the operand of the prefix operator `op` needs parens. Exhaustive, so

@@ -5721,9 +5721,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:json/core:json/JsonDeserializer::quoted_number<i64>$sroa[return]"(self) {
     let start_1: i64;
     let $qm_e_3: ref "core:serde//DeserializeError";
-    let $match_7: ref "core:prelude/types.wado//Option<i64>";
     let self_10: ref "core:prelude/string.wado//String";
     start_1 = builtin::i64_extend_i32_s(self.pos);
+    let $match_scrut_2: ref "core:prelude/types.wado//Option<i64>";
     let $mv$$vr_9$0: i32;
     let $mv$$vr_9$1: ref null "core:prelude/string.wado//String";
     let $mv$$vr_9$2: ref null "core:serde//DeserializeError";
@@ -5740,7 +5740,7 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<i64>$sroa[return]"(self)
     });
     let $mv$$vr_8$1: ref null "core:prelude/types.wado//Option<i64>";
     multivalue_bind [$mv$$vr_9$0, $mv$$vr_8$1, $mv$$vr_9$2] = (let $mv_field_1: ref Array<u8>; $mv_field_1 = self_10.repr; $mv$$vr_9$0 = self_10.used; "core:json/core:json/read_number_text<i64>$sroa[return]$spec0"($mv_field_1, $mv$$vr_9$0, start_1));
-    if @likely(ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $match_7((if $mv$$vr_9$0 == 0 -> ref "core:prelude/types.wado//Option<i64>" {
+    start_1 = (if @likely(ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $match_scrut_2((if $mv$$vr_9$0 == 0 -> ref "core:prelude/types.wado//Option<i64>" {
         ref.as_non_null($mv$$vr_8$1);
     } else if @unlikely($mv$$vr_9$0 == 1) -> ref "core:prelude/types.wado//Option<i64>" {
         cold_path;
@@ -5749,22 +5749,21 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<i64>$sroa[return]"(self)
         return 1, 0_i64, $qm_e_3;
     } else {
         unreachable;
-    })))) {
-        start_1 = ref.cast "core:prelude/types.wado//Option<i64>::Some"($match_7).payload_0;
-        return 0, start_1, ref.null none;
+    })))) -> i64 {
+        ref.cast "core:prelude/types.wado//Option<i64>::Some"($match_scrut_2).payload_0;
     } else {
         cold_path;
         return 1, 0_i64, "core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected number"), used: 15 }, start_1);
-    }
-    unreachable;
+    });
+    return 0, start_1, ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer::quoted_number<u64>$sroa[return]"(self) {
     let start_1: i64;
     let $qm_e_3: ref "core:serde//DeserializeError";
-    let $match_7: ref "core:prelude/types.wado//Option<u64>";
     let self_10: ref "core:prelude/string.wado//String";
     start_1 = builtin::i64_extend_i32_s(self.pos);
+    let $match_scrut_2: ref "core:prelude/types.wado//Option<u64>";
     let $mv$$vr_9$0: i32;
     let $mv$$vr_9$1: ref null "core:prelude/string.wado//String";
     let $mv$$vr_9$2: ref null "core:serde//DeserializeError";
@@ -5781,7 +5780,7 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<u64>$sroa[return]"(self)
     });
     let $mv$$vr_8$1: ref null "core:prelude/types.wado//Option<u64>";
     multivalue_bind [$mv$$vr_9$0, $mv$$vr_8$1, $mv$$vr_9$2] = (let $mv_field_1: ref Array<u8>; $mv_field_1 = self_10.repr; $mv$$vr_9$0 = self_10.used; "core:json/core:json/read_number_text<u64>$sroa[return]$spec0"($mv_field_1, $mv$$vr_9$0, start_1));
-    if @likely(ref.test "core:prelude/types.wado//Option<u64>::Some"(local.tee $match_7((if $mv$$vr_9$0 == 0 -> ref "core:prelude/types.wado//Option<u64>" {
+    start_1 = (if @likely(ref.test "core:prelude/types.wado//Option<u64>::Some"(local.tee $match_scrut_2((if $mv$$vr_9$0 == 0 -> ref "core:prelude/types.wado//Option<u64>" {
         ref.as_non_null($mv$$vr_8$1);
     } else if @unlikely($mv$$vr_9$0 == 1) -> ref "core:prelude/types.wado//Option<u64>" {
         cold_path;
@@ -5790,14 +5789,13 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<u64>$sroa[return]"(self)
         return 1, 0_i64, $qm_e_3;
     } else {
         unreachable;
-    })))) {
-        start_1 = ref.cast "core:prelude/types.wado//Option<u64>::Some"($match_7).payload_0;
-        return 0, start_1, ref.null none;
+    })))) -> u64 {
+        ref.cast "core:prelude/types.wado//Option<u64>::Some"($match_scrut_2).payload_0;
     } else {
         cold_path;
         return 1, 0_i64, "core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected number"), used: 15 }, start_1);
-    }
-    unreachable;
+    });
+    return 0, start_1, ref.null none;
 }
 
 fn "core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(msg, offset) {

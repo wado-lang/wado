@@ -1342,7 +1342,7 @@ impl Monomorphizer {
             let old_stmts = std::mem::take(&mut block.stmts);
             for mut stmt in old_stmts {
                 if let TirStmtKind::VariadicForOf { .. } = &stmt.kind {
-                    block.stmts.extend(self.expand_variadic_for_of(
+                    block.stmts.push(self.expand_variadic_for_of(
                         &mut stmt,
                         substitution,
                         type_table,
@@ -3107,7 +3107,7 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
-    ) -> Vec<TirStmt> {
+    ) -> TirStmt {
         let span = stmt.span;
         let TirStmtKind::VariadicForOf {
             iterable,
@@ -3570,13 +3570,16 @@ impl Monomorphizer {
         }
 
         let outer_label = format!("$tuple_for_of_{uid}");
-        vec![TirStmt::new(
-            TirStmtKind::LabeledBlock {
-                label: outer_label,
-                block: TirBlock::new(outer_stmts, span),
-            },
-            span,
-        )]
+        TirStmt {
+            source: stmt.source,
+            ..TirStmt::new(
+                TirStmtKind::LabeledBlock {
+                    label: outer_label,
+                    block: TirBlock::new(outer_stmts, span),
+                },
+                span,
+            )
+        }
     }
 
     /// Reconcile one unrolled iteration's locals against those already emitted,

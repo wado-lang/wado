@@ -1244,6 +1244,11 @@ pub fn remap_locals(expr: &mut TirExpr, map: impl Fn(u32) -> u32) {
     RemapLocals { map }.visit_expr(expr);
 }
 
+/// Renumber every local index `pattern` binds or reads by `map`.
+pub fn remap_pattern_locals(pattern: &mut TirPattern, map: impl Fn(u32) -> u32) {
+    RemapLocals { map }.visit_pattern(pattern);
+}
+
 struct RemapLocals<F> {
     map: F,
 }
