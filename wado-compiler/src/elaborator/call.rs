@@ -30,6 +30,7 @@ use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
 use super::sig::{DeclSig, MethodSig, Param};
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
@@ -5010,11 +5011,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.construct_variant_case(case, &args, raw_args, expected_type)
     }
 
-    /// The type arguments a case construction builds: what the turbofish
-    /// writes, else what the payload's own type answers for the slots it names,
-    /// else the site's variables. The expected type pinned the variables only
-    /// to type the payload, so `x = Some(1)` into an `Option<!>` is an
-    /// `Option<i32>`, and the mismatch is the whole value's.
+    /// The type arguments a case construction builds: the site's variables,
+    /// except where the payload's own type cannot be what the expected type
+    /// pinned one to. `x = Some(1)` into an `Option<!>` is an `Option<i32>`, and
+    /// the mismatch is the whole value's; `Some(panic())` and `Some(&mut v)`
+    /// into an `Option<&i32>` fit, so the expected type decides them.
     fn case_type_args(
         &mut self,
         case: &CaseSite<'_>,
@@ -5037,12 +5038,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .written
                     .get(i)
                     .is_some_and(|&t| t != TypeTable::UNKNOWN);
+                let at_site = self.apply_infer_holes(var);
                 let param = self.tysys.type_table.borrow().declared_param(slot);
-                from_payload
+                let Some(own) = from_payload
                     .as_ref()
                     .filter(|_| !written)
                     .and_then(|bound| bound.get(&param).copied())
-                    .unwrap_or_else(|| self.apply_infer_holes(var))
+                else {
+                    return at_site;
+                };
+                let table = self.tysys.type_table.borrow();
+                let fits = !table.is_infer_var(at_site)
+                    && !matches!(
+                        check_assignable(own, at_site, &table),
+                        TypeCheckResult::Incompatible
+                    );
+                if fits { at_site } else { own }
             })
             .collect()
     }
