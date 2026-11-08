@@ -5,7 +5,10 @@ use { Uri } from "core:uri";
 
 /// A format Jade asserts.
 internal enum Format {
+    Uri,
     UriReference,
+    Iri,
+    IriReference,
     Uuid,
 }
 
@@ -13,7 +16,10 @@ impl Format {
     /// The format `name` names, or none for one Jade does not assert.
     internal fn named(name: &String) -> Option<Format> {
         return match name.as_str_slice() {
+            "uri" => Option::Some(Uri),
             "uri-reference" => Option::Some(UriReference),
+            "iri" => Option::Some(Iri),
+            "iri-reference" => Option::Some(IriReference),
             "uuid" => Option::Some(Uuid),
             _ => null,
         };
@@ -21,7 +27,10 @@ impl Format {
 
     internal fn name(&self) -> String {
         return match self {
+            Uri => "uri",
             UriReference => "uri-reference",
+            Iri => "iri",
+            IriReference => "iri-reference",
             Uuid => "uuid",
         };
     }
@@ -29,10 +38,78 @@ impl Format {
     /// Whether `text` is a value of the format.
     internal fn admits(&self, text: StrSlice) -> bool {
         return match self {
-            UriReference => Uri::from_str(text) matches { Ok(_) },
+            Uri => is_uri_reference(text) && has_scheme(text),
+            UriReference => is_uri_reference(text),
+            Iri => is_iri_reference(text) && has_scheme(text),
+            IriReference => is_iri_reference(text),
             Uuid => is_uuid(text),
         };
     }
+}
+
+/// Whether `text` is RFC 3986's `URI-reference`.
+fn is_uri_reference(text: StrSlice) -> bool {
+    return Uri::from_str(text) matches { Ok(_) };
+}
+
+/// Whether `text` begins with RFC 3986's `scheme ":"`. A `relative-ref` cannot,
+/// since its first segment holds no colon, so a `URI-reference` that does is a
+/// `URI`.
+fn has_scheme(text: StrSlice) -> bool {
+    let mut first = true;
+    for let c of text.chars() {
+        if c == ':' {
+            return !first;
+        }
+        let allowed = c.is_ascii_alphabetic() || !first && (c.is_ascii_digit() || c == '+' || c == '-' || c == '.');
+        if !allowed {
+            return false;
+        }
+        first = false;
+    }
+    return false;
+}
+
+/// Whether `text` is RFC 3987's `IRI-reference`. RFC 3987 3.1 maps an IRI to a
+/// URI by percent-encoding each character outside ASCII, and the IRI grammar
+/// admits such a character exactly where the URI grammar admits a
+/// percent-encoded octet, save that it must be a `ucschar`, or an `iprivate`
+/// in the query.
+fn is_iri_reference(text: StrSlice) -> bool {
+    let mut mapped = String::with_capacity(text.len());
+    let mut in_query = false;
+    let mut in_fragment = false;
+    for let c of text.chars() {
+        if c == '#' {
+            in_fragment = true;
+            in_query = false;
+        } else if c == '?' && !in_fragment {
+            in_query = true;
+        }
+        if (c as u32) < 0x80 {
+            mapped.push(c);
+        } else if is_ucschar(c) || in_query && is_iprivate(c) {
+            mapped.push_str("%00");
+        } else {
+            return false;
+        }
+    }
+    return is_uri_reference(mapped.as_str_slice());
+}
+
+fn is_ucschar(c: char) -> bool {
+    let n = c as u32;
+    if 0xA0 <= n && n <= 0xD7FF || 0xF900 <= n && n <= 0xFDCF || 0xFDF0 <= n && n <= 0xFFEF {
+        return true;
+    }
+    // %x10000-1FFFD through %xE1000-EFFFD: every plane from 1 to 14, less its
+    // last two code points.
+    return 0x10000 <= n && n < 0xF0000 && n & 0xFFFF <= 0xFFFD;
+}
+
+fn is_iprivate(c: char) -> bool {
+    let n = c as u32;
+    return 0xE000 <= n && n <= 0xF8FF || 0xF0000 <= n && n & 0xFFFF <= 0xFFFD;
 }
 
 /// Whether `text` is RFC 4122's `UUID`: 32 hex digits, grouped 8-4-4-4-12 by

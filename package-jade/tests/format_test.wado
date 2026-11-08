@@ -1,0 +1,28 @@
+use { CompileOptions, Document, Schema, Validator } from "../src/lib.wado";
+
+/// Whether `text` is valid against `{"format": format}` with `format` asserting.
+fn admits(format: String, text: String) -> bool {
+    let schema = Schema::parse(`{"format": "${format}"}`).unwrap();
+    let validator = Validator::compile(&schema, CompileOptions { assert_format: true }).unwrap();
+    let doc = Document::parse(`"${text}"`).unwrap();
+    return validator.validate(&doc.root()) matches { Ok(_) };
+}
+
+test "format is an annotation unless asserting" {
+    let validator = Validator::compile(&Schema::parse(#"{"format": "uuid"}"#).unwrap()).unwrap();
+    assert validator.validate(&Document::parse(#""x""#).unwrap().root()) matches { Ok(_) };
+    assert !admits("uuid", "x");
+}
+
+test "an iri admits a private-use character in its query alone" {
+    assert admits("iri", "http://example.com/?q=\u{E000}");
+    assert !admits("iri", "http://example.com/\u{E000}");
+    assert !admits("iri", "http://example.com/#\u{E000}");
+    assert admits("iri", "http://example.com/?q=\u{F0000}");
+}
+
+test "an iri admits no noncharacter at the end of a plane" {
+    assert admits("iri", "http://example.com/\u{1FFFD}");
+    assert !admits("iri", "http://example.com/\u{1FFFE}");
+    assert !admits("iri", "http://example.com/\u{FFFE}");
+}
