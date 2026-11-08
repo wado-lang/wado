@@ -5,6 +5,10 @@ use { Uri } from "core:uri";
 
 /// A format Jade asserts.
 internal enum Format {
+    DateTime,
+    Date,
+    Time,
+    Duration,
     Uri,
     UriReference,
     Iri,
@@ -16,6 +20,10 @@ impl Format {
     /// The format `name` names, or none for one Jade does not assert.
     internal fn named(name: &String) -> Option<Format> {
         return match name.as_str_slice() {
+            "date-time" => Option::Some(DateTime),
+            "date" => Option::Some(Date),
+            "time" => Option::Some(Time),
+            "duration" => Option::Some(Duration),
             "uri" => Option::Some(Uri),
             "uri-reference" => Option::Some(UriReference),
             "iri" => Option::Some(Iri),
@@ -27,6 +35,10 @@ impl Format {
 
     internal fn name(&self) -> String {
         return match self {
+            DateTime => "date-time",
+            Date => "date",
+            Time => "time",
+            Duration => "duration",
             Uri => "uri",
             UriReference => "uri-reference",
             Iri => "iri",
@@ -38,6 +50,19 @@ impl Format {
     /// Whether `text` is a value of the format.
     internal fn admits(&self, text: StrSlice) -> bool {
         return match self {
+            DateTime => {
+                let mut s = Scan::of(text);
+                full_date(&mut s) && s.eat('T') && full_time(&mut s) && s.done();
+            },
+            Date => {
+                let mut s = Scan::of(text);
+                full_date(&mut s) && s.done();
+            },
+            Time => {
+                let mut s = Scan::of(text);
+                full_time(&mut s) && s.done();
+            },
+            Duration => is_duration(text),
             Uri => is_uri_reference(text) && has_scheme(text),
             UriReference => is_uri_reference(text),
             Iri => is_iri_reference(text) && has_scheme(text),
@@ -45,6 +70,172 @@ impl Format {
             Uuid => is_uuid(text),
         };
     }
+}
+
+/// A cursor over the characters of a format value. A letter matches in either
+/// case, as an ABNF string does.
+struct Scan {
+    chars: List<char>,
+    at: i32 = 0,
+}
+
+impl Scan {
+    fn of(text: StrSlice) -> Scan {
+        return Scan { chars: text.chars().collect() };
+    }
+
+    fn done(&self) -> bool {
+        return self.at == self.chars.len();
+    }
+
+    /// Takes `c`, in either case, when it comes next.
+    fn eat(&mut self, c: char) -> bool {
+        if self.done() || self.chars[self.at].to_ascii_uppercase() != c.to_ascii_uppercase() {
+            return false;
+        }
+        self.at += 1;
+        return true;
+    }
+
+    /// Takes exactly `n` ASCII digits, as the number they spell.
+    fn digits(&mut self, n: i32) -> Option<i32> {
+        let mut value = 0;
+        for let _ of 0..<n {
+            let Some(d) = self.digit() else {
+                return null;
+            };
+            value = value * 10 + d;
+        }
+        return Option::Some(value);
+    }
+
+    /// Takes one or more ASCII digits, answering whether there was one.
+    fn some_digits(&mut self) -> bool {
+        let start = self.at;
+        while self.digit() matches { Some(_) } {
+        }
+        return self.at > start;
+    }
+
+    fn digit(&mut self) -> Option<i32> {
+        if self.done() || !self.chars[self.at].is_ascii_digit() {
+            return null;
+        }
+        self.at += 1;
+        return Option::Some(self.chars[self.at - 1] as i32 - '0' as i32);
+    }
+}
+
+/// RFC 3339's `full-date`, its day within its month.
+fn full_date(s: &mut Scan) -> bool {
+    let Some(year) = s.digits(4) else {
+        return false;
+    };
+    if !s.eat('-') {
+        return false;
+    }
+    let Some(month) = s.digits(2) else {
+        return false;
+    };
+    if !s.eat('-') {
+        return false;
+    }
+    let Some(day) = s.digits(2) else {
+        return false;
+    };
+    return 1 <= month && month <= 12 && 1 <= day && day <= days_in(year, month);
+}
+
+fn days_in(year: i32, month: i32) -> i32 {
+    if month == 2 {
+        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+        return if leap { 29 } else { 28 };
+    }
+    return if month == 4 || month == 6 || month == 9 || month == 11 { 30 } else { 31 };
+}
+
+/// RFC 3339's `full-time`. A leap second must fall on the last minute of a UTC
+/// day, once the offset is taken away.
+fn full_time(s: &mut Scan) -> bool {
+    let Some(hour) = s.digits(2) else {
+        return false;
+    };
+    if !s.eat(':') {
+        return false;
+    }
+    let Some(minute) = s.digits(2) else {
+        return false;
+    };
+    if !s.eat(':') {
+        return false;
+    }
+    let Some(second) = s.digits(2) else {
+        return false;
+    };
+    if hour > 23 || minute > 59 || second > 60 {
+        return false;
+    }
+    if s.eat('.') && !s.some_digits() {
+        return false;
+    }
+    let mut offset = 0;
+    if !s.eat('Z') {
+        let sign = if s.eat('+') {
+            1;
+        } else if s.eat('-') {
+            -1;
+        } else {
+            return false;
+        };
+        let Some(h) = s.digits(2) else {
+            return false;
+        };
+        if !s.eat(':') {
+            return false;
+        }
+        let Some(m) = s.digits(2) else {
+            return false;
+        };
+        if h > 23 || m > 59 {
+            return false;
+        }
+        offset = sign * (h * 60 + m);
+    }
+    let day = 24 * 60;
+    return second < 60 || ((hour * 60 + minute - offset) % day + day) % day == day - 1;
+}
+
+/// RFC 3339 Appendix A's `duration`. A unit may follow only the next larger
+/// one: `dur-year = 1*DIGIT "Y" [dur-month]`, and so on down to seconds.
+fn is_duration(text: StrSlice) -> bool {
+    let mut s = Scan::of(text);
+    if !s.eat('P') {
+        return false;
+    }
+    let date = units(&mut s);
+    let timed = s.eat('T');
+    let time = if timed { units(&mut s) } else { "" };
+    if !s.done() || timed && time.is_empty() {
+        return false;
+    }
+    if date == "W" {
+        return !timed;
+    }
+    return !(date.is_empty() && time.is_empty()) && "YMD".contains(&date) && "HMS".contains(&time);
+}
+
+/// The units of the `1*DIGIT unit` elements that come next, upper-cased, in
+/// order.
+fn units(s: &mut Scan) -> String {
+    let mut out = "";
+    while s.some_digits() {
+        if s.done() || !s.chars[s.at].is_ascii_alphabetic() {
+            return "?";
+        }
+        out.push(s.chars[s.at].to_ascii_uppercase());
+        s.at += 1;
+    }
+    return out;
 }
 
 /// Whether `text` is RFC 3986's `URI-reference`.

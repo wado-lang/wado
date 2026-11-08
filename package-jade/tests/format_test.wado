@@ -14,6 +14,11 @@ test "format is an annotation unless asserting" {
     assert !admits("uuid", "x");
 }
 
+test "a duration's letters match in either case, as ABNF's strings do" {
+    assert admits("duration", "p1dt2h");
+    assert !admits("duration", "p1dt");
+}
+
 test "an iri admits a private-use character in its query alone" {
     assert admits("iri", "http://example.com/?q=\u{E000}");
     assert !admits("iri", "http://example.com/\u{E000}");
