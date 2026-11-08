@@ -4742,6 +4742,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declared = sig.declaring_type_params();
         let mut table = self.tysys.type_table.borrow_mut();
         let ids: Vec<TypeId> = declared.iter().map(|&(_, id)| id).collect();
+        assert_eq!(ids.len(), values.len(), "one value per declared parameter");
         let slots = table.bind_params(&ids, values);
         let target = match sig.declaring_impl {
             Some(def) => table.impl_target_args(def).to_vec(),
@@ -4755,8 +4756,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&id) = ids.iter().find(|&&id| table.declared_param(id).index == index) else {
                 break;
             };
-            let value = slots.get(&table.declared_param(id)).copied().unwrap_or(id);
-            out.push(value);
+            out.push(slots[&table.declared_param(id)]);
         }
         out
     }
@@ -5048,31 +5048,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         type_args: Vec<TypeId>,
     ) -> TypeId {
-        if !self.check_case_arity(case.case, args.len(), case.span)
-            || !self.check_case_turbofish_arity(
-                case.written.len(),
-                case.owner,
-                case.variant.type_params.len(),
-                case.span,
-            )
-        {
+        if !self.check_case_site(case, args.len()) {
             return TypeTable::ERROR;
         }
         let variant_def = self.tysys.def_at(case.variant.defined_at);
-        if let Some(&payload) = args.first() {
-            let declared = self.substitute_in_frame(case.case.payload, variant_def, &type_args);
-            match raw_args.first() {
-                Some(value) => self.typecheck_value(value, payload, declared),
-                None => self.typecheck(payload, declared, case.span),
-            }
-        }
         let variant_type = self
             .tysys
             .type_table
             .borrow_mut()
             .make_generic_instance(variant_def, type_args.clone());
-        self.record_generic_instantiation(case.site, type_args, variant_type);
-        variant_type
+        self.finish_case_construction(case, args, raw_args, type_args, variant_type)
     }
 
     /// The variant instance a case construction builds from its resolved
@@ -5084,25 +5069,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let CaseSite {
-            variant,
-            case: case_data,
-            written,
-            owner,
-            site,
-            span,
-        } = *case;
-        if !self.check_case_arity(case_data, args.len(), span)
-            || !self.check_case_turbofish_arity(
-                written.len(),
-                owner,
-                variant.type_params.len(),
-                span,
-            )
-        {
+        if !self.check_case_site(case, args.len()) {
             return TypeTable::ERROR;
         }
-        let payload = args.first().copied();
+        let variant = case.variant;
         let variant_type = if variant.type_params.is_empty() {
             self.tysys
                 .type_table
@@ -5112,12 +5082,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inferred = self.tysys.infer_variant_type_args(
                 &self.annotate_ctx,
                 variant,
-                case_data,
-                payload,
+                case.case,
+                args.first().copied(),
                 expected_type,
-                written,
+                case.written,
             );
-            self.defer_uninferable_variant(inferred, owner, variant, span)
+            self.defer_uninferable_variant(inferred, case.owner, variant, case.span)
         };
         let type_args = self
             .tysys
@@ -5125,15 +5095,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .nominal_type_args(variant_type)
             .unwrap_or_default();
-        if let Some(payload) = payload {
-            let variant_def = self.tysys.def_at(variant.defined_at);
-            let declared = self.substitute_in_frame(case_data.payload, variant_def, &type_args);
+        self.finish_case_construction(case, args, raw_args, type_args, variant_type)
+    }
+
+    /// Whether the case takes `arg_count` arguments and the turbofish the
+    /// variant's parameters.
+    fn check_case_site(&mut self, case: &CaseSite<'_>, arg_count: usize) -> bool {
+        self.check_case_arity(case.case, arg_count, case.span)
+            && self.check_case_turbofish_arity(
+                case.written.len(),
+                case.owner,
+                case.variant.type_params.len(),
+                case.span,
+            )
+    }
+
+    /// Checks the payload against the case at `type_args` and records the
+    /// instance the construction builds.
+    fn finish_case_construction(
+        &mut self,
+        case: &CaseSite<'_>,
+        args: &[TypeId],
+        raw_args: &[Expr],
+        type_args: Vec<TypeId>,
+        variant_type: TypeId,
+    ) -> TypeId {
+        if let Some(&payload) = args.first() {
+            let variant_def = self.tysys.def_at(case.variant.defined_at);
+            let declared = self.substitute_in_frame(case.case.payload, variant_def, &type_args);
             match raw_args.first() {
                 Some(value) => self.typecheck_value(value, payload, declared),
-                None => self.typecheck(payload, declared, span),
+                None => self.typecheck(payload, declared, case.span),
             }
         }
-        self.record_generic_instantiation(site, type_args, variant_type);
+        self.record_generic_instantiation(case.site, type_args, variant_type);
         variant_type
     }
 

@@ -415,9 +415,8 @@ struct EnvFrame<'a> {
 impl EnvFrame<'_> {
     /// What this frame gives `param`, where `param` is its template's.
     fn arg(&self, param: TypeParamId) -> Option<TypeId> {
-        if self.template != Some(param.owner) {
-            return None;
-        }
+        let template = self.template?;
+        assert_eq!(param.owner, template, "a member names its template's parameters");
         self.args.get(param.index as usize).copied()
     }
 }

@@ -468,12 +468,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     ) -> Vec<TirTypeParam> {
         params
             .map(|p| {
-                let id = self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .get(&p.name)
-                    .and_then(|binder| self.tysys.type_table.borrow().type_param_id(binder.type_id));
+                let id = p.is_real_type_param().then(|| {
+                    let binder = self.annotate_ctx.trait_ctx.type_params[&p.name].type_id;
+                    self.tysys.type_table.borrow().declared_param(binder)
+                });
                 TirTypeParam {
                     name: p.name.clone(),
                     is_effect: p.is_effect,
@@ -2597,13 +2595,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .type_params
             .iter()
             .filter(|p| p.is_real_type_param())
-            .filter_map(|p| {
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .get(&p.name)
-                    .map(|b| (p.name.clone(), b.type_id))
+            .map(|p| {
+                let binder = &scope.annotate_ctx.trait_ctx.type_params[&p.name];
+                (p.name.clone(), binder.type_id)
             })
             .collect();
         let param_types: Vec<TypeId> = func

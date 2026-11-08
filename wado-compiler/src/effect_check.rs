@@ -307,8 +307,11 @@ impl MemberTables {
             .flatten()
             .chain(payloads.into_iter().flatten())
             .map(move |&member| match tt.get(member) {
-                ResolvedType::TypeParam { id, .. } if Some(id.owner) == decl => {
-                    type_args.get(id.index as usize).copied().unwrap_or(member)
+                // The declaration's own type binds none of its parameters.
+                ResolvedType::TypeParam { id, .. }
+                    if Some(id.owner) == decl && !type_args.is_empty() =>
+                {
+                    type_args[id.index as usize]
                 }
                 _ => member,
             })

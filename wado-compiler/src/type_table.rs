@@ -2691,12 +2691,10 @@ impl TypeTable {
         walked: &mut IndexSet<(TypeId, Option<DefId>, Vec<TypeId>)>,
     ) -> bool {
         let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
-            ResolvedType::TypeParam { id, .. } => match frame {
-                Some((template, args)) if template == id.owner => {
-                    args.get(id.index as usize).copied()
-                }
-                _ => None,
-            },
+            ResolvedType::TypeParam { id, .. } => frame.and_then(|(template, args)| {
+                assert_eq!(id.owner, template, "a member names its template's parameters");
+                args.get(id.index as usize).copied()
+            }),
             _ => Some(ty),
         };
         let Some(ty) = bind(ty) else {
