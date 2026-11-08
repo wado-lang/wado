@@ -2922,9 +2922,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t))
             });
-        if let Some(target) = target {
-            for &branch in &*branches {
-                self.solve_infer_holes_against(branch, target);
+        match target {
+            Some(target) => {
+                for &branch in &*branches {
+                    self.solve_infer_holes_against(branch, target);
+                }
+            }
+            // No branch is decided alone, yet each may decide what another
+            // leaves open: `Ok(v)` settles `Result`'s `T`, `Err("x")` its `E`.
+            None => {
+                for i in 0..branches.len() {
+                    for j in 0..branches.len() {
+                        if i != j {
+                            let sibling = self.apply_infer_holes(branches[j]);
+                            self.solve_infer_holes_against(branches[i], sibling);
+                        }
+                    }
+                }
             }
         }
         for branch in branches {

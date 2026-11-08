@@ -4999,11 +4999,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.pin_arg_hole_against(arg, expected);
         }
         if !slots.is_empty() {
-            let solved: Vec<TypeId> = inst.vars.iter().map(|&var| self.apply_infer_holes(var)).collect();
+            let solved = self.case_type_args(case, &inst, args.first().copied());
             self.blame_unsolved(&inst, &solved);
             return self.construct_variant_case_at(case, &args, raw_args, solved);
         }
         self.construct_variant_case(case, &args, raw_args, expected_type)
+    }
+
+    /// The type arguments a case construction builds: what the payload's own
+    /// type answers for the slots it names, the site's variables for the rest.
+    /// The expected type pinned the variables only to type the payload, so
+    /// `x = Some(1)` into an `Option<!>` is an `Option<i32>`, and the
+    /// mismatch is the whole value's.
+    fn case_type_args(
+        &mut self,
+        case: &CaseSite<'_>,
+        inst: &Instantiated,
+        payload: Option<TypeId>,
+    ) -> Vec<TypeId> {
+        let from_payload = payload.and_then(|payload| {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .bind_type_params(&[case.case.payload], &[payload])
+        });
+        let slots = &case.variant.type_param_type_ids;
+        slots
+            .iter()
+            .zip(&inst.vars)
+            .map(|(&slot, &var)| {
+                let param = self.tysys.type_table.borrow().declared_param(slot);
+                from_payload
+                    .as_ref()
+                    .and_then(|bound| bound.get(&param).copied())
+                    .unwrap_or_else(|| self.apply_infer_holes(var))
+            })
+            .collect()
     }
 
     /// [`Self::construct_variant_case`] at the type arguments the site settled.

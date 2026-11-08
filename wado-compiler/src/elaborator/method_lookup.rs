@@ -1766,14 +1766,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
-        // A slot answered with itself is not answered: a rigid parameter carried
-        // past here dies in codegen, so put the variable back and let the blame
-        // below report it at the call. A slot the enclosing scope declares is
-        // the caller forwarding its own generics, which monomorphization
-        // resolves. `defer_or_report_uninferred_fn_type_args` guards it too.
+        // A slot answered with itself, or with a variable the arguments left
+        // open, is not answered: carried past here it dies in codegen, so put
+        // the variable back and let the blame below report it at the call. A
+        // slot the enclosing scope declares is the caller forwarding its own
+        // generics, which monomorphization resolves.
+        // `defer_or_report_uninferred_fn_type_args` guards it too.
         let scope_params = self.scope_type_param_ids();
         for (i, answer) in inferred.iter_mut().enumerate() {
-            if slots.get(i) == Some(answer) && !scope_params.contains(answer) {
+            let open_var = {
+                let applied = self.apply_infer_holes(*answer);
+                self.tysys.type_table.borrow().is_infer_var(applied)
+                    && !self.awaits_pending_call(applied)
+            };
+            if (slots.get(i) == Some(answer) && !scope_params.contains(answer)) || open_var {
                 *answer = inst.vars[i];
             }
         }
