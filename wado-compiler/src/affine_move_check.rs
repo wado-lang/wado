@@ -2186,7 +2186,7 @@ impl MoveWalker<'_, '_> {
                 if let Some(update) = update {
                     walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
                 }
-            })
+            });
         });
     }
 

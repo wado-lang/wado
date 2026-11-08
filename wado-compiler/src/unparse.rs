@@ -2449,11 +2449,11 @@ impl<'a> Unparser<'a> {
         self.unparse_condition(&i.condition);
         self.output.push_str(" { ");
         self.with_parens_if(expr_stmt_needs_parens(then_expr), |s| {
-            s.unparse_expr(then_expr)
+            s.unparse_expr(then_expr);
         });
         self.output.push_str(" } else { ");
         self.with_parens_if(expr_stmt_needs_parens(else_expr), |s| {
-            s.unparse_expr(else_expr)
+            s.unparse_expr(else_expr);
         });
         self.output.push_str(" }");
 
