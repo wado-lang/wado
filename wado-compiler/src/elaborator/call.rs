@@ -5006,11 +5006,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.construct_variant_case(case, &args, raw_args, expected_type)
     }
 
-    /// The type arguments a case construction builds: what the payload's own
-    /// type answers for the slots it names, the site's variables for the rest.
-    /// The expected type pinned the variables only to type the payload, so
-    /// `x = Some(1)` into an `Option<!>` is an `Option<i32>`, and the
-    /// mismatch is the whole value's.
+    /// The type arguments a case construction builds: what the turbofish
+    /// writes, else what the payload's own type answers for the slots it names,
+    /// else the site's variables. The expected type pinned the variables only
+    /// to type the payload, so `x = Some(1)` into an `Option<!>` is an
+    /// `Option<i32>`, and the mismatch is the whole value's.
     fn case_type_args(
         &mut self,
         case: &CaseSite<'_>,
@@ -5027,10 +5027,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slots
             .iter()
             .zip(&inst.vars)
-            .map(|(&slot, &var)| {
+            .enumerate()
+            .map(|(i, (&slot, &var))| {
+                let written = case.written.get(i).is_some_and(|&t| t != TypeTable::UNKNOWN);
                 let param = self.tysys.type_table.borrow().declared_param(slot);
                 from_payload
                     .as_ref()
+                    .filter(|_| !written)
                     .and_then(|bound| bound.get(&param).copied())
                     .unwrap_or_else(|| self.apply_infer_holes(var))
             })
