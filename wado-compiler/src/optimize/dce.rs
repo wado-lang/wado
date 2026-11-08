@@ -1753,9 +1753,9 @@ fn collect_type_dependencies(
 pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
     project.structs.retain(|s| analysis.keeps_struct(s));
     let type_table = project.type_table.borrow();
-    project.variants.retain(|v| {
-        analysis.nominal_defs.contains(&v.def) || kept_past_use(v.def, &type_table)
-    });
+    project
+        .variants
+        .retain(|v| analysis.nominal_defs.contains(&v.def) || kept_past_use(v.def, &type_table));
     drop(type_table);
     project
         .enums

@@ -890,7 +890,7 @@ impl NirPackage {
     pub fn variant_cases(&self, def: DefId, type_args: &[TypeId]) -> Option<Vec<(String, TypeId)>> {
         let variant = self.find_variant(def)?;
         assert_eq!(
-            variant.type_params.iter().filter(|p| !p.is_effect).count(),
+            variant.type_arity(),
             type_args.len(),
             "an instance gives each type parameter of its variant an argument"
         );

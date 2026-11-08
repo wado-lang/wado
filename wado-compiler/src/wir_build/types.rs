@@ -6,15 +6,13 @@
 
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::FqTypeName;
 use crate::nir::{NirEnum, NirStruct};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
-    WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantCase, WirVariantRepr,
-    WirVariantType,
+    WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantCase, WirVariantRepr, WirVariantType,
 };
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -66,7 +64,8 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
             ty: cell_field_type(ctx, type_table, payload),
             mutable: true,
         };
-        ctx.define_type(&id, struct_type(&id, vec![field], Some(ModuleSource::prelude())));
+        let cell = struct_type(&id, vec![field], Some(ModuleSource::prelude()));
+        ctx.define_type(&id, WirTypeDef::Struct(cell));
     }
     register_canonical_closure_types(ctx, type_table);
 }
@@ -85,22 +84,21 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
             let type_id = tt
                 .find_struct_instance(def, &args)
                 .expect("a concrete struct declaration's type is interned");
-            found
-                .entry(type_id)
-                .or_insert_with(|| (wir_type_key(&s.module_source, &s.name), Shape::Struct(s)));
+            let fq = wir_type_key(&s.module_source, &s.name);
+            let previous = found.insert(type_id, (fq, Shape::Struct(s)));
+            assert!(previous.is_none(), "one struct type has one declaration");
         }
         for e in &package.enums {
             let type_id = tt
                 .find_enum_type(e.def)
                 .expect("an enum declaration's type is interned");
-            found
-                .entry(type_id)
-                .or_insert_with(|| (wir_enum_type_key(&e.module_source, &e.name), Shape::Enum(e)));
+            let fq = wir_enum_type_key(&e.module_source, &e.name);
+            let previous = found.insert(type_id, (fq, Shape::Enum(e)));
+            assert!(previous.is_none(), "one enum type has one declaration");
         }
-        let concrete = |ids: &[TypeId]| !ids.iter().any(|&t| tt.contains_type_param(t));
-        for type_id in tt.iter_type_ids() {
+        for type_id in tt.iter_type_ids().filter(|&t| tt.is_concrete(t)) {
             match tt.get(type_id) {
-                ResolvedType::Tuple(elems) if concrete(elems) => {
+                ResolvedType::Tuple(elems) => {
                     let names: Vec<String> = elems
                         .iter()
                         .map(|&e| tt.mangle_type_arg_rowless(e))
@@ -110,12 +108,12 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
                         (wir_tuple_type_key(&names), Shape::Tuple(elems.clone())),
                     );
                 }
-                ResolvedType::BuiltinArray(elem) if concrete(&[*elem]) => {
+                ResolvedType::BuiltinArray(elem) => {
                     let fq = mangle_builtin_array_type(&tt.mangle_type_arg_rowless(*elem));
                     found.insert(type_id, (fq, Shape::Array(*elem)));
                 }
                 ResolvedType::Variant { def, type_args }
-                    if concrete(type_args) && is_variant_instance(package, *def, type_args) =>
+                    if is_variant_instance(package, *def, type_args) =>
                 {
                     let fq = variant_type_key(tt, *def, type_args);
                     variants.push((type_id, fq, *def, type_args.clone()));
@@ -128,8 +126,21 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
         let cases = package
             .variant_cases(def, &args)
             .expect("filtered to declared variants");
-        let module_source = package.find_variant(def).expect("declared").module_source.clone();
-        found.insert(type_id, (fq, Shape::Variant { module_source, cases }));
+        let module_source = package
+            .find_variant(def)
+            .expect("declared")
+            .module_source
+            .clone();
+        found.insert(
+            type_id,
+            (
+                fq,
+                Shape::Variant {
+                    module_source,
+                    cases,
+                },
+            ),
+        );
     }
     found
         .into_iter()
@@ -140,9 +151,9 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
 /// Whether `def` applied to `type_args` is an instance of a variant the
 /// package declares, rather than the declaration of a generic one.
 fn is_variant_instance(package: &NirPackage, def: DefId, type_args: &[TypeId]) -> bool {
-    package.find_variant(def).is_some_and(|v| {
-        v.type_params.iter().filter(|p| !p.is_effect).count() == type_args.len()
-    })
+    package
+        .find_variant(def)
+        .is_some_and(|v| v.type_arity() == type_args.len())
 }
 
 /// Each concrete cell's WIR struct name, with the payload it holds. Cells of
@@ -171,26 +182,22 @@ fn define_wado_type(
         Shape::Struct(s) => {
             let fields = s.fields.iter().map(|f| (f.name.clone(), f.type_id));
             let fields = slot_fields(ctx, type_table, id, fields);
-            let mut def = struct_type(id, fields, Some(s.module_source.clone()));
-            if let WirTypeDef::Struct(st) = &mut def {
-                st.generic_origin = s.monomorph_info.as_ref().map(|info| WirGenericOrigin {
+            WirTypeDef::Struct(WirStructType {
+                generic_origin: s.monomorph_info.as_ref().map(|info| WirGenericOrigin {
                     base_name: info.generic_name.clone(),
                     type_args: info
                         .impl_type_args
                         .iter()
                         .map(|&ta| type_table.mangle_type_name(ta))
                         .collect(),
-                });
-            }
-            def
+                }),
+                ..struct_type(id, fields, Some(s.module_source.clone()))
+            })
         }
         Shape::Tuple(elems) => {
-            let fields = elems
-                .iter()
-                .enumerate()
-                .map(|(i, &e)| (i.to_string(), e));
+            let fields = elems.iter().enumerate().map(|(i, &e)| (i.to_string(), e));
             let fields = slot_fields(ctx, type_table, id, fields);
-            struct_type(id, fields, None)
+            WirTypeDef::Struct(struct_type(id, fields, None))
         }
         Shape::Variant {
             module_source,
@@ -287,8 +294,12 @@ fn slot_fields(
     wir_fields
 }
 
-fn struct_type(id: &WirTypeId, fields: Vec<WirField>, module: Option<ModuleSource>) -> WirTypeDef {
-    WirTypeDef::Struct(WirStructType {
+fn struct_type(
+    id: &WirTypeId,
+    fields: Vec<WirField>,
+    module: Option<ModuleSource>,
+) -> WirStructType {
+    WirStructType {
         name: WirName {
             fq: id.fq().to_string(),
         },
@@ -300,7 +311,7 @@ fn struct_type(id: &WirTypeId, fields: Vec<WirField>, module: Option<ModuleSourc
         generic_origin: None,
         newtype_origin: None,
         supertype: None,
-    })
+    }
 }
 
 /// The struct each payload case of variant `variant` is, which the emitter
@@ -319,7 +330,10 @@ fn register_case_structs(ctx: &mut WirContext<'_>, variant: &WirTypeId, cases: &
             mutable: false,
         }));
         let case_id = ctx.reserve_type(wir_variant_case_key(variant.fq(), &case.name));
-        ctx.define_type(&case_id, struct_type(&case_id, fields, None));
+        ctx.define_type(
+            &case_id,
+            WirTypeDef::Struct(struct_type(&case_id, fields, None)),
+        );
         ctx.variant_case_info
             .insert(case_id.index(), (variant.index(), case.index));
         ctx.variant_case_types
@@ -416,58 +430,13 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>, type_table: &TypeT
     }
 }
 
-/// The name a variant instance is registered under: the base name with
-/// module-qualified type arguments, which keeps two same-named arguments apart.
-pub(super) fn generic_instance_name(
-    type_table: &TypeTable,
-    name: &str,
-    type_args: &[TypeId],
-) -> String {
-    let type_arg_names: Vec<String> = type_args
+/// The WIR name of variant `def` at `type_args` (none for a plain variant):
+/// module-qualified arguments keep two same-named ones apart.
+fn variant_type_key(type_table: &TypeTable, def: DefId, type_args: &[TypeId]) -> String {
+    let args: Vec<String> = type_args
         .iter()
-        .map(|&t| match type_table.get(t) {
-            ResolvedType::AssocTypeProjection { .. } => {
-                normalized_projection_name(type_table, t).to_mangled()
-            }
-            _ => type_table.mangle_type_arg_rowless(t),
-        })
+        .map(|&t| type_table.mangle_type_arg_rowless(t))
         .collect();
-    mangle_generic_name(name, &type_arg_names)
-}
-
-/// The key variant `def` applied to `type_args` (none for a plain variant) is
-/// registered under.
-pub(super) fn variant_type_key(type_table: &TypeTable, def: DefId, type_args: &[TypeId]) -> String {
-    let name = generic_instance_name(type_table, type_table.decl_name(def), type_args);
+    let name = mangle_generic_name(type_table.decl_name(def), &args);
     wir_type_key(type_table.def_module(def), &name)
-}
-
-/// The name of an associated-type projection (`f64::Err`) as the type it
-/// names. A projection can still sit in a generic instance's arguments while
-/// the instance was registered under the resolved spelling.
-fn normalized_projection_name(type_table: &TypeTable, type_id: TypeId) -> FqTypeName {
-    let ResolvedType::AssocTypeProjection {
-        param_id,
-        assoc_name,
-        args,
-        owning_trait,
-        trait_args,
-        ..
-    } = type_table.get(type_id)
-    else {
-        return type_table.fq_type_name(type_id);
-    };
-    let Some(family) = type_table.resolve_assoc_type_qualified(
-        *param_id,
-        owning_trait,
-        trait_args.as_deref(),
-        assoc_name,
-    ) else {
-        return type_table.fq_type_name(type_id);
-    };
-    let args: Vec<FqTypeName> = args
-        .iter()
-        .map(|&arg| type_table.fq_type_name(arg))
-        .collect();
-    type_table.family_name_at(*owning_trait, assoc_name, family, &args)
 }

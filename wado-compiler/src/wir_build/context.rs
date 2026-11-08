@@ -9,6 +9,7 @@ use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
+use crate::nir;
 use crate::nir::{FuncId, FuncRef, StructDecls};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
@@ -20,7 +21,6 @@ use crate::wir::{
     WirImport, WirImportDesc, WirInstr, WirMemory, WirMeta, WirName, WirNames, WirPackage,
     WirStructType, WirType, WirTypeDef, WirTypeId,
 };
-use crate::nir;
 use crate::world_registry::WorldSurface;
 
 /// Base offset for defined function `WirFuncId` indices.
@@ -340,12 +340,10 @@ impl<'a> WirContext<'a> {
         }
     }
 
-    /// Register a type definition and return its `WirTypeId`.
+    /// Register a type definition and return its `WirTypeId`. A WIR-only type
+    /// (a function type, a closure struct) is named by its shape, so a name
+    /// already registered answers the type registered under it.
     pub fn register_type(&mut self, fq: String, typedef: WirTypeDef) -> WirTypeId {
-        // Dedup: if the same fq name is already registered, return the existing type.
-        // This prevents cm_binding synthesis and WIR build from creating duplicate
-        // struct types for the same logical type (e.g., tuple types that appear in
-        // both the entry module and binding functions).
         if let Some(existing) = self.type_map.get(&fq) {
             return existing.clone();
         }
@@ -390,9 +388,12 @@ impl<'a> WirContext<'a> {
     /// The WIR array type of `Array<element>`.
     #[track_caller]
     pub fn array_type(&self, type_table: &TypeTable, element: TypeId) -> WirTypeId {
-        let array = type_table
-            .find_builtin_array(element)
-            .unwrap_or_else(|| panic!("[WIR] `Array<{}>` is not interned", type_table.name(element)));
+        let array = type_table.find_builtin_array(element).unwrap_or_else(|| {
+            panic!(
+                "[WIR] `Array<{}>` is not interned",
+                type_table.name(element)
+            )
+        });
         match self.type_id_to_wir_type(type_table, array) {
             WirType::Ref { type_id, .. } => type_id,
             other => unreachable!("an array lowers to a reference, not {other:?}"),
@@ -406,10 +407,6 @@ impl<'a> WirContext<'a> {
         params: Vec<WirType>,
         results: Vec<WirType>,
     ) -> WirTypeId {
-        // Check if already registered
-        if let Some(existing) = self.type_map.get(&fq) {
-            return existing.clone();
-        }
         self.register_type(
             fq.clone(),
             WirTypeDef::Func(WirFuncType {
@@ -750,9 +747,7 @@ impl<'a> WirContext<'a> {
     /// [`TypeTable::slot_box`] names one.
     pub fn boxed_slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
         match type_table.slot_box(type_id) {
-            Some(wrapper) => self
-                .type_id_to_wir_type(type_table, wrapper)
-                .as_nullable(),
+            Some(wrapper) => self.type_id_to_wir_type(type_table, wrapper).as_nullable(),
             None => ty,
         }
     }

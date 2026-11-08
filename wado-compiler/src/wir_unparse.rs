@@ -2444,10 +2444,10 @@ mod tests {
             newtype_origin: None,
             supertype: None,
         }));
+        let text = unparse_wir(&package);
         assert!(
-            unparse_wir(&package).contains("struct app//Unit {}  // TypeId(0)\n"),
-            "{}",
-            unparse_wir(&package)
+            text.contains("struct app//Unit {}  // TypeId(0)\n"),
+            "{text}"
         );
     }
 }

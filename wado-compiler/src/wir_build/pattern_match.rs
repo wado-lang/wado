@@ -701,10 +701,7 @@ impl FunctionTranslator<'_, '_> {
                 .package
                 .enums
                 .iter()
-                .find(|e| {
-                    e.name == self.type_table.decl_name(*def)
-                        && e.module_source == *self.type_table.def_module(*def)
-                })
+                .find(|e| e.def == *def)
                 .map(|e| e.cases.len()),
             _ => None,
         }
@@ -719,7 +716,10 @@ impl FunctionTranslator<'_, '_> {
     fn variant_def(&self, type_id: TypeId) -> (WirTypeId, &WirVariantType) {
         let variant = self.ref_type_id(type_id);
         let WirTypeDef::Variant(vt) = &self.ctx.types[variant.index() as usize] else {
-            panic!("[WIR] `{}` is registered as a non-variant WIR type", variant.fq());
+            panic!(
+                "[WIR] `{}` is registered as a non-variant WIR type",
+                variant.fq()
+            );
         };
         (variant, vt)
     }
@@ -729,7 +729,10 @@ impl FunctionTranslator<'_, '_> {
     fn variant_case_at(&self, type_id: TypeId, case_index: u32) -> (WirTypeId, &WirVariantCase) {
         let (variant, vt) = self.variant_def(type_id);
         let Some(case) = vt.cases.get(case_index as usize) else {
-            panic!("[WIR] variant `{}` has no case at index {case_index}", variant.fq());
+            panic!(
+                "[WIR] variant `{}` has no case at index {case_index}",
+                variant.fq()
+            );
         };
         (variant, case)
     }

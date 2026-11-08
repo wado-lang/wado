@@ -1244,6 +1244,15 @@ pub struct NirVariantDecl {
     pub span: Span,
 }
 
+impl NirVariantDecl {
+    /// How many type arguments an instance gives it: its type parameters,
+    /// less the effect ones.
+    #[must_use]
+    pub fn type_arity(&self) -> usize {
+        self.type_params.iter().filter(|p| !p.is_effect).count()
+    }
+}
+
 /// A case in a variant declaration
 /// e.g., `Circle(f64)` or `Point`
 ///
