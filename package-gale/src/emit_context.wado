@@ -3,7 +3,7 @@
 //! and records the tables its text names and the diagnostics it raises. Where
 //! the walk stands is the `EmitCursor`.
 
-use { AltAction, Alternative, ParserRule } from "./ir.wado";
+use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
 use { Admits, Diagnostics, Rule, admits_or_everything } from "./gir.wado";
 use { RuleOverlap, ambiguity_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
@@ -13,10 +13,12 @@ use { TableRegistry, follow_mask_name, kind_set_fn_name, sync_bits_name, sync_li
 use { ParserPlan } from "./parser_plan.wado";
 use {
     DecisionPredicates,
+    MetPredicate,
     PredicateSite,
     alt_has_gate,
     alt_scan_gate_conditions,
     gate_condition_for,
+    predicates_met_at,
 } from "./gate_conditions.wado";
 use { AmbiguousNode } from "./prediction.wado";
 use { AltBinding, unmatched_bindings } from "./attr_resolve.wado";
@@ -469,6 +471,15 @@ impl EmitContext {
     /// rule being emitted.
     pub fn alt_scan_gate_conditions(&self, alt: &Alternative) -> String {
         return alt_scan_gate_conditions(alt, &self.settings, &self.analysis, &self.predicate_site());
+    }
+
+    /// The predicates of the rule being emitted that prediction meets entering
+    /// `elements` at `index` (`gate_conditions::predicates_met_at`).
+    pub fn own_predicates_met_at(&mut self, elements: &List<Element>, actions: &List<AltAction>, index: i32) -> List<AltAction> {
+        let site = self.predicate_site();
+        let mut met: List<MetPredicate> = [];
+        let _ = predicates_met_at(elements, actions, index, &site, &mut self.analysis, &mut [], &mut met);
+        return met.into_iter().filter(|m| m.1.rule_index == site.rule_index).map(|m| m.0).collect();
     }
 
     /// `rule_overlap::rule_overlap_groups` for the rule being emitted.

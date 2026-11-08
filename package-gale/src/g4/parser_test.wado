@@ -2407,6 +2407,28 @@ test "a label on a set, and on an atom, is still accepted" {
     }
 }
 
+test "a label rebound as another kind, or to another rule, is rejected" {
+    // `error(75): label x type mismatch with previous definition`, across the
+    // whole rule: a label is one field of its context.
+    let bad: List<String> = [
+        "grammar Test;\nr : x=a | x=b ;\na : A ;\nb : A ;", "grammar Test;\nr : (x=a)* x=b ;\na : A ;\nb : A ;",
+        "grammar Test;\nr : x+=a x+=b ;\na : A ;\nb : A ;", "grammar Test;\nr : x=A x+=B ;",
+        "grammar Test;\nr : x+=A x+=a ;\na : A ;", "grammar Test;\nr : x+=a x=a ;\na : A ;",
+        "grammar Test;\nr : x=a | x='c' ;\na : A ;",
+    ];
+    for let src of &bad {
+        let err = parse(*src).unwrap_err();
+        assert err.message == "label x type mismatch with previous definition";
+    }
+    let good: List<String> = [
+        "grammar Test;\nr : x=A | x='c' ;", "grammar Test;\nr : x=a | x=a ;\na : A ;",
+        "grammar Test;\nr : x=(A|B) | x=. | x=~A ;", "grammar Test;\nr : x=a ;\nt : x=b ;\na : A ;\nb : A ;",
+    ];
+    for let src of &good {
+        assert parse(*src) matches { Ok(_) };
+    }
+}
+
 /// Each case is a grammar and the escape its error must name. Slicing the
 /// source at the reported span catches a report that names a prefix.
 fn assert_escape_errors(cases: &List<[String, String]>) {

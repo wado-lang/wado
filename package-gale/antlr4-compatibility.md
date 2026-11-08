@@ -102,7 +102,7 @@ checks no diagnostic carries a span.
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
 
-Two more are decided as the text is read, so each carries a span:
+Three more are decided as the text is read, so each carries a span:
 
 - **An escape the lexicon does not define** — ANTLR4 error 156. A string
   literal takes `\n \r \t \b \f \\ \' \uXXXX \u{…}`. A char set takes the same
@@ -116,6 +116,11 @@ Two more are decided as the text is read, so each carries a span:
   while `x = (ID)`, `x += (A*)`, `n = (ID ',')+` and `x += (.|A)` do not. A
   label belongs on an atom or a set. `(e)` is not the free wrapper it looks
   like.
+- **A label rebound as another kind** — ANTLR4 error 75. A label is one field
+  of its rule's context, so every binding of it in the rule, in any
+  alternative, binds a token or a call of the same rule, and all of them
+  collect (`+=`) or none do. `x=a | x=b` with two rules is rejected, and so is
+  `x=A x+=B`.
 
 ### ICU is the source of truth for `\p{...}`
 

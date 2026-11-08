@@ -24,7 +24,8 @@ use { lower } from "./lower.wado";
 use { LowerContext } from "./lower_context.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
-use { assert_canonical_shape, assign_atn_call_sites, canonicalize_empty_alt_groups } from "./ir.wado";
+use { assert_canonical_shape, assign_atn_call_sites, assign_atn_decisions, canonicalize_empty_alt_groups } from "./ir.wado";
+use { decision_predicates } from "./gate_conditions.wado";
 use { parse } from "./g4/parser.wado";
 use { empty_grammar, alt } from "../tests/support/fixtures.wado";
 use {
@@ -5923,4 +5924,25 @@ test "java action: a comment translates to nothing" {
 test "java: an unterminated string literal is a loud error" {
     assert java_action_res("System.out.println(\"abc); ", "a : ID ;", false).is_err();
     assert java_pred_res("this.s == \"ab", "a : ID ;", false).is_err();
+}
+
+// An iteration that ends behind a nested decision's empty alternative re-enters
+// the loop's body, so that decision meets what the body opens with.
+test "a decision inside a loop body meets the body's predicates through the loop-back" {
+    let mut g = parse("grammar T;
+r : ( {p}? 'a' | 'c' ( 'b' | ) )* 'x' ;
+").unwrap();
+    assign_atn_decisions(&mut g);
+    let Repeat(rep) = g.parser_rules[0].alternatives[0].elements[0] else {
+        panic("the loop leads the rule");
+    };
+    let Group(body) = rep.element else {
+        panic("the loop's body is a group");
+    };
+    let Group(nested) = body.alternatives[1].elements[1] else {
+        panic("the body's second alternative ends in a group");
+    };
+    let mut analysis = GrammarAnalysis::new(&g.parser_rules);
+    let decisions = decision_predicates(&GenSettings { emit_actions: true }, &mut analysis);
+    assert decisions.at_site(nested.atn_decision).len() == 1;
 }

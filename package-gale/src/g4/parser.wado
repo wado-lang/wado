@@ -72,7 +72,16 @@ pub struct G4Parser {
     imports: List<String>,
     pending_refs: List<PendingRef>,
     current_rule: String,
+    rule_labels: List<RuleLabel>,
     kind: GrammarKind,
+}
+
+/// A label of the parser rule being read: what it binds, a token (an empty
+/// `rule`) or a call of `rule`, and whether it collects them.
+struct RuleLabel {
+    name: String,
+    list: bool,
+    rule: String,
 }
 
 struct LexerCommands {
@@ -241,6 +250,7 @@ impl G4Parser {
             imports: [],
             pending_refs: [],
             current_rule: "",
+            rule_labels: [],
             kind: GrammarKind::Combined,
         };
     }
@@ -776,6 +786,7 @@ impl G4Parser {
         let prequel = self.parse_rule_prequel()?;
         self.expect(G4Token::Colon)?;
         self.current_rule = name.to_string();
+        self.rule_labels = [];
         let alternatives = self.parse_alternatives()?;
         self.current_rule = "";
         self.expect(G4Token::Semicolon)?;
@@ -998,6 +1009,24 @@ impl G4Parser {
                             ),
                         );
                     }
+                }
+                let label = RuleLabel {
+                    name,
+                    list,
+                    rule: if let RuleRef(r) = &inner { r.name } else { String::new() },
+                };
+                if let Some(prev) = self.rule_labels.iter_ref().find(|l| l.name == name) {
+                    if prev.list != list || prev.rule != label.rule {
+                        return Result::Err(
+                            ParseError::new(
+                                `label ${name} type mismatch with previous definition`,
+                                name_span,
+                                ["a label of the same kind"],
+                            ),
+                        );
+                    }
+                } else {
+                    self.rule_labels.push(label);
                 }
                 return Result::<Element, ParseError>::Ok(
                     Element::Label(LabelElement::new(name, list, inner)),

@@ -3644,7 +3644,11 @@ fn enter_alt_label_scope(
         let read_first = actions.iter_ref().any(
             |a| a.before_index - first_element <= site.at && body_names_binding(&a.source.text, &b.base),
         )
-            || (0..<site.at).any(|j| element_names_binding(&elements[first_element + j], &b.base));
+            || (0..<site.at).any(|j| element_names_binding(&elements[first_element + j], &b.base))
+            || ctx.own_predicates_met_at(elements, actions, first_element + site.at).iter_ref().any(
+                |a| body_names_binding(&a.source.text, &b.base),
+            );
+        assert b.is_token || same.iter_ref().all(|s| s.binding.ref_name == b.ref_name), "a rule label calls one rule (ANTLR4 error 75)";
         if same.len() > 1 || same.iter_ref().any(|s| s.nested) || read_first {
             shared.push(AltBinding { ..*b, reach: LabelReach::Shared, capture: b.field });
         }
@@ -3909,15 +3913,20 @@ fn call_site_stamps(ctx: &EmitContext, call_site: i32) -> List<String> {
     return stamps;
 }
 
+/// What a matched token is kept in: the local a shared label's alternative
+/// declared, or `let_binding`'s.
+fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field: S1) -> String {
+    if ctx.settings.emit_actions && let Some(label) = ctx.cursor.shared_label(true, &base) {
+        return `${label.field} = `;
+    }
+    return let_binding(ctx, base, field);
+}
+
 /// A binding exists only for a semantic action to read. A reference reaches it
-/// by its base name, or by the local itself where no binding records it. A
-/// shared label assigns the local its alternative declared.
-fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field: S1, is_token: bool = true) -> String {
+/// by its base name, or by the local itself where no binding records it.
+fn let_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field: S1) -> String {
     if !ctx.settings.emit_actions {
         return String::new();
-    }
-    if let Some(label) = ctx.cursor.shared_label(is_token, &base) {
-        return `${label.field} = `;
     }
     if ctx.reads_binding(base) || ctx.reads_binding(field) {
         return `let ${field} = `;
@@ -4037,7 +4046,7 @@ fn gen_op_leaf(
                 gen_call_site_stamps(w, ctx, r.atn_call_site);
                 gen_shared_rule_call(w, &local, &callee, &args.join(", "), ctx);
             } else {
-                let bind = leaf_binding(ctx, &r.dedup_base, &r.field, false);
+                let bind = let_binding(ctx, &r.dedup_base, &r.field);
                 w.call(CallStmt {
                     pre: call_site_stamps(ctx, r.atn_call_site),
                     form: if bind.is_empty() { CallForm::Discard } else { CallForm::Bind(bind) },
@@ -7585,7 +7594,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut EmitConte
         let local = label.field;
         gen_shared_rule_call(w, &local, &`_parse_${rc.target_snake}`, &args, ctx);
     } else {
-        w.line(`${leaf_binding(ctx, &local_var, &local_var, false)}_parse_${rc.target_snake}(${args});`);
+        w.line(`${let_binding(ctx, &local_var, &local_var)}_parse_${rc.target_snake}(${args});`);
     }
     close_call_capture(w, &span_field);
 }
@@ -7885,7 +7894,13 @@ fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decisi
 /// (`atn_decision_gates`). Only a verdict no predicate decided is kept for the
 /// parse. Without predicates the pick goes through the decision's lookahead
 /// DFA first (`atn_sll.wado`).
-fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx: &mut EmitContext) -> String
+fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx: &mut EmitContext) -> String {
+    let gates = atn_decision_gates(met, ctx, side matches { Scan });
+    return atn_gated_predict_call(atn_dec, &gates, side, ctx);
+}
+
+/// `atn_predict_call` over the verdicts `atn_decision_gates` rendered.
+fn atn_gated_predict_call(atn_dec: i32, gates: &List<[i32, String]>, side: PickSide, ctx: &mut EmitContext) -> String
     contract ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator"
 {
     let [tokens, pos] = match side {
@@ -7893,7 +7908,6 @@ fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx:
         Scan => ["tokens", "pos"],
     };
     let prec = atn_prec_arg(ctx);
-    let gates = atn_decision_gates(met, ctx, side matches { Scan });
     if gates.is_empty() {
         let decide = sll_decide_fn_name(atn_dec);
         ctx.cursor.note_ref(&decide);
@@ -8593,10 +8607,11 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 let rule = ctx.cursor.current_rule_index();
                 let met = *ctx.decisions.at_rule(rule);
                 let dec = ctx.plan.atn_rule_body_decision(rule);
-                w.line(`let _atn_alt = ${atn_predict_call(dec, &met, side, ctx)};`);
-                // A predicate can exclude every alt (`_atn_alt == -1`), which
+                let gates = atn_decision_gates(&met, ctx, side matches { Scan });
+                w.line(`let _atn_alt = ${atn_gated_predict_call(dec, &gates, side, ctx)};`);
+                // A verdict can exclude every alt (`_atn_alt == -1`), which
                 // the index dispatch would otherwise route to its last alt.
-                if !met.is_empty() {
+                if !gates.is_empty() {
                     w.begin("if _atn_alt < 0");
                     emit_no_viable_pick(w, side, ctx);
                     w.end();

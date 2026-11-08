@@ -4860,10 +4860,14 @@ A : 'a' ; B : 'b' ; C : 'c' ;
 test "an action reads a label bound anywhere in its alternative" {
     let g4 = "grammar T;
 s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF
-  | 'G' r7 EOF | 'H' r8 EOF | 'I' r9 EOF | 'J' r10 EOF | 'K' r11 EOF | 'L' r12 EOF | 'M' r13 EOF ;
+  | 'G' r7 EOF | 'H' r8 EOF | 'I' r9 EOF | 'J' r10 EOF | 'K' r11 EOF | 'L' r12 EOF | 'M' r13 EOF
+  | 'N' r14 EOF | 'O' r15 EOF | 'P' r16 EOF ;
 r1 : x='-'? {$x == null}? 'a' | '-' 'a' 'b' ;
 r12 : x='-'? {$x == null}? 'a' | '-' 'a' ;
 r13 : ( x='-'? {$x == null}? 'a' | '-' 'a' ) {System.out.println(\"r13 \" + $x.text);} ;
+r14 : {$x != null}? x='-' 'a' | '-' 'a' 'b' | '-' ;
+r15 : ('a' 'b' 'c' 'd' 'e' 'f')? z=w {!\"z\".equals($z.text)}? 'a' 'b' 'c' 'd' 'e' 'g' ;
+r16 : (y=q)? 'a' {System.out.println(\"r16 \" + $y.ctx);} ;
 r2 : (x='-')? 'a' {System.out.println(\"r2 \" + $x.text + \" \" + $x.line + \" \" + $x.index + \" \" + ($x != null));} ;
 r3 : X ( X Y {System.out.println(\"r3 \" + $X.text);} ) ;
 r4 : (y=q)? 'a' {System.out.println(\"r4 \" + $y.text);} ;
@@ -4875,13 +4879,15 @@ r9 : (x=X {System.out.println(\"r9 \" + $x.text);} | Y {System.out.println(\"r9 
 r10 : (y=q)+ {System.out.println(\"r10 \" + $y.text + \" \" + $y.v);} ;
 r11 : y=q y=q {System.out.println(\"r11 \" + $y.text + \" \" + $y.v);} ;
 q returns [int v] : X {$v = $X.int;} ;
+w : ;
 X : [0-9]+ ;
 Y : 'y' ;
 WS : ' ' -> skip ;
 ";
     let inputs: List<String> = [
         "A a", "A - a", "A - a b", "B a", "B - a", "C 1 2 y", "D a", "D 7 a", "E - a", "E + a", "F a", "F - - a",
-        "G 1 2", "H 1", "I 1", "I y", "J 1 2 3", "K 1 2", "L a", "L - a", "M a", "M - a",
+        "G 1 2", "H 1", "I 1", "I y", "J 1 2 3", "K 1 2", "L a", "L - a", "M a", "M - a", "N - a", "N - a b", "N -",
+        "O a b c d e f a b c d e g", "O a b c d e g", "P a",
     ];
     for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
         assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A (r1 a))
@@ -4906,6 +4912,12 @@ L a => (s L (r12 a))
 L - a => error
 M a => (s M (r13 a)) [r13 null\n]
 M - a => error
+N - a => error
+N - a b => (s N (r14 - a b))
+N - => (s N (r14 -))
+O a b c d e f a b c d e g => (s O (r15 a b c d e f w a b c d e g))
+O a b c d e g => (s O (r15 w a b c d e g))
+P a => (s P (r16 a)) [r16 null\n]
 ";
     }
 }

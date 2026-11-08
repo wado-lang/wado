@@ -216,7 +216,9 @@ fn walk_element_decisions(
             element_predicates_met(&rep.element, site, analysis, &mut [], &mut met);
             extend_met(&mut met, cont);
             out.record(rep.atn_decision, met);
-            walk_element_decisions(&rep.element, site, cont, analysis, out);
+            // Past an iteration, a loop re-enters its body or leaves.
+            let body_cont = if rep.kind matches { Optional } { cont } else { &met };
+            walk_element_decisions(&rep.element, site, body_cont, analysis, out);
         },
         RuleRef(_) | TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
@@ -489,14 +491,17 @@ fn alt_scan_gate_conjunction(
 }
 
 /// `gate_condition_for` rendered against the scan's copy of the members, or
-/// `null` where it reads anything else.
+/// `null` where it reads anything else. A scan holds no label, so a label read
+/// leaves it unanswered whatever `site` binds: the lowering and the emit ask
+/// from sites binding different labels, and must agree.
 pub fn scan_gate_condition_for(
     a: &AltAction,
     settings: &GenSettings,
     analysis: &GrammarAnalysis,
     site: &PredicateSite,
 ) -> Option<String> {
-    let Some(rendered) = predicate_condition_for(a, settings, analysis, site, &SCAN_GATE_HANDLE) else {
+    let unlabelled = PredicateSite { rule_index: site.rule_index, vals_in_scope: site.vals_in_scope };
+    let Some(rendered) = predicate_condition_for(a, settings, analysis, &unlabelled, &SCAN_GATE_HANDLE) else {
         return null;
     };
     let code = scan_gate_condition(&rendered, &settings.scan_gate_fields);

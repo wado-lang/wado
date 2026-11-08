@@ -690,19 +690,23 @@ fn rule_member_expr<S: AsStrSlice>(
 ) -> Result<String, String> {
     let b = binding_for(bindings, false, &binding_name(&r.name));
     let capture = rule_capture(&b);
-    // `.text` is the invocation's own span, not a value-channel field.
-    if let Some(m) = &r.member && *m == "text" {
-        let text = `${handle}.text_between(${rule_span_lo_ref(&capture)}, ${rule_span_hi_ref(&capture)})`;
+    // `.text` is the invocation's own span and `.ctx` its tree, not
+    // value-channel fields. Only `toStringTree` is modelled on ANTLR's context
+    // object, so `.ctx` resolves straight to the rendering (java2wado drops the
+    // call above it).
+    let captured = match &r.member {
+        Some(m) && *m == "text" => Option::Some(
+            `${handle}.text_between(${rule_span_lo_ref(&capture)}, ${rule_span_hi_ref(&capture)})`,
+        ),
+        Some(m) && *m == "ctx" => Option::Some(`${handle}.rule_tree_at(${rule_node_ref(&capture)})`),
+        _ => null,
+    };
+    if let Some(read) = captured {
         return Result::Ok(match b.reach {
-            Bound => text,
-            Shared => `(if ${b.field} matches { None } { "null" } else { ${text} })`,
+            Bound => read,
+            Shared => `(if ${b.field} matches { None } { "null" } else { ${read} })`,
             Unmatched => "\"null\"",
         });
-    }
-    // Only `toStringTree` is modelled on ANTLR's context object, so `.ctx`
-    // resolves straight to the rendering (java2wado drops the call above it).
-    if let Some(m) = &r.member && *m == "ctx" {
-        return Result::Ok(`${handle}.rule_tree_at(${rule_node_ref(&capture)})`);
     }
     let binding = rule_value(&b);
     let target = match rules.iter_ref().find(|c| c.name == r.rule_name) {
