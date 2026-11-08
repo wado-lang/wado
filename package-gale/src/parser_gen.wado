@@ -2779,7 +2779,7 @@ fn gen_scan_op_elements<S: AsStrSlice>(
     let mut k = *known;
     let mut proven_run = 0;
     for let mut i = start; i <= end; i += 1 {
-        gen_scan_gates_before(w, ctx, gates, i, start, end, &fail_stmt, &proven_run);
+        gen_scan_gates_before(w, ctx, gates, i, start, end, &fail_stmt, proven_run);
         if i == end {
             break;
         }
@@ -2900,7 +2900,7 @@ fn gen_scan_gates_before<S: AsStrSlice>(
     start: i32,
     end: i32,
     fail_stmt: S,
-    proven_run: &i32,
+    proven_run: i32,
 ) {
     let lo = if at == start { i32::MIN } else { at };
     let hi = if at == end { i32::MAX } else { at + 1 };
@@ -2911,7 +2911,7 @@ fn gen_scan_gates_before<S: AsStrSlice>(
         match g.step {
             Assign([field, value]) => w.line(`${ctx.scan_gate_member(&field)} = ${value};`),
             Check(cond) => {
-                assert *proven_run == 0, "a check compares `pos` with the edge, so no proven token waits behind it";
+                assert proven_run == 0, "a check compares `pos` with the edge, so no proven token waits behind it";
                 w.line(`if ${negate_cond(ctx.scan_gate_cond(&cond))} { ${fail_stmt} }`);
             },
         }
@@ -5789,12 +5789,8 @@ fn gen_consume_token_group_op(
     let base = token_group_field_name(alts);
     let _ = dedup_name(&base, name_counts);
     let kinds = ctx.analysis.single_token_kinds(alts);
-    // A label on the set is its field, which is what the alternative shares.
-    let bind = if ctx.settings.emit_actions && let Some(label) = ctx.cursor.shared_label(true, &to.field) {
-        `${label.field} = `;
-    } else {
-        leaf_binding(ctx, &base, &to.field);
-    };
+    // A label on the set names its field, so the field is what a `$` reads.
+    let bind = leaf_binding(ctx, &to.field, &to.field);
     if proves(proven, &kinds) {
         w.line(`${bind}p.take();`);
         return;
