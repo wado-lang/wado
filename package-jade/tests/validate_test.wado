@@ -181,6 +181,7 @@ test "a reference reaches a schema another document identifies by its `$id`" {
         uri("https://x.test/defs.json"),
         Schema::parse(#"{"$defs": {"int": {"$id": "https://y.test/int", "type": "integer"}}}"#).unwrap(),
     );
+    set.insert(uri("https://x.test/broken.json"), Schema::parse(#"{"$ref": "nobody.json"}"#).unwrap());
     let validator = Validator::compile_in(&set, &uri("https://x.test/root.json")).unwrap();
     assert validator.validate(&Document::parse("1").unwrap().root()) matches { Ok(_) };
     assert validator.validate(&Document::parse(#""x""#).unwrap().root()) matches { Err(_) };

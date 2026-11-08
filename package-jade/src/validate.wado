@@ -74,6 +74,9 @@ impl SchemaSet {
     pub fn missing(&self) -> Result<Option<Uri>, SchemaError> {
         let mut c = Compiler::of(self);
         c.load_all()?;
+        for let d of 0..<c.added.len() {
+            c.reach(d);
+        }
         return match c.link() {
             Ok(_) => Result::Ok(null),
             Err(Unresolved(u)) => Result::Ok(Option::Some(u.target.without_fragment())),
@@ -174,9 +177,11 @@ impl Validator {
     {
         let mut c = Compiler::of(set);
         c.load(uri)?;
+        let root = c.documents.get_str(&`${*uri}`).unwrap();
+        c.reach(c.node_document[root]);
         let dynamic_anchors = c.link()?;
         return Result::Ok(Validator {
-            root: c.documents.get_str(&`${*uri}`).unwrap(),
+            root,
             nodes: c.nodes,
             resources: c.resources,
             dynamic_anchors,
@@ -746,6 +751,19 @@ struct Compiler {
     /// The supplied documents not added yet, which a reference adds once it
     /// needs them.
     unloaded: SchemaSet = SchemaSet::new(),
+    /// The documents added, in order.
+    added: List<AddedDocument> = [],
+    /// The index into `added` of the document each subschema belongs to.
+    node_document: List<i32> = [],
+    /// The added documents the compiled one reaches, in the order reached.
+    /// `link` resolves only their references.
+    reached: List<i32> = [],
+}
+
+struct AddedDocument {
+    /// Its references, as indices into `Compiler.refs`.
+    refs: List<i32> = [],
+    reached: bool = false,
 }
 
 /// A reference, resolved against its base, to look up once every target is
@@ -754,6 +772,8 @@ struct PendingRef {
     node: i32,
     uri: Uri,
     dynamic: bool,
+    /// The subschema it names, and its fragment, once linked.
+    found: Option<[i32, String]> = null,
 }
 
 impl Compiler {
@@ -796,7 +816,16 @@ impl Compiler {
         return Result::Ok(false);
     }
 
+    /// Marks added document `d` as one the compiled schema reaches.
+    fn reach(&mut self, d: i32) {
+        if !self.added[d].reached {
+            self.added[d].reached = true;
+            self.reached.push(d);
+        }
+    }
+
     fn add_document(&mut self, uri: &Uri, schema: &Schema) -> Result<(), SchemaError> {
+        self.added.push(AddedDocument {});
         self.source = if `${*uri}` == DEFAULT_BASE { null } else { Option::Some(*uri) };
         // The URI a document was retrieved from names it, whatever its `$id`
         // says, so it is a resource of its own around the root.
@@ -830,6 +859,8 @@ impl Compiler {
         }
         let mut node = Compiled { source: self.source, at, owner: r };
         self.nodes.push(node);
+        let document = self.added.len() - 1;
+        self.node_document.push(document);
         let o = match schema {
             Bool(b) => {
                 node.always = Option::Some(*b);
@@ -847,6 +878,7 @@ impl Compiler {
             self.resources[r].dynamic_anchors[*a] = i;
         }
         if let Some(reference) = &o.reference {
+            self.added[document].refs.push(self.refs.len());
             self.refs.push(PendingRef {
                 node: i,
                 uri: uri.resolve(&parse_uri(reference, `${at}/$ref`)?),
@@ -854,6 +886,7 @@ impl Compiler {
             });
         }
         if let Some(reference) = &o.dynamic_ref {
+            self.added[document].refs.push(self.refs.len());
             self.refs.push(PendingRef {
                 node: i,
                 uri: uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?),
@@ -959,11 +992,14 @@ impl Compiler {
     /// one keyword leads to. Returns the anchors a `$dynamicRef` may resolve
     /// through the dynamic scope.
     fn link(&mut self) -> Result<List<String>, CompileError> {
-        // Resolving a reference may add a document, and its references.
-        let mut resolved: List<[i32, String]> = [];
-        for let mut k = 0; k < self.refs.len(); k += 1 {
-            let r = self.refs[k];
-            resolved.push(self.resolve(&r)?);
+        // Resolving a reference may add a document, and reach it.
+        for let mut q = 0; q < self.reached.len(); q += 1 {
+            for let k of self.added[self.reached[q]].refs {
+                let r = self.refs[k];
+                let found = self.resolve(&r)?;
+                self.reach(self.node_document[found.0]);
+                self.refs[k].found = Option::Some(found);
+            }
         }
         // A document's root and every subschema outside `$defs` are led to by
         // the keyword holding them.
@@ -972,9 +1008,10 @@ impl Compiler {
             leads[*d] = 0;
         }
         let mut anchors: List<String> = [];
-        for let k of 0..<self.refs.len() {
-            let r = self.refs[k];
-            let [target, fragment] = resolved[k];
+        for let r of self.refs {
+            let Some([target, fragment]) = r.found else {
+                continue;
+            };
             leads[target] += 1;
             if !r.dynamic {
                 self.nodes[r.node].reference = Option::Some(target);
