@@ -1438,14 +1438,25 @@ fn sync_to_targets(
     ctx: &WalkCtx,
     span: Span,
 ) -> Vec<StmtId> {
-    let mut out = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, states[i], targets[i], c, span) {
-            out.push(stmt);
-        }
-        states[i] = targets[i];
-    }
+    let out = convergence_stmts(body, states, targets, ctx, span);
+    states.copy_from_slice(targets);
     out
+}
+
+/// The sync stmts that bring every candidate from `from` to `to`, in candidate
+/// order.
+fn convergence_stmts(
+    body: &mut Body,
+    from: &[CanonState],
+    to: &[CanonState],
+    ctx: &WalkCtx,
+    span: Span,
+) -> Vec<StmtId> {
+    ctx.candidates
+        .iter()
+        .enumerate()
+        .filter_map(|(i, c)| state_transition_stmt(body, from[i], to[i], c, span))
+        .collect()
 }
 
 /// The sync a `from → to` transition requires, if any.
@@ -1561,12 +1572,7 @@ fn insert_convergence_at_block_end(
     span: Span,
 ) {
     debug_assert_eq!(from.len(), to.len());
-    let mut sync_stmts: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, from[i], to[i], c, span) {
-            sync_stmts.push(stmt);
-        }
-    }
+    let sync_stmts = convergence_stmts(body, from, to, ctx, span);
     if sync_stmts.is_empty() {
         return;
     }
@@ -1754,12 +1760,7 @@ fn build_convergence_block(
     ctx: &WalkCtx,
     span: Span,
 ) -> BlockId {
-    let mut stmts: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, from[i], to[i], c, span) {
-            stmts.push(stmt);
-        }
-    }
+    let stmts = convergence_stmts(body, from, to, ctx, span);
     body.blocks.push(BlockNode { stmts, span })
 }
 
@@ -2138,17 +2139,8 @@ fn walk_nested_loop(
     let body_exit_pre_sync = body_exit_states.clone();
     // Restore back-edge invariant: drive body_exit back to entry so
     // iter 2+ starts at the same state the walker analyzed.
-    for i in 0..ctx.candidates.len() {
-        if let Some(stmt) = state_transition_stmt(
-            body,
-            body_exit_states[i],
-            entry_states[i],
-            &ctx.candidates[i],
-            span,
-        ) {
-            body.blocks[block].stmts.push(stmt);
-        }
-    }
+    let back_edge_sync = convergence_stmts(body, &body_exit_states, &entry_states, ctx, span);
+    body.blocks[block].stmts.extend(back_edge_sync);
     // Post-loop state: JOIN over every exit — the zero-iteration path (which
     // leaves at `entry`), the fall-through, and each recorded `break`. A
     // `ScalarOnly` join is demoted to `FieldOnly` unless every exit already
@@ -2652,9 +2644,12 @@ fn walk_other_expr_kinds(
                     .map(|(&l, &r)| join_free_for_first(l, r))
                     .collect();
                 if states_differ(&rhs_exit, &target) {
-                    emit_convergence_at_expr_end_operand(
-                        body, right, &rhs_exit, &target, ctx, span,
-                    );
+                    let synced =
+                        emit_convergence_at_operand_end(body, right, &rhs_exit, &target, ctx, span);
+                    let ExprKind::Binary { right: slot, .. } = &mut body.exprs[e].kind else {
+                        unreachable!("walking a binary expression");
+                    };
+                    *slot = synced;
                     ctx.interior_effects = true;
                 }
                 *states = target;
@@ -2746,7 +2741,7 @@ fn walk_other_expr_kinds(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             walk_operand(body, scrutinee, states, true, out, ctx);
-            walk_expr_branches_match(body, &arms, states, result_used, ctx, span);
+            walk_expr_branches_match(body, e, &arms, states, result_used, ctx, span);
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
@@ -2816,12 +2811,7 @@ fn insert_convergence_before_break(
     ctx: &mut WalkCtx,
     span: Span,
 ) {
-    let mut sync: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, record.states[i], target[i], c, span) {
-            sync.push(stmt);
-        }
-    }
+    let sync = convergence_stmts(body, &record.states, target, ctx, span);
     if sync.is_empty() {
         return;
     }
@@ -2886,6 +2876,7 @@ fn walk_expr_branches_switch(
 /// pattern-mismatch path has no sync slot, so that join must be sync-free.
 fn walk_expr_branches_match(
     body: &mut Body,
+    match_expr: ExprId,
     arms: &[ArmData],
     states: &mut ScalarStates,
     result_used: bool,
@@ -2895,7 +2886,13 @@ fn walk_expr_branches_match(
     let entry = states.clone();
     let mut accumulated_pre = entry;
     let mut arm_states: Vec<ScalarStates> = Vec::with_capacity(arms.len());
-    for arm in arms {
+    fn arm_slot(body: &mut Body, match_expr: ExprId, k: usize) -> &mut ArmData {
+        let ExprKind::Match { arms, .. } = &mut body.exprs[match_expr].kind else {
+            unreachable!("walking a match");
+        };
+        &mut arms[k]
+    }
+    for (k, arm) in arms.iter().enumerate() {
         let mut s = accumulated_pre.clone();
         // Guard (if any). Pre-stmts emitted by walking the guard must
         // run BEFORE the guard's expression evaluates; wrap the guard
@@ -2915,7 +2912,8 @@ fn walk_expr_branches_match(
                 .map(|(&pre, &after)| join_free_for_first(pre, after))
                 .collect();
             if states_differ(&s, &joined) {
-                emit_convergence_at_expr_end_operand(body, guard, &s, &joined, ctx, span);
+                let synced = emit_convergence_at_operand_end(body, guard, &s, &joined, ctx, span);
+                arm_slot(body, match_expr, k).guard = Some(synced);
                 ctx.interior_effects = true;
             }
             s.clone_from(&joined);
@@ -2936,17 +2934,18 @@ fn walk_expr_branches_match(
     }
     let arm_refs: Vec<&ScalarStates> = arm_states.iter().collect();
     let target = pick_join_targets(&arm_refs);
-    for (arm, exit) in arms.iter().zip(arm_states.iter()) {
-        // Emit convergence sync at the end of the arm body.
-        emit_convergence_at_expr_end_operand(body, arm.body, exit, &target, ctx, span);
+    for (k, (arm, exit)) in arms.iter().zip(arm_states.iter()).enumerate() {
+        let synced = emit_convergence_at_operand_end(body, arm.body, exit, &target, ctx, span);
+        arm_slot(body, match_expr, k).body = synced;
     }
     *states = target;
 }
 
 fn wrap_expr_with_prefix_operand(body: &mut Body, op: Operand, prefix: Vec<StmtId>) {
-    if let Some(e) = op.as_expr() {
-        wrap_expr_with_prefix(body, e, prefix);
-    }
+    let e = op
+        .as_expr()
+        .expect("only walking an expression emits a prefix");
+    wrap_expr_with_prefix(body, e, prefix);
 }
 
 /// Prepend prefix stmts into an expression's evaluation by wrapping the
@@ -2971,42 +2970,54 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     body.exprs[e].kind = ExprKind::plain_block(blk, expr_type, "prefix");
 }
 
-fn emit_convergence_at_expr_end_operand(
+/// [`emit_convergence_at_expr_end`] for an operand slot, answering what the
+/// slot holds afterwards. A pooled value has no node to wrap, so where it needs
+/// sync it moves into a block of its own, which the caller stores back: an arm
+/// left unsynced would still be counted as reaching the join target.
+#[must_use]
+fn emit_convergence_at_operand_end(
     body: &mut Body,
     op: Operand,
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
     span: Span,
-) {
-    if let Some(e) = op.as_expr() {
-        emit_convergence_at_expr_end(body, e, from, to, ctx, span);
+) -> Operand {
+    let sync_stmts = convergence_stmts(body, from, to, ctx, span);
+    if sync_stmts.is_empty() {
+        return op;
     }
+    let e = match op {
+        Operand::Expr(e) => e,
+        Operand::Value(v) => {
+            let ty = body
+                .values
+                .type_of(v)
+                .expect("a pooled operand records its type");
+            let stmt = push_stmt(body, StmtKind::Expr(op), span);
+            let blk = body.blocks.push(BlockNode {
+                stmts: vec![stmt],
+                span,
+            });
+            push_expr(body, ExprKind::plain_block(blk, ty, "sync"), ty, span)
+        }
+    };
+    emit_convergence_at_expr_end(body, e, sync_stmts, ctx);
+    Operand::Expr(e)
 }
 
-/// Insert convergence sync at the end of an expression's evaluation (a
-/// match arm body, a match guard, or an `&&`/`||` RHS). If the expression is
-/// already a block no `break` leaves early, append the sync stmts directly.
-/// Otherwise wrap it in a block `{ expr_as_stmt; sync }` (when unit-typed) or
+/// Run `sync_stmts` at the end of an expression's evaluation (a match arm
+/// body, a match guard, or an `&&`/`||` RHS). If the expression is already a
+/// block no `break` leaves early, append them directly. Otherwise wrap it in a
+/// block `{ expr_as_stmt; sync }` (when unit-typed) or
 /// `{ let tmp = expr; sync; tmp }` (when non-unit, so the temp preserves the
 /// value across the trailing sync). The temp uses the per-type pool.
 fn emit_convergence_at_expr_end(
     body: &mut Body,
     arm_e: ExprId,
-    from: &ScalarStates,
-    to: &ScalarStates,
+    sync_stmts: Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: Span,
 ) {
-    let mut sync_stmts: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, from[i], to[i], c, span) {
-            sync_stmts.push(stmt);
-        }
-    }
-    if sync_stmts.is_empty() {
-        return;
-    }
     // Existing block bodies: append sync to the block, preserving the
     // block's trailing value if it has one (a non-unit Expr stmt). A `break`
     // to the label would jump over what we append, so that block is wrapped

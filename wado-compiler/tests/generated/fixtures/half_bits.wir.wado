@@ -68,7 +68,7 @@ type "functype//half_bits.wado/$template_segment$half_bits.wado/$tmpl$f5d91125f7
 
 type "functype//half_bits.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//half_bits.wado/run$cold1" = fn(u16);  // TypeId(20)
+type "functype//half_bits.wado/run$cold0" = fn(u16);  // TypeId(20)
 
 type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(21)
 
@@ -166,7 +166,7 @@ fn "half_bits.wado/run"() with Stdout {
     weights.used = 3;
     if @unlikely(local.tee self_52(builtin::array_get_value<u16>($load_1, 2)) != 49152) {
         cold_path;
-        "half_bits.wado/run$cold1"(self_52);
+        "half_bits.wado/run$cold0"(self_52);
         unreachable;
     }
     self_52 = builtin::array_get_value<u16>($load_1, 1);
@@ -303,7 +303,7 @@ fn "half_bits.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "half_bits.wado/run$cold1"($v0) with Stdout {
+fn "half_bits.wado/run$cold0"($v0) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
     "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<half_bits.wado/$tmpl$f5d91125f718483c,[u16]>"(struct.new "half_bits.wado//$tmpl$f5d91125f718483c" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at half_bits.wado:19
 condition: weights[2].to_bits() == 0xC000

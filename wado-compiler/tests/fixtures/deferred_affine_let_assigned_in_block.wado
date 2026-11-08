@@ -1,0 +1,34 @@
+// A local declared without a value holds nothing until it is first assigned,
+// so the first assignment of an affine one drops no earlier value. Folded at
+// compile time, the declaration once read as a value that was not moved.
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+fn count(items: List<Token>) -> i32 {
+    return items.len();
+}
+
+export fn run() with Stdout {
+    let items: List<Token>;
+    let n = count(l: {
+        items = [Token { id: 7 }];
+        break l: items;
+    });
+    println(`${n} ${DROPS}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1\n"
+}

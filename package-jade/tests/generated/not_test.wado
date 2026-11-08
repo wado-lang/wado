@@ -9,6 +9,7 @@ test "not: allowed" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":"integer"}}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "not: disallowed" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":"integer"}}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "not multiple types: valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":["integer","boolean"]}}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "not multiple types: mismatch" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":["integer","boolean"]}}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "not multiple types: other mismatch" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":["integer","boolean"]}}"#,
         #"true"#,
         false,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "not more complex schema: match" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":"object","properties":{"foo":{"type":"string"}}}}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "not more complex schema: other match" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":"object","properties":{"foo":{"type":"string"}}}}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "not more complex schema: mismatch" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"type":"object","properties":{"foo":{"type":"string"}}}}"#,
         #"{"foo":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "forbidden property: property present" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"not":{}}}}"#,
         #"{"foo":1,"bar":2}"#,
         false,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "forbidden property: property absent" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{"not":{}}}}"#,
         #"{"bar":1,"baz":2}"#,
         true,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "forbid everything with empty schema: number is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "forbid everything with empty schema: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "forbid everything with empty schema: boolean true is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"true"#,
         false,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "forbid everything with empty schema: boolean false is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"false"#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "forbid everything with empty schema: null is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"null"#,
         false,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "forbid everything with empty schema: object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"{"foo":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "forbid everything with empty schema: empty object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "forbid everything with empty schema: array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"["foo"]"#,
         false,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "forbid everything with empty schema: empty array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{}}"#,
         #"[]"#,
         false,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "forbid everything with boolean schema true: number is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "forbid everything with boolean schema true: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "forbid everything with boolean schema true: boolean true is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"true"#,
         false,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "forbid everything with boolean schema true: boolean false is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"false"#,
         false,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "forbid everything with boolean schema true: null is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"null"#,
         false,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "forbid everything with boolean schema true: object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"{"foo":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "forbid everything with boolean schema true: empty object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "forbid everything with boolean schema true: array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"["foo"]"#,
         false,
+        [],
     );
 }
 
@@ -225,6 +252,7 @@ test "forbid everything with boolean schema true: empty array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":true}"#,
         #"[]"#,
         false,
+        [],
     );
 }
 
@@ -233,6 +261,7 @@ test "allow everything with boolean schema false: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -241,6 +270,7 @@ test "allow everything with boolean schema false: string is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -249,6 +279,7 @@ test "allow everything with boolean schema false: boolean true is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"true"#,
         true,
+        [],
     );
 }
 
@@ -257,6 +288,7 @@ test "allow everything with boolean schema false: boolean false is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"false"#,
         true,
+        [],
     );
 }
 
@@ -265,6 +297,7 @@ test "allow everything with boolean schema false: null is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -273,6 +306,7 @@ test "allow everything with boolean schema false: object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"{"foo":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -281,6 +315,7 @@ test "allow everything with boolean schema false: empty object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -289,6 +324,7 @@ test "allow everything with boolean schema false: array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"["foo"]"#,
         true,
+        [],
     );
 }
 
@@ -297,6 +333,7 @@ test "allow everything with boolean schema false: empty array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":false}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -305,6 +342,7 @@ test "double negation: any value is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"not":{}}}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -313,6 +351,7 @@ test "collect annotations inside a 'not', even if collection is disabled: uneval
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"$comment":"this subschema must still produce annotations internally, even though the 'not' will ultimately discard them","anyOf":[true,{"properties":{"foo":true}}],"unevaluatedProperties":false}}"#,
         #"{"bar":1}"#,
         true,
+        [],
     );
 }
 
@@ -321,5 +360,6 @@ test "collect annotations inside a 'not', even if collection is disabled: annota
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","not":{"$comment":"this subschema must still produce annotations internally, even though the 'not' will ultimately discard them","anyOf":[true,{"properties":{"foo":true}}],"unevaluatedProperties":false}}"#,
         #"{"foo":1}"#,
         false,
+        [],
     );
 }

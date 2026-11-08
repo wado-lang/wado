@@ -229,7 +229,7 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_245: i32;
+    let start_242: i32;
     if @unlikely(((builtin::array_get_value<u8>(global:contract_checks_default_off.wado::$const_obj_0.repr, 3) & 192) != 128) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"(1, global:contract_checks_default_off.wado::$const_obj_0, 3, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("contract_checks_default_off.wado:8"), used: 34 });
@@ -308,22 +308,22 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_88, is_negative_151);
         }
-        start_245 = out_88.used;
+        start_242 = out_88.used;
         out_88.used = is_negative_151;
-        builtin::array_set_u8(out_88.repr, start_245, 45);
+        builtin::array_set_u8(out_88.repr, start_242, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_151(out_88.used + end_62) > builtin::array_len(out_88.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_88, is_negative_151);
     }
-    start_245 = out_88.used;
+    start_242 = out_88.used;
     out_88.used = is_negative_151;
     arr = out_88.repr;
-    end_62 = start_245 + end_62;
+    end_62 = start_242 + end_62;
     b23: block {
         l24: loop {
-            break_if b23 (end_62 - start_245) < 2;
+            break_if b23 (end_62 - start_242) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_151(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, end_62 - 1, (48 + is_negative_151) - (tens * 10));
@@ -333,8 +333,8 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if end_62 > start_245 {
-        builtin::array_set_u8(arr, start_245, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if end_62 > start_242 {
+        builtin::array_set_u8(arr, start_242, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_59: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_59;
@@ -644,12 +644,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v1, self, end, start, $site) {
+    let $v2: i32;
     let $v2_seen: bool;
+    let $v3: bool;
     let $v3_seen: bool;
     let $v2_text: ref "core:prelude/string.wado//String";
     let $v3_text: ref "core:prelude/string.wado//String";
-    let $v3: bool;
-    let $v2: i32;
     $v2_seen = 0;
     $v3_seen = 0;
     drop((if $v1 -> i32 {

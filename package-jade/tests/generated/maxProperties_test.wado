@@ -9,6 +9,7 @@ test "maxProperties validation: shorter is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "maxProperties validation: exact length is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #"{"foo":1,"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "maxProperties validation: too long is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #"{"foo":1,"bar":2,"baz":3}"#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "maxProperties validation: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #"[1,2,3]"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "maxProperties validation: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #""foobar""#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "maxProperties validation: ignores other non-objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #"12"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "maxProperties validation with a decimal: shorter is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #"{"foo":1}"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "maxProperties validation with a decimal: too long is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":2}"#,
         #"{"foo":1,"bar":2,"baz":3}"#,
         false,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "maxProperties = 0 means the object is empty: no properties is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":0}"#,
         #"{}"#,
         true,
+        [],
     );
 }
 
@@ -81,5 +90,6 @@ test "maxProperties = 0 means the object is empty: one property is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxProperties":0}"#,
         #"{"foo":1}"#,
         false,
+        [],
     );
 }

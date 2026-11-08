@@ -731,6 +731,11 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    #[must_use]
+    pub fn type_table(&self) -> &'a TypeTable {
+        self.type_table
+    }
+
     /// What is left of the CTFE work budget: a declined fold and an exhausted
     /// budget look alike from outside.
     #[must_use]
@@ -816,13 +821,20 @@ impl<'a> Interpreter<'a> {
         self.record_aggregate_locals(body);
         for stmt in lets {
             let StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                type_id,
+                ..
             } = &body.stmts[*stmt].kind
             else {
                 return;
             };
             let (local_index, value) = (*local_index, *value);
-            let lattice = self.operand_to_lattice(body, value);
+            let lattice = if body.declares_without_value(self.type_table, *type_id, value) {
+                Lattice::Unevaluated
+            } else {
+                self.operand_to_lattice(body, value)
+            };
             self.bind_local(local_index, lattice);
         }
     }

@@ -71,7 +71,7 @@ type "functype//list_from_le_bytes_nan.wado/$cm_export__run" = fn();  // TypeId(
 
 type "functype//list_from_le_bytes_nan.wado/run$cold0" = fn(u64);  // TypeId(19)
 
-type "functype//list_from_le_bytes_nan.wado/run$cold2" = fn(u32);  // TypeId(20)
+type "functype//list_from_le_bytes_nan.wado/run$cold1" = fn(u32);  // TypeId(20)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(21)
 
@@ -197,7 +197,7 @@ fn "list_from_le_bytes_nan.wado/$cm_export__run"() {
     let $v0_4: u64;
     if @unlikely(local.tee $v0_1(builtin::i32_reinterpret_f32(builtin::array_get_value<f32>(array.new_fixed<f32>(NaN_f32), 0))) != 2139095041) {
         cold_path;
-        "list_from_le_bytes_nan.wado/run$cold2"($v0_1);
+        "list_from_le_bytes_nan.wado/run$cold1"($v0_1);
         unreachable;
     }
     if @unlikely(local.tee $v0_4(builtin::i64_reinterpret_f64(NaN)) != 9218868437227405313_i64) {
@@ -218,7 +218,7 @@ wide[0].to_bits(): "), used: 127 }, s1: struct.new "core:prelude/string.wado//St
     unreachable;
 }
 
-fn "list_from_le_bytes_nan.wado/run$cold2"($v0) {
+fn "list_from_le_bytes_nan.wado/run$cold1"($v0) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
     "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<list_from_le_bytes_nan.wado/$tmpl$96693f35219525e8,[u32]>"(struct.new "list_from_le_bytes_nan.wado//$tmpl$96693f35219525e8" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at list_from_le_bytes_nan.wado:6
 condition: signalling[0].to_bits() == 0x7F800001

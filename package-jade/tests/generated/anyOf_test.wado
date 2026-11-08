@@ -9,6 +9,7 @@ test "anyOf: first anyOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "anyOf: second anyOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"2.5"#,
         true,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "anyOf: both anyOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"3"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "anyOf: neither anyOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"integer"},{"minimum":2}]}"#,
         #"1.5"#,
         false,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "anyOf with base schema: mismatch base schema" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","anyOf":[{"maxLength":2},{"minLength":4}]}"#,
         #"3"#,
         false,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "anyOf with base schema: one anyOf valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","anyOf":[{"maxLength":2},{"minLength":4}]}"#,
         #""foobar""#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "anyOf with base schema: both anyOf invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","anyOf":[{"maxLength":2},{"minLength":4}]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "anyOf with boolean schemas, all true: any value is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[true,true]}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "anyOf with boolean schemas, some true: any value is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[true,false]}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "anyOf with boolean schemas, all false: any value is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[false,false]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "anyOf complex types: first anyOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "anyOf complex types: second anyOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":"baz"}"#,
         true,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "anyOf complex types: both anyOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":"baz","bar":2}"#,
         true,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "anyOf complex types: neither anyOf valid (complex)" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"properties":{"bar":{"type":"integer"}},"required":["bar"]},{"properties":{"foo":{"type":"string"}},"required":["foo"]}]}"#,
         #"{"foo":2,"bar":"quux"}"#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "anyOf with one empty schema: string is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"number"},{}]}"#,
         #""foo""#,
         true,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "anyOf with one empty schema: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"number"},{}]}"#,
         #"123"#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "nested anyOf, to check validation semantics: null is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"anyOf":[{"type":"null"}]}]}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -145,5 +162,6 @@ test "nested anyOf, to check validation semantics: anything non-null is invalid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"anyOf":[{"type":"null"}]}]}"#,
         #"123"#,
         false,
+        [],
     );
 }

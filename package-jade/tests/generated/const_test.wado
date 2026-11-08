@@ -9,6 +9,7 @@ test "const validation: same value is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":2}"#,
         #"2"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "const validation: another value is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":2}"#,
         #"5"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "const validation: another type is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":2}"#,
         #""a""#,
         false,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "const with object: same object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"foo":"bar","baz":"bax"}}"#,
         #"{"foo":"bar","baz":"bax"}"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "const with object: same object with different property order is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"foo":"bar","baz":"bax"}}"#,
         #"{"baz":"bax","foo":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "const with object: another object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"foo":"bar","baz":"bax"}}"#,
         #"{"foo":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "const with object: another type is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"foo":"bar","baz":"bax"}}"#,
         #"[1,2]"#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "const with array: same array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[{"foo":"bar"}]}"#,
         #"[{"foo":"bar"}]"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "const with array: another array item is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[{"foo":"bar"}]}"#,
         #"[2]"#,
         false,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "const with array: array with additional items is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[{"foo":"bar"}]}"#,
         #"[1,2,3]"#,
         false,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "const with null: null is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":null}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "const with null: not null is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":null}"#,
         #"0"#,
         false,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "const with false does not match 0: false is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":false}"#,
         #"false"#,
         true,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "const with false does not match 0: integer zero is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":false}"#,
         #"0"#,
         false,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "const with false does not match 0: float zero is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":false}"#,
         #"0"#,
         false,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "const with true does not match 1: true is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":true}"#,
         #"true"#,
         true,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "const with true does not match 1: integer one is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":true}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "const with true does not match 1: float one is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":true}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "const with [false] does not match [0]: [false] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[false]}"#,
         #"[false]"#,
         true,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "const with [false] does not match [0]: [0] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[false]}"#,
         #"[0]"#,
         false,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "const with [false] does not match [0]: [0.0] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[false]}"#,
         #"[0]"#,
         false,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "const with [true] does not match [1]: [true] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[true]}"#,
         #"[true]"#,
         true,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "const with [true] does not match [1]: [1] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[true]}"#,
         #"[1]"#,
         false,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "const with [true] does not match [1]: [1.0] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":[true]}"#,
         #"[1]"#,
         false,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "const with {\"a\": false} does not match {\"a\": 0}: {\"a\": false} is val
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"a":false}}"#,
         #"{"a":false}"#,
         true,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "const with {\"a\": false} does not match {\"a\": 0}: {\"a\": 0} is invalid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"a":false}}"#,
         #"{"a":0}"#,
         false,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "const with {\"a\": false} does not match {\"a\": 0}: {\"a\": 0.0} is inval
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"a":false}}"#,
         #"{"a":0}"#,
         false,
+        [],
     );
 }
 
@@ -225,6 +252,7 @@ test "const with {\"a\": true} does not match {\"a\": 1}: {\"a\": true} is valid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"a":true}}"#,
         #"{"a":true}"#,
         true,
+        [],
     );
 }
 
@@ -233,6 +261,7 @@ test "const with {\"a\": true} does not match {\"a\": 1}: {\"a\": 1} is invalid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"a":true}}"#,
         #"{"a":1}"#,
         false,
+        [],
     );
 }
 
@@ -241,6 +270,7 @@ test "const with {\"a\": true} does not match {\"a\": 1}: {\"a\": 1.0} is invali
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":{"a":true}}"#,
         #"{"a":1}"#,
         false,
+        [],
     );
 }
 
@@ -249,6 +279,7 @@ test "const with 0 does not match other zero-like types: false is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":0}"#,
         #"false"#,
         false,
+        [],
     );
 }
 
@@ -257,6 +288,7 @@ test "const with 0 does not match other zero-like types: integer zero is valid" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":0}"#,
         #"0"#,
         true,
+        [],
     );
 }
 
@@ -265,6 +297,7 @@ test "const with 0 does not match other zero-like types: float zero is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":0}"#,
         #"0"#,
         true,
+        [],
     );
 }
 
@@ -273,6 +306,7 @@ test "const with 0 does not match other zero-like types: empty object is invalid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":0}"#,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -281,6 +315,7 @@ test "const with 0 does not match other zero-like types: empty array is invalid"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":0}"#,
         #"[]"#,
         false,
+        [],
     );
 }
 
@@ -289,6 +324,7 @@ test "const with 0 does not match other zero-like types: empty string is invalid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":0}"#,
         #""""#,
         false,
+        [],
     );
 }
 
@@ -297,6 +333,7 @@ test "const with 1 does not match true: true is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":1}"#,
         #"true"#,
         false,
+        [],
     );
 }
 
@@ -305,6 +342,7 @@ test "const with 1 does not match true: integer one is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":1}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -313,6 +351,7 @@ test "const with 1 does not match true: float one is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":1}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -321,6 +360,7 @@ test "const with -2.0 matches integer and float types: integer -2 is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":-2}"#,
         #"-2"#,
         true,
+        [],
     );
 }
 
@@ -329,6 +369,7 @@ test "const with -2.0 matches integer and float types: integer 2 is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":-2}"#,
         #"2"#,
         false,
+        [],
     );
 }
 
@@ -337,6 +378,7 @@ test "const with -2.0 matches integer and float types: float -2.0 is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":-2}"#,
         #"-2"#,
         true,
+        [],
     );
 }
 
@@ -345,6 +387,7 @@ test "const with -2.0 matches integer and float types: float 2.0 is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":-2}"#,
         #"2"#,
         false,
+        [],
     );
 }
 
@@ -353,6 +396,7 @@ test "const with -2.0 matches integer and float types: float -2.00001 is invalid
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":-2}"#,
         #"-2.00001"#,
         false,
+        [],
     );
 }
 
@@ -361,6 +405,7 @@ test "float and integers are equal up to 64-bit representation limits: integer i
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":9007199254740992}"#,
         #"9007199254740992"#,
         true,
+        [],
     );
 }
 
@@ -369,6 +414,7 @@ test "float and integers are equal up to 64-bit representation limits: integer m
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":9007199254740992}"#,
         #"9007199254740991"#,
         false,
+        [],
     );
 }
 
@@ -377,6 +423,7 @@ test "float and integers are equal up to 64-bit representation limits: float is 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":9007199254740992}"#,
         #"9007199254740992"#,
         true,
+        [],
     );
 }
 
@@ -385,6 +432,7 @@ test "float and integers are equal up to 64-bit representation limits: float min
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":9007199254740992}"#,
         #"9007199254740991"#,
         false,
+        [],
     );
 }
 
@@ -393,6 +441,7 @@ test "nul characters in strings: match string with nul" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":"hello\u0000there"}"#,
         #""hello\u0000there""#,
         true,
+        [],
     );
 }
 
@@ -401,6 +450,7 @@ test "nul characters in strings: do not match string lacking nul" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":"hello\u0000there"}"#,
         #""hellothere""#,
         false,
+        [],
     );
 }
 
@@ -409,6 +459,7 @@ test "characters with the same visual representation but different codepoint: ch
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":"μ","$comment":"U+03BC"}"#,
         #""μ""#,
         true,
+        [],
     );
 }
 
@@ -417,6 +468,7 @@ test "characters with the same visual representation but different codepoint: ch
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":"μ","$comment":"U+03BC"}"#,
         #""µ""#,
         false,
+        [],
     );
 }
 
@@ -425,6 +477,7 @@ test "characters with the same visual representation, but different number of co
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":"ä","$comment":"U+00E4"}"#,
         #""ä""#,
         true,
+        [],
     );
 }
 
@@ -433,5 +486,6 @@ test "characters with the same visual representation, but different number of co
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","const":"ä","$comment":"U+00E4"}"#,
         #""ä""#,
         false,
+        [],
     );
 }

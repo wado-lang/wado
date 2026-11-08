@@ -9,6 +9,7 @@ test "simple enum validation: one of the enum is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[1,2,3]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "simple enum validation: something else is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[1,2,3]}"#,
         #"4"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "heterogeneous enum validation: one of the enum is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,"foo",[],true,{"foo":12}]}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "heterogeneous enum validation: something else is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,"foo",[],true,{"foo":12}]}"#,
         #"null"#,
         false,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "heterogeneous enum validation: objects are deep compared" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,"foo",[],true,{"foo":12}]}"#,
         #"{"foo":false}"#,
         false,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "heterogeneous enum validation: valid object matches" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,"foo",[],true,{"foo":12}]}"#,
         #"{"foo":12}"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "heterogeneous enum validation: extra properties in object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,"foo",[],true,{"foo":12}]}"#,
         #"{"foo":12,"boo":42}"#,
         false,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "heterogeneous enum-with-null validation: null is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,null]}"#,
         #"null"#,
         true,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "heterogeneous enum-with-null validation: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,null]}"#,
         #"6"#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "heterogeneous enum-with-null validation: something else is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[6,null]}"#,
         #""test""#,
         false,
+        [],
     );
 }
 
@@ -89,6 +99,7 @@ test "enums in properties: both properties are valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"enum":["foo"]},"bar":{"enum":["bar"]}},"required":["bar"]}"#,
         #"{"foo":"foo","bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -97,6 +108,7 @@ test "enums in properties: wrong foo value" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"enum":["foo"]},"bar":{"enum":["bar"]}},"required":["bar"]}"#,
         #"{"foo":"foot","bar":"bar"}"#,
         false,
+        [],
     );
 }
 
@@ -105,6 +117,7 @@ test "enums in properties: wrong bar value" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"enum":["foo"]},"bar":{"enum":["bar"]}},"required":["bar"]}"#,
         #"{"foo":"foo","bar":"bart"}"#,
         false,
+        [],
     );
 }
 
@@ -113,6 +126,7 @@ test "enums in properties: missing optional property is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"enum":["foo"]},"bar":{"enum":["bar"]}},"required":["bar"]}"#,
         #"{"bar":"bar"}"#,
         true,
+        [],
     );
 }
 
@@ -121,6 +135,7 @@ test "enums in properties: missing required property is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"enum":["foo"]},"bar":{"enum":["bar"]}},"required":["bar"]}"#,
         #"{"foo":"foo"}"#,
         false,
+        [],
     );
 }
 
@@ -129,6 +144,7 @@ test "enums in properties: missing all properties is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"enum":["foo"]},"bar":{"enum":["bar"]}},"required":["bar"]}"#,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -137,6 +153,7 @@ test "enum with escaped characters: member 1 is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":["foo\nbar","foo\rbar"]}"#,
         #""foo\nbar""#,
         true,
+        [],
     );
 }
 
@@ -145,6 +162,7 @@ test "enum with escaped characters: member 2 is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":["foo\nbar","foo\rbar"]}"#,
         #""foo\rbar""#,
         true,
+        [],
     );
 }
 
@@ -153,6 +171,7 @@ test "enum with escaped characters: another string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":["foo\nbar","foo\rbar"]}"#,
         #""abc""#,
         false,
+        [],
     );
 }
 
@@ -161,6 +180,7 @@ test "enum with false does not match 0: false is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[false]}"#,
         #"false"#,
         true,
+        [],
     );
 }
 
@@ -169,6 +189,7 @@ test "enum with false does not match 0: integer zero is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[false]}"#,
         #"0"#,
         false,
+        [],
     );
 }
 
@@ -177,6 +198,7 @@ test "enum with false does not match 0: float zero is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[false]}"#,
         #"0"#,
         false,
+        [],
     );
 }
 
@@ -185,6 +207,7 @@ test "enum with [false] does not match [0]: [false] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[false]]}"#,
         #"[false]"#,
         true,
+        [],
     );
 }
 
@@ -193,6 +216,7 @@ test "enum with [false] does not match [0]: [0] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[false]]}"#,
         #"[0]"#,
         false,
+        [],
     );
 }
 
@@ -201,6 +225,7 @@ test "enum with [false] does not match [0]: [0.0] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[false]]}"#,
         #"[0]"#,
         false,
+        [],
     );
 }
 
@@ -209,6 +234,7 @@ test "enum with true does not match 1: true is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[true]}"#,
         #"true"#,
         true,
+        [],
     );
 }
 
@@ -217,6 +243,7 @@ test "enum with true does not match 1: integer one is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[true]}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -225,6 +252,7 @@ test "enum with true does not match 1: float one is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[true]}"#,
         #"1"#,
         false,
+        [],
     );
 }
 
@@ -233,6 +261,7 @@ test "enum with [true] does not match [1]: [true] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[true]]}"#,
         #"[true]"#,
         true,
+        [],
     );
 }
 
@@ -241,6 +270,7 @@ test "enum with [true] does not match [1]: [1] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[true]]}"#,
         #"[1]"#,
         false,
+        [],
     );
 }
 
@@ -249,6 +279,7 @@ test "enum with [true] does not match [1]: [1.0] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[true]]}"#,
         #"[1]"#,
         false,
+        [],
     );
 }
 
@@ -257,6 +288,7 @@ test "enum with 0 does not match false: false is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[0]}"#,
         #"false"#,
         false,
+        [],
     );
 }
 
@@ -265,6 +297,7 @@ test "enum with 0 does not match false: integer zero is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[0]}"#,
         #"0"#,
         true,
+        [],
     );
 }
 
@@ -273,6 +306,7 @@ test "enum with 0 does not match false: float zero is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[0]}"#,
         #"0"#,
         true,
+        [],
     );
 }
 
@@ -281,6 +315,7 @@ test "enum with [0] does not match [false]: [false] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[0]]}"#,
         #"[false]"#,
         false,
+        [],
     );
 }
 
@@ -289,6 +324,7 @@ test "enum with [0] does not match [false]: [0] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[0]]}"#,
         #"[0]"#,
         true,
+        [],
     );
 }
 
@@ -297,6 +333,7 @@ test "enum with [0] does not match [false]: [0.0] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[0]]}"#,
         #"[0]"#,
         true,
+        [],
     );
 }
 
@@ -305,6 +342,7 @@ test "enum with 1 does not match true: true is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[1]}"#,
         #"true"#,
         false,
+        [],
     );
 }
 
@@ -313,6 +351,7 @@ test "enum with 1 does not match true: integer one is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[1]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -321,6 +360,7 @@ test "enum with 1 does not match true: float one is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[1]}"#,
         #"1"#,
         true,
+        [],
     );
 }
 
@@ -329,6 +369,7 @@ test "enum with [1] does not match [true]: [true] is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[1]]}"#,
         #"[true]"#,
         false,
+        [],
     );
 }
 
@@ -337,6 +378,7 @@ test "enum with [1] does not match [true]: [1] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[1]]}"#,
         #"[1]"#,
         true,
+        [],
     );
 }
 
@@ -345,6 +387,7 @@ test "enum with [1] does not match [true]: [1.0] is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[[1]]}"#,
         #"[1]"#,
         true,
+        [],
     );
 }
 
@@ -353,6 +396,7 @@ test "nul characters in strings: match string with nul" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":["hello\u0000there"]}"#,
         #""hello\u0000there""#,
         true,
+        [],
     );
 }
 
@@ -361,6 +405,7 @@ test "nul characters in strings: do not match string lacking nul" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":["hello\u0000there"]}"#,
         #""hellothere""#,
         false,
+        [],
     );
 }
 
@@ -369,6 +414,7 @@ test "empty enum: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[]}"#,
         #""foo""#,
         false,
+        [],
     );
 }
 
@@ -377,6 +423,7 @@ test "empty enum: number is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[]}"#,
         #"42"#,
         false,
+        [],
     );
 }
 
@@ -385,6 +432,7 @@ test "empty enum: null is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[]}"#,
         #"null"#,
         false,
+        [],
     );
 }
 
@@ -393,6 +441,7 @@ test "empty enum: object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[]}"#,
         #"{}"#,
         false,
+        [],
     );
 }
 
@@ -401,6 +450,7 @@ test "empty enum: array is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[]}"#,
         #"[]"#,
         false,
+        [],
     );
 }
 
@@ -409,6 +459,7 @@ test "empty enum: boolean is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":[]}"#,
         #"false"#,
         false,
+        [],
     );
 }
 
@@ -417,6 +468,7 @@ test "characters with the same visual representation, but different number of co
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":["ä"],"$comment":"U+00E4"}"#,
         #""ä""#,
         true,
+        [],
     );
 }
 
@@ -425,5 +477,6 @@ test "characters with the same visual representation, but different number of co
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","enum":["ä"],"$comment":"U+00E4"}"#,
         #""ä""#,
         false,
+        [],
     );
 }

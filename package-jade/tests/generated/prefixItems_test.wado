@@ -9,6 +9,7 @@ test "a schema given for prefixItems: correct types" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"integer"},{"type":"string"}]}"#,
         #"[1,"foo"]"#,
         true,
+        [],
     );
 }
 
@@ -17,6 +18,7 @@ test "a schema given for prefixItems: wrong types" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"integer"},{"type":"string"}]}"#,
         #"["foo",1]"#,
         false,
+        [],
     );
 }
 
@@ -25,6 +27,7 @@ test "a schema given for prefixItems: incomplete array of items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"integer"},{"type":"string"}]}"#,
         #"[1]"#,
         true,
+        [],
     );
 }
 
@@ -33,6 +36,7 @@ test "a schema given for prefixItems: array with additional items" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"integer"},{"type":"string"}]}"#,
         #"[1,"foo",true]"#,
         true,
+        [],
     );
 }
 
@@ -41,6 +45,7 @@ test "a schema given for prefixItems: empty array" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"integer"},{"type":"string"}]}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -49,6 +54,7 @@ test "a schema given for prefixItems: JavaScript pseudo-array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"integer"},{"type":"string"}]}"#,
         #"{"0":"invalid","1":"valid","length":2}"#,
         true,
+        [],
     );
 }
 
@@ -57,6 +63,7 @@ test "prefixItems with boolean schemas: array with one item is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[true,false]}"#,
         #"[1]"#,
         true,
+        [],
     );
 }
 
@@ -65,6 +72,7 @@ test "prefixItems with boolean schemas: array with two items is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[true,false]}"#,
         #"[1,"foo"]"#,
         false,
+        [],
     );
 }
 
@@ -73,6 +81,7 @@ test "prefixItems with boolean schemas: empty array is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[true,false]}"#,
         #"[]"#,
         true,
+        [],
     );
 }
 
@@ -81,6 +90,7 @@ test "additional items are allowed by default: only the first item is validated"
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"integer"}]}"#,
         #"[1,"foo",false]"#,
         true,
+        [],
     );
 }
 
@@ -89,5 +99,6 @@ test "prefixItems with null instance elements: allows null elements" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","prefixItems":[{"type":"null"}]}"#,
         #"[null]"#,
         true,
+        [],
     );
 }
