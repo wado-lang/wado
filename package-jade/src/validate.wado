@@ -69,19 +69,37 @@ impl SchemaSet {
         }
     }
 
-    /// A document some reference names that the set does not hold yet, or
-    /// none once every reference resolves.
-    pub fn missing(&self) -> Result<Option<Uri>, SchemaError> {
-        let mut c = Compiler::of(self);
-        c.load_all()?;
-        for let d of 0..<c.added.len() {
-            c.reach(d);
-        }
+    /// A document that compiling the one held under `uri` needs and the set
+    /// does not hold yet, or none once every reference it reaches resolves.
+    pub fn missing(&self, uri: &Uri) -> Result<Option<Uri>, SchemaError>
+        contract self.holds(uri), "`uri` must name a document the set holds"
+    {
+        let [mut c, _] = Compiler::rooted(self, uri)?;
         return match c.link() {
             Ok(_) => Result::Ok(null),
             Err(Unresolved(u)) => Result::Ok(Option::Some(u.target.without_fragment())),
             Err(Invalid(e)) => Result::Err(e),
         };
+    }
+
+    /// Holds every document that compiling the one held under `uri` needs,
+    /// each fetched by `fetch` from the URI it is retrieved from.
+    pub fn load<E, effect X>(
+        &mut self,
+        uri: &Uri,
+        fetch: fn(&Uri) -> Result<Schema, E> with X,
+    ) -> Result<(), LoadError<E>> with X
+        contract self.holds(uri), "`uri` must name a document the set holds"
+    {
+        while let Some(needed) = self.missing(uri)? {
+            match fetch(&needed) {
+                Ok(schema) => self.insert(needed, schema),
+                Err(error) => {
+                    return Result::Err(LoadError::Failed(FailedLoad { uri: needed, error }));
+                },
+            }
+        }
+        return Result::Ok(());
     }
 
     internal fn holds(&self, uri: &Uri) -> bool {
@@ -159,6 +177,43 @@ impl Display for UnresolvedRef {
 impl Error for UnresolvedRef {
 }
 
+/// Why `SchemaSet::load` could not supply a document.
+pub variant LoadError<E> {
+    Invalid(SchemaError),
+    Failed(FailedLoad<E>),
+}
+
+impl<E> From<SchemaError> for LoadError<E> {
+    fn from(value: SchemaError) -> LoadError<E> {
+        return LoadError::Invalid(value);
+    }
+}
+
+impl<E: Display> Display for LoadError<E> {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Invalid(e) => e.fmt(f),
+            Failed(e) => e.fmt(f),
+        }
+    }
+}
+
+impl<E: Display> Error for LoadError<E> {
+}
+
+/// A document the loader failed to fetch.
+pub struct FailedLoad<E> {
+    pub uri: Uri,
+    /// Why, as the loader reported it.
+    pub error: E,
+}
+
+impl<E: Display> Display for FailedLoad<E> {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.uri}: ${self.error}`);
+    }
+}
+
 impl Validator {
     /// `schema` compiled, its references resolved. A reference to a schema
     /// that neither `schema` nor Draft 2020-12's meta-schemas hold is an
@@ -175,10 +230,7 @@ impl Validator {
     pub fn compile_in(set: &SchemaSet, uri: &Uri) -> Result<Validator, CompileError>
         contract set.holds(uri), "`uri` must name a document the set holds"
     {
-        let mut c = Compiler::of(set);
-        c.load(uri)?;
-        let root = c.documents.get_str(&`${*uri}`).unwrap();
-        c.reach(c.node_document[root]);
+        let [mut c, root] = Compiler::rooted(set, uri)?;
         let dynamic_anchors = c.link()?;
         return Result::Ok(Validator {
             root,
@@ -777,9 +829,14 @@ struct PendingRef {
 }
 
 impl Compiler {
-    /// A compiler holding none of `set`'s documents yet.
-    fn of(set: &SchemaSet) -> Compiler {
-        return Compiler { unloaded: *set };
+    /// A compiler that starts from `set`'s document under `uri`, and that
+    /// document's root subschema.
+    fn rooted(set: &SchemaSet, uri: &Uri) -> Result<[Compiler, i32], SchemaError> {
+        let mut c = Compiler { unloaded: *set };
+        c.load(uri)?;
+        let root = c.documents.get_str(&`${*uri}`).unwrap();
+        c.reach(c.node_document[root]);
+        return Result::Ok([c, root]);
     }
 
     /// Adds the supplied document retrieved from `uri`, answering whether one

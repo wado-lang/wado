@@ -194,12 +194,14 @@ test "a set names the documents its references still need, then compiles" {
         root,
         Schema::parse(#"{"items": {"$ref": "int.json"}, "$defs": {"m": {"$ref": "moved.json"}}}"#).unwrap(),
     );
-    assert set.missing().unwrap() matches { Some(u) && `${u}` == "https://x.test/int.json" };
+    // A reference nothing from the root reaches needs no document.
+    set.insert(uri("https://x.test/unreached.json"), Schema::parse(#"{"$ref": "nobody.json"}"#).unwrap());
+    assert set.missing(&root).unwrap() matches { Some(u) && `${u}` == "https://x.test/int.json" };
     set.insert(uri("https://x.test/int.json"), Schema::parse(#"{"type": "integer"}"#).unwrap());
-    assert set.missing().unwrap() matches { Some(u) && `${u}` == "https://x.test/moved.json" };
+    assert set.missing(&root).unwrap() matches { Some(u) && `${u}` == "https://x.test/moved.json" };
     // The URI a document was retrieved from names it, whatever its `$id` says.
     set.insert(uri("https://x.test/moved.json"), Schema::parse(#"{"$id": "https://y.test/s"}"#).unwrap());
-    assert set.missing().unwrap() matches { None };
+    assert set.missing(&root).unwrap() matches { None };
     let validator = Validator::compile_in(&set, &root).unwrap();
     assert validator.validate(&Document::parse("[1, 2]").unwrap().root()) matches { Ok(_) };
     let found = validator.validate(&Document::parse(#"[1, "x"]"#).unwrap().root()).unwrap_err();
@@ -207,6 +209,38 @@ test "a set names the documents its references still need, then compiles" {
     assert found[0].uri matches { Some(u) && `${u}` == "https://x.test/int.json" };
     assert found[0].keyword == "/type";
     assert found[0].instance == "/1";
+}
+
+fn served(u: &Uri) -> Result<Schema, String> {
+    return match `${*u}` {
+        "https://x.test/int.json" => Result::Ok(Schema::parse(#"{"type": "integer"}"#).unwrap()),
+        "https://x.test/defs.json" => Result::Ok(Schema::parse(##"{"$defs": {"i": {"$ref": "int.json"}}}"##).unwrap()),
+        _ => Result::Err(`no ${*u}`),
+    };
+}
+
+test "a loader supplies what a set lacks, and what that refers to" {
+    let root = uri("https://x.test/root.json");
+    let mut set = SchemaSet::new();
+    set.insert(root, Schema::parse(##"{"items": {"$ref": "defs.json#/$defs/i"}}"##).unwrap());
+    set.insert(uri("https://x.test/unreached.json"), Schema::parse(#"{"$ref": "nobody.json"}"#).unwrap());
+    set.load(&root, served).unwrap();
+    assert set.missing(&root).unwrap() matches { None };
+    let validator = Validator::compile_in(&set, &root).unwrap();
+    assert validator.validate(&Document::parse("[1]").unwrap().root()) matches { Ok(_) };
+    assert validator.validate(&Document::parse(#"["x"]"#).unwrap().root()) matches { Err(_) };
+}
+
+test "a document the loader cannot supply is an error naming it" {
+    let root = uri("https://x.test/root.json");
+    let mut set = SchemaSet::new();
+    set.insert(root, Schema::parse(#"{"$ref": "gone.json"}"#).unwrap());
+    let e = set.load(&root, served).unwrap_err();
+    let Failed(f) = e else {
+        panic(`${e}`);
+    };
+    assert `${f.uri}` == "https://x.test/gone.json";
+    assert f.error == "no https://x.test/gone.json";
 }
 
 test "Draft 2020-12's meta-schemas are held without being supplied" {

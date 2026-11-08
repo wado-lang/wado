@@ -9,7 +9,6 @@ test "A $dynamicRef to a $dynamicAnchor in the same schema resource behaves like
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamicRef-dynamicAnchor-same-schema/root","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"foo":{"$dynamicAnchor":"items","type":"string"}}}"##,
         #"["foo","bar"]"#,
         true,
-        [],
     );
 }
 
@@ -18,7 +17,6 @@ test "A $dynamicRef to a $dynamicAnchor in the same schema resource behaves like
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamicRef-dynamicAnchor-same-schema/root","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"foo":{"$dynamicAnchor":"items","type":"string"}}}"##,
         #"["foo",42]"#,
         false,
-        [],
     );
 }
 
@@ -27,7 +25,6 @@ test "A $dynamicRef to an $anchor in the same schema resource behaves like a nor
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamicRef-anchor-same-schema/root","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"foo":{"$anchor":"items","type":"string"}}}"##,
         #"["foo","bar"]"#,
         true,
-        [],
     );
 }
 
@@ -36,7 +33,6 @@ test "A $dynamicRef to an $anchor in the same schema resource behaves like a nor
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamicRef-anchor-same-schema/root","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"foo":{"$anchor":"items","type":"string"}}}"##,
         #"["foo",42]"#,
         false,
-        [],
     );
 }
 
@@ -45,7 +41,6 @@ test "A $ref to a $dynamicAnchor in the same schema resource behaves like a norm
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/ref-dynamicAnchor-same-schema/root","type":"array","items":{"$ref":"#items"},"$defs":{"foo":{"$dynamicAnchor":"items","type":"string"}}}"##,
         #"["foo","bar"]"#,
         true,
-        [],
     );
 }
 
@@ -54,7 +49,6 @@ test "A $ref to a $dynamicAnchor in the same schema resource behaves like a norm
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/ref-dynamicAnchor-same-schema/root","type":"array","items":{"$ref":"#items"},"$defs":{"foo":{"$dynamicAnchor":"items","type":"string"}}}"##,
         #"["foo",42]"#,
         false,
-        [],
     );
 }
 
@@ -63,7 +57,6 @@ test "A $dynamicRef resolves to the first $dynamicAnchor still in scope that is 
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/typical-dynamic-resolution/root","$ref":"list","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"items":{"$comment":"This is only needed to satisfy the bookending requirement","$dynamicAnchor":"items"}}}}}"##,
         #"["foo","bar"]"#,
         true,
-        [],
     );
 }
 
@@ -72,7 +65,6 @@ test "A $dynamicRef resolves to the first $dynamicAnchor still in scope that is 
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/typical-dynamic-resolution/root","$ref":"list","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"items":{"$comment":"This is only needed to satisfy the bookending requirement","$dynamicAnchor":"items"}}}}}"##,
         #"["foo",42]"#,
         false,
-        [],
     );
 }
 
@@ -81,7 +73,6 @@ test "A $dynamicRef without anchor in fragment behaves identical to $ref: An arr
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamicRef-without-anchor/root","$ref":"list","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#/$defs/items"},"$defs":{"items":{"$comment":"This is only needed to satisfy the bookending requirement","$dynamicAnchor":"items","type":"number"}}}}}"##,
         #"["foo","bar"]"#,
         false,
-        [],
     );
 }
 
@@ -90,7 +81,6 @@ test "A $dynamicRef without anchor in fragment behaves identical to $ref: An arr
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamicRef-without-anchor/root","$ref":"list","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#/$defs/items"},"$defs":{"items":{"$comment":"This is only needed to satisfy the bookending requirement","$dynamicAnchor":"items","type":"number"}}}}}"##,
         #"[24,42]"#,
         true,
-        [],
     );
 }
 
@@ -99,7 +89,6 @@ test "A $dynamicRef with intermediate scopes that don't include a matching $dyna
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-resolution-with-intermediate-scopes/root","$ref":"intermediate-scope","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"intermediate-scope":{"$id":"intermediate-scope","$ref":"list"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"items":{"$comment":"This is only needed to satisfy the bookending requirement","$dynamicAnchor":"items"}}}}}"##,
         #"["foo","bar"]"#,
         true,
-        [],
     );
 }
 
@@ -108,7 +97,6 @@ test "A $dynamicRef with intermediate scopes that don't include a matching $dyna
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-resolution-with-intermediate-scopes/root","$ref":"intermediate-scope","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"intermediate-scope":{"$id":"intermediate-scope","$ref":"list"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"items":{"$comment":"This is only needed to satisfy the bookending requirement","$dynamicAnchor":"items"}}}}}"##,
         #"["foo",42]"#,
         false,
-        [],
     );
 }
 
@@ -117,7 +105,6 @@ test "An $anchor with the same name as a $dynamicAnchor is not used for dynamic 
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-resolution-ignores-anchors/root","$ref":"list","$defs":{"foo":{"$anchor":"items","type":"string"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"items":{"$comment":"This is only needed to satisfy the bookending requirement","$dynamicAnchor":"items"}}}}}"##,
         #"["foo",42]"#,
         true,
-        [],
     );
 }
 
@@ -126,7 +113,6 @@ test "A $dynamicRef without a matching $dynamicAnchor in the same schema resourc
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-resolution-without-bookend/root","$ref":"list","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"items":{"$comment":"This is only needed to give the reference somewhere to resolve to when it behaves like $ref","$anchor":"items"}}}}}"##,
         #"["foo",42]"#,
         true,
-        [],
     );
 }
 
@@ -135,7 +121,6 @@ test "A $dynamicRef with a non-matching $dynamicAnchor in the same schema resour
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/unmatched-dynamic-anchor/root","$ref":"list","$defs":{"foo":{"$dynamicAnchor":"items","type":"string"},"list":{"$id":"list","type":"array","items":{"$dynamicRef":"#items"},"$defs":{"items":{"$comment":"This is only needed to give the reference somewhere to resolve to when it behaves like $ref","$anchor":"items","$dynamicAnchor":"foo"}}}}}"##,
         #"["foo",42]"#,
         true,
-        [],
     );
 }
 
@@ -144,7 +129,6 @@ test "A $dynamicRef that initially resolves to a schema with a matching $dynamic
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/relative-dynamic-reference/root","$dynamicAnchor":"meta","type":"object","properties":{"foo":{"const":"pass"}},"$ref":"extended","$defs":{"extended":{"$id":"extended","$dynamicAnchor":"meta","type":"object","properties":{"bar":{"$ref":"bar"}}},"bar":{"$id":"bar","type":"object","properties":{"baz":{"$dynamicRef":"extended#meta"}}}}}"#,
         #"{"foo":"pass","bar":{"baz":{"foo":"pass"}}}"#,
         true,
-        [],
     );
 }
 
@@ -153,7 +137,6 @@ test "A $dynamicRef that initially resolves to a schema with a matching $dynamic
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/relative-dynamic-reference/root","$dynamicAnchor":"meta","type":"object","properties":{"foo":{"const":"pass"}},"$ref":"extended","$defs":{"extended":{"$id":"extended","$dynamicAnchor":"meta","type":"object","properties":{"bar":{"$ref":"bar"}}},"bar":{"$id":"bar","type":"object","properties":{"baz":{"$dynamicRef":"extended#meta"}}}}}"#,
         #"{"foo":"pass","bar":{"baz":{"foo":"fail"}}}"#,
         false,
-        [],
     );
 }
 
@@ -162,7 +145,6 @@ test "A $dynamicRef that initially resolves to a schema without a matching $dyna
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/relative-dynamic-reference-without-bookend/root","$dynamicAnchor":"meta","type":"object","properties":{"foo":{"const":"pass"}},"$ref":"extended","$defs":{"extended":{"$id":"extended","$anchor":"meta","type":"object","properties":{"bar":{"$ref":"bar"}}},"bar":{"$id":"bar","type":"object","properties":{"baz":{"$dynamicRef":"extended#meta"}}}}}"#,
         #"{"foo":"pass","bar":{"baz":{"foo":"fail"}}}"#,
         true,
-        [],
     );
 }
 
@@ -171,7 +153,6 @@ test "multiple dynamic paths to the $dynamicRef keyword: number list with number
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-with-multiple-paths/main","if":{"properties":{"kindOfList":{"const":"numbers"}},"required":["kindOfList"]},"then":{"$ref":"numberList"},"else":{"$ref":"stringList"},"$defs":{"genericList":{"$id":"genericList","properties":{"list":{"items":{"$dynamicRef":"#itemType"}}},"$defs":{"defaultItemType":{"$comment":"Only needed to satisfy bookending requirement","$dynamicAnchor":"itemType"}}},"numberList":{"$id":"numberList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"number"}},"$ref":"genericList"},"stringList":{"$id":"stringList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"string"}},"$ref":"genericList"}}}"##,
         #"{"kindOfList":"numbers","list":[1.1]}"#,
         true,
-        [],
     );
 }
 
@@ -180,7 +161,6 @@ test "multiple dynamic paths to the $dynamicRef keyword: number list with string
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-with-multiple-paths/main","if":{"properties":{"kindOfList":{"const":"numbers"}},"required":["kindOfList"]},"then":{"$ref":"numberList"},"else":{"$ref":"stringList"},"$defs":{"genericList":{"$id":"genericList","properties":{"list":{"items":{"$dynamicRef":"#itemType"}}},"$defs":{"defaultItemType":{"$comment":"Only needed to satisfy bookending requirement","$dynamicAnchor":"itemType"}}},"numberList":{"$id":"numberList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"number"}},"$ref":"genericList"},"stringList":{"$id":"stringList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"string"}},"$ref":"genericList"}}}"##,
         #"{"kindOfList":"numbers","list":["foo"]}"#,
         false,
-        [],
     );
 }
 
@@ -189,7 +169,6 @@ test "multiple dynamic paths to the $dynamicRef keyword: string list with number
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-with-multiple-paths/main","if":{"properties":{"kindOfList":{"const":"numbers"}},"required":["kindOfList"]},"then":{"$ref":"numberList"},"else":{"$ref":"stringList"},"$defs":{"genericList":{"$id":"genericList","properties":{"list":{"items":{"$dynamicRef":"#itemType"}}},"$defs":{"defaultItemType":{"$comment":"Only needed to satisfy bookending requirement","$dynamicAnchor":"itemType"}}},"numberList":{"$id":"numberList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"number"}},"$ref":"genericList"},"stringList":{"$id":"stringList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"string"}},"$ref":"genericList"}}}"##,
         #"{"kindOfList":"strings","list":[1.1]}"#,
         false,
-        [],
     );
 }
 
@@ -198,7 +177,6 @@ test "multiple dynamic paths to the $dynamicRef keyword: string list with string
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-with-multiple-paths/main","if":{"properties":{"kindOfList":{"const":"numbers"}},"required":["kindOfList"]},"then":{"$ref":"numberList"},"else":{"$ref":"stringList"},"$defs":{"genericList":{"$id":"genericList","properties":{"list":{"items":{"$dynamicRef":"#itemType"}}},"$defs":{"defaultItemType":{"$comment":"Only needed to satisfy bookending requirement","$dynamicAnchor":"itemType"}}},"numberList":{"$id":"numberList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"number"}},"$ref":"genericList"},"stringList":{"$id":"stringList","$defs":{"itemType":{"$dynamicAnchor":"itemType","type":"string"}},"$ref":"genericList"}}}"##,
         #"{"kindOfList":"strings","list":["foo"]}"#,
         true,
-        [],
     );
 }
 
@@ -207,7 +185,6 @@ test "after leaving a dynamic scope, it is not used by a $dynamicRef: string mat
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-leaving-dynamic-scope/main","if":{"$id":"first_scope","$defs":{"thingy":{"$comment":"this is first_scope#thingy","$dynamicAnchor":"thingy","type":"number"}}},"then":{"$id":"second_scope","$ref":"start","$defs":{"thingy":{"$comment":"this is second_scope#thingy, the final destination of the $dynamicRef","$dynamicAnchor":"thingy","type":"null"}}},"$defs":{"start":{"$comment":"this is the landing spot from $ref","$id":"start","$dynamicRef":"inner_scope#thingy"},"thingy":{"$comment":"this is the first stop for the $dynamicRef","$id":"inner_scope","$dynamicAnchor":"thingy","type":"string"}}}"#,
         #""a string""#,
         false,
-        [],
     );
 }
 
@@ -216,7 +193,6 @@ test "after leaving a dynamic scope, it is not used by a $dynamicRef: first_scop
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-leaving-dynamic-scope/main","if":{"$id":"first_scope","$defs":{"thingy":{"$comment":"this is first_scope#thingy","$dynamicAnchor":"thingy","type":"number"}}},"then":{"$id":"second_scope","$ref":"start","$defs":{"thingy":{"$comment":"this is second_scope#thingy, the final destination of the $dynamicRef","$dynamicAnchor":"thingy","type":"null"}}},"$defs":{"start":{"$comment":"this is the landing spot from $ref","$id":"start","$dynamicRef":"inner_scope#thingy"},"thingy":{"$comment":"this is the first stop for the $dynamicRef","$id":"inner_scope","$dynamicAnchor":"thingy","type":"string"}}}"#,
         #"42"#,
         false,
-        [],
     );
 }
 
@@ -225,7 +201,6 @@ test "after leaving a dynamic scope, it is not used by a $dynamicRef: /then/$def
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-leaving-dynamic-scope/main","if":{"$id":"first_scope","$defs":{"thingy":{"$comment":"this is first_scope#thingy","$dynamicAnchor":"thingy","type":"number"}}},"then":{"$id":"second_scope","$ref":"start","$defs":{"thingy":{"$comment":"this is second_scope#thingy, the final destination of the $dynamicRef","$dynamicAnchor":"thingy","type":"null"}}},"$defs":{"start":{"$comment":"this is the landing spot from $ref","$id":"start","$dynamicRef":"inner_scope#thingy"},"thingy":{"$comment":"this is the first stop for the $dynamicRef","$id":"inner_scope","$dynamicAnchor":"thingy","type":"string"}}}"#,
         #"null"#,
         true,
-        [],
     );
 }
 
@@ -234,7 +209,6 @@ test "strict-tree schema, guards against misspelled properties: instance with mi
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-tree.json","$dynamicAnchor":"node","$ref":"tree.json","unevaluatedProperties":false}"#,
         #"{"children":[{"daat":1}]}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/tree.json"#, ##"{"description":"tree schema, extensible","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/tree.json","$dynamicAnchor":"node","type":"object","properties":{"data":true,"children":{"type":"array","items":{"$dynamicRef":"#node"}}}}"##]],
     );
 }
 
@@ -243,7 +217,6 @@ test "strict-tree schema, guards against misspelled properties: instance with co
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-tree.json","$dynamicAnchor":"node","$ref":"tree.json","unevaluatedProperties":false}"#,
         #"{"children":[{"data":1}]}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/tree.json"#, ##"{"description":"tree schema, extensible","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/tree.json","$dynamicAnchor":"node","type":"object","properties":{"data":true,"children":{"type":"array","items":{"$dynamicRef":"#node"}}}}"##]],
     );
 }
 
@@ -252,7 +225,6 @@ test "tests for implementation dynamic anchor and reference link: incorrect pare
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible.json","$ref":"extendible-dynamic-ref.json","$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}"#,
         #"{"a":true}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -261,7 +233,6 @@ test "tests for implementation dynamic anchor and reference link: incorrect exte
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible.json","$ref":"extendible-dynamic-ref.json","$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}"#,
         #"{"elements":[{"b":1}]}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -270,7 +241,6 @@ test "tests for implementation dynamic anchor and reference link: correct extend
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible.json","$ref":"extendible-dynamic-ref.json","$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}"#,
         #"{"elements":[{"a":1}]}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -279,7 +249,6 @@ test "$ref and $dynamicAnchor are independent of order - $defs first: incorrect 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-defs-first.json","allOf":[{"$ref":"extendible-dynamic-ref.json"},{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}]}"#,
         #"{"a":true}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -288,7 +257,6 @@ test "$ref and $dynamicAnchor are independent of order - $defs first: incorrect 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-defs-first.json","allOf":[{"$ref":"extendible-dynamic-ref.json"},{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}]}"#,
         #"{"elements":[{"b":1}]}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -297,7 +265,6 @@ test "$ref and $dynamicAnchor are independent of order - $defs first: correct ex
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-defs-first.json","allOf":[{"$ref":"extendible-dynamic-ref.json"},{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}]}"#,
         #"{"elements":[{"a":1}]}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -306,7 +273,6 @@ test "$ref and $dynamicAnchor are independent of order - $ref first: incorrect p
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-ref-first.json","allOf":[{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}},{"$ref":"extendible-dynamic-ref.json"}]}"#,
         #"{"a":true}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -315,7 +281,6 @@ test "$ref and $dynamicAnchor are independent of order - $ref first: incorrect e
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-ref-first.json","allOf":[{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}},{"$ref":"extendible-dynamic-ref.json"}]}"#,
         #"{"elements":[{"b":1}]}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -324,7 +289,6 @@ test "$ref and $dynamicAnchor are independent of order - $ref first: correct ext
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-ref-first.json","allOf":[{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}},{"$ref":"extendible-dynamic-ref.json"}]}"#,
         #"{"elements":[{"a":1}]}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json"#, ##"{"description":"extendible array","$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/extendible-dynamic-ref.json","type":"object","properties":{"elements":{"type":"array","items":{"$dynamicRef":"#elements"}}},"required":["elements"],"additionalProperties":false,"$defs":{"elements":{"$dynamicAnchor":"elements"}}}"##]],
     );
 }
 
@@ -333,7 +297,6 @@ test "$ref to $dynamicRef finds detached $dynamicAnchor: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/detached-dynamicref.json#/$defs/foo"}"#,
         #"1"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/detached-dynamicref.json"#, ##"{"$id":"http://localhost:1234/draft2020-12/detached-dynamicref.json","$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"foo":{"$dynamicRef":"#detached"},"detached":{"$dynamicAnchor":"detached","type":"integer"}}}"##]],
     );
 }
 
@@ -342,7 +305,6 @@ test "$ref to $dynamicRef finds detached $dynamicAnchor: non-number is invalid" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/detached-dynamicref.json#/$defs/foo"}"#,
         #""a""#,
         false,
-        [[#"http://localhost:1234/draft2020-12/detached-dynamicref.json"#, ##"{"$id":"http://localhost:1234/draft2020-12/detached-dynamicref.json","$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"foo":{"$dynamicRef":"#detached"},"detached":{"$dynamicAnchor":"detached","type":"integer"}}}"##]],
     );
 }
 
@@ -351,7 +313,6 @@ test "$dynamicRef points to a boolean schema: follow $dynamicRef to a true schem
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"true":true,"false":false},"properties":{"true":{"$dynamicRef":"#/$defs/true"},"false":{"$dynamicRef":"#/$defs/false"}}}"##,
         #"{"true":1}"#,
         true,
-        [],
     );
 }
 
@@ -360,7 +321,6 @@ test "$dynamicRef points to a boolean schema: follow $dynamicRef to a false sche
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"true":true,"false":false},"properties":{"true":{"$dynamicRef":"#/$defs/true"},"false":{"$dynamicRef":"#/$defs/false"}}}"##,
         #"{"false":1}"#,
         false,
-        [],
     );
 }
 
@@ -369,7 +329,6 @@ test "$dynamicRef skips over intermediate resources - direct reference: integer 
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-skips-intermediate-resource/main","type":"object","properties":{"bar-item":{"$ref":"item"}},"$defs":{"bar":{"$id":"bar","type":"array","items":{"$ref":"item"},"$defs":{"item":{"$id":"item","type":"object","properties":{"content":{"$dynamicRef":"#content"}},"$defs":{"defaultContent":{"$dynamicAnchor":"content","type":"integer"}}},"content":{"$dynamicAnchor":"content","type":"string"}}}}}"##,
         #"{"bar-item":{"content":42}}"#,
         true,
-        [],
     );
 }
 
@@ -378,7 +337,6 @@ test "$dynamicRef skips over intermediate resources - direct reference: string p
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-skips-intermediate-resource/main","type":"object","properties":{"bar-item":{"$ref":"item"}},"$defs":{"bar":{"$id":"bar","type":"array","items":{"$ref":"item"},"$defs":{"item":{"$id":"item","type":"object","properties":{"content":{"$dynamicRef":"#content"}},"$defs":{"defaultContent":{"$dynamicAnchor":"content","type":"integer"}}},"content":{"$dynamicAnchor":"content","type":"string"}}}}}"##,
         #"{"bar-item":{"content":"value"}}"#,
         false,
-        [],
     );
 }
 
@@ -387,7 +345,6 @@ test "$dynamicRef avoids the root of each schema, but scopes are still registere
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-avoids-root-of-each-schema/base","$ref":"first#/$defs/stuff","$defs":{"first":{"$id":"first","$defs":{"stuff":{"$ref":"second#/$defs/stuff"},"length":{"$comment":"unused, because there is no $dynamicAnchor here","maxLength":1}}},"second":{"$id":"second","$defs":{"stuff":{"$ref":"third#/$defs/stuff"},"length":{"$dynamicAnchor":"length","maxLength":2}}},"third":{"$id":"third","$defs":{"stuff":{"$dynamicRef":"#length"},"length":{"$dynamicAnchor":"length","maxLength":3}}}}}"##,
         #""hi""#,
         true,
-        [],
     );
 }
 
@@ -396,6 +353,5 @@ test "$dynamicRef avoids the root of each schema, but scopes are still registere
         ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://test.json-schema.org/dynamic-ref-avoids-root-of-each-schema/base","$ref":"first#/$defs/stuff","$defs":{"first":{"$id":"first","$defs":{"stuff":{"$ref":"second#/$defs/stuff"},"length":{"$comment":"unused, because there is no $dynamicAnchor here","maxLength":1}}},"second":{"$id":"second","$defs":{"stuff":{"$ref":"third#/$defs/stuff"},"length":{"$dynamicAnchor":"length","maxLength":2}}},"third":{"$id":"third","$defs":{"stuff":{"$dynamicRef":"#length"},"length":{"$dynamicAnchor":"length","maxLength":3}}}}}"##,
         #""hey""#,
         false,
-        [],
     );
 }
