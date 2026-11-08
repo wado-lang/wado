@@ -51,6 +51,9 @@ pub(crate) struct Tally {
 impl Tally {
     /// What a report of a cached file says about it.
     pub(crate) fn describe(self) -> String {
+        if self.passed == 0 && self.todo_pending == 0 {
+            return "compiled before, with no tests; nothing it read changed".to_string();
+        }
         let mut text = format!("{} passed", self.passed);
         if self.todo_pending > 0 {
             text.push_str(&format!(", {} todo", self.todo_pending));

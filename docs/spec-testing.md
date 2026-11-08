@@ -173,8 +173,9 @@ than a `#![TODO]` module, which counts as a pending TODO instead.
 
 ### Cached Results
 
-A file whose tests all passed, or trapped as pending TODOs, is not compiled or
-run again while nothing that decided the outcome has changed. That is the
+A file whose tests all passed, or trapped as pending TODOs, or that compiled and
+declares no `test` block, is not compiled or run again while nothing that
+decided the outcome has changed. That is the
 `wado` binary, the stdlib it compiles against, the run's options, the `WADO_*`
 environment, and every file and environment variable the file's compile read.
 Those files include Kiln generators and their inputs, and the manifests that
@@ -183,10 +184,9 @@ summary counts the file's tests as they went before and names the file on a
 `cached:` line.
 
 A result is cached only where those inputs decide it. A file is always run when
-it declares no `test` block, or when its tests perform an effect beyond writing
-to stdout or stderr and drawing insecure randomness: a clock, secure
-randomness, the filesystem, the network, or `core:eval` hands a test what no
-compile reads.
+its tests perform an effect beyond writing to stdout or stderr and drawing
+insecure randomness: a clock, secure randomness, the filesystem, the network,
+or `core:eval` hands a test what no compile reads.
 
 `--no-cache` runs every file and still records the passes. `--coverage`,
 `--pgo`, `--profile`, `--report-fuel` and `--no-run` neither read nor record

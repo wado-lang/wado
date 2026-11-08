@@ -2040,22 +2040,33 @@ fn test_test_keys_its_cache_by_the_compilers_environment() {
         .stdout(predicate::str::contains("cached:").not());
 }
 
+/// A file without tests compiles to the same outcome while nothing it read
+/// changed, whatever it imports, so its compile is cached like a pass.
+#[test]
+fn test_test_caches_the_compile_of_a_file_without_tests() {
+    let tmp = tempfile::tempdir().unwrap();
+    let empty = tmp.path().join("empty_test.wado");
+    std::fs::write(
+        &empty,
+        "use { println, Stdout } from \"core:cli\";\nuse { MonotonicClock } from \"wasi:clocks\";\n\npub fn f() with (Stdout, MonotonicClock) {\n    println(`${MonotonicClock::now()}`);\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(&empty).assert().success();
+
+    run()
+        .stdout(predicate::str::contains("skip:"))
+        .stdout(predicate::str::contains("cached:").not());
+    run()
+        .stdout(predicate::str::contains("cached:  1 files"))
+        .stdout(predicate::str::contains("skip:").not());
+}
+
 #[test]
 fn test_test_reports_on_every_run_what_a_cache_cannot_hold() {
     let tmp = tempfile::tempdir().unwrap();
-    let empty = tmp.path().join("empty_test.wado");
-    std::fs::write(&empty, "pub fn f() -> i32 {\n    return 1;\n}\n").unwrap();
     let fuel = tmp.path().join("fuel_test.wado");
     std::fs::write(&fuel, "test \"t\" {\n    assert 1 + 1 == 2;\n}\n").unwrap();
     for _ in 0..2 {
-        // A file without tests is a skip, which says it holds none.
-        wado()
-            .arg("test")
-            .arg(&empty)
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("skip:"))
-            .stdout(predicate::str::contains("cached:").not());
         wado()
             .args(["test", "--report-fuel"])
             .arg(&fuel)

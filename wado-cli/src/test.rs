@@ -1140,8 +1140,11 @@ fn load_module(
                     let plans = read_from_component(&artifact.wasm)?;
                     Some((Arc::clone(run), run.register(&artifact.path, &plans)?))
                 });
+            // A file without tests runs nothing, so what it imports cannot
+            // decide its outcome.
             let cache_reads = artifact.reads.filter(|_| {
-                test_cache::cacheable(component_ty.imports(&engine).map(|(name, _)| name))
+                tests.is_empty()
+                    || test_cache::cacheable(component_ty.imports(&engine).map(|(name, _)| name))
             });
             reporter.on_load(
                 &artifact.path,
@@ -1395,9 +1398,9 @@ async fn run_load_stage(
             } => {
                 tally.ok += 1;
                 if module.tests.is_empty() {
-                    // Reported as `skip` on every run, never as `cached`.
                     tally.skip += 1;
-                } else if let Some(reads) = cache_reads {
+                }
+                if let Some(reads) = cache_reads {
                     tally
                         .cacheable
                         .push((module.path.clone(), reads, module.tests.len()));
