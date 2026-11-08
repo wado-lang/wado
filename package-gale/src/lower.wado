@@ -2384,6 +2384,7 @@ fn rebind_scan_repeat_caller_follow(
             ctx,
             reaches_rule_tail,
             re.gate_caller_follow,
+            re.atn_decision,
             rule_name,
             outer_suffix,
         );
@@ -4315,6 +4316,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         ctx,
         reaches_rule_tail,
         rep_op.gate_caller_follow,
+        rep_op.atn_decision,
         rule_name,
         outer_suffix,
     );
@@ -4390,14 +4392,12 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     gate_caller_follow: bool,
+    atn_decision: i32,
     rule_name: S,
     outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
-    let Repeat(rep) = &alt_elements[index] else {
-        panic("a loop's exit stamps are read at the loop");
-    };
-    let takes_contested = ctx.simulator_takes_contested(rep.atn_decision);
+    let takes_contested = ctx.simulator_takes_contested(atn_decision);
     let contested_somewhere = (takes_contested || ctx.settings.atn.verifies())
         && !by_atn
         && repeat_contested(
