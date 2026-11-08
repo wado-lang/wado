@@ -74,15 +74,6 @@ rejects and Gale accepts is a Gale bug, on one side or the other.
   split would produce. A `parser grammar` has no lexer and still rejects it.
   Pinned by "mode declaration is accepted in a combined grammar (superset)" in
   `src/g4/parser_test.wado`.
-- **A label rebound as another kind in another alternative** — error 75,
-  "label x type mismatch with previous definition", as in `x=a | x=b` with two
-  rules or `x=a | x='y'`. The jar accepts it once the alternatives carry `#`
-  labels, since each then has a context of its own. Gale gives every
-  alternative its own label scope (`action.md`, "A label belongs to its
-  alternative"), so `$x` in each alternative reads that alternative's binding.
-  Pinned by "a label rebound as another kind, or to another rule, in one
-  alternative is rejected" in `src/g4/parser_test.wado`, and by
-  `wado_label_cross_rule.g4` and `java_rule_label_text.g4`.
 - **A left-recursive alternative that can be followed by nothing** — error
   148, as in `e : e x | INT ;` with `x : '*'? ;`, or an empty alternative in a
   suffix group (`e : e ( A | ) | C ;`). Any number of empty iterations derives
@@ -111,7 +102,7 @@ checks no diagnostic carries a span.
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
 
-Three more are decided as the text is read, so each carries a span:
+Four more are decided as the text is read, so each carries a span:
 
 - **An escape the lexicon does not define** — ANTLR4 error 156. A string
   literal takes `\n \r \t \b \f \\ \' \uXXXX \u{…}`. A char set takes the same
@@ -125,11 +116,18 @@ Three more are decided as the text is read, so each carries a span:
   while `x = (ID)`, `x += (A*)`, `n = (ID ',')+` and `x += (.|A)` do not. A
   label belongs on an atom or a set. `(e)` is not the free wrapper it looks
   like.
-- **A label rebound as another kind in one alternative** — ANTLR4 error 75. A
-  label is one local of its alternative, so every binding of it there binds a
-  token or a call of the same rule, and all of them collect (`+=`) or none do.
-  `(x=a | x=b)` with two rules is rejected, and so is `x=A x+=B`. Across
-  alternatives Gale accepts it (see above).
+- **A label rebound as another kind in one rule** — ANTLR4 error 75. A label
+  is one field of the rule's context, so every binding of it binds a token or a
+  call of the same rule, and all of them collect (`+=`) or none do. `x=a | x=b`
+  with two rules is rejected, and so are `x=a | x='y'` and `x=A x+=B`. Labelled
+  alternatives (`# One`) each have a context of their own, where `x=a # One | x=b # Two` is accepted. Pinned by "a label rebound as another kind, or to
+  another rule, in one rule is rejected" in `src/g4/parser_test.wado`, and by
+  `wado_label_cross_rule.g4` and `java_rule_label_text.g4`.
+- **A rule prequel reading a label of labelled alternatives** — the label lives
+  in the alternative's context, which `@init` and `@after` do not see. The jar
+  accepts the grammar and its Java fails to compile; Gale rejects it as it
+  reads it. Pinned by "a prequel reading a label of labelled alternatives is
+  rejected" in `src/g4/parser_test.wado`.
 
 ### ICU is the source of truth for `\p{...}`
 

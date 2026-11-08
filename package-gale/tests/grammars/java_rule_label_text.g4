@@ -7,11 +7,13 @@ start : a* EOF ;
 
 // `myLabel` is deliberately not snake_case: label disambiguation keys on the
 // name codegen derives, which a snake_case label would not exercise.
-a : myLabel=sub {System.out.println($myLabel.text);} tail=sub {System.out.println($tail.text);}
-  | myLabel='y' {System.out.println($myLabel.text);}
+// The alternatives are labelled, so each has a context of its own and
+// `myLabel` names a call in one and a token in the other.
+a : myLabel=sub {System.out.println($myLabel.text);} tail=sub {System.out.println($tail.text);} # Pair
+  | myLabel='y' {System.out.println($myLabel.text);} # Y
   // Repeated, inside a group: the capture must reach whatever scope the call
   // lives in, not only an alternative's top level.
-  | 'g' (inner=sub {System.out.println($inner.text);})+
+  | 'g' (inner=sub {System.out.println($inner.text);})+ # Group
   ;
 
 sub : 'x' 'z' ;

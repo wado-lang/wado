@@ -3580,7 +3580,8 @@ fn peel_scalar_label(elem: &Element) -> &Element {
 /// The actual post-dedup bindings of an alt's top-level leaf ops, so the action
 /// translator resolves a `$ref` to its real local even when a token / rule
 /// field-name collision deduped it (`e_2`), and to the rule this alternative
-/// called when the same label names a different one elsewhere (`x=a | x=b`).
+/// called when the same label names a different one elsewhere
+/// (`x=a # A | x=b # B`).
 fn collect_alt_bindings(ops: &List<Op>) -> List<AltBinding> {
     let mut out: List<AltBinding> = [];
     for let op of ops {
