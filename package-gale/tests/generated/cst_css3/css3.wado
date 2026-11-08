@@ -1436,7 +1436,7 @@ impl AtnPredictor {
         let mut asked: List<i32> = [];
         let mut floor = self.floor;
         loop {
-            let alt = atn_predict_above(
+            let [alt, _] = atn_predict_above(
                 &mut ATN_DFA,
                 sim,
                 decision,
@@ -2326,7 +2326,7 @@ internal fn atn_predict_with_stack(
         &mut preds,
         &mut [],
         ask,
-    );
+    ).0;
 }
 
 fn atn_predict_above<effect E>(
@@ -2342,10 +2342,10 @@ fn atn_predict_above<effect E>(
     preds: &mut AtnPreds,
     asked: &mut List<i32>,
     ask: fn(i32) -> bool with E,
-) -> i32 with E {
+) -> [i32, bool] with E {
     loop {
         let mut held: List<i32> = [];
-        let [alt, _] = atn_walk(
+        let verdict = atn_walk(
             dfa,
             sim,
             decision,
@@ -2370,25 +2370,39 @@ fn atn_predict_above<effect E>(
             }
         }
         if preds.failed.len() == known_failed {
-            return alt;
+            return verdict;
         }
         preds.failed.sort();
     }
 }
 
-fn atn_predict_walk(
-    dfa: &mut AtnDfa,
+fn atn_predict_walk<effect E>(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
-    floor: i32,
     tokens: &Array<i32>,
     start_pos: i32,
     eof: i32,
     min_prec: i32,
-) -> [i32, bool] {
-    let mut held: List<i32> = [];
-    return atn_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, &ATN_NO_PREDS, &mut held);
+    met: &List<i32>,
+    own: &List<i32>,
+    ask: fn(i32) -> bool with E,
+) -> [i32, bool] with E {
+    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
+    return atn_predict_above(
+        &mut ATN_DFA,
+        sim,
+        decision,
+        rule_stack,
+        0,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        &mut preds,
+        &mut [],
+        ask,
+    );
 }
 
 fn atn_walk(
@@ -21638,7 +21652,7 @@ fn _parse_media(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    let _rc_at = p.pos;
+    let _rc_at_23 = p.pos;
     let mut opt_enter: bool = false;
     if _kind_set_4(p.peek_kind()) {
         opt_enter_scan: {
@@ -21679,6 +21693,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 373;
         _parse_media_query(p, follow_open_with(follow_then_opening(FOLLOW_MASK_11, 16, follow), follow_open_set(FOLLOW_MASK_9)));
         while !p.recovering && p.peek_kind() == TK_Comma {
+            let _rc_at_24 = p.pos;
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             p.take();
             p.site = 43;
@@ -21687,10 +21702,16 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 44;
             p.atn_ret_pending = 383;
             _parse_media_query(p, follow_open_with(follow_then_opening(FOLLOW_MASK_11, 16, follow), follow_open_set(FOLLOW_MASK_9)));
+            if _rc_at_24 >= 0 && !p.recovering && !p.speculating {
+                let _ = atn_verified(24, 1, &mut p.atn, &p.kinds, _rc_at_24, 0, 0);
+            }
+        }
+        if !p.recovering && !p.speculating {
+            let _ = atn_verified(24, 1, &mut p.atn, &p.kinds, p.pos, 0, 1);
         }
     }
     if !p.recovering && !p.speculating {
-        let _ = atn_verified(23, 1, &mut p.atn, &p.kinds, _rc_at, 0, if p.pos > _rc_at { 0 } else { 1 });
+        let _ = atn_verified(23, 1, &mut p.atn, &p.kinds, _rc_at_23, 0, if p.pos > _rc_at_23 { 0 } else { 1 });
     }
     p.site = 45;
     p.atn_ret_pending = 386;
@@ -21718,7 +21739,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_17(kind) {
         if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_20, &EXPECTED_20); }
-        let _rc_at = p.pos;
+        let _rc_at_26 = p.pos;
         let mut opt_enter: bool = false;
         if _kind_set_6(p.peek_kind()) {
             opt_enter_scan: {
@@ -21756,7 +21777,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.expect_set(&SYNC_21, &EXPECTED_21);
         }
         if !p.recovering && !p.speculating {
-            let _ = atn_verified(26, 1, &mut p.atn, &p.kinds, _rc_at, 0, if p.pos > _rc_at { 0 } else { 1 });
+            let _ = atn_verified(26, 1, &mut p.atn, &p.kinds, _rc_at_26, 0, if p.pos > _rc_at_26 { 0 } else { 1 });
         }
         p.site = 46;
         p.atn_ret_pending = 396;
@@ -21769,7 +21790,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_ws(p, follow_then_opening(FOLLOW_MASK_14, 16, follow));
         loop {
             if p.recovering { break; }
-            let _rc_at_2 = p.pos;
+            let _rc_at_28 = p.pos;
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             if p.peek_kind() != TK_And { break; }
             let sp_pending = p.pending;
@@ -21808,8 +21829,8 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
             }
             p.pos = sp_end;
-            if _rc_at_2 >= 0 && !p.recovering && !p.speculating {
-                let _ = atn_verified(28, 1, &mut p.atn, &p.kinds, _rc_at_2, 0, 0);
+            if _rc_at_28 >= 0 && !p.recovering && !p.speculating {
+                let _ = atn_verified(28, 1, &mut p.atn, &p.kinds, _rc_at_28, 0, 0);
             }
         }
         if !p.recovering && !p.speculating {
@@ -21822,7 +21843,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_media_expression(p, follow_then_opening(FOLLOW_MASK_14, 16, follow));
         loop {
             if p.recovering { break; }
-            let _rc_at = p.pos;
+            let _rc_at_29 = p.pos;
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             if p.peek_kind() != TK_And { break; }
             let sp_pending = p.pending;
@@ -21861,8 +21882,8 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
             }
             p.pos = sp_end;
-            if _rc_at >= 0 && !p.recovering && !p.speculating {
-                let _ = atn_verified(29, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+            if _rc_at_29 >= 0 && !p.recovering && !p.speculating {
+                let _ = atn_verified(29, 1, &mut p.atn, &p.kinds, _rc_at_29, 0, 0);
             }
         }
         if !p.recovering && !p.speculating {
@@ -22063,7 +22084,7 @@ fn _parse_selector_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 503;
     _parse_selector(p, follow_then_opening(FOLLOW_MASK_20, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
-        let _rc_at = p.pos;
+        let _rc_at_35 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 72;
@@ -22072,8 +22093,8 @@ fn _parse_selector_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 73;
         p.atn_ret_pending = 513;
         _parse_selector(p, follow_then_opening(FOLLOW_MASK_20, 16, follow));
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(35, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_35 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(35, 1, &mut p.atn, &p.kinds, _rc_at_35, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -22105,7 +22126,7 @@ fn _parse_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 520;
     _parse_ws(p, follow_then_opening(FOLLOW_MASK_23, 16, follow));
     while !p.recovering && _kind_set_19(p.peek_kind()) {
-        let _rc_at = p.pos;
+        let _rc_at_36 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.site = 76;
         p.atn_ret_pending = 526;
@@ -22116,8 +22137,8 @@ fn _parse_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 78;
         p.atn_ret_pending = 530;
         _parse_ws(p, follow_then_opening(FOLLOW_MASK_23, 16, follow));
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(36, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_36 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(36, 1, &mut p.atn, &p.kinds, _rc_at_36, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -22241,7 +22262,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_32);
         }
         while !p.recovering && _kind_set_21(p.peek_kind()) {
-            let _rc_at = p.pos;
+            let _rc_at_40 = p.pos;
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             let grp_kind = p.peek_kind();
             if grp_kind == TK_Hash {
@@ -22263,8 +22284,8 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
                 p.atn_ret_pending = 571;
                 _parse_negation(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_24)));
             }
-            if _rc_at >= 0 && !p.recovering && !p.speculating {
-                let _ = atn_verified(40, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+            if _rc_at_40 >= 0 && !p.recovering && !p.speculating {
+                let _ = atn_verified(40, 1, &mut p.atn, &p.kinds, _rc_at_40, 0, 0);
             }
         }
         if !p.recovering && !p.speculating {
@@ -22275,7 +22296,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
         if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_33, &EXPECTED_33); }
         let mut _plus_first = true;
         while !p.recovering && (_plus_first || _kind_set_21(p.peek_kind())) {
-            let _rc_at = if _plus_first { -1 } else { p.pos };
+            let _rc_at_43 = if _plus_first { -1 } else { p.pos };
             if !_plus_first {
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             }
@@ -22304,8 +22325,8 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
                 p.atn_ret_pending = 584;
                 _parse_negation(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_24)));
             }
-            if _rc_at >= 0 && !p.recovering && !p.speculating {
-                let _ = atn_verified(43, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+            if _rc_at_43 >= 0 && !p.recovering && !p.speculating {
+                let _ = atn_verified(43, 1, &mut p.atn, &p.kinds, _rc_at_43, 0, 0);
             }
         }
         if !p.recovering && !p.speculating {
@@ -22338,7 +22359,7 @@ fn _parse_simple_selector_sequence(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_type_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_32, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_32, &EXPECTED_32); }
-    let _rc_at = p.pos;
+    let _rc_at_44 = p.pos;
     let mut opt_enter: bool = false;
     if _kind_set_20(p.peek_kind()) {
         opt_enter_scan: {
@@ -22358,7 +22379,7 @@ fn _parse_type_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_type_namespace_prefix(p, FOLLOW_MASK_12);
     }
     if !p.recovering && !p.speculating {
-        let _ = atn_verified(44, 1, &mut p.atn, &p.kinds, _rc_at, 0, if p.pos > _rc_at { 0 } else { 1 });
+        let _ = atn_verified(44, 1, &mut p.atn, &p.kinds, _rc_at_44, 0, if p.pos > _rc_at_44 { 0 } else { 1 });
     }
     p.site = 94;
     p.atn_ret_pending = 594;
@@ -22452,7 +22473,7 @@ fn _parse_element_name(p: &mut Parser) -> () {
 
 fn _parse_universal__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_32, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_32, &EXPECTED_32); }
-    let _rc_at = p.pos;
+    let _rc_at_47 = p.pos;
     let mut opt_enter: bool = false;
     if _kind_set_20(p.peek_kind()) {
         opt_enter_scan: {
@@ -22472,7 +22493,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_type_namespace_prefix(p, follow_then(FOLLOW_MASK_26, 8, follow));
     }
     if !p.recovering && !p.speculating {
-        let _ = atn_verified(47, 1, &mut p.atn, &p.kinds, _rc_at, 0, if p.pos > _rc_at { 0 } else { 1 });
+        let _ = atn_verified(47, 1, &mut p.atn, &p.kinds, _rc_at_47, 0, if p.pos > _rc_at_47 { 0 } else { 1 });
     }
     p.expect(TK_Multiply, &EMPTY_SYNC, true);
     return;
@@ -22522,7 +22543,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 630;
     _parse_ws(p, 0);
     if !kind_set_has(&SYNC_32, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_32, &EXPECTED_32); }
-    let _rc_at = p.pos;
+    let _rc_at_48 = p.pos;
     let mut opt_enter: bool = false;
     if _kind_set_20(p.peek_kind()) {
         opt_enter_scan: {
@@ -22563,7 +22584,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_type_namespace_prefix(p, FOLLOW_MASK_12);
     }
     if !p.recovering && !p.speculating {
-        let _ = atn_verified(48, 1, &mut p.atn, &p.kinds, _rc_at, 0, if p.pos > _rc_at { 0 } else { 1 });
+        let _ = atn_verified(48, 1, &mut p.atn, &p.kinds, _rc_at_48, 0, if p.pos > _rc_at_48 { 0 } else { 1 });
     }
     p.site = 101;
     p.atn_ret_pending = 636;
@@ -22694,7 +22715,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_42, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_42, &EXPECTED_42); }
     let mut _plus_first = true;
     while !p.recovering && (_plus_first || _kind_set_25(p.peek_kind())) {
-        let _rc_at = if _plus_first { -1 } else { p.pos };
+        let _rc_at_55 = if _plus_first { -1 } else { p.pos };
         if !_plus_first {
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         }
@@ -22713,8 +22734,8 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 111;
         p.atn_ret_pending = 704;
         _parse_ws(p, 0);
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(55, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_55 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(55, 1, &mut p.atn, &p.kinds, _rc_at_55, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -23150,7 +23171,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_ws(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_6)));
     loop {
         if p.recovering { break; }
-        let _rc_at = p.pos;
+        let _rc_at_64 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if p.peek_kind() != TK_SemiColon { break; }
         let sp_pending = p.pending;
@@ -23162,6 +23183,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 140;
         p.atn_ret_pending = 824;
         _parse_ws(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_19)));
+        let _rc_at_65 = p.pos;
         let mut opt_enter: bool = _kind_set_18(p.peek_kind());
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
@@ -23178,6 +23200,9 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 141;
             p.atn_ret_pending = 828;
             _parse_declaration(p, follow);
+        }
+        if !p.recovering && !p.speculating {
+            let _ = atn_verified(65, 1, &mut p.atn, &p.kinds, _rc_at_65, 0, if p.pos > _rc_at_65 { 0 } else { 1 });
         }
         p.speculating = sp_outer;
         if p.recovering || p.pos <= sp_pos {
@@ -23203,8 +23228,8 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         p.pos = sp_end;
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(64, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_64 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(64, 1, &mut p.atn, &p.kinds, _rc_at_64, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -23240,7 +23265,7 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 144;
     p.atn_ret_pending = 839;
     _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_33)));
-    let _rc_at = p.pos;
+    let _rc_at_67 = p.pos;
     let mut opt_enter: bool = p.peek_kind() == TK_Important;
     if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         let mut opt_scan_pos: i32 = -1;
@@ -23259,7 +23284,7 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_prio(p, follow);
     }
     if !p.recovering && !p.speculating {
-        let _ = atn_verified(67, 1, &mut p.atn, &p.kinds, _rc_at, 0, if p.pos > _rc_at { 0 } else { 1 });
+        let _ = atn_verified(67, 1, &mut p.atn, &p.kinds, _rc_at_67, 0, if p.pos > _rc_at_67 { 0 } else { 1 });
     }
     return;
 }
@@ -23389,7 +23414,7 @@ fn _parse_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
-        let _rc_at = if _plus_first { -1 } else { p.pos };
+        let _rc_at_69 = if _plus_first { -1 } else { p.pos };
         if !_plus_first {
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         }
@@ -23461,8 +23486,8 @@ fn _parse_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.atn_ret_pending = 869;
             _parse_ws(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_34)));
         }
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(69, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_69 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(69, 1, &mut p.atn, &p.kinds, _rc_at_69, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -23492,7 +23517,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_term(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_35)));
     loop {
         if p.recovering { break; }
-        let _rc_at = p.pos;
+        let _rc_at_70 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_46(p.peek_kind()) { break; }
         let sp_pending = p.pending;
@@ -23533,8 +23558,8 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         p.pos = sp_end;
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(70, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_70 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(70, 1, &mut p.atn, &p.kinds, _rc_at_70, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -24989,7 +25014,7 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
-        let _rc_at = if _plus_first { -1 } else { p.pos };
+        let _rc_at_97 = if _plus_first { -1 } else { p.pos };
         if !_plus_first {
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -25055,8 +25080,8 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 263;
         p.atn_ret_pending = 1280;
         _parse_supports_condition_in_parens(p, 0);
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(97, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_97 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(97, 1, &mut p.atn, &p.kinds, _rc_at_97, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -25088,7 +25113,7 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
-        let _rc_at = if _plus_first { -1 } else { p.pos };
+        let _rc_at_98 = if _plus_first { -1 } else { p.pos };
         if !_plus_first {
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -25154,8 +25179,8 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 269;
         p.atn_ret_pending = 1304;
         _parse_supports_condition_in_parens(p, 0);
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(98, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_98 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(98, 1, &mut p.atn, &p.kinds, _rc_at_98, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -25349,7 +25374,7 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 1377;
     _parse_calc_product(p, follow_then_opening(FOLLOW_MASK_46, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Space {
-        let _rc_at = p.pos;
+        let _rc_at_103 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 283;
@@ -25367,8 +25392,8 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 286;
         p.atn_ret_pending = 1397;
         _parse_calc_product(p, follow_then_opening(FOLLOW_MASK_46, 16, follow));
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(103, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_103 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(103, 1, &mut p.atn, &p.kinds, _rc_at_103, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -25397,7 +25422,7 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 1402;
     _parse_calc_value(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_48)));
     while !p.recovering && _kind_set_69(p.peek_kind()) {
-        let _rc_at = p.pos;
+        let _rc_at_105 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_Multiply {
@@ -25420,8 +25445,8 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.atn_ret_pending = 1420;
             _parse_ws(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_48)));
         }
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(105, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_105 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(105, 1, &mut p.atn, &p.kinds, _rc_at_105, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -25855,7 +25880,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 1551;
     _parse_ws(p, follow_then_opening(FOLLOW_MASK_51, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
-        let _rc_at = p.pos;
+        let _rc_at_115 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 328;
@@ -25866,8 +25891,8 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 329;
         p.atn_ret_pending = 1565;
         _parse_ws(p, follow_then_opening(FOLLOW_MASK_51, 16, follow));
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(115, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_115 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(115, 1, &mut p.atn, &p.kinds, _rc_at_115, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -26021,7 +26046,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_font_family_name(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_54)));
     loop {
         if p.recovering { break; }
-        let _rc_at = p.pos;
+        let _rc_at_120 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_71(p.peek_kind()) { break; }
         let sp_pending = p.pending;
@@ -26063,8 +26088,8 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         p.pos = sp_end;
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(120, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_120 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(120, 1, &mut p.atn, &p.kinds, _rc_at_120, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -26100,7 +26125,7 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_ident(p);
         loop {
             if p.recovering { break; }
-            let _rc_at = p.pos;
+            let _rc_at_122 = p.pos;
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             if !_kind_set_17(p.peek_kind()) { break; }
             let sp_pending = p.pending;
@@ -26138,8 +26163,8 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
             }
             p.pos = sp_end;
-            if _rc_at >= 0 && !p.recovering && !p.speculating {
-                let _ = atn_verified(122, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+            if _rc_at_122 >= 0 && !p.recovering && !p.speculating {
+                let _ = atn_verified(122, 1, &mut p.atn, &p.kinds, _rc_at_122, 0, 0);
             }
         }
         if !p.recovering && !p.speculating {
@@ -26257,7 +26282,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: i64 = 0) -> ()
     _parse_number(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_57)));
     loop {
         if p.recovering { break; }
-        let _rc_at = p.pos;
+        let _rc_at_126 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_77(p.peek_kind()) { break; }
         let sp_pending = p.pending;
@@ -26295,8 +26320,8 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: i64 = 0) -> ()
             }
         }
         p.pos = sp_end;
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(126, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_126 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(126, 1, &mut p.atn, &p.kinds, _rc_at_126, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -26353,7 +26378,7 @@ fn _parse_ident(p: &mut Parser) -> () {
 fn _parse_ws__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
-        let _rc_at = p.pos;
+        let _rc_at_128 = p.pos;
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_68(p.peek_kind()) { break; }
         let sp_pending = p.pending;
@@ -26386,8 +26411,8 @@ fn _parse_ws__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         p.pos = sp_end;
-        if _rc_at >= 0 && !p.recovering && !p.speculating {
-            let _ = atn_verified(128, 1, &mut p.atn, &p.kinds, _rc_at, 0, 0);
+        if _rc_at_128 >= 0 && !p.recovering && !p.speculating {
+            let _ = atn_verified(128, 1, &mut p.atn, &p.kinds, _rc_at_128, 0, 0);
         }
     }
     if !p.recovering && !p.speculating {
@@ -29628,8 +29653,12 @@ fn atn_decide_111_10(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn atn_verified(decision: i32, picker: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32 {
-    let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec);
-    if viable && simulated != alt {
+    return atn_verified_against(decision, picker, pos, atn_predict_walk(&ATN_SIM, decision, &atn.stack, tokens, pos, TK_EOF, min_prec, &ATN_NO_PREDS.met, &ATN_NO_PREDS.own, atn_unasked), alt);
+}
+
+fn atn_verified_against(decision: i32, picker: i32, pos: i32, verdict: [i32, bool], alt: i32) -> i32 {
+    let [simulated, viable] = verdict;
+    if viable && simulated >= 0 && simulated != alt {
         let by = match picker {
             0 => "the tournament",
             1 => "the repeat",
