@@ -283,24 +283,36 @@ fn carried(
     }
     if op == "Gemm" {
         let [_, _, trans_a, _] = gemm_options(node).unwrap();
-        // A bias with rows of its own adds them where no merge put them.
-        let bias_rows = node.has_operand(2)
-            && shapes[node.inputs[2]] matches { b && b.rank() == 2 && !b.axes[0].extent.is_one() };
-        if trans_a || bias_rows {
+        if trans_a {
             return reads();
         }
         merges[0] = a.1[0];
+        if node.has_operand(2) && shapes[node.inputs[2]] matches { c && rows_under(&merges, &c, c.rank(), 2) } {
+            return reads();
+        }
         return Result::Ok(Option::Some(merges));
     }
     if op == "MatMul" {
+        let b = shapes[node.inputs[1]];
         // A vector on the right leaves no axis of its own in the product.
-        let lead = out.rank() - a_rank + if shapes[node.inputs[1]].rank() == 1 { 1 } else { 0 };
+        let lead = out.rank() - a_rank + if b.rank() == 1 { 1 } else { 0 };
         for let i of 0..<a_rank - 1 {
             merges[lead + i] = a.1[i];
+        }
+        if rows_under(&merges, &b, i32::max(b.rank() - 2, 0), out.rank() - 2) {
+            return reads();
         }
         return Result::Ok(Option::Some(merges));
     }
     return reads();
+}
+
+/// Whether the first `n` axes of `shape`, an operand broadcast into a product
+/// and aligned at their ends with the output's axes before `end`, hold rows of
+/// their own under a merge: an extent other than one, which the merge never
+/// laid out.
+fn rows_under(merges: &Merges, shape: &Shape, n: i32, end: i32) -> bool {
+    return (0..<n).any(|i| merges[end - n + i] matches { Some(_) } && !shape.axes[i].extent.is_one());
 }
 
 /// The symbols some extent of `node`'s outputs may fall as they rise. An

@@ -105,6 +105,26 @@ test "a length merged behind the rows refuses it where a bias holds rows of its 
     assert judged(source) == ["S: refused at G = Gemm: it reads rows a regrouping merged"] as List<String>;
 }
 
+test "a length merged behind the rows refuses it where a product's right operand holds rows of its own" {
+    // The right operand counts the merged rows in its batch axis, so at a
+    // capacity its rows are not the merged operand's.
+    let source = `g (float[2, S, 4] X) => (float[2, S, 1] Y) <float[4, 1] W, int64[3] Flat = {-1, 1, 4}, int64[3] Back = {2, -1, 1}> {
+        F = Reshape(X, Flat)
+        Dims = Shape(F)
+        Zero = Constant<value_int = 0>()
+        One = Constant<value_int = 1>()
+        Axes = Constant<value_ints = [1, 2]>()
+        N = Gather(Dims, Zero)
+        P = Range(Zero, N, One)
+        Counted = Cast<to = 1>(P)
+        C = Unsqueeze(Counted, Axes)
+        R = Mul(C, W)
+        G = MatMul(F, R)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: refused at G = MatMul: it reads rows a regrouping merged"] as List<String>;
+}
+
 test "a branch's merged tensors stay its own where its sibling reuses their names" {
     let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
         Y = If <then_branch = merged () => (float[M, 4] U) {
