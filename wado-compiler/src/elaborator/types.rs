@@ -21,7 +21,9 @@ use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::missing_trait_message;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member, written_param_name};
+use crate::name::{
+    FqTraitName, FqTypeName, minted_name, unalias_namespace_member, written_param_name,
+};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId};
 use crate::token::Span;
@@ -3955,6 +3957,19 @@ impl FunctionContext {
     /// How many locals the function has allocated.
     pub(super) fn local_count(&self) -> u32 {
         self.next_local
+    }
+
+    /// A fresh local of the same type for each one allocated from `first` on,
+    /// in order; answers the first of them. A `let ... else` binds these in its
+    /// matched arm and hands them on to the locals its pattern names. Resolve
+    /// and reify both call it, which keeps their local indices in step.
+    pub(super) fn twin_locals(&mut self, first: u32) -> u32 {
+        let twins = self.next_local;
+        for index in first..twins {
+            let type_id = self.locals[index as usize].type_id;
+            self.add_local(minted_name("twin", index), type_id, false, None);
+        }
+        twins
     }
 
     /// Add a local variable to the current scope.

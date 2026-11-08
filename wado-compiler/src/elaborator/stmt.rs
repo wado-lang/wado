@@ -707,7 +707,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let pattern = let_stmt.else_pattern();
+        let first = ctx.local_count();
         self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
+        ctx.twin_locals(first);
         if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "irrefutable pattern in `let ... else`: the else block can never run; \

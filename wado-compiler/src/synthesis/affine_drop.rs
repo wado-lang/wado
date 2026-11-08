@@ -20,8 +20,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DROP_GLUE_PREFIX, Receiver, checked_name, drop_glue_name, is_contract_holder,
-    is_template_block, minted_name,
+    DROP_GLUE_PREFIX, Receiver, checked_name, drop_glue_name, is_contract_holder, minted_name,
 };
 use crate::package::Package;
 use crate::synthesis::cm_binding::{end_drop_call, resource_drop_call};
@@ -46,8 +45,8 @@ struct Live {
     local: u32,
     name: String,
     type_id: TypeId,
-    /// A referenced temporary spilled by [`spill_temporary`], owned by its
-    /// statement rather than by the enclosing block.
+    /// A temporary spilled by [`spill_temporary`] that a statement owns, which
+    /// drops as that statement ends rather than with its scope.
     temporary: bool,
 }
 
@@ -57,11 +56,21 @@ impl Live {
     }
 }
 
-/// An open scope: the affine locals it declared, and which statement owns the
-/// temporaries among them.
+/// An open scope: the affine locals it declared, with the temporaries it or one
+/// of its statements owns.
 struct Scope {
     lives: Vec<Live>,
-    temporaries: TemporaryScope,
+}
+
+/// What owns the temporaries spilled while it is open.
+#[derive(Clone, Copy)]
+enum Owner {
+    /// A statement of the source, in the scope at depth `scope`. `keeps` when it
+    /// is a `let`, which keeps the temporaries marked `extended` in that scope.
+    Statement { scope: usize, keeps: bool },
+    /// The scope at that depth, which runs more than once inside one statement:
+    /// a loop's iteration, or an expression expanded once per pack element.
+    Scope(usize),
 }
 
 /// Where a `break` or `continue` lands: a labeled block, or a loop
@@ -81,13 +90,13 @@ struct Cx<'a> {
     local_count: Option<&'a mut u32>,
     /// The affine locals each open scope declared, outermost first.
     scopes: Vec<Scope>,
-    /// The scope holding the `let` whose initializer is being elaborated, which
-    /// keeps the temporaries the `let` borrows. A plain block inside it is part
-    /// of that statement, so a `let` it holds answers to the outer one.
-    let_scope: Option<usize>,
-    /// The declarations of the temporaries spilled since the statement owning
-    /// them began, which go ahead of that statement: its drops read them after
-    /// the expression that assigns them, so no block inside it may declare them.
+    /// The owners open, innermost last. A temporary belongs to the innermost:
+    /// the statements a desugaring adds own none, so reshaping a statement
+    /// cannot end its temporaries early.
+    owners: Vec<Owner>,
+    /// The declarations of the temporaries spilled since their owner began,
+    /// which go ahead of it: its drops read them after the expression that
+    /// assigns them, so no block inside it may declare them.
     declarations: Vec<TirStmt>,
     /// The enclosing loops and labeled blocks, innermost last.
     targets: Vec<BreakTarget>,
@@ -141,15 +150,6 @@ impl Cx<'_> {
         }
     }
 
-    /// Run `walk` over the initializer of a `let` the innermost scope holds.
-    fn in_let<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
-        let outer = self.let_scope;
-        self.let_scope = outer.or(Some(self.scopes.len() - 1));
-        let result = walk(self);
-        self.let_scope = outer;
-        result
-    }
-
     /// Declare `live` in the innermost scope.
     fn declare(&mut self, live: Live) {
         self.scopes
@@ -159,8 +159,9 @@ impl Cx<'_> {
             .push(live);
     }
 
-    fn open_scope(&mut self, lives: Vec<Live>, temporaries: TemporaryScope) {
-        self.scopes.push(Scope { lives, temporaries });
+    fn open_scope(&mut self, lives: Vec<Live>) -> usize {
+        self.scopes.push(Scope { lives });
+        self.scopes.len() - 1
     }
 
     /// How many scopes are open outside the target a `break label` (or, with
@@ -175,28 +176,13 @@ impl Cx<'_> {
     }
 
     /// The statements that drop every local the scopes from `depth` up
-    /// declared, innermost first. The temporaries of the scopes from `depth`
-    /// that defer theirs are left out: the statement owning them lies outside
-    /// the jump, which lands inside it.
+    /// declared, innermost first. A temporary lives in the scope holding its
+    /// owner, so these are the ones whose owner the jump leaves.
     fn drop_scopes_from(&mut self, depth: usize) -> Vec<TirStmt> {
-        let scopes = &self.scopes[depth..];
-        let deferring = scopes
+        let lives: Vec<Live> = self.scopes[depth..]
             .iter()
-            .take_while(|scope| scope.temporaries == TemporaryScope::Enclosing)
-            .count();
-        let lives: Vec<Live> = scopes
-            .iter()
-            .enumerate()
             .rev()
-            .flat_map(|(idx, scope)| {
-                let kept = idx < deferring;
-                scope
-                    .lives
-                    .iter()
-                    .rev()
-                    .filter(move |live| !(kept && live.temporary))
-                    .cloned()
-            })
+            .flat_map(|scope| scope.lives.iter().rev().cloned())
             .collect();
         drop_lives(&lives, self)
     }
@@ -663,7 +649,7 @@ fn build_drop_glue(
         local_base: 0,
         local_count: Some(&mut local_count),
         scopes: Vec::new(),
-        let_scope: None,
+        owners: Vec::new(),
         declarations: Vec::new(),
         targets: Vec::new(),
         expanding: Vec::new(),
@@ -736,7 +722,7 @@ fn elaborate_function(func: &mut TirFunction, affine_types: AffineTypes, glue: &
         local_base: 0,
         local_count: Some(local_count),
         scopes: Vec::new(),
-        let_scope: None,
+        owners: Vec::new(),
         declarations: Vec::new(),
         targets: Vec::new(),
         expanding: Vec::new(),
@@ -745,7 +731,7 @@ fn elaborate_function(func: &mut TirFunction, affine_types: AffineTypes, glue: &
         drop_self,
     };
     let yields = cx.yields(*return_type);
-    elab_scope(body, owned, TemporaryScope::Statement, yields, &mut cx);
+    elab_scope(body, owned, false, yields, &mut cx);
 }
 
 /// Each type's `Drop::drop`, by the type's declaration.
@@ -1218,15 +1204,6 @@ fn variant_drop_arm(
 // Block / statement elaboration
 // ---------------------------------------------------------------------------
 
-/// Which statement a temporary spilled inside a block belongs to.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum TemporaryScope {
-    /// The block's own statement that spilled it.
-    Statement,
-    /// The statement holding the block: see [`elab_plain_block`].
-    Enclosing,
-}
-
 /// Where a block's last statement's value goes.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tail {
@@ -1240,21 +1217,16 @@ enum Tail {
 }
 
 /// Elaborate `block` in place as a scope that opens declaring `declared`. Its
-/// locals drop at its end where it falls through, and its temporaries where
-/// `temporaries` says. Its last statement's value goes where `tail` says.
-fn elab_scope(
-    block: &mut TirBlock,
-    declared: Vec<Live>,
-    temporaries: TemporaryScope,
-    tail: Tail,
-    cx: &mut Cx,
-) {
-    cx.open_scope(declared, temporaries);
-    let outer_let = if temporaries == TemporaryScope::Statement {
-        cx.let_scope.take()
-    } else {
-        cx.let_scope
-    };
+/// locals drop at its end where it falls through. A statement of the source
+/// owns the temporaries spilled in it, and so does each statement where no
+/// owner is open, as in a body synthesis built; an `iteration` owns those no
+/// statement in it does. Its last statement's value goes where `tail` says.
+fn elab_scope(block: &mut TirBlock, declared: Vec<Live>, iteration: bool, tail: Tail, cx: &mut Cx) {
+    let depth = cx.open_scope(declared);
+    let first_scope_declaration = cx.declarations.len();
+    if iteration {
+        cx.owners.push(Owner::Scope(depth));
+    }
     let stmts = std::mem::take(&mut block.stmts);
     let mut out: Vec<TirStmt> = Vec::new();
     let mut diverged = false;
@@ -1267,12 +1239,24 @@ fn elab_scope(
             continue;
         }
         let stmt_tail = if idx == last { tail } else { Tail::Discarded };
-        let first_declared = cx.scopes.last().expect("pushed above").lives.len();
+        let owns = stmt.source || cx.owners.is_empty();
+        let keeps = matches!(
+            stmt.kind,
+            TirStmtKind::Let { .. } | TirStmtKind::LetDestructure { .. }
+        );
+        let first_declared = cx.scopes[depth].lives.len();
         let first_out = out.len();
         let first_declaration = cx.declarations.len();
         diverged = divergence::tir_stmt_always_exits(&cx.affine_types.tt.borrow(), &stmt);
+        if owns {
+            cx.owners.push(Owner::Statement {
+                scope: depth,
+                keeps,
+            });
+        }
         elab_stmt(stmt, cx, stmt_tail, &mut out);
-        if temporaries == TemporaryScope::Statement {
+        if owns {
+            cx.owners.pop();
             if !diverged {
                 let spilled = take_temporaries(cx, first_declared);
                 let drops = drop_lives(&spilled, cx);
@@ -1288,19 +1272,16 @@ fn elab_scope(
             out.splice(first_out..first_out, declarations);
         }
     }
-    cx.let_scope = outer_let;
+    if iteration {
+        cx.owners.pop();
+        let declarations = cx.declarations.split_off(first_scope_declaration);
+        out.splice(0..0, declarations);
+    }
     let scope = cx.scopes.pop().expect("pushed above");
-    let (deferred, lives): (Vec<Live>, Vec<Live>) = scope
-        .lives
-        .into_iter()
-        .partition(|live| live.temporary && temporaries == TemporaryScope::Enclosing);
     if !diverged {
-        let lives: Vec<Live> = lives.into_iter().rev().collect();
+        let lives: Vec<Live> = scope.lives.into_iter().rev().collect();
         let drops = drop_lives(&lives, cx);
         out = append_block_drops(out, drops, cx);
-    }
-    if let Some(enclosing) = cx.scopes.last_mut() {
-        enclosing.lives.extend(deferred);
     }
     block.stmts = out;
 }
@@ -1363,32 +1344,18 @@ fn append_expr_drops(expr: &mut TirExpr, drops: Vec<TirStmt>, cx: &mut Cx) {
 
 /// Elaborate a block in place as a fresh nested scope.
 fn elab_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
-    elab_scope(block, Vec::new(), TemporaryScope::Statement, tail, cx);
+    elab_scope(block, Vec::new(), false, tail, cx);
 }
 
-/// Elaborate a plain block expression in place. Nothing can leave it but a
-/// `return` or a `break` past it, so it runs whole as part of the statement
-/// holding it, and its temporaries drop when that statement ends. Synthesized
-/// code relies on that: an `assert` captures its operand `f(&t())` as
-/// `f({ $v = &t(); $v })`, so `t()` must outlive the capture's statement.
-fn elab_plain_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
-    elab_scope(block, Vec::new(), TemporaryScope::Enclosing, tail, cx);
-}
-
-/// Elaborate `block`, the body `target` is reached from. The block binding a
-/// template's holes is part of the statement holding the template, as a plain
-/// block is: its temporaries outlive the call the holes are read by.
+/// Elaborate `block`, the body `label` names, or the loop's body (`None`),
+/// each run of which is an iteration.
 fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) {
-    let temporaries = if label.as_deref().is_some_and(is_template_block) {
-        TemporaryScope::Enclosing
-    } else {
-        TemporaryScope::Statement
-    };
+    let iteration = label.is_none();
     cx.targets.push(BreakTarget {
         label,
         depth: cx.scopes.len(),
     });
-    elab_scope(block, Vec::new(), temporaries, tail, cx);
+    elab_scope(block, Vec::new(), iteration, tail, cx);
     cx.targets.pop();
 }
 
@@ -1404,7 +1371,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
             value,
             storage,
         } => {
-            let value = cx.in_let(|cx| elab_value_expr(value, cx));
+            let value = elab_value_expr(value, cx);
             if cx.carries_affine(type_id) {
                 cx.declare(Live {
                     local: local_index,
@@ -1413,8 +1380,8 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
                     temporary: false,
                 });
             }
-            out.push(TirStmt {
-                kind: TirStmtKind::Let {
+            out.push(TirStmt::new(
+                TirStmtKind::Let {
                     name,
                     local_index,
                     is_mut,
@@ -1423,7 +1390,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
                     storage,
                 },
                 span,
-            });
+            ));
         }
 
         // The pattern consumes its value as an arm's does: the parts no
@@ -1431,16 +1398,15 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
         TirStmtKind::LetDestructure { pattern, mut value } => {
             let bindings = cx.affine_types.pattern_bindings(&pattern);
             let extracts = !bindings.is_empty();
-            let entry = cx
-                .in_let(|cx| consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx))
+            let entry = consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx)
                 .map_or_else(Vec::new, |place| consume_matched(&pattern, place, cx));
             for live in bindings {
                 cx.declare(live);
             }
-            out.push(TirStmt {
-                kind: TirStmtKind::LetDestructure { pattern, value },
+            out.push(TirStmt::new(
+                TirStmtKind::LetDestructure { pattern, value },
                 span,
-            });
+            ));
             out.extend(entry);
         }
 
@@ -1453,19 +1419,13 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
             if tail == Tail::Discarded && discards && cx.carries_affine(elaborated.type_id) {
                 out.extend(drop_discarded(elaborated, cx));
             } else {
-                out.push(TirStmt {
-                    kind: TirStmtKind::Expr(elaborated),
-                    span,
-                });
+                out.push(TirStmt::new(TirStmtKind::Expr(elaborated), span));
             }
         }
 
         TirStmtKind::TaskReturn { value } => {
             let value = elab_value_expr(value, cx);
-            out.push(TirStmt {
-                kind: TirStmtKind::TaskReturn { value },
-                span,
-            });
+            out.push(TirStmt::new(TirStmtKind::TaskReturn { value }, span));
         }
 
         TirStmtKind::Return { value } => {
@@ -1487,30 +1447,27 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
                 elab_block(&mut block, Tail::Discarded, cx);
                 block
             });
-            out.push(TirStmt {
-                kind: TirStmtKind::If {
+            out.push(TirStmt::new(
+                TirStmtKind::If {
                     condition,
                     then_block,
                     else_block,
                 },
                 span,
-            });
+            ));
         }
 
         TirStmtKind::Loop { mut body } => {
             elab_target_body(&mut body, None, Tail::Discarded, cx);
-            out.push(TirStmt {
-                kind: TirStmtKind::Loop { body },
-                span,
-            });
+            out.push(TirStmt::new(TirStmtKind::Loop { body }, span));
         }
 
         TirStmtKind::LabeledBlock { label, mut block } => {
             elab_target_body(&mut block, Some(label.clone()), Tail::Discarded, cx);
-            out.push(TirStmt {
-                kind: TirStmtKind::LabeledBlock { label, block },
+            out.push(TirStmt::new(
+                TirStmtKind::LabeledBlock { label, block },
                 span,
-            });
+            ));
         }
 
         TirStmtKind::Break { label, value } => {
@@ -1563,10 +1520,7 @@ fn leave_after_drops(
         value => value,
     };
     out.extend(drops);
-    out.push(TirStmt {
-        kind: leave(value),
-        span,
-    });
+    out.push(TirStmt::new(leave(value), span));
 }
 
 // ---------------------------------------------------------------------------
@@ -1712,11 +1666,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         // Every operator takes its operands by reference.
         TirExprKind::Binary { op, left, right } => {
             elab_expr(left, false, cx);
-            if op.is_short_circuit() {
-                elab_expr_scope(right, cx);
-            } else {
-                elab_expr(right, false, cx);
-            }
+            // A short-circuit operand that does not run leaves its temporaries
+            // empty, and dropping an empty place drops nothing.
+            elab_expr(right, op.is_short_circuit(), cx);
         }
         TirExprKind::Assign { target, value } => {
             elab_expr(target, false, cx);
@@ -1737,7 +1689,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 Tail::Consumed if !consuming => Tail::Referenced,
                 tail => tail,
             };
-            elab_plain_block(block, tail, cx);
+            elab_block(block, tail, cx);
         }
         TirExprKind::LabeledBlock { label, block, .. } => {
             elab_target_body(block, Some(label.clone()), cx.yields(type_id), cx);
@@ -1777,13 +1729,12 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 elab_expr(payload, true, cx);
             }
         }
-        // Expanded once per pack element, so each expansion is a scope.
         TirExprKind::TypePackExpansion { call_expr, .. } => {
-            elab_expr_scope(call_expr, cx);
+            elab_expansion(call_expr, cx);
         }
         TirExprKind::VariadicTupleComprehension { iterable, body, .. } => {
             elab_expr(iterable, true, cx);
-            elab_expr_scope(body, cx);
+            elab_expansion(body, cx);
         }
         TirExprKind::GlobalVarGet { .. } => {}
 
@@ -2127,7 +2078,7 @@ fn elab_closure(
         local_base: params.len() as u32,
         local_count: None,
         scopes: Vec::new(),
-        let_scope: None,
+        owners: Vec::new(),
         declarations: Vec::new(),
         targets: Vec::new(),
         expanding: Vec::new(),
@@ -2137,13 +2088,7 @@ fn elab_closure(
     };
     let yields = inner.yields(body.type_id);
     let mut block = into_block(body);
-    elab_scope(
-        &mut block,
-        owned,
-        TemporaryScope::Statement,
-        yields,
-        &mut inner,
-    );
+    elab_scope(&mut block, owned, false, yields, &mut inner);
     body.kind = TirExprKind::Block(block);
 }
 
@@ -2247,7 +2192,7 @@ fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
     if is_temporary(base, cx) {
         elab_expr(base, true, cx);
         let type_id = base.type_id;
-        let (local, name) = spill_as_local(base, None, cx);
+        let (local, name) = spill_as_local(base, false, cx);
         let value = std::mem::replace(&mut **base, local_ref(local, &name, type_id));
         take_place(expr, cx);
         let TirExprKind::Block(block) = &mut expr.kind else {
@@ -2286,16 +2231,12 @@ fn is_temporary(expr: &TirExpr, cx: &Cx) -> bool {
 }
 
 /// Move the referenced temporary `expr` into a fresh local, in place and so in
-/// evaluation order (`{ $temp = expr; $temp }`), owned until the statement
-/// holding it ends, or the scope holding the `let` that keeps the borrow
-/// (`extended`). Returns the local.
+/// evaluation order (`{ $temp = expr; $temp }`), owned until its owner ends,
+/// or the scope holding the `let` that keeps the borrow (`extended`). Returns
+/// the local.
 fn spill_temporary(expr: &mut TirExpr, extended: bool, cx: &mut Cx) -> TirExpr {
     let type_id = expr.type_id;
-    let kept_by = extended.then(|| {
-        cx.let_scope
-            .expect("a temporary a `let` keeps is spilled inside its initializer")
-    });
-    let (local, name) = spill_as_local(expr, kept_by, cx);
+    let (local, name) = spill_as_local(expr, extended, cx);
     let value = std::mem::replace(expr, local_ref(local, &name, type_id));
     wrap_in_block(expr, |read| {
         vec![
@@ -2306,23 +2247,34 @@ fn spill_temporary(expr: &mut TirExpr, extended: bool, cx: &mut Cx) -> TirExpr {
     local_ref(local, &name, type_id)
 }
 
-/// Declare a local owned by the statement holding `expr`, or by the scope
-/// `kept_by` names, to hold the temporary `expr` evaluates to; the caller
-/// assigns it. It is declared empty ahead of that statement (see
+/// Declare a local owned by the innermost owner, or by the scope of the `let`
+/// that keeps it (`extended`), to hold the temporary `expr` evaluates to; the
+/// caller assigns it. It is declared empty ahead of its owner (see
 /// [`Cx::declarations`]).
-fn spill_as_local(expr: &TirExpr, kept_by: Option<usize>, cx: &mut Cx) -> (u32, String) {
+fn spill_as_local(expr: &TirExpr, extended: bool, cx: &mut Cx) -> (u32, String) {
     let type_id = expr.type_id;
     let (local, name) = cx.alloc_local(type_id, "temp");
     cx.locals[(local - cx.local_base) as usize].is_mut = true;
     let empty = TirExpr::new(TirExprKind::Null, type_id, synth_span());
     cx.declarations
         .push(let_mut_stmt(&name, local, type_id, empty));
-    let scope = kept_by.unwrap_or(cx.scopes.len() - 1);
+    let owner = *cx
+        .owners
+        .last()
+        .expect("a temporary is spilled inside a statement");
+    let (scope, keeps, temporary) = match owner {
+        Owner::Statement { scope, keeps } => (scope, keeps, !extended),
+        Owner::Scope(scope) => (scope, false, false),
+    };
+    assert!(
+        keeps || !extended,
+        "a temporary a `let` keeps is spilled inside that `let`"
+    );
     cx.scopes[scope].lives.push(Live {
         local,
         name: name.clone(),
         type_id,
-        temporary: kept_by.is_none(),
+        temporary,
     });
     (local, name)
 }
@@ -2454,13 +2406,14 @@ fn zero_object(value: TirExpr, cx: &Cx) -> Vec<TirStmt> {
     }
 }
 
-/// Elaborate `expr` as a scope of its own: whatever it declares (its
-/// temporaries) drops once its value is computed. An expression that runs on
-/// some paths only, or more than once, is one.
-fn elab_expr_scope(expr: &mut TirExpr, cx: &mut Cx) {
-    cx.open_scope(Vec::new(), TemporaryScope::Statement);
+/// Elaborate `expr`, expanded once per pack element, as an owner of its own:
+/// what it declares (its temporaries) drops once its value is computed.
+fn elab_expansion(expr: &mut TirExpr, cx: &mut Cx) {
+    let depth = cx.open_scope(Vec::new());
+    cx.owners.push(Owner::Scope(depth));
     let first_declaration = cx.declarations.len();
     elab_expr(expr, true, cx);
+    cx.owners.pop();
     let scope = cx.scopes.pop().expect("pushed above");
     let lives: Vec<Live> = scope.lives.into_iter().rev().collect();
     let drops = drop_lives(&lives, cx);
@@ -2515,20 +2468,12 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
     let place = consumed_scrutinee(scrutinee, &patterns, extracts, cx);
     for (arm, arm_bindings) in arms.iter_mut().zip(bindings) {
         let consumed = place.clone().filter(|_| arm.consumes);
-        cx.open_scope(Vec::new(), TemporaryScope::Statement);
         if let Some(guard) = arm.guard.as_mut() {
-            elab_expr_scope(guard, cx);
+            elab_expr(guard, true, cx);
         }
-        cx.scopes.pop();
         let mut block = into_block(&mut arm.body);
         let yields = cx.yields(arm.body.type_id);
-        elab_scope(
-            &mut block,
-            arm_bindings,
-            TemporaryScope::Statement,
-            yields,
-            cx,
-        );
+        elab_scope(&mut block, arm_bindings, false, yields, cx);
         // Inserted once the body is elaborated: emptying the scrutinee is a
         // move, not a store that drops what it replaces.
         if let Some(place) = consumed {

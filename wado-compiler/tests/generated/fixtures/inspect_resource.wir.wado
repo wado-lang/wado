@@ -598,9 +598,6 @@ fn "inspect_resource.wado/$test_1_resource_flows_through_result__unwrap_err_insp
         }
     }
     $v0 = "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_resource.wado/$tmpl$411223e30d59a82a,[core:prelude/types.wado/StreamWritable<u8>]>$spec0$spec0$sroa[t.h0]"($sroa_$pattern_temp_0_1_39);
-    if ref.is_null($sroa_$pattern_temp_0_1_39) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_39.value);
-    }
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
         if local.tee end_20($v0.used) != shown.used {
             break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
@@ -608,9 +605,9 @@ fn "inspect_resource.wado/$test_1_resource_flows_through_result__unwrap_err_insp
         i = 0;
         $sroa_p_repr_21 = $v0.repr;
         $licm_repr_68 = shown.repr;
-        b31: block {
-            l32: loop {
-                break_if b31 (((i >= end_20) | ((i + 1) >= end_20)) | (((i + 1) + 1) >= end_20)) | ((((i + 1) + 1) + 1) >= end_20);
+        b30: block {
+            l31: loop {
+                break_if b30 (((i >= end_20) | ((i + 1) >= end_20)) | (((i + 1) + 1) >= end_20)) | ((((i + 1) + 1) + 1) >= end_20);
                 if builtin::array_get_value<u8>($sroa_p_repr_21, i) != builtin::array_get_value<u8>($licm_repr_68, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
@@ -627,17 +624,17 @@ fn "inspect_resource.wado/$test_1_resource_flows_through_result__unwrap_err_insp
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i = i + 1;
-                continue l32;
+                continue l31;
             };
         };
-        b37: block {
-            l38: loop {
-                break_if b37 i >= end_20;
+        b36: block {
+            l37: loop {
+                break_if b36 i >= end_20;
                 if builtin::array_get_value<u8>($sroa_p_repr_21, i) != builtin::array_get_value<u8>($licm_repr_68, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i = i + 1;
-                continue l38;
+                continue l37;
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
@@ -651,6 +648,9 @@ condition: `${r.unwrap_err():?}` == shown
 shown: "), used: 8 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 shown: "), used: 8 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, shown.used);
         unreachable;
+    }
+    if ref.is_null($sroa_$pattern_temp_0_1_39) == 0 {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_39.value);
     }
     "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_38);
 }

@@ -66,22 +66,25 @@ for let it of items {
 `else` follows the initializer (statement position only — a C-style for-loop
 initializer has no "rest of block" to guard, so `else` is not accepted there).
 
-`let ... else` desugars, at reify time, into a two-arm `Match` — the same
-lowering `if let` uses (`reify_let_chain_stmts`), with one twist: the then-arm
-is the rest of the enclosing block, so the pattern's bindings are in scope
-for it, and the wildcard arm is the diverging `else` block:
+`let ... else` desugars, at reify time, into one `let` whose value is a two-arm
+`Match`. The matched arm hands the pattern's bindings on to the `let`, which
+binds the same locals again, and the wildcard arm is the diverging `else`
+block:
 
 ```
-{ ...; let PAT = EXPR else { ELSE }; REST }
+let PAT = EXPR else { ELSE };
 ⇒
-{ ...; match EXPR { PAT => { REST }, _ => { ELSE } } }
+let [b₁, …, bₙ] = match EXPR { PAT => [b₁, …, bₙ], _ => { ELSE } };
 ```
+
+With one binding the `let` binds it bare, and with none the `match` is the
+statement. Either way the desugaring is one statement, so a temporary the
+initializer holds drops where the `let` ends, as any `let`'s does.
 
 The else block is resolved/reified before the pattern bindings enter scope, so
-it cannot reference them; the scrutinee, else block, pattern, and continuation
-are walked in the same order in the records-only resolve pass and the
-TIR-building reify pass, keeping the monotonic local-index allocation identical
-between the two.
+it cannot reference them; the scrutinee, else block, and pattern are walked in
+the same order in the records-only resolve pass and the TIR-building reify
+pass, keeping the monotonic local-index allocation identical between the two.
 
 A pattern name that shadows an outer binding is therefore the outer one
 throughout the else block: `let Some(x) = x else { … }` reads the shadowed `x`

@@ -175,6 +175,9 @@ impl From<AffineMoveError> for Diagnostic {
                     Gone::StatementEnded => format!(
                         "`{holder}` refers into {owner}, which dropped as its statement ended"
                     ),
+                    Gone::IterationEnded => format!(
+                        "`{holder}` refers into {owner}, which dropped as its iteration ended"
+                    ),
                     Gone::Disturbed(at) => format!(
                         "`{holder}` refers into {owner}, which a `&mut` use at {}:{} may have moved out of",
                         at.line, at.column,
@@ -518,6 +521,8 @@ enum Gone {
     Ended,
     /// A temporary no `let` keeps borrowed, whose statement ended.
     StatementEnded,
+    /// A temporary a loop's head borrowed, whose iteration ended.
+    IterationEnded,
     /// A `&mut` use of the local, not through the value, which may have moved
     /// a part of it out.
     Disturbed(Span),
@@ -537,12 +542,20 @@ struct Owner {
     disturbed: usize,
 }
 
-/// A statement, or a scope, that a temporary borrowed in it lives as long as:
-/// the statement, or the scope where a `let` keeps the borrow.
+/// What a temporary borrowed in it lives as long as: the statement, a loop's
+/// iteration for one its head borrows, or the scope where a `let` keeps the
+/// borrow.
 #[derive(Clone, Copy)]
 struct Region {
     serial: u32,
-    scope: bool,
+    kind: RegionKind,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RegionKind {
+    Statement,
+    Iteration,
+    Scope,
 }
 
 #[derive(Clone)]
@@ -1334,7 +1347,7 @@ impl MoveWalker<'_, '_> {
         let mut inner = self.sub_walker();
         inner.closure_locals = Some(locals);
         inner.own_regions_from = inner.checker.regions_opened;
-        inner.in_region(false, |inner| {
+        inner.in_region(RegionKind::Statement, |inner| {
             inner.visit_at(&closure.body);
             if !matches!(closure.body, Expr::Block(_)) {
                 inner.refuse_returned(&closure.body);
@@ -1759,15 +1772,15 @@ impl MoveWalker<'_, '_> {
     }
 
     /// The temporary `expr` as the owner of a borrow of it, living as long as
-    /// the innermost statement, or the innermost scope where a `let` keeps the
-    /// borrow.
+    /// the innermost statement or loop iteration, or the innermost scope where
+    /// a `let` keeps the borrow.
     fn temporary_owner(&self, expr: &Expr, writes: bool) -> (Owner, OwnerSite) {
         let scope = self.modes.extended(expr);
         let region = *self
             .regions
             .iter()
             .rev()
-            .find(|region| region.scope == scope)
+            .find(|region| (region.kind == RegionKind::Scope) == scope)
             .expect("a temporary is borrowed inside a statement of a scope");
         let span = expr.span();
         let owner = Owner {
@@ -1790,12 +1803,14 @@ impl MoveWalker<'_, '_> {
     /// Why a temporary living as long as `region` no longer holds what a value
     /// reads through it, if it does not.
     fn temporary_gone(&self, region: Region) -> Option<Gone> {
-        let open = self.regions.iter().any(|r| r.serial == region.serial);
-        match (open, region.scope) {
-            (true, _) => None,
-            (false, true) => Some(Gone::Ended),
-            (false, false) => Some(Gone::StatementEnded),
+        if self.regions.iter().any(|r| r.serial == region.serial) {
+            return None;
         }
+        Some(match region.kind {
+            RegionKind::Statement => Gone::StatementEnded,
+            RegionKind::Iteration => Gone::IterationEnded,
+            RegionKind::Scope => Gone::Ended,
+        })
     }
 
     /// What the value a block ends with refers into.
@@ -1910,12 +1925,11 @@ impl MoveWalker<'_, '_> {
         }
     }
 
-    /// Runs `walk` in a statement, or a scope, that the temporaries it borrows
-    /// live as long as.
-    fn in_region<R>(&mut self, scope: bool, walk: impl FnOnce(&mut Self) -> R) -> R {
+    /// Runs `walk` in a region that the temporaries it borrows live as long as.
+    fn in_region<R>(&mut self, kind: RegionKind, walk: impl FnOnce(&mut Self) -> R) -> R {
         let serial = self.checker.regions_opened;
         self.checker.regions_opened += 1;
-        self.regions.push(Region { serial, scope });
+        self.regions.push(Region { serial, kind });
         let result = walk(self);
         self.regions.pop();
         result
@@ -1924,7 +1938,7 @@ impl MoveWalker<'_, '_> {
     /// Runs `walk` in a scope of its own: the bindings it makes end with it.
     fn in_scope<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
         self.scopes.push(Vec::new());
-        let result = self.in_region(true, walk);
+        let result = self.in_region(RegionKind::Scope, walk);
         for id in self.scopes.pop().expect("the scope pushed above") {
             let instance = self.instance(id);
             self.ended.insert(id, instance);
@@ -1967,7 +1981,7 @@ impl MoveWalker<'_, '_> {
 
     /// Walks `stmt`, answering whether control never reaches past it.
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
-        let walked = self.in_region(false, |walker| walker.walk_stmt(stmt));
+        let walked = self.in_region(RegionKind::Statement, |walker| walker.walk_stmt(stmt));
         walked || divergence::stmt_head_always_exits(self, stmt)
     }
 
@@ -2112,7 +2126,7 @@ impl MoveWalker<'_, '_> {
     /// state this one began with.
     fn visit_iteration(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
         let start = self.flow.clone();
-        self.in_scope(|walker| {
+        self.in_region(RegionKind::Iteration, |walker| walker.in_scope(|walker| {
             match head {
                 LoopHead::None => {}
                 LoopHead::Condition(condition) => walker.visit_condition(condition),
@@ -2130,9 +2144,9 @@ impl MoveWalker<'_, '_> {
             }
             walker.flow = end.unwrap_or(start);
             if let Some(update) = update {
-                walker.in_region(false, |walker| walker.visit_at(update));
+                walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
             }
-        });
+        }));
     }
 
     /// A labeled block ends where its body does and where each `break` naming

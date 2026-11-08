@@ -247,6 +247,10 @@ An owner stops holding a value at the first of these:
   `let _ = make();`), and its statement ends. A `with` owns a handler it is
   given by value the same way. A temporary a `let` keeps borrowed is the
   exception, below.
+- It is a temporary in a loop's head, which runs once per iteration, and the
+  iteration ends, after the body. The head is a `while` condition or let chain,
+  or a C-style `for` condition. A `for` update is a statement of its own, and a
+  for-of evaluates its iterable once, as part of its statement.
 - An assignment replaces it: `x = value` drops what `x` held, and a store into a
   field or an element drops what the slot held.
 - It is the part of a by-value pattern that no binding takes. It drops as the
@@ -385,8 +389,8 @@ test {
 ```
 
 A borrow of an affine temporary refers into it as into a local whose scope is
-the temporary's statement, or the `let`'s scope where a `let` keeps the borrow,
-and the same rules hold. A temporary is any value no place holds: a call's
+the temporary's statement, the iteration for one a loop's head holds, or the
+`let`'s scope where a `let` keeps the borrow, and the same rules hold. A temporary is any value no place holds: a call's
 result, a literal, what `?` unwraps. A cast converts for free, so borrowing
 one borrows its operand.
 

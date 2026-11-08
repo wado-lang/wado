@@ -97,12 +97,12 @@ fn "let_else_loop.wado/run"() with Stdout {
             break_if b0 $sroa_$iter_0_index_55 >= 3;
             item = builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">($sroa_$iter_0_repr_54, $sroa_$iter_0_index_55);
             $sroa_$iter_0_index_55 = $sroa_$iter_0_index_55 + 1;
-            if ref.test "core:prelude/types.wado//Option<i32>::Some"(item) {
-                n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(item).payload_0;
-                sum = sum + n;
+            n = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(item) -> i32 {
+                ref.cast "core:prelude/types.wado//Option<i32>::Some"(item).payload_0;
             } else {
                 continue l1;
-            }
+            });
+            sum = sum + n;
             continue l1;
         };
     };
@@ -113,21 +113,20 @@ fn "let_else_loop.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_55, message_24.repr, message_24.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
     sum = 0;
-    b3: block {
+    block {
         l4: loop {
-            $fused_$inline_at_sroa_return__5: block {
+            message_24 = "core:prelude/string.wado/core:prelude/string.wado/String::format<let_else_loop.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"($fused_$inline_at_sroa_return__5: block -> i32 {
                 if sum < 2 {
-                    message_24 = "core:prelude/string.wado/core:prelude/string.wado/String::format<let_else_loop.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(sum * 10);
-                    $sroa_$iter_0_index_55 = builtin::i32_wrap_i64(local.tee $cm_pair_7_31("wasi/stream-new"()));
-                    n = builtin::i32_wrap_i64($cm_pair_7_31 >> 32_i64);
-                    $sroa_$iter_0_index_55 = "let_else_loop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_55);
-                    "core:rt/write_string_to_stream$dae[add_newline]"(n, message_24.repr, message_24.used);
-                    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_55);
-                    sum = sum + 1;
-                    break $fused_$inline_at_sroa_return__5;
+                    break $fused_$inline_at_sroa_return__5: sum * 10;
                 }
                 break b3;
-            };
+            });
+            $sroa_$iter_0_index_55 = builtin::i32_wrap_i64(local.tee $cm_pair_7_31("wasi/stream-new"()));
+            n = builtin::i32_wrap_i64($cm_pair_7_31 >> 32_i64);
+            $sroa_$iter_0_index_55 = "let_else_loop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_55);
+            "core:rt/write_string_to_stream$dae[add_newline]"(n, message_24.repr, message_24.used);
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_55);
+            sum = sum + 1;
             continue l4;
         };
     };

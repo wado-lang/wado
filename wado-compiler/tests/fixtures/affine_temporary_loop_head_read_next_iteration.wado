@@ -1,0 +1,34 @@
+// A temporary a loop's head borrows drops as its iteration ends, so a reference
+// kept into it cannot be read in the next one.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn opt_id(t: &Tok) -> Option<&Tok> {
+    return Some(t);
+}
+
+test {
+    let mut kept: Option<&Tok> = null;
+    let mut i = 0;
+    while let Some(r) = opt_id(&make(i)) && i < 2 {
+        if let Some(prev) = kept {
+            assert prev.n >= 0;
+        }
+        kept = Some(r);
+        i += 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":25:29: analysis error: `kept` refers into the temporary at 24:33, which dropped as its iteration ended"}

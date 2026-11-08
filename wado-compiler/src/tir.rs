@@ -2081,11 +2081,26 @@ impl LetStorage {
 pub struct TirStmt {
     pub kind: TirStmtKind,
     pub span: Span,
+    /// Whether it is one of the source's statements, which own the temporaries
+    /// evaluated in them; the statements a desugaring adds own none.
+    pub source: bool,
 }
 
 impl TirStmt {
     pub fn new(kind: TirStmtKind, span: Span) -> Self {
-        Self { kind, span }
+        Self {
+            kind,
+            span,
+            source: false,
+        }
+    }
+
+    #[must_use]
+    pub fn of_source(self) -> Self {
+        Self {
+            source: true,
+            ..self
+        }
     }
 }
 
