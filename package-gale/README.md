@@ -272,9 +272,12 @@ static path against the simulator over real inputs, not for use.
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
 stays with the tournament, and a `?` at a rule's end goes to the simulator when
-the rule asks it anyway. A `?` `*` `+` is ambiguous where its body and what
-follows it can start on one token; under `"always"`, one at the end of its
-alternative counts too, since its caller's continuation is not known there. The
+the rule asks it anyway. A group's or a `?` `*` `+`'s ambiguity that meets a
+predicate goes to the simulator under `"auto"` as well, since the static path
+cannot weigh the predicate's verdict against what follows. A `?` `*` `+` is
+ambiguous where its body and what follows it can start on one token; where the
+simulator takes it, one at the end of its alternative counts too, since its
+caller's continuation is not known there. The
 decisions only the simulator can make are the `between` shape above, `??`, a
 non-greedy loop's exit no lookahead locates, and a group's choice between its
 empty alternative and another. A lexer rule the lexer simulator matches is not

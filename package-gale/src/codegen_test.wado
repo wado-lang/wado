@@ -1275,6 +1275,31 @@ WS : ' ' -> skip ;
     assert parses(g4, "s", inputs, &GenerateOptions { atn: AtnMode::Verify }) == never;
 }
 
+// A contested decision meeting a predicate needs both the continuation and the
+// verdict, so `auto` hands it the simulator: the loop's `q`, the group's and
+// the `+`'s alternative. The trees and output are the jar's.
+test "atn auto lets the simulator decide a contested decision meeting a predicate" {
+    let p = "grammar P;
+@parser::members {
+boolean pred(boolean v) {
+	System.out.println(\"eval=\" + v);
+	return v;
+}
+}
+s : q* 'a'? EOF ;
+q : {this.pred(false)}? 'a' | 'b' ;
+WS : ' ' -> skip ;
+";
+    let g = "grammar G;\ns : ({true}? a | a B) B EOF ;\na : A+ ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n";
+    let r = "grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n";
+    for let atn of [AtnMode::Auto, AtnMode::Always] {
+        let options = GenerateOptions { atn };
+        assert parses(p, "s", ["b a", "a"], &options) == "b a => (s (q b) a) [eval=false\n]\na => (s a) [eval=false\n]\n";
+        assert parses(g, "s", ["a b", "a b b"], &options) == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
+        assert parses(r, "u", ["a a b", "a b a b"], &options) == "a a b => (u a a b)\na b a b => (u a b a b)\n";
+    }
+}
+
 // Each decision meets a predicate that holds, and on each input the jar takes
 // another pick than `never`: the jar parses `a b`, `a a b` and
 // `new a < b > . c`, and reads `Z Z X` as `(r (a (b Z Z)) X)`.

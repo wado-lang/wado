@@ -2010,7 +2010,7 @@ fn group_atn_site(
     admits: &Option<EmptyAltAdmits>,
     ctx: &mut LowerContext,
 ) -> i32 {
-    let always = ctx.settings.atn matches { Always };
+    let takes_contested = ctx.simulator_takes_contested(g.atn_decision);
     for let branch of &decision_partition(classes) {
         if branch.alts.len() < 2 {
             continue;
@@ -2019,7 +2019,7 @@ fn group_atn_site(
             ctx.mark_asks_simulator("a group's choice between its empty alternative and another");
             return g.atn_decision;
         }
-        if always {
+        if takes_contested {
             ctx.mark_asks_simulator("a group's choice among alternatives sharing a first token");
             return g.atn_decision;
         }
@@ -4394,7 +4394,11 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
-    let contested_somewhere = ctx.settings.atn matches { Always | Verify }
+    let Repeat(rep) = &alt_elements[index] else {
+        panic("a loop's exit stamps are read at the loop");
+    };
+    let takes_contested = ctx.simulator_takes_contested(rep.atn_decision);
+    let contested_somewhere = (takes_contested || ctx.settings.atn.verifies())
         && !by_atn
         && repeat_contested(
             body_admits,
@@ -4405,7 +4409,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             reaches_rule_tail,
             gate_caller_follow,
         );
-    let contested = contested_somewhere && ctx.settings.atn matches { Always };
+    let contested = contested_somewhere && takes_contested;
     let checked = contested_somewhere && !non_greedy && ctx.settings.atn.verifies();
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
