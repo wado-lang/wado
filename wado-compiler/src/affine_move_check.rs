@@ -2071,8 +2071,11 @@ impl MoveWalker<'_, '_> {
     }
 
     /// A loop as two iterations: the first records what it moves, and the
-    /// second reports what reads a value the first moved. Each iteration runs
-    /// the head, the body, then `update`, as a C-style `for` does.
+    /// second, starting where the loop entered or the first left, reports.
+    /// Two suffice: an iteration's effect on what is moved or held is the same
+    /// from any start, so a third adds nothing the second did not see. Each
+    /// iteration runs the head, the body, then `update`, as a C-style `for`
+    /// does.
     /// A loop whose head can end it may also run no iteration, so it ends
     /// where its head does, in the state it entered with or any an iteration
     /// left; every loop ends where each `break` lands.
@@ -2082,6 +2085,7 @@ impl MoveWalker<'_, '_> {
         self.suppress += 1;
         self.visit_iteration(head, body, update);
         self.suppress -= 1;
+        self.flow.merge(entry.clone());
         self.visit_iteration(head, body, update);
         let jumps = self.loops.pop().expect("pushed above");
         let end = (!head.is_endless()).then(|| {
@@ -2115,7 +2119,7 @@ impl MoveWalker<'_, '_> {
             }
             walker.flow = end.unwrap_or(start);
             if let Some(update) = update {
-                walker.visit_at(update);
+                walker.in_region(false, |walker| walker.visit_at(update));
             }
         });
     }

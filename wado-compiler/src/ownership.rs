@@ -272,6 +272,10 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
                     self.extend(operand, false);
                 }
             }
+            // A constant index into a tuple is its field.
+            Expr::Index(ix) if place && self.facts.indexes_tuple(&ix.expr) => {
+                self.extend(&ix.expr, true)
+            }
             // An element is a place in what it is read from, not a temporary.
             Expr::Index(_) => {}
             _ if place && place_path(expr, self.facts).is_none() => {
