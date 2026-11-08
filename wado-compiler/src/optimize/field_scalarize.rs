@@ -249,21 +249,16 @@ impl NirRefVisitor for ParamUsageScan<'_> {
     }
 }
 
-/// The place `e` names, seen through a `&`/`&mut` that wraps it.
-fn place_of(body: &Body, e: ExprId) -> Option<ExprId> {
-    match &body.exprs[e].kind {
-        ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } => inner.as_expr(),
-        _ => Some(e),
-    }
-}
-
 /// The local a place names, seen through a `&`/`&mut` that wraps it: its
 /// expression, for the type the place carries, and its index.
 fn local_place(body: &Body, e: ExprId) -> Option<(ExprId, u32)> {
-    let place = place_of(body, e)?;
+    let place = match &body.exprs[e].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } => inner.as_expr()?,
+        _ => e,
+    };
     match &body.exprs[place].kind {
         ExprKind::Local { index, .. } => Some((place, *index)),
         _ => None,
@@ -900,10 +895,6 @@ impl NirRefVisitor for AliasScan<'_> {
 /// and `let b = &mut a` leave two names for one heap object, and a write through
 /// either bypasses a scalar held under the other. A deep value copy is wrapped
 /// in `copy_value(...)` (an `ExprKind::Call`), so it does not match.
-///
-/// `let b = a.f` names an object `a` still reaches, as does a reference a call
-/// hands back, so a call given `a` writes it behind `b`'s scalar: `licm` binds
-/// `run.items` ahead of a loop whose calls take `run`.
 fn mark_gc_alias_pair(
     body: &Body,
     dst: Option<u32>,
@@ -911,39 +902,11 @@ fn mark_gc_alias_pair(
     type_table: &TypeTable,
     out: &mut IndexSet<u32>,
 ) {
-    if let Some(src) = gc_alias_source(body, value, type_table) {
-        out.insert(src);
-        out.extend(dst);
-    } else if names_reachable_object(body, value, type_table) {
-        out.extend(dst);
-    }
-}
-
-/// Whether `value` is a GC object that a handle other than the binding reaches:
-/// a place inside another object, or a reference a call returns.
-fn names_reachable_object(body: &Body, value: ExprId, type_table: &TypeTable) -> bool {
-    let type_id = body.exprs[value].type_id;
-    if !is_gc_heap_type(type_id, type_table) {
-        return false;
-    }
-    let Some(place) = place_of(body, value) else {
-        return false;
+    let Some(src) = gc_alias_source(body, value, type_table) else {
+        return;
     };
-    match &body.exprs[place].kind {
-        ExprKind::FieldAccess { .. }
-        | ExprKind::Index { .. }
-        | ExprKind::Unary {
-            op: NirUnaryOp::Deref,
-            ..
-        } => true,
-        ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
-            matches!(
-                type_table.get(type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
-        }
-        _ => false,
-    }
+    out.insert(src);
+    out.extend(dst);
 }
 
 /// The local `value` reads as a whole GC object, directly or through one reference.
@@ -2689,9 +2652,12 @@ fn walk_other_expr_kinds(
                     .map(|(&l, &r)| join_free_for_first(l, r))
                     .collect();
                 if states_differ(&rhs_exit, &target) {
-                    emit_convergence_at_expr_end_operand(
-                        body, right, &rhs_exit, &target, ctx, span,
-                    );
+                    let synced =
+                        emit_convergence_at_operand_end(body, right, &rhs_exit, &target, ctx, span);
+                    let ExprKind::Binary { right: slot, .. } = &mut body.exprs[e].kind else {
+                        unreachable!("walking a binary expression");
+                    };
+                    *slot = synced;
                     ctx.interior_effects = true;
                 }
                 *states = target;
@@ -2783,7 +2749,7 @@ fn walk_other_expr_kinds(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             walk_operand(body, scrutinee, states, true, out, ctx);
-            walk_expr_branches_match(body, &arms, states, result_used, ctx, span);
+            walk_expr_branches_match(body, e, &arms, states, result_used, ctx, span);
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
@@ -2923,6 +2889,7 @@ fn walk_expr_branches_switch(
 /// pattern-mismatch path has no sync slot, so that join must be sync-free.
 fn walk_expr_branches_match(
     body: &mut Body,
+    match_expr: ExprId,
     arms: &[ArmData],
     states: &mut ScalarStates,
     result_used: bool,
@@ -2932,7 +2899,13 @@ fn walk_expr_branches_match(
     let entry = states.clone();
     let mut accumulated_pre = entry;
     let mut arm_states: Vec<ScalarStates> = Vec::with_capacity(arms.len());
-    for arm in arms {
+    fn arm_slot(body: &mut Body, match_expr: ExprId, k: usize) -> &mut ArmData {
+        let ExprKind::Match { arms, .. } = &mut body.exprs[match_expr].kind else {
+            unreachable!("walking a match");
+        };
+        &mut arms[k]
+    }
+    for (k, arm) in arms.iter().enumerate() {
         let mut s = accumulated_pre.clone();
         // Guard (if any). Pre-stmts emitted by walking the guard must
         // run BEFORE the guard's expression evaluates; wrap the guard
@@ -2952,7 +2925,8 @@ fn walk_expr_branches_match(
                 .map(|(&pre, &after)| join_free_for_first(pre, after))
                 .collect();
             if states_differ(&s, &joined) {
-                emit_convergence_at_expr_end_operand(body, guard, &s, &joined, ctx, span);
+                let synced = emit_convergence_at_operand_end(body, guard, &s, &joined, ctx, span);
+                arm_slot(body, match_expr, k).guard = Some(synced);
                 ctx.interior_effects = true;
             }
             s.clone_from(&joined);
@@ -2973,17 +2947,18 @@ fn walk_expr_branches_match(
     }
     let arm_refs: Vec<&ScalarStates> = arm_states.iter().collect();
     let target = pick_join_targets(&arm_refs);
-    for (arm, exit) in arms.iter().zip(arm_states.iter()) {
-        // Emit convergence sync at the end of the arm body.
-        emit_convergence_at_expr_end_operand(body, arm.body, exit, &target, ctx, span);
+    for (k, (arm, exit)) in arms.iter().zip(arm_states.iter()).enumerate() {
+        let synced = emit_convergence_at_operand_end(body, arm.body, exit, &target, ctx, span);
+        arm_slot(body, match_expr, k).body = synced;
     }
     *states = target;
 }
 
 fn wrap_expr_with_prefix_operand(body: &mut Body, op: Operand, prefix: Vec<StmtId>) {
-    if let Some(e) = op.as_expr() {
-        wrap_expr_with_prefix(body, e, prefix);
-    }
+    let e = op
+        .as_expr()
+        .expect("only walking an expression emits a prefix");
+    wrap_expr_with_prefix(body, e, prefix);
 }
 
 /// Prepend prefix stmts into an expression's evaluation by wrapping the
@@ -3008,17 +2983,43 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     body.exprs[e].kind = ExprKind::plain_block(blk, expr_type, "prefix");
 }
 
-fn emit_convergence_at_expr_end_operand(
+/// [`emit_convergence_at_expr_end`] for an operand slot, answering what the
+/// slot holds afterwards. A pooled value has no node to wrap, so where it needs
+/// sync it moves into a block of its own, which the caller stores back: an arm
+/// left unsynced would still be counted as reaching the join target.
+#[must_use]
+fn emit_convergence_at_operand_end(
     body: &mut Body,
     op: Operand,
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
     span: Span,
-) {
-    if let Some(e) = op.as_expr() {
-        emit_convergence_at_expr_end(body, e, from, to, ctx, span);
-    }
+) -> Operand {
+    let e = match op {
+        Operand::Expr(e) => e,
+        Operand::Value(v) => {
+            let syncs = from
+                .iter()
+                .zip(to)
+                .any(|(&f, &t)| transition_sync_action(f, t).is_some());
+            if !syncs {
+                return op;
+            }
+            let ty = body
+                .values
+                .type_of(v)
+                .expect("a pooled operand records its type");
+            let stmt = push_stmt(body, StmtKind::Expr(op), span);
+            let blk = body.blocks.push(BlockNode {
+                stmts: vec![stmt],
+                span,
+            });
+            push_expr(body, ExprKind::plain_block(blk, ty, "sync"), ty, span)
+        }
+    };
+    emit_convergence_at_expr_end(body, e, from, to, ctx, span);
+    Operand::Expr(e)
 }
 
 /// Insert convergence sync at the end of an expression's evaluation (a

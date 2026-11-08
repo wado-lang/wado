@@ -1,7 +1,8 @@
-// A local bound to a field's object is a second handle on it: `licm` hoists
-// `log.items` out of the loop, and a call taking `log` pushes onto the same
-// list. The hoisted local's `used` held in a scalar across that call wrote the
-// stale length back at the end of the iteration, dropping the pushed item.
+// `licm` binds `log.items` ahead of the loop, and hot field scalarization holds
+// its `used` in a scalar. A call taking `log` pushes onto that list, so the
+// scalar goes stale, and the `if let` arm re-reads it. Its other arm, a bare
+// `()`, had no node to hold the re-read, and the iteration's write-back stored
+// the stale length, dropping the pushed item.
 
 struct Log {
     items: List<i32>,
@@ -24,6 +25,7 @@ fn walk(keys: List<i32>, log: &mut Log, nested: Option<i32>) {
         if let Some(n) = nested {
             let kept = log.items.len();
             add(log, n);
+            assert log.items.len() == kept + 1;
             log.items.truncate(kept);
         }
     }
@@ -34,6 +36,11 @@ export fn run() {
     walk(builtin::black_box([1, -2, 3] as List<i32>), &mut log, builtin::black_box(null));
     assert log.items.len() == 2;
     assert log.calls == 2;
+
+    let mut nested = Log { items: [], calls: 0, marks: [] };
+    walk(builtin::black_box([1, -2, 3] as List<i32>), &mut nested, builtin::black_box(Option::Some(42)));
+    assert nested.items.len() == 2;
+    assert nested.calls == 5;
 }
 
 __DATA__
