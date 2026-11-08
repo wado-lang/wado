@@ -1192,7 +1192,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
     w.begin("loop");
-    w.line(`let _atn_alt = ${lr_decision_call(ctx, decision, "tokens", "pos")};`);
+    w.line(`let _atn_alt = ${lr_decision_call(ctx, decision, PickSide::Scan)};`);
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr = &lr_alts[valid[i]];
         let suffix_call = `${fn_name}_lr_${lr.alt_index}(tokens, pos${scan_trailing_args(ctx)})`;
@@ -4510,7 +4510,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     let mut nc: List<[String, i32]> = [];
     w.begin("loop");
     w.line("if p.recovering { break; }");
-    w.line(`let _atn_alt = ${lr_decision_call(ctx, decision, "&p.kinds", "p.pos")};`);
+    w.line(`let _atn_alt = ${lr_decision_call(ctx, decision, PickSide::Parse)};`);
     w.line("let _lr_pos0 = p.pos;");
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr = &lr_alts[valid[i]];
@@ -8023,10 +8023,16 @@ fn gen_group_branch_body(
     );
 }
 
-/// The LR loop's pick at decision `decision`, over `tokens` at `pos`, through
+/// The LR loop's pick at decision `decision`, from where `side` reads, through
 /// its table (`atn_lr_table.wado`), handed the caller's FOLLOW where the rule
 /// reads it. Under `atn: "verify"` the pick is checked against the simulator.
-fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decision: i32, tokens: S, pos: S1) -> String {
+/// A table holds no predicate, so a loop that meets one asks the simulator.
+fn lr_decision_call(ctx: &mut EmitContext, decision: i32, side: PickSide) -> String {
+    let met = *ctx.decisions.at_lr_loop(ctx.cursor.current_rule_index());
+    if !met.is_empty() {
+        return atn_predict_call(decision, &met, side, ctx);
+    }
+    let [tokens, pos] = pick_reads(side);
     let decide = lr_decide_fn_name(decision);
     ctx.cursor.note_ref(&decide);
     let follow = if ctx.current_rule_reads_follow() { `, ${FOLLOW_PARAM}` } else { "" };
@@ -8053,10 +8059,7 @@ fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx:
 fn atn_gated_predict_call(atn_dec: i32, gates: &List<AtnGate>, side: PickSide, ctx: &mut EmitContext) -> String
     contract ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator"
 {
-    let [tokens, pos] = match side {
-        Parse => ["&p.kinds", "p.pos"],
-        Scan => ["tokens", "pos"],
-    };
+    let [tokens, pos] = pick_reads(side);
     let prec = atn_prec_arg(ctx);
     if gates.is_empty() {
         let decide = sll_decide_fn_name(atn_dec);
@@ -8862,6 +8865,14 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
 enum PickSide {
     Parse,
     Scan,
+}
+
+/// The token array and the position a pick on `side` reads.
+fn pick_reads(side: PickSide) -> [String, String] {
+    return match side {
+        Parse => ["&p.kinds", "p.pos"],
+        Scan => ["tokens", "pos"],
+    };
 }
 
 global NO_READS: List<i32> = [];

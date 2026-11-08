@@ -14,7 +14,7 @@ use { PARSER_HANDLE } from "./ident.wado";
 use { and_operand } from "./gen_util.wado";
 use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
 use { translate_predicate } from "./java2wado.wado";
-use { alt_is_left_recursive } from "./lr_util.wado";
+use { alt_is_left_recursive, rule_is_left_recursive } from "./lr_util.wado";
 
 /// Where a predicate's condition is rendered: the rule whose environment it
 /// translates in, whether that rule's value channel is in scope, and the
@@ -112,18 +112,24 @@ pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &Gramma
 pub type MetPredicate = [AltAction, PredicateSite];
 
 /// The predicates prediction meets at each decision, as `predicates_met_at`
-/// collects them: at a rule's body decision by rule index, and at a group's or
-/// a repeat's by its `atn_decision` site. The simulator closes the edge of each
-/// one whose verdict is false, and `atn: "verify"` checks no decision that meets
-/// one, since the static path answers it where the simulator could not.
+/// collects them: at a rule's body decision and at a left-recursive rule's
+/// loop entry by rule index, and at a group's or a repeat's by its
+/// `atn_decision` site. The simulator closes the edge of each one whose verdict
+/// is false, and `atn: "verify"` checks no decision that meets one, since the
+/// static path answers it where the simulator could not.
 pub struct DecisionPredicates {
     by_rule: List<List<MetPredicate>>,
+    by_lr_loop: List<List<MetPredicate>>,
     by_site: List<List<MetPredicate>>,
 }
 
 impl DecisionPredicates {
     pub fn at_rule(&self, rule: i32) -> &List<MetPredicate> {
         return &self.by_rule[rule];
+    }
+
+    pub fn at_lr_loop(&self, rule: i32) -> &List<MetPredicate> {
+        return &self.by_lr_loop[rule];
     }
 
     pub fn at_site(&self, site: i32) -> &List<MetPredicate>
@@ -154,7 +160,11 @@ global NO_MET: List<MetPredicate> = [];
 /// grow as the walk finds call sites, so it repeats until none grows.
 pub fn decision_predicates(settings: &GenSettings, analysis: &mut GrammarAnalysis) -> DecisionPredicates {
     let rules = analysis.parser_rules();
-    let mut out = DecisionPredicates { by_rule: List::filled(rules.len(), []), by_site: [] };
+    let mut out = DecisionPredicates {
+        by_rule: List::filled(rules.len(), []),
+        by_lr_loop: List::filled(rules.len(), []),
+        by_site: [],
+    };
     if !settings.emit_actions {
         return out;
     }
@@ -176,6 +186,17 @@ pub fn decision_predicates(settings: &GenSettings, analysis: &mut GrammarAnalysi
                 }
             }
             walk.out.by_rule[r] = body;
+            if rule_is_left_recursive(rule) {
+                // Past the left operand the loop enters a suffix or leaves the rule.
+                let mut lr_loop: List<MetPredicate> = [];
+                for let alt of &rule.alternatives {
+                    if alt_is_left_recursive(alt, &rule.name) {
+                        let _ = predicates_met_at(&alt.elements, &alt.actions, 1, &site, analysis, &mut [], &mut lr_loop);
+                    }
+                }
+                extend_met(&mut lr_loop, &exit);
+                walk.out.by_lr_loop[r] = lr_loop;
+            }
             for let alt of &rule.alternatives {
                 walk_sequence_decisions(&alt.elements, &alt.actions, &site, &exit, analysis, &mut walk);
             }

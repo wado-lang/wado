@@ -4106,6 +4106,23 @@ WS : ' ' -> skip ;
     assert got == "1 b + => (s (e (e 1) b +)) [e b\n]\n";
 }
 
+// The `.` suffix sends the loop to the simulator, whose table holds no
+// predicate: `op`'s decides between the two suffixes `+` opens.
+test "the left-recursion loop's simulator pick answers the predicates past the operand" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar T;
+s : e EOF ;
+e : e op 'b' | e . 'b' | INT ;
+op : {false}? '+' | '-' ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["1 + b", "1 - b", "1 + b - b"], &GenerateOptions { atn }) == "1 + b => (s (e (e 1) + b))
+1 - b => (s (e (e 1) (op -) b))
+1 + b - b => (s (e (e (e 1) + b) (op -) b))
+";
+    }
+}
+
 // An action only hides the predicates behind it from the paths that run it: a
 // path still empty there reaches the predicate past the group.
 test "an action in one alternative leaves the others' predicates in view" {
