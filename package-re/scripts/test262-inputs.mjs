@@ -2,10 +2,9 @@
 // test262's RegExp tests run, as cases for oracle.mjs. It also writes
 // tests/generated/test262_syntax_test.wado: each pattern they run that Re
 // refuses for one of the reasons below, held to validate_ecma262_syntax
-// accepting it. Each test runs in Node
-// with RegExp.prototype.exec wrapped to record what it was called on; every
-// search a RegExp makes, `test`, `match`, `replace` and `split` included, goes
-// through it. test262 is read as a corpus of inputs here, and Node answers
+// accepting it. Each test runs in Node with RegExp.prototype.exec wrapped to
+// record what it was called on; every search a RegExp makes, `test`, `match`,
+// `replace` and `split` included, goes through it. test262 is read as a corpus of inputs here, and Node answers
 // for them: its assertions are not read.
 //
 // A case is kept when Re means the same by it:

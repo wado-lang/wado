@@ -389,7 +389,6 @@ impl Parser {
         let Some([min, max]) = self.quantifier_prefix()? else {
             return Ok(atom);
         };
-        // In Unicode mode, Term admits no quantified Assertion.
         if !quantifiable {
             return Err(self.error_at(start, "an assertion cannot be repeated"));
         }
@@ -468,11 +467,20 @@ impl Parser {
             '$' => Ok([Node::End, false]),
             '.' => Ok([Node::Any, true]),
             '(' => {
-                let lookaround = self.looking_at("?=")
-                    || self.looking_at("?!")
-                    || self.looking_at("?<=")
-                    || self.looking_at("?<!");
-                Ok([self.group(start)?, !lookaround]);
+                // In Unicode mode, Term admits no quantified Assertion.
+                if self.looking_at("?=") || self.looking_at("?!") {
+                    return Ok([
+                        self.lookaround(start, 2, "lookahead `(?=` `(?!` cannot be matched in linear time")?,
+                        false,
+                    ]);
+                }
+                if self.looking_at("?<=") || self.looking_at("?<!") {
+                    return Ok([
+                        self.lookaround(start, 3, "lookbehind `(?<=` `(?<!` cannot be matched in linear time")?,
+                        false,
+                    ]);
+                }
+                Ok([self.group(start)?, true]);
             },
             '[' => Ok([Node::Set(self.class(start)?), true]),
             '\\' => self.atom_escape(start),
@@ -495,12 +503,6 @@ impl Parser {
             let body = self.disjunction()?;
             self.close_group(start)?;
             return Ok(Node::Group(Group { index: Some(index), name: null, body }));
-        }
-        if self.looking_at("=") || self.looking_at("!") {
-            return self.lookaround(start, 1, "lookahead `(?=` `(?!` cannot be matched in linear time");
-        }
-        if self.looking_at("<=") || self.looking_at("<!") {
-            return self.lookaround(start, 2, "lookbehind `(?<=` `(?<!` cannot be matched in linear time");
         }
         if self.eat('<') {
             self.groups += 1;
@@ -540,15 +542,18 @@ impl Parser {
         return Ok(Node::Modified(Modified { add, remove, body }));
     }
 
-    /// A lookaround after its `(?`, whose opener runs `len` bytes on. Its groups
+    /// A lookaround after its `(`, whose opener runs `len` bytes on. Its groups
     /// count and its names are claimed, though Re cannot match it, so no tree
     /// is built.
     fn lookaround(&mut self, start: i32, len: i32, why: String) -> Result<Node, PatternError> {
         self.refuse(start, why);
+        let at = self.pos;
         self.pos += len;
-        self.disjunction()?;
-        self.close_group(start)?;
-        return Ok(Node::Concat([]));
+        return self.inside(at, |p| {
+            p.disjunction()?;
+            p.close_group(start)?;
+            return Ok(Node::Concat([]));
+        });
     }
 
     fn close_group(&mut self, start: i32) -> Result<(), PatternError> {
