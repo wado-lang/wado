@@ -40,6 +40,8 @@ export fn run() {
     let mut nested = Log { items: [], calls: 0, marks: [] };
     walk(builtin::black_box([1, -2, 3] as List<i32>), &mut nested, builtin::black_box(Option::Some(42)));
     assert nested.items.len() == 2;
+    assert nested.items[0] == 1;
+    assert nested.items[1] == 3;
     assert nested.calls == 5;
 }
 
