@@ -299,8 +299,8 @@ impl Widener<'_> {
             cases
                 .into_iter()
                 .map(|(name, index, payload)| {
-                    let f = tt.substitute_positional(payload, &from_args);
-                    let t = tt.substitute_positional(payload, &to_args);
+                    let f = tt.substitute_positional(payload, def, &from_args);
+                    let t = tt.substitute_positional(payload, def, &to_args);
                     (name, index, f, t)
                 })
                 .collect(),

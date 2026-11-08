@@ -28,17 +28,6 @@ use crate::type_table::{AnonStructId, TypeTable};
 /// registry-driven.
 pub(crate) const REFLECT_NEWTYPE_BASE: &str = "Base";
 
-/// Identifies the scope where a type parameter is defined
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TypeParamScope {
-    /// Type parameter from struct/impl block (e.g., T in `impl Container<T>`)
-    Impl,
-    /// Type parameter from method signature (e.g., U in `fn transform<U>`)
-    Method,
-    /// Type parameter from free function (e.g., T in `fn identity<T>`)
-    Function,
-}
-
 /// A resolved effect reference — a bare string in the AST. `Concrete` is
 /// identified by its declaration, so `with Stdout` imported from `wasi:cli` and
 /// from `core:cli` compare equal; `Param` by its name alone.
@@ -106,34 +95,55 @@ impl EffectRef {
     }
 }
 
-/// Identifies a type parameter with its scope and index
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// A type parameter or pack: the declaration binding it, and its slot there.
+/// The one key a parameter is told apart and substituted by, so an enclosing
+/// function's `T` and a callee's own `T` at one slot are two parameters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypeParamId {
-    pub scope: TypeParamScope,
+    pub owner: DefId,
     pub index: u32,
 }
 
 impl TypeParamId {
-    pub fn impl_param(index: u32) -> Self {
+    /// A trait's `Self`, the first of its parameters.
+    #[must_use]
+    pub fn trait_self(trait_: DefId) -> Self {
         Self {
-            scope: TypeParamScope::Impl,
-            index,
+            owner: trait_,
+            index: 0,
         }
     }
 
-    pub fn method_param(index: u32) -> Self {
+    /// The slot under which unrolling walk `walk` fills the elements of this
+    /// pack. Above every declared slot, so it never shadows one.
+    #[must_use]
+    pub fn walk_slot(self, walk: u32) -> Self {
+        const BASE: u32 = 1 << 30;
+        const PACKS_PER_WALK: u32 = 1 << 10;
+        // An impl's list and its method's index one sequence.
+        const _: () = assert!(2 * crate::ast::MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
+        assert!(
+            self.index < PACKS_PER_WALK && walk < BASE / PACKS_PER_WALK - 1,
+            "a declaration's parameters and a body's walk nesting are bounded"
+        );
         Self {
-            scope: TypeParamScope::Method,
-            index,
+            owner: self.owner,
+            index: BASE + walk * PACKS_PER_WALK + self.index,
         }
     }
+}
 
-    pub fn function_param(index: u32) -> Self {
-        Self {
-            scope: TypeParamScope::Function,
-            index,
-        }
-    }
+/// What a use site fills a declaration's parameters with.
+pub type TypeArgMap = IndexMap<TypeParamId, TypeId>;
+
+/// `args` filling `owner`'s parameters in declaration order, which is how a
+/// declaration numbers them.
+#[must_use]
+pub fn positional_substitution(owner: DefId, args: &[TypeId]) -> TypeArgMap {
+    (0u32..)
+        .zip(args)
+        .map(|(index, &arg)| (TypeParamId { owner, index }, arg))
+        .collect()
 }
 
 /// What a use site chose for a declaration's type parameters.
@@ -629,7 +639,7 @@ pub fn wrapped_reference(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
 #[derive(Debug, Clone)]
 pub struct ShapeSubstitution {
     pub origin: AnonStructId,
-    pub params: IndexMap<u32, TypeId>,
+    pub params: TypeArgMap,
 }
 
 /// What a struct type's head is.
@@ -657,10 +667,10 @@ impl StructDef {
 
 /// One position in a tuple's layout: a pack standing for a run of positions,
 /// or a single slot holding one type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TupleSlot {
     Fixed,
-    Pack(String),
+    Pack(TypeParamId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -715,14 +725,7 @@ pub enum ResolvedType {
     /// inside that item it is opaque: nothing but itself is assignable to it.
     /// It appears only within the item that binds it; a *use* of a polymorphic
     /// signature instantiates these into [`ResolvedType::InferVar`]s.
-    TypeParam {
-        /// The declaration that binds it, which is its identity: an enclosing
-        /// function's `T` and a callee's own `T` at one index are two types.
-        owner: DefId,
-        name: String,
-        /// Index of the type parameter in the generic definition (0 for first param)
-        index: u32,
-    },
+    TypeParam { id: TypeParamId, name: String },
     /// Inference variable — a *flexible* variable standing for a type the
     /// solver has yet to determine. Minted when a use site instantiates a
     /// polymorphic signature: where a rigid parameter rejects anything but
@@ -739,10 +742,8 @@ pub enum ResolvedType {
     /// element `i` is `R[F := F_i]`, degenerating to `|F|` copies of `R` when
     /// `R` does not mention the pack).
     TypePack {
-        /// The declaration that binds it, as a [`ResolvedType::TypeParam`]'s.
-        owner: DefId,
+        id: TypeParamId,
         name: String,
-        index: u32,
         mapped_elem: Option<TypeId>,
     },
     /// One element of an identity pack: what `for let v of t` over `t: [..T]`
@@ -909,16 +910,6 @@ pub fn range_item(kind: RangeKind) -> CompilerItem {
         RangeKind::Exclusive => CompilerItem::RangeExclusive,
         RangeKind::Inclusive => CompilerItem::RangeInclusive,
     }
-}
-
-/// `args` keyed by the parameter slot each one fills, which is what
-/// [`TypeTable::substitute_type_params`] reads.
-#[must_use]
-pub fn positional_substitution(args: &[TypeId]) -> IndexMap<u32, TypeId> {
-    args.iter()
-        .enumerate()
-        .map(|(slot, &arg)| (slot as u32, arg))
-        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -2189,7 +2180,9 @@ pub struct TirTypeParam {
     pub bounds: Vec<String>,
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
-    pub index: u32,
+    /// Which parameter it is; `None` for one that binds no type parameter: an
+    /// effect parameter, or one written `<F: fn(...)>`.
+    pub id: Option<TypeParamId>,
     /// Whether a blanket impl's bound projects it (`..F` in
     /// `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F>`). The instance key
     /// carries the projection's answer at the parameter's own slot, a pack
@@ -2204,7 +2197,7 @@ pub struct TirTypeParam {
 /// [`TypeTable::substitute_type_params_with`]. A declaration resolves
 /// `Self::Item` in its own frame, where it can only be a projection; what it
 /// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
-pub type SlotProjections = IndexMap<u32, Vec<ProjectionAnswer>>;
+pub type SlotProjections = IndexMap<TypeParamId, Vec<ProjectionAnswer>>;
 
 /// What a use site says one projection off a slot is.
 #[derive(Debug, Clone)]
@@ -2292,7 +2285,8 @@ pub fn solve_row(
 pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
     impl_type_params
         .iter()
-        .map(|p| p.index + 1)
+        .filter_map(|p| p.id)
+        .map(|id| id.index + 1)
         .max()
         .unwrap_or(0)
 }

@@ -3881,12 +3881,9 @@ impl TypeSystem {
             return false;
         }
         let table = self.type_table.borrow();
-        // By the numbering, not the count: a concrete head argument leaves a
-        // gap, so the block's last slot sits past how many names it contributed.
         match table.get(table.peel_refs(param)) {
-            ResolvedType::TypeParam { index, name, .. }
-            | ResolvedType::TypePack { index, name, .. } => {
-                *index < sig.method_slot_base && !header.ty.mentions(name)
+            ResolvedType::TypeParam { id, name } | ResolvedType::TypePack { id, name, .. } => {
+                sig.declaring_impl == Some(id.owner) && !header.ty.mentions(name)
             }
             _ => false,
         }

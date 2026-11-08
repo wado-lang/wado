@@ -2575,7 +2575,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
-            return self.substitute_in_frame(payload, type_args);
+            return self.substitute_in_frame(payload, variant, type_args);
         }
 
         // The declaration is a variant — it answered `variant_cases_of` or it

@@ -5,8 +5,8 @@
 //! anything is checked. They then join the lifecycle [`super::infer_hole`] owns.
 
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, SubstitutionContext, TypeId};
+use crate::defs::DefId;
+use crate::tir::{ResolvedType, SubstitutionContext, TypeArgMap, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -73,7 +73,7 @@ pub(super) struct Instantiated {
     pub(super) vars: Vec<TypeId>,
     /// Rewrites a type written in the declaration's frame into this use site's
     /// variables. Apply with `TypeTable::substitute_type_params`.
-    subst: IndexMap<u32, TypeId>,
+    subst: TypeArgMap,
     /// Per-slot "cannot infer" diagnostic, attached by
     /// [`Elaborator::record_instantiation`] to the slots still unsolved when the
     /// use site commits. `None` marks a slot that cannot go unanswered: one left
@@ -89,7 +89,7 @@ impl Instantiated {
         let diags = vec![None; vars.len()];
         Instantiated {
             vars,
-            subst: IndexMap::default(),
+            subst: TypeArgMap::default(),
             diags,
         }
     }
@@ -113,18 +113,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
-        let mut subst = IndexMap::default();
+        let mut subst = TypeArgMap::default();
         let named_args = self.turbofish_per_slot(slots, of.type_args);
         for (i, &slot) in slots.iter().enumerate() {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
-                    ResolvedType::TypeParam { index, name, .. } => {
-                        Some((*index, name.clone(), false))
-                    }
-                    ResolvedType::TypePack { index, name, .. } => {
-                        Some((*index, name.clone(), true))
-                    }
+                    ResolvedType::TypeParam { id, name } => Some((*id, name.clone(), false)),
+                    ResolvedType::TypePack { id, name, .. } => Some((*id, name.clone(), true)),
                     _ => None,
                 }
             };
@@ -132,21 +128,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get(i)
                 .copied()
                 .filter(|&t| t != TypeTable::UNKNOWN);
-            let Some((index, name, is_pack)) = named_slot else {
+            let Some((param, name, is_pack)) = named_slot else {
                 vars.push(slot);
                 diags.push(None);
                 continue;
             };
             if is_pack {
                 if let Some(pack) = named {
-                    subst.insert(index, pack);
+                    subst.insert(param, pack);
                 }
                 vars.push(slot);
                 diags.push(None);
                 continue;
             }
             let var = self.mint_infer_var_named(&name);
-            subst.insert(index, var);
+            subst.insert(param, var);
             vars.push(var);
             // Answered here, so an argument meets what the source wrote.
             if let Some(named) = named {
@@ -183,19 +179,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_type_params(ty, &inst.subst)
     }
 
-    /// `type_id` with each `TypeParam { index: i }` replaced by `type_args[i]`,
-    /// read at this frame: a projection the substitution reaches is answered.
-    pub(super) fn substitute_in_frame(&mut self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
-        let substituted = self.tysys.substitute_type_params(type_id, type_args);
+    /// `type_id` with `owner`'s parameter `i` replaced by `type_args[i]`, read
+    /// at this frame: a projection the substitution reaches is answered.
+    pub(super) fn substitute_in_frame(
+        &mut self,
+        type_id: TypeId,
+        owner: DefId,
+        type_args: &[TypeId],
+    ) -> TypeId {
+        let substituted = self
+            .tysys
+            .substitute_type_params(type_id, owner, type_args);
         self.answer_frame_projections(substituted)
     }
 
-    /// A static method's parameter types at a call: the impl's type parameters
-    /// number first and the method's own after them, so the method's arguments
-    /// alone would fill the impl's slots.
+    /// A static method's parameter types at a call. The declarations in
+    /// `owners`, its impl block's and its own, number one sequence: the impl's
+    /// parameters first and the method's after them.
     pub(super) fn static_param_types_at(
         &mut self,
         param_types: Vec<TypeId>,
+        owners: &[DefId],
         impl_args: &[TypeId],
         method_args: &[TypeId],
     ) -> Vec<TypeId> {
@@ -203,9 +207,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return param_types;
         }
         let combined: Vec<TypeId> = impl_args.iter().chain(method_args).copied().collect();
+        let subst: TypeArgMap = {
+            let table = self.tysys.type_table.borrow();
+            param_types
+                .iter()
+                .flat_map(|&t| table.type_params_in(t))
+                .filter(|param| owners.contains(&param.owner))
+                .filter_map(|param| Some((param, *combined.get(param.index as usize)?)))
+                .collect()
+        };
         param_types
             .iter()
-            .map(|&t| self.substitute_in_frame(t, &combined))
+            .map(|&t| {
+                let substituted = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .substitute_type_params(t, &subst);
+                self.answer_frame_projections(substituted)
+            })
             .collect()
     }
 

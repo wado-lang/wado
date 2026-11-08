@@ -264,7 +264,6 @@ pub struct NirTypeParam {
     pub bounds: Vec<String>,
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
-    pub index: u32,
 }
 
 /// Information about monomorphization origin for instantiated items

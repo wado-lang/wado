@@ -40,7 +40,7 @@ use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
 use crate::hashmap;
 use crate::name::{FqTraitName, test_function_name};
-use crate::tir::{ResolvedType, StructDef, TirTypeParam};
+use crate::tir::{ResolvedType, StructDef, TirTypeParam, TypeArgMap, TypeParamId};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -440,7 +440,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             is_pack,
             bounds,
             default: None,
-            index,
+            id: Some(TypeParamId {
+                owner: impl_def,
+                index,
+            }),
             projected,
         }
     }
@@ -451,27 +454,35 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 
     /// A function's parameters for the TIR. An effect or `fn`-bound one takes
-    /// no slot, so the rest are numbered densely, as `register_generic_params` does.
+    /// no slot.
     fn fn_type_params(&mut self, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
         self.project_type_params(params.iter().filter(|p| p.is_real_type_param()))
     }
 
     /// Resolved in this frame, where a default naming a sibling (`<A, B = A>`)
-    /// reaches it; once the frame is torn down it cannot.
+    /// reaches it and the frame binds each parameter; once the frame is torn
+    /// down it cannot.
     fn project_type_params<'p>(
         &mut self,
         params: impl Iterator<Item = &'p ast::GenericParam>,
     ) -> Vec<TirTypeParam> {
         params
-            .enumerate()
-            .map(|(i, p)| TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                index: i as u32,
-                projected: false,
+            .map(|p| {
+                let id = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .get(&p.name)
+                    .and_then(|binder| self.tysys.type_table.borrow().type_param_id(binder.type_id));
+                TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: p.is_effect,
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                    id,
+                    projected: false,
+                }
             })
             .collect()
     }
@@ -865,11 +876,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// another of them, which a use site then reads off `P`'s argument.
     fn impl_projections(&mut self, impl_block: &ast::ImplBlock) -> Vec<ImplProjection> {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+        let owner = self.tysys.def_at(impl_block.id);
         let mut projections = Vec::new();
         for param in &impl_block.type_params {
-            let Some(source) = slots.of_name(&param.name) else {
+            let Some(index) = slots.of_name(&param.name) else {
                 continue;
             };
+            let source = TypeParamId { owner, index };
             for bound in &param.bounds {
                 let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
                     continue;
@@ -1267,18 +1280,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if defaulted.is_empty() {
             return ty;
         }
-        let mut subst = hashmap::IndexMap::default();
+        let mut subst = TypeArgMap::default();
         for (name, default_ty) in defaulted {
-            // The index the declaration gave the parameter, not its position
-            // among the signature's own: a method's slots follow the impl's.
-            let &BinderInScope { index, .. } = self
+            let &BinderInScope { type_id, .. } = self
                 .annotate_ctx
                 .trait_ctx
                 .type_params
                 .get(&name)
                 .expect("a signature's own type parameters are in scope for its defaults");
+            let param = self.tysys.type_table.borrow().declared_param(type_id);
             let resolved = self.resolve_type(&default_ty);
-            subst.insert(index, resolved);
+            subst.insert(param, resolved);
         }
         self.tysys
             .type_table

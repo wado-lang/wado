@@ -301,13 +301,14 @@ impl MemberTables {
         let fields = key.as_ref().and_then(|k| self.struct_fields.get(k));
         let payloads = key.as_ref().and_then(|k| self.variant_payloads.get(k));
         let type_args = tt.nominal_type_args(type_id).unwrap_or_default();
+        let decl = tt.nominal_def(type_id);
         fields
             .into_iter()
             .flatten()
             .chain(payloads.into_iter().flatten())
             .map(move |&member| match tt.get(member) {
-                ResolvedType::TypeParam { index, .. } => {
-                    type_args.get(*index as usize).copied().unwrap_or(member)
+                ResolvedType::TypeParam { id, .. } if Some(id.owner) == decl => {
+                    type_args.get(id.index as usize).copied().unwrap_or(member)
                 }
                 _ => member,
             })

@@ -18,7 +18,7 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, StructDef,
-    SubstitutionContext, TemplateId, TypeId, positional_substitution,
+    SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId, positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -1259,19 +1259,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .first()
             .copied();
         let tt = self.tysys.type_table.borrow();
-        written.is_some_and(|written| tt.param_slot(written).is_some() || written == key)
+        written.is_some_and(|written| tt.type_param_id(written).is_some() || written == key)
     }
 
     /// Check the bounds impl `def` places on its parameters still open, once
     /// they are answered.
-    fn defer_open_impl_bounds(&mut self, def: DefId, slots: &IndexMap<u32, TypeId>, span: Span) {
+    fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
         let names = ImplParamSlots::of(&header.ty, &header.type_params);
         for (&slot, &arg) in slots {
+            assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
             let arg = self.apply_infer_holes(arg);
             let param = names
-                .name_of(slot)
+                .name_of(slot.index)
                 .and_then(|name| header.type_params.iter().find(|p| p.name == name));
             let open = self.awaits_pending_call(arg)
                 || self.awaits_report(&self.tysys.type_table.borrow(), arg);
@@ -1449,13 +1450,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(&first) = slots.first() else {
             return vec![None; method_type_params.len()];
         };
-        let base = self.declared_slot(first);
-        let (owner, _) = self
-            .tysys
-            .type_table
-            .borrow()
-            .param_identity(first)
-            .expect("a method's slot is a declared parameter");
+        let TypeParamId { owner, index: base } =
+            self.tysys.type_table.borrow().declared_param(first);
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
@@ -2234,7 +2230,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let Some(slot) = slots.of_name(&param.name) else {
                         continue;
                     };
-                    let Some(&bound) = filled.get(&slot) else {
+                    let id = TypeParamId {
+                        owner: impl_ref.0,
+                        index: slot,
+                    };
+                    let Some(&bound) = filled.get(&id) else {
                         continue;
                     };
                     Self::bind_type_param(&mut scope, Some(param), &param.name, slot, bound);
@@ -2297,12 +2297,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // shape (generic, ref, blanket, variadic) — which a flat positional
         // list cannot express. Method-level slots stay abstract: inference
         // solves them at the call site.
-        let impl_slots: IndexMap<u32, TypeId> = scope
+        let impl_slots: TypeArgMap = scope
             .annotate_ctx
             .trait_ctx
             .type_params
             .values()
-            .map(|b| (b.index, b.type_id))
+            .map(|b| {
+                let id = TypeParamId {
+                    owner: impl_ref.0,
+                    index: b.index,
+                };
+                (id, b.type_id)
+            })
             .collect();
         // The same frame under the names the block wrote, which is what a
         // parameter default naming one (`v: T = T::default()`) spells. Taken
@@ -2475,7 +2481,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &default_method
                         .sig
                         .call_slots(tt, None, &declaring_args, &[]),
-                    &SlotProjections::from_iter([(0, own_assoc)]),
+                    &SlotProjections::from_iter([(TypeParamId::trait_self(trait_decl), own_assoc)]),
                     &EffectRows::default(),
                 );
 
@@ -3118,7 +3124,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // in the impl's frame; instantiating it with the receiver's
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
-                let mut slots = positional_substitution(&concrete_type_args);
+                let mut slots = s
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .impl_slots(impl_ref.0, &concrete_type_args);
                 if let Some(pointee) = pointee {
                     if !s
                         .tysys
@@ -3136,7 +3146,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .iter()
                             .filter(|p| p.is_real_type_param())
                             .position(|p| p.name == binder)?;
-                        slots = [(slot as u32, pointee)].into_iter().collect();
+                        let id = TypeParamId {
+                            owner: impl_ref.0,
+                            index: slot as u32,
+                        };
+                        slots = TypeArgMap::from_iter([(id, pointee)]);
                     }
                 }
 
@@ -3821,7 +3835,7 @@ impl TypeSystem {
         }
         let instantiated = sig.instantiate_received(
             &self.type_table,
-            &positional_substitution(receiver_type_args.unwrap_or(&[])),
+            &positional_substitution(def, receiver_type_args.unwrap_or(&[])),
             &SlotProjections::default(),
             &EffectRows::default(),
         );

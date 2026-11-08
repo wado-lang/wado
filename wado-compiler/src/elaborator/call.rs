@@ -13,7 +13,8 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId,
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeArgMap, TypeId,
+    TypeParamId,
 };
 use crate::type_table::TypeTable;
 
@@ -627,18 +628,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved
     }
 
-    /// The callee's own packs among `own_vars`, each slot with its index. An
+    /// The callee's own packs among `own_vars`, each slot with its identity. An
     /// instantiation leaves a pack rigid (see [`Self::instantiate`]).
-    fn own_packs(&self, own_vars: &[TypeId]) -> Vec<(TypeId, u32)> {
+    fn own_packs(&self, own_vars: &[TypeId]) -> Vec<(TypeId, TypeParamId)> {
         let table = self.tysys.type_table.borrow();
         own_vars
             .iter()
             .filter_map(|&slot| match table.get(slot) {
                 ResolvedType::TypePack {
-                    index,
+                    id,
                     mapped_elem: None,
                     ..
-                } => Some((slot, *index)),
+                } => Some((slot, *id)),
                 _ => None,
             })
             .collect()
@@ -648,7 +649,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// answer replaced by its answer.
     fn packs_answered(
         &mut self,
-        packs: &[(TypeId, u32)],
+        packs: &[(TypeId, TypeParamId)],
         param_types: &[TypeId],
         resolved: &[Option<TypeId>],
         i: usize,
@@ -658,7 +659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let table = self.tysys.type_table.borrow();
             packs
                 .iter()
-                .any(|&(_, index)| table.contains_type_param_index(param, index))
+                .any(|&(_, pack)| table.mentions_param(param, pack))
         };
         if !mentions_pack {
             return Some(PacksAnswered {
@@ -674,7 +675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_type_params(param, &answers);
         let open = packs
             .iter()
-            .filter(|&&(_, index)| !answers.contains_key(&index))
+            .filter(|(_, pack)| !answers.contains_key(pack))
             .map(|&(slot, _)| slot)
             .collect();
         Some(PacksAnswered { declared, open })
@@ -716,13 +717,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ArgParam { checked, declared }
     }
 
-    /// What the arguments `resolved` so far answer of `packs`, by slot index.
+    /// What the arguments `resolved` so far answer of `packs`.
     fn pack_answers(
         &self,
-        packs: &[(TypeId, u32)],
+        packs: &[(TypeId, TypeParamId)],
         param_types: &[TypeId],
         resolved: &[Option<TypeId>],
-    ) -> IndexMap<u32, TypeId> {
+    ) -> TypeArgMap {
         let mut bindings = IndexMap::default();
         for (&declared, actual) in param_types.iter().zip(resolved) {
             if let Some(actual) = *actual {
@@ -731,7 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         packs
             .iter()
-            .filter_map(|&(slot, index)| bindings.get(&slot).map(|&tuple| (index, tuple)))
+            .filter_map(|&(slot, pack)| bindings.get(&slot).map(|&tuple| (pack, tuple)))
             .collect()
     }
 
@@ -741,7 +742,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// pack stays open: the call reports that pack unanswered.
     fn answer_stand_ins(
         &mut self,
-        packs: &[(TypeId, u32)],
+        packs: &[(TypeId, TypeParamId)],
         param_types: &[TypeId],
         resolved: &[TypeId],
         stand_ins: &[(TypeId, TypeId)],
@@ -1390,20 +1391,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// type arguments, is `source`.
     fn wrapped_case(&self, target: TypeId, source: TypeId) -> Result<u32, WrappedCase> {
         let lookup = self.type_lookup();
-        let (args, info) = {
+        let (def, args, info) = {
             let tt = self.tysys.type_table.borrow();
-            let info = tt
-                .nominal_def(target)
-                .and_then(|def| lookup.variant_cases_of(def))
+            let def = tt.nominal_def(target).ok_or(WrappedCase::NotAVariant)?;
+            let info = lookup
+                .variant_cases_of(def)
                 .ok_or(WrappedCase::NotAVariant)?;
-            (tt.nominal_type_args(target).unwrap_or_default(), info)
+            (def, tt.nominal_type_args(target).unwrap_or_default(), info)
         };
         let carrying: Vec<(usize, &str)> = info
             .cases
             .iter()
             .enumerate()
             .filter(|(_, case)| case.payload != TypeTable::UNIT)
-            .filter(|(_, case)| self.tysys.substitute_type_params(case.payload, &args) == source)
+            .filter(|(_, case)| {
+                self.tysys.substitute_type_params(case.payload, def, &args) == source
+            })
             .map(|(index, case)| (index, case.name.as_str()))
             .collect();
         match carrying.as_slice() {
@@ -1986,14 +1989,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let mut substituted = self.static_param_types_at(
-                    raw_param_types,
-                    &impl_type_args_inferred,
-                    &method_type_args,
-                );
                 let block = resolved
                     .found()
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
+                let owners: Vec<DefId> = block
+                    .into_iter()
+                    .chain(resolved.found().and_then(|c| c.method_ref.method_id))
+                    .chain(receiver_key.decl())
+                    .collect();
+                let mut substituted = self.static_param_types_at(
+                    raw_param_types,
+                    &owners,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                );
                 self.retype_static_to_newtype(
                     &receiver_key,
                     block,
@@ -2554,7 +2563,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
-            return_type = self.substitute_in_frame(return_type, &type_args);
+            return_type =
+                self.substitute_in_frame(return_type, callee.type_param_owner(), &type_args);
         }
 
         // WEP 2026-05-26: record the inferred /
@@ -2582,7 +2592,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             declared_param_types
                 .iter()
-                .map(|&param| self.substitute_in_frame(param, &type_args))
+                .map(|&param| {
+                    self.substitute_in_frame(param, callee.type_param_owner(), &type_args)
+                })
                 .collect()
         };
         // Looked up before padding and recorded below, so reify pads from the
@@ -3794,7 +3806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
-                type_args[i] = self.substitute_in_frame(default_ty, &snapshot);
+                type_args[i] = self.substitute_in_frame(default_ty, owner, &snapshot);
             }
         }
     }
@@ -3947,9 +3959,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 for bound in &param.bounds {
-                    // A slot left as its own parameter shares its id with the
-                    // caller's of one name and index, so only the slot's shape
-                    // says it is open.
                     let targets: Vec<(usize, &ast::AssocTypeBound)> = bound
                         .assoc_types
                         .iter()
@@ -3972,17 +3981,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     for (target_idx, assoc) in targets {
                         let resolved = if forwarded {
-                            // A block's slot carries no declaration here; its
-                            // open value is a pack where the slot is one.
-                            let is_pack = match target_idx.checked_sub(offset) {
-                                Some(own) if own < params.len() => params[own].is_pack,
-                                _ => self
-                                    .tysys
-                                    .type_table
-                                    .borrow()
-                                    .contains_type_pack(args[target_idx]),
-                            };
-                            trait_.filter(|_| !is_pack).map(|trait_| {
+                            trait_.map(|trait_| {
                                 self.forwarded_projection(
                                     owner_ty,
                                     trait_,
@@ -4731,31 +4730,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The slot a declared type parameter's `TypeId` holds.
+    /// The slot a declared type parameter's `TypeId` holds in its own frame's
+    /// argument list.
     pub(super) fn declared_slot(&self, id: TypeId) -> u32 {
-        let table = self.tysys.type_table.borrow();
-        table.param_slot(id).unwrap_or_else(|| {
-            panic!(
-                "a declared slot is a type parameter, found {:?}",
-                table.get(id)
-            )
-        })
+        self.tysys.type_table.borrow().declared_param(id).index
     }
 
     /// The declaring block's slots filled with `values` (one per declared
     /// parameter), in the method frame's order: the target's positions, then past them.
     fn declaring_slot_values(&self, sig: &MethodSig, values: &[TypeId]) -> Vec<TypeId> {
-        let declared: IndexMap<u32, TypeId> = sig
-            .declaring_type_params()
-            .iter()
-            .map(|&(_, id)| (self.declared_slot(id), id))
-            .collect();
-        let slots: IndexMap<u32, TypeId> = declared
-            .keys()
-            .zip(values)
-            .map(|(&slot, &value)| (slot, value))
-            .collect();
+        let declared = sig.declaring_type_params();
         let mut table = self.tysys.type_table.borrow_mut();
+        let ids: Vec<TypeId> = declared.iter().map(|&(_, id)| id).collect();
+        let slots = table.bind_params(&ids, values);
         let target = match sig.declaring_impl {
             Some(def) => table.impl_target_args(def).to_vec(),
             None => Vec::new(),
@@ -4764,11 +4751,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&arg| table.substitute_type_params(arg, &slots))
             .collect();
-        for slot in out.len() as u32..sig.method_slot_base {
-            let own = declared.get(&slot).copied();
-            let Some(value) = slots.get(&slot).copied().or(own) else {
+        for index in out.len() as u32..sig.method_slot_base {
+            let Some(&id) = ids.iter().find(|&&id| table.declared_param(id).index == index) else {
                 break;
             };
+            let value = slots.get(&table.declared_param(id)).copied().unwrap_or(id);
             out.push(value);
         }
         out
@@ -5065,7 +5052,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(variant_type)
             .unwrap_or_default();
         if let Some(payload) = payload {
-            let declared = self.substitute_in_frame(case_data.payload, &type_args);
+            let variant_def = self.tysys.def_at(variant.defined_at);
+            let declared = self.substitute_in_frame(case_data.payload, variant_def, &type_args);
             match raw_args.first() {
                 Some(value) => self.typecheck_value(value, payload, declared),
                 None => self.typecheck(payload, declared, span),

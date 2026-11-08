@@ -13,7 +13,7 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, StructDef, TypeId};
+use crate::tir::{ResolvedType, StructDef, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -615,8 +615,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let target = self.tysys.type_table.borrow().impl_target_whole(impl_def);
-        let mut slots: IndexMap<u32, TypeId> = IndexMap::default();
-        slots.insert(0, target);
+        let slot = |index| TypeParamId {
+            owner: trait_decl,
+            index,
+        };
+        let mut slots = TypeArgMap::default();
+        slots.insert(slot(0), target);
         let defaults = header
             .type_params
             .iter()
@@ -638,14 +642,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // own module, which this frame cannot read from.
                 (None, Some(DefaultArg::Named(_)) | None) => return,
             };
-            slots.insert(supplied.slot, arg);
+            slots.insert(slot(supplied.slot), arg);
         }
         let answers: Vec<ProjectionAnswer> = impl_sig
             .associated_types
             .iter()
             .map(|(name, &answer)| ProjectionAnswer::at_any(trait_decl, name.clone(), answer))
             .collect();
-        let projections = SlotProjections::from_iter([(0, answers)]);
+        let projections = SlotProjections::from_iter([(slot(0), answers)]);
 
         for method in &impl_block.methods {
             let Some(declared) = trait_sig.method(&method.name) else {
@@ -670,10 +674,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .zip(written.own_type_params())
                 {
-                    let slot = table
-                        .param_slot(*from)
-                        .expect("a method's own type parameter is a slot");
-                    method_slots.insert(slot, *to);
+                    method_slots.insert(table.declared_param(*from), *to);
                 }
             }
             let expected = declared.sig.decl.instantiate_slots_with(
@@ -1241,14 +1242,21 @@ impl TypeSystem {
     ) -> Option<bool> {
         // A member is read at the instance: `items: List<T>` is `List<i32>`
         // at `Gen<i32>`, however deep the parameter sits.
-        let at_instance =
-            |type_args: &[TypeId], tid: TypeId| self.substitute_type_params(tid, type_args);
+        let at_instance = |params: &[TypeId], type_args: &[TypeId], tid: TypeId| {
+            if type_args.is_empty() {
+                return tid;
+            }
+            let mut table = self.type_table.borrow_mut();
+            let substitution = table.bind_params(params, type_args);
+            table.substitute_type_params(tid, &substitution)
+        };
         let walk_struct = |info: &StructFieldInfo,
                            type_args: &[TypeId],
                            visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
          -> bool {
             info.fields.iter().all(|(fname, tid, _)| {
-                visit(StructuralMember::Field(fname), at_instance(type_args, *tid))
+                let member = at_instance(&info.type_param_type_ids, type_args, *tid);
+                visit(StructuralMember::Field(fname), member)
             })
         };
         let walk_variant = |info: &VariantInfo,
@@ -1259,10 +1267,8 @@ impl TypeSystem {
                 .iter()
                 .filter(|c| c.has_payload(&self.type_table.borrow()))
                 .all(|c| {
-                    visit(
-                        StructuralMember::Case(&c.name),
-                        at_instance(type_args, c.payload),
-                    )
+                    let member = at_instance(&info.type_param_type_ids, type_args, c.payload);
+                    visit(StructuralMember::Case(&c.name), member)
                 })
         };
         let resource = self.type_table.borrow().resource_def_in(resolved);
@@ -1457,22 +1463,23 @@ impl TypeSystem {
         // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
         trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(|sig| {
             sig.methods.values().any(|m| {
-                m.sig.self_kind == SelfKind::None && self.receiverless_method_mentions_self(&m.sig)
+                m.sig.self_kind == SelfKind::None
+                    && self.receiverless_method_mentions_self(trait_, &m.sig)
             })
         })
     }
 
     /// Whether a receiverless method's signature names `Self` — in a parameter,
     /// the return type, or a bound on one of its own type parameters. Slot 0 of
-    /// a trait method's frame is `Self`.
-    fn receiverless_method_mentions_self(&self, sig: &sig::MethodSig) -> bool {
+    /// a trait's frame is `Self`.
+    fn receiverless_method_mentions_self(&self, trait_: DefId, sig: &sig::MethodSig) -> bool {
         let table = self.type_table.borrow();
         let in_types = sig
             .decl
             .param_types
             .iter()
             .chain(sig.decl.return_type.iter())
-            .any(|t| table.contains_type_param_index(*t, 0));
+            .any(|t| table.mentions_param(*t, TypeParamId::trait_self(trait_)));
         in_types
             || sig
                 .own_params
@@ -2139,7 +2146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         candidate: &BoundCandidate,
         self_type_id: TypeId,
-    ) -> IndexMap<u32, TypeId> {
+    ) -> TypeArgMap {
         let BoundCandidate {
             bound,
             space,
@@ -2271,7 +2278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
-            &SlotProjections::from_iter([(0, answers)]),
+            &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
         );
         let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
         Some(instantiated.param_types[first_value_param..].to_vec())
@@ -2414,11 +2421,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let fq_trait_name = self
             .tysys
-            .trait_named_from_slots(fq_trait_name, &bound, &slots);
+            .trait_named_from_slots(fq_trait_name, &bound, decl, &slots);
         let instantiated = sig.instantiate_received(
             &self.tysys.type_table,
             &slots,
-            &SlotProjections::from_iter([(0, answers)]),
+            &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
             &EffectRows::default(),
         );
         // A bare bound dispatches on the parameter itself, off no `impl` block.
@@ -2540,7 +2547,7 @@ impl TypeSystem {
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
             return slots
                 .iter()
-                .find_map(|(&slot, &type_arg)| unmet(names.name_of(slot)?, type_arg));
+                .find_map(|(slot, &type_arg)| unmet(names.name_of(slot.index)?, type_arg));
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
@@ -2985,8 +2992,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         decl: DefId,
         self_type_id: TypeId,
         written_self: BoundSelf,
-    ) -> IndexMap<u32, TypeId> {
-        let mut slots = IndexMap::from_iter([(0, self_type_id)]);
+    ) -> TypeArgMap {
+        let mut slots = TypeArgMap::from_iter([(TypeParamId::trait_self(decl), self_type_id)]);
         let Some(trait_params) = self.tysys.trait_decl_type_params_of(&decl) else {
             return slots;
         };
@@ -3009,7 +3016,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (slot, ty, scope) in written {
             let resolved =
                 self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
-            slots.insert(slot, resolved);
+            slots.insert(TypeParamId { owner: decl, index: slot }, resolved);
         }
         slots
     }
@@ -3682,7 +3689,8 @@ impl TypeSystem {
         &self,
         fq: FqTraitName,
         bound: &ast::TraitBound,
-        slots: &IndexMap<u32, TypeId>,
+        decl: DefId,
+        slots: &TypeArgMap,
     ) -> FqTraitName {
         if !bound.type_args.iter().any(names_no_type) {
             return fq;
@@ -3693,7 +3701,13 @@ impl TypeSystem {
                 .type_args
                 .get(i)
                 .filter(|ty| names_no_type(ty))
-                .and_then(|_| slots.get(&(1 + i as u32)).copied())
+                .and_then(|_| {
+                    let slot = TypeParamId {
+                        owner: decl,
+                        index: 1 + i as u32,
+                    };
+                    slots.get(&slot).copied()
+                })
         })
     }
 }

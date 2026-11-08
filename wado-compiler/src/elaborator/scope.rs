@@ -296,9 +296,10 @@ pub(super) struct TraitContext {
     /// Type parameters currently in scope. Set when resolving generic structs,
     /// functions, or impl blocks.
     pub(super) type_params: IndexMap<String, BinderInScope>,
-    /// The binders a method's parameter of the same name shadowed. No name
-    /// reaches one, but the body still holds values of it, through `self`.
-    pub(super) shadowed: Vec<(String, BinderInScope)>,
+    /// The binders a method's parameter of the same name shadowed, each with
+    /// the bounds it carried. No name reaches one, but the body still holds
+    /// values of it, through `self`.
+    pub(super) shadowed: Vec<(String, BinderInScope, Vec<ScopedBound>)>,
     /// Trait bounds on type parameters in scope (name → full bounds with assoc
     /// types), each paired with the `Self` its written types mean. Used for
     /// resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
@@ -337,17 +338,33 @@ impl TraitContext {
             .collect()
     }
 
-    /// Every binder the frame holds, by name, a shadowed one included.
+    /// Every binder the frame holds, by name, a shadowed one included: the
+    /// named ones first, at their positions in [`Self::type_params`].
     pub(super) fn binders(&self) -> impl Iterator<Item = (&String, &BinderInScope)> {
-        self.type_params
-            .iter()
-            .chain(self.shadowed.iter().map(|(name, binder)| (name, binder)))
+        self.binders_with_bounds()
+            .map(|(name, binder, _)| (name, binder))
     }
 
-    /// Bind `name` to `binder`, keeping the binder it shadows.
+    /// [`Self::binders`], each with the bounds in force on it.
+    pub(super) fn binders_with_bounds(
+        &self,
+    ) -> impl Iterator<Item = (&String, &BinderInScope, &[ScopedBound])> {
+        let named = self.type_params.iter().map(|(name, binder)| {
+            let bounds = self.type_param_bounds.get(name).map_or(&[][..], Vec::as_slice);
+            (name, binder, bounds)
+        });
+        let shadowed = self
+            .shadowed
+            .iter()
+            .map(|(name, binder, bounds)| (name, binder, bounds.as_slice()));
+        named.chain(shadowed)
+    }
+
+    /// Bind `name` to `binder`, keeping the binder it shadows with its bounds.
     pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
         if let Some(shadowed) = self.type_params.insert(name.to_string(), binder) {
-            self.shadowed.push((name.to_string(), shadowed));
+            let bounds = self.type_param_bounds.shift_remove(name).unwrap_or_default();
+            self.shadowed.push((name.to_string(), shadowed, bounds));
         }
     }
 
@@ -1261,7 +1278,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // The impl's own parameter keeps the name, but the trait's mark
             // still reaches what it binds.
             if ctx.type_params.contains_key(&param.name) {
-                ctx.shadowed.push((param.name.clone(), binder));
+                ctx.shadowed.push((param.name.clone(), binder, Vec::new()));
                 continue;
             }
             self.bind_param(&param.name, binder, bounds);

@@ -17,7 +17,6 @@ use crate::elaborator::trait_env::{
 };
 use crate::elaborator::{InstanceBody, InstanceImpl, InstanceOrder, SolverBridge};
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
-use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name};
 use crate::synthesis::common::{
@@ -28,7 +27,7 @@ use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TemplateShape,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TypeId, deref_to_layers,
+    TirStruct, TirStructField, TypeArgMap, TypeId, TypeParamId, deref_to_layers,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -1026,20 +1025,24 @@ pub(crate) fn blanket_impl_args(
     // A blanket's slots are its parameters in declaration order, so a
     // source's position is its slot.
     let sources = trait_env.blanket_param_sources(blanket);
-    let mut slots: IndexMap<u32, TypeId> = sources
+    let slot = |index| TypeParamId {
+        owner: blanket.def,
+        index,
+    };
+    let mut slots: TypeArgMap = sources
         .iter()
         .zip(0..)
         .filter(|(source, _)| matches!(source, BlanketParamSource::Receiver))
-        .map(|(_, slot)| (slot, receiver))
+        .map(|(_, index)| (slot(index), receiver))
         .collect();
     tt.project_impl_slots(blanket.def, &mut slots);
     sources
         .iter()
         .zip(0..)
-        .map(|(source, slot)| match source {
+        .map(|(source, index)| match source {
             BlanketParamSource::Unresolved => None,
             BlanketParamSource::Receiver | BlanketParamSource::Projection => {
-                slots.get(&slot).copied()
+                slots.get(&slot(index)).copied()
             }
         })
         .collect()

@@ -16,7 +16,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{ResolvedType, StructDef, TypeId, range_item};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeParamId, range_item};
 use crate::type_table::TypeTable;
 
 use super::sem::decls::ModuleDecls;
@@ -381,14 +381,19 @@ impl TypeSystem {
         Some(self.qualified_case(owner, defs.name(case)))
     }
 
-    /// `type_id` with each `TypeParam { index: i }` replaced by `type_args[i]`.
-    pub(crate) fn substitute_type_params(&self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
+    /// `type_id` with `owner`'s parameter `i` replaced by `type_args[i]`.
+    pub(crate) fn substitute_type_params(
+        &self,
+        type_id: TypeId,
+        owner: DefId,
+        type_args: &[TypeId],
+    ) -> TypeId {
         if type_args.is_empty() {
             return type_id;
         }
         self.type_table
             .borrow_mut()
-            .substitute_positional(type_id, type_args)
+            .substitute_positional(type_id, owner, type_args)
     }
 
     /// The `Type::Case` spelling of `case` under `owner`.
@@ -820,24 +825,23 @@ impl TypeSystem {
                 .chain(self.data.variant_cases.iter().map(|(def, info)| {
                     (*def, info.cases.iter().map(|case| case.payload).collect())
                 }));
-        let mut steps: IndexMap<(DefId, u32), Vec<(DefId, u32)>> = IndexMap::default();
-        let mut expanding: Vec<((DefId, u32), (DefId, u32))> = Vec::new();
+        let mut steps: IndexMap<TypeParamId, Vec<TypeParamId>> = IndexMap::default();
+        let mut expanding: Vec<(TypeParamId, TypeParamId)> = Vec::new();
         for (def, member_types) in members {
             let member_types: Vec<TypeId> = member_types;
             for ty in member_types {
                 for_each_application(&table, ty, &mut |head, args| {
                     for (position, &arg) in args.iter().enumerate() {
-                        let to = (head, position as u32);
+                        let to = TypeParamId {
+                            owner: head,
+                            index: position as u32,
+                        };
                         let mut params = Vec::new();
                         type_params_in(&table, arg, &mut params);
-                        for param in params {
-                            let from = (def, param);
+                        for from in params {
+                            assert_eq!(from.owner, def, "a member names its own parameters");
                             steps.entry(from).or_default().push(to);
-                            let bare = matches!(
-                                table.get(arg),
-                                ResolvedType::TypeParam { index, .. } if *index == param
-                            );
-                            if !bare {
+                            if table.type_param_id(arg) != Some(from) {
                                 expanding.push((from, to));
                             }
                         }
@@ -848,7 +852,7 @@ impl TypeSystem {
         expanding
             .into_iter()
             .filter(|&(from, to)| reaches(&steps, to, from))
-            .map(|((def, _), _)| def)
+            .map(|(from, _)| from.owner)
             .collect()
     }
 }
@@ -867,10 +871,10 @@ fn for_each_application(table: &TypeTable, ty: TypeId, visit: &mut dyn FnMut(Def
 
 /// The type parameters `ty` is built over, at any depth. A projection
 /// (`K::Child`) is not: an impl settles what it names, so it need not be
-/// larger than `K`, unlike what [`TypeTable::type_param_indices`] counts.
-fn type_params_in(table: &TypeTable, ty: TypeId, params: &mut Vec<u32>) {
-    if let ResolvedType::TypeParam { index, .. } = table.get(ty) {
-        params.push(*index);
+/// larger than `K`, unlike what [`TypeTable::type_params_in`] counts.
+fn type_params_in(table: &TypeTable, ty: TypeId, params: &mut Vec<TypeParamId>) {
+    if let ResolvedType::TypeParam { id, .. } = table.get(ty) {
+        params.push(*id);
     }
     for part in constituents(table, ty).1 {
         type_params_in(table, part, params);
@@ -970,9 +974,9 @@ fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
 
 /// Whether `steps` lead from `from` to `to`.
 fn reaches(
-    steps: &IndexMap<(DefId, u32), Vec<(DefId, u32)>>,
-    from: (DefId, u32),
-    to: (DefId, u32),
+    steps: &IndexMap<TypeParamId, Vec<TypeParamId>>,
+    from: TypeParamId,
+    to: TypeParamId,
 ) -> bool {
     let mut seen = IndexSet::default();
     let mut pending = vec![from];
@@ -1005,7 +1009,7 @@ impl HeldTypes for AffineParams<'_> {
                 declared_affine(type_id)
                     || self.affine_params.iter().any(|&param| {
                         table.is_type_pack(param)
-                            && table.param_identity(param) == table.param_identity(type_id)
+                            && table.type_param_id(param) == table.type_param_id(type_id)
                     })
             }
             ResolvedType::TypePack { .. } => declared_affine(type_id),
@@ -1097,18 +1101,25 @@ impl TypeSystem {
                     .borrow()
                     .nominal_type_args(base)
                     .unwrap_or_default();
+                let decl = self.type_def(base);
                 let members = if let Some(templates) = self.struct_field_type_ids_of(base) {
-                    templates
-                        .into_iter()
-                        .map(|field_type| self.substitute_type_params(field_type, &args))
-                        .collect()
+                    match decl {
+                        Some(decl) => templates
+                            .into_iter()
+                            .map(|field_type| self.substitute_type_params(field_type, decl, &args))
+                            .collect(),
+                        None => {
+                            assert!(args.is_empty(), "an anonymous struct takes no arguments");
+                            templates
+                        }
+                    }
                 } else if let Some(payloads) = self.case_payload_types(base) {
                     payloads
                 } else {
                     return Held::Nothing;
                 };
                 Held::Members {
-                    decl: self.type_def(base),
+                    decl,
                     args,
                     members,
                 }

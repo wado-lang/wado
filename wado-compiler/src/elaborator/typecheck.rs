@@ -7,7 +7,7 @@
 use crate::ast::{AstId, Expr};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId};
+use crate::tir::{EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -461,17 +461,17 @@ fn pack_shape_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable)
 
 /// The packs a layout names, sorted and deduplicated, so two tuples naming the
 /// same packs in different orders still compare as one type.
-fn packs_named(layout: &[TupleSlot]) -> Vec<&str> {
-    let mut names: Vec<&str> = layout
+fn packs_named(layout: &[TupleSlot]) -> Vec<TypeParamId> {
+    let mut packs: Vec<TypeParamId> = layout
         .iter()
         .filter_map(|slot| match slot {
-            TupleSlot::Pack(name) => Some(name.as_str()),
+            TupleSlot::Pack(pack) => Some(*pack),
             TupleSlot::Fixed => None,
         })
         .collect();
-    names.sort_unstable();
-    names.dedup();
-    names
+    packs.sort_unstable();
+    packs.dedup();
+    packs
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).

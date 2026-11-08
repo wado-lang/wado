@@ -96,7 +96,7 @@ use crate::synthesis::common::{
 };
 use crate::tir::{
     EffectRef, ExitScope, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam,
-    TirTypeParam, agree_branch_types,
+    TirTypeParam, TypeParamId, agree_branch_types,
 };
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
@@ -1153,17 +1153,16 @@ impl<'a> Reify<'a> {
     /// them, read off what the declaration states. A default is the one fact
     /// left behind: resolving it needs the declaration's own parameters in
     /// scope, which is where the base type is resolved, not here.
-    fn declared_type_params(params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
-        params
-            .iter()
-            .enumerate()
+    fn declared_type_params(owner: DefId, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
+        (0u32..)
+            .zip(params)
             .map(|(index, p)| TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.real_bounds().iter().map(|b| b.name.clone()).collect(),
                 default: None,
-                index: index as u32,
+                id: (!p.is_effect).then_some(TypeParamId { owner, index }),
                 projected: false,
             })
             .collect()
@@ -1185,7 +1184,7 @@ impl<'a> Reify<'a> {
             module_source: self.current_module_source.clone(),
             visibility: newtype_decl.visibility,
             def,
-            type_params: Self::declared_type_params(&newtype_decl.type_params),
+            type_params: Self::declared_type_params(def, &newtype_decl.type_params),
             type_id: type_id.filter(|_| !generic),
             span: newtype_decl.span,
         })
@@ -1317,7 +1316,7 @@ impl<'a> Reify<'a> {
                 module_source: self.current_module_source.clone(),
                 visibility: ast::Visibility::Private,
                 def,
-                type_params: Self::declared_type_params(&newtype_decl.type_params),
+                type_params: Self::declared_type_params(def, &newtype_decl.type_params),
                 type_id: type_id.filter(|_| !generic),
                 span: newtype_decl.span,
             },
@@ -5082,6 +5081,9 @@ impl<'a> Reify<'a> {
             })
             .unwrap_or_default()
         };
+        let decl_params: Vec<TypeId> = info
+            .map(|info| info.type_param_type_ids.clone())
+            .unwrap_or_default();
         let field_names_to_index: hashmap::IndexMap<String, (u32, TypeId)> = decl_fields
             .iter()
             .map(|(n, i, t, _)| (n.clone(), (*i, *t)))
@@ -5100,13 +5102,15 @@ impl<'a> Reify<'a> {
         // Substitute the decl's `TypeParam`s with the instance's generic
         // args so a field's expected type is concrete (a no-op for
         // non-generic structs, where `generic_args` is empty).
+        let subst = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(&decl_params, &generic_args);
         let substitute = |this: &Self, raw: TypeId| -> TypeId {
-            if generic_args.is_empty() {
+            if subst.is_empty() {
                 return raw;
             }
-            let subst: hashmap::IndexMap<u32, TypeId> = (0..generic_args.len() as u32)
-                .zip(generic_args.iter().copied())
-                .collect();
             this.tysys
                 .type_table
                 .borrow_mut()
@@ -6832,20 +6836,24 @@ impl<'a> Reify<'a> {
         else {
             return Vec::new();
         };
-        let raw: Vec<(String, TypeId, u32)> = {
+        let (raw, subst): (Vec<(String, TypeId, u32)>, _) = {
             let lookup = self.type_lookup();
             let Some(info) = lookup.struct_fields_of_head(head) else {
                 return Vec::new();
             };
-            info.fields
+            let raw = info
+                .fields
                 .iter()
                 .enumerate()
                 .map(|(i, (fname, fty, _vis))| (fname.clone(), *fty, i as u32))
-                .collect()
+                .collect();
+            let subst = self
+                .tysys
+                .type_table
+                .borrow()
+                .bind_params(&info.type_param_type_ids, &type_args);
+            (raw, subst)
         };
-        let subst: hashmap::IndexMap<u32, TypeId> = (0..type_args.len() as u32)
-            .zip(type_args.iter().copied())
-            .collect();
         raw.into_iter()
             .map(|(fname, fty, i)| {
                 let concrete = self
@@ -8195,19 +8203,23 @@ impl<'a> Reify<'a> {
                         .iter()
                         .enumerate()
                         .find(|(_, (n, _, _))| n == field_name)
-                        .map(|(idx, (n, ty, _))| (idx as u32, n.clone(), *ty))
+                        .map(|(idx, (n, ty, _))| {
+                            (idx as u32, n.clone(), *ty, info.type_param_type_ids.clone())
+                        })
                 })
         });
-        let Some((idx, canonical, raw_field_type)) = found else {
+        let Some((idx, canonical, raw_field_type, params)) = found else {
             return (0, field_name.to_string(), None);
         };
 
         let field_type = if type_args.is_empty() {
             raw_field_type
         } else {
-            let substitution: hashmap::IndexMap<u32, TypeId> = (0..type_args.len() as u32)
-                .zip(type_args.iter().copied())
-                .collect();
+            let substitution = self
+                .tysys
+                .type_table
+                .borrow()
+                .bind_params(&params, &type_args);
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -9556,12 +9568,12 @@ impl<'a> Reify<'a> {
                 })
                 .unwrap_or_default()
         };
-        let type_args = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_type_args(peeled_scrutinee)
-            .unwrap_or_default();
+        let frame = {
+            let table = self.tysys.type_table.borrow();
+            table
+                .nominal_def(peeled_scrutinee)
+                .zip(table.nominal_type_args(peeled_scrutinee))
+        };
 
         let tir_fields: Vec<TirStructPatternField> = fields
             .iter()
@@ -9570,7 +9582,10 @@ impl<'a> Reify<'a> {
                     .get(&f.field_name)
                     .copied()
                     .unwrap_or((0, TypeTable::UNKNOWN));
-                let field_ty = self.tysys.substitute_type_params(declared, &type_args);
+                let field_ty = match &frame {
+                    Some((decl, args)) => self.tysys.substitute_type_params(declared, *decl, args),
+                    None => declared,
+                };
                 // Match ergonomics: a field bound through a `&Point` /
                 // `&mut Point` scrutinee is `&field` / `&mut field`.
                 let binding_ty = self
@@ -9626,7 +9641,7 @@ impl<'a> Reify<'a> {
             .unwrap_or_default();
         let payload_type = self
             .tysys
-            .substitute_type_params(declared_payload, &type_args);
+            .substitute_type_params(declared_payload, owner, &type_args);
         let payload = args
             .first()
             .map(|arg| Box::new(self.reify_expr(arg, ctx, Some(payload_type))));
@@ -9708,7 +9723,7 @@ impl<'a> Reify<'a> {
             ResolvedType::Variant { type_args, .. } => type_args,
             _ => Vec::new(),
         };
-        let (case_index, payload, type_param_indices): (u32, TypeId, Vec<u32>) = {
+        let (case_index, payload, params): (u32, TypeId, Vec<TypeId>) = {
             let lookup = self.type_lookup();
             let Some(variant_info) = self
                 .tysys
@@ -9720,29 +9735,19 @@ impl<'a> Reify<'a> {
             let Some((case_index, case_data)) = variant_info.case_named(case_name) else {
                 return (None, TypeTable::UNKNOWN);
             };
-            // Extract the variant decl's type-param indices so the
-            // substitution map below is keyed by `index` — matching
-            // `TypeTable::substitute_type_params`.
-            let indices: Vec<u32> = (0..variant_info.type_param_type_ids.len() as u32).collect();
             let case_index = u32::try_from(case_index).expect("case index fits u32");
-            (case_index, case_data.payload, indices)
+            (
+                case_index,
+                case_data.payload,
+                variant_info.type_param_type_ids.clone(),
+            )
         };
         if type_args.is_empty() {
             return (Some(case_index), payload);
         }
-        // Map TypeParam{index} → concrete `type_args[index]`. Recurse
-        // through containers (`Ref`, `BuiltinArray`, a generic instance,
-        // `Function`, …) via `TypeTable::substitute_type_params`.
-        let substitution: hashmap::IndexMap<u32, TypeId> = type_param_indices
-            .iter()
-            .zip(type_args.iter())
-            .map(|(&idx, &t)| (idx, t))
-            .collect();
-        let payload = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .substitute_type_params(payload, &substitution);
+        let mut table = self.tysys.type_table.borrow_mut();
+        let substitution = table.bind_params(&params, &type_args);
+        let payload = table.substitute_type_params(payload, &substitution);
         (Some(case_index), payload)
     }
 }
@@ -10332,20 +10337,12 @@ fn call_with_params(
     type_table: &mut TypeTable,
 ) -> TirExpr {
     let span = callee.span;
-    // A method's own parameters are numbered after its impl's.
-    let offset = func.impl_type_params.len() as u32;
-    let owner = func.def_id.expect("a function a call forwards to is declared");
     let type_args: Vec<TypeId> = func
         .type_params
         .iter()
-        .filter(|param| !param.is_effect)
-        .map(|param| {
-            type_table.make_declared_param(
-                owner,
-                param.name.clone(),
-                offset + param.index,
-                param.is_pack,
-            )
+        .filter_map(|param| {
+            let id = param.id?;
+            Some(type_table.make_declared_param(id.owner, param.name.clone(), id.index, param.is_pack))
         })
         .collect();
     assert_eq!(func.type_params.len(), callee.type_params.len());

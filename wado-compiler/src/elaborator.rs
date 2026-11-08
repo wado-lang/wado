@@ -2355,16 +2355,14 @@ impl TypeSystem {
     /// Each case's payload type of the variant `ty`, typed at this instance.
     pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
         let variant_info = self.variant_of_type(ty)?;
-        let type_args = self
-            .type_table
-            .borrow()
-            .nominal_type_args(ty)
-            .unwrap_or_default();
+        let mut table = self.type_table.borrow_mut();
+        let type_args = table.nominal_type_args(ty).unwrap_or_default();
+        let substitution = table.bind_params(&variant_info.type_param_type_ids, &type_args);
         Some(
             variant_info
                 .cases
                 .iter()
-                .map(|c| self.substitute_type_params(c.payload, &type_args))
+                .map(|c| table.substitute_type_params(c.payload, &substitution))
                 .collect(),
         )
     }

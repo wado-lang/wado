@@ -4,7 +4,10 @@
 
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
-use crate::tir::{InstantiationKey, ResolvedType, StructDef, TirPattern, TirStruct, TypeId};
+use crate::tir::{
+    InstantiationKey, ResolvedType, StructDef, TirPattern, TirStruct, TypeArgMap, TypeId,
+    TypeParamId,
+};
 use crate::type_table::TypeTable;
 
 use super::state::Monomorphizer;
@@ -70,7 +73,7 @@ impl Monomorphizer {
     pub fn substitute_type(
         &self,
         type_id: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) -> TypeId {
         match type_table.get(type_id).clone() {
@@ -122,10 +125,9 @@ impl Monomorphizer {
                 let mut new_elems: Vec<TypeId> = Vec::new();
                 for &e in &elems {
                     let ResolvedType::TypePack {
-                        index,
+                        id: pack,
                         name: pack_name,
                         mapped_elem,
-                        ..
                     } = type_table.get(e).clone()
                     else {
                         new_elems.push(self.substitute_type(e, substitution, type_table));
@@ -138,13 +140,11 @@ impl Monomorphizer {
                     let pack_type = self
                         .pack_splice_bindings
                         .borrow()
-                        .get(&index)
+                        .get(&pack)
                         .copied()
-                        .or_else(|| substitution.get(&index).copied())
+                        .or_else(|| substitution.get(&pack).copied())
                         .unwrap_or_else(|| {
-                            panic!(
-                                "TypePack `..{pack_name}` (index {index}) not found in substitution map"
-                            )
+                            panic!("TypePack `..{pack_name}` ({pack:?}) not found in substitution map")
                         });
                     match mapped_elem {
                         // Mapped pack: substitute `elem` once per source
@@ -156,17 +156,17 @@ impl Monomorphizer {
                             // The element binding must not reach a splice
                             // position nested in `elem`: one still spells the
                             // whole pack, so it reads the pack's tuple, not `pe`.
-                            let displaced = self.bind_pack_splice(index, pack_type);
+                            let displaced = self.bind_pack_splice(pack, pack_type);
                             for pe in pack_elems {
                                 let mut elem_substitution = substitution.clone();
-                                elem_substitution.insert(index, pe);
+                                elem_substitution.insert(pack, pe);
                                 new_elems.push(self.substitute_type(
                                     elem,
                                     &elem_substitution,
                                     type_table,
                                 ));
                             }
-                            self.restore_pack_splice(index, displaced);
+                            self.restore_pack_splice(pack, displaced);
                         }
                         None => new_elems.extend(type_table.elem_types_or_self(pack_type)),
                     }
@@ -180,9 +180,9 @@ impl Monomorphizer {
                 if substitution.is_empty() {
                     return type_id;
                 }
-                let mut indexed_args: Vec<(u32, TypeId)> =
-                    substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
-                indexed_args.sort_by_key(|(idx, _)| *idx);
+                let mut indexed_args: Vec<(TypeParamId, TypeId)> =
+                    substitution.iter().map(|(&param, &tid)| (param, tid)).collect();
+                indexed_args.sort_by_key(|(param, _)| param.index);
                 let args: Vec<TypeId> = indexed_args.into_iter().map(|(_, tid)| tid).collect();
                 type_table
                     .find_generic_instance(def, &args)
@@ -216,7 +216,7 @@ impl Monomorphizer {
     pub fn substitute_types_in_pattern(
         &self,
         pattern: &mut TirPattern,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) {
         match pattern {

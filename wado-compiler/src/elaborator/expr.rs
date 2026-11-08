@@ -48,7 +48,6 @@ use crate::elaborator::types::{
     ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
 };
 use crate::escape::{self, unescape_byte, unescape_char};
-use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::primitive::PrimitiveType;
 use crate::tir::StructDef;
@@ -1934,7 +1933,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Generic instance - look up field from generic struct definition
             // and substitute type parameters with concrete type args.
             ResolvedType::Struct {
-                def: StructDef::Decl(_),
+                def: StructDef::Decl(decl),
                 type_args,
             } if !type_args.is_empty() => {
                 let name = self
@@ -1953,7 +1952,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type = self.substitute_in_frame(*ftype, &type_args);
+                            let concrete_type =
+                                self.substitute_in_frame(*ftype, decl, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }
@@ -3293,22 +3293,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A struct's fields in declaration order, typed at this instance.
     pub(super) fn struct_field_types(&self, struct_type: TypeId) -> Option<Vec<(String, TypeId)>> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
-        let (info, type_args) = match resolved {
+        let (info, frame) = match resolved {
             ResolvedType::Struct {
-                def: StructDef::Decl(_),
+                def: StructDef::Decl(decl),
                 type_args,
-            } if !type_args.is_empty() => (self.struct_fields_of_type(struct_type)?, type_args),
-            ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, Vec::new()),
+            } if !type_args.is_empty() => (
+                self.struct_fields_of_type(struct_type)?,
+                Some((decl, type_args)),
+            ),
+            ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, None),
             _ => return None,
         };
         Some(
             info.fields
                 .iter()
                 .map(|(name, ty, _)| {
-                    (
-                        name.clone(),
-                        self.tysys.substitute_type_params(*ty, &type_args),
-                    )
+                    let ty = match &frame {
+                        Some((decl, args)) => self.tysys.substitute_type_params(*ty, *decl, args),
+                        None => *ty,
+                    };
+                    (name.clone(), ty)
                 })
                 .collect(),
         )
@@ -3902,12 +3906,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let every_slot_written = {
             let tt = self.tysys.type_table.borrow();
             slots.iter().all(|&slot| {
-                let index = tt
-                    .param_slot(slot)
-                    .expect("a struct slot is a type parameter");
+                let param = tt.declared_param(slot);
                 info.fields.iter().any(|(name, declared, _)| {
                     struct_lit.fields.iter().any(|f| &f.name == name)
-                        && tt.contains_type_param_index(*declared, index)
+                        && tt.mentions_param(*declared, param)
                 })
             })
         };
@@ -4055,11 +4057,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return fields;
                 };
                 let mut tt = self.tysys.type_table.borrow_mut();
-                let substitution: hashmap::IndexMap<u32, TypeId> = params
-                    .iter()
-                    .zip(args.iter())
-                    .filter_map(|(param, arg)| Some((tt.param_slot(*param)?, *arg)))
-                    .collect();
+                let substitution = tt.bind_params(&params, &args);
                 fields
                     .into_iter()
                     .map(|(name, type_id)| {
@@ -4469,9 +4467,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(ModuleSource, Vec<(String, TypeId, u32, Visibility)>)> {
         let (head, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
         let info = self.lookup_struct_fields_of(head)?.clone();
-        let subst: IndexMap<u32, TypeId> = (0..type_args.len() as u32)
-            .zip(type_args.iter().copied())
-            .collect();
+        let subst = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(&info.type_param_type_ids, &type_args);
         let fields = info
             .fields
             .iter()
@@ -4958,12 +4958,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
                 let table = self.tysys.type_table.borrow();
-                let Some(index) = table.param_slot(decl_param) else {
+                let Some(param) = table.type_param_id(decl_param) else {
                     continue;
                 };
                 !decl_field_types
                     .iter()
-                    .any(|&f| table.contains_type_param_index(f, index))
+                    .any(|&f| table.mentions_param(f, param))
             };
             if inst.vars.get(slot) != inferred.get(slot) || !is_phantom {
                 continue;

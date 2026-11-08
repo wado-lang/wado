@@ -6,7 +6,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::name::{FqTypeName, LocalMethodName};
-use crate::tir::{FunctionRef, ResolvedType, TemplateShape, TypeId};
+use crate::tir::{FunctionRef, ResolvedType, TemplateShape, TypeArgMap, TypeId};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -21,7 +21,7 @@ use crate::synthesis::traits::{
     REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_INPUTS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC,
     REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
 };
-use crate::{hashmap, tir};
+use crate::tir;
 
 /// The two payload-free kinds share one static-call resolution shape, differing
 /// only in their compiler items, subject kind, and scalar type (`i32` / `u64`).
@@ -1752,11 +1752,11 @@ impl TypeSystem {
             return declared.to_vec();
         }
         let mut tt = self.type_table.borrow_mut();
-        let substitution: hashmap::IndexMap<u32, TypeId> = param_ids
+        let substitution: TypeArgMap = param_ids
             .iter()
             .zip(type_args)
             .filter_map(|(param, &arg)| match tt.get(*param) {
-                ResolvedType::TypeParam { index, .. } => Some((*index, arg)),
+                ResolvedType::TypeParam { id, .. } => Some((*id, arg)),
                 _ => None,
             })
             .collect();

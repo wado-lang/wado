@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
 use crate::tir::{
-    ProjectionAnswer, ResolvedType, SlotProjections, StructDef, TypeId, positional_substitution,
+    ProjectionAnswer, ResolvedType, SlotProjections, StructDef, TypeArgMap, TypeId, TypeParamId,
+    positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -1534,7 +1534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.annotate_ctx.trait_ctx.type_param_bounds.is_empty() {
             return ty;
         }
-        let asked: Vec<(u32, TypeId, String, ProjectionAnswer)> = {
+        let asked: Vec<(TypeParamId, TypeId, String, ProjectionAnswer)> = {
             let table = self.tysys.type_table.borrow();
             let binders = &self.annotate_ctx.trait_ctx.type_params;
             table
@@ -1551,11 +1551,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     else {
                         unreachable!("assoc_type_projections answers projections");
                     };
-                    let ResolvedType::TypeParam { index, name, .. } = table.get(*param_id) else {
+                    let ResolvedType::TypeParam { id, name } = table.get(*param_id) else {
                         return None;
                     };
-                    // A callee's parameter the substitution left behind may
-                    // share a name with one of this frame's binders.
                     let asked = ProjectionAnswer {
                         owning_trait: *owning_trait,
                         trait_args: trait_args.clone(),
@@ -1563,7 +1561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         answer: TypeTable::UNKNOWN,
                     };
                     (binders.get(name)?.type_id == *param_id)
-                        .then(|| (*index, *param_id, name.clone(), asked))
+                        .then(|| (*id, *param_id, name.clone(), asked))
                 })
                 .collect()
         };
@@ -1586,7 +1584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .substitute_type_params_with(ty, &IndexMap::default(), &answers)
+            .substitute_type_params_with(ty, &TypeArgMap::default(), &answers)
     }
 
     /// What `bounds`, declared on `owning_trait`'s associated type `assoc`, say
@@ -1808,12 +1806,16 @@ impl TypeLookup<'_> {
         defaults: &[Type],
         type_table: &mut TypeTable,
     ) {
-        let mut substitution = positional_substitution(settled);
+        let mut substitution = positional_substitution(owner, settled);
         let frame = Some(DeclParams { owner, slots });
         for default in defaults {
             let resolved = self.resolve_in(default, type_table, frame);
             let filled = type_table.substitute_type_params(resolved, &substitution);
-            substitution.insert(settled.len() as u32, filled);
+            let slot = TypeParamId {
+                owner,
+                index: settled.len() as u32,
+            };
+            substitution.insert(slot, filled);
             settled.push(filled);
         }
     }
@@ -1928,8 +1930,7 @@ impl TypeLookup<'_> {
                             slots: &slots,
                         }),
                     );
-                    let substitution = positional_substitution(&type_args);
-                    let base_type_id = type_table.substitute_type_params(base, &substitution);
+                    let base_type_id = type_table.substitute_positional(base, head, &type_args);
                     return type_table.make_newtype_instance(head, type_args, base_type_id);
                 }
                 if self.struct_fields_of(head).is_some()

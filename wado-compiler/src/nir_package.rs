@@ -900,7 +900,7 @@ impl NirPackage {
                 .cases
                 .iter()
                 .map(|case| {
-                    let payload = table.substitute_positional(case.payload, type_args);
+                    let payload = table.substitute_positional(case.payload, def, type_args);
                     (case.name.clone(), payload)
                 })
                 .collect(),

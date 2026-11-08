@@ -3105,7 +3105,6 @@ fn convert_type_param(tp: &TirTypeParam) -> NirTypeParam {
         is_pack: tp.is_pack,
         bounds: tp.bounds.clone(),
         default: tp.default,
-        index: tp.index,
     }
 }
 

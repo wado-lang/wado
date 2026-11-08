@@ -9,9 +9,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeId};
+use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeArgMap, TypeId};
 
 use super::affine_drop;
 use super::traits::{
@@ -156,11 +155,11 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
         else {
             continue;
         };
-        let substitution: IndexMap<u32, TypeId> = decl
+        let substitution: TypeArgMap = decl
             .type_params
             .iter()
             .zip(&type_args)
-            .map(|(param, &arg)| (param.index, arg))
+            .filter_map(|(param, &arg)| Some((param.id?, arg)))
             .collect();
         if substitution.is_empty() {
             continue;

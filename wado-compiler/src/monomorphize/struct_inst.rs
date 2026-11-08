@@ -1,7 +1,6 @@
 //! Struct instantiation: creating concrete structs from generic definitions.
 
-use crate::hashmap::IndexMap;
-use crate::tir::{InstantiationKey, MonomorphInfo, TirField, TirStruct, TypeId};
+use crate::tir::{InstantiationKey, MonomorphInfo, TirField, TirStruct, TypeArgMap};
 use crate::type_table::TypeTable;
 
 use super::state::Monomorphizer;
@@ -21,12 +20,11 @@ impl Monomorphizer {
             .def
             .expect("a struct instantiation names its declaration");
 
-        // Build substitution map: type param index -> concrete type
-        let substitution: IndexMap<u32, TypeId> = generic
+        let substitution: TypeArgMap = generic
             .type_params
             .iter()
             .zip(key.impl_type_args.iter())
-            .map(|(param, &arg)| (param.index, arg))
+            .filter_map(|(param, &arg)| Some((param.id?, arg)))
             .collect();
 
         // Record this monomorphized struct's associated-type resolutions so
@@ -43,7 +41,7 @@ impl Monomorphizer {
             type_table.register_monomorphized_assoc_types(
                 concrete_type_id,
                 base_decl,
-                &substitution,
+                &key.impl_type_args,
             );
         }
 

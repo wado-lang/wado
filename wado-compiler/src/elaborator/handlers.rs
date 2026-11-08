@@ -7,7 +7,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, StructDef, TypeId};
+use crate::tir::{EffectRef, ResolvedType, StructDef, TypeArgMap, TypeId};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -368,7 +368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         impl_def: DefId,
         handler_type: TypeId,
-    ) -> Option<hashmap::IndexMap<u32, TypeId>> {
+    ) -> Option<TypeArgMap> {
         let mut tt = self.tysys.type_table.borrow_mut();
         let target = tt.impl_target_whole(impl_def);
         let mut slots = tt.bind_type_params(&[target], &[handler_type])?;
