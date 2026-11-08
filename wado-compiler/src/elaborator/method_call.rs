@@ -2095,7 +2095,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 )
             });
-            let solving = inst.as_ref().map_or_else(|| own_ids.clone(), |inst| inst.vars.clone());
+            let solving = inst
+                .as_ref()
+                .map_or_else(|| own_ids.clone(), |inst| inst.vars.clone());
             let mut solved_for = param_types.clone();
             if inst.is_some() {
                 let open: Vec<TypeId> = solving
