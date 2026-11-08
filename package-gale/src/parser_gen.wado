@@ -5340,7 +5340,12 @@ fn gen_prequel_action<S: AsStrSlice>(
     ctx: &mut EmitContext,
 ) {
     ctx.cursor.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
+    // A prequel stands outside every alternative, so it reaches a label only
+    // through the captures the rule's value struct keeps.
+    let outer = *ctx.cursor.alt_bindings();
+    ctx.cursor.set_alt_bindings([]);
     gen_action_body(w, src, ctx, !at_entry);
+    ctx.cursor.set_alt_bindings(outer);
     ctx.cursor.set_expected_names(String::new());
 }
 
