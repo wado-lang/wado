@@ -5164,6 +5164,9 @@ pub(super) fn trait_call_on_type(
         info = info.with_struct_type_args(&type_arg_names);
     }
     info.is_type_param_receiver = is_type_param;
+    if is_type_param {
+        info.receiver_param = tt.type_param_id(named);
+    }
 
     let (impl_module, monomorph_info, template) =
         if let Some((mono, blanket_module, template)) = blanket {

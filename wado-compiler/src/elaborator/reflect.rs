@@ -601,6 +601,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
         );
         method_info.is_type_param_receiver = true;
+        method_info.receiver_param = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(type_param_name)
+            .and_then(|binder| self.tysys.type_table.borrow().type_param_id(binder.type_id));
 
         let func_ref = FunctionRef {
             module_source: self.current_module_source.clone(),

@@ -1126,11 +1126,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         // Build method_info with base struct name, then apply impl and method type args
-        let is_type_param_receiver = self
-            .tysys
-            .type_table
-            .borrow()
-            .receiver_head_awaits_substitution(base_type_id);
         let base_receiver = match matched_ref_kind {
             Some(kind) => Receiver::of_ref_impl(kind, &receiver_struct_name),
             None => Receiver::Type(base_struct_name),
@@ -1138,7 +1133,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
-        method_info.is_type_param_receiver = is_type_param_receiver;
+        self.tysys
+            .type_table
+            .borrow()
+            .mark_receiver(&mut method_info, base_type_id);
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
 

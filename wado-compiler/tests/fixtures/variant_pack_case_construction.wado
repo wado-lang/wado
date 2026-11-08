@@ -1,0 +1,33 @@
+// A variant generic over a pack takes the pack's tuple as one slot, settled by
+// the payload, the turbofish or the expected type as any other slot is. A case
+// built from it once kept the declaration's own pack, which codegen could not
+// lay out.
+use { println, Stdout } from "core:cli";
+
+variant V<..P> {
+    Data([..P]),
+    Empty,
+}
+
+variant W<..T> {
+    A(i32),
+    B([..T]),
+}
+
+export fn run() with Stdout {
+    let v = V::Data([1, true]);
+    if let Data(t) = v {
+        println(`${t.0} ${t.1}`);
+    }
+    let w: W<[i32, bool]> = W::A(2);
+    println(`${w:?}`);
+    let u = W::<[i32, String]>::A(3);
+    println(`${u:?}`);
+    let b = W::<[i32, String]>::B([4, "four"]);
+    println(`${b:?}`);
+}
+
+__DATA__
+{
+    "stdout": "1 true\nW::A(2)\nW::A(3)\nW::B([4, \"four\"])\n"
+}

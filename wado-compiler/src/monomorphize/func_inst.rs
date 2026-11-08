@@ -102,7 +102,7 @@ pub fn expand_settled_packs(
     functions: &[Rc<RefCell<TirFunction>>],
 ) {
     mono.current_param_substitution_key = IndexMap::default();
-    mono.current_impl_type_param_count = 0;
+    mono.current_impl_type_params = Vec::new();
     mono.current_impl_receiver = None;
 
     struct SettledPackExpander<'a> {
@@ -819,24 +819,36 @@ impl Monomorphizer {
             .or(written)
     }
 
-    /// The concrete type a `T^Trait::method` receiver dispatches on: the
-    /// parameter named `T`, else (a synthesised receiver) the lowest slot.
+    /// The concrete type a `T^Trait::method` receiver dispatches on: what
+    /// [`Self::receiver_param_answer`] says, else (a synthesised receiver) the
+    /// lowest slot.
     fn receiver_substitution_tid(
         &self,
         info: &LocalMethodName,
         substitution: &TypeArgMap,
     ) -> Option<TypeId> {
-        if let Some(key) = self
-            .current_param_substitution_key
-            .get(&info.base_struct_name())
-            && let Some(&tid) = substitution.get(key)
-        {
-            return Some(tid);
-        }
-        substitution
-            .iter()
-            .min_by_key(|(param, _)| param.index)
-            .map(|(_, &tid)| tid)
+        self.receiver_param_answer(info, substitution).or_else(|| {
+            substitution
+                .iter()
+                .min_by_key(|(param, _)| param.index)
+                .map(|(_, &tid)| tid)
+        })
+    }
+
+    /// What `substitution` fills the parameter receiving `info` with: the one
+    /// the call recorded, else the one named so.
+    fn receiver_param_answer(
+        &self,
+        info: &LocalMethodName,
+        substitution: &TypeArgMap,
+    ) -> Option<TypeId> {
+        let param = match info.receiver_param {
+            Some(param) => param,
+            None => *self
+                .current_param_substitution_key
+                .get(&info.base_struct_name())?,
+        };
+        substitution.get(&param).copied()
     }
 
     /// Resolve a `T^Trait::method` static call's dispatch receiver, in order:
@@ -1247,7 +1259,7 @@ impl Monomorphizer {
 
         // Clone and substitute types in body
         let mut local_count = generic.local_count;
-        self.current_impl_type_param_count = generic.impl_type_params.len();
+        self.current_impl_type_params = generic.impl_type_params.iter().map(|p| p.id).collect();
         self.current_impl_receiver = generic
             .method_info
             .as_ref()
@@ -1554,7 +1566,7 @@ impl Monomorphizer {
                                 .map(|&tid| self.substitute_type(tid, substitution, type_table))
                                 .collect::<Vec<_>>(),
                         )
-                    } else if self.current_impl_type_param_count > 0
+                    } else if !self.current_impl_type_params.is_empty()
                         && info.struct_type_args.is_empty()
                         && self.current_impl_receiver.as_ref() == Some(&info.fq_base_struct_name())
                     {
@@ -1565,12 +1577,10 @@ impl Monomorphizer {
                         // The elaborator didn't annotate the bare struct reference with
                         // type args, so we derive them from the outer substitution's
                         // impl-level entries.
-                        let mut sorted_entries: Vec<_> = substitution.iter().collect();
-                        sorted_entries.sort_by_key(|(idx, _)| **idx);
-                        let impl_args: Vec<TypeId> = sorted_entries
+                        let impl_args: Vec<TypeId> = self
+                            .current_impl_type_params
                             .iter()
-                            .take(self.current_impl_type_param_count)
-                            .map(|(_, tid)| **tid)
+                            .map(|param| substitution[param])
                             .collect();
                         (impl_args, vec![])
                     } else {
@@ -2648,11 +2658,7 @@ impl Monomorphizer {
         substitution: &TypeArgMap,
         type_table: &TypeTable,
     ) -> Option<(LocalMethodName, TemplateId)> {
-        let binder = info.fq_struct_name();
-        let key = self
-            .current_param_substitution_key
-            .get(binder.binder_name()?)?;
-        let bound = *substitution.get(key)?;
+        let bound = self.receiver_param_answer(info, substitution)?;
         RefKind::from_resolved(type_table.get(bound))?;
         let at_bound = info.at_owner(&type_table.fq_type_name(bound));
         let trait_fq = at_bound.trait_name.as_ref()?;

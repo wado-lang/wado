@@ -122,9 +122,9 @@ pub(super) struct Monomorphizer {
     pub structs: StructInstState,
     pub functions: FuncInstState,
     pub pool: Pool,
-    /// How many leading substitution slots of the function being instantiated
-    /// are its impl's type params rather than its own.
-    pub current_impl_type_param_count: usize,
+    /// The impl's type params of the function being instantiated, apart from
+    /// its own.
+    pub current_impl_type_params: Vec<TypeParamId>,
     /// The receiver head of the impl method being instantiated; only a call on
     /// that same head inherits its impl type args.
     pub current_impl_receiver: Option<FqTypeName>,
@@ -186,7 +186,7 @@ impl Monomorphizer {
                 concrete_names: IndexMap::default(),
             },
             pool: Pool::default(),
-            current_impl_type_param_count: 0,
+            current_impl_type_params: Vec::new(),
             current_impl_receiver: None,
             current_param_substitution_key: IndexMap::default(),
             pack_splice_bindings: RefCell::new(IndexMap::default()),

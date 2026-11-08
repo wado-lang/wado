@@ -3984,17 +3984,22 @@ impl TypeTable {
 
     /// The parameters a generic `entry` is written over, at an instance of
     /// declaration `decl` taking `type_args`: what its impl's target binds
-    /// there. An impl's parameters need not stand at the declaration's
-    /// positions: one is nested in an argument (`impl<T> Tr for W<List<T>>`),
-    /// or written only in an `<F: fn(...)>` signature.
+    /// there, then what its bounds project from those. An impl's parameters
+    /// need not stand at the declaration's positions: one is nested in an
+    /// argument (`impl<T> Tr for W<List<T>>`), written only in an
+    /// `<F: fn(...)>` signature, or projected (`impl<T: Tr<Out = U>, U>`).
     fn entry_slots(
-        &self,
+        &mut self,
         entry: &AssocAnswer,
         decl: AstId,
         type_args: &[TypeId],
     ) -> Option<TypeArgMap> {
         match entry.impl_def {
-            Some(def) => self.impl_target_binding(self.impl_target_args(def), type_args),
+            Some(def) => {
+                let mut slots = self.impl_target_binding(self.impl_target_args(def), type_args)?;
+                self.project_impl_slots(def, &mut slots);
+                Some(slots)
+            }
             None => Some(positional_substitution(self.defs().def_at(decl), type_args)),
         }
     }
@@ -5625,6 +5630,13 @@ impl TypeTable {
             } => self.any_anon_shape_type(*id, f),
             _ => false,
         }
+    }
+
+    /// Mark `info` as received by a value of type `receiver`: whether its head
+    /// awaits substitution, and the parameter it is.
+    pub fn mark_receiver(&self, info: &mut name::LocalMethodName, receiver: TypeId) {
+        info.is_type_param_receiver = self.receiver_head_awaits_substitution(receiver);
+        info.receiver_param = self.type_param_id(receiver);
     }
 
     /// Whether a receiver of type `id` names no dispatch head until

@@ -5016,44 +5016,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// pinned one to. `x = Some(1)` into an `Option<!>` is an `Option<i32>`, and
     /// the mismatch is the whole value's; `Some(panic())` and `Some(&mut v)`
     /// into an `Option<&i32>` fit, so the expected type decides them.
+    ///
+    /// A pack slot instantiation left rigid takes the tuple the payload splices
+    /// into it. One nothing settles is deferred as unsolved: the declaration's
+    /// own pack means nothing at this site.
     fn case_type_args(
         &mut self,
         case: &CaseSite<'_>,
         inst: &Instantiated,
         payload: Option<TypeId>,
     ) -> Vec<TypeId> {
-        let from_payload = payload.and_then(|payload| {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .bind_type_params(&[case.case.payload], &[payload])
-        });
+        let mut from_payload = IndexMap::default();
+        if let Some(payload) = payload {
+            unify(
+                &self.tysys.type_table,
+                case.case.payload,
+                payload,
+                &mut from_payload,
+            );
+        }
         let slots = &case.variant.type_param_type_ids;
         slots
             .iter()
-            .zip(&inst.vars)
             .enumerate()
-            .map(|(i, (&slot, &var))| {
+            .map(|(i, &slot)| {
                 let written = case
                     .written
                     .get(i)
                     .is_some_and(|&t| t != TypeTable::UNKNOWN);
-                let at_site = self.apply_infer_holes(var);
-                let param = self.tysys.type_table.borrow().declared_param(slot);
-                let Some(own) = from_payload
-                    .as_ref()
-                    .filter(|_| !written)
-                    .and_then(|bound| bound.get(&param).copied())
-                else {
-                    return at_site;
+                let at_site = self.instantiate_type(slot, inst);
+                let at_site = self.apply_infer_holes(at_site);
+                let answer = match from_payload.get(&slot).copied().filter(|_| !written) {
+                    None => at_site,
+                    Some(own) if at_site == slot => own,
+                    Some(own) => {
+                        let table = self.tysys.type_table.borrow();
+                        let fits = !table.is_infer_var(at_site)
+                            && !matches!(
+                                check_assignable(own, at_site, &table),
+                                TypeCheckResult::Incompatible
+                            );
+                        if fits { at_site } else { own }
+                    }
                 };
-                let table = self.tysys.type_table.borrow();
-                let fits = !table.is_infer_var(at_site)
-                    && !matches!(
-                        check_assignable(own, at_site, &table),
-                        TypeCheckResult::Incompatible
-                    );
-                if fits { at_site } else { own }
+                if answer != slot || !self.tysys.type_table.borrow().is_type_pack(slot) {
+                    return answer;
+                }
+                let name = case.variant.type_params[i].name.clone();
+                self.mint_infer_hole(
+                    case.span,
+                    uninferable_type_param("variant", case.owner),
+                    name,
+                    Vec::new(),
+                )
             })
             .collect()
     }
@@ -5619,7 +5634,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &method_type_args,
             )[0];
 
-            // Build method_info with is_type_param_receiver = true
             let method_type_arg_names: Vec<FqTypeName> = method_type_args
                 .iter()
                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
@@ -5634,6 +5648,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name.to_string(),
             );
             method_info.is_type_param_receiver = true;
+            method_info.receiver_param = self
+                .tysys
+                .type_table
+                .borrow()
+                .type_param_id(type_param_type_id);
             if !method_type_arg_names.is_empty() {
                 method_info.method_type_args = method_type_arg_names;
             }

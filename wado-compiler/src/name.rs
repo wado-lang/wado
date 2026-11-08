@@ -1317,6 +1317,10 @@ pub struct LocalMethodName {
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
+    /// The parameter a type-parameter receiver is, where it is one rather than
+    /// a projection. Its spelling cannot say which: a method's own `T` may
+    /// shadow its impl's.
+    pub receiver_param: Option<tir::TypeParamId>,
     /// Whether this method came from an `impl Trait for &T` / `&mut T` block —
     /// a semantic flag (self-adjustment, codegen), distinct from the receiver's
     /// head being `&` (which `receiver` records).
@@ -1676,6 +1680,7 @@ impl LocalMethodName {
             method_name,
             method_type_args: vec![],
             is_type_param_receiver: false,
+            receiver_param: None,
             is_ref_impl: false,
             cm_name: None,
         }
@@ -1746,6 +1751,7 @@ impl LocalMethodName {
             method_name,
             method_type_args,
             is_type_param_receiver: false,
+            receiver_param: None,
             is_ref_impl: false,
             cm_name: None,
         }
@@ -1772,6 +1778,7 @@ impl LocalMethodName {
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
             is_type_param_receiver: self.is_type_param_receiver,
+            receiver_param: self.receiver_param,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
@@ -1823,6 +1830,7 @@ impl LocalMethodName {
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
             is_type_param_receiver: false,
+            receiver_param: None,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
@@ -1837,6 +1845,7 @@ impl LocalMethodName {
                 receiver: Receiver::RefTo(kind, pointee.head_only()),
                 struct_type_args: pointee.args().to_vec(),
                 is_type_param_receiver: false,
+                receiver_param: None,
                 ..self.clone()
             },
             None => self.with_substituted_struct_name(owner),

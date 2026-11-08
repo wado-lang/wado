@@ -1110,7 +1110,7 @@ fn method_name_for_type(
         _ => tt_ref.fq_base_type_name(type_id),
     };
     let mut info = LocalMethodName::new(head, Some(trait_name.clone()), method_name.to_string());
-    info.is_type_param_receiver = tt_ref.receiver_head_awaits_substitution(type_id);
+    tt_ref.mark_receiver(&mut info, type_id);
     info
 }
 
