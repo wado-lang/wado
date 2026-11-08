@@ -3157,12 +3157,12 @@ impl Parser {
 
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    let mut _plus_first = true;
-    while !p.recovering && (_plus_first || p.peek_kind() == TK_ID) {
-        if !_plus_first {
-            if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        }
-        _plus_first = false;
+    _first_iter: {
+        p.site = 0;
+        p.atn_ret_pending = 7;
+        _parse_a(p);
+    }
+    while !p.recovering && p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[0, 2], &[], |_pred| match _pred { 0 => false, 2 => true, _ => unreachable() }) == 0 {
         p.site = 0;
         p.atn_ret_pending = 7;
         _parse_a(p);

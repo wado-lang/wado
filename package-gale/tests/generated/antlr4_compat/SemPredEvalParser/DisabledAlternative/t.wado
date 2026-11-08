@@ -2959,90 +2959,15 @@ impl Parser {
     }
 }
 
-fn scan_content(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor) -> i32 {
-    let start = pos;
-    let start_gate = *gate;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if true {
-        if kind == TK_ANY_CHAR {
-            let _atn_alt = atn.predict(&ATN_SIM, 1, tokens, pos, TK_EOF, 0, &[0], &[], |_pred| match _pred { 0 => (gate._scan_edge != pos || false), _ => unreachable() });
-            if _atn_alt < 0 {
-                return -1;
-            }
-            if _atn_alt == 0 {
-                return scan_content__alt_0(tokens, start, gate, atn);
-            }
-            return scan_content__alt_1(tokens, start, gate, atn);
-        } else {
-            let mut best: i32 = -1;
-            let mut best_gate = *gate;
-            let try_0_end = scan_content__alt_0(tokens, start, gate, atn);
-            if try_0_end > best { best = try_0_end; best_gate = *gate; }
-            *gate = start_gate;
-            let try_1_end = scan_content__alt_1(tokens, start, gate, atn);
-            if try_1_end > best { best = try_1_end; best_gate = *gate; }
-            if best >= 0 {
-                pos = best;
-                *gate = best_gate;
-                return pos;
-            }
-            *gate = start_gate;
-        }
-    }
-    return -1;
-}
-
 fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
     if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 3) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    let mut _plus_first = true;
-    loop {
-        if p.recovering { break; }
-        if !_plus_first {
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                p.scan_gate._scan_edge = p.pos;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                p.atn.stack.push(9);
-                pos = scan_content(tokens, pos, &mut p.scan_gate, &mut p.atn);
-                p.atn.stack.pop();
-                if pos < 0 { break rep_scan; }
-                if pos <= p.pos { break rep_scan; }
-                let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if rep_body_end_kind == TK_EOF {
-                    let rep_body_end = pos;
-                    let rep_body_end_gate = p.scan_gate;
-                    let mut rep_body_end_ok = false;
-                    rep_body_end_scan: {
-                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
-                        pos += 1;
-                        rep_body_end_ok = true;
-                    }
-                    pos = rep_body_end;
-                    p.scan_gate = rep_body_end_gate;
-                    if !rep_body_end_ok { break rep_scan; }
-                }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 {
-                if p.peek_kind() == TK_ANY_CHAR {
-                    let _rec_pos = p.pos;
-                    let _rec_cp = p.b.checkpoint();
-                    let _rec_outer = p.speculating;
-                    p.speculating = true;
-                    p.site = 0;
-                    p.atn_ret_pending = 9;
-                    _parse_content(p);
-                    p.speculating = _rec_outer;
-                    p.recovering = false;
-                    p.pos = _rec_pos;
-                    p.b.truncate(_rec_cp);
-                }
-                break;
-            }
-        }
-        _plus_first = false;
+    _first_iter: {
+        p.site = 0;
+        p.atn_ret_pending = 9;
+        _parse_content(p);
+    }
+    if !(kind_set_has(&SYNC_1, p.kinds[p.pos]) || p.kinds[p.pos] >= 3) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
+    while !p.recovering && p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[0], &[], |_pred| match _pred { 0 => false, _ => unreachable() }) == 0 {
         p.site = 0;
         p.atn_ret_pending = 9;
         _parse_content(p);
