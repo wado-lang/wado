@@ -1438,14 +1438,25 @@ fn sync_to_targets(
     ctx: &WalkCtx,
     span: Span,
 ) -> Vec<StmtId> {
-    let mut out = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, states[i], targets[i], c, span) {
-            out.push(stmt);
-        }
-        states[i] = targets[i];
-    }
+    let out = convergence_stmts(body, states, targets, ctx, span);
+    states.copy_from_slice(targets);
     out
+}
+
+/// The sync stmts that bring every candidate from `from` to `to`, in candidate
+/// order.
+fn convergence_stmts(
+    body: &mut Body,
+    from: &[CanonState],
+    to: &[CanonState],
+    ctx: &WalkCtx,
+    span: Span,
+) -> Vec<StmtId> {
+    ctx.candidates
+        .iter()
+        .enumerate()
+        .filter_map(|(i, c)| state_transition_stmt(body, from[i], to[i], c, span))
+        .collect()
 }
 
 /// The sync a `from → to` transition requires, if any.
@@ -1561,12 +1572,7 @@ fn insert_convergence_at_block_end(
     span: Span,
 ) {
     debug_assert_eq!(from.len(), to.len());
-    let mut sync_stmts: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, from[i], to[i], c, span) {
-            sync_stmts.push(stmt);
-        }
-    }
+    let sync_stmts = convergence_stmts(body, from, to, ctx, span);
     if sync_stmts.is_empty() {
         return;
     }
@@ -1754,12 +1760,7 @@ fn build_convergence_block(
     ctx: &WalkCtx,
     span: Span,
 ) -> BlockId {
-    let mut stmts: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, from[i], to[i], c, span) {
-            stmts.push(stmt);
-        }
-    }
+    let stmts = convergence_stmts(body, from, to, ctx, span);
     body.blocks.push(BlockNode { stmts, span })
 }
 
@@ -2138,17 +2139,8 @@ fn walk_nested_loop(
     let body_exit_pre_sync = body_exit_states.clone();
     // Restore back-edge invariant: drive body_exit back to entry so
     // iter 2+ starts at the same state the walker analyzed.
-    for i in 0..ctx.candidates.len() {
-        if let Some(stmt) = state_transition_stmt(
-            body,
-            body_exit_states[i],
-            entry_states[i],
-            &ctx.candidates[i],
-            span,
-        ) {
-            body.blocks[block].stmts.push(stmt);
-        }
-    }
+    let back_edge_sync = convergence_stmts(body, &body_exit_states, &entry_states, ctx, span);
+    body.blocks[block].stmts.extend(back_edge_sync);
     // Post-loop state: JOIN over every exit — the zero-iteration path (which
     // leaves at `entry`), the fall-through, and each recorded `break`. A
     // `ScalarOnly` join is demoted to `FieldOnly` unless every exit already
@@ -2819,12 +2811,7 @@ fn insert_convergence_before_break(
     ctx: &mut WalkCtx,
     span: Span,
 ) {
-    let mut sync: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, record.states[i], target[i], c, span) {
-            sync.push(stmt);
-        }
-    }
+    let sync = convergence_stmts(body, &record.states, target, ctx, span);
     if sync.is_empty() {
         return;
     }
@@ -2996,16 +2983,13 @@ fn emit_convergence_at_operand_end(
     ctx: &mut WalkCtx,
     span: Span,
 ) -> Operand {
+    let sync_stmts = convergence_stmts(body, from, to, ctx, span);
+    if sync_stmts.is_empty() {
+        return op;
+    }
     let e = match op {
         Operand::Expr(e) => e,
         Operand::Value(v) => {
-            let syncs = from
-                .iter()
-                .zip(to)
-                .any(|(&f, &t)| transition_sync_action(f, t).is_some());
-            if !syncs {
-                return op;
-            }
             let ty = body
                 .values
                 .type_of(v)
@@ -3018,33 +3002,22 @@ fn emit_convergence_at_operand_end(
             push_expr(body, ExprKind::plain_block(blk, ty, "sync"), ty, span)
         }
     };
-    emit_convergence_at_expr_end(body, e, from, to, ctx, span);
+    emit_convergence_at_expr_end(body, e, sync_stmts, ctx);
     Operand::Expr(e)
 }
 
-/// Insert convergence sync at the end of an expression's evaluation (a
-/// match arm body, a match guard, or an `&&`/`||` RHS). If the expression is
-/// already a block no `break` leaves early, append the sync stmts directly.
-/// Otherwise wrap it in a block `{ expr_as_stmt; sync }` (when unit-typed) or
+/// Run `sync_stmts` at the end of an expression's evaluation (a match arm
+/// body, a match guard, or an `&&`/`||` RHS). If the expression is already a
+/// block no `break` leaves early, append them directly. Otherwise wrap it in a
+/// block `{ expr_as_stmt; sync }` (when unit-typed) or
 /// `{ let tmp = expr; sync; tmp }` (when non-unit, so the temp preserves the
 /// value across the trailing sync). The temp uses the per-type pool.
 fn emit_convergence_at_expr_end(
     body: &mut Body,
     arm_e: ExprId,
-    from: &ScalarStates,
-    to: &ScalarStates,
+    sync_stmts: Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: Span,
 ) {
-    let mut sync_stmts: Vec<StmtId> = Vec::new();
-    for (i, c) in ctx.candidates.iter().enumerate() {
-        if let Some(stmt) = state_transition_stmt(body, from[i], to[i], c, span) {
-            sync_stmts.push(stmt);
-        }
-    }
-    if sync_stmts.is_empty() {
-        return;
-    }
     // Existing block bodies: append sync to the block, preserving the
     // block's trailing value if it has one (a non-unit Expr stmt). A `break`
     // to the label would jump over what we append, so that block is wrapped
