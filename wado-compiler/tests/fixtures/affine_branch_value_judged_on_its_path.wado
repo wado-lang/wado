@@ -66,6 +66,26 @@ fn broken(flag: bool) -> i32 {
     return read(r);
 }
 
+affine struct Pair {
+    a: T,
+}
+
+// The assignment replaces `p` on a path the value did not come by.
+fn assigned_elsewhere(k: i32) -> i32 {
+    let mut p = Pair { a: T { v: 1 } };
+    let u = T { v: 2 };
+    let mut n = read(if k == 0 { &p.a } else { p = Pair { a: T { v: 3 } }; &u });
+    n += read(match k { 0 => &p.a, _ => { p = Pair { a: T { v: 4 } }; &u } });
+    let b = b: {
+        if k == 0 {
+            break b: &p.a;
+        }
+        p = Pair { a: T { v: 5 } };
+        &u
+    };
+    return n + read(b);
+}
+
 fn reset_through(t: T) -> i32 {
     let mut t = t;
     let r = &mut t;
@@ -83,5 +103,7 @@ test {
     assert arm(1) == 2;
     assert broken(true) == 1;
     assert broken(false) == 2;
+    assert assigned_elsewhere(0) == 3;
+    assert assigned_elsewhere(1) == 6;
     assert reset_through(T { v: 5 }) == 0;
 }
