@@ -78,9 +78,18 @@ impl SchemaSet {
     ) -> Result<(), LoadError<E>> with X
         contract self.holds(uri), "`uri` must name a document the set holds"
     {
-        // One compiler takes each fetched document in, so no document is added
-        // and no reference resolved twice.
         let [mut c, _] = Compiler::rooted(self, uri)?;
+        return self.load_into(&mut c, fetch);
+    }
+
+    /// Resolves every reference `c` reaches, fetching through `fetch` each
+    /// document neither the set nor `c` holds yet. `c` takes each fetched
+    /// document in, so no document is added and no reference resolved twice.
+    fn load_into<E, effect X>(
+        &mut self,
+        c: &mut Compiler,
+        mut fetch: fn mut(&Uri) -> Result<Schema, E> with X,
+    ) -> Result<(), LoadError<E>> with X {
         loop {
             let needed = match c.resolve_reached() {
                 Ok(_) => {
@@ -226,13 +235,23 @@ impl Validator {
         contract set.holds(uri), "`uri` must name a document the set holds"
     {
         let [mut c, root] = Compiler::rooted(set, uri)?;
-        let dynamic_anchors = c.link()?;
-        return Result::Ok(Validator {
-            root,
-            nodes: c.nodes,
-            resources: c.resources,
-            dynamic_anchors,
-        });
+        c.resolve_reached()?;
+        return Result::Ok(c.into_validator(root));
+    }
+
+    /// The document `set` holds under `uri` compiled, its references resolved
+    /// among the documents of `set` and those `fetch` supplies, which `set`
+    /// then holds, as `SchemaSet::load` leaves them.
+    pub fn compile_loading<E, effect X>(
+        set: &mut SchemaSet,
+        uri: &Uri,
+        fetch: fn mut(&Uri) -> Result<Schema, E> with X,
+    ) -> Result<Validator, LoadError<E>> with X
+        contract set.holds(uri), "`uri` must name a document the set holds"
+    {
+        let [mut c, root] = Compiler::rooted(set, uri)?;
+        set.load_into(&mut c, fetch)?;
+        return Result::Ok(c.into_validator(root));
     }
 
     /// Every keyword `instance` fails, once for each value failing it, or `Ok`
@@ -803,7 +822,7 @@ struct Compiler {
     /// The index into `added` of the document each subschema belongs to.
     node_document: List<i32> = [],
     /// The added documents the compiled one reaches, in the order reached.
-    /// `link` resolves only their references.
+    /// `resolve_reached` resolves only their references.
     reached: List<i32> = [],
     /// How many of `reached` have every reference resolved.
     resolved: i32 = 0,
@@ -1036,11 +1055,18 @@ impl Compiler {
         return Result::Ok(out);
     }
 
+    /// The validator rooted at subschema `root`, every reached reference
+    /// resolved.
+    fn into_validator(&mut self, root: i32) -> Validator {
+        let dynamic_anchors = self.link();
+        return Validator { root, nodes: self.nodes, resources: self.resources, dynamic_anchors };
+    }
+
     /// Points every reference at its target, and marks the targets more than
     /// one keyword leads to. Returns the anchors a `$dynamicRef` may resolve
     /// through the dynamic scope.
-    fn link(&mut self) -> Result<List<String>, CompileError> {
-        self.resolve_reached()?;
+    fn link(&mut self) -> List<String> {
+        assert self.resolved == self.reached.len(), "every reached reference must be resolved";
         // A document's root and every subschema outside `$defs` are led to by
         // the keyword holding them.
         let mut leads: List<i32> = List::filled(self.nodes.len(), 1);
@@ -1077,7 +1103,7 @@ impl Compiler {
         for let i of 0..<self.nodes.len() {
             self.nodes[i].shared = leads[i] > 1;
         }
-        return Result::Ok(anchors);
+        return anchors;
     }
 
     /// Resolves the references of every reached document. Resolving one may

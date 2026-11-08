@@ -11,7 +11,7 @@ pub fn check(schema: String, data: String, valid: bool, remotes: List<[String, S
     let base = Uri::from_str(&DEFAULT_BASE).unwrap();
     let mut set = SchemaSet::new();
     set.insert(base, Schema::parse(schema).unwrap());
-    set.load(&base, |u| {
+    let validator = Validator::compile_loading(&mut set, &base, |u| {
         let name = `${*u}`;
         for let [uri, text] of &remotes {
             if *uri == name {
@@ -20,7 +20,6 @@ pub fn check(schema: String, data: String, valid: bool, remotes: List<[String, S
         }
         return Result::Err("not embedded; run `mise run suite-jade`");
     }).unwrap();
-    let validator = Validator::compile_in(&set, &base).unwrap();
     let doc = Document::parse(data).unwrap();
     let result = validator.validate(&doc.root());
     assert result matches { Ok(_) } == valid, `${result:?}`;

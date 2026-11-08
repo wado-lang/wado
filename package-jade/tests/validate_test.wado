@@ -224,14 +224,15 @@ test "a loader fetches each document the root reaches, once, then the set compil
     assert found[0].instance == "/1";
 }
 
-test "a loader supplies what a set lacks, and what that refers to" {
+test "compiling through a loader fetches what a set lacks, and what that refers to" {
     let root = uri("https://x.test/root.json");
     let mut set = SchemaSet::new();
     set.insert(root, Schema::parse(##"{"items": {"$ref": "defs.json#/$defs/i"}}"##).unwrap());
-    set.load(&root, served).unwrap();
-    let validator = Validator::compile_in(&set, &root).unwrap();
+    let validator = Validator::compile_loading(&mut set, &root, served).unwrap();
     assert validator.validate(&Document::parse("[1]").unwrap().root()) matches { Ok(_) };
     assert validator.validate(&Document::parse(#"["x"]"#).unwrap().root()) matches { Err(_) };
+    // What it fetched stays in the set.
+    assert Validator::compile_in(&set, &root) matches { Ok(_) };
 }
 
 test "a document the loader cannot supply is an error naming it" {
