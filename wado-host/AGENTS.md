@@ -32,8 +32,8 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
   generator provider; `local.rs` feeds it the generators a fixture names,
   each compiled after its own invocations have run.
 - `random.rs` — the fixed-seed `wasi:random/insecure` and `insecure-seed` that
-  a Kiln generator and a `core:eval` program get, so each stays a function of
-  its input.
+  a Kiln generator, a `core:eval` program and a test get, so each stays a
+  function of its input.
 - `sync.rs` — how production code locks a mutex and joins a task or thread. A
   poisoned guard is recovered, and test mocks may still `unwrap`. A panic in a
   joined task continues in the caller, and one in a thread nobody joins ends

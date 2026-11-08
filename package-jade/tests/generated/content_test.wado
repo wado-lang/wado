@@ -9,7 +9,6 @@ test "validation of string-encoded content based on media type: a valid JSON doc
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json"}"#,
         #""{\"foo\": \"bar\"}""#,
         true,
-        [],
     );
 }
 
@@ -18,7 +17,6 @@ test "validation of string-encoded content based on media type: an invalid JSON 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json"}"#,
         #""{:}""#,
         true,
-        [],
     );
 }
 
@@ -27,7 +25,6 @@ test "validation of string-encoded content based on media type: ignores non-stri
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json"}"#,
         #"100"#,
         true,
-        [],
     );
 }
 
@@ -36,7 +33,6 @@ test "validation of binary string-encoding: a valid base64 string" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentEncoding":"base64"}"#,
         #""eyJmb28iOiAiYmFyIn0K""#,
         true,
-        [],
     );
 }
 
@@ -45,7 +41,6 @@ test "validation of binary string-encoding: an invalid base64 string (% is not a
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentEncoding":"base64"}"#,
         #""eyJmb28iOi%iYmFyIn0K""#,
         true,
-        [],
     );
 }
 
@@ -54,7 +49,6 @@ test "validation of binary string-encoding: ignores non-strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentEncoding":"base64"}"#,
         #"100"#,
         true,
-        [],
     );
 }
 
@@ -63,7 +57,6 @@ test "validation of binary-encoded media type documents: a valid base64-encoded 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64"}"#,
         #""eyJmb28iOiAiYmFyIn0K""#,
         true,
-        [],
     );
 }
 
@@ -72,7 +65,6 @@ test "validation of binary-encoded media type documents: a validly-encoded inval
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64"}"#,
         #""ezp9Cg==""#,
         true,
-        [],
     );
 }
 
@@ -81,7 +73,6 @@ test "validation of binary-encoded media type documents: an invalid base64 strin
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64"}"#,
         #""{}""#,
         true,
-        [],
     );
 }
 
@@ -90,7 +81,6 @@ test "validation of binary-encoded media type documents: ignores non-strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64"}"#,
         #"100"#,
         true,
-        [],
     );
 }
 
@@ -99,7 +89,6 @@ test "validation of binary-encoded media type documents with schema: a valid bas
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #""eyJmb28iOiAiYmFyIn0K""#,
         true,
-        [],
     );
 }
 
@@ -108,7 +97,6 @@ test "validation of binary-encoded media type documents with schema: another val
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #""eyJib28iOiAyMCwgImZvbyI6ICJiYXoifQ==""#,
         true,
-        [],
     );
 }
 
@@ -117,7 +105,6 @@ test "validation of binary-encoded media type documents with schema: an invalid 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #""eyJib28iOiAyMH0=""#,
         true,
-        [],
     );
 }
 
@@ -126,7 +113,6 @@ test "validation of binary-encoded media type documents with schema: an empty ob
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #""e30=""#,
         true,
-        [],
     );
 }
 
@@ -135,7 +121,6 @@ test "validation of binary-encoded media type documents with schema: an empty ar
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #""W10=""#,
         true,
-        [],
     );
 }
 
@@ -144,7 +129,6 @@ test "validation of binary-encoded media type documents with schema: a validly-e
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #""ezp9Cg==""#,
         true,
-        [],
     );
 }
 
@@ -153,7 +137,6 @@ test "validation of binary-encoded media type documents with schema: an invalid 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #""{}""#,
         true,
-        [],
     );
 }
 
@@ -162,6 +145,5 @@ test "validation of binary-encoded media type documents with schema: ignores non
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contentMediaType":"application/json","contentEncoding":"base64","contentSchema":{"type":"object","required":["foo"],"properties":{"foo":{"type":"string"}}}}"#,
         #"100"#,
         true,
-        [],
     );
 }

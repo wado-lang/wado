@@ -1,0 +1,14 @@
+// `let mut ... else` whose pattern binds a name twice is reported once, not a
+// crash while making its bindings mutable.
+
+fn first(o: Option<[i32, i32]>) -> i32 {
+    let mut Some([a, a]) = o else {
+        return 0;
+    };
+    return a;
+}
+
+__DATA__
+{
+    "compile_error": "cannot redeclare 'a' in the same scope (first defined at 5:19)"
+}

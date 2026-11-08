@@ -1,5 +1,5 @@
 //! The `wasi:random` a host gives a program whose result must be a function of
-//! its input: a Kiln generator, and a program `core:eval` runs.
+//! its input: a Kiln generator, a program `core:eval` runs, and a test.
 
 use rand::SeedableRng;
 use rand::rngs::ChaCha12Rng;
@@ -21,12 +21,14 @@ pub fn add_to_linker<T: WasiRandomView + 'static>(linker: &mut Linker<T>) -> was
     insecure_seed::add_to_linker::<_, WasiRandom>(linker, T::random)
 }
 
-/// Answers `wasi:random/insecure` and `insecure-seed` the same on every run, as
-/// `insecure-seed` permits. The seeds are arbitrary; only their being fixed
-/// matters. `ChaCha12` is named rather than `StdRng`, whose output rand does not
-/// promise to keep across versions.
+/// Answers `wasi:random/insecure` and `insecure-seed` the same on every run,
+/// which both permit: `insecure` places no requirement on its values, and
+/// `insecure-seed` may be entirely deterministic. `insecure` still differs from
+/// one draw to the next, so a caller that draws until it gets a new value ends.
+/// `ChaCha12` is named rather than `StdRng`, whose output rand does not promise
+/// to keep across versions.
 pub fn fixed_seed(builder: &mut WasiCtxBuilder) -> &mut WasiCtxBuilder {
     builder
-        .insecure_random(ChaCha12Rng::from_seed([1; 32]))
-        .insecure_random_seed(2)
+        .insecure_random(ChaCha12Rng::from_seed([0; 32]))
+        .insecure_random_seed(0)
 }

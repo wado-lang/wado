@@ -1565,18 +1565,40 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_in { return -1; }
     pos += 1;
-    osl_0_done: {
-        if pos < tokens.len() && tokens[pos] == TK_LIT_a && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_b {
-            pos += 2;
-            break osl_0_done;
+    let mut cont_done_0 = false;
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
+        let sp = pos;
+        sg_1_done: {
+            sg_1: {
+                if pos < tokens.len() && tokens[pos] == TK_LIT_a {
+                    pos += 1;
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_b { break sg_1; }
+                pos += 1;
+                break sg_1_done;
+            }
+            pos = -1;
         }
-        if pos < tokens.len() && tokens[pos] == TK_LIT_b {
-            pos += 1;
-            break osl_0_done;
+        if pos < 0 {
+            pos = sp;
+        } else {
+            let mut opt_ok: bool = false;
+            opt_probe: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_a { break opt_probe; }
+                pos += 1;
+                opt_ok = true;
+            }
+            if opt_ok {
+                cont_done_0 = true;
+            } else {
+                pos = sp;
+            }
         }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
+    if !cont_done_0 {
+        if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+        pos += 1;
+    }
     return pos;
 }
 
@@ -1660,13 +1682,35 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
                 if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-                if p.peek_kind() == TK_LIT_a && p.peek_at(1) == TK_LIT_b {
-                    p.expect(TK_LIT_a, &SYNC_2, false);
-                    p.expect(TK_LIT_b, &SYNC_3, false);
-                } else if p.peek_kind() == TK_LIT_b {
-                    p.expect(TK_LIT_b, &SYNC_3, false);
+                let mut opt_enter: bool = false;
+                if _kind_set_0(p.peek_kind()) {
+                    opt_enter_scan: {
+                        let tokens = &p.kinds;
+                        let mut pos: i32 = p.pos;
+                        sg_0_done: {
+                            sg_0: {
+                                if pos < tokens.len() && tokens[pos] == TK_LIT_a {
+                                    pos += 1;
+                                }
+                                if pos >= tokens.len() || tokens[pos] != TK_LIT_b { break sg_0; }
+                                pos += 1;
+                                break sg_0_done;
+                            }
+                            break opt_enter_scan;
+                        }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_a { break opt_enter_scan; }
+                        pos += 1;
+                        opt_enter = true;
+                    }
                 }
-                p.expect(TK_LIT_a, &SYNC_4, true);
+                if opt_enter {
+                    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
+                    if p.peek_kind() == TK_LIT_a {
+                        p.take();
+                    }
+                    p.expect(TK_LIT_b, &SYNC_2, false);
+                }
+                p.expect(TK_LIT_a, &SYNC_3, true);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1747,7 +1791,6 @@ global EMPTY_SYNC: List<i32> = [];
 global EXPECTED_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [96];
 global EXPECTED_1: List<i32> = [TK_LIT_a, TK_LIT_b];
-global SYNC_2: List<i32> = [64];
-global SYNC_3: List<i32> = [32];
-global SYNC_4: List<i32> = [16];
+global SYNC_2: List<i32> = [32];
+global SYNC_3: List<i32> = [16];
 

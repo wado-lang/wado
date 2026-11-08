@@ -4248,6 +4248,41 @@ fn test_format_keeps_parens_around_a_handler_closure_body() {
     }
 }
 
+/// An expression statement opening with `if`, `match`, a label or `with` keeps
+/// its parentheses: bare, the keyword reads as that statement, which ends at its
+/// `}`. So does one opening with an anonymous struct literal's `{`.
+#[test]
+fn test_format_keeps_parens_around_a_statement_keyword_expression() {
+    for stmt in [
+        "(match x { _ => 1 });",
+        "(if c { 1 } else { 2 });",
+        "(lbl: { 1 });",
+        "(match x { _ => 1 }) + 2;",
+        "(if c { 1 } else { 2 }) < 2 < 3;",
+        "(lbl: { 1 })..<4;",
+        "(with Log => &mut sink do { 1 }) + 2;",
+        "({ x: 1 }).x;",
+    ] {
+        let source = format!("fn run() {{\n    {stmt}\n}}\n");
+        let formatted = wado_compiler::format(&source).expect("format failed");
+        assert!(
+            formatted.starts_with("fn run() {\n    ("),
+            "expected the statement to stay parenthesized, got:\n{formatted}"
+        );
+        assert_format_preserves_ast(&source);
+    }
+    // An arm of a one-line `if` is a statement too.
+    assert_format_preserves_ast(
+        "fn run() {\n    let y = if c { (match x { _ => 1 }) + 2 } else { 3 };\n}\n",
+    );
+    assert_format_preserves_ast(
+        "fn run() {\n    if let { x } = (if c { ({ x: 1 }) } else { ({ x: 2 }) }) && x > 0 {\n        return;\n    }\n}\n",
+    );
+    assert_format_preserves_ast(
+        "fn run() {\n    if let { x } = (if c { (P { x: 1 }) } else { (P { x: 2 }) }) && x > 0 {\n        return;\n    }\n}\n",
+    );
+}
+
 /// `#[side_effect(negative = p)]` names a parameter, so the value stays an
 /// identifier while `#[param(name = "...")]` keeps its quotes.
 #[test]

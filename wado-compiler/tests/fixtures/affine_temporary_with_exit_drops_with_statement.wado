@@ -1,0 +1,72 @@
+// A `return` inside a `with` body still owns the temporaries its value
+// borrows: they drop as it ends, ahead of the body's locals, as they do
+// outside a `with`. A `with` statement's value is discarded, so a reference
+// it ends with into a dropped temporary is never read.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn val(t: &Tok) -> i32 {
+    return t.n;
+}
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct C {
+    v: i32,
+}
+
+impl Counter for C {
+    fn next(&mut self) -> i32 {
+        self.v += 1;
+        resume self.v
+    }
+}
+
+fn returns() -> i32 {
+    let mut m = C { v: 0 };
+    with Counter => &mut m do {
+        let _local = make(1);
+        return val(&make(2)) + Counter::next();
+    }
+}
+
+fn id(t: &Tok) -> &Tok {
+    return t;
+}
+
+// The `with`'s value refers into a dropped temporary, but nothing reads it.
+fn discards() {
+    let mut m = C { v: 0 };
+    with Counter => &mut m do {
+        let _n = Counter::next();
+        id(&make(3));
+    }
+}
+
+test "a return" {
+    LOG = [];
+    assert returns() == 3;
+    assert LOG == ["drop 2", "drop 1"] as List<String>;
+}
+
+test "a discarded value" {
+    LOG = [];
+    discards();
+    assert LOG == ["drop 3"] as List<String>;
+}

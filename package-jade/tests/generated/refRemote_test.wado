@@ -4,12 +4,29 @@
 
 use { check } from "../suite.wado";
 
+global REMOTES: List<[String, String]> = [
+    ["http://localhost:1234/draft2020-12/integer.json", #include_str("./remotes/draft2020-12/integer.json")],
+    ["http://localhost:1234/draft2020-12/subSchemas.json", #include_str("./remotes/draft2020-12/subSchemas.json")],
+    ["http://localhost:1234/draft2020-12/locationIndependentIdentifier.json", #include_str("./remotes/draft2020-12/locationIndependentIdentifier.json")],
+    ["http://localhost:1234/draft2020-12/baseUriChange/folderInteger.json", #include_str("./remotes/draft2020-12/baseUriChange/folderInteger.json")],
+    ["http://localhost:1234/draft2020-12/baseUriChangeFolder/folderInteger.json", #include_str("./remotes/draft2020-12/baseUriChangeFolder/folderInteger.json")],
+    ["http://localhost:1234/draft2020-12/baseUriChangeFolderInSubschema/folderInteger.json", #include_str("./remotes/draft2020-12/baseUriChangeFolderInSubschema/folderInteger.json")],
+    ["http://localhost:1234/draft2020-12/name-defs.json", #include_str("./remotes/draft2020-12/name-defs.json")],
+    ["http://localhost:1234/draft2020-12/ref-and-defs.json", #include_str("./remotes/draft2020-12/ref-and-defs.json")],
+    ["http://localhost:1234/draft2020-12/nested/foo-ref-string.json", #include_str("./remotes/draft2020-12/nested/foo-ref-string.json")],
+    ["http://localhost:1234/draft2020-12/nested/string.json", #include_str("./remotes/draft2020-12/nested/string.json")],
+    ["http://localhost:1234/draft2020-12/different-id-ref-string.json", #include_str("./remotes/draft2020-12/different-id-ref-string.json")],
+    ["http://localhost:1234/draft2020-12/urn-ref-string.json", #include_str("./remotes/draft2020-12/urn-ref-string.json")],
+    ["http://localhost:1234/draft2020-12/nested-absolute-ref-to-string.json", #include_str("./remotes/draft2020-12/nested-absolute-ref-to-string.json")],
+    ["http://localhost:1234/draft2020-12/detached-ref.json", #include_str("./remotes/draft2020-12/detached-ref.json")],
+];
+
 test "remote ref: remote ref valid" {
     check(
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/integer.json"}"#,
         #"1"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/integer.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -18,7 +35,7 @@ test "remote ref: remote ref invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/integer.json"}"#,
         #""a""#,
         false,
-        [[#"http://localhost:1234/draft2020-12/integer.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -27,7 +44,7 @@ test "fragment within remote ref: remote fragment valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/subSchemas.json#/$defs/integer"}"#,
         #"1"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/subSchemas.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"integer":{"type":"integer"},"refToInteger":{"$ref":"#/$defs/integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -36,7 +53,7 @@ test "fragment within remote ref: remote fragment invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/subSchemas.json#/$defs/integer"}"#,
         #""a""#,
         false,
-        [[#"http://localhost:1234/draft2020-12/subSchemas.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"integer":{"type":"integer"},"refToInteger":{"$ref":"#/$defs/integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -45,7 +62,7 @@ test "anchor within remote ref: remote anchor valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json#foo"}"#,
         #"1"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"refToInteger":{"$ref":"#foo"},"A":{"$anchor":"foo","type":"integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -54,7 +71,7 @@ test "anchor within remote ref: remote anchor invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json#foo"}"#,
         #""a""#,
         false,
-        [[#"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"refToInteger":{"$ref":"#foo"},"A":{"$anchor":"foo","type":"integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -63,7 +80,7 @@ test "ref within remote ref: ref within ref valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/subSchemas.json#/$defs/refToInteger"}"#,
         #"1"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/subSchemas.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"integer":{"type":"integer"},"refToInteger":{"$ref":"#/$defs/integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -72,7 +89,7 @@ test "ref within remote ref: ref within ref invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/subSchemas.json#/$defs/refToInteger"}"#,
         #""a""#,
         false,
-        [[#"http://localhost:1234/draft2020-12/subSchemas.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"integer":{"type":"integer"},"refToInteger":{"$ref":"#/$defs/integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -81,7 +98,7 @@ test "base URI change: base URI change ref valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/","items":{"$id":"baseUriChange/","items":{"$ref":"folderInteger.json"}}}"#,
         #"[[1]]"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/baseUriChange/folderInteger.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -90,7 +107,7 @@ test "base URI change: base URI change ref invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/","items":{"$id":"baseUriChange/","items":{"$ref":"folderInteger.json"}}}"#,
         #"[["a"]]"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/baseUriChange/folderInteger.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -99,7 +116,7 @@ test "base URI change - change folder: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/scope_change_defs1.json","type":"object","properties":{"list":{"$ref":"baseUriChangeFolder/"}},"$defs":{"baz":{"$id":"baseUriChangeFolder/","type":"array","items":{"$ref":"folderInteger.json"}}}}"#,
         #"{"list":[1]}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/baseUriChangeFolder/folderInteger.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -108,7 +125,7 @@ test "base URI change - change folder: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/scope_change_defs1.json","type":"object","properties":{"list":{"$ref":"baseUriChangeFolder/"}},"$defs":{"baz":{"$id":"baseUriChangeFolder/","type":"array","items":{"$ref":"folderInteger.json"}}}}"#,
         #"{"list":["a"]}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/baseUriChangeFolder/folderInteger.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -117,7 +134,7 @@ test "base URI change - change folder in subschema: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/scope_change_defs2.json","type":"object","properties":{"list":{"$ref":"baseUriChangeFolderInSubschema/#/$defs/bar"}},"$defs":{"baz":{"$id":"baseUriChangeFolderInSubschema/","$defs":{"bar":{"type":"array","items":{"$ref":"folderInteger.json"}}}}}}"#,
         #"{"list":[1]}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/baseUriChangeFolderInSubschema/folderInteger.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -126,7 +143,7 @@ test "base URI change - change folder in subschema: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/scope_change_defs2.json","type":"object","properties":{"list":{"$ref":"baseUriChangeFolderInSubschema/#/$defs/bar"}},"$defs":{"baz":{"$id":"baseUriChangeFolderInSubschema/","$defs":{"bar":{"type":"array","items":{"$ref":"folderInteger.json"}}}}}}"#,
         #"{"list":["a"]}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/baseUriChangeFolderInSubschema/folderInteger.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}"#]],
+        &REMOTES,
     );
 }
 
@@ -135,7 +152,7 @@ test "root ref in remote ref: string is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/object","type":"object","properties":{"name":{"$ref":"name-defs.json#/$defs/orNull"}}}"#,
         #"{"name":"foo"}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/name-defs.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"orNull":{"anyOf":[{"type":"null"},{"$ref":"#"}]}},"type":"string"}"##]],
+        &REMOTES,
     );
 }
 
@@ -144,7 +161,7 @@ test "root ref in remote ref: null is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/object","type":"object","properties":{"name":{"$ref":"name-defs.json#/$defs/orNull"}}}"#,
         #"{"name":null}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/name-defs.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"orNull":{"anyOf":[{"type":"null"},{"$ref":"#"}]}},"type":"string"}"##]],
+        &REMOTES,
     );
 }
 
@@ -153,7 +170,7 @@ test "root ref in remote ref: object is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/object","type":"object","properties":{"name":{"$ref":"name-defs.json#/$defs/orNull"}}}"#,
         #"{"name":{"name":null}}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/name-defs.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"orNull":{"anyOf":[{"type":"null"},{"$ref":"#"}]}},"type":"string"}"##]],
+        &REMOTES,
     );
 }
 
@@ -162,7 +179,7 @@ test "remote ref with ref to defs: invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/schema-remote-ref-ref-defs1.json","$ref":"ref-and-defs.json"}"#,
         #"{"bar":1}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/ref-and-defs.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/ref-and-defs.json","$defs":{"inner":{"properties":{"bar":{"type":"string"}}}},"$ref":"#/$defs/inner"}"##]],
+        &REMOTES,
     );
 }
 
@@ -171,7 +188,7 @@ test "remote ref with ref to defs: valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/schema-remote-ref-ref-defs1.json","$ref":"ref-and-defs.json"}"#,
         #"{"bar":"a"}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/ref-and-defs.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/ref-and-defs.json","$defs":{"inner":{"properties":{"bar":{"type":"string"}}}},"$ref":"#/$defs/inner"}"##]],
+        &REMOTES,
     );
 }
 
@@ -180,7 +197,7 @@ test "Location-independent identifier in remote ref: integer is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json#/$defs/refToInteger"}"#,
         #"1"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"refToInteger":{"$ref":"#foo"},"A":{"$anchor":"foo","type":"integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -189,7 +206,7 @@ test "Location-independent identifier in remote ref: string is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json#/$defs/refToInteger"}"#,
         #""foo""#,
         false,
-        [[#"http://localhost:1234/draft2020-12/locationIndependentIdentifier.json"#, ##"{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"refToInteger":{"$ref":"#foo"},"A":{"$anchor":"foo","type":"integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -198,7 +215,7 @@ test "retrieved nested refs resolve relative to their URI not $id: number is inv
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/some-id","properties":{"name":{"$ref":"nested/foo-ref-string.json"}}}"#,
         #"{"name":{"foo":1}}"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/nested/foo-ref-string.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"$ref":"string.json"}}}"#], [#"http://localhost:1234/draft2020-12/nested/string.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}"#]],
+        &REMOTES,
     );
 }
 
@@ -207,7 +224,7 @@ test "retrieved nested refs resolve relative to their URI not $id: string is val
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/some-id","properties":{"name":{"$ref":"nested/foo-ref-string.json"}}}"#,
         #"{"name":{"foo":"a"}}"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/nested/foo-ref-string.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"foo":{"$ref":"string.json"}}}"#], [#"http://localhost:1234/draft2020-12/nested/string.json"#, #"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}"#]],
+        &REMOTES,
     );
 }
 
@@ -216,7 +233,7 @@ test "remote HTTP ref with different $id: number is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/different-id-ref-string.json"}"#,
         #"1"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/different-id-ref-string.json"#, ##"{"$id":"http://localhost:1234/draft2020-12/real-id-ref-string.json","$defs":{"bar":{"type":"string"}},"$ref":"#/$defs/bar"}"##]],
+        &REMOTES,
     );
 }
 
@@ -225,7 +242,7 @@ test "remote HTTP ref with different $id: string is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/different-id-ref-string.json"}"#,
         #""foo""#,
         true,
-        [[#"http://localhost:1234/draft2020-12/different-id-ref-string.json"#, ##"{"$id":"http://localhost:1234/draft2020-12/real-id-ref-string.json","$defs":{"bar":{"type":"string"}},"$ref":"#/$defs/bar"}"##]],
+        &REMOTES,
     );
 }
 
@@ -234,7 +251,7 @@ test "remote HTTP ref with different URN $id: number is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/urn-ref-string.json"}"#,
         #"1"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/urn-ref-string.json"#, ##"{"$id":"urn:uuid:feebdaed-ffff-0000-2020-1200deadbeef","$defs":{"bar":{"type":"string"}},"$ref":"#/$defs/bar"}"##]],
+        &REMOTES,
     );
 }
 
@@ -243,7 +260,7 @@ test "remote HTTP ref with different URN $id: string is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/urn-ref-string.json"}"#,
         #""foo""#,
         true,
-        [[#"http://localhost:1234/draft2020-12/urn-ref-string.json"#, ##"{"$id":"urn:uuid:feebdaed-ffff-0000-2020-1200deadbeef","$defs":{"bar":{"type":"string"}},"$ref":"#/$defs/bar"}"##]],
+        &REMOTES,
     );
 }
 
@@ -252,7 +269,7 @@ test "remote HTTP ref with nested absolute ref: number is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/nested-absolute-ref-to-string.json"}"#,
         #"1"#,
         false,
-        [[#"http://localhost:1234/draft2020-12/nested-absolute-ref-to-string.json"#, #"{"$defs":{"bar":{"$id":"http://localhost:1234/draft2020-12/the-nested-id.json","type":"string"}},"$ref":"http://localhost:1234/draft2020-12/the-nested-id.json"}"#]],
+        &REMOTES,
     );
 }
 
@@ -261,7 +278,7 @@ test "remote HTTP ref with nested absolute ref: string is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/nested-absolute-ref-to-string.json"}"#,
         #""foo""#,
         true,
-        [[#"http://localhost:1234/draft2020-12/nested-absolute-ref-to-string.json"#, #"{"$defs":{"bar":{"$id":"http://localhost:1234/draft2020-12/the-nested-id.json","type":"string"}},"$ref":"http://localhost:1234/draft2020-12/the-nested-id.json"}"#]],
+        &REMOTES,
     );
 }
 
@@ -270,7 +287,7 @@ test "$ref to $ref finds detached $anchor: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/detached-ref.json#/$defs/foo"}"#,
         #"1"#,
         true,
-        [[#"http://localhost:1234/draft2020-12/detached-ref.json"#, ##"{"$id":"http://localhost:1234/draft2020-12/detached-ref.json","$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"foo":{"$ref":"#detached"},"detached":{"$anchor":"detached","type":"integer"}}}"##]],
+        &REMOTES,
     );
 }
 
@@ -279,6 +296,6 @@ test "$ref to $ref finds detached $anchor: non-number is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/detached-ref.json#/$defs/foo"}"#,
         #""a""#,
         false,
-        [[#"http://localhost:1234/draft2020-12/detached-ref.json"#, ##"{"$id":"http://localhost:1234/draft2020-12/detached-ref.json","$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"foo":{"$ref":"#detached"},"detached":{"$anchor":"detached","type":"integer"}}}"##]],
+        &REMOTES,
     );
 }

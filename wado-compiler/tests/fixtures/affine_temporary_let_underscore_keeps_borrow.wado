@@ -1,0 +1,29 @@
+// `let _ =` keeps a temporary it borrows as any `let` does, until its scope
+// ends, though it binds nothing.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn kept() {
+    let _ = &make(1);
+    LOG.push("after");
+}
+
+test {
+    LOG = [];
+    kept();
+    assert LOG == ["after", "drop 1"] as List<String>;
+}

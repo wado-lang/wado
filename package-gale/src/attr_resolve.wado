@@ -59,6 +59,56 @@ pub struct AltBinding {
     /// The referenced rule's name for a rule call, empty for the token ops:
     /// which rule a label names is the only ambiguity kind cannot settle.
     pub ref_name: String = "",
+    pub reach: LabelReach = LabelReach::Bound,
+    /// For a shared rule call, the name its `.text` / `.ctx` captures are kept
+    /// under; `field` may have been renamed apart from another label's.
+    pub capture: String = "",
+}
+
+impl AltBinding {
+    /// Whether this binds the label a reference of that kind and base names.
+    pub fn binds<S: AsStrSlice>(&self, is_token: bool, base: S) -> bool {
+        return self.is_token == is_token && self.base == base.as_str_slice();
+    }
+}
+
+/// What a body finds where it reads a label. ANTLR4 keeps one in a field of
+/// the rule's context, which holds the last binding and is `null` before the
+/// first.
+pub enum LabelReach {
+    /// A local bound once, ahead of every body that reads it.
+    Bound,
+    /// A local declared where the alternative starts, which every binding of
+    /// the label assigns: `-1` for a token and `null` for a rule call until one
+    /// matches. A label is shared where it is bound inside a group, an optional
+    /// or a loop, more than once, or after a body reads it, prediction's own
+    /// reads included.
+    Shared,
+    /// Nothing yet: the rule's own decision runs before any alternative binds.
+    Unmatched,
+}
+
+/// Every label and element reference of `rule`, as a decision ahead of its
+/// alternatives finds them.
+pub fn unmatched_bindings(rule: &ParserRule) -> List<AltBinding> {
+    let env = build_attr_env(rule);
+    let mut out: List<AltBinding> = [];
+    let mut push = |is_token: bool, name: &String, ref_name: &String| {
+        let base = escape_ident(&to_snake_case(name));
+        out.push(AltBinding { is_token, base, field: base, ref_name: *ref_name, reach: LabelReach::Unmatched });
+    };
+    for let lab of &env.labels {
+        if !lab.list {
+            push(lab.is_token, &lab.name, &lab.ref_name);
+        }
+    }
+    for let name of &env.token_refs {
+        push(true, name, &"");
+    }
+    for let name of &env.rule_refs {
+        push(false, name, name);
+    }
+    return out;
 }
 
 struct LabelInfo {
@@ -150,9 +200,9 @@ fn resolve_one(
 /// alternative (validation passes, tests).
 global NO_BINDINGS: List<AltBinding> = [];
 
-/// The label named `name`. A label name may be bound in more than one
-/// alternative, to a different kind in each (`x=sub` in one, `x='y'` in
-/// another) or to a different rule (`x=a | x=b`); the environment is rule-wide,
+/// The label named `name`. A label name may be bound in more than one labelled
+/// alternative, to a different kind in each (`x=sub # A | x='y' # B`) or to a
+/// different rule (`x=a # A | x=b # B`); the environment is rule-wide,
 /// so pick the one the *enclosing alternative* actually bound. Without that,
 /// every alternative resolves as the first one declared. Falls back to
 /// first-match when the alternative binds nothing by that name.
@@ -169,7 +219,7 @@ fn label_named<S: AsStrSlice>(env: &AttrEnv, name: S, bindings: &List<AltBinding
             first = Option::Some(*lab);
         }
         for let b of bindings {
-            if b.base == key && b.is_token == lab.is_token && binding_names(b, lab) {
+            if b.binds(lab.is_token, &key) && binding_names(b, lab) {
                 return Option::Some(*lab);
             }
         }

@@ -1,0 +1,109 @@
+// What a branch yields is judged on the path it came by: a move on another
+// branch never reached it, and a `&mut` use through the holder it reads before
+// the read does not disturb it.
+
+affine struct T {
+    v: i32,
+}
+
+impl Drop for T {
+    fn drop(self) {
+    }
+}
+
+impl T {
+    fn reset(&mut self) {
+        self.v = 0;
+    }
+}
+
+fn consume(t: T) -> i32 {
+    return t.v;
+}
+
+fn read(t: &T) -> i32 {
+    return t.v;
+}
+
+fn pick(flag: bool) -> i32 {
+    let t = T { v: 1 };
+    let u = T { v: 2 };
+    return read(if flag { &t } else { consume(t); &u });
+}
+
+fn pick_held(flag: bool) -> i32 {
+    let t = T { v: 1 };
+    let u = T { v: 2 };
+    let r = if flag { &t } else { consume(t); &u };
+    return read(r);
+}
+
+// The refill writes `t` in place on the path where `r` refers into it.
+fn refilled(flag: bool) -> i32 {
+    let mut t = T { v: 1 };
+    let u = T { v: 2 };
+    let r = if flag { &t } else { consume(t); &u };
+    t = T { v: 3 };
+    return read(r);
+}
+
+fn arm(k: i32) -> i32 {
+    let t = T { v: 1 };
+    let u = T { v: 2 };
+    return read(match k { 0 => &t, _ => { consume(t); &u } });
+}
+
+fn broken(flag: bool) -> i32 {
+    let t = T { v: 1 };
+    let u = T { v: 2 };
+    let r = b: {
+        if flag {
+            break b: &t;
+        }
+        consume(t);
+        &u
+    };
+    return read(r);
+}
+
+affine struct Pair {
+    a: T,
+}
+
+// The assignment replaces `p` on a path the value did not come by.
+fn assigned_elsewhere(k: i32) -> i32 {
+    let mut p = Pair { a: T { v: 1 } };
+    let u = T { v: 2 };
+    let mut n = read(if k == 0 { &p.a } else { p = Pair { a: T { v: 3 } }; &u });
+    n += read(match k { 0 => &p.a, _ => { p = Pair { a: T { v: 4 } }; &u } });
+    let b = b: {
+        if k == 0 {
+            break b: &p.a;
+        }
+        p = Pair { a: T { v: 5 } };
+        &u
+    };
+    return n + read(b);
+}
+
+fn reset_through(t: T) -> i32 {
+    let mut t = t;
+    let r = &mut t;
+    return read(b: { r.reset(); r });
+}
+
+test {
+    assert pick(true) == 1;
+    assert pick(false) == 2;
+    assert pick_held(true) == 1;
+    assert pick_held(false) == 2;
+    assert refilled(true) == 3;
+    assert refilled(false) == 2;
+    assert arm(0) == 1;
+    assert arm(1) == 2;
+    assert broken(true) == 1;
+    assert broken(false) == 2;
+    assert assigned_elsewhere(0) == 3;
+    assert assigned_elsewhere(1) == 6;
+    assert reset_through(T { v: 5 }) == 0;
+}

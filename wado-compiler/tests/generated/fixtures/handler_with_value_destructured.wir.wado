@@ -394,15 +394,15 @@ fn "handler_with_value_destructured.wado/$test_0_a_with_block_s_tuple_destructur
     let $local_6_6: ref null "handler_with_value_destructured.wado//$Dispatch_handler_with_value_destructured.wado/Tick";
     let $local_8: ref null "tuple//[i32, i32]";
     let $temp_9: ref null "handler_with_value_destructured.wado//Token";
-    let $pattern_temp_0: ref "tuple//[i32, i32]";
+    let $block_v_10: ref "tuple//[i32, i32]";
     let $local_0: ref null "handler_with_value_destructured.wado//$Dispatch_handler_with_value_destructured.wado/Tick";
     let $local_1: ref "handler_with_value_destructured.wado//$Dispatch_handler_with_value_destructured.wado/Tick";
     let $local_2: i32;
     let $cm_pair_5: i64;
-    let $sroa_$pattern_temp_0_1_23: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_24: ref null "core:prelude//$Resource";
     c = struct.new "handler_with_value_destructured.wado//Counter" { n: 0 };
     global:handler_with_value_destructured.wado::$effect_handler_with_value_destructured.wado/Tick = struct.new "handler_with_value_destructured.wado//$Dispatch_handler_with_value_destructured.wado/Tick" { outer: local.tee $local_6_6(global:handler_with_value_destructured.wado::$effect_handler_with_value_destructured.wado/Tick), op_tick: struct.new "canonical//CanonicalClosure_0" { env: struct.new "handler_with_value_destructured.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/handler_with_value_destructured.wado/$closure_wrapper_0" } };
-    $local_8 = struct.new "tuple//[i32, i32]" { 0: $inline__effect_dispatch__handler_with_value_destructured_wado_Tick__tick_0: block -> i32 {
+    $block_v_10 = struct.new "tuple//[i32, i32]" { 0: $inline__effect_dispatch__handler_with_value_destructured_wado_Tick__tick_0: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0(global:handler_with_value_destructured.wado::$effect_handler_with_value_destructured.wado/Tick)) == 0) {
             global:handler_with_value_destructured.wado::$effect_handler_with_value_destructured.wado/Tick = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
@@ -417,16 +417,17 @@ fn "handler_with_value_destructured.wado/$test_0_a_with_block_s_tuple_destructur
             unreachable;
         }
         unreachable;
-    }, 1: $local_2 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())); $sroa_$pattern_temp_0_1_23 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5 >> 32_i64) }; "wasi/stream-drop-readable"($local_2); $temp_9 = struct.new "handler_with_value_destructured.wado//Token" { end: $sroa_$pattern_temp_0_1_23, v: 3 }; 3 };
+    }, 1: $local_2 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())); $sroa_$pattern_temp_0_1_24 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5 >> 32_i64) }; "wasi/stream-drop-readable"($local_2); $temp_9 = struct.new "handler_with_value_destructured.wado//Token" { end: $sroa_$pattern_temp_0_1_24, v: 3 }; 3 };
     if ref.is_null($temp_9) == 0 {
-        if ref.is_null(local.tee $sroa_$pattern_temp_0_1_23($temp_9.end)) == 0 {
-            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_23.value);
+        if ref.is_null(local.tee $sroa_$pattern_temp_0_1_24($temp_9.end)) == 0 {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_24.value);
         }
         $temp_9.end = ref.null none;
     }
+    $local_8 = $block_v_10;
     global:handler_with_value_destructured.wado::$effect_handler_with_value_destructured.wado/Tick = $local_6_6;
-    $local_2 = local.tee $pattern_temp_0(ref.as_non_null($local_8)).0;
-    b = $pattern_temp_0.1;
+    $local_2 = local.tee $block_v_10(ref.as_non_null($local_8)).0;
+    b = $block_v_10.1;
     if @unlikely(local.tee $v2($local_2 + b) != 4) {
         cold_path;
         "handler_with_value_destructured.wado/$test_0_a_with_block_s_tuple_destructures$cold0"($local_2, b, $v2);

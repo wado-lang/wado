@@ -1411,7 +1411,8 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
-    memo: ScanMemo<()>,
+    scan_gate: ScanGate = ScanGate {},
+    memo: ScanMemo<ScanGate>,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1836,18 +1837,24 @@ struct ArgsVals {
     return: i32 = 0,
 }
 
-fn scan_continue_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_continue_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_gate = *gate;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_FOR {
         pos = start + 1;
         if pos < tokens.len() && tokens[pos] == TK_FOR {
             let sp = pos;
+            let sp_gate = *gate;
             pos += 1;
-            if pos < 0 { pos = sp; }
+            if pos < 0 {
+                pos = sp;
+                *gate = sp_gate;
+            }
             if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !((if pos < tokens.len() { tokens[pos] } else { TK_EOF }) == TK_CONTINUE_ || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos = sp;
+                *gate = sp_gate;
             }
         }
         return pos;
@@ -1874,34 +1881,42 @@ fn scan_continue_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fo
     return -1;
 }
 
-fn scan_continue_lr_3(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_continue_lr_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_CONTINUE_ { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_continue(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let memo_at = memo.find(1, pos, min_prec, follow, 0, &());
+fn scan_continue(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+    let memo_gate = if gate._scan_edge == pos { *gate } else { ScanGate { ..*gate, _scan_edge: -1 } };
+    let memo_at = memo.find(1, pos, min_prec, follow, 0, &memo_gate);
     if memo_at >= 0 {
+        let memo_edge = gate._scan_edge;
+        *gate = memo.gate_of(memo_at);
+        if memo_edge != pos { gate._scan_edge = memo_edge; }
         return memo.end_of(memo_at);
     }
-    let memo_gate = ();
-    let memo_end = scan_continue__walk(tokens, pos, memo, follow, min_prec);
-    memo.put(1, pos, min_prec, follow, 0, memo_gate, memo_end, ());
+    let memo_end = scan_continue__walk(tokens, pos, gate, memo, follow, min_prec);
+    memo.put(1, pos, min_prec, follow, 0, memo_gate, memo_end, *gate);
     return memo_end;
 }
 
-fn scan_continue__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_continue_atom(tokens, pos, memo, follow);
+fn scan_continue__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_continue_atom(tokens, pos, gate, memo, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_CONTINUE_ {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_continue_lr_3(tokens, pos, memo, follow);
-                if pos < 0 { pos = lr_saved_pos; break; }
+                let lr_saved_pos_gate = *gate;
+                pos = scan_continue_lr_3(tokens, pos, gate, memo, follow);
+                if pos < 0 {
+                    pos = lr_saved_pos;
+                    *gate = lr_saved_pos_gate;
+                    break;
+                }
             } else {
                 break;
             }
@@ -1959,6 +1974,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || p.peek_kind() == TK_CONTINUE_) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
+                p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 if pos >= tokens.len() || tokens[pos] != TK_FOR { break opt_scan; }
@@ -2007,6 +2023,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
+                p.scan_gate._scan_edge = p.pos;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 if pos >= tokens.len() || tokens[pos] != TK_IF { break rep_scan; }
@@ -2039,7 +2056,8 @@ fn _parse_continue__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) ->
         let _sk = p.peek_kind();
         if _sk == TK_CONTINUE_ {
             if 1 >= min_prec {
-                if scan_continue_lr_3(&p.kinds, p.pos, &mut p.memo, follow) < 0 {
+                p.scan_gate._scan_edge = p.pos;
+                if scan_continue_lr_3(&p.kinds, p.pos, &mut p.scan_gate, &mut p.memo, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_CONTINUE, _start);
@@ -2181,4 +2199,8 @@ global EXPECTED_2: List<i32> = [TK_FOR, TK_IF];
 global SYNC_3: List<i32> = [12];
 
 global FOLLOW_SETS: List<List<i32>> = [];
+
+struct ScanGate {
+    _scan_edge: i32 = -1,
+}
 

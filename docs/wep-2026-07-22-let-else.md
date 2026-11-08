@@ -66,20 +66,25 @@ for let it of items {
 `else` follows the initializer (statement position only — a C-style for-loop
 initializer has no "rest of block" to guard, so `else` is not accepted there).
 
-`let ... else` desugars, at reify time, into a two-arm `Match` — the same
-lowering `if let` uses (`reify_let_chain_stmts`), with one twist: the then-arm
-is the rest of the enclosing block, so the pattern's bindings are in scope
-for it, and the wildcard arm is the diverging `else` block:
+`let ... else` desugars, at reify time, into one `let` whose value is a two-arm
+`Match`. The matched arm binds `PAT′`, which is `PAT` with each local `bᵢ`
+replaced by a fresh twin `bᵢ′`, and hands the twins on to the `let`. The `let`
+binds the pattern's own locals. The wildcard arm is the diverging `else` block:
 
 ```
-{ ...; let PAT = EXPR else { ELSE }; REST }
+let PAT = EXPR else { ELSE };
 ⇒
-{ ...; match EXPR { PAT => { REST }, _ => { ELSE } } }
+let [b₁, …, bₙ] = match EXPR { PAT′ => [b₁′, …, bₙ′], _ => { ELSE } };
 ```
+
+With one binding the `let` binds it bare, and with none it binds `_`. Either way
+the desugaring is one `let`, so a temporary the initializer holds drops where
+the `let` ends, and one it keeps borrowed drops with its scope, as any `let`'s
+does.
 
 The else block is resolved/reified before the pattern bindings enter scope, so
-it cannot reference them; the scrutinee, else block, pattern, and continuation
-are walked in the same order in the records-only resolve pass and the
+it cannot reference them. The scrutinee, else block, pattern and twins take
+their locals in the same order in the records-only resolve pass and the
 TIR-building reify pass, keeping the monotonic local-index allocation identical
 between the two.
 

@@ -514,6 +514,7 @@ fn sll_advance(c: &SllConfig, token: i32, analysis: &mut GrammarAnalysis, inline
             skip_pos += 1;
         }
         if skip_pos < c.elements.len() {
+            advance_past_empty(c, skip_pos, token, analysis, inline_depth, &mut results);
             let skipped_elem = &c.elements[skip_pos];
             match skipped_elem {
                 TokenRef(_) | Literal(_) => {
@@ -544,6 +545,43 @@ fn sll_advance(c: &SllConfig, token: i32, analysis: &mut GrammarAnalysis, inline
         return results;
     }
 
+    let mut results: List<SllConfig> = [];
+    if !elem matches { Label(_) } {
+        advance_past_empty(c, c.pos, token, analysis, inline_depth, &mut results);
+    }
+    for let a of advance_into(c, elem, token, analysis, inline_depth) {
+        results.push(a);
+    }
+    return results;
+}
+
+/// `c` moved past the element at `at` on `token` where that element can match
+/// nothing without being an optional or a loop, as a call to a rule with an
+/// empty alternative can.
+fn advance_past_empty(
+    c: &SllConfig,
+    at: i32,
+    token: i32,
+    analysis: &mut GrammarAnalysis,
+    inline_depth: i32,
+    results: &mut List<SllConfig>,
+) {
+    if !analysis.element_is_nullable_deep(&c.elements[at], &mut []) {
+        return;
+    }
+    for let a of sll_advance(&SllConfig { ..*c, pos: at + 1 }, token, analysis, inline_depth) {
+        results.push(a);
+    }
+}
+
+/// `c` moved into `elem`, the element at its position, on `token`.
+fn advance_into(
+    c: &SllConfig,
+    elem: &Element,
+    token: i32,
+    analysis: &mut GrammarAnalysis,
+    inline_depth: i32,
+) -> List<SllConfig> {
     return match elem {
         TokenRef(_) | Literal(_) => if analysis.terminal_kind(elem) == token { sll_step(c, c.pos + 1) } else { [] },
         // Advance past a RuleRef only if the rule always consumes exactly one

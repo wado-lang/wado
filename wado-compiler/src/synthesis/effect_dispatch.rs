@@ -1947,7 +1947,10 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
                 Some(value) => std::mem::replace(value, slot.take()),
                 None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
             };
-            let fill = slot.fill(parked, self.type_table);
+            let fill = TirStmt {
+                source: jump.source,
+                ..slot.fill(parked, self.type_table)
+            };
             let leave = TirStmt::new(
                 TirStmtKind::Break {
                     label: Some(self.label.to_string()),

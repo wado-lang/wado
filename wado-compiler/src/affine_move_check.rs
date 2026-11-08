@@ -166,21 +166,24 @@ impl From<AffineMoveError> for Diagnostic {
                 Code::TypeMismatch,
                 match gone {
                     Gone::Moved(at) => format!(
-                        "`{holder}` refers into {owner}, which moved at {}:{}",
+                        "{holder} refers into {owner}, which moved at {}:{}",
                         at.line, at.column,
                     ),
                     Gone::Ended => {
-                        format!("`{holder}` refers into {owner}, which dropped as its scope ended")
+                        format!("{holder} refers into {owner}, which dropped as its scope ended")
                     }
                     Gone::StatementEnded => format!(
-                        "`{holder}` refers into {owner}, which dropped as its statement ended"
+                        "{holder} refers into {owner}, which dropped as its statement ended"
+                    ),
+                    Gone::IterationEnded => format!(
+                        "{holder} refers into {owner}, which dropped as its iteration ended"
                     ),
                     Gone::Disturbed(at) => format!(
-                        "`{holder}` refers into {owner}, which a `&mut` use at {}:{} may have moved out of",
+                        "{holder} refers into {owner}, which a `&mut` use at {}:{} may have moved out of",
                         at.line, at.column,
                     ),
                     Gone::Replaced(at) => format!(
-                        "`{holder}` refers into {owner}, which the assignment at {}:{} replaced",
+                        "{holder} refers into {owner}, which the assignment at {}:{} replaced",
                         at.line, at.column,
                     ),
                 },
@@ -230,6 +233,8 @@ pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
             fallbacks: &fallbacks,
             in_fallback: None,
             regions_opened: 0,
+            walked_in: IndexMap::default(),
+            events: 0,
         };
         for item in &module.items {
             checker.check_item(item);
@@ -287,6 +292,20 @@ struct Checker<'a> {
     in_fallback: Option<NotedFallback>,
     /// The regions opened so far, which number the next.
     regions_opened: u32,
+    /// Where each affine temporary was last walked: what it lives as long as,
+    /// though a value carrying a borrow of it is traced after that may close.
+    walked_in: IndexMap<AstId, WalkedIn>,
+    /// The events so far, which number the next.
+    events: u32,
+}
+
+/// The innermost regions open where a temporary was walked.
+#[derive(Clone, Copy)]
+struct WalkedIn {
+    /// A statement or a loop iteration.
+    statement: Option<Region>,
+    /// A scope, where a `let` keeps it borrowed.
+    scope: Option<Region>,
 }
 
 struct NotedFallback {
@@ -508,8 +527,17 @@ impl LoopHead<'_> {
     }
 }
 
-/// Each moved place, a binding and a field path into it, with where it moved.
-type Moves = IndexMap<(AstId, Vec<String>), Span>;
+/// A move or a `&mut` use: where it happened, and which run of it, since a
+/// statement a loop runs again makes another at the same span.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Event {
+    span: Span,
+    serial: u32,
+}
+
+/// Each moved place, a binding and a field path into it, with its moves on the
+/// paths that reach here.
+type Moves = IndexMap<(AstId, Vec<String>), Vec<Event>>;
 
 /// Why a local a value refers into no longer holds what the value reads.
 #[derive(Debug, Clone, Copy)]
@@ -518,6 +546,8 @@ enum Gone {
     Ended,
     /// A temporary no `let` keeps borrowed, whose statement ended.
     StatementEnded,
+    /// A temporary a loop's head borrowed, whose iteration ended.
+    IterationEnded,
     /// A `&mut` use of the local, not through the value, which may have moved
     /// a part of it out.
     Disturbed(Span),
@@ -527,22 +557,30 @@ enum Gone {
 
 /// A local a reference reaches into: the binding, the field path into it,
 /// which binding of it, since a loop binds its locals afresh each iteration,
-/// and how many `&mut` uses of it came before. A temporary is one too: its
-/// expression, its instance the region it lives as long as.
+/// and the first event a `&mut` use of it disturbs the value from. A temporary
+/// is one too: its expression, its instance the region it lives as long as.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Owner {
     def: AstId,
     path: Vec<String>,
     instance: u32,
-    disturbed: usize,
+    since: u32,
 }
 
-/// A statement, or a scope, that a temporary borrowed in it lives as long as:
-/// the statement, or the scope where a `let` keeps the borrow.
+/// What a temporary borrowed in it lives as long as: the statement, a loop's
+/// iteration for one its head borrows, or the scope where a `let` keeps the
+/// borrow.
 #[derive(Clone, Copy)]
 struct Region {
     serial: u32,
-    scope: bool,
+    kind: RegionKind,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RegionKind {
+    Statement,
+    Iteration,
+    Scope,
 }
 
 #[derive(Clone)]
@@ -562,6 +600,9 @@ struct OwnerSite {
     /// Why the object the value names left the local, once an assignment
     /// refilled or replaced the place holding it.
     gone: Option<Gone>,
+    /// The events a join merged in from paths other than the ones the value
+    /// came by, which never reached what it refers into.
+    elsewhere: IndexSet<u32>,
 }
 
 impl OwnerSite {
@@ -580,18 +621,26 @@ impl OwnerSite {
 struct Disturbance {
     via: AstId,
     path: Vec<String>,
-    span: Span,
+    at: Event,
 }
 
 /// What a value refers into.
 type Owners = IndexMap<Owner, OwnerSite>;
 
+/// `from` added to `into`. An owner both refer into is gone where either has
+/// it gone, and past only the events both are past.
 fn merge_owners(into: &mut Owners, from: Owners) {
     for (owner, site) in from {
-        let gone = site.gone;
-        let kept = into.entry(owner).or_insert(site);
-        if kept.gone.is_none() {
-            kept.gone = gone;
+        match into.entry(owner) {
+            indexmap::map::Entry::Occupied(mut kept) => {
+                let kept = kept.get_mut();
+                kept.gone = kept.gone.or(site.gone);
+                kept.elsewhere
+                    .retain(|serial| site.elsewhere.contains(serial));
+            }
+            indexmap::map::Entry::Vacant(slot) => {
+                slot.insert(site);
+            }
         }
     }
 }
@@ -600,21 +649,123 @@ fn merge_owners(into: &mut Owners, from: Owners) {
 #[derive(Clone, Default)]
 struct Flow {
     moved: Moves,
+    /// The `&mut` uses of each local on the paths that reach here.
+    disturbances: IndexMap<AstId, Vec<Disturbance>>,
     /// What each local holding a reference refers into.
     holders: IndexMap<AstId, Owners>,
+    /// What the value of each branch, labeled block and closure the paths
+    /// formed refers into, by its block, arm body or closure, until the
+    /// statement holding it ends.
+    formed: IndexMap<AstId, Owners>,
 }
 
 impl Flow {
-    /// The state where paths join: a place moved on any of them, and a
-    /// reference held on any of them.
-    fn merge(&mut self, from: Flow) {
-        for (place, span) in from.moved {
-            self.moved.entry(place).or_insert(span);
+    /// The state where paths join: a place moved on any of them, a `&mut` use
+    /// made on any, and a reference held on any, past what only the paths
+    /// that do not hold it did.
+    fn merge(&mut self, mut from: Flow) {
+        let holders = std::mem::take(&mut from.holders);
+        let formed = std::mem::take(&mut from.formed);
+        let mine = std::mem::take(&mut self.holders);
+        self.holders = self.join_owner_maps(mine, &from, holders);
+        let mine = std::mem::take(&mut self.formed);
+        self.formed = self.join_owner_maps(mine, &from, formed);
+        for (place, events) in from.moved {
+            let kept = self.moved.entry(place).or_default();
+            for event in events {
+                if !kept.contains(&event) {
+                    kept.push(event);
+                }
+            }
         }
-        for (holder, owners) in from.holders {
-            merge_owners(self.holders.entry(holder).or_default(), owners);
+        for (def, uses) in from.disturbances {
+            let kept = self.disturbances.entry(def).or_default();
+            for used in uses {
+                if !kept.iter().any(|d| d.at == used.at) {
+                    kept.push(used);
+                }
+            }
         }
     }
+
+    /// The owner maps of this path, `mine`, and of `other`, `theirs`, joined.
+    fn join_owner_maps(
+        &self,
+        mut mine: IndexMap<AstId, Owners>,
+        other: &Flow,
+        mut theirs: IndexMap<AstId, Owners>,
+    ) -> IndexMap<AstId, Owners> {
+        let keys: IndexSet<AstId> = mine.keys().chain(theirs.keys()).copied().collect();
+        keys.into_iter()
+            .map(|key| {
+                let a = mine.shift_remove(&key).unwrap_or_default();
+                let b = theirs.shift_remove(&key).unwrap_or_default();
+                (key, join_owners(a, self, b, other))
+            })
+            .collect()
+    }
+
+    /// The serials of the moves of `def` and the `&mut` uses of it here.
+    fn events(&self, def: AstId) -> IndexSet<u32> {
+        let moves = self
+            .moved
+            .iter()
+            .filter(|((moved, _), _)| *moved == def)
+            .flat_map(|(_, events)| events.iter().map(|event| event.serial));
+        let uses = self
+            .disturbances
+            .get(&def)
+            .into_iter()
+            .flatten()
+            .map(|used| used.at.serial);
+        moves.chain(uses).collect()
+    }
+}
+
+/// What `a`, held on the path `a_flow`, and `b`, on `b_flow`, refer into where
+/// the paths join. An event is past an owner where each path holding it did
+/// not see it or already had it past.
+fn join_owners(mut a: Owners, a_flow: &Flow, mut b: Owners, b_flow: &Flow) -> Owners {
+    let past = |own: &Flow, other: &Flow, def: AstId| -> IndexSet<u32> {
+        other
+            .events(def)
+            .difference(&own.events(def))
+            .copied()
+            .collect()
+    };
+    let owners: IndexSet<Owner> = a.keys().chain(b.keys()).cloned().collect();
+    owners
+        .into_iter()
+        .map(|owner| {
+            let site = match (a.shift_remove(&owner), b.shift_remove(&owner)) {
+                (Some(mut on_a), Some(on_b)) => {
+                    let past_a: IndexSet<u32> = on_a
+                        .elsewhere
+                        .union(&past(a_flow, b_flow, owner.def))
+                        .copied()
+                        .collect();
+                    let past_b: IndexSet<u32> = on_b
+                        .elsewhere
+                        .union(&past(b_flow, a_flow, owner.def))
+                        .copied()
+                        .collect();
+                    on_a.elsewhere = past_a.intersection(&past_b).copied().collect();
+                    on_a.gone = on_a.gone.or(on_b.gone);
+                    on_a
+                }
+                (Some(mut on_a), None) => {
+                    on_a.elsewhere.extend(past(a_flow, b_flow, owner.def));
+                    on_a
+                }
+                (None, Some(mut on_b)) => {
+                    on_b.elsewhere.extend(past(b_flow, a_flow, owner.def));
+                    on_b
+                }
+                (None, None) => unreachable!("the owner came from one of the two"),
+            };
+            (owner, site)
+        })
+        .collect()
 }
 
 /// What a body's modes read: the types the elaborator recorded, and the body's
@@ -677,20 +828,14 @@ struct MoveWalker<'a, 'c> {
     regions: Vec<Region>,
     /// The first region of this body: one before it is the enclosing body's.
     own_regions_from: u32,
-    /// The `&mut` uses of each local, in order.
-    disturbances: IndexMap<AstId, Vec<Disturbance>>,
     /// Inside a closure body, the captures it makes a `&mut` use of.
     disturbed_captures: IndexSet<AstId>,
-    /// What each closure the body built refers into.
-    closure_owners: IndexMap<AstId, Owners>,
-    /// What the `break` values of each labeled block refer into.
-    break_owners: IndexMap<String, Owners>,
     /// The state each enclosing loop's `break`s and `continue`s carry to where
     /// they jump, innermost last.
     loops: Vec<LoopJumps>,
-    /// The state each enclosing labeled block's `break`s carry to its end,
-    /// innermost last.
-    labels: Vec<(String, Option<Flow>)>,
+    /// Each enclosing labeled block, by its label and its block, with the
+    /// state its `break`s carry to its end, innermost last.
+    labels: Vec<(String, AstId, Option<Flow>)>,
     suppress: u32,
 }
 
@@ -740,10 +885,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             scopes: Vec::new(),
             regions: Vec::new(),
             own_regions_from: 0,
-            disturbances: IndexMap::default(),
             disturbed_captures: IndexSet::default(),
-            closure_owners: IndexMap::default(),
-            break_owners: IndexMap::default(),
             loops: Vec::new(),
             labels: Vec::new(),
             suppress: 0,
@@ -764,7 +906,6 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
         inner.ended.clone_from(&self.ended);
         inner.regions.clone_from(&self.regions);
         inner.own_regions_from = self.own_regions_from;
-        inner.disturbances.clone_from(&self.disturbances);
         inner.suppress = self.suppress;
         inner
     }
@@ -807,13 +948,31 @@ impl MoveWalker<'_, '_> {
     /// The moved place overlapping `def.path`, if any: the place itself, one
     /// inside it, or one holding it.
     fn moved_overlap(&self, def: AstId, path: &[&str]) -> Option<Span> {
+        self.moves_overlapping(def, path)
+            .next()
+            .map(|event| event.span)
+    }
+
+    /// Each move of a place of `def` overlapping `path`.
+    fn moves_overlapping<'s>(
+        &'s self,
+        def: AstId,
+        path: &'s [&str],
+    ) -> impl Iterator<Item = Event> + 's {
         self.flow
             .moved
             .iter()
-            .find_map(|((moved_def, moved_path), span)| {
-                let overlaps = *moved_def == def && paths_overlap(moved_path, path);
-                overlaps.then_some(*span)
+            .filter(move |((moved_def, moved_path), _)| {
+                *moved_def == def && paths_overlap(moved_path, path)
             })
+            .flat_map(|(_, events)| events.iter().copied())
+    }
+
+    /// A move or a `&mut` use at `span`, happening now.
+    fn event(&mut self, span: Span) -> Event {
+        let serial = self.checker.events;
+        self.checker.events += 1;
+        Event { span, serial }
     }
 
     fn place_path<'e>(&self, expr: &'e Expr) -> Option<PlacePath<'e>> {
@@ -890,22 +1049,13 @@ impl MoveWalker<'_, '_> {
         let Some(owners) = self.flow.holders.get(&holder) else {
             return;
         };
-        let gone = owners.iter().find_map(|(owner, site)| {
-            let gone = || match site.region {
-                Some(region) => self
-                    .temporary_gone(region)
-                    .or_else(|| self.disturbed_since(holder, owner)),
-                None => self.owner_gone(holder, owner),
-            };
-            site.affine
-                .then(|| site.gone.or_else(gone))
-                .flatten()
-                .map(|gone| (site.name.clone(), gone))
-        });
+        let gone = owners
+            .iter()
+            .find_map(|(owner, site)| self.site_gone(holder, owner, site));
         if let Some((owner, gone)) = gone {
             self.report(
                 MoveError::DanglingReference {
-                    holder: ident.name.clone(),
+                    holder: format!("`{}`", ident.name),
                     owner,
                     gone,
                 },
@@ -914,34 +1064,101 @@ impl MoveWalker<'_, '_> {
         }
     }
 
+    /// Refuse the value the block form `expr`, a `construct`, ends with once
+    /// what it refers into moved or dropped. Nothing holds the value, so its use
+    /// is the read.
+    fn refuse_dangling_value(&mut self, expr: &Expr, construct: &str) {
+        let gone = self
+            .owners_of(expr)
+            .iter()
+            .find_map(|(owner, site)| self.site_gone(expr.id(), owner, site));
+        if let Some((owner, gone)) = gone {
+            self.report(
+                MoveError::DanglingReference {
+                    holder: format!("the value of this {construct}"),
+                    owner,
+                    gone,
+                },
+                expr.span(),
+            );
+        }
+    }
+
+    /// The affine owner's name, and why it no longer holds what `holder` reads
+    /// through it, if it does not.
+    fn site_gone(&self, holder: AstId, owner: &Owner, site: &OwnerSite) -> Option<(String, Gone)> {
+        if !site.affine {
+            return None;
+        }
+        let gone = site.gone.or_else(|| match site.region {
+            Some(region) => self
+                .temporary_gone(region)
+                .or_else(|| self.disturbed_since(holder, owner, &site.elsewhere)),
+            None => self.owner_gone(holder, owner, &site.elsewhere),
+        })?;
+        Some((site.name.clone(), gone))
+    }
+
+    /// `owners`, read out of `holder` here: one gone here stays gone, and only
+    /// a `&mut` use from here on disturbs the rest.
+    fn settle(&self, owners: Owners, holder: AstId) -> Owners {
+        let mut settled = Owners::default();
+        for (mut owner, mut site) in owners {
+            match self.site_gone(holder, &owner, &site) {
+                Some((_, gone)) => site.gone = Some(gone),
+                None => owner.since = self.checker.events,
+            }
+            merge_owners(&mut settled, Owners::from_iter([(owner, site)]));
+        }
+        settled
+    }
+
+    /// Record on this path what the value of the branch, labeled block or
+    /// closure `id` refers into: `owners`, which reads `id` as not formed yet.
+    fn form(&mut self, id: AstId, owners: impl FnOnce(&Self) -> Owners) {
+        self.flow.formed.shift_remove(&id);
+        let owners = owners(self);
+        self.flow.formed.insert(id, owners);
+    }
+
     /// Why `owner` no longer holds what `holder` reads through it, if it does
-    /// not.
-    fn owner_gone(&self, holder: AstId, owner: &Owner) -> Option<Gone> {
+    /// not, `elsewhere` being the events it is past.
+    fn owner_gone(&self, holder: AstId, owner: &Owner, elsewhere: &IndexSet<u32>) -> Option<Gone> {
         if self.instance(owner.def) != owner.instance
             || self.ended.get(&owner.def) == Some(&owner.instance)
         {
             return Some(Gone::Ended);
         }
         let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
-        if let Some(moved_at) = self.moved_overlap(owner.def, &path) {
-            return Some(Gone::Moved(moved_at));
+        if let Some(moved) = self
+            .moves_overlapping(owner.def, &path)
+            .find(|event| !elsewhere.contains(&event.serial))
+        {
+            return Some(Gone::Moved(moved.span));
         }
-        self.disturbed_since(holder, owner)
+        self.disturbed_since(holder, owner, elsewhere)
     }
 
     /// The `&mut` use, not through `holder`, that may have moved what `holder`
     /// reads through `owner` out since it took the reference.
-    fn disturbed_since(&self, holder: AstId, owner: &Owner) -> Option<Gone> {
+    fn disturbed_since(
+        &self,
+        holder: AstId,
+        owner: &Owner,
+        elsewhere: &IndexSet<u32>,
+    ) -> Option<Gone> {
         let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
-        let since = self.disturbances.get(&owner.def)?.get(owner.disturbed..)?;
-        since
+        self.flow
+            .disturbances
+            .get(&owner.def)?
             .iter()
-            .find(|d| d.via != holder && paths_overlap(&d.path, &path))
-            .map(|d| Gone::Disturbed(d.span))
-    }
-
-    fn disturbed_count(&self, def: AstId) -> usize {
-        self.disturbances.get(&def).map_or(0, Vec::len)
+            .find(|d| {
+                d.at.serial >= owner.since
+                    && !elsewhere.contains(&d.at.serial)
+                    && d.via != holder
+                    && paths_overlap(&d.path, &path)
+            })
+            .map(|d| Gone::Disturbed(d.at.span))
     }
 
     /// A `&mut` use of the place `expr` writes through: of the local it is
@@ -958,6 +1175,7 @@ impl MoveWalker<'_, '_> {
             .place_path(expr)
             .map(|place| place.owned_fields())
             .unwrap_or_default();
+        let at = self.event(expr.span());
         let mut places = vec![(via, path, false)];
         if let Some(owners) = self.flow.holders.get(&via) {
             places.extend(
@@ -976,11 +1194,11 @@ impl MoveWalker<'_, '_> {
                     self.disturbed_captures.insert(def);
                 }
             }
-            self.disturbances.entry(def).or_default().push(Disturbance {
-                via,
-                path,
-                span: expr.span(),
-            });
+            self.flow
+                .disturbances
+                .entry(def)
+                .or_default()
+                .push(Disturbance { via, path, at });
         }
     }
 
@@ -994,7 +1212,7 @@ impl MoveWalker<'_, '_> {
             def,
             path,
             instance: self.instance(def),
-            disturbed: self.disturbed_count(def),
+            since: self.checker.events,
         }
     }
 
@@ -1035,9 +1253,12 @@ impl MoveWalker<'_, '_> {
             return;
         }
         self.refuse_move_out_of_drop(expr);
+        let moved = self.event(place.root.span);
         self.flow
             .moved
-            .insert((def, place.owned_fields()), place.root.span);
+            .entry((def, place.owned_fields()))
+            .or_default()
+            .push(moved);
     }
 
     fn type_name_of(&self, expr: &Expr) -> String {
@@ -1173,30 +1394,35 @@ impl MoveWalker<'_, '_> {
             return;
         };
         let mut refilled = Vec::new();
-        self.flow.moved.retain(|(moved_def, moved_path), span| {
+        self.flow.moved.retain(|(moved_def, moved_path), events| {
             let inside = *moved_def == def
                 && moved_path.len() >= place.fields.len()
                 && paths_overlap(moved_path, &place.fields);
             if inside {
-                refilled.push((moved_path.clone(), *span));
+                refilled.extend(events.iter().map(|event| (moved_path.clone(), *event)));
             }
             !inside
         });
         let instance = self.instance(def);
-        for (owner, site) in self
+        // A value formed on this path is read through as one held is.
+        let owner_sets = self
             .flow
             .holders
             .values_mut()
-            .flat_map(|owners| owners.iter_mut())
-        {
+            .chain(self.flow.formed.values_mut());
+        for (owner, site) in owner_sets.flat_map(|owners| owners.iter_mut()) {
             if owner.def != def || owner.instance != instance || site.gone.is_some() {
                 continue;
             }
             let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
             site.gone = refilled
                 .iter()
-                .find(|(moved, _)| moved.len() <= path.len() && paths_overlap(moved, &path))
-                .map(|(_, span)| Gone::Moved(*span))
+                .find(|(moved, event)| {
+                    moved.len() <= path.len()
+                        && paths_overlap(moved, &path)
+                        && !site.elsewhere.contains(&event.serial)
+                })
+                .map(|(_, event)| Gone::Moved(event.span))
                 .or_else(|| {
                     (owner.path.len() > place.fields.len()
                         && paths_overlap(&owner.path, &place.fields))
@@ -1210,10 +1436,23 @@ impl MoveWalker<'_, '_> {
         self.visit(expr, self.modes.of(expr));
     }
 
-    /// Visit `expr` in a position of `mode`. A place the modes move moves
+    /// Visit `expr` in a position of `mode`, whose value is read.
+    fn visit(&mut self, expr: &Expr, mode: OperandMode) {
+        self.walk_value(expr, mode);
+        if let Some(construct) = block_form(expr) {
+            self.refuse_dangling_value(expr, construct);
+        }
+    }
+
+    /// Visit `expr`, whose value nothing reads: an expression statement's.
+    fn visit_discarded(&mut self, expr: &Expr) {
+        self.walk_value(expr, self.modes.of(expr));
+    }
+
+    /// Walk `expr` in a position of `mode`. A place the modes move moves
     /// unless `mode` reads it, and is read anywhere else; drop elaboration
     /// takes ownership at the same places.
-    fn visit(&mut self, expr: &Expr, mode: OperandMode) {
+    fn walk_value(&mut self, expr: &Expr, mode: OperandMode) {
         let consumes = mode == OperandMode::Consume;
         if let Some(place) = self.place_path(expr) {
             if consumes && self.modes.moves(expr, &self.facts()) {
@@ -1223,8 +1462,23 @@ impl MoveWalker<'_, '_> {
             }
             return;
         }
+        let affine = self.expr_is_affine(expr.id());
+        if affine {
+            let innermost = |scope: bool| {
+                self.regions
+                    .iter()
+                    .rev()
+                    .find(|region| (region.kind == RegionKind::Scope) == scope)
+                    .copied()
+            };
+            let walked_in = WalkedIn {
+                statement: innermost(false),
+                scope: innermost(true),
+            };
+            self.checker.walked_in.insert(expr.id(), walked_in);
+        }
         if consumes
-            && self.expr_is_affine(expr.id())
+            && affine
             && let Some(base) = self.out_of_reference(expr)
         {
             self.visit(base, OperandMode::Borrow);
@@ -1334,7 +1588,7 @@ impl MoveWalker<'_, '_> {
         let mut inner = self.sub_walker();
         inner.closure_locals = Some(locals);
         inner.own_regions_from = inner.checker.regions_opened;
-        inner.in_region(false, |inner| {
+        inner.in_region(RegionKind::Statement, |inner| {
             inner.visit_at(&closure.body);
             if !matches!(closure.body, Expr::Block(_)) {
                 inner.refuse_returned(&closure.body);
@@ -1380,6 +1634,7 @@ impl MoveWalker<'_, '_> {
                 span: closure.span,
                 writes,
                 gone: None,
+                elsewhere: IndexSet::default(),
             };
             if site.matters() {
                 owners.insert(self.owner(def, Vec::new()), site);
@@ -1391,7 +1646,7 @@ impl MoveWalker<'_, '_> {
                 }
             }
         }
-        self.closure_owners.insert(closure.id, owners);
+        self.flow.formed.insert(closure.id, owners);
     }
 
     fn is_affine_local(&self, def: AstId) -> bool {
@@ -1588,13 +1843,13 @@ impl MoveWalker<'_, '_> {
         let mut owners = Owners::default();
         match expr {
             Expr::Ident(_) | Expr::FieldAccess(_) | Expr::Index(_) => match place_root(expr) {
+                // The value is formed at this read, which a `&mut` use through
+                // the holder before it does not disturb.
                 Some(root) => {
-                    if let Some(held) = self
-                        .sem()
-                        .referenced_symbol(root.id)
-                        .and_then(|def| self.flow.holders.get(&def))
+                    if let Some(def) = self.sem().referenced_symbol(root.id)
+                        && let Some(held) = self.flow.holders.get(&def)
                     {
-                        owners.clone_from(held);
+                        owners = self.settle(held.clone(), def);
                     }
                 }
                 None => match expr {
@@ -1646,14 +1901,14 @@ impl MoveWalker<'_, '_> {
                 merge_owners(&mut owners, self.owners_of(&r.end));
             }
             Expr::Block(block) => owners = self.block_owners(block),
-            Expr::LabeledBlock(lb) => owners = self.labeled_block_owners(&lb.label, &lb.block),
+            Expr::LabeledBlock(lb) => owners = self.block_owners(&lb.block),
             Expr::WithHandler(w) => owners = self.block_owners(&w.body),
             Expr::If(if_expr) => {
                 owners = self.if_owners(&if_expr.then_block, if_expr.else_block.as_ref());
             }
             Expr::Match(m) => owners = self.arms_owners(&m.arms),
             Expr::Closure(c) => {
-                owners = self.closure_owners.get(&c.id).cloned().unwrap_or_default();
+                owners = self.flow.formed.get(&c.id).cloned().unwrap_or_default();
             }
             Expr::Binary(_)
             | Expr::Assign(_)
@@ -1748,6 +2003,7 @@ impl MoveWalker<'_, '_> {
                         affine: self.is_affine_local(def),
                         writes,
                         gone: None,
+                        elsewhere: IndexSet::default(),
                     };
                     if site.matters() {
                         owners.insert(self.owner(def, place.owned_fields()), site);
@@ -1759,22 +2015,26 @@ impl MoveWalker<'_, '_> {
     }
 
     /// The temporary `expr` as the owner of a borrow of it, living as long as
-    /// the innermost statement, or the innermost scope where a `let` keeps the
-    /// borrow.
+    /// the innermost statement or loop iteration it was walked in, or the
+    /// innermost scope where a `let` keeps the borrow.
     fn temporary_owner(&self, expr: &Expr, writes: bool) -> (Owner, OwnerSite) {
-        let scope = self.modes.extended(expr);
-        let region = *self
-            .regions
-            .iter()
-            .rev()
-            .find(|region| region.scope == scope)
-            .expect("a temporary is borrowed inside a statement of a scope");
+        let walked_in = self
+            .checker
+            .walked_in
+            .get(&expr.id())
+            .expect("a temporary is walked before a borrow of it is traced");
+        let region = if self.modes.extended(expr) {
+            walked_in.scope
+        } else {
+            walked_in.statement
+        }
+        .expect("a temporary is borrowed inside a statement of a scope");
         let span = expr.span();
         let owner = Owner {
             def: expr.id(),
             path: Vec::new(),
             instance: region.serial,
-            disturbed: self.disturbed_count(expr.id()),
+            since: self.checker.events,
         };
         let site = OwnerSite {
             name: format!("the temporary at {}:{}", span.line, span.column),
@@ -1783,6 +2043,7 @@ impl MoveWalker<'_, '_> {
             affine: true,
             writes,
             gone: None,
+            elsewhere: IndexSet::default(),
         };
         (owner, site)
     }
@@ -1790,21 +2051,26 @@ impl MoveWalker<'_, '_> {
     /// Why a temporary living as long as `region` no longer holds what a value
     /// reads through it, if it does not.
     fn temporary_gone(&self, region: Region) -> Option<Gone> {
-        let open = self.regions.iter().any(|r| r.serial == region.serial);
-        match (open, region.scope) {
-            (true, _) => None,
-            (false, true) => Some(Gone::Ended),
-            (false, false) => Some(Gone::StatementEnded),
+        if self.regions.iter().any(|r| r.serial == region.serial) {
+            return None;
         }
+        Some(match region.kind {
+            RegionKind::Statement => Gone::StatementEnded,
+            RegionKind::Iteration => Gone::IterationEnded,
+            RegionKind::Scope => Gone::Ended,
+        })
     }
 
     /// What the value a block ends with refers into.
     fn block_owners(&self, block: &Block) -> Owners {
+        if let Some(formed) = self.flow.formed.get(&block.id) {
+            return formed.clone();
+        }
         match block.stmts.last() {
             Some(Stmt::Expr(e)) => self.owners_of(&e.expr),
             Some(Stmt::If(s)) => self.if_owners(&s.then_block, s.else_block.as_ref()),
             Some(Stmt::Match(m)) => self.arms_owners(&m.arms),
-            Some(Stmt::LabeledBlock(lb)) => self.labeled_block_owners(&lb.label, &lb.block),
+            Some(Stmt::LabeledBlock(lb)) => self.block_owners(&lb.block),
             _ => Owners::default(),
         }
     }
@@ -1820,15 +2086,11 @@ impl MoveWalker<'_, '_> {
     fn arms_owners(&self, arms: &[ast::MatchArm]) -> Owners {
         let mut owners = Owners::default();
         for arm in arms {
-            merge_owners(&mut owners, self.owners_of(&arm.body));
-        }
-        owners
-    }
-
-    fn labeled_block_owners(&self, label: &str, block: &Block) -> Owners {
-        let mut owners = self.block_owners(block);
-        if let Some(broken) = self.break_owners.get(label) {
-            merge_owners(&mut owners, broken.clone());
+            let arm_owners = match self.flow.formed.get(&arm.body.id()) {
+                Some(formed) => formed.clone(),
+                None => self.owners_of(&arm.body),
+            };
+            merge_owners(&mut owners, arm_owners);
         }
         owners
     }
@@ -1910,12 +2172,11 @@ impl MoveWalker<'_, '_> {
         }
     }
 
-    /// Runs `walk` in a statement, or a scope, that the temporaries it borrows
-    /// live as long as.
-    fn in_region<R>(&mut self, scope: bool, walk: impl FnOnce(&mut Self) -> R) -> R {
+    /// Runs `walk` in a region that the temporaries it borrows live as long as.
+    fn in_region<R>(&mut self, kind: RegionKind, walk: impl FnOnce(&mut Self) -> R) -> R {
         let serial = self.checker.regions_opened;
         self.checker.regions_opened += 1;
-        self.regions.push(Region { serial, scope });
+        self.regions.push(Region { serial, kind });
         let result = walk(self);
         self.regions.pop();
         result
@@ -1924,7 +2185,7 @@ impl MoveWalker<'_, '_> {
     /// Runs `walk` in a scope of its own: the bindings it makes end with it.
     fn in_scope<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
         self.scopes.push(Vec::new());
-        let result = self.in_region(true, walk);
+        let result = self.in_region(RegionKind::Scope, walk);
         for id in self.scopes.pop().expect("the scope pushed above") {
             let instance = self.instance(id);
             self.ended.insert(id, instance);
@@ -1935,7 +2196,18 @@ impl MoveWalker<'_, '_> {
     fn visit_block(&mut self, block: &Block) -> bool {
         self.in_scope(|walker| {
             let mut stmts = block.stmts.iter();
-            let diverged = stmts.by_ref().any(|stmt| walker.visit_stmt(stmt));
+            let tail = block.stmts.last().map(Stmt::id);
+            let diverged = stmts.by_ref().any(|stmt| {
+                if Some(stmt.id()) == tail {
+                    return walker.visit_stmt(stmt);
+                }
+                // What a statement forms is read by the end of it, except the
+                // tail's, which is the block's value.
+                let before: IndexSet<AstId> = walker.flow.formed.keys().copied().collect();
+                let diverged = walker.visit_stmt(stmt);
+                walker.flow.formed.retain(|id, _| before.contains(id));
+                diverged
+            });
             if diverged {
                 walker.visit_unreachable(|dead| {
                     for stmt in stmts {
@@ -1954,20 +2226,16 @@ impl MoveWalker<'_, '_> {
         let closure_locals = self.closure_locals.clone();
         let captures = self.captures.clone();
         let disturbed_captures = self.disturbed_captures.clone();
-        let closure_owners = self.closure_owners.clone();
-        let break_owners = self.break_owners.clone();
         let mut dead = self.sub_walker();
         dead.closure_locals = closure_locals;
         dead.captures = captures;
         dead.disturbed_captures = disturbed_captures;
-        dead.closure_owners = closure_owners;
-        dead.break_owners = break_owners;
         walk(&mut dead);
     }
 
     /// Walks `stmt`, answering whether control never reaches past it.
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
-        let walked = self.in_region(false, |walker| walker.walk_stmt(stmt));
+        let walked = self.in_region(RegionKind::Statement, |walker| walker.walk_stmt(stmt));
         walked || divergence::stmt_head_always_exits(self, stmt)
     }
 
@@ -1996,7 +2264,7 @@ impl MoveWalker<'_, '_> {
                 false
             }
             Stmt::Expr(e) => {
-                self.visit_at(&e.expr);
+                self.visit_discarded(&e.expr);
                 false
             }
             Stmt::Return(r) => {
@@ -2034,24 +2302,23 @@ impl MoveWalker<'_, '_> {
             }
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
             Stmt::Break(b) => {
-                if let Some(value) = &b.value {
-                    self.visit_at(value);
-                    if let Some(label) = &b.label {
-                        let owners = self.owners_of(value);
-                        merge_owners(self.break_owners.entry(label.clone()).or_default(), owners);
-                    }
-                }
                 // A jump with no target is a type error the language service
                 // still walks.
+                let labeled = b
+                    .label
+                    .as_ref()
+                    .and_then(|label| self.labels.iter().rposition(|(name, ..)| name == label));
+                if let Some(value) = &b.value {
+                    self.visit_at(value);
+                    if let Some(at) = labeled {
+                        let block = self.labels[at].1;
+                        self.form(block, |walker| walker.owners_of(value));
+                    }
+                }
                 let flow = self.flow.clone();
-                let target = match &b.label {
-                    Some(label) => self
-                        .labels
-                        .iter_mut()
-                        .rev()
-                        .find(|(name, _)| name == label)
-                        .map(|(_, end)| end),
-                    None => self.loops.last_mut().map(|jumps| &mut jumps.breaks),
+                let target = match (&b.label, labeled) {
+                    (Some(_), at) => at.map(|at| &mut self.labels[at].2),
+                    (None, _) => self.loops.last_mut().map(|jumps| &mut jumps.breaks),
                 };
                 if let Some(target) = target {
                     reach(target, flow);
@@ -2112,35 +2379,40 @@ impl MoveWalker<'_, '_> {
     /// state this one began with.
     fn visit_iteration(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
         let start = self.flow.clone();
-        self.in_scope(|walker| {
-            match head {
-                LoopHead::None => {}
-                LoopHead::Condition(condition) => walker.visit_condition(condition),
-                LoopHead::Binding(pattern, owners) => {
-                    walker.refuse_destructured_drop(pattern, None);
-                    walker.bind_pattern(pattern);
-                    walker.hold_bindings(pattern, owners);
+        self.in_region(RegionKind::Iteration, |walker| {
+            walker.in_scope(|walker| {
+                match head {
+                    LoopHead::None => {}
+                    LoopHead::Condition(condition) => walker.visit_condition(condition),
+                    LoopHead::Binding(pattern, owners) => {
+                        walker.refuse_destructured_drop(pattern, None);
+                        walker.bind_pattern(pattern);
+                        walker.hold_bindings(pattern, owners);
+                    }
                 }
-            }
-            let diverged = walker.visit_block(body);
-            let jumps = walker.loops.last_mut().expect("the loop pushed its jumps");
-            let mut end = (!diverged).then(|| walker.flow.clone());
-            if let Some(continued) = jumps.continues.take() {
-                reach(&mut end, continued);
-            }
-            walker.flow = end.unwrap_or(start);
-            if let Some(update) = update {
-                walker.in_region(false, |walker| walker.visit_at(update));
-            }
+                let diverged = walker.visit_block(body);
+                let jumps = walker.loops.last_mut().expect("the loop pushed its jumps");
+                let mut end = (!diverged).then(|| walker.flow.clone());
+                if let Some(continued) = jumps.continues.take() {
+                    reach(&mut end, continued);
+                }
+                walker.flow = end.unwrap_or(start);
+                if let Some(update) = update {
+                    walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
+                }
+            });
         });
     }
 
     /// A labeled block ends where its body does and where each `break` naming
     /// it lands.
     fn visit_labeled_block(&mut self, label: &str, block: &Block) -> bool {
-        self.labels.push((label.to_string(), None));
+        self.labels.push((label.to_string(), block.id, None));
         let diverged = self.visit_block(block);
-        let (_, broken) = self.labels.pop().expect("pushed above");
+        if !diverged {
+            self.form(block.id, |walker| walker.block_owners(block));
+        }
+        let (_, _, broken) = self.labels.pop().expect("pushed above");
         let end = (!diverged).then(|| std::mem::take(&mut self.flow));
         self.continue_from(end, broken)
     }
@@ -2194,8 +2466,12 @@ impl MoveWalker<'_, '_> {
             walker.visit_condition(condition);
             walker.visit_block(then_block)
         });
+        self.form(then_block.id, |walker| walker.block_owners(then_block));
         let then_flow = std::mem::replace(&mut self.flow, unmatched);
         let else_div = else_block.is_some_and(|eb| self.visit_block(eb));
+        if let Some(eb) = else_block {
+            self.form(eb.id, |walker| walker.block_owners(eb));
+        }
         match (then_div, else_div) {
             (false, false) => self.flow.merge(then_flow),
             (false, true) => self.flow = then_flow,
@@ -2239,6 +2515,7 @@ impl MoveWalker<'_, '_> {
                 walker.visit_expr_diverges(&arm.body)
             });
             if !diverged {
+                self.form(arm.body.id(), |walker| walker.owners_of(&arm.body));
                 all_diverge = false;
                 merged.merge(std::mem::take(&mut self.flow));
             }
@@ -2314,6 +2591,42 @@ fn keeps_whole(pattern: &Pattern) -> bool {
         | Pattern::Literal(_)
         | Pattern::Range { .. }
         | Pattern::Error(_) => false,
+    }
+}
+
+/// What `expr` is named in a diagnostic, if it is a form whose value its last
+/// statement computes, after that statement's temporaries drop.
+fn block_form(expr: &Expr) -> Option<&'static str> {
+    match expr {
+        Expr::Block(_) => Some("block"),
+        Expr::LabeledBlock(_) => Some("labeled block"),
+        Expr::If(_) => Some("`if`"),
+        Expr::Match(_) => Some("`match`"),
+        Expr::WithHandler(_) => Some("`with`"),
+        Expr::Ident(_)
+        | Expr::Literal(_)
+        | Expr::Binary(_)
+        | Expr::Unary(_)
+        | Expr::Assign(_)
+        | Expr::CompoundAssign(_)
+        | Expr::ComparisonChain(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::Matches(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::TaggedTemplate(_)
+        | Expr::Cast(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::TryOp(_)
+        | Expr::Spread(..)
+        | Expr::Range(_)
+        | Expr::Error(_) => None,
     }
 }
 

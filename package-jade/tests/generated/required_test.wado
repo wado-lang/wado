@@ -9,7 +9,6 @@ test "required validation: present required property is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{},"bar":{}},"required":["foo"]}"#,
         #"{"foo":1}"#,
         true,
-        [],
     );
 }
 
@@ -18,7 +17,6 @@ test "required validation: non-present required property is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{},"bar":{}},"required":["foo"]}"#,
         #"{"bar":1}"#,
         false,
-        [],
     );
 }
 
@@ -27,7 +25,6 @@ test "required validation: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{},"bar":{}},"required":["foo"]}"#,
         #"[]"#,
         true,
-        [],
     );
 }
 
@@ -36,7 +33,6 @@ test "required validation: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{},"bar":{}},"required":["foo"]}"#,
         #""""#,
         true,
-        [],
     );
 }
 
@@ -45,7 +41,6 @@ test "required validation: ignores other non-objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{},"bar":{}},"required":["foo"]}"#,
         #"12"#,
         true,
-        [],
     );
 }
 
@@ -54,7 +49,6 @@ test "required validation: ignores null" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{},"bar":{}},"required":["foo"]}"#,
         #"null"#,
         true,
-        [],
     );
 }
 
@@ -63,7 +57,6 @@ test "required validation: ignores boolean" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{},"bar":{}},"required":["foo"]}"#,
         #"true"#,
         true,
-        [],
     );
 }
 
@@ -72,7 +65,6 @@ test "required default validation: not required by default" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{}}}"#,
         #"{}"#,
         true,
-        [],
     );
 }
 
@@ -81,7 +73,6 @@ test "required with empty array: property not required" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{}},"required":[]}"#,
         #"{}"#,
         true,
-        [],
     );
 }
 
@@ -90,7 +81,6 @@ test "required with escaped characters: object with all properties present is va
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["foo\nbar","foo\"bar","foo\\bar","foo\rbar","foo\tbar","foo\fbar"]}"#,
         #"{"foo\nbar":1,"foo\"bar":1,"foo\\bar":1,"foo\rbar":1,"foo\tbar":1,"foo\fbar":1}"#,
         true,
-        [],
     );
 }
 
@@ -99,7 +89,6 @@ test "required with escaped characters: object with some properties missing is i
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["foo\nbar","foo\"bar","foo\\bar","foo\rbar","foo\tbar","foo\fbar"]}"#,
         #"{"foo\nbar":"1","foo\"bar":"1"}"#,
         false,
-        [],
     );
 }
 
@@ -108,7 +97,6 @@ test "required properties whose names are Javascript object property names: igno
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["__proto__","toString","constructor"]}"#,
         #"[]"#,
         true,
-        [],
     );
 }
 
@@ -117,7 +105,6 @@ test "required properties whose names are Javascript object property names: igno
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["__proto__","toString","constructor"]}"#,
         #"12"#,
         true,
-        [],
     );
 }
 
@@ -126,7 +113,6 @@ test "required properties whose names are Javascript object property names: none
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["__proto__","toString","constructor"]}"#,
         #"{}"#,
         false,
-        [],
     );
 }
 
@@ -135,7 +121,6 @@ test "required properties whose names are Javascript object property names: __pr
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["__proto__","toString","constructor"]}"#,
         #"{"__proto__":"foo"}"#,
         false,
-        [],
     );
 }
 
@@ -144,7 +129,6 @@ test "required properties whose names are Javascript object property names: toSt
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["__proto__","toString","constructor"]}"#,
         #"{"toString":{"length":37}}"#,
         false,
-        [],
     );
 }
 
@@ -153,7 +137,6 @@ test "required properties whose names are Javascript object property names: cons
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["__proto__","toString","constructor"]}"#,
         #"{"constructor":{"length":37}}"#,
         false,
-        [],
     );
 }
 
@@ -162,6 +145,5 @@ test "required properties whose names are Javascript object property names: all 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","required":["__proto__","toString","constructor"]}"#,
         #"{"__proto__":12,"toString":{"length":"foo"},"constructor":37}"#,
         true,
-        [],
     );
 }

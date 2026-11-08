@@ -1,0 +1,38 @@
+// What a C-style `for`'s init declares is the loop's: a local it binds, and a
+// temporary its `let` keeps borrowed, drop as the loop ends.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+test "a local the init binds" {
+    LOG = [];
+    for let t = make(7); t.n < 8; {
+        LOG.push(`read ${t.n}`);
+        break;
+    }
+    LOG.push("after");
+    assert LOG == ["read 7", "drop 7", "after"] as List<String>;
+}
+
+test "a temporary the init keeps borrowed" {
+    LOG = [];
+    for let r = &make(7); r.n < 8; {
+        LOG.push(`read ${r.n}`);
+        break;
+    }
+    LOG.push("after");
+    assert LOG == ["read 7", "drop 7", "after"] as List<String>;
+}

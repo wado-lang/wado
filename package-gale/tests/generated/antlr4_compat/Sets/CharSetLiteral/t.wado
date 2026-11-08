@@ -1674,18 +1674,19 @@ impl Parser {
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
+    let mut a: i32 = -1;
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     _first_iter: {
-        let a = p.expect(TK_A, &SYNC_0, true);
+        a = p.expect(TK_A, &SYNC_0, true);
         if !p.speculating {
-            p.emit(`${p.token_text(a)}\n`);
+            p.emit(`${(if a < 0 { "null" } else { p.token_text(a) })}\n`);
         }
     }
     while !p.recovering && p.peek_kind() == TK_A {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let a = p.take();
+        a = p.take();
         if !p.speculating {
-            p.emit(`${p.token_text(a)}\n`);
+            p.emit(`${(if a < 0 { "null" } else { p.token_text(a) })}\n`);
         }
     }
     return;

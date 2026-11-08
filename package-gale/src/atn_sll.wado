@@ -1005,7 +1005,7 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         `fn ${ATN_VERIFIED}(decision: i32, picker: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
     );
     w.line(
-        "let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec, &ATN_NO_FALSE_PREDS);",
+        "let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec);",
     );
     w.begin("if viable && simulated != alt");
     w.begin("let by = match picker");

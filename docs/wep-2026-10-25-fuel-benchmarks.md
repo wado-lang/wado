@@ -66,13 +66,14 @@ Only `wado test` links the interface. A program for any other world that
 reaches `core:fuel` does not compile, as with `core:eval`
 (`TEST_WORLD_ONLY_IMPORT`).
 
-### A metered run fixes the insecure randomness
+### A test's insecure randomness is fixed
 
-Under `wado test --report-fuel`, `wasi:random/insecure` and `insecure-seed`
-answer the same on every run, as Kiln generators and `core:eval` programs
-already get. `HashMap::new` hashes under `insecure-seed`, and the seed changes
-how far its probes go, so without this a program using one spent different fuel
-on each run. `wasi:random/random` stays unpredictable.
+Under `wado test`, `wasi:random/insecure` and `insecure-seed` answer the same on
+every run, as Kiln generators and `core:eval` programs get. `HashMap::new` hashes under
+`insecure-seed`, and the seed changes how far its probes go, so without this a
+program using one spent different fuel on each run. First only a metered or
+coverage run fixed them; every test run now does, which also lets `wado test`
+cache a pass that drew them. `wasi:random/random` stays unpredictable.
 
 Only a test gets this. `insecure-seed` exists to seed a hash map's DoS
 protection, so `wado run` and `wado serve` keep the host's seed under
@@ -106,8 +107,7 @@ pull request. An exact test leaves a threshold nothing to catch for fuel, and
 the wasm-size threshold, which failed a pull request at 130%, goes with it.
 
 `mise run update-baselines` rewrites it together with the stdlib coverage
-baseline, since a change to the compiler or the stdlib moves either. A change
-that moves fuel commits the result, so the diff shows its cost.
+baseline, since a change to the compiler or the stdlib moves either.
 
 The wall-clock series on gh-pages stops. Its history stays where it is.
 

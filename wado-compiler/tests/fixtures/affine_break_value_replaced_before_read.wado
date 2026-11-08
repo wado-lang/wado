@@ -1,0 +1,29 @@
+// What a `break` hands its labeled block is settled at the `break`, and an
+// assignment later in the same expression still replaces what it refers into.
+
+affine struct T {
+    v: i32,
+}
+
+impl Drop for T {
+    fn drop(self) {
+    }
+}
+
+affine struct Pair {
+    a: T,
+}
+
+fn read(t: &T) -> i32 {
+    return t.v;
+}
+
+fn pick(flag: bool) -> i32 {
+    let mut p = Pair { a: T { v: 1 } };
+    let r = &p.a;
+    let h = [l: { if flag { break l: r; } r }, b: { p = Pair { a: T { v: 9 } }; 0 }];
+    return read(h.0);
+}
+
+__DATA__
+{"compile_error": ":25:17: analysis error: `h` refers into `p`, which the assignment at 24:53 replaced"}

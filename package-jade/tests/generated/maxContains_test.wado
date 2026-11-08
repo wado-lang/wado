@@ -9,7 +9,6 @@ test "maxContains without contains is ignored: one item valid against lone maxCo
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxContains":1}"#,
         #"[1]"#,
         true,
-        [],
     );
 }
 
@@ -18,7 +17,6 @@ test "maxContains without contains is ignored: two items still valid against lon
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","maxContains":1}"#,
         #"[1,2]"#,
         true,
-        [],
     );
 }
 
@@ -27,7 +25,6 @@ test "maxContains with contains: empty data" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"maxContains":1}"#,
         #"[]"#,
         false,
-        [],
     );
 }
 
@@ -36,7 +33,6 @@ test "maxContains with contains: all elements match, valid maxContains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"maxContains":1}"#,
         #"[1]"#,
         true,
-        [],
     );
 }
 
@@ -45,7 +41,6 @@ test "maxContains with contains: all elements match, invalid maxContains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"maxContains":1}"#,
         #"[1,1]"#,
         false,
-        [],
     );
 }
 
@@ -54,7 +49,6 @@ test "maxContains with contains: some elements match, valid maxContains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"maxContains":1}"#,
         #"[1,2]"#,
         true,
-        [],
     );
 }
 
@@ -63,7 +57,6 @@ test "maxContains with contains: some elements match, invalid maxContains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"maxContains":1}"#,
         #"[1,2,1]"#,
         false,
-        [],
     );
 }
 
@@ -72,7 +65,6 @@ test "maxContains with contains, value with a decimal: one element matches, vali
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"maxContains":1}"#,
         #"[1]"#,
         true,
-        [],
     );
 }
 
@@ -81,7 +73,6 @@ test "maxContains with contains, value with a decimal: too many elements match, 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"maxContains":1}"#,
         #"[1,1]"#,
         false,
-        [],
     );
 }
 
@@ -90,7 +81,6 @@ test "minContains < maxContains: actual < minContains < maxContains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"minContains":1,"maxContains":3}"#,
         #"[]"#,
         false,
-        [],
     );
 }
 
@@ -99,7 +89,6 @@ test "minContains < maxContains: minContains < actual < maxContains" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"minContains":1,"maxContains":3}"#,
         #"[1,1]"#,
         true,
-        [],
     );
 }
 
@@ -108,7 +97,6 @@ test "minContains < maxContains: minContains < maxContains < actual" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"minContains":1,"maxContains":3}"#,
         #"[1,1,1,1]"#,
         false,
-        [],
     );
 }
 
@@ -117,7 +105,6 @@ test "maxContains = 0 with minContains = 0: empty array" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"minContains":0,"maxContains":0}"#,
         #"[]"#,
         true,
-        [],
     );
 }
 
@@ -126,6 +113,5 @@ test "maxContains = 0 with minContains = 0: one matching item" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","contains":{"const":1},"minContains":0,"maxContains":0}"#,
         #"[1]"#,
         false,
-        [],
     );
 }

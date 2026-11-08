@@ -1,0 +1,68 @@
+// A loop's head runs once per iteration, and a temporary it borrows drops as
+// that iteration ends, after the body: a `while` condition the same as a
+// `while let` scrutinee.
+
+global mut LOG: List<String> = [];
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        LOG.push(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn id(t: &Tok) -> &Tok {
+    return t;
+}
+
+fn opt_id(t: &Tok) -> Option<&Tok> {
+    return Some(t);
+}
+
+test "a while condition" {
+    LOG = [];
+    let mut i = 0;
+    while id(&make(i)).n < 2 {
+        LOG.push(`body ${i}`);
+        i += 1;
+    }
+    assert LOG == ["body 0", "drop 0", "body 1", "drop 1", "drop 2"] as List<String>;
+}
+
+test "a while let scrutinee" {
+    LOG = [];
+    let mut i = 0;
+    while let Some(r) = opt_id(&make(i)) && r.n < 2 {
+        LOG.push(`body ${r.n}`);
+        i += 1;
+    }
+    assert LOG == ["body 0", "drop 0", "body 1", "drop 1", "drop 2"] as List<String>;
+}
+
+test "a for condition" {
+    LOG = [];
+    for let mut i = 0; id(&make(i)).n < 2; i += 1 {
+        LOG.push(`body ${i}`);
+    }
+    assert LOG == ["body 0", "drop 0", "body 1", "drop 1", "drop 2"] as List<String>;
+}
+
+fn step(i: i32) -> i32 {
+    LOG.push(`update ${i}`);
+    return i + 1;
+}
+
+test "a for condition outlives the update" {
+    LOG = [];
+    for let mut i = 0; id(&make(i)).n < 1; i = step(i) {
+        LOG.push(`body ${i}`);
+    }
+    assert LOG == ["body 0", "update 0", "drop 0", "drop 1"] as List<String>;
+}
