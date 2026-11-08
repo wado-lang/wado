@@ -72,13 +72,13 @@ pub struct G4Parser {
     imports: List<String>,
     pending_refs: List<PendingRef>,
     current_rule: String,
-    rule_labels: List<RuleLabel>,
+    alt_labels: List<AltLabel>,
     kind: GrammarKind,
 }
 
-/// A label of the parser rule being read: what it binds, a token (an empty
-/// `rule`) or a call of `rule`, and whether it collects them.
-struct RuleLabel {
+/// A label of the rule alternative being read: what it binds, a token (an
+/// empty `rule`) or a call of `rule`, and whether it collects them.
+struct AltLabel {
     name: String,
     list: bool,
     rule: String,
@@ -250,7 +250,7 @@ impl G4Parser {
             imports: [],
             pending_refs: [],
             current_rule: "",
-            rule_labels: [],
+            alt_labels: [],
             kind: GrammarKind::Combined,
         };
     }
@@ -786,8 +786,7 @@ impl G4Parser {
         let prequel = self.parse_rule_prequel()?;
         self.expect(G4Token::Colon)?;
         self.current_rule = name.to_string();
-        self.rule_labels = [];
-        let alternatives = self.parse_alternatives()?;
+        let alternatives = self.parse_alternatives(true)?;
         self.current_rule = "";
         self.expect(G4Token::Semicolon)?;
         let mut rule = ParserRule::new(name, Visibility::Default, prequel.options, alternatives);
@@ -916,15 +915,19 @@ impl G4Parser {
         );
     }
 
-    fn parse_alternatives(&mut self) -> Result<List<Alternative>, ParseError> {
+    /// A rule's alternatives (`of_rule`), or a group's. Each of a rule's starts
+    /// its own label scope.
+    fn parse_alternatives(&mut self, of_rule: bool) -> Result<List<Alternative>, ParseError> {
         let mut alts: List<Alternative> = [];
-        let first = self.parse_alternative()?;
-        alts.push(first);
-
-        while self.is_kind(G4Token::Pipe) {
+        loop {
+            if of_rule {
+                self.alt_labels = [];
+            }
+            alts.push(self.parse_alternative()?);
+            if !self.is_kind(G4Token::Pipe) {
+                break;
+            }
             self.advance();
-            let alt = self.parse_alternative()?;
-            alts.push(alt);
         }
         return Result::<List<Alternative>, ParseError>::Ok(alts);
     }
@@ -1010,7 +1013,7 @@ impl G4Parser {
                         );
                     }
                 }
-                let label = RuleLabel {
+                let label = AltLabel {
                     name,
                     list,
                     rule: if let RuleRef(r) = &inner {
@@ -1019,7 +1022,7 @@ impl G4Parser {
                         String::new();
                     },
                 };
-                if let Some(prev) = self.rule_labels.iter_ref().find(|l| l.name == name) {
+                if let Some(prev) = self.alt_labels.iter_ref().find(|l| l.name == name) {
                     if prev.list != list || prev.rule != label.rule {
                         return Result::Err(
                             ParseError::new(
@@ -1030,7 +1033,7 @@ impl G4Parser {
                         );
                     }
                 } else {
-                    self.rule_labels.push(label);
+                    self.alt_labels.push(label);
                 }
                 return Result::<Element, ParseError>::Ok(
                     Element::Label(LabelElement::new(name, list, inner)),
@@ -1084,7 +1087,7 @@ impl G4Parser {
         if self.is_kind(G4Token::LParen) {
             self.advance();
             let options = self.parse_block_prequel()?;
-            let alternatives = self.parse_alternatives()?;
+            let alternatives = self.parse_alternatives(false)?;
             self.expect(G4Token::RParen)?;
             return Result::<Element, ParseError>::Ok(
                 Element::Group(GroupElement { alternatives, options }),
