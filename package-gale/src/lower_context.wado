@@ -12,13 +12,12 @@ use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry } from "./table_registry.wado";
 use {
     DecisionPredicates,
-    MetPredicate,
     PredicateSite,
     alt_has_gate,
     alt_scan_checks,
     alt_scan_gate_conditions,
     decision_predicates,
-    predicates_met_at,
+    predicates_met_entering,
 } from "./gate_conditions.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 
@@ -225,9 +224,7 @@ impl LowerContext {
             return false;
         }
         let site = self.predicate_site();
-        let mut met: List<MetPredicate> = [];
-        let _ = predicates_met_at(&alt.elements, &alt.actions, index, &site, &mut self.analysis, &mut [], &mut met);
-        return !met.is_empty();
+        return !predicates_met_entering(&alt.elements, &alt.actions, index, &site, &mut self.analysis).is_empty();
     }
 
     /// Whether the decision at site `site` meets a predicate.

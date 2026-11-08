@@ -277,6 +277,19 @@ pub fn predicates_met_at(
     unreachable();
 }
 
+/// What `predicates_met_at` meets, on its own.
+pub fn predicates_met_entering(
+    elements: &List<Element>,
+    actions: &List<AltAction>,
+    index: i32,
+    site: &PredicateSite,
+    analysis: &mut GrammarAnalysis,
+) -> List<MetPredicate> {
+    let mut met: List<MetPredicate> = [];
+    let _ = predicates_met_at(elements, actions, index, site, analysis, &mut [], &mut met);
+    return met;
+}
+
 /// `predicates_met_at` for what `elem` opens, past the rules in `visited`.
 fn element_predicates_met(
     elem: &Element,
@@ -399,9 +412,7 @@ pub fn alt_scan_checks(
     if !settings.emit_actions {
         return out;
     }
-    let mut met: List<MetPredicate> = [];
-    let _ = predicates_met_at(&alt.elements, &alt.actions, from, site, analysis, &mut [], &mut met);
-    for let [a, _] of &met {
+    for let [a, _] of &predicates_met_entering(&alt.elements, &alt.actions, from, site, analysis) {
         if a.before_index == 0 || !alt.actions.iter_ref().any(|own| own.source.action_id == a.source.action_id) {
             continue;
         }

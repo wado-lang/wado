@@ -1013,7 +1013,11 @@ impl G4Parser {
                 let label = RuleLabel {
                     name,
                     list,
-                    rule: if let RuleRef(r) = &inner { r.name } else { String::new() },
+                    rule: if let RuleRef(r) = &inner {
+                        r.name;
+                    } else {
+                        String::new();
+                    },
                 };
                 if let Some(prev) = self.rule_labels.iter_ref().find(|l| l.name == name) {
                     if prev.list != list || prev.rule != label.rule {

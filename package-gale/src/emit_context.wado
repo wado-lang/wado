@@ -13,12 +13,11 @@ use { TableRegistry, follow_mask_name, kind_set_fn_name, sync_bits_name, sync_li
 use { ParserPlan } from "./parser_plan.wado";
 use {
     DecisionPredicates,
-    MetPredicate,
     PredicateSite,
     alt_has_gate,
     alt_scan_gate_conditions,
     gate_condition_for,
-    predicates_met_at,
+    predicates_met_entering,
 } from "./gate_conditions.wado";
 use { AmbiguousNode } from "./prediction.wado";
 use { AltBinding, unmatched_bindings } from "./attr_resolve.wado";
@@ -475,10 +474,14 @@ impl EmitContext {
 
     /// The predicates of the rule being emitted that prediction meets entering
     /// `elements` at `index` (`gate_conditions::predicates_met_at`).
-    pub fn own_predicates_met_at(&mut self, elements: &List<Element>, actions: &List<AltAction>, index: i32) -> List<AltAction> {
+    pub fn own_predicates_met_at(
+        &mut self,
+        elements: &List<Element>,
+        actions: &List<AltAction>,
+        index: i32,
+    ) -> List<AltAction> {
         let site = self.predicate_site();
-        let mut met: List<MetPredicate> = [];
-        let _ = predicates_met_at(elements, actions, index, &site, &mut self.analysis, &mut [], &mut met);
+        let met = predicates_met_entering(elements, actions, index, &site, &mut self.analysis);
         return met.into_iter().filter(|m| m.1.rule_index == site.rule_index).map(|m| m.0).collect();
     }
 

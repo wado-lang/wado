@@ -53,9 +53,9 @@ A repeat writes its capture once per iteration, so a reference reads the last ma
 
 ANTLR keeps a label in a field of the rule's context, so the label is the whole alternative's. Bound inside a group, an optional or a loop, it reads as `null` where that element matched nothing. Bound twice, it reads the last binding.
 
-A label bound once at the alternative's top level, ahead of every body naming it, stays a plain `let`. Any other is shared (`LabelReach::Shared`): the alternative declares one local where it starts, `-1` for a token and `null` for a rule call, and every binding assigns it. A shared token label that never matched reads as the jar's does: `.text` is `null`, a number is `0`, and `$x == null` is `x < 0`. A shared rule label holds an `Option`, so `$y.v` traps where the jar throws `NullPointerException`.
+A label bound once at the alternative's top level, ahead of every body naming it and of every predicate prediction can meet before it binds, stays a plain `let`. Any other is shared (`LabelReach::Shared`): the alternative declares one local where it starts, `-1` for a token and `null` for a rule call, and every binding assigns it. A shared token label that never matched reads as the jar's does: `.text` is `null`, a number is `0`, and `$x == null` is `x < 0`. A shared rule label holds an `Option`, so `$y.v` traps where the jar throws `NullPointerException`.
 
-A decision ahead of the rule's alternatives finds every label unmatched (`LabelReach::Unmatched`). A decision inside an alternative reads the shared locals as they stand.
+A decision ahead of the rule's alternatives finds every label unmatched (`LabelReach::Unmatched`). A decision inside an alternative reads the shared locals as they stand. A scan holds no label, so it leaves a predicate that reads one to the parse.
 
 ## Runtime context API
 
