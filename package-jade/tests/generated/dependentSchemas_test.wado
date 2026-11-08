@@ -9,7 +9,6 @@ test "single dependency: valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #"{"foo":1,"bar":2}"#,
         true,
-        [],
     );
 }
 
@@ -18,7 +17,6 @@ test "single dependency: no dependency" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #"{"foo":"quux"}"#,
         true,
-        [],
     );
 }
 
@@ -27,7 +25,6 @@ test "single dependency: wrong type" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #"{"foo":"quux","bar":2}"#,
         false,
-        [],
     );
 }
 
@@ -36,7 +33,6 @@ test "single dependency: wrong type other" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #"{"foo":2,"bar":"quux"}"#,
         false,
-        [],
     );
 }
 
@@ -45,7 +41,6 @@ test "single dependency: wrong type both" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #"{"foo":"quux","bar":"quux"}"#,
         false,
-        [],
     );
 }
 
@@ -54,7 +49,6 @@ test "single dependency: ignores arrays" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #"["bar"]"#,
         true,
-        [],
     );
 }
 
@@ -63,7 +57,6 @@ test "single dependency: ignores strings" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #""foobar""#,
         true,
-        [],
     );
 }
 
@@ -72,7 +65,6 @@ test "single dependency: ignores other non-objects" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"bar":{"properties":{"foo":{"type":"integer"},"bar":{"type":"integer"}}}}}"#,
         #"12"#,
         true,
-        [],
     );
 }
 
@@ -81,7 +73,6 @@ test "boolean subschemas: object with property having schema true is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo":true,"bar":false}}"#,
         #"{"foo":1}"#,
         true,
-        [],
     );
 }
 
@@ -90,7 +81,6 @@ test "boolean subschemas: object with property having schema false is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo":true,"bar":false}}"#,
         #"{"bar":2}"#,
         false,
-        [],
     );
 }
 
@@ -99,7 +89,6 @@ test "boolean subschemas: object with both properties is invalid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo":true,"bar":false}}"#,
         #"{"foo":1,"bar":2}"#,
         false,
-        [],
     );
 }
 
@@ -108,7 +97,6 @@ test "boolean subschemas: empty object is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo":true,"bar":false}}"#,
         #"{}"#,
         true,
-        [],
     );
 }
 
@@ -117,7 +105,6 @@ test "dependencies with escaped characters: quoted tab" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo\tbar":{"minProperties":4},"foo'bar":{"required":["foo\"bar"]}}}"#,
         #"{"foo\tbar":1,"a":2,"b":3,"c":4}"#,
         true,
-        [],
     );
 }
 
@@ -126,7 +113,6 @@ test "dependencies with escaped characters: quoted quote" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo\tbar":{"minProperties":4},"foo'bar":{"required":["foo\"bar"]}}}"#,
         #"{"foo'bar":{"foo\"bar":1}}"#,
         false,
-        [],
     );
 }
 
@@ -135,7 +121,6 @@ test "dependencies with escaped characters: quoted tab invalid under dependent s
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo\tbar":{"minProperties":4},"foo'bar":{"required":["foo\"bar"]}}}"#,
         #"{"foo\tbar":1,"a":2}"#,
         false,
-        [],
     );
 }
 
@@ -144,7 +129,6 @@ test "dependencies with escaped characters: quoted quote invalid under dependent
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","dependentSchemas":{"foo\tbar":{"minProperties":4},"foo'bar":{"required":["foo\"bar"]}}}"#,
         #"{"foo'bar":1}"#,
         false,
-        [],
     );
 }
 
@@ -153,7 +137,6 @@ test "dependent subschema incompatible with root: matches root" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{}},"dependentSchemas":{"foo":{"properties":{"bar":{}},"additionalProperties":false}}}"#,
         #"{"foo":1}"#,
         false,
-        [],
     );
 }
 
@@ -162,7 +145,6 @@ test "dependent subschema incompatible with root: matches dependency" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{}},"dependentSchemas":{"foo":{"properties":{"bar":{}},"additionalProperties":false}}}"#,
         #"{"bar":1}"#,
         true,
-        [],
     );
 }
 
@@ -171,7 +153,6 @@ test "dependent subschema incompatible with root: matches both" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{}},"dependentSchemas":{"foo":{"properties":{"bar":{}},"additionalProperties":false}}}"#,
         #"{"foo":1,"bar":2}"#,
         false,
-        [],
     );
 }
 
@@ -180,6 +161,5 @@ test "dependent subschema incompatible with root: no dependency" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"foo":{}},"dependentSchemas":{"foo":{"properties":{"bar":{}},"additionalProperties":false}}}"#,
         #"{"baz":1}"#,
         true,
-        [],
     );
 }

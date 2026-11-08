@@ -1,10 +1,10 @@
-//! The `wado test` result cache: a file whose tests all passed is neither
-//! compiled nor run again while nothing it read has changed, an
-//! [`InputCache`] entry.
+//! The `wado test` result cache: a file whose tests all passed, or that runs
+//! none, is neither compiled nor run again while nothing it read has changed,
+//! an [`InputCache`] entry.
 //!
 //! It is stored only for a component whose outcome those files decide: one
-//! importing any effect beyond output receives what no compile recorded, and
-//! runs every time.
+//! whose tests import an effect beyond [`OUTCOME_NEUTRAL_IMPORTS`] receives
+//! what no compile recorded, and runs every time.
 
 use std::path::Path;
 
@@ -14,15 +14,18 @@ use crate::input_cache::InputCache;
 use crate::knobs::RuntimeKnobs;
 
 /// The interfaces that hand a cached run nothing its key does not decide:
-/// output, its types, exit, and `core:fuel`, whose `spent` answers `None`
-/// since a metered run is never cached. Every other import is an effect whose
-/// answer can change between runs (a clock, randomness, a file, the network,
+/// output, its types, exit, insecure randomness, which a test answers the same
+/// on every run, and `core:fuel`, whose `spent` answers `None` since a metered
+/// run is never cached. Every other import is an effect whose answer can change
+/// between runs (a clock, secure randomness, a file, the network,
 /// `core:eval`), so it decides the outcome as much as the compile's inputs do.
 const OUTCOME_NEUTRAL_IMPORTS: &[&str] = &[
     "wasi:cli/types",
     "wasi:cli/stdout",
     "wasi:cli/stderr",
     "wasi:cli/exit",
+    "wasi:random/insecure",
+    "wasi:random/insecure-seed",
     "core:fuel/fuel-host",
 ];
 
@@ -48,6 +51,9 @@ pub(crate) struct Tally {
 impl Tally {
     /// What a report of a cached file says about it.
     pub(crate) fn describe(self) -> String {
+        if self.passed == 0 && self.todo_pending == 0 {
+            return "compiled before and ran no tests; nothing it read changed".to_string();
+        }
         let mut text = format!("{} passed", self.passed);
         if self.todo_pending > 0 {
             text.push_str(&format!(", {} todo", self.todo_pending));
@@ -64,8 +70,9 @@ impl TestCache {
         Self(InputCache::new("test", flags, runtime_knobs))
     }
 
-    /// Take out of `files` each one whose tests passed when it last ran and
-    /// that nothing it read has changed since, with how they went.
+    /// Take out of `files` each one whose tests passed, or that ran none, when
+    /// it last ran and that nothing it read has changed since, with how they
+    /// went.
     pub(crate) fn take_hits(&self, files: &mut Vec<String>) -> Vec<(String, Tally)> {
         let mut hits = Vec::new();
         files.retain(|file| match self.0.lookup(Path::new(file)) {
