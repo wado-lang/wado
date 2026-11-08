@@ -191,16 +191,17 @@ fn remotes_of(text: &String) -> Result<List<[String, String]>, String> with Preo
     let mut remotes: List<[String, String]> = [];
     let loaded = set.load(&base, |u| {
         let unserved = `refers to ${*u}, which the suite does not serve`;
-        let Some(path) = `${*u}`.strip_prefix(&REMOTE_BASE) else {
+        let Some(under) = `${*u}`.strip_prefix(&REMOTE_BASE) else {
             return Result::<Schema, String>::Err(unserved);
         };
-        let Ok(served) = fs::read_to_string(fs::join(&REMOTES, path.to_string())) else {
+        let path = under.to_string();
+        let Ok(served) = fs::read_to_string(fs::join(&REMOTES, &path)) else {
             return Result::Err(unserved);
         };
         let Ok(schema) = Schema::parse(served) else {
             return Result::Err(`refers to ${*u}, which is no Draft 2020-12 schema`);
         };
-        remotes.push([path.to_string(), served]);
+        remotes.push([path, served]);
         return Result::Ok(schema);
     });
     return match loaded {
