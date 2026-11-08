@@ -74,6 +74,13 @@ impl BinderInScope {
     }
 }
 
+/// One binder of a frame: see [`TraitContext::binders`].
+pub(super) struct FrameBinder<'a> {
+    pub(super) type_id: TypeId,
+    pub(super) is_affine: bool,
+    pub(super) bounds: Vec<&'a ScopedBound>,
+}
+
 /// A bound a frame carries, with the chain it came through when it was reached
 /// through a supertrait clause rather than written here.
 ///
@@ -333,31 +340,36 @@ impl TraitContext {
     /// the impl's `T` it shadows.
     pub(super) fn affine_params(&self) -> Vec<TypeId> {
         self.binders()
-            .filter(|(_, binder)| binder.is_affine)
-            .map(|(_, binder)| binder.type_id)
+            .into_iter()
+            .filter(|binder| binder.is_affine)
+            .map(|binder| binder.type_id)
             .collect()
     }
 
-    /// Every binder the frame holds, by name, a shadowed one included: the
-    /// named ones first, at their positions in [`Self::type_params`].
-    pub(super) fn binders(&self) -> impl Iterator<Item = (&String, &BinderInScope)> {
-        self.binders_with_bounds()
-            .map(|(name, binder, _)| (name, binder))
-    }
-
-    /// [`Self::binders`], each with the bounds in force on it.
-    pub(super) fn binders_with_bounds(
-        &self,
-    ) -> impl Iterator<Item = (&String, &BinderInScope, &[ScopedBound])> {
+    /// Every binder the frame holds, a shadowed one included, each once with
+    /// the bounds every name reaching it carries. A binder is its type, not its
+    /// name: a callee's parameter bound to the caller's `K` under the letter
+    /// `K` is that same binder, not a second one shadowing it.
+    pub(super) fn binders(&self) -> Vec<FrameBinder<'_>> {
         let named = self.type_params.iter().map(|(name, binder)| {
             let bounds = self.type_param_bounds.get(name).map_or(&[][..], Vec::as_slice);
-            (name, binder, bounds)
+            (binder, bounds)
         });
         let shadowed = self
             .shadowed
             .iter()
-            .map(|(name, binder, bounds)| (name, binder, bounds.as_slice()));
-        named.chain(shadowed)
+            .map(|(_, binder, bounds)| (binder, bounds.as_slice()));
+        let mut binders: IndexMap<TypeId, FrameBinder<'_>> = IndexMap::default();
+        for (binder, bounds) in named.chain(shadowed) {
+            let held = binders.entry(binder.type_id).or_insert(FrameBinder {
+                type_id: binder.type_id,
+                is_affine: false,
+                bounds: Vec::new(),
+            });
+            held.is_affine |= binder.is_affine;
+            held.bounds.extend(bounds);
+        }
+        binders.into_values().collect()
     }
 
     /// Bind `name` to `binder`, keeping the binder it shadows with its bounds.
@@ -840,7 +852,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx
             .trait_ctx
             .binders()
-            .flat_map(|(_, binder)| {
+            .into_iter()
+            .flat_map(|binder| {
                 let elem = tt
                     .is_type_pack(binder.type_id)
                     .then(|| tt.pack_placeholder(binder.type_id));

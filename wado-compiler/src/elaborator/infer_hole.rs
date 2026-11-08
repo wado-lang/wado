@@ -382,7 +382,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .annotate_ctx
             .trait_ctx
             .binders()
-            .map(|(_, b)| b.type_id)
+            .into_iter()
+            .map(|binder| binder.type_id)
             .collect();
         self.tysys
             .type_table

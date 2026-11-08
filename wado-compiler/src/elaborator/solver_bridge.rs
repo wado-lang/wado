@@ -2015,7 +2015,7 @@ impl SolverBridge {
         let placed = place_binder(ctx, &table);
         let mut env = Env::default();
         let mut unstated = Vec::new();
-        for (position, (_, binder, bounds)) in ctx.trait_ctx.binders_with_bounds().enumerate() {
+        for (position, binder) in ctx.trait_ctx.binders().into_iter().enumerate() {
             // A family parameter also carries what its declaration bounds it
             // by, which an impl writing it need not restate.
             let declared = ctx
@@ -2025,9 +2025,7 @@ impl SolverBridge {
                 .into_iter()
                 .flatten()
                 .map(|declared| self.lowering.bound_named(declared, &param));
-            let scoped = bounds
-                .iter()
-                .map(|scoped| {
+            let scoped = binder.bounds.iter().map(|scoped| {
                     let self_type = scoped
                         .self_binding
                         .filter(|_| scoped.bound.writes_self())
@@ -2088,11 +2086,11 @@ impl SolverBridge {
     /// which stands for many.
     pub(super) fn is_rigid(&self, tysys: &TypeSystem, ctx: &scope::Scope, type_id: TypeId) -> bool {
         let table = tysys.type_table.borrow();
+        let binders = binder_types(ctx);
         let place = place_binder(ctx, &table);
         let rigid = |binder: Binder| {
             let at = place(binder)?;
-            let (_, bound) = ctx.trait_ctx.binders().nth(at as usize)?;
-            (!table.is_type_pack(bound.type_id)).then_some(at)
+            (!table.is_type_pack(binders[at as usize])).then_some(at)
         };
         matches!(
             self.lowering.type_id(&table, type_id, &rigid),
@@ -2638,12 +2636,27 @@ pub(super) enum Ordered {
 /// [`SolverBridge::env_for`] built, which is what gives a rigid parameter its
 /// [`SolverType::Param`].
 fn place_in(ctx: &scope::Scope) -> impl Fn(&str) -> Option<u32> + '_ {
-    |name: &str| {
-        ctx.trait_ctx
-            .type_params
-            .get_index_of(name)
-            .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
+    let binders = binder_types(ctx);
+    move |name: &str| {
+        let type_id = ctx.trait_ctx.type_params.get(name)?.type_id;
+        position_among(&binders, |binder| binder == type_id)
     }
+}
+
+/// The type of each of `ctx`'s binders, at its position.
+fn binder_types(ctx: &scope::Scope) -> Vec<TypeId> {
+    ctx.trait_ctx
+        .binders()
+        .into_iter()
+        .map(|binder| binder.type_id)
+        .collect()
+}
+
+fn position_among(binders: &[TypeId], is: impl Fn(TypeId) -> bool) -> Option<u32> {
+    binders
+        .iter()
+        .position(|&binder| is(binder))
+        .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
 }
 
 /// A type parameter at its declared position, where no scope places binders:
@@ -2663,15 +2676,12 @@ fn place_binder<'a>(
     ctx: &'a scope::Scope,
     table: &'a TypeTable,
 ) -> impl Fn(Binder) -> Option<u32> + 'a {
+    let binders = binder_types(ctx);
     move |binder| {
-        ctx.trait_ctx
-            .binders()
-            .map(|(_, bound)| bound)
-            .position(|bound| match binder {
-                Binder::Param(id) => table.type_param_id(bound.type_id) == Some(id),
-                Binder::Family(id) => bound.type_id == id,
-            })
-            .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
+        position_among(&binders, |held| match binder {
+            Binder::Param(id) => table.type_param_id(held) == Some(id),
+            Binder::Family(id) => held == id,
+        })
     }
 }
 
