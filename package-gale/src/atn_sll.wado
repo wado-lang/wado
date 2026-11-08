@@ -997,16 +997,37 @@ impl SllShape {
     }
 }
 
-/// Emit `ATN_VERIFIED`. Where no alternative survives under the parse's stack,
-/// as in a scan of an alternative that is about to fail, the decision is moot
-/// and nothing is checked.
+/// The call `atn_verified_against(decision, …, answer)` that checks `answer`,
+/// the pick `picker` made at `pos`, against `verdict`, the simulator's
+/// `[alt, viable]` there.
+pub fn atn_verified_against_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    decision: i32,
+    picker: AtnPicker,
+    pos: S,
+    verdict: S1,
+    answer: S2,
+) -> String {
+    return `${ATN_VERIFIED_AGAINST}(${decision}, ${atn_picker_code(&picker)}, ${pos}, ${verdict}, ${answer})`;
+}
+
+global ATN_VERIFIED_AGAINST: String = "atn_verified_against";
+
+/// Emit `ATN_VERIFIED`, which asks the simulator under no predicate, and
+/// `ATN_VERIFIED_AGAINST`, which takes its verdict. Where no alternative
+/// survives under the parse's stack, as in a scan of an alternative that is
+/// about to fail, the decision is moot and nothing is checked.
 pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
     w.begin(
         `fn ${ATN_VERIFIED}(decision: i32, picker: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
     );
-    w.line(
-        "let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec);",
+    let walk = "atn_predict_walk(&ATN_SIM, decision, &atn.stack, tokens, pos, TK_EOF, min_prec, &ATN_NO_PREDS.met, &ATN_NO_PREDS.own, atn_unasked)";
+    w.line(`return ${ATN_VERIFIED_AGAINST}(decision, picker, pos, ${walk}, alt);`);
+    w.end();
+    w.blank();
+    w.begin(
+        `fn ${ATN_VERIFIED_AGAINST}(decision: i32, picker: i32, pos: i32, verdict: [i32, bool], alt: i32) -> i32`,
     );
+    w.line("let [simulated, viable] = verdict;");
     w.begin("if viable && simulated != alt");
     w.begin("let by = match picker");
     for let picker of ATN_PICKERS {

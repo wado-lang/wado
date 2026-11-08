@@ -1201,34 +1201,86 @@ new new a ( ) ( ) ( ) => (s (e new (e new (e (e a) (args ( ))) (args ( ))) (args
 ";
 }
 
-// The simulator is handed no predicate's verdict, so `atn: \"verify\"` leaves a
-// decision unchecked that meets one through a rule it calls: the loop's `op`,
-// the repeat's `q`, the group's `r`. The trees are the jar's.
-test "atn verify leaves a decision meeting a called rule's predicate unchecked" {
+// Each decision meets a predicate through a rule it calls: the loop's `op`, the
+// repeat's `q`, the group's `r`. A simulator handed no verdict would enter
+// each, where `never` leaves it. `_vq_out` holds the output a check that asks
+// a predicate takes back. The trees are the jar's.
+test "atn verify hands the simulator the verdicts of the predicates a decision meets" {
     let verify = GenerateOptions { atn: AtnMode::Verify };
-    assert parses("grammar P;
-s : e ('+' ID)? EOF ;
-e : e op e | ID ;
-op : {false}? '+' | '-' ;
-ID : [a-z]+ ;
-WS : ' ' -> skip ;
-", "s", ["a + b", "a - b + c"], &verify) == "a + b => (s (e a) + b)
-a - b + c => (s (e (e a) (op -) (e b)) + c)
-";
-    assert parses("grammar R;
+    let cases: List<[String, List<String>, String]> = [
+        [
+            "grammar P;\ns : e ('+' ID)? EOF ;\ne : e op e | ID ;\nop : {false}? '+' | '-' ;\nID : [a-z]+ ;\nWS : ' ' -> skip ;\n",
+            ["a + b", "a - b + c"],
+            "a + b => (s (e a) + b)\na - b + c => (s (e (e a) (op -) (e b)) + c)\n",
+        ],
+        [
+            "grammar R;\ns : q* 'a'? EOF ;\nq : {false}? 'a' | 'b' ;\nWS : ' ' -> skip ;\n",
+            ["a", "b a"],
+            "a => (s a)\nb a => (s (q b) a)\n",
+        ],
+        [
+            "grammar T;\ns : (r | 'a' 'c'?) EOF ;\nr : {false}? 'a' 'c' | 'b' ;\nWS : ' ' -> skip ;\n",
+            ["a c", "b"],
+            "a c => (s a c)\nb => (s (r b))\n",
+        ],
+    ];
+    for let [g4, inputs, trees] of cases {
+        assert gen_with(g4, &verify).source.contains("_vq_out"), g4;
+        assert parses(g4, "s", inputs, &verify) == trees;
+    }
+}
+
+// The repeat's check asks `q`'s predicate again, and takes back what it
+// prints. The trees are the jar's.
+test "atn verify prints what never prints" {
+    let g4 = "grammar P;
+@parser::members {
+boolean pred(boolean v) {
+	System.out.println(\"eval=\" + v);
+	return v;
+}
+}
 s : q* 'a'? EOF ;
-q : {false}? 'a' | 'b' ;
+q : {this.pred(true)}? 'a' | 'b' ;
 WS : ' ' -> skip ;
-", "s", ["a", "b a"], &verify) == "a => (s a)
-b a => (s (q b) a)
 ";
-    assert parses("grammar T;
-s : (r | 'a' 'c'?) EOF ;
-r : {false}? 'a' 'c' | 'b' ;
-WS : ' ' -> skip ;
-", "s", ["a c", "b"], &verify) == "a c => (s a c)
-b => (s (r b))
-";
+    let inputs: List<String> = ["a", "b a"];
+    let never = parses(g4, "s", inputs, &GenerateOptions { atn: AtnMode::Never });
+    assert never.starts_with("a => (s (q a)) [eval=true\n"), never;
+    assert never.contains("b a => (s (q b) (q a)) [eval=true\n"), never;
+    assert parses(g4, "s", inputs, &GenerateOptions { atn: AtnMode::Verify }) == never;
+}
+
+// Each decision meets a predicate that holds, and on each input the jar takes
+// another pick than `never`: the jar parses `a b`, `a a b` and
+// `new a < b > . c`, and reads `Z Z X` as `(r (a (b Z Z)) X)`.
+test "atn verify checks a decision meeting a predicate" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    for let [g4, rule, input, picker] of [
+        [
+            "grammar T;\nr : a X* EOF ;\na : {true}? b | b X ;\nb : Z Z ;\nX : 'X' ;\nZ : 'Z' ;\nWS : ' ' -> skip ;\n",
+            "r",
+            "Z Z X",
+            "the tournament",
+        ],
+        [
+            "grammar G;\ns : ({true}? a | a B) B EOF ;\na : A+ ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n",
+            "s",
+            "a b",
+            "the tournament",
+        ],
+        ["grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n", "u", "a a b", "the repeat"],
+        [
+            "grammar L;\ns : e EOF ;\ne : e '.' ID | 'new' e targs? '(' e? ')' | 'new' e targs? | e '(' e? ')' | e {true}? '<' e | e '>' e | ID ;\ntargs : '<' ID '>' ;\nID : [a-z]+ ;\nWS : ' ' -> skip ;\n",
+            "s",
+            "new a < b > . c",
+            "the left-recursion loop",
+        ],
+    ] {
+        let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_${rule}("${input}"));\n`, SHOW_FN);
+        assert !out.status matches { Exited(0) }, input;
+        assert out.stderr.contains(`: ${picker} picks `), out.stderr;
+    }
 }
 
 // Prediction evaluates a predicate exactly where it reaches one before

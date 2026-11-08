@@ -36,12 +36,6 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 - [ ] **Mid operands nested in each other take time growing as the fourth power of the depth.** With `lr_mid_operand.g4`, `x` followed by `n` × `between y` and then `n` × `and z` takes 0.18M fuel at `n = 4`, 1.1M at 8, 16M at 16 and 349M at 32 under `never`. An `and` or `or` chain after one `between` grows linearly.
 - [ ] **A generated parser exhausts the Wasm call stack on deeply nested input.** It traps instead of reporting a diagnostic. Grog's `Protobuf.g4` parser traps in `scan_message_def` / `scan_message_body` / `scan_message_element` on 20000 nested `message M {` … `}`. The parse has no nesting limit to report against.
 
-### Pipeline and tooling correctness
-
-- [ ] **`atn: "verify"` leaves part of `never` unchecked.** It builds `never`'s tree and checks against the simulator each rule and group tournament, each contested `?` `*` `+`, and each pick of a static left-recursion loop. A check on input that has no parse can panic where both sides are recovering. A decision that meets a predicate before consuming a token, in its alternatives or in a rule they open with, is still unchecked, since the simulator is handed no predicate's verdict.
-
-  The generated SQLite parser is 1.0 MB under `never`, 2.0 MB under `verify`, 1.8 MB under `auto` and 9.5 MB under `always`.
-
 ## Stage C — action / predicate execution
 
 Design in [`action.md`](./action.md). Landed: every lexer emit the match can take replays its translatable actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. A body the translator refuses is still reported and dropped rather than replayed — `UnsupportedAction`, warn-and-emit, unchanged. What is left below is held by something other than action execution.

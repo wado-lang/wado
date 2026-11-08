@@ -756,11 +756,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx, &mut cont_rests);
     }
     stamp_lr_self_ref_min_prec(&mut lr_alts, rule, ctx, atn_class, &mut cont_rests);
-    let mut loop_meets_predicate = !ctx.decisions.at_lr_loop(ctx.current_rule_index()).is_empty();
-    for let a of &lr_alts {
-        loop_meets_predicate = loop_meets_predicate || ctx.meets_predicate_at(&rule.alternatives[a.alt_index], 0);
-    }
-    let loop_checked = !atn_class && ctx.settings.atn.verifies() && !loop_meets_predicate;
+    let loop_checked = !atn_class && ctx.settings.atn.verifies();
     if loop_checked {
         ctx.mark_checks_with_simulator();
     }
@@ -3079,9 +3075,7 @@ fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut LowerContext) -> Op {
 /// tournament among alternatives sharing a first token, which `always` hands
 /// the simulator. Else -1.
 fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut LowerContext) -> i32 {
-    if !ctx.settings.atn.verifies()
-        || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1)
-        || ctx.site_meets_predicate(g.atn_decision) {
+    if !ctx.settings.atn.verifies() || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1) {
         return -1;
     }
     ctx.mark_checks_with_simulator();
@@ -4384,13 +4378,6 @@ fn atn_asked_kinds(
     return asked;
 }
 
-fn repeat_decision_site(repeat: &Element) -> i32 {
-    let Repeat(rep) = repeat else {
-        panic("a loop's exit stamps are read at the loop");
-    };
-    return rep.atn_decision;
-}
-
 fn lower_repeat_exit_stamps<S: AsStrSlice>(
     non_greedy: bool,
     kind: RepeatKind,
@@ -4419,10 +4406,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             gate_caller_follow,
         );
     let contested = contested_somewhere && ctx.settings.atn matches { Always };
-    let checked = contested_somewhere
-        && !non_greedy
-        && ctx.settings.atn.verifies()
-        && !ctx.site_meets_predicate(repeat_decision_site(&alt_elements[index]));
+    let checked = contested_somewhere && !non_greedy && ctx.settings.atn.verifies();
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {

@@ -263,10 +263,11 @@ rule's ambiguity to the simulator, or `"always"` a group's or a `?` `*` `+`'s,
 the parser asks the simulator as well and panics where its answer differs from
 the static pick. So does a left-recursion loop's choice of suffix, in a rule
 whose atom choice `"auto"` routes. The lookahead DFA and LR table `"auto"` reads
-there are checked the same way. A decision a predicate gates is not checked yet,
-and neither is a `?` at a rule's end that `"auto"` hands the simulator. It is
-for testing the static path against the simulator over real inputs, not for
-use.
+there are checked the same way. Where the decision meets a predicate, the
+simulator is handed the predicate's verdict, and what the predicate prints for
+the check is taken back out of the output. On input that has no parse, a check
+can panic where both sides are recovering. It is for testing the static path
+against the simulator over real inputs, not for use.
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
 stays with the tournament, and a `?` at a rule's end goes to the simulator when
