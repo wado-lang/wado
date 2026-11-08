@@ -4325,7 +4325,7 @@ use { atn_blob_bytes, Atn } from "./atn.wado";
 use { build_atn, NON_GREEDY_G4, GREEDY_G4, LR_G4 } from "../tests/support/fixtures.wado";
 use { TokenKinds } from "./token_kinds.wado";
 use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY, ATN_TR_RULE } from "./runtime/atn.wado";
-use { AtnPredictor, atn_invocation_prec, atn_predict_once, atn_predict_with_stack } from "./runtime/atn_predict.wado";
+use { AtnPredictor, atn_invocation_prec, atn_predict_once, atn_predict_with_stack, atn_unasked } from "./runtime/atn_predict.wado";
 use { atn_lr_loop_decision, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { Span } from "./runtime/lex.wado";
 use { Token } from "./g4/token.wado";
@@ -4764,9 +4764,9 @@ test "a cached prediction answers only its own caller stack" {
     let mut state = AtnPredictor::new();
     for let round of 0..<2 {
         state.stack = [-1, csr[0], csr[1]];
-        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[]) == 0, `round ${round}`;
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[], atn_unasked) == 0, `round ${round}`;
         state.stack = [-1, csr[0], csr[2]];
-        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[]) == 1, `round ${round}`;
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[], atn_unasked) == 1, `round ${round}`;
     }
 }
 

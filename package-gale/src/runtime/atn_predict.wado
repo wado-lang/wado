@@ -977,7 +977,7 @@ internal fn atn_predict_once(
     return alt;
 }
 
-internal fn atn_predict_with_stack<effect E>(
+internal fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
@@ -986,8 +986,8 @@ internal fn atn_predict_with_stack<effect E>(
     eof: i32,
     min_prec: i32 = 0,
     met: &List<i32> = &ATN_NO_PREDS.met,
-    ask: fn(i32) -> bool with E = atn_unasked,
-) -> i32 with E {
+    ask: fn(i32) -> bool = atn_unasked,
+) -> i32 {
     let mut dfa = AtnDfa::new();
     return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, met, ask);
 }
