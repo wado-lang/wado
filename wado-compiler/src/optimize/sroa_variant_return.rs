@@ -1025,9 +1025,7 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
 
     let type_table = project.type_table.borrow();
     let option = OptionCases::of(&type_table);
-    let null_case = type_table
-        .as_option(variant_type)
-        .map(|_| option.none.index);
+    let null_case = type_table.null_case(variant_type);
 
     Some(Layout {
         tuple_type,

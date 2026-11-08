@@ -142,7 +142,8 @@ pub(super) fn run_peephole(
         // One rule, two entry points: `apply_block` fuses the value-discarding
         // if-let shape, `apply_expr` threads the value-producing `match LB`
         // (`?`) shape. Both only exist post-inline.
-        let labeled_block_fusion_rule = (!pre_inline).then_some(LabeledBlockFusionRule);
+        let labeled_block_fusion_rule =
+            (!pre_inline).then_some(LabeledBlockFusionRule { types: type_table });
         // Scalarizes the `[tag, slots…]` temp fusion leaves behind — the
         // value-producing `let x = f()?` consumer it cannot relocate. Ordered
         // after fusion, which produces the better code where it applies and
