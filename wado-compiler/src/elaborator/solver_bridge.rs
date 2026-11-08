@@ -2012,10 +2012,12 @@ impl SolverBridge {
                 .trait_env
                 .bound_declaring_assoc_type(bounds, assoc, &tysys.resolutions)
         };
-        let placed = place_binder(ctx, &table);
+        let binders = ctx.trait_ctx.binders();
+        let binder_ids: Vec<TypeId> = binders.iter().map(|binder| binder.type_id).collect();
+        let placed = place_binder(&binder_ids, &table);
         let mut env = Env::default();
         let mut unstated = Vec::new();
-        for (position, binder) in ctx.trait_ctx.binders().into_iter().enumerate() {
+        for (position, binder) in binders.into_iter().enumerate() {
             // A family parameter also carries what its declaration bounds it
             // by, which an impl writing it need not restate.
             let declared = ctx
@@ -2087,7 +2089,7 @@ impl SolverBridge {
     pub(super) fn is_rigid(&self, tysys: &TypeSystem, ctx: &scope::Scope, type_id: TypeId) -> bool {
         let table = tysys.type_table.borrow();
         let binders = binder_types(ctx);
-        let place = place_binder(ctx, &table);
+        let place = place_binder(&binders, &table);
         let rigid = |binder: Binder| {
             let at = place(binder)?;
             (!table.is_type_pack(binders[at as usize])).then_some(at)
@@ -2196,7 +2198,8 @@ impl SolverBridge {
             .iter()
             .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
         {
-            self.shapes_in(&table, type_id, &place_binder(ctx, &table), &mut shapes);
+            let binders = binder_types(ctx);
+            self.shapes_in(&table, type_id, &place_binder(&binders, &table), &mut shapes);
         }
         let defs = tysys.resolutions.defs();
         let bodies = owed
@@ -2669,16 +2672,15 @@ fn by_position(binder: Binder) -> Option<u32> {
     }
 }
 
-/// Where the binder a resolved type names sits among `ctx`'s, by its identity:
-/// a parameter of the declaration that binds it, or a family parameter, under
-/// whatever name either is written.
+/// Where the binder a resolved type names sits among `binders` (a scope's
+/// [`binder_types`]), by its identity: a parameter of the declaration that
+/// binds it, or a family parameter, under whatever name either is written.
 fn place_binder<'a>(
-    ctx: &'a scope::Scope,
+    binders: &'a [TypeId],
     table: &'a TypeTable,
 ) -> impl Fn(Binder) -> Option<u32> + 'a {
-    let binders = binder_types(ctx);
     move |binder| {
-        position_among(&binders, |held| match binder {
+        position_among(binders, |held| match binder {
             Binder::Param(id) => table.type_param_id(held) == Some(id),
             Binder::Family(id) => held == id,
         })

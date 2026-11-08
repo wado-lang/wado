@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use crate::ast;
 use crate::ast::{Attribute, CmBoundary, Function, Item, Module, Type};
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::lexer::lex;
 use crate::module_source::ModuleSource;
 use crate::name::ARRAY_TYPE_NAME;
@@ -79,9 +80,11 @@ impl BuiltinRegistry {
         });
 
         let mut registry = Self::new();
+        let source = ModuleSource::builtin();
+        let owners = type_table.borrow().defs().functions_in(&source);
         for item in &module.items {
             if let Item::Function(func) = item {
-                registry.register(&ModuleSource::builtin(), func, type_table);
+                registry.register(&source, func, &owners, type_table);
             }
         }
         registry
@@ -96,12 +99,13 @@ impl BuiltinRegistry {
         type_table: &RefCell<TypeTable>,
     ) {
         assert!(source.is_wasm_asset(), "{source} is not a wasm asset");
+        let owners = type_table.borrow().defs().functions_in(source);
         for item in &module.items {
             if let Item::Function(func) = item
                 && func.body.is_none()
                 && func.attrs.iter().any(is_canonical_builtin)
             {
-                self.register(source, func, type_table);
+                self.register(source, func, &owners, type_table);
             }
         }
     }
@@ -111,16 +115,16 @@ impl BuiltinRegistry {
         &mut self,
         source: &ModuleSource,
         func: &Function,
+        owners: &IndexMap<String, DefId>,
         type_table: &RefCell<TypeTable>,
     ) {
         let type_params: Vec<(String, TypeId)> = if func.type_params.is_empty() {
             Vec::new()
         } else {
-            let mut table = type_table.borrow_mut();
-            let owner = table
-                .defs()
-                .function_in(source, &func.name)
+            let owner = *owners
+                .get(&func.name)
                 .unwrap_or_else(|| panic!("{source} declares `{}`", func.name));
+            let mut table = type_table.borrow_mut();
             func.type_params
                 .iter()
                 .zip(0..)

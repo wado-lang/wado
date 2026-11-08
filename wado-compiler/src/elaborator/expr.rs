@@ -2929,14 +2929,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // No branch is decided alone, yet each may decide what another
             // leaves open: `Ok(v)` settles `Result`'s `T`, `Err("x")` its `E`.
+            // One branch gathers what every other decides, then hands it back.
             None => {
-                for i in 0..branches.len() {
-                    for j in 0..branches.len() {
-                        if i != j {
-                            let sibling = self.apply_infer_holes(branches[j]);
-                            self.solve_infer_holes_against(branches[i], sibling);
-                        }
-                    }
+                let at = branches
+                    .iter()
+                    .position(|&t| t != TypeTable::NEVER)
+                    .expect("a branch carrying a hole is not `!`");
+                let others = || (0..branches.len()).filter(move |&i| i != at);
+                for i in others() {
+                    let sibling = self.apply_infer_holes(branches[i]);
+                    self.solve_infer_holes_against(branches[at], sibling);
+                }
+                let hub = self.apply_infer_holes(branches[at]);
+                for i in others() {
+                    self.solve_infer_holes_against(branches[i], hub);
                 }
             }
         }
@@ -4855,11 +4861,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Infer a generic struct's type arguments by running [`InferCtx`] over its
-    /// declared field types against the literal's values. An `expected_type`
-    /// that is an instance of the same struct is unified in too, so a
-    /// phantom parameter still lands concrete. Returns the *partial* result: an
-    /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
     /// A struct literal's own variables for the declaration's slots.
     fn instantiate_struct_slots(&mut self, info: &StructFieldInfo, span: Span) -> Instantiated {
         self.instantiate(
@@ -4876,6 +4877,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// Solve a generic struct literal's variables `inst` from its field values.
+    /// An `expected_type` that is an instance of the same struct is unified in
+    /// too, so a phantom parameter still lands concrete.
     pub(super) fn infer_struct_type_args(
         &mut self,
         struct_decl: Option<DefId>,

@@ -573,17 +573,17 @@ impl DefTable {
         &self.get(def).name
     }
 
-    /// The module-level function `module` declares under `name`: what a path
-    /// into that module resolves, for a registry built from a parse of its own.
+    /// The module-level functions `module` declares, by name: what a path into
+    /// that module resolves, for a registry built from a parse of its own.
     #[must_use]
-    pub fn function_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
-        self.iter().find(|&def| {
-            let entry = self.get(def);
-            entry.kind == DefKind::Function
-                && !entry.function_local
-                && entry.module == *module
-                && entry.name == name
-        })
+    pub fn functions_in(&self, module: &ModuleSource) -> IndexMap<String, DefId> {
+        self.iter()
+            .filter(|&def| {
+                let entry = self.get(def);
+                entry.kind == DefKind::Function && !entry.function_local && entry.module == *module
+            })
+            .map(|def| (self.name(def).to_string(), def))
+            .collect()
     }
 
     /// Whether `def` was declared inside a function body.
