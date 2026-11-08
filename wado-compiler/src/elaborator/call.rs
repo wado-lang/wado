@@ -1795,7 +1795,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &callee_slots, &mut args, ret);
+            self.settle_onto_slots(inst, &mut args, ret);
         }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
@@ -4992,13 +4992,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(args) => args,
             None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret),
         };
-        self.settle_onto_slots(&inst, slots, &mut args, ret);
+        self.settle_onto_slots(&inst, &mut args, ret);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
         for (arg, &expected) in args.iter_mut().zip(&payload) {
             let expected = self.apply_infer_holes(expected);
             self.pin_arg_hole_against(arg, expected);
         }
+        if !slots.is_empty() {
+            let solved: Vec<TypeId> = inst.vars.iter().map(|&var| self.apply_infer_holes(var)).collect();
+            self.blame_unsolved(&inst, &solved);
+            return self.construct_variant_case_at(case, &args, raw_args, solved);
+        }
         self.construct_variant_case(case, &args, raw_args, expected_type)
+    }
+
+    /// [`Self::construct_variant_case`] at the type arguments the site settled.
+    fn construct_variant_case_at(
+        &mut self,
+        case: &CaseSite<'_>,
+        args: &[TypeId],
+        raw_args: &[Expr],
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        if !self.check_case_arity(case.case, args.len(), case.span)
+            || !self.check_case_turbofish_arity(
+                case.written.len(),
+                case.owner,
+                case.variant.type_params.len(),
+                case.span,
+            )
+        {
+            return TypeTable::ERROR;
+        }
+        let variant_def = self.tysys.def_at(case.variant.defined_at);
+        if let Some(&payload) = args.first() {
+            let declared = self.substitute_in_frame(case.case.payload, variant_def, &type_args);
+            match raw_args.first() {
+                Some(value) => self.typecheck_value(value, payload, declared),
+                None => self.typecheck(payload, declared, case.span),
+            }
+        }
+        let variant_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_generic_instance(variant_def, type_args.clone());
+        self.record_generic_instantiation(case.site, type_args, variant_type);
+        variant_type
     }
 
     /// The variant instance a case construction builds from its resolved
