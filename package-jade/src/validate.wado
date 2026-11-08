@@ -69,37 +69,37 @@ impl SchemaSet {
         }
     }
 
-    /// A document that compiling the one held under `uri` needs and the set
-    /// does not hold yet, or none once every reference it reaches resolves.
-    pub fn missing(&self, uri: &Uri) -> Result<Option<Uri>, SchemaError>
-        contract self.holds(uri), "`uri` must name a document the set holds"
-    {
-        let [mut c, _] = Compiler::rooted(self, uri)?;
-        return match c.link() {
-            Ok(_) => Result::Ok(null),
-            Err(Unresolved(u)) => Result::Ok(Option::Some(u.target.without_fragment())),
-            Err(Invalid(e)) => Result::Err(e),
-        };
-    }
-
     /// Holds every document that compiling the one held under `uri` needs,
     /// each fetched by `fetch` from the URI it is retrieved from.
     pub fn load<E, effect X>(
         &mut self,
         uri: &Uri,
-        fetch: fn(&Uri) -> Result<Schema, E> with X,
+        mut fetch: fn mut(&Uri) -> Result<Schema, E> with X,
     ) -> Result<(), LoadError<E>> with X
         contract self.holds(uri), "`uri` must name a document the set holds"
     {
-        while let Some(needed) = self.missing(uri)? {
-            match fetch(&needed) {
-                Ok(schema) => self.insert(needed, schema),
+        // One compiler takes each fetched document in, so no document is added
+        // and no reference resolved twice.
+        let [mut c, _] = Compiler::rooted(self, uri)?;
+        loop {
+            let needed = match c.resolve_reached() {
+                Ok(_) => {
+                    return Result::Ok(());
+                },
+                Err(Invalid(e)) => {
+                    return Result::Err(LoadError::Invalid(e));
+                },
+                Err(Unresolved(u)) => u.target.without_fragment(),
+            };
+            let schema = match fetch(&needed) {
+                Ok(schema) => schema,
                 Err(error) => {
                     return Result::Err(LoadError::Failed(FailedLoad { uri: needed, error }));
                 },
-            }
+            };
+            c.unloaded.insert(needed, schema);
+            self.insert(needed, schema);
         }
-        return Result::Ok(());
     }
 
     internal fn holds(&self, uri: &Uri) -> bool {
@@ -805,6 +805,8 @@ struct Compiler {
     /// The added documents the compiled one reaches, in the order reached.
     /// `link` resolves only their references.
     reached: List<i32> = [],
+    /// How many of `reached` have every reference resolved.
+    resolved: i32 = 0,
 }
 
 struct AddedDocument {
@@ -1038,15 +1040,7 @@ impl Compiler {
     /// one keyword leads to. Returns the anchors a `$dynamicRef` may resolve
     /// through the dynamic scope.
     fn link(&mut self) -> Result<List<String>, CompileError> {
-        // Resolving a reference may add a document, and reach it.
-        for let mut q = 0; q < self.reached.len(); q += 1 {
-            for let k of self.added[self.reached[q]].refs {
-                let r = self.refs[k];
-                let found = self.resolve(&r)?;
-                self.reach(self.node_document[found.0]);
-                self.refs[k].found = Option::Some(found);
-            }
-        }
+        self.resolve_reached()?;
         // A document's root and every subschema outside `$defs` are led to by
         // the keyword holding them.
         let mut leads: List<i32> = List::filled(self.nodes.len(), 1);
@@ -1084,6 +1078,24 @@ impl Compiler {
             self.nodes[i].shared = leads[i] > 1;
         }
         return Result::Ok(anchors);
+    }
+
+    /// Resolves the references of every reached document. Resolving one may
+    /// add a document, and reach it. A reference that fails stays unresolved,
+    /// so a later call, once a document is supplied, resumes from it.
+    fn resolve_reached(&mut self) -> Result<(), CompileError> {
+        while self.resolved < self.reached.len() {
+            for let k of self.added[self.reached[self.resolved]].refs {
+                if self.refs[k].found matches { None } {
+                    let r = self.refs[k];
+                    let found = self.resolve(&r)?;
+                    self.reach(self.node_document[found.0]);
+                    self.refs[k].found = Option::Some(found);
+                }
+            }
+            self.resolved += 1;
+        }
+        return Result::Ok(());
     }
 
     /// The subschema `r` names, and its fragment percent-decoded. A document

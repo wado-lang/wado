@@ -187,7 +187,16 @@ test "a reference reaches a schema another document identifies by its `$id`" {
     assert validator.validate(&Document::parse(#""x""#).unwrap().root()) matches { Err(_) };
 }
 
-test "a set names the documents its references still need, then compiles" {
+fn served(u: &Uri) -> Result<Schema, String> {
+    return match `${*u}` {
+        "https://x.test/int.json" => Result::Ok(Schema::parse(#"{"type": "integer"}"#).unwrap()),
+        "https://x.test/defs.json" => Result::Ok(Schema::parse(##"{"$defs": {"i": {"$ref": "int.json"}}}"##).unwrap()),
+        "https://x.test/moved.json" => Result::Ok(Schema::parse(#"{"$id": "https://y.test/s"}"#).unwrap()),
+        _ => Result::Err(`no ${*u}`),
+    };
+}
+
+test "a loader fetches each document the root reaches, once, then the set compiles" {
     let root = uri("https://x.test/root.json");
     let mut set = SchemaSet::new();
     set.insert(
@@ -196,12 +205,16 @@ test "a set names the documents its references still need, then compiles" {
     );
     // A reference nothing from the root reaches needs no document.
     set.insert(uri("https://x.test/unreached.json"), Schema::parse(#"{"$ref": "nobody.json"}"#).unwrap());
-    assert set.missing(&root).unwrap() matches { Some(u) && `${u}` == "https://x.test/int.json" };
-    set.insert(uri("https://x.test/int.json"), Schema::parse(#"{"type": "integer"}"#).unwrap());
-    assert set.missing(&root).unwrap() matches { Some(u) && `${u}` == "https://x.test/moved.json" };
+    let mut fetched: List<String> = [];
+    let mut recording = |u: &Uri| {
+        fetched.push(`${*u}`);
+        return served(u);
+    };
+    set.load(&root, recording).unwrap();
     // The URI a document was retrieved from names it, whatever its `$id` says.
-    set.insert(uri("https://x.test/moved.json"), Schema::parse(#"{"$id": "https://y.test/s"}"#).unwrap());
-    assert set.missing(&root).unwrap() matches { None };
+    assert fetched == ["https://x.test/int.json", "https://x.test/moved.json"];
+    set.load(&root, recording).unwrap();
+    assert fetched.len() == 2;
     let validator = Validator::compile_in(&set, &root).unwrap();
     assert validator.validate(&Document::parse("[1, 2]").unwrap().root()) matches { Ok(_) };
     let found = validator.validate(&Document::parse(#"[1, "x"]"#).unwrap().root()).unwrap_err();
@@ -211,21 +224,11 @@ test "a set names the documents its references still need, then compiles" {
     assert found[0].instance == "/1";
 }
 
-fn served(u: &Uri) -> Result<Schema, String> {
-    return match `${*u}` {
-        "https://x.test/int.json" => Result::Ok(Schema::parse(#"{"type": "integer"}"#).unwrap()),
-        "https://x.test/defs.json" => Result::Ok(Schema::parse(##"{"$defs": {"i": {"$ref": "int.json"}}}"##).unwrap()),
-        _ => Result::Err(`no ${*u}`),
-    };
-}
-
 test "a loader supplies what a set lacks, and what that refers to" {
     let root = uri("https://x.test/root.json");
     let mut set = SchemaSet::new();
     set.insert(root, Schema::parse(##"{"items": {"$ref": "defs.json#/$defs/i"}}"##).unwrap());
-    set.insert(uri("https://x.test/unreached.json"), Schema::parse(#"{"$ref": "nobody.json"}"#).unwrap());
     set.load(&root, served).unwrap();
-    assert set.missing(&root).unwrap() matches { None };
     let validator = Validator::compile_in(&set, &root).unwrap();
     assert validator.validate(&Document::parse("[1]").unwrap().root()) matches { Ok(_) };
     assert validator.validate(&Document::parse(#"["x"]"#).unwrap().root()) matches { Err(_) };
