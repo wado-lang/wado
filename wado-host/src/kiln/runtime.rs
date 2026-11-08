@@ -287,7 +287,7 @@ async fn instantiate(
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
 
     let mut builder = WasiCtx::builder();
-    random::fixed(&mut builder);
+    random::fixed_seed(&mut builder);
     builder.stdout(stdio.sink(StdStream::Stdout));
     builder.stderr(stdio.sink(StdStream::Stderr));
     let mut store = Store::new(

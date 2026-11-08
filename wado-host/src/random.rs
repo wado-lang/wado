@@ -15,7 +15,7 @@ pub const INTERFACES: [&str; 2] = [
 ];
 
 /// Links `wasi:random/insecure` and `insecure-seed`. The store's context answers
-/// them, so build it through [`fixed`].
+/// them, so build it through [`fixed_seed`].
 pub fn add_to_linker<T: WasiRandomView + 'static>(linker: &mut Linker<T>) -> wasmtime::Result<()> {
     insecure::add_to_linker::<_, WasiRandom>(linker, T::random)?;
     insecure_seed::add_to_linker::<_, WasiRandom>(linker, T::random)
@@ -27,7 +27,7 @@ pub fn add_to_linker<T: WasiRandomView + 'static>(linker: &mut Linker<T>) -> was
 /// one draw to the next, so a caller that draws until it gets a new value ends.
 /// `ChaCha12` is named rather than `StdRng`, whose output rand does not promise
 /// to keep across versions.
-pub fn fixed(builder: &mut WasiCtxBuilder) -> &mut WasiCtxBuilder {
+pub fn fixed_seed(builder: &mut WasiCtxBuilder) -> &mut WasiCtxBuilder {
     builder
         .insecure_random(ChaCha12Rng::from_seed([0; 32]))
         .insecure_random_seed(0)

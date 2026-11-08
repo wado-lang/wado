@@ -669,7 +669,7 @@ async fn run(engine: &Engine, linker: &Linker<Program>, wasm: &[u8], fuel: u64) 
     let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
     let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
     let mut builder = WasiCtx::builder();
-    random::fixed(&mut builder);
+    random::fixed_seed(&mut builder);
     builder.stdout(stdout.clone());
     builder.stderr(stderr.clone());
     let mut store = Store::new(

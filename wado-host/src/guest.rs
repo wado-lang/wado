@@ -232,7 +232,7 @@ impl GuestState {
         match insecure_random {
             InsecureRandom::Host => {}
             InsecureRandom::Fixed => {
-                random::fixed(&mut builder);
+                random::fixed_seed(&mut builder);
             }
         }
         let guest_stdio = match stdio {
