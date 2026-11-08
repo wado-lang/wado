@@ -916,18 +916,9 @@ impl MoveWalker<'_, '_> {
         let Some(owners) = self.flow.holders.get(&holder) else {
             return;
         };
-        let gone = owners.iter().find_map(|(owner, site)| {
-            let gone = || match site.region {
-                Some(region) => self
-                    .temporary_gone(region)
-                    .or_else(|| self.disturbed_since(holder, owner)),
-                None => self.owner_gone(holder, owner),
-            };
-            site.affine
-                .then(|| site.gone.or_else(gone))
-                .flatten()
-                .map(|gone| (site.name.clone(), gone))
-        });
+        let gone = owners
+            .iter()
+            .find_map(|(owner, site)| self.site_gone(holder, owner, site));
         if let Some((owner, gone)) = gone {
             self.report(
                 MoveError::DanglingReference {
@@ -940,15 +931,14 @@ impl MoveWalker<'_, '_> {
         }
     }
 
-    /// Refuse the value the block form `expr`, a `construct`, ends with once a
-    /// temporary it refers into dropped. Nothing holds the value, so its use is
-    /// the read.
+    /// Refuse the value the block form `expr`, a `construct`, ends with once
+    /// what it refers into moved or dropped. Nothing holds the value, so its use
+    /// is the read.
     fn refuse_dangling_value(&mut self, expr: &Expr, construct: &str) {
-        let gone = self.owners_of(expr).iter().find_map(|(_, site)| {
-            let region = site.region.filter(|_| site.affine)?;
-            self.temporary_gone(region)
-                .map(|gone| (site.name.clone(), gone))
-        });
+        let gone = self
+            .owners_of(expr)
+            .iter()
+            .find_map(|(owner, site)| self.site_gone(expr.id(), owner, site));
         if let Some((owner, gone)) = gone {
             self.report(
                 MoveError::DanglingReference {
@@ -959,6 +949,21 @@ impl MoveWalker<'_, '_> {
                 expr.span(),
             );
         }
+    }
+
+    /// The affine owner's name, and why it no longer holds what `holder` reads
+    /// through it, if it does not.
+    fn site_gone(&self, holder: AstId, owner: &Owner, site: &OwnerSite) -> Option<(String, Gone)> {
+        if !site.affine {
+            return None;
+        }
+        let gone = site.gone.or_else(|| match site.region {
+            Some(region) => self
+                .temporary_gone(region)
+                .or_else(|| self.disturbed_since(holder, owner)),
+            None => self.owner_gone(holder, owner),
+        })?;
+        Some((site.name.clone(), gone))
     }
 
     /// Why `owner` no longer holds what `holder` reads through it, if it does

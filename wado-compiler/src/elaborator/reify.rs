@@ -2166,6 +2166,11 @@ impl<'a> Reify<'a> {
         let first = ctx.local_count();
         let mut tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, span, ctx);
         let binders = collect_pattern_bindings_with_index(&tir_pattern);
+        if l.is_mut {
+            for (name, index, _) in &binders {
+                ctx.make_mutable(name, *index);
+            }
+        }
 
         // The matched arm binds a twin of each local and hands it on to the
         // `let`'s pattern, which binds the local itself where the `let` stands.

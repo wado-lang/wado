@@ -3962,16 +3962,17 @@ impl FunctionContext {
     /// A fresh local of the same type for each one allocated from `first` on,
     /// in order; answers the first of them. A `let ... else` binds these in its
     /// matched arm and hands them on to the locals its pattern names. Resolve
-    /// and reify both call it, which keeps their local indices in step.
+    /// and reify both call it, which keeps their local indices in step. A
+    /// reference the pattern takes, as a constant's initializer may, moves to
+    /// the twin with every other use inside the pattern.
     pub(super) fn twin_locals(&mut self, first: u32) -> u32 {
         let twins = self.next_local;
-        assert!(
-            (first..twins).all(|index| !self.address_taken_locals.contains(&index)),
-            "a pattern takes no reference to a local it binds"
-        );
         for index in first..twins {
             let type_id = self.locals[index as usize].type_id;
-            self.add_local(minted_name("twin", index), type_id, false, None);
+            let twin = self.add_local(minted_name("twin", index), type_id, false, None);
+            if self.address_taken_locals.shift_remove(&index) {
+                self.address_taken_locals.insert(twin);
+            }
         }
         twins
     }

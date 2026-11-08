@@ -4278,6 +4278,9 @@ fn test_format_keeps_parens_around_a_statement_keyword_expression() {
     assert_format_preserves_ast(
         "fn run() {\n    if let { x } = (if c { ({ x: 1 }) } else { ({ x: 2 }) }) && x > 0 {\n        return;\n    }\n}\n",
     );
+    assert_format_preserves_ast(
+        "fn run() {\n    if let { x } = (if c { (P { x: 1 }) } else { (P { x: 2 }) }) && x > 0 {\n        return;\n    }\n}\n",
+    );
 }
 
 /// `#[side_effect(negative = p)]` names a parameter, so the value stays an

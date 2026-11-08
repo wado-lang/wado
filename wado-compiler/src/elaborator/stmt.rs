@@ -708,7 +708,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let pattern = let_stmt.else_pattern();
         let first = ctx.local_count();
-        self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
+        let bindings = self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
+        if let_stmt.is_mut {
+            for (name, index, _) in bindings {
+                ctx.make_mutable(&name, index);
+            }
+        }
         ctx.twin_locals(first);
         if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
             let _ = self.emit(TypeError::InvalidPattern {
