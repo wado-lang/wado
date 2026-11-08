@@ -72,7 +72,8 @@ impl SchemaSet {
     /// A document some reference names that the set does not hold yet, or
     /// none once every reference resolves.
     pub fn missing(&self) -> Result<Option<Uri>, SchemaError> {
-        let mut c = Compiler::of(self)?;
+        let mut c = Compiler::of(self);
+        c.load_all()?;
         return match c.link() {
             Ok(_) => Result::Ok(null),
             Err(Unresolved(u)) => Result::Ok(Option::Some(u.target.without_fragment())),
@@ -171,7 +172,7 @@ impl Validator {
     pub fn compile_in(set: &SchemaSet, uri: &Uri) -> Result<Validator, CompileError>
         contract set.holds(uri), "`uri` must name a document the set holds"
     {
-        let mut c = Compiler { unloaded: set.documents };
+        let mut c = Compiler::of(set);
         c.load(uri)?;
         let dynamic_anchors = c.link()?;
         return Result::Ok(Validator {
@@ -744,7 +745,7 @@ struct Compiler {
     source: Option<Uri> = null,
     /// The supplied documents not added yet, which a reference adds once it
     /// needs them.
-    unloaded: List<[Uri, Schema]> = [],
+    unloaded: SchemaSet = SchemaSet::new(),
 }
 
 /// A reference, resolved against its base, to look up once every target is
@@ -756,20 +757,18 @@ struct PendingRef {
 }
 
 impl Compiler {
-    /// A compiler holding every document of `set`.
-    fn of(set: &SchemaSet) -> Result<Compiler, SchemaError> {
-        let mut c = Compiler { unloaded: set.documents };
-        c.load_all()?;
-        return Result::Ok(c);
+    /// A compiler holding none of `set`'s documents yet.
+    fn of(set: &SchemaSet) -> Compiler {
+        return Compiler { unloaded: *set };
     }
 
     /// Adds the supplied document retrieved from `uri`, answering whether one
     /// was waiting.
     fn load(&mut self, uri: &Uri) -> Result<bool, SchemaError> {
-        let Some(k) = self.unloaded.iter_ref().position(|d| d.0 == *uri) else {
+        let Some(k) = self.unloaded.find(uri) else {
             return Result::Ok(false);
         };
-        let [u, schema] = self.unloaded.remove(k);
+        let [u, schema] = self.unloaded.documents.remove(k);
         self.add_document(&u, &schema)?;
         return Result::Ok(true);
     }
@@ -777,8 +776,8 @@ impl Compiler {
     /// Adds every supplied document still waiting, answering whether there
     /// was one.
     fn load_all(&mut self) -> Result<bool, SchemaError> {
-        let waiting = self.unloaded;
-        self.unloaded = [];
+        let waiting = self.unloaded.documents;
+        self.unloaded = SchemaSet::new();
         for let [uri, schema] of &waiting {
             self.add_document(uri, schema)?;
         }
