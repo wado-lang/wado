@@ -278,7 +278,7 @@ impl Validator {
             at: Document::position(inst),
             anchors: self.dynamic_anchors.iter_ref().map(|a| self.outermost(a, &run.scope).unwrap_or(-1)).collect(),
         };
-        if let Some(k) = run.memo.get(key) && Document::same_node(&run.outcomes[k].node, inst) {
+        if let Some(k) = run.memo().get(key) {
             run.replay(k, out);
             return;
         }
@@ -289,11 +289,13 @@ impl Validator {
         run.following.pop();
         let errors = run.sinks.pop().unwrap().errors;
         let k = run.outcomes.len();
-        run.outcomes.push(Outcome { node: *inst, errors, evaluated });
+        run.outcomes.push(Outcome { errors, evaluated });
         run.replay(k, out);
         // A cycle's error depends on the references being followed, which the
         // next reference to `t` may not share.
-        if run.cycles != cycles || !run.memo.try_insert(key, k) {
+        if run.cycles == cycles {
+            run.memo()[key] = k;
+        } else {
             run.outcomes.pop();
         }
     }
@@ -440,7 +442,7 @@ impl Validator {
         let prefix = i32::min(len, n.prefix_items.len());
         for let k of 0..<prefix {
             self.check(n.prefix_items[k], &items[k], &`${*ip}/${k}`, run);
-            out.items.push(k);
+            out.items.insert(k);
         }
         if let Some(t) = n.items {
             for let k of prefix..<len {
@@ -453,7 +455,7 @@ impl Validator {
             for let k of 0..<len {
                 if self.passes(t, &items[k], &`${*ip}/${k}`, run).0 {
                     count += 1;
-                    out.items.push(k);
+                    out.items.insert(k);
                 }
             }
             if count < n.min_contains {
@@ -465,12 +467,8 @@ impl Validator {
             }
         }
         if let Some(t) = n.unevaluated_items && !out.all_items {
-            let mut seen = HashSet::<i32>::new();
-            for let k of out.items {
-                seen.insert(k);
-            }
             for let k of 0..<len {
-                if !seen.contains(k) {
+                if !out.items.contains(k) {
                     self.check(t, &items[k], &`${*ip}/${k}`, run);
                 }
             }
@@ -523,10 +521,14 @@ impl Validator {
                 matched = true;
             }
             if matched {
-                out.props.push(key.to_string());
+                out.props.insert(key.to_string());
             }
             if let Some(t) = n.property_names {
+                run.memos.push(HashMap::new());
+                let kept = run.outcomes.len();
                 self.check(t, &Document::string(key).root(), &kp, run);
+                run.memos.pop();
+                run.outcomes.truncate(kept);
             }
         }
         for let [key, t] of n.dependent_schemas.entries() {
@@ -535,14 +537,9 @@ impl Validator {
             }
         }
         if let Some(t) = n.unevaluated_properties {
-            let mut seen = HashSet::<String>::new();
-            for let p of out.props {
-                seen.insert(p);
-            }
             for let [key, value] of inst.entries() {
-                if !seen.contains_str(key) {
+                if out.props.insert(key.to_string()) {
                     self.check(t, &value, &`${*ip}/${pointer_token(key)}`, run);
-                    out.props.push(key.to_string());
                 }
             }
         }
@@ -624,15 +621,19 @@ struct Resource {
 /// What evaluating an instance against a subschema evaluated of it, which
 /// `unevaluatedItems` and `unevaluatedProperties` read.
 struct Evaluated {
-    props: List<String> = [],
-    items: List<i32> = [],
+    props: HashSet<String> = HashSet::new(),
+    items: HashSet<i32> = HashSet::new(),
     all_items: bool = false,
 }
 
 impl Evaluated {
     fn merge(&mut self, other: &Evaluated) {
-        self.props.extend(&other.props);
-        self.items.extend(&other.items);
+        for let p of other.props.iter_ref() {
+            self.props.insert(*p);
+        }
+        for let k of other.items.iter_ref() {
+            self.items.insert(*k);
+        }
         self.all_items = self.all_items || other.all_items;
     }
 }
@@ -652,7 +653,10 @@ struct Run {
     following: List<[i32, Node]> = [],
     /// How many times a reference was found to loop.
     cycles: i32 = 0,
-    memo: HashMap<MemoKey, i32> = HashMap::new(),
+    /// The outcomes of shared subschemas, one memo for each document being
+    /// evaluated, innermost last: a key places a value only within its
+    /// document.
+    memos: List<HashMap<MemoKey, i32>> = [HashMap::new()],
     outcomes: List<Outcome> = [],
 }
 
@@ -678,6 +682,11 @@ impl Run {
     /// The sink errors go to now.
     fn top(&mut self) -> &mut Sink {
         return &mut self.sinks[self.sinks.len() - 1];
+    }
+
+    /// The memo of the document being evaluated.
+    fn memo(&mut self) -> &mut HashMap<MemoKey, i32> {
+        return &mut self.memos[self.memos.len() - 1];
     }
 
     /// Reports outcome `k` here, as though its subschema were evaluated again.
@@ -713,9 +722,8 @@ struct MemoKey {
     anchors: List<i32>,
 }
 
-/// What evaluating a shared subschema at `node` found.
+/// What evaluating a shared subschema at a value found.
 struct Outcome {
-    node: Node,
     errors: List<ValidationError>,
     evaluated: Evaluated,
 }
@@ -772,15 +780,17 @@ impl Compiler {
         let i = self.nodes.len();
         let mut uri = *base;
         let mut r = parent;
+        let mut identified_at = at;
         if let Object(o) = schema && let Some(id) = &o.id {
-            uri = base.resolve(&parse_uri(id, `${at}/$id`)?).without_fragment();
+            identified_at = `${at}/$id`;
+            uri = base.resolve(&parse_uri(id, identified_at)?).without_fragment();
             r = self.resources.len();
             self.resources.push(Resource { uri, at, parent: Option::Some(parent) });
         }
         let mut holder = Option::Some(r);
         while let Some(h) = holder {
             let res = &self.resources[h];
-            self.targets[`${res.uri}#${at.substr_bytes(res.at.len(), at.len())}`] = i;
+            self.claim(`${res.uri}#${at.substr_bytes(res.at.len(), at.len())}`, i, &identified_at)?;
             holder = res.parent;
         }
         let mut node = Compiled { source: self.source, at, owner: r };
@@ -795,10 +805,10 @@ impl Compiler {
         };
         o.check(&at)?;
         if let Some(a) = &o.anchor {
-            self.targets[`${uri}#${*a}`] = i;
+            self.claim(`${uri}#${*a}`, i, &`${at}/$anchor`)?;
         }
         if let Some(a) = &o.dynamic_anchor {
-            self.targets[`${uri}#${*a}`] = i;
+            self.claim(`${uri}#${*a}`, i, &`${at}/$dynamicAnchor`)?;
             self.resources[r].dynamic_anchors[*a] = i;
         }
         if let Some(reference) = &o.reference {
@@ -869,6 +879,16 @@ impl Compiler {
         }
         self.nodes[i] = node;
         return Result::Ok(i);
+    }
+
+    /// Points `uri` at subschema `i`. A URI identifies at most one schema, so
+    /// another one claiming it is the error Core §9.1.2 asks for, at `at`.
+    fn claim(&mut self, uri: String, i: i32, at: &String) -> Result<(), SchemaError> {
+        if let Some(held) = self.targets.get_str(&uri) && held != i {
+            return Result::Err(SchemaError { pointer: *at, message: `identifies ${uri}, as another schema does` });
+        }
+        self.targets[uri] = i;
+        return Result::Ok(());
     }
 
     fn add_some(&mut self, s: &Option<Schema>, at: String, base: &Uri, r: i32) -> Result<Option<i32>, SchemaError> {

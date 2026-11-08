@@ -83,12 +83,17 @@ test "a dynamic reference's fragment is percent-decoded before it names an ancho
 /// A schema whose every level refers to the next twice, `depth` levels deep,
 /// ending in `leaf`.
 fn doubling(depth: i32, leaf: String) -> String {
+    return `{"$ref": "#/$defs/d0", ${doubling_defs(depth, leaf)}}`;
+}
+
+/// The `$defs` of `doubling`, from `d0` down.
+fn doubling_defs(depth: i32, leaf: String) -> String {
     let mut defs: List<String> = [];
     for let i of 0..<depth {
         defs.push(`"d${i}": {"allOf": [{"$ref": "#/$defs/d${i + 1}"}, {"$ref": "#/$defs/d${i + 1}"}]}`);
     }
     defs.push(`"d${depth}": ${leaf}`);
-    return `{"$ref": "#/$defs/d0", "$defs": {${defs.join(", ")}}}`;
+    return `"$defs": {${defs.join(", ")}}`;
 }
 
 test "a target many references share is evaluated once per value" {
@@ -98,6 +103,30 @@ test "a target many references share is evaluated once per value" {
     assert found[0].keyword == "/$defs/d40/type";
     let deep = doubling(40, ##"{"items": {"$ref": "#/$defs/d0"}, "type": ["array", "integer"]}"##);
     assert errors(deep, "[[[1]], [2]]").is_empty();
+}
+
+test "what a shared target evaluated is gathered once, however many references reach it" {
+    let leaf = #"{"properties": {"x": true}}"#;
+    let schema = `{"$ref": "#/$defs/d0", "unevaluatedProperties": false, ${doubling_defs(40, leaf)}}`;
+    assert errors(schema, #"{"x": 1}"#).is_empty();
+    assert errors(schema, #"{"x": 1, "y": 2}"#).len() == 1;
+}
+
+test "each property name keeps what its shared targets evaluated" {
+    let schema = `{"propertyNames": {"$ref": "#/$defs/d0"}, ${doubling_defs(40, #"{"minLength": 2}"#)}}`;
+    assert errors(schema, #"{"ab": 1, "cd": 2}"#).is_empty();
+    assert errors(schema, #"{"ab": 1, "c": 2}"#).len() == 1;
+}
+
+test "two schemas that name one URI are an error at compile" {
+    let mut set = SchemaSet::new();
+    set.insert(uri("https://x.test/a.json"), Schema::parse(#"{"$id": "https://x.test/s"}"#).unwrap());
+    set.insert(uri("https://x.test/b.json"), Schema::parse(#"{"$id": "https://x.test/s"}"#).unwrap());
+    let e = invalid(Validator::compile_in(&set, &uri("https://x.test/a.json")));
+    assert e.uri matches { Some(u) && `${u}` == "https://x.test/b.json" };
+    assert e.pointer == "/$id";
+    let anchors = ##"{"$defs": {"a": {"$anchor": "x"}, "b": {"$anchor": "x"}}}"##;
+    assert invalid(Validator::compile(&Schema::parse(anchors).unwrap())).pointer.ends_with("/$anchor");
 }
 
 test "a shared target is evaluated apart under each binding of a dynamic anchor" {
