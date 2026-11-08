@@ -2311,6 +2311,7 @@ impl WebGpuBackend {
         options: &Attention,
     ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
         contract pasts.len() == q.extents[0] && reaches.len() == q.extents[0]
+        contract q.extents[0] > 0, "a batch holds a row"
         contract (0..<pasts.len()).all(|b| 0 <= pasts[b] <= past_k.extents[2] && reaches[b] <= pasts[b] + q.extents[1])
     {
         let [batch, s, d] = [q.extents[0], q.extents[1], past_k.extents[3]];
@@ -4400,8 +4401,10 @@ ${element(last, "            ")}            staged[e] = s${last};
     return out;
 }
 
-fn max_of(values: &List<i32>) -> i32 {
-    let mut m = -1;
+fn max_of(values: &List<i32>) -> i32
+    contract !values.is_empty()
+{
+    let mut m = values[0];
     for let v of *values {
         m = i32::max(m, v);
     }

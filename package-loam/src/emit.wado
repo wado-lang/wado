@@ -1743,7 +1743,7 @@ fn emit_decode(
         apart_checks = [
             `assert pasts.len() == rows, "decode_rows takes a past for each row";`, "for let past of pasts {",
             `    refuse(unmet(*past, "a row's past must not be negative"));`,
-            `    refuse(unmet(${past} - *past - steps as i64, "a row's past and its steps must fit the mask"));`, "}",
+            `    refuse(unmet(${total} - *past - steps as i64, "a row's past and its steps must fit the mask"));`, "}",
             "let mut pasts = *pasts;", "while pasts.len() < ended.len() {", "    pasts.push(0);", "}",
         ];
         at_each_past(total, past);

@@ -91,7 +91,7 @@ pub fn requested_tokens<affine Bk: Graph>(
     steps: i32,
     sampling: &Sampling,
 ) -> List<List<i64>> with _ {
-    assert (count - 1) % steps == 0, "a request ends at the end of a call";
+    assert count > 1 && (count - 1) % steps == 0, "a request ends at the end of a call";
     let mut model = Model::new(Params::embedded(g));
     let mut requests = Requests::new(g, slots, 16);
     let mut tokens: List<List<i64>> = [];

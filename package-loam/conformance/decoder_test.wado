@@ -2,7 +2,7 @@
 //! a time through `compute`.
 
 use { Cpu, Sampling } from "lib:loam";
-use { decoded_tokens, requests_apart, samplers, stepped_tokens, steps_taken } from "./decoded.wado";
+use { decoded_tokens, requested_tokens, requests_apart, samplers, stepped_tokens, steps_taken } from "./decoded.wado";
 
 test "decode picks each token a pass at a time would" {
     let cpu = &mut Cpu {};
@@ -75,6 +75,12 @@ test "requests in slots each pick the tokens they pick alone" {
             assert requests_apart(&mut Cpu {}, slots, &sampling) == 0.0;
         }
     }
+}
+
+test "a request decodes into the last position of its slot" {
+    let prompt = List::<i64>::filled(15, 3);
+    let requested = requested_tokens(&mut Cpu {}, [prompt], 1, 2, 1, &Sampling {});
+    assert requested == [stepped_tokens(&mut Cpu {}, prompt, 2, &Sampling {})] as List<List<i64>>;
 }
 
 test "a sampler of the conformance programs ends its row" {

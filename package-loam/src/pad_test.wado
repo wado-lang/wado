@@ -77,6 +77,48 @@ test "a length merged behind the rows refuses it where a product contracts the m
     assert judged(source) == ["S: refused at Y = Gemm: it reads rows a regrouping merged"] as List<String>;
 }
 
+test "a length merged behind the rows keeps it padded where a product by a vector computes each row apart" {
+    let source = `g (float[2, S, 4] X) => (float[2, S] Y) <float[4] V, int64[2] Flat = {-1, 4}, int64[2] Back = {2, -1}> {
+        F = Reshape(X, Flat)
+        G = MatMul(F, V)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: padded"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where a bias holds rows of its own" {
+    // The bias counts the merged rows, so at a capacity its rows are not the
+    // merged operand's.
+    let source = `g (float[2, S, 4] X) => (float[2, S, 4] Y) <float[4, 4] W, int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        F = Reshape(X, Flat)
+        Dims = Shape(F)
+        Zero = Constant<value_int = 0>()
+        One = Constant<value_int = 1>()
+        Axis = Constant<value_ints = [1]>()
+        N = Gather(Dims, Zero)
+        P = Range(Zero, N, One)
+        Counted = Cast<to = 1>(P)
+        B = Unsqueeze(Counted, Axis)
+        G = Gemm(F, W, B)
+        Y = Reshape(G, Back)
+    }`;
+    assert judged(source) == ["S: refused at G = Gemm: it reads rows a regrouping merged"] as List<String>;
+}
+
+test "a branch's merged tensors stay its own where its sibling reuses their names" {
+    let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        Y = If <then_branch = merged () => (float[M, 4] U) {
+            T = Reshape(X, Flat)
+            R = Reshape(T, Back)
+            U = Relu(Z)
+        }, else_branch = kept () => (float[M, 4] U) {
+            T = Relu(Z)
+            U = Softmax<axis = 0>(T)
+        }> (C)
+    }`;
+    assert judged(source) == ["S: padded", "M: padded"] as List<String>;
+}
+
 test "a regrouping that cuts a length into axes it never lines up with refuses it" {
     let source = `g (float[S] X) => (float[?, 2] Y) <int64[2] Shape = {-1, 2}> {
         Y = Reshape(X, Shape)

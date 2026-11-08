@@ -165,8 +165,11 @@ fn judge_scope(
         // A folded output is spelled at the capacity too.
         refuse(shrinking(node, checked), Why::Shrinks);
         if !folded && checked.branches.contains_key(node.outputs[0]) {
+            // Sibling branches may reuse a name, so each reads only what
+            // merged around it.
             for let b of branches(node, checked) {
-                judge_scope(&b.graph, &b.checked, refusals, ties, merged);
+                let mut around = *merged;
+                judge_scope(&b.graph, &b.checked, refusals, ties, &mut around);
             }
         }
     }
@@ -280,15 +283,20 @@ fn carried(
     }
     if op == "Gemm" {
         let [_, _, trans_a, _] = gemm_options(node).unwrap();
-        if trans_a {
+        // A bias with rows of its own adds them where no merge put them.
+        let bias_rows = node.inputs.len() > 2 && node.inputs[2] != ""
+            && shapes[node.inputs[2]] matches { b && b.rank() == 2 && !b.axes[0].extent.is_one() };
+        if trans_a || bias_rows {
             return reads();
         }
         merges[0] = a.1[0];
         return Result::Ok(Option::Some(merges));
     }
     if op == "MatMul" {
+        // A vector on the right leaves no axis of its own in the product.
+        let lead = out.rank() - a_rank + if shapes[node.inputs[1]].rank() == 1 { 1 } else { 0 };
         for let i of 0..<a_rank - 1 {
-            merges[out.rank() - a_rank + i] = a.1[i];
+            merges[lead + i] = a.1[i];
         }
         return Result::Ok(Option::Some(merges));
     }
