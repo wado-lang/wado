@@ -38,6 +38,15 @@ fn pick_held(flag: bool) -> i32 {
     return read(r);
 }
 
+// The refill writes `t` in place on the path where `r` refers into it.
+fn refilled(flag: bool) -> i32 {
+    let mut t = T { v: 1 };
+    let u = T { v: 2 };
+    let r = if flag { &t } else { consume(t); &u };
+    t = T { v: 3 };
+    return read(r);
+}
+
 fn arm(k: i32) -> i32 {
     let t = T { v: 1 };
     let u = T { v: 2 };
@@ -68,6 +77,8 @@ test {
     assert pick(false) == 2;
     assert pick_held(true) == 1;
     assert pick_held(false) == 2;
+    assert refilled(true) == 3;
+    assert refilled(false) == 2;
     assert arm(0) == 1;
     assert arm(1) == 2;
     assert broken(true) == 1;

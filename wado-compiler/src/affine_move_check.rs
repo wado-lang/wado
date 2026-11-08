@@ -1311,19 +1311,26 @@ impl MoveWalker<'_, '_> {
             !inside
         });
         let instance = self.instance(def);
-        for (owner, site) in self
+        // Every owner set a value may still be read through, held or not yet.
+        let owner_sets = self
             .flow
             .holders
             .values_mut()
-            .flat_map(|owners| owners.iter_mut())
-        {
+            .chain(self.settled.values_mut())
+            .chain(self.break_owners.values_mut())
+            .chain(self.closure_owners.values_mut());
+        for (owner, site) in owner_sets.flat_map(|owners| owners.iter_mut()) {
             if owner.def != def || owner.instance != instance || site.gone.is_some() {
                 continue;
             }
             let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
             site.gone = refilled
                 .iter()
-                .find(|(moved, _)| moved.len() <= path.len() && paths_overlap(moved, &path))
+                .find(|(moved, span)| {
+                    moved.len() <= path.len()
+                        && paths_overlap(moved, &path)
+                        && !site.moved_elsewhere.contains(span)
+                })
                 .map(|(_, span)| Gone::Moved(*span))
                 .or_else(|| {
                     (owner.path.len() > place.fields.len()
