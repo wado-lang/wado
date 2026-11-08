@@ -1125,10 +1125,15 @@ the compiled fast path:**
    nothing, at the left edge of a rule or group it opens with, or past a
    group's or a loop's exit. ANTLR4 finds those visible at the decision
    (`doc/predicates.md`). Every decision the simulator makes, a rule's, a
-   group's or a loop's, is handed the verdicts of the predicates it meets
-   (`DecisionPredicates`). A scan answers a predicate under the same rule, a
-   group alternative's included: only at the position its decision started
-   from.
+   group's or a loop's, can ask the predicates it meets
+   (`DecisionPredicates`), its callers' past the rule's end included. Each
+   configuration records the predicates its path passed, and the simulator
+   asks only those guarding the configurations the input leaves viable,
+   then predicts again with the false ones closed. So a predicate on a path
+   the input or the caller stack rules out is never evaluated, as the jar
+   evaluates none (`PredsInGlobalFOLLOW`). A scan answers a predicate under
+   the same rule, a group alternative's included: only at the position its
+   decision started from.
    A left-recursive rule whose atom choice reaches the simulator is routed as
    in 1, in any grammar: its static loop would take a suffix the full context
    gives the caller (TypeScript's `new Map<T>()`, where `()` is the `new`'s).

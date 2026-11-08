@@ -4497,7 +4497,7 @@ test "predict drops an alternative whose predicate fails from the viable ones" {
         mk(5),
     ];  // ID '(' ')' — only alt 0 is viable
     let kinds = to_kinds(&paren);
-    let pick = |false_preds: List<i32>| atn_predict_with_stack(&sim, d, &empty, &kinds, 0, eof, 0, &false_preds);
+    let pick = |false_preds: List<i32>| atn_predict_with_stack(&sim, d, &empty, &kinds, 0, eof, 0, &false_preds, |_| false);
     assert pick([]) == 0;
     assert pick([left_edge_pred_id(&g, 0, 1)]) == 0;
     assert pick([left_edge_pred_id(&g, 0, 0)]) == -1;
@@ -4537,6 +4537,7 @@ test "a failed alternative covering the others does not settle the decision" {
         eof,
         0,
         &false_preds,
+        |_| false,
     );
     let p = left_edge_pred_id(&g, 1, 0);
     assert pick(&x_only, []) == 0;
@@ -4576,6 +4577,7 @@ test "a failed predicate in a called rule closes only its own path" {
         eof,
         0,
         false_preds,
+        |_| false,
     );
     assert pick("TK_A", &[]) == 0;
     assert pick("TK_A", &q) == 1;

@@ -131,7 +131,7 @@ Cost model (verified on a probe): a handler operation with no post-resume code h
 
 Gating: a non-superClass grammar emits no interface, no effect clause, and no operation call — byte-identical output.
 
-ATN purity holds: a superClass predicate is pre-evaluated at the decision (in the caller, where the handler is ambient) via the existing exclusion path, so the simulator body stays a pure function of the token stream.
+A superClass predicate reaches the simulator the way any predicate does, as the decision's answer callback, so the simulator carries the base effect only where it asks one.
 
 Parser side: a parser base's operations are predicates taking `p: &Parser`. There is no view here — the parser's cursor is a field, so the recognizer itself is what an ANTLR base method reads through `this`, and the action-context API (`la` / `lt` / `token_text` / `token_start` / `rule_text` / …) becomes that base's public surface. There is no command surface either, so a name reached from an action body is refused the way an argument-passing one is. Every generated parse function carries the base effect — a predicate can sit in any rule and an effect propagates to each caller — while scan functions stay exempt, evaluating no action.
 
@@ -145,7 +145,7 @@ Each predicate compiles to a standalone effect-free function callable from every
 
 1. Static dispatch: an alt-initial predicate guards its branch. Only alt-initial predicates participate in prediction (ANTLR's "visible" predicates); a mid-alt predicate evaluating false is a parse failure at that point, feeding normal recovery.
 2. Scan tournament: a context-independent predicate is evaluated before scanning its gated alternative (false excludes it). A context-dependent predicate is treated as true during cross-rule scans — matching ANTLR, which ignores dependent predicates evaluated outside their owning context — and evaluated for real in the owning rule's dispatch.
-3. ATN simulator: because prediction predicates are alt-initial, the caller pre-evaluates each gated alternative at the decision and excludes the false ones from the simulator's seed, so the simulator stays a pure function of the token stream.
+3. ATN simulator: the decision hands the simulator the predicates it may meet and a callback that answers one. The simulator first finds the alternatives the input leaves viable, asks only the predicates guarding those, then predicts again with the false ones closed. A predicate on a path the input or the caller stack rules out is never evaluated, as ANTLR evaluates none.
 
 Prediction answers no predicate on a path past an action, and the paths into one alternative can differ: in `(u | ) {p}? X` with `u : {} ;`, the path through `u` crosses an action and skips `p`, so the alternative stays viable when `p` is false. The simulator carries that per configuration, through an action edge that marks it. A scan stops answering predicates once it may have crossed an action without consuming a token. A predicate behind the alternative's own first action guards the parse and gates nothing.
 

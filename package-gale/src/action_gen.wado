@@ -530,6 +530,9 @@ pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_sc
     let mut gates: List<[i32, String]> = [];
     let rule = ctx.cursor.current_rule_index();
     for let [a, met_site] of met {
+        if gates.iter_ref().any(|g| g.0 == a.source.action_id) {
+            continue;
+        }
         let site = if met_site.rule_index == rule { ctx.predicate_site() } else { *met_site };
         if in_scan {
             if let Some(c) = scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site) {
@@ -603,8 +606,8 @@ pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alterna
 /// Walks the whole tree, not just its root, to stay symmetric with emit (which
 /// gates a node nested under a `Dispatch` too). A node is gated when it either
 /// dispatches by the grammar-order predicate chain (interchangeable), or routes
-/// through the runtime ATN — where the simulator closes the edges of the false
-/// predicates it is handed (`false_preds`) instead.
+/// through the runtime ATN — where the simulator asks the predicates guarding
+/// the viable alternatives and closes the edges of the false ones instead.
 fn collect_gated_ambiguous_alts(
     node: &PredictionNode,
     alts: &List<Alternative>,
@@ -633,8 +636,8 @@ fn collect_gated_ambiguous_alts(
 }
 
 /// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
-/// gateable predicate — so its predicates feed the simulator's `false_preds`
-/// rather than an inline dispatch chain.
+/// gateable predicate — so the simulator asks its predicates rather than an
+/// inline dispatch chain.
 fn ambiguous_group_atn_predicate_gated(
     a: &AmbiguousNode,
     alts: &List<Alternative>,

@@ -7989,9 +7989,10 @@ fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decisi
     return atn_verified_call(decision, AtnPicker::LrTable, ctx.atn_arg(), tokens, pos, "min_prec", call);
 }
 
-/// The simulator's pick at decision `atn_dec`, from where `side` reads, with
-/// the edge of each predicate in `met` whose condition is false there closed
-/// (`atn_decision_gates`). Only a verdict no predicate decided is kept for the
+/// The simulator's pick at decision `atn_dec`, from where `side` reads. It
+/// asks a predicate in `met` (`atn_decision_gates`) only once the predicate
+/// guards an alternative the input leaves viable, and closes its edge where
+/// the answer is false. Only a verdict no predicate decided is kept for the
 /// parse. Without predicates the pick goes through the decision's lookahead
 /// DFA first (`atn_sll.wado`).
 fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx: &mut EmitContext) -> String {
@@ -8013,8 +8014,10 @@ fn atn_gated_predict_call(atn_dec: i32, gates: &List<[i32, String]>, side: PickS
         ctx.cursor.note_ref(&decide);
         return `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, ${prec})`;
     }
-    let verdicts = gates.iter_ref().map(|g| `if ${g.1} { -1 } else { ${g.0} }`).collect().join(", ");
-    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &[${verdicts}])`;
+    let met = gates.iter_ref().map(|g| `${g.0}`).collect().join(", ");
+    let arms = gates.iter_ref().map(|g| `${g.0} => ${g.1}, `).collect().join("");
+    let ask = `|_pred| match _pred { ${arms}_ => unreachable() }`;
+    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &[${met}], ${ask})`;
 }
 
 /// A group deciding between alternatives. Under `SimpleCst` each alternative is
