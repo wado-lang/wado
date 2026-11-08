@@ -19,6 +19,14 @@ test "a duration's letters match in either case, as ABNF's strings do" {
     assert !admits("duration", "p1dt");
 }
 
+test "an email's address literal follows SMTP's rules, not the ipv4 and ipv6 formats'" {
+    assert admits("email", "a@[001.2.3.4]");
+    assert !admits("ipv4", "001.2.3.4");
+    assert admits("email", "a@[IPv6:1:2:3:4:5:6::]");
+    assert !admits("email", "a@[IPv6:1:2:3:4:5:6:7::]");
+    assert admits("ipv6", "1:2:3:4:5:6:7::");
+}
+
 test "an iri admits a private-use character in its query alone" {
     assert admits("iri", "http://example.com/?q=\u{E000}");
     assert !admits("iri", "http://example.com/\u{E000}");

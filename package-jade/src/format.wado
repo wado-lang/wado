@@ -9,6 +9,9 @@ internal enum Format {
     Date,
     Time,
     Duration,
+    Email,
+    Ipv4,
+    Ipv6,
     Uri,
     UriReference,
     Iri,
@@ -24,6 +27,9 @@ impl Format {
             "date" => Option::Some(Date),
             "time" => Option::Some(Time),
             "duration" => Option::Some(Duration),
+            "email" => Option::Some(Email),
+            "ipv4" => Option::Some(Ipv4),
+            "ipv6" => Option::Some(Ipv6),
             "uri" => Option::Some(Uri),
             "uri-reference" => Option::Some(UriReference),
             "iri" => Option::Some(Iri),
@@ -39,6 +45,9 @@ impl Format {
             Date => "date",
             Time => "time",
             Duration => "duration",
+            Email => "email",
+            Ipv4 => "ipv4",
+            Ipv6 => "ipv6",
             Uri => "uri",
             UriReference => "uri-reference",
             Iri => "iri",
@@ -63,6 +72,15 @@ impl Format {
                 full_time(&mut s) && s.done();
             },
             Duration => is_duration(text),
+            Email => {
+                let mut s = Scan::of(text);
+                mailbox(&mut s) && s.done();
+            },
+            Ipv4 => {
+                let mut s = Scan::of(text);
+                dotted_quad(&mut s, Leading::Unpadded) && s.done();
+            },
+            Ipv6 => is_ipv6(&Scan::of(text).chars, 1, Leading::Unpadded),
             Uri => is_uri_reference(text) && has_scheme(text),
             UriReference => is_uri_reference(text),
             Iri => is_iri_reference(text) && has_scheme(text),
@@ -124,6 +142,191 @@ impl Scan {
         self.at += 1;
         return Option::Some(self.chars[self.at - 1] as i32 - '0' as i32);
     }
+}
+
+/// Whether a decimal octet may start with a zero.
+enum Leading {
+    /// RFC 2673's `decbyte`, as the Test Suite reads it: never, since a
+    /// leading zero reads as octal elsewhere.
+    Unpadded,
+    /// RFC 5321's `Snum = 1*3DIGIT`: always.
+    Padded,
+}
+
+/// Four decimal octets, 0 to 255, joined by dots.
+fn dotted_quad(s: &mut Scan, leading: Leading) -> bool {
+    for let i of 0..<4 {
+        if i > 0 && !s.eat('.') {
+            return false;
+        }
+        let start = s.at;
+        let mut value = 0;
+        while s.at - start < 3 && let Some(d) = s.digit() {
+            value = value * 10 + d;
+        }
+        let width = s.at - start;
+        if width == 0 || value > 255 || leading matches { Unpadded } && width > 1 && s.chars[start] == '0' {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Whether `chars` is RFC 4291 2.2's text form of an IPv6 address: eight
+/// groups of one to four hex digits, the last two of which may be written as a
+/// dotted quad, with one `::` standing for at least `elided` groups of zeros.
+fn is_ipv6(chars: &List<char>, elided: i32, leading: Leading) -> bool {
+    let len = chars.len();
+    let mut gap = -1;
+    for let i of 0..<len - 1 {
+        if chars[i] == ':' && chars[i + 1] == ':' {
+            if gap >= 0 {
+                return false;
+            }
+            gap = i;
+        }
+    }
+    if gap < 0 {
+        return groups(chars, 0, len, true, leading) == Option::Some(8);
+    }
+    let Some(head) = groups(chars, 0, gap, false, leading) else {
+        return false;
+    };
+    let Some(tail) = groups(chars, gap + 2, len, true, leading) else {
+        return false;
+    };
+    return head + tail <= 8 - elided;
+}
+
+/// How many 16-bit groups `chars[from..to]` writes, separated by colons, or
+/// none when it is not such a list. Where `last`, the final group may be a
+/// dotted quad, which writes two.
+fn groups(chars: &List<char>, from: i32, to: i32, last: bool, leading: Leading) -> Option<i32> {
+    if from == to {
+        return Option::Some(0);
+    }
+    let mut count = 0;
+    let mut start = from;
+    for let i of from..=to {
+        if i < to && chars[i] != ':' {
+            continue;
+        }
+        let mut piece: List<char> = [];
+        for let k of start..<i {
+            piece.push(chars[k]);
+        }
+        if 1 <= piece.len() && piece.len() <= 4 && piece.iter_ref().all(|c| c.is_hexdigit()) {
+            count += 1;
+        } else {
+            let mut s = Scan { chars: piece };
+            if !(last && i == to && dotted_quad(&mut s, leading) && s.done()) {
+                return null;
+            }
+            count += 2;
+        }
+        start = i + 1;
+    }
+    return Option::Some(count);
+}
+
+/// RFC 5321 4.1.2's `Mailbox`.
+fn mailbox(s: &mut Scan) -> bool {
+    if !local_part(s) || !s.eat('@') {
+        return false;
+    }
+    if s.eat('[') {
+        return address_literal(s);
+    }
+    return domain(s);
+}
+
+/// `Local-part = Dot-string / Quoted-string`.
+fn local_part(s: &mut Scan) -> bool {
+    if !s.eat('"') {
+        return dot_string(s);
+    }
+    while !s.done() {
+        let c = s.chars[s.at] as u32;
+        s.at += 1;
+        if c == 34 {
+            return true;
+        }
+        if c == 92 {
+            // quoted-pairSMTP = %d92 %d32-126
+            if s.done() || !(32 <= s.chars[s.at] as u32 && s.chars[s.at] as u32 <= 126) {
+                return false;
+            }
+            s.at += 1;
+        } else if !(32 <= c && c <= 126) {
+            // qtextSMTP is %d32-126 less the quote and the backslash.
+            return false;
+        }
+    }
+    return false;
+}
+
+/// `Dot-string = Atom *("." Atom)`, each `Atom` one or more of RFC 5322's
+/// `atext`.
+fn dot_string(s: &mut Scan) -> bool {
+    loop {
+        let start = s.at;
+        while !s.done() && is_atext(s.chars[s.at]) {
+            s.at += 1;
+        }
+        if s.at == start {
+            return false;
+        }
+        if !s.eat('.') {
+            return true;
+        }
+    }
+}
+
+fn is_atext(c: char) -> bool {
+    return c.is_ascii_alphanumeric() || "!#$%&'*+-/=?^_`{|}~".contains_char(c);
+}
+
+/// `Domain = sub-domain *("." sub-domain)`, each `sub-domain` letters, digits
+/// and hyphens that neither start nor end with a hyphen.
+fn domain(s: &mut Scan) -> bool {
+    loop {
+        let start = s.at;
+        while !s.done() && (s.chars[s.at].is_ascii_alphanumeric() || s.chars[s.at] == '-') {
+            s.at += 1;
+        }
+        if s.at == start || s.chars[start] == '-' || s.chars[s.at - 1] == '-' {
+            return false;
+        }
+        if !s.eat('.') {
+            return true;
+        }
+    }
+}
+
+/// An `address-literal` after its `[`: an IPv4 or an IPv6 address literal. A
+/// `General-address-literal` needs a tag IANA registers, and the registry
+/// holds only `IPv6`.
+fn address_literal(s: &mut Scan) -> bool {
+    let mut inner: List<char> = [];
+    while !s.done() && s.chars[s.at] != ']' {
+        inner.push(s.chars[s.at]);
+        s.at += 1;
+    }
+    if !s.eat(']') {
+        return false;
+    }
+    let mut literal = Scan { chars: inner };
+    if literal.eat('I') && literal.eat('P') && literal.eat('v') && literal.eat('6') && literal.eat(':') {
+        let mut address: List<char> = [];
+        for let k of literal.at..<literal.chars.len() {
+            address.push(literal.chars[k]);
+        }
+        // RFC 5321's `IPv6-comp`: "The "::" represents at least 2 16-bit
+        // groups of zeros."
+        return is_ipv6(&address, 2, Leading::Padded);
+    }
+    literal.at = 0;
+    return dotted_quad(&mut literal, Leading::Padded) && literal.done();
 }
 
 /// RFC 3339's `full-date`, its day within its month.
