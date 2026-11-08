@@ -151,6 +151,13 @@ fn analyze_copy_binding(
     };
     let (local_index, value, skip_value_copy, let_type_id) =
         (*local_index, *value, *skip_value_copy, *let_type_id);
+    // `let x: T;` binds a unit that is no value of `T`. Once constant folding
+    // drops the assignment a short-circuit skipped, an assert's failure report
+    // still reads the slot, and forwarding the unit there left the call one
+    // argument short.
+    if body.declares_without_value(let_type_id, value) {
+        return None;
+    }
     // `let x = Operand::Value(v)`: a copy of a promoted operand. Forward `x`'s
     // reads to it (the value is pooled-immutable, so it is always stable). This
     // is independent of `skip_value_copy` — the source is a value, not a place.
