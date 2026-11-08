@@ -4096,6 +4096,15 @@ WS : ' ' -> skip ;
     assert got == "E 7 a => (s E (r5 (q 7) a)) [r5 7\n]\n";
 }
 
+test "@after reads a token-set label" {
+    let got = parses("grammar T;
+s : r EOF ;
+r @after {System.out.println(\"x \" + $x.text);} : x=(A|B) | C ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+", "s", ["b"]);
+    assert got == "b => (s (r b)) [x b\n]\n";
+}
+
 test "a left-recursive suffix binds its token-set label" {
     let got = parses("grammar T;
 s : e EOF ;
@@ -4120,6 +4129,18 @@ WS : ' ' -> skip ;
 1 - b => (s (e (e 1) (op -) b))
 1 + b - b => (s (e (e (e 1) + b) (op -) b))
 ";
+    }
+}
+
+// The jar never enters the gated suffix, so `s` takes the `+ 2` itself.
+test "a predicate past the operand gates the left-recursive suffix in the simulator" {
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses("grammar T;
+s : e ('+' INT)? EOF ;
+e : e {false}? '+' INT | e . 'z' | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["1 + 2"], &GenerateOptions { atn }) == "1 + 2 => (s (e 1) + 2)\n";
     }
 }
 

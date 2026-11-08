@@ -16,7 +16,7 @@ use {
 use { Diagnostics, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, RuleCallOp } from "./gir.wado";
 use { EmitContext } from "./emit_context.wado";
 use { GenSettings } from "./gen_settings.wado";
-use { RuleCaptures, LabelCapture } from "./parser_plan.wado";
+use { RuleCaptures } from "./parser_plan.wado";
 use {
     MetPredicate,
     body_names_unwired_base,
@@ -364,7 +364,7 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
         gen_vals_fields(w, &rule.locals_decls);
         gen_capture_fields(w, ctx.plan.rule_captures(&rule.name));
         for let label of &ctx.plan.rule_captures(&rule.name).labels {
-            w.line(`${after_label_field(&label.base)}: ${after_label_type(label, ctx)} = ${if label.is_token {
+            w.line(`${after_label_field(&label.base)}: ${label_value_type(label.is_token, &label.ref_name, ctx)} = ${if label.is_token {
                 "-1";
             } else {
                 "null";
@@ -380,15 +380,6 @@ pub fn after_label_field<S: AsStrSlice>(base: S) -> String {
     return `label_${base}`;
 }
 
-/// What a label `@after` reads holds: a token's index, or a call's result,
-/// `null` where the alternative that ran did not bind it.
-pub fn after_label_type(label: &LabelCapture, ctx: &EmitContext) -> String {
-    if label.is_token {
-        return "i32";
-    }
-    let callee = ctx.analysis.find_rule(&label.ref_name).expect("a rule label calls a parser rule");
-    return if ctx.rule_emits_vals(callee) { `Option<${vals_struct_name(callee)}>` } else { "Option<()>" };
-}
 
 /// The captured token range / builder row of each labeled rule call an action
 /// reads. A read that may come before the call asks the shared label instead
@@ -477,6 +468,23 @@ pub fn gen_parser_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
 /// emitter (the tree accrues in the `TreeBuilder`).
 pub fn rule_result_type() -> String {
     return String::from("()");
+}
+
+pub fn rule_result_type_for(rule: &ParserRule, ctx: &EmitContext) -> String {
+    if ctx.rule_emits_vals(rule) {
+        return vals_struct_name(rule);
+    }
+    return rule_result_type();
+}
+
+/// What a label holds: a token's index, or a call's result, `null` where the
+/// alternative that ran did not bind it.
+pub fn label_value_type<S: AsStrSlice>(is_token: bool, ref_name: S, ctx: &EmitContext) -> String {
+    if is_token {
+        return "i32";
+    }
+    let callee = ctx.analysis.find_rule(ref_name).expect("a rule label calls a parser rule");
+    return `Option<${rule_result_type_for(callee, ctx)}>`;
 }
 
 /// Whether a rule's result type is a `<Rule>Vals` struct rather than the

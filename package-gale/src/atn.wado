@@ -363,27 +363,20 @@ fn build_lr_body(
 /// stripped) as a sequence, returning `[entry, exit]`. Each operand takes the
 /// precedence lowering stamped on it, so the ATN models the language the parser
 /// accepts. A self-reference nested in a subrule is a plain call, `e[0]`.
-fn build_lr_suffix<S: AsStrSlice>(
+fn build_lr_suffix(
     b: &mut AtnBuilder,
     alt: &Alternative,
     lr_alt: &LrAlt,
-    rule_name: S,
+    rule_name: &String,
     r: i32,
     rule_index: &HashMap<String, i32>,
 ) -> [i32, i32] {
-    let entry = b.new_state(ATN_BASIC, r);
-    let mut cursor = entry;
-    for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let elem = &alt.elements[i];
-        let seg = if element_is_self_ref(elem, rule_name) {
-            self_ref_segment(b, r, lr_operand_prec(lr_alt, i - 1, rule_name), self_ref_call_site(elem));
-        } else {
-            build_element(b, elem, r, rule_index);
-        };
-        b.add_eps(cursor, seg.0);
-        cursor = seg.1;
-    }
-    return [entry, cursor];
+    let operand_prec = |i: i32| if element_is_self_ref(&alt.elements[i], rule_name) {
+        lr_operand_prec(lr_alt, i - 1, rule_name)
+    } else {
+        NOT_AN_OPERAND
+    };
+    return build_sequence(b, &alt.elements, r, rule_index, &alt.prediction_guards(), 1, operand_prec);
 }
 
 /// The `atn_call_site` id of a self-ref element (unwrapping labels), or -1.
@@ -439,10 +432,11 @@ fn build_alternation(
         return [start, end];
     }
     for let mut i = 0; i < alts.len(); i += 1 {
-        let operand_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
-        let guards = alts[i].prediction_guards();
-        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, operand_prec, &guards);
-        b.add_eps(start, guard_with(b, &guards_before(&guards, 0), rule, seg.0));
+        let prefix_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
+        let last = alts[i].elements.len() - 1;
+        let operand_prec = |k: i32| if prefix_prec > 0 && k == last { prefix_prec } else { NOT_AN_OPERAND };
+        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, &alts[i].prediction_guards(), 0, operand_prec);
+        b.add_eps(start, seg.0);
         b.add_eps(seg.1, end);
     }
     if alts.is_empty() {
@@ -505,39 +499,41 @@ fn guard_with(b: &mut AtnBuilder, guards: &List<AltAction>, rule: i32, entry: i3
     return at;
 }
 
-/// Build a sequence of elements, threading each element's exit into the
-/// next element's entry. Returns `[entry, exit]`. A positive `operand_prec`
-/// makes the last element a prefix alternative's self-ref at that precedence.
-/// Each of `guards` past the left edge guards the element it sits before, or
-/// the exit: prediction answers a predicate where every element ahead matched
-/// nothing.
+global NOT_AN_OPERAND: i32 = -1;
+
+/// Build `elements[first..]` as a sequence, threading each element's exit into
+/// the next element's entry. Returns `[entry, exit]`. `operand_prec(i)` is the
+/// precedence floor element `i` calls its own rule at, as a prefix or suffix
+/// operand. Each of `guards` guards the element it sits before, or the exit:
+/// prediction answers a predicate where every element ahead matched nothing.
 fn build_sequence(
     b: &mut AtnBuilder,
     elements: &List<Element>,
     rule: i32,
     rule_index: &HashMap<String, i32>,
-    operand_prec: i32 = 0,
-    guards: &List<AltAction> = &NO_GUARDS,
+    guards: &List<AltAction>,
+    first: i32,
+    operand_prec: fn(i32) -> i32,
 ) -> [i32, i32] {
-    if elements.is_empty() {
+    if first == elements.len() {
         let entry = b.new_state(ATN_BASIC, rule);
-        return [entry, entry];
+        return [guard_with(b, &guards_before(guards, first), rule, entry), entry];
     }
     let mut entry = -1;
     let mut cursor = -1;
-    for let mut i = 0; i < elements.len(); i += 1 {
+    for let mut i = first; i < elements.len(); i += 1 {
         let elem = &elements[i];
-        let seg = if operand_prec > 0 && i == elements.len() - 1 {
-            self_ref_segment(b, rule, operand_prec, self_ref_call_site(elem));
-        } else {
+        let prec = operand_prec(i);
+        let seg = if prec == NOT_AN_OPERAND {
             build_element(b, elem, rule, rule_index);
-        };
-        if i == 0 {
-            entry = seg.0;
-        } else if guards.is_empty() {
-            b.add_eps(cursor, seg.0);
         } else {
-            b.add_eps(cursor, guard_with(b, &guards_before(guards, i), rule, seg.0));
+            self_ref_segment(b, rule, prec, self_ref_call_site(elem));
+        };
+        let guarded = guard_with(b, &guards_before(guards, i), rule, seg.0);
+        if i == first {
+            entry = guarded;
+        } else {
+            b.add_eps(cursor, guarded);
         }
         cursor = seg.1;
     }
@@ -549,8 +545,6 @@ fn build_sequence(
     }
     return [entry, cursor];
 }
-
-global NO_GUARDS: List<AltAction> = [];
 
 fn guards_before(guards: &List<AltAction>, index: i32) -> List<AltAction> {
     return guards.iter_ref().filter(|a| a.before_index == index).map(|a| *a).collect();

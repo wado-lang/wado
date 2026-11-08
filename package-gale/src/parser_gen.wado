@@ -158,6 +158,7 @@ use {
     gen_parser_member_methods,
     gen_predicate_fns,
     gen_vals_structs,
+    label_value_type,
     mark_gated_predicates,
     result_type_carries_vals,
     rule_call_ctx_field,
@@ -165,6 +166,7 @@ use {
     rule_has_attr_inits,
     rule_has_emittable_actions,
     rule_result_type,
+    rule_result_type_for,
     warn_unhandled_actions,
     wrapper_args,
 } from "./action_gen.wado";
@@ -3194,12 +3196,6 @@ fn open_seeded_alt_fn(w: &mut CodeWriter, f: &mut FnSpec, rule: &ParserRule, ctx
 
 /// A rule's inner / wrapper result type: `<Rule>Vals` when the rule exposes a
 /// value channel (action execution on), else `()`.
-fn rule_result_type_for(rule: &ParserRule, ctx: &EmitContext) -> String {
-    if ctx.rule_emits_vals(rule) {
-        return vals_struct_name(rule);
-    }
-    return rule_result_type();
-}
 
 /// Compact parser for an all-single-token multi-alt rule. The CST node
 /// is a `{ span, token }` struct (`gen_multi_alt_cst` single-token path),
@@ -3606,7 +3602,12 @@ fn leaf_op_binding(op: &Op) -> Option<AltBinding> {
         RuleCall(rc) => Option::Some(
             AltBinding { is_token: false, base: rc.dedup_base, field: rc.field, ref_name: rc.target_name },
         ),
-        Repeat(_) | ListLabel(_) | Group(_) => null,
+        Group(g) => if let TokenOnly(to) = &g.shape {
+            Option::Some(AltBinding { is_token: true, base: to.dedup_base, field: to.field });
+        } else {
+            null;
+        },
+        Repeat(_) | ListLabel(_) => null,
     };
 }
 
@@ -3619,27 +3620,23 @@ struct LabelSite {
 }
 
 fn collect_label_sites(op: &Op, at: i32, nested: bool, out: &mut List<LabelSite>) {
+    if let Some(binding) = leaf_op_binding(op) {
+        out.push(LabelSite { binding, at, nested });
+        return;
+    }
     match *op {
         Repeat(r) => collect_label_sites(&r.body, at, true, out),
         // A list label collects into a list of its own.
         ListLabel(_) => {
         },
-        Group(g) => if let TokenOnly(to) = &g.shape {
-            out.push(LabelSite {
-                binding: AltBinding { is_token: true, base: to.dedup_base, field: to.field },
-                at,
-                nested,
-            });
-        } else {
+        Group(g) => {
             for let alt of &g.alts {
                 for let inner of &alt.ops {
                     collect_label_sites(inner, at, true, out);
                 }
             }
         },
-        Token(_) | Literal(_) | Excluded(_) | Wildcard(_) | RuleCall(_) => out.push(
-            LabelSite { binding: leaf_op_binding(op).unwrap(), at, nested },
-        ),
+        Token(_) | Literal(_) | Excluded(_) | Wildcard(_) | RuleCall(_) => unreachable(),
     }
 }
 
@@ -3700,7 +3697,7 @@ fn enter_alt_label_scope(
         } else {
             "null";
         };
-        w.line(`let mut ${s.field}: ${shared_label_type(&s, ctx)} = ${init};`);
+        w.line(`let mut ${s.field}: ${label_value_type(s.is_token, &s.ref_name, ctx)} = ${init};`);
         if holds_left_operand {
             capture_left_operand(w, &s.capture, ctx);
         }
@@ -3723,13 +3720,6 @@ fn capture_left_operand(w: &mut CodeWriter, field: &String, ctx: &EmitContext) {
     }
 }
 
-fn shared_label_type(label: &AltBinding, ctx: &EmitContext) -> String {
-    if label.is_token {
-        return "i32";
-    }
-    let callee = ctx.analysis.find_rule(&label.ref_name).expect("a rule call names a parser rule");
-    return `Option<${rule_result_type_for(callee, ctx)}>`;
-}
 
 fn gen_alt_elements(
     w: &mut CodeWriter,

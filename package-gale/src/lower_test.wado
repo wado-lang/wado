@@ -4607,6 +4607,29 @@ test "a failed predicate in a called rule closes only its own path" {
     assert pick("TK_B", &q) == 0;
 }
 
+global OWN_PRED_G4: String = "grammar O;
+s : r[0] r[1] EOF ;
+r[int d] : {$d > 0}? A | ;
+A : 'a' ;
+";
+
+// The predicate reads the invocation, so failing it under `r[0]` says nothing
+// about `r[1]`, which takes the `a` after `r[0]` takes nothing.
+test "a failed own-invocation predicate closes no other invocation's path" {
+    let mut g = parse(OWN_PRED_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    assign_action_ids(&mut g);
+    let atn = build_atn(&g);
+    let tk = TokenKinds::build(&g);
+    let eof = tk.id_of("TK_EOF");
+    let sim = decode(&atn);
+    let p = [left_edge_pred_id(&g, 1, 0)] as List<i32>;
+    let stack: List<i32> = [-1, atn.call_site_returns[0]];
+    let a = ([tk.id_of("TK_A"), eof] as List<i32>).to_array();
+    let picked = atn_predict_with_stack(&sim, rule_block_decision(&atn, 1), &stack, &a, 0, eof, 0, &p, &p, |_| false);
+    assert picked == 1;
+}
+
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
     let g = parse(NON_GREEDY_G4).unwrap();
     let atn = build_atn(&g);
