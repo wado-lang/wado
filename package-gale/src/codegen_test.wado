@@ -1259,25 +1259,26 @@ test "atn verify checks a decision meeting a predicate" {
     for let [g4, rule, input, picker] of [
         [
             "grammar T;\nr : a X* EOF ;\na : {true}? b | b X ;\nb : Z Z ;\nX : 'X' ;\nZ : 'Z' ;\nWS : ' ' -> skip ;\n",
-            "r",
-            "Z Z X",
-            "the tournament",
+            "r", "Z Z X", "the tournament",
         ],
         [
-            "grammar G;\ns : ({true}? a | a B) B EOF ;\na : A+ ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n",
-            "s",
-            "a b",
-            "the tournament",
+            "grammar G;\ns : ({true}? a | a B) B EOF ;\na : A+ ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n", "s",
+            "a b", "the tournament",
         ],
-        ["grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n", "u", "a a b", "the repeat"],
+        [
+            "grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n", "u", "a a b",
+            "the repeat",
+        ],
         [
             "grammar L;\ns : e EOF ;\ne : e '.' ID | 'new' e targs? '(' e? ')' | 'new' e targs? | e '(' e? ')' | e {true}? '<' e | e '>' e | ID ;\ntargs : '<' ID '>' ;\nID : [a-z]+ ;\nWS : ' ' -> skip ;\n",
-            "s",
-            "new a < b > . c",
-            "the left-recursion loop",
+            "s", "new a < b > . c", "the left-recursion loop",
         ],
     ] {
-        let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_${rule}("${input}"));\n`, SHOW_FN);
+        let out = eval_beside(
+            gen_with(g4, &verify).source,
+            wado`show("${input}", parse_${rule}("${input}"));\n`,
+            SHOW_FN,
+        );
         assert !out.status matches { Exited(0) }, input;
         assert out.stderr.contains(`: ${picker} picks `), out.stderr;
     }

@@ -1080,7 +1080,20 @@ fn atn_predict_walk<effect E>(
     ask: fn(i32) -> bool with E,
 ) -> [i32, bool] with E {
     let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
-    return atn_predict_above(&mut ATN_DFA, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, &mut preds, &mut [], ask);
+    return atn_predict_above(
+        &mut ATN_DFA,
+        sim,
+        decision,
+        rule_stack,
+        0,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        &mut preds,
+        &mut [],
+        ask,
+    );
 }
 
 fn atn_walk(

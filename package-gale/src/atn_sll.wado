@@ -879,6 +879,9 @@ pub fn sll_decide_fn_name(decision: i32) -> String {
 /// checked against the simulator's.
 pub global ATN_VERIFIED: String = "atn_verified";
 
+/// What a check whose verdict the caller took goes through.
+global ATN_VERIFIED_AGAINST: String = "atn_verified_against";
+
 /// What picked an answer `ATN_VERIFIED` checks. The call passes its
 /// discriminant, and only the panic spells it out.
 pub enum AtnPicker {
@@ -1009,8 +1012,6 @@ pub fn atn_verified_against_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 ) -> String {
     return `${ATN_VERIFIED_AGAINST}(${decision}, ${atn_picker_code(&picker)}, ${pos}, ${verdict}, ${answer})`;
 }
-
-global ATN_VERIFIED_AGAINST: String = "atn_verified_against";
 
 /// Emit `ATN_VERIFIED`, which asks the simulator under no predicate, and
 /// `ATN_VERIFIED_AGAINST`, which takes its verdict. Where no alternative

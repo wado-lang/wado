@@ -4269,9 +4269,9 @@ fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> 
 /// Whether a Repeat's body and what follows it in its alternative can start on
 /// one token, so its first token does not say whether it enters. Past the
 /// alternative's end the caller continues, which is unknown here, so a Repeat
-/// whose rest can match empty counts as contested. That holds as well where the
-/// alternative ends at a left-recursion loop rather than at the rule's tail:
-/// the FOLLOW gate stands in for both there.
+/// whose rest can match empty counts as contested. So does one ending an
+/// alternative that ends at a left-recursion loop rather than at the rule's
+/// tail, which `gate_caller_follow` marks as well.
 fn repeat_contested(
     body_admits: &Admits,
     caller_follow_first: &List<i32>,

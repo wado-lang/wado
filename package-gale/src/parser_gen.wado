@@ -4597,7 +4597,9 @@ fn gen_lr_loop_check(w: &mut CodeWriter, decision: i32, ctx: &mut EmitContext, a
         let call = atn_verified_call(decision, AtnPicker::LrLoop, ctx.atn_arg(), "&p.kinds", pos, "min_prec", `${edge}`);
         gen_verified_check(w, "", [call]);
     } else if at matches { IterationStart } {
-        gen_verified_check(w, "", [atn_verified_against_call(decision, AtnPicker::LrLoop, pos, "_lrc_verdict", `${edge}`)]);
+        gen_verified_check(w, "", [
+            atn_verified_against_call(decision, AtnPicker::LrLoop, pos, "_lrc_verdict", `${edge}`),
+        ]);
     } else {
         gen_gated_check(w, "", decision, AtnPicker::LrLoop, &met, pos, `${edge}`, ctx);
     }
@@ -6598,7 +6600,12 @@ fn gen_exit_check_or_entered(
 }
 
 /// The call checking that the iteration `c` began took edge `edge`.
-fn iteration_verified_call<S: AsStrSlice>(rep_op: &RepeatOp, ctx: &mut EmitContext, c: &IterationCheck, edge: S) -> String {
+fn iteration_verified_call<S: AsStrSlice>(
+    rep_op: &RepeatOp,
+    ctx: &mut EmitContext,
+    c: &IterationCheck,
+    edge: S,
+) -> String {
     let Some(verdict) = &c.verdict else {
         return repeat_verified_call(rep_op, ctx, &c.at, edge);
     };
@@ -8172,7 +8179,9 @@ fn atn_gate_args(gates: &List<AtnGate>) -> String {
 fn atn_gated_verdict<S: AsStrSlice>(decision: i32, met: &List<MetPredicate>, pos: S, ctx: &mut EmitContext) -> String {
     let gates = atn_decision_gates(met, ctx, false);
     let prec = atn_prec_arg(ctx);
-    return `atn_predict_walk(&ATN_SIM, ${decision}, &${ctx.atn_path()}.stack, &p.kinds, ${pos}, TK_EOF, ${prec}, ${atn_gate_args(&gates)})`;
+    return `atn_predict_walk(&ATN_SIM, ${decision}, &${ctx.atn_path()}.stack, &p.kinds, ${pos}, TK_EOF, ${prec}, ${atn_gate_args(
+        &gates,
+    )})`;
 }
 
 /// A group deciding between alternatives. Under `SimpleCst` each alternative is
@@ -8683,7 +8692,11 @@ fn atn_tournament_check(sorted_indices: &List<i32>, ctx: &mut EmitContext) -> At
     let Some(numbers) = ctx.atn_body_alt_numbers(sorted_indices) else {
         unreachable();
     };
-    return AtnCheck { decision: ctx.plan.atn_rule_body_decision(rule), numbers, met: *ctx.decisions.at_rule(rule) };
+    return AtnCheck {
+        decision: ctx.plan.atn_rule_body_decision(rule),
+        numbers,
+        met: *ctx.decisions.at_rule(rule),
+    };
 }
 
 /// Check the candidate `pick` names, an index into `candidates` or -1 where
