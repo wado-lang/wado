@@ -216,28 +216,30 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<match_switch_single_range_no_table.wado/$tmpl$82976a53828ad9fe,[bool]>$spec0$spec0$sroa[t.h0]"(t) {
     let out_3: ref "core:prelude/string.wado//String";
-    let text: ref "core:prelude/string.wado//String";
     let new_used_109: i32;
     let start_110: i32;
+    let $sroa_slot_312: ref null Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    text = (if t -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+    if t {
+        $sroa_slot_312 = array.new_fixed<u8>(116, 114, 117, 101);
+        t = 4;
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    });
+        $sroa_slot_312 = array.new_data<u8>("false");
+        t = 5;
+    }
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee t(text.used) == 0;
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 t == 0;
             if @unlikely(local.tee new_used_109(0 + t) > builtin::array_len(out_3.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_109);
             }
             start_110 = out_3.used;
             out_3.used = new_used_109;
-            builtin::array_copy<u8>(out_3.repr, start_110, text.repr, 0, t);
+            builtin::array_copy<u8>(out_3.repr, start_110, $sroa_slot_312, 0, t);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
