@@ -2199,7 +2199,12 @@ impl SolverBridge {
             .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
         {
             let binders = binder_types(ctx);
-            self.shapes_in(&table, type_id, &place_binder(&binders, &table), &mut shapes);
+            self.shapes_in(
+                &table,
+                type_id,
+                &place_binder(&binders, &table),
+                &mut shapes,
+            );
         }
         let defs = tysys.resolutions.defs();
         let bodies = owed

@@ -4239,10 +4239,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A non-pub field may be neither set nor spread-read from another module;
         // omitting one with a default is fine, the default running in its own module.
         let vantage = self.visibility_vantage(Some(struct_lit.id));
-        let (struct_field_defaults, hidden_fields, is_generic_struct): (
+        let (struct_field_defaults, hidden_fields): (
             Vec<Option<ast::Expr>>,
             IndexMap<String, Visibility>,
-            bool,
         ) = match self.struct_fields_of_written_decl(struct_decl) {
             Some(info) => {
                 let hidden = if struct_module_source == vantage {
@@ -4255,13 +4254,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|(name, _, vis)| (name.clone(), *vis))
                         .collect()
                 };
-                (
-                    info.field_defaults.clone(),
-                    hidden,
-                    !info.type_params.is_empty(),
-                )
+                (info.field_defaults.clone(), hidden)
             }
-            None => (Vec::new(), IndexMap::default(), false),
+            None => (Vec::new(), IndexMap::default()),
         };
         let mut omitted_hidden: Vec<String> = Vec::new();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
@@ -4344,23 +4339,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
-            // This is a generic struct - infer type arguments from field values.
+        let (struct_type, _mangled_struct_name, _fields) = if let Some(inst) = inst {
             // `expected_type` lets the caller's annotation (e.g.
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
             // parameters that never appear in a field, matching the
             // behaviour of plain function calls.
-            // An effect parameter alone takes no type argument.
-            let type_args = match inst {
-                Some(inst) => self.infer_struct_type_args(
-                    struct_decl,
-                    inst,
-                    &fields,
-                    expected_type.or(spread_base_type),
-                    struct_lit.span,
-                ),
-                None => Vec::new(),
-            };
+            let type_args = self.infer_struct_type_args(
+                struct_decl,
+                inst,
+                &fields,
+                expected_type.or(spread_base_type),
+                struct_lit.span,
+            );
 
             // Substitute type parameters in field value types.
             // This is necessary for empty array literals in self-referential fields
