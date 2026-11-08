@@ -2779,7 +2779,7 @@ fn gen_scan_op_elements<S: AsStrSlice>(
     let mut k = *known;
     let mut proven_run = 0;
     for let mut i = start; i <= end; i += 1 {
-        gen_scan_gates_before(w, ctx, gates, i, start, end, &fail_stmt);
+        gen_scan_gates_before(w, ctx, gates, i, start, end, &fail_stmt, &proven_run);
         if i == end {
             break;
         }
@@ -2900,6 +2900,7 @@ fn gen_scan_gates_before<S: AsStrSlice>(
     start: i32,
     end: i32,
     fail_stmt: S,
+    proven_run: &i32,
 ) {
     let lo = if at == start { i32::MIN } else { at };
     let hi = if at == end { i32::MAX } else { at + 1 };
@@ -2909,7 +2910,10 @@ fn gen_scan_gates_before<S: AsStrSlice>(
         }
         match g.step {
             Assign([field, value]) => w.line(`${ctx.scan_gate_member(&field)} = ${value};`),
-            Check(cond) => w.line(`if ${negate_cond(ctx.scan_gate_cond(&cond))} { ${fail_stmt} }`),
+            Check(cond) => {
+                assert *proven_run == 0, "a check compares `pos` with the edge, so no proven token waits behind it";
+                w.line(`if ${negate_cond(ctx.scan_gate_cond(&cond))} { ${fail_stmt} }`);
+            },
         }
     }
 }
@@ -3409,14 +3413,8 @@ fn gen_alt_body(
         w.line(`p.b.set_alt(${alt_index});`);
     }
     let alt = &rule.alternatives[alt_index];
-    gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx, proven_first);
-
-    if ctx.settings.emit_actions {
-        if let Some(a) = after_action {
-            gen_prequel_action(w, a, &ctx.current_rule_name(), false, ctx);
-        }
-    }
-
+    let after = if ctx.settings.emit_actions { after_action } else { &NO_AFTER };
+    gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx, proven_first, after);
     emit_alt_exit(w, ctx);
 }
 
@@ -3683,6 +3681,7 @@ fn gen_alt_elements(
     actions: &List<AltAction>,
     ctx: &mut EmitContext,
     proven_first: &List<i32>,
+    after_action: &Option<ActionSource>,
 ) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
@@ -3729,6 +3728,9 @@ fn gen_alt_elements(
         }
     }
     gen_alt_actions_at(w, actions, elements.len(), ctx, true);
+    if let Some(a) = after_action {
+        gen_prequel_in_scope(w, a, &ctx.current_rule_name(), false, ctx);
+    }
     ctx.cursor.set_alt_bindings(outer);
 }
 
@@ -5345,13 +5347,25 @@ fn gen_prequel_action<S: AsStrSlice>(
     at_entry: bool,
     ctx: &mut EmitContext,
 ) {
-    ctx.cursor.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
     // A prequel stands outside every alternative, so it reaches a label only
     // through the captures the rule's value struct keeps.
     let outer = *ctx.cursor.alt_bindings();
     ctx.cursor.set_alt_bindings([]);
-    gen_action_body(w, src, ctx, !at_entry);
+    gen_prequel_in_scope(w, src, rule_name, at_entry, ctx);
     ctx.cursor.set_alt_bindings(outer);
+}
+
+/// `gen_prequel_action` reading the labels the cursor binds: an `@after` run
+/// at the end of the alternative that bound them.
+fn gen_prequel_in_scope<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    src: &ActionSource,
+    rule_name: S,
+    at_entry: bool,
+    ctx: &mut EmitContext,
+) {
+    ctx.cursor.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
+    gen_action_body(w, src, ctx, !at_entry);
     ctx.cursor.set_expected_names(String::new());
 }
 
@@ -5775,11 +5789,17 @@ fn gen_consume_token_group_op(
     let base = token_group_field_name(alts);
     let _ = dedup_name(&base, name_counts);
     let kinds = ctx.analysis.single_token_kinds(alts);
+    // A label on the set is its field, which is what the alternative shares.
+    let bind = if ctx.settings.emit_actions && let Some(label) = ctx.cursor.shared_label(true, &to.field) {
+        `${label.field} = `;
+    } else {
+        leaf_binding(ctx, &base, &to.field);
+    };
     if proves(proven, &kinds) {
-        w.line(`${leaf_binding(ctx, &base, &to.field)}p.take();`);
+        w.line(`${bind}p.take();`);
         return;
     }
-    w.line(`${leaf_binding(ctx, &base, &to.field)}${expect_set_call(ctx, &kinds)};`);
+    w.line(`${bind}${expect_set_call(ctx, &kinds)};`);
 }
 
 /// Single-alt group emit `(e1 e2 …)`: parse each inner element (each appends

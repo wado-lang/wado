@@ -339,8 +339,11 @@ fn empties_freely(elem: &Element, analysis: &mut GrammarAnalysis, visited: &mut 
             if visited.contains_str(&r.name) {
                 return false;
             }
+            // Only the rules on the path: `w w` empties each `w` in turn.
             visited.push(r.name);
-            any_alt_empties_freely(&analysis.find_rule(&r.name).unwrap().alternatives, analysis, visited);
+            let empties = any_alt_empties_freely(&analysis.find_rule(&r.name).unwrap().alternatives, analysis, visited);
+            let _ = visited.pop();
+            empties;
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
     };
