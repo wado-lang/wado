@@ -1757,9 +1757,10 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_whole__inner(p: &mut Parser) -> WholeVals {
     let mut vals = WholeVals {};
+    let mut r: Option<()> = null;
     vals._span_lo_r = p.pos;
     p.site = 0;
-    let r = _parse_a(p);
+    r = Option::Some(_parse_a(p));
     vals._span_hi_r = p.pos - 1;
     p.expect(TK_B, &EMPTY_SYNC, true);
     if !p.speculating {
@@ -1782,6 +1783,7 @@ fn _parse_whole(p: &mut Parser) -> WholeVals {
 
 fn _parse_opt__inner(p: &mut Parser, follow: i64 = 0) -> OptVals {
     let mut vals = OptVals {};
+    let mut r: Option<()> = null;
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -1794,7 +1796,7 @@ fn _parse_opt__inner(p: &mut Parser, follow: i64 = 0) -> OptVals {
     if opt_scan_pos >= 0 {
         vals._node_r = p.b.checkpoint();
         p.site = 1;
-        let r = _parse_a(p);
+        r = Option::Some(_parse_a(p));
         if !p.speculating {
              p.emit(p.rule_tree_at(vals._node_r)) 
         }
@@ -1841,6 +1843,7 @@ fn _parse_before(p: &mut Parser) -> BeforeVals {
 
 fn _parse_loop_span__inner(p: &mut Parser, follow: i64 = 0) -> LoopSpanVals {
     let mut vals = LoopSpanVals {};
+    let mut r: Option<()> = null;
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
     let mut _plus_first = true;
     while !p.recovering && (_plus_first || p.peek_kind() == TK_A) {
@@ -1850,7 +1853,7 @@ fn _parse_loop_span__inner(p: &mut Parser, follow: i64 = 0) -> LoopSpanVals {
         _plus_first = false;
         vals._span_lo_r = p.pos;
         p.site = 3;
-        let r = _parse_a(p);
+        r = Option::Some(_parse_a(p));
         vals._span_hi_r = p.pos - 1;
         p.expect(TK_B, &SYNC_1, true);
     }
@@ -1874,6 +1877,7 @@ fn _parse_loop_span(p: &mut Parser, follow: i64 = 0) -> LoopSpanVals {
 
 fn _parse_deep__inner(p: &mut Parser, follow: i64 = 0) -> DeepVals {
     let mut vals = DeepVals {};
+    let mut r: Option<()> = null;
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if p.peek_kind() == TK_A {
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
@@ -1890,7 +1894,7 @@ fn _parse_deep__inner(p: &mut Parser, follow: i64 = 0) -> DeepVals {
         if opt_scan_pos >= 0 {
             vals._span_lo_r = p.pos;
             p.site = 4;
-            let r = _parse_a(p);
+            r = Option::Some(_parse_a(p));
             vals._span_hi_r = p.pos - 1;
             p.expect(TK_B, &SYNC_4, false);
         }

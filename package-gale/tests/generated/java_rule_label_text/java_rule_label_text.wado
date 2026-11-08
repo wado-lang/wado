@@ -1763,6 +1763,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
         }
         return vals;
     } else if kind == TK_LIT_g {
+        let mut inner: Option<()> = null;
         p.take();
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         let mut _plus_first = true;
@@ -1797,10 +1798,10 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
             _plus_first = false;
             vals._span_lo_inner = p.pos;
             p.site = 3;
-            let inner = _parse_sub(p);
+            inner = Option::Some(_parse_sub(p));
             vals._span_hi_inner = p.pos - 1;
             if !p.speculating {
-                p.emit(`${p.text_between(vals._span_lo_inner, vals._span_hi_inner)}\n`);
+                p.emit(`${(if inner matches { None } { "null" } else { p.text_between(vals._span_lo_inner, vals._span_hi_inner) })}\n`);
             }
         }
         return vals;
