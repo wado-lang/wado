@@ -1,8 +1,8 @@
 // Regression test: a statement that leaves its function by `return` on every
-// path is no cold path. `pick`'s `match`, an expression statement, returns from
-// both arms, so the statement has type `!` like a `panic(…)` does. Marked cold on that type, it
-// made all of `pick` cold, and Constant Object Globalization left the hot
-// `&"hello"` a per-call allocation.
+// path is no cold path. `pick`'s `match` returns from both arms, so the
+// expression statement has type `!`, as a `panic(…)` does. Marked cold on that
+// type, it made all of `pick` cold, and Constant Object Globalization left the
+// hot `&"hello"` a per-call allocation.
 
 use { println, Stdout } from "core:cli";
 

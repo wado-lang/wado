@@ -1444,7 +1444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a let chain's operands in order, binding each pattern into
     /// `ctx` so later operands and the success path the caller resolves next
     /// can name it. Reify rebuilds the chain's nested `Match` / `If` shape
-    /// (`reify_let_chain_stmts`).
+    /// (`reify_let_chain`).
     pub(super) fn resolve_let_chain_operands(
         &mut self,
         elements: &[ConditionElement],
@@ -3361,7 +3361,8 @@ pub(super) fn collect_ast_pattern_binding_ids(
     }
 }
 
-/// Collect binding names, local indices, and types from a TIR pattern for or-pattern validation.
+/// The names, local indices and types a TIR pattern binds, by name. An
+/// or-pattern binds what its first alternative does.
 pub(super) fn collect_pattern_bindings_with_index(
     pattern: &TirPattern,
 ) -> Vec<(String, u32, tir::TypeId)> {

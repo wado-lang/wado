@@ -103,7 +103,7 @@ use crate::tir::{
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
     deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_pattern_locals};
 use crate::token::{Quote, Span};
 use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
@@ -2153,22 +2153,25 @@ impl<'a> Reify<'a> {
 
         let first = ctx.local_count();
         let mut tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, span, ctx);
-        let mut binders = IndexMap::default();
-        pattern_binders(&tir_pattern, &mut binders);
+        let binders = collect_pattern_bindings_with_index(&tir_pattern);
 
         // The matched arm binds a twin of each local and hands it on to the
         // `let`'s pattern, which binds the local itself where the `let` stands.
-        let mut twins = RenumberLocals {
-            from: first,
-            to: ctx.twin_locals(first),
+        let twins = ctx.twin_locals(first);
+        let twin = |index: u32| {
+            if index >= first {
+                twins + (index - first)
+            } else {
+                index
+            }
         };
-        twins.visit_pattern(&mut tir_pattern);
+        remap_pattern_locals(&mut tir_pattern, twin);
         let mut reads: Vec<TirExpr> = binders
             .iter()
-            .map(|(&index, (name, type_id))| {
+            .map(|(name, index, type_id)| {
                 self.handed_on(TirExpr::new(
                     TirExprKind::Local {
-                        index: twins.renumber(index),
+                        index: twin(*index),
                         name: name.clone(),
                     },
                     *type_id,
@@ -2178,7 +2181,7 @@ impl<'a> Reify<'a> {
             .collect();
         let mut bound: Vec<TirPattern> = binders
             .into_iter()
-            .map(|(local_index, (name, type_id))| TirPattern::Binding {
+            .map(|(name, local_index, type_id)| TirPattern::Binding {
                 name,
                 local_index,
                 type_id,
@@ -2191,7 +2194,11 @@ impl<'a> Reify<'a> {
                 let types = reads.iter().map(|read| read.type_id).collect();
                 let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(types);
                 (
-                    TirExpr::new(TirExprKind::TupleLiteral { elements: reads }, tuple_type, span),
+                    TirExpr::new(
+                        TirExprKind::TupleLiteral { elements: reads },
+                        tuple_type,
+                        span,
+                    ),
                     Some(TirPattern::Tuple(bound, false)),
                 )
             }
@@ -3633,7 +3640,11 @@ impl<'a> Reify<'a> {
     /// labelled blocks. Mirrors `Elaborator::resolve_tuple_for_of`
     /// Handles `.enumerate()` unwrap on the AST
     /// receiver so each iteration sees `[i, element]`.
-    fn reify_tuple_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> TirStmt {
+    fn reify_tuple_for_of(
+        &mut self,
+        for_of: &ast::ForOfStmt,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
 
@@ -3824,7 +3835,11 @@ impl<'a> Reify<'a> {
     /// element types contain `TypePack`. The monomorphizer expands
     /// this after `TypePack` substitution. Mirrors
     /// `Elaborator::resolve_variadic_for_of`.
-    fn reify_variadic_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> TirStmt {
+    fn reify_variadic_for_of(
+        &mut self,
+        for_of: &ast::ForOfStmt,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
         let span = for_of.span;
         let (actual_iterable, is_enumerate) = split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
@@ -10168,78 +10183,6 @@ fn bind_to_local(
         span,
     ));
     TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
-}
-
-/// Moves each local from `from` on to its twin, the one as far from `to`.
-struct RenumberLocals {
-    from: u32,
-    to: u32,
-}
-
-impl RenumberLocals {
-    fn renumber(&self, index: u32) -> u32 {
-        assert!(index >= self.from, "a pattern binds the locals it allocated");
-        self.to + (index - self.from)
-    }
-}
-
-impl TirMutVisitor for RenumberLocals {
-    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        if let Some(index) = pattern.declared_local_index_mut() {
-            *index = self.renumber(*index);
-        }
-        self.walk_pattern(pattern);
-    }
-
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        if let TirExprKind::Local { index, .. } = &mut expr.kind
-            && *index >= self.from
-        {
-            *index = self.renumber(*index);
-        }
-        self.walk_expr(expr);
-    }
-}
-
-/// The locals `pattern` binds a name to, each once, with the name and type.
-fn pattern_binders(pattern: &TirPattern, binders: &mut IndexMap<u32, (String, TypeId)>) {
-    match pattern {
-        TirPattern::Binding {
-            name,
-            local_index,
-            type_id,
-        }
-        | TirPattern::Narrow {
-            name: Some(name),
-            local_index,
-            type_id,
-            ..
-        } => {
-            binders.insert(*local_index, (name.clone(), *type_id));
-        }
-        TirPattern::Tuple(patterns, _) | TirPattern::Or(patterns) => {
-            for pattern in patterns {
-                pattern_binders(pattern, binders);
-            }
-        }
-        TirPattern::Variant { bindings, .. } => {
-            for binding in bindings {
-                pattern_binders(binding, binders);
-            }
-        }
-        TirPattern::Struct { fields, .. } => {
-            for field in fields {
-                pattern_binders(&field.pattern, binders);
-            }
-        }
-        TirPattern::Narrow { name: None, .. }
-        | TirPattern::Wildcard
-        | TirPattern::Literal(_)
-        | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. }
-        | TirPattern::PerInstance { .. } => {}
-    }
 }
 
 /// `if $contract_clause() { check }`: one `contract` clause, marked for

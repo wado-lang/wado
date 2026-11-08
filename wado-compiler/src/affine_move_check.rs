@@ -2126,27 +2126,29 @@ impl MoveWalker<'_, '_> {
     /// state this one began with.
     fn visit_iteration(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
         let start = self.flow.clone();
-        self.in_region(RegionKind::Iteration, |walker| walker.in_scope(|walker| {
-            match head {
-                LoopHead::None => {}
-                LoopHead::Condition(condition) => walker.visit_condition(condition),
-                LoopHead::Binding(pattern, owners) => {
-                    walker.refuse_destructured_drop(pattern, None);
-                    walker.bind_pattern(pattern);
-                    walker.hold_bindings(pattern, owners);
+        self.in_region(RegionKind::Iteration, |walker| {
+            walker.in_scope(|walker| {
+                match head {
+                    LoopHead::None => {}
+                    LoopHead::Condition(condition) => walker.visit_condition(condition),
+                    LoopHead::Binding(pattern, owners) => {
+                        walker.refuse_destructured_drop(pattern, None);
+                        walker.bind_pattern(pattern);
+                        walker.hold_bindings(pattern, owners);
+                    }
                 }
-            }
-            let diverged = walker.visit_block(body);
-            let jumps = walker.loops.last_mut().expect("the loop pushed its jumps");
-            let mut end = (!diverged).then(|| walker.flow.clone());
-            if let Some(continued) = jumps.continues.take() {
-                reach(&mut end, continued);
-            }
-            walker.flow = end.unwrap_or(start);
-            if let Some(update) = update {
-                walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
-            }
-        }));
+                let diverged = walker.visit_block(body);
+                let jumps = walker.loops.last_mut().expect("the loop pushed its jumps");
+                let mut end = (!diverged).then(|| walker.flow.clone());
+                if let Some(continued) = jumps.continues.take() {
+                    reach(&mut end, continued);
+                }
+                walker.flow = end.unwrap_or(start);
+                if let Some(update) = update {
+                    walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
+                }
+            })
+        });
     }
 
     /// A labeled block ends where its body does and where each `break` naming

@@ -67,14 +67,14 @@ for let it of items {
 initializer has no "rest of block" to guard, so `else` is not accepted there).
 
 `let ... else` desugars, at reify time, into one `let` whose value is a two-arm
-`Match`. The matched arm hands the pattern's bindings on to the `let`, which
-binds the same locals again, and the wildcard arm is the diverging `else`
-block:
+`Match`. The matched arm binds `PAT′`, which is `PAT` with each local `bᵢ`
+replaced by a fresh twin `bᵢ′`, and hands the twins on to the `let`. The `let`
+binds the pattern's own locals. The wildcard arm is the diverging `else` block:
 
 ```
 let PAT = EXPR else { ELSE };
 ⇒
-let [b₁, …, bₙ] = match EXPR { PAT => [b₁, …, bₙ], _ => { ELSE } };
+let [b₁, …, bₙ] = match EXPR { PAT′ => [b₁′, …, bₙ′], _ => { ELSE } };
 ```
 
 With one binding the `let` binds it bare, and with none the `match` is the
@@ -82,9 +82,10 @@ statement. Either way the desugaring is one statement, so a temporary the
 initializer holds drops where the `let` ends, as any `let`'s does.
 
 The else block is resolved/reified before the pattern bindings enter scope, so
-it cannot reference them; the scrutinee, else block, and pattern are walked in
-the same order in the records-only resolve pass and the TIR-building reify
-pass, keeping the monotonic local-index allocation identical between the two.
+it cannot reference them. The scrutinee, else block, pattern and twins take
+their locals in the same order in the records-only resolve pass and the
+TIR-building reify pass, keeping the monotonic local-index allocation identical
+between the two.
 
 A pattern name that shadows an outer binding is therefore the outer one
 throughout the else block: `let Some(x) = x else { … }` reads the shadowed `x`

@@ -1218,9 +1218,9 @@ enum Tail {
 
 /// Elaborate `block` in place as a scope that opens declaring `declared`. Its
 /// locals drop at its end where it falls through. A statement of the source
-/// owns the temporaries spilled in it, and so does each statement where no
-/// owner is open, as in a body synthesis built; an `iteration` owns those no
-/// statement in it does. Its last statement's value goes where `tail` says.
+/// owns the temporaries spilled in it, and so does a statement no owner
+/// encloses, such as one of a synthesized body. An `iteration` owns those no
+/// statement in it owns. Its last statement's value goes where `tail` says.
 fn elab_scope(block: &mut TirBlock, declared: Vec<Live>, iteration: bool, tail: Tail, cx: &mut Cx) {
     let depth = cx.open_scope(declared);
     let first_scope_declaration = cx.declarations.len();
@@ -1240,10 +1240,6 @@ fn elab_scope(block: &mut TirBlock, declared: Vec<Live>, iteration: bool, tail: 
         }
         let stmt_tail = if idx == last { tail } else { Tail::Discarded };
         let owns = stmt.source || cx.owners.is_empty();
-        let keeps = matches!(
-            stmt.kind,
-            TirStmtKind::Let { .. } | TirStmtKind::LetDestructure { .. }
-        );
         let first_declared = cx.scopes[depth].lives.len();
         let first_out = out.len();
         let first_declaration = cx.declarations.len();
@@ -1251,7 +1247,10 @@ fn elab_scope(block: &mut TirBlock, declared: Vec<Live>, iteration: bool, tail: 
         if owns {
             cx.owners.push(Owner::Statement {
                 scope: depth,
-                keeps,
+                keeps: matches!(
+                    stmt.kind,
+                    TirStmtKind::Let { .. } | TirStmtKind::LetDestructure { .. }
+                ),
             });
         }
         elab_stmt(stmt, cx, stmt_tail, &mut out);
@@ -1664,11 +1663,11 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         }
 
         // Every operator takes its operands by reference.
-        TirExprKind::Binary { op, left, right } => {
+        TirExprKind::Binary { left, right, .. } => {
             elab_expr(left, false, cx);
             // A short-circuit operand that does not run leaves its temporaries
             // empty, and dropping an empty place drops nothing.
-            elab_expr(right, op.is_short_circuit(), cx);
+            elab_expr(right, false, cx);
         }
         TirExprKind::Assign { target, value } => {
             elab_expr(target, false, cx);
