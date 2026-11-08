@@ -356,7 +356,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .fields
             .iter()
             .map(|field| {
-                let type_id = scope.resolve_struct_field(field);
+                let mut type_id = scope.resolve_struct_field(field);
+                let outer = scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .type_params_in(type_id)
+                    .iter()
+                    .any(|param| param.owner != def);
+                if outer {
+                    let field_type = scope.tysys.type_table.borrow().name(type_id);
+                    let _ = scope.emit(TypeError::LocalStructOuterParam {
+                        struct_name: struct_decl.name.clone(),
+                        field: field.name.clone(),
+                        field_type,
+                        span: field.span,
+                    });
+                    type_id = TypeTable::ERROR;
+                }
                 (field.name.clone(), type_id, field.visibility)
             })
             .collect();

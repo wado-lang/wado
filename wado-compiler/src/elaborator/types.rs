@@ -1518,6 +1518,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A local struct's field reaches a type parameter of the enclosing item,
+    /// through `Self` or a local newtype: the struct is emitted once, so it
+    /// cannot vary with that parameter.
+    LocalStructOuterParam {
+        struct_name: String,
+        field: String,
+        field_type: String,
+        span: Span,
+    },
+
     /// `#[wire(default)]` is removed: a struct field default value is the
     /// single mechanism for an optional field. Guides to `field: T = <value>`.
     WireDefaultAttr {
@@ -3106,6 +3116,18 @@ impl TypeError {
             TypeError::ExportTargetNotWorld { world, span } => (
                 Code::UnknownType,
                 format!("`{world}` in `export(…)` is not a world in scope"),
+                *span,
+            ),
+            TypeError::LocalStructOuterParam {
+                struct_name,
+                field,
+                field_type,
+                span,
+            } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "field '{field}' of local struct `{struct_name}` is `{field_type}`, which names a type parameter of the enclosing item; declare the parameter on the struct instead"
+                ),
                 *span,
             ),
             TypeError::WireDefaultAttr { field, span } => (

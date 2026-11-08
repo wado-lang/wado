@@ -124,4 +124,6 @@ parameter as its own (`struct Box<T>`).
 A local struct's `Self` is that struct. Inside an `impl` or `trait` method, the
 compiler resolves `Self` in the struct's field types to the type the `impl` is
 for instead. In a trait default method this also makes the struct differ per
-inheriting impl, while it is emitted once for all of them.
+inheriting impl, while it is emitted once for all of them. In a generic `impl`
+that type names the impl's parameter, which the struct cannot vary with, so
+such a field is refused as an outer parameter would be.

@@ -2565,14 +2565,12 @@ impl TypeTable {
         let (def, args, members): (Option<DefId>, &[TypeId], Vec<TypeId>) = match self.get(ty) {
             // `params` are the answers for the template `open` is inside. The
             // declaration's own type (no arguments) binds none of its
-            // parameters, which are free there as they are outside any template.
+            // parameters, which are free there as they are outside any template,
+            // and so is the enclosing function's that a local struct's member
+            // reaches through a local newtype.
             ResolvedType::TypeParam { id, .. } => {
                 return open.last().is_some_and(|(template, _)| {
-                    assert_eq!(
-                        id.owner, *template,
-                        "a member mentions its template's parameters"
-                    );
-                    !params.is_empty() && params[id.index as usize]
+                    id.owner == *template && !params.is_empty() && params[id.index as usize]
                 });
             }
             ResolvedType::Resource { .. } => return self.is_resource_object(ty),
@@ -2694,13 +2692,11 @@ impl TypeTable {
         walked: &mut IndexSet<(TypeId, Option<DefId>, Vec<TypeId>)>,
     ) -> bool {
         let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
-            ResolvedType::TypeParam { id, .. } => frame.and_then(|(template, args)| {
-                assert_eq!(
-                    id.owner, template,
-                    "a member names its template's parameters"
-                );
-                args.get(id.index as usize).copied()
-            }),
+            // Another declaration's parameter, reached as in `holds_affine_in`,
+            // is free here.
+            ResolvedType::TypeParam { id, .. } => frame
+                .filter(|&(template, _)| template == id.owner)
+                .and_then(|(_, args)| args.get(id.index as usize).copied()),
             _ => Some(ty),
         };
         let Some(ty) = bind(ty) else {
