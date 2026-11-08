@@ -1279,11 +1279,9 @@ impl MoveWalker<'_, '_> {
         match expr {
             Expr::Block(block) => {
                 self.visit_block(block);
-                self.refuse_dangling_value(expr);
             }
             Expr::LabeledBlock(lb) => {
                 self.visit_labeled_block(&lb.label, &lb.block);
-                self.refuse_dangling_value(expr);
             }
             Expr::If(if_expr) => {
                 self.visit_if(
@@ -1291,11 +1289,9 @@ impl MoveWalker<'_, '_> {
                     &if_expr.then_block,
                     if_expr.else_block.as_ref(),
                 );
-                self.refuse_dangling_value(expr);
             }
             Expr::Match(m) => {
                 self.visit_match(&m.expr, &m.arms);
-                self.refuse_dangling_value(expr);
             }
             Expr::Closure(closure) => self.visit_closure(closure),
             Expr::Assign(a) => self.visit_assign(a),
@@ -1314,7 +1310,6 @@ impl MoveWalker<'_, '_> {
             Expr::WithHandler(w) => {
                 self.visit_operands(expr);
                 self.visit_block(&w.body);
-                self.refuse_dangling_value(expr);
             }
             Expr::StructLiteral(s) => {
                 if let Some(spread) = s.spreads.first()
@@ -1343,6 +1338,16 @@ impl MoveWalker<'_, '_> {
             | Expr::Ident(_)
             | Expr::Literal(_)
             | Expr::Error(_) => self.visit_operands(expr),
+        }
+        if matches!(
+            expr,
+            Expr::Block(_)
+                | Expr::LabeledBlock(_)
+                | Expr::If(_)
+                | Expr::Match(_)
+                | Expr::WithHandler(_)
+        ) {
+            self.refuse_dangling_value(expr);
         }
     }
 
