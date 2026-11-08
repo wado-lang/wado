@@ -289,11 +289,8 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
                 pool.lay_out(payload, &type_table);
             }
         } else {
-            let params = variant
-                .type_params
-                .iter()
-                .map(|param| param.id.expect("a variant's type parameter binds a type"))
-                .collect();
+            // An instance's arguments fill only the parameters binding a type.
+            let params = variant.type_params.iter().filter_map(|param| param.id).collect();
             pool.generic_variants
                 .insert(variant.def, (params, payloads.collect()));
         }

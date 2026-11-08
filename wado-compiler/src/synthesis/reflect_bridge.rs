@@ -39,18 +39,17 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
 /// `$hole_ref$S$V` and `$template_segment$S` where that shape is a template's.
 fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
     let targets: Vec<usize> = {
-        let tt = flat.type_table.borrow();
+        let mut tt = flat.type_table.borrow_mut();
         flat.structs
             .iter()
             .enumerate()
             .filter(|(_, s)| match s.def {
                 StructDef::Anon(shape) => !tt.anon_struct_is_written(shape),
                 StructDef::Decl(decl) => {
-                    s.monomorph_info.is_some()
-                        && tt.has_generic_assoc_type_def_for_decl(
-                            tt.defs().ast_id(decl),
-                            REFLECT_MEMBERS_ASSOC,
-                        )
+                    s.monomorph_info.is_some() && {
+                        let decl = tt.defs().ast_id(decl);
+                        tt.has_generic_assoc_type_def_for_decl(decl, REFLECT_MEMBERS_ASSOC)
+                    }
                 }
             })
             .map(|(i, _)| i)
@@ -115,11 +114,16 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
     // collapses onto one helper.
     let mut seen_subjects: hashmap::IndexSet<String> = hashmap::IndexSet::default();
     let instances: Vec<(TypeId, String, ModuleSource, Vec<TypeId>)> = {
-        let tt = flat.type_table.borrow();
-        tt.iter_type_ids()
+        let mut tt = flat.type_table.borrow_mut();
+        let variants: Vec<TypeId> = tt
+            .iter_type_ids()
+            .filter(|&id| matches!(tt.get(id), ResolvedType::Variant { .. }))
+            .collect();
+        variants
+            .into_iter()
             .filter_map(|id| {
-                let ResolvedType::Variant { def, type_args } = tt.get(id) else {
-                    return None;
+                let ResolvedType::Variant { def, type_args } = tt.get(id).clone() else {
+                    unreachable!("collected as a variant");
                 };
                 if type_args.is_empty() {
                     return None;
@@ -138,9 +142,9 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                     .then(|| {
                         (
                             id,
-                            tt.decl_name(*def).to_string(),
-                            tt.def_module(*def).clone(),
-                            type_args.clone(),
+                            tt.decl_name(def).to_string(),
+                            tt.def_module(def).clone(),
+                            type_args,
                         )
                     })
             })

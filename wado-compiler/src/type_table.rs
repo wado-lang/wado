@@ -3937,13 +3937,13 @@ impl TypeTable {
     /// [`Self::resolve_assoc_type`] applies to resolved types. With
     /// `type_args`, only an impl whose target binds at them takes part.
     fn generic_assoc_type_def(
-        &self,
+        &mut self,
         base_decl: AstId,
         target_ref: Option<RefKind>,
         assoc_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> Option<(DefId, AssocAnswer)> {
-        let mut candidates: Vec<(DefId, &AssocAnswer)> = self
+        let mut candidates: Vec<(DefId, AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| {
@@ -3953,29 +3953,40 @@ impl TypeTable {
             })
             .flat_map(|(key, answers)| answers.0.iter().map(move |entry| (key.trait_decl, entry)))
             .filter(|(_, entry)| type_args.is_none_or(|args| self.entry_reaches(entry, args)))
+            .map(|(trait_decl, entry)| (trait_decl, entry.clone()))
             .collect();
         if candidates.iter().any(|(_, entry)| entry.written.is_empty()) {
             candidates.retain(|(_, entry)| entry.written.is_empty());
         }
         // Several traits may declare one name over a single definition —
         // `IterFilter` answers `Item` as both `Iterator` and `IntoIterator` —
-        // so the definitions decide agreement. One answer means one type only
-        // where both are written over the same parameters.
-        let &(trait_decl, last) = candidates.last()?;
-        candidates
+        // so the definitions decide agreement. Each impl writes its answer over
+        // its own parameters, so the answers are compared at one instance: the
+        // call's, else the target one of the impls writes.
+        let (trait_decl, last) = candidates.last()?.clone();
+        let frame = type_args.map(<[TypeId]>::to_vec).or_else(|| {
+            candidates
+                .iter()
+                .find_map(|(_, entry)| entry.impl_def)
+                .map(|def| self.impl_target_args(def).to_vec())
+        });
+        let Some(frame) = frame else {
+            // Every answer is written over the declaration's own parameters.
+            return candidates
+                .iter()
+                .all(|(_, entry)| entry.answer == last.answer)
+                .then_some((trait_decl, last));
+        };
+        let mut answers = candidates
             .iter()
-            .all(|(_, entry)| entry.answer == last.answer && self.same_frame(entry, last))
-            .then(|| (trait_decl, last.clone()))
-    }
-
-    /// Whether two entries are written over the same parameters: the
-    /// declaration's own, or impl targets that place them alike.
-    fn same_frame(&self, a: &AssocAnswer, b: &AssocAnswer) -> bool {
-        match (a.impl_def, b.impl_def) {
-            (None, None) => true,
-            (Some(a), Some(b)) => a == b || self.impl_target_args(a) == self.impl_target_args(b),
-            (Some(_), None) | (None, Some(_)) => false,
-        }
+            .map(|(_, entry)| {
+                let slots = self.entry_slots(entry, base_decl, &frame)?;
+                Some(self.substitute_type_params(entry.answer, &slots))
+            });
+        let first = answers.next()??;
+        answers
+            .all(|answer| answer == Some(first))
+            .then_some((trait_decl, last))
     }
 
     /// The parameters a generic `entry` is written over, at an instance of
@@ -4094,65 +4105,10 @@ impl TypeTable {
         }
     }
 
-    /// Resolve an associated type of a generic instance from its impl's definition.
-    /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
-    /// then substitutes using the instance's `type_args` to get `i32`.
-    pub fn resolve_generic_assoc_type(
-        &self,
-        concrete_id: TypeId,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        let type_args = self.nominal_type_args(concrete_id)?;
-        let decl = self.decl_of_type(concrete_id)?;
-        let (_, entry) = self.generic_assoc_type_def(
-            decl,
-            self.ref_kind(concrete_id),
-            assoc_name,
-            Some(&type_args),
-        )?;
-        let slots = self.entry_slots(&entry, decl, &type_args)?;
-        let def_type_id = entry.answer;
-        match self.get(def_type_id).clone() {
-            ResolvedType::TypeParam { id, .. } => slots.get(&id).copied(),
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name: inner_assoc_name,
-                ..
-            } => {
-                // The def is `I::InnerName`. Substitute I with the concrete type arg.
-                let inner_concrete_id = match self.get(param_id) {
-                    ResolvedType::TypeParam { id, .. } => slots.get(id).copied()?,
-                    _ => param_id,
-                };
-                // Recursively resolve `inner_concrete_id::inner_assoc_name`.
-                if let Some(resolved) =
-                    self.resolve_assoc_type(inner_concrete_id, &inner_assoc_name)
-                {
-                    return Some(resolved);
-                }
-                self.resolve_generic_assoc_type(inner_concrete_id, &inner_assoc_name)
-            }
-            // A composite def (`&T`, `List<T>`, …) still carrying the base
-            // struct's type params cannot be substituted here without interning
-            // (this is a `&self` fast path). Return `None` so the caller keeps
-            // the projection unresolved; the `&mut`
-            // `resolve_generic_assoc_type_mono` resolves it with the instance's
-            // type args. A param-free composite def is returned as-is.
-            _ => {
-                if self.contains_type_param(def_type_id) {
-                    None
-                } else {
-                    Some(def_type_id)
-                }
-            }
-        }
-    }
-
-    /// Monomorphization-time associated-type resolution for a generic instance.
-    /// Where [`Self::resolve_generic_assoc_type`] is a `&self` fast path limited
-    /// to a bare-`TypeParam` def, this substitutes positionally through
-    /// [`Self::substitute_type_params`], so a composite or nested definition
-    /// (`&T`, `I::Item`) becomes fully concrete one level per recursion.
+    /// Monomorphization-time associated-type resolution for a generic instance:
+    /// the impl's definition substituted through [`Self::substitute_type_params`],
+    /// so a composite or nested definition (`&T`, `I::Item`) becomes fully
+    /// concrete one level per recursion.
     pub fn resolve_generic_assoc_type_mono(
         &mut self,
         concrete_id: TypeId,
@@ -4177,16 +4133,17 @@ impl TypeTable {
     /// Whether a generic definition of `assoc_name` is registered for the
     /// declaration behind `type_id` — i.e. the generic type carries a
     /// synthesized impl binding that associated type.
-    pub fn has_generic_assoc_type_def(&self, type_id: TypeId, assoc_name: &str) -> bool {
+    pub fn has_generic_assoc_type_def(&mut self, type_id: TypeId, assoc_name: &str) -> bool {
+        let ref_kind = self.ref_kind(type_id);
         self.decl_of_type(type_id).is_some_and(|decl| {
-            self.generic_assoc_type_def(decl, self.ref_kind(type_id), assoc_name, None)
+            self.generic_assoc_type_def(decl, ref_kind, assoc_name, None)
                 .is_some()
         })
     }
 
     /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
     /// declaring [`AstId`](crate::ast::AstId) of a type it names bare.
-    pub fn has_generic_assoc_type_def_for_decl(&self, decl: AstId, assoc_name: &str) -> bool {
+    pub fn has_generic_assoc_type_def_for_decl(&mut self, decl: AstId, assoc_name: &str) -> bool {
         self.generic_assoc_type_def(decl, None, assoc_name, None)
             .is_some()
     }
@@ -5748,17 +5705,15 @@ impl TypeTable {
     }
 
     fn collect_type_params_in(&self, id: TypeId, params: &mut IndexSet<TypeParamId>) {
-        match self.type_param_id(id) {
-            Some(param) => {
-                params.insert(param);
-            }
-            None => {
-                self.any_constituent(id, &mut |t| {
-                    self.collect_type_params_in(t, params);
-                    false
-                });
-            }
+        if let Some(param) = self.type_param_id(id) {
+            params.insert(param);
         }
+        // A mapped pack's element is a constituent too: `[..T]` over a scalar
+        // `T` mentions `T` as well as the pack repeating it.
+        self.any_constituent(id, &mut |t| {
+            self.collect_type_params_in(t, params);
+            false
+        });
     }
 
     /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in

@@ -374,6 +374,14 @@ impl TraitContext {
 
     /// Bind `name` to `binder`, keeping the binder it shadows with its bounds.
     pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
+        // The name already reaching this binder shadows nothing.
+        if self
+            .type_params
+            .get(name)
+            .is_some_and(|held| held.type_id == binder.type_id)
+        {
+            return;
+        }
         if let Some(shadowed) = self.type_params.insert(name.to_string(), binder) {
             let bounds = self.type_param_bounds.shift_remove(name).unwrap_or_default();
             self.shadowed.push((name.to_string(), shadowed, bounds));
