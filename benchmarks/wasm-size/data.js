@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794123747253,
+  "lastUpdate": 1794143609506,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75693,6 +75693,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/33143edb96f16c19396109ea0548614b8b942f6a"
         },
         "date": 1794123746474,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404722,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b25d037955f95b079af708465dcb5cd6740cc20d",
+          "message": "Merge pull request #2588 from wado-lang/ccr-a7390310-jade-loader\n\nfeat(jade)!: compile a schema whose remote references a caller's loader fetches",
+          "timestamp": "2026-11-08T21:54:46+09:00",
+          "tree_id": "0f1ab5ff4513c5619b1f0da9cff9255c7968ef1a",
+          "url": "https://github.com/wado-lang/wado/commit/b25d037955f95b079af708465dcb5cd6740cc20d"
+        },
+        "date": 1794143608208,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
