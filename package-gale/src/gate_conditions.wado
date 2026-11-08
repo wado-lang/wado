@@ -108,6 +108,20 @@ pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &Gramma
         && alt.edge_gates().iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
+/// Whether prediction entering `alt` meets a predicate that will be rendered:
+/// `alt_has_gate`, and also one inside a group or a callee it opens with.
+pub fn alt_meets_gate(alt: &Alternative, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
+    if !settings.emit_actions {
+        return false;
+    }
+    let Some(edges) = analysis.left_edges() else {
+        panic("predicates are tracked to every rule's left edge before any alternative is weighed");
+    };
+    let mut met: List<MetPredicate> = [];
+    let _ = met_at(&alt.elements, &alt.actions, 0, site, analysis, edges, &mut met);
+    return met.iter_ref().any(|m| gate_condition_for(&m.0, settings, analysis, &m.1) matches { Some(_) });
+}
+
 /// A predicate prediction meets at a decision, beside the site it renders in.
 pub type MetPredicate = [AltAction, PredicateSite];
 

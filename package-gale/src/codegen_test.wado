@@ -4582,6 +4582,28 @@ WS : [ \\t]+ -> skip ;
     assert got == "a b => error\n";
 }
 
+// `q` tells its alternatives apart on its second token, so the one `b c`
+// leaves viable is predicated, and a false predicate leaves none. The jar
+// reports no viable alternative at `b`.
+test "a predicate on the one alternative deeper lookahead leaves removes it" {
+    let g4 = "grammar X;\ns : x EOF ;\nx : 'a' q | 'a' 'b' 'c' ;\nq : {false}? 'b' 'c' | 'b' 'd' ;\nWS : ' ' -> skip ;\n";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        let got = parses(g4, "s", ["a b c", "a b d"], &GenerateOptions { atn });
+        assert got == "a b c => error\na b d => (s (x a (q b d)))\n", got;
+    }
+}
+
+// Both alternatives end on `a c d`, and only what follows `r` would tell them
+// apart, but the first meets a false predicate inside its group: the jar takes
+// the second.
+test "a predicate inside a group decides a tie at the rule's end" {
+    let g4 = "grammar Z;\ns : r EOF ;\nr : ({false}? 'a' 'b'? 'c')? 'd' | 'a' 'c' 'd' 'e'? ;\nWS : ' ' -> skip ;\n";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        let got = parses(g4, "s", ["a c d", "d", "a c d e"], &GenerateOptions { atn });
+        assert got == "a c d => (s (r a c d))\nd => (s (r d))\na c d e => (s (r a c d e))\n", got;
+    }
+}
+
 test "a left-recursive rule runs @after once per invocation, after its whole climb" {
     let got = parses("grammar T;
 s : e EOF ;

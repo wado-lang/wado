@@ -8849,7 +8849,16 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
 ) {
     match node {
         Leaf(idx) => {
-            emit_leaf_pick(w, side, &fn_name, *idx, ctx);
+            // Lookahead leaves one alternative viable; a false predicate on it
+            // leaves none, so the pick falls through to no viable alternative.
+            let gate = side_gate(side, &alts[*idx], ctx);
+            if gate.is_empty() {
+                emit_leaf_pick(w, side, &fn_name, *idx, ctx);
+            } else {
+                w.begin(`if ${gate}`);
+                emit_leaf_pick(w, side, &fn_name, *idx, ctx);
+                w.end();
+            }
         },
         Consume(c) => {
             // Shared-prefix terminal: the dispatch below reads past it, and the

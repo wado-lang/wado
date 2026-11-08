@@ -45,19 +45,19 @@ fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
     return out;
 }
 
-/// How `rule`'s non-LR alternatives group by what they start with. `has_gate`
-/// answers for the site asking: prediction is predicate-blind, so a rule with
-/// a gate keeps deciding in the tournament that evaluates it, without its
-/// FOLLOW.
+/// How `rule`'s non-LR alternatives group by what they start with. `meets_gate`
+/// answers for the site asking: prediction is predicate-blind, so a rule whose
+/// alternative meets a predicate keeps deciding in the tournament that
+/// evaluates it, without its FOLLOW.
 pub fn rule_overlap_groups(
     rule: &ParserRule,
     lowered_rule: &Rule,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    has_gate: fn(&Alternative) -> bool,
+    meets_gate: fn(&Alternative) -> bool,
 ) -> RuleOverlap {
     let multi_alt = lowered_rule matches { MultiAlt(_) };
-    return overlap_groups_of(rule, non_lr_alt_indices(lowered_rule), multi_alt, analysis, follow, has_gate);
+    return overlap_groups_of(rule, non_lr_alt_indices(lowered_rule), multi_alt, analysis, follow, meets_gate);
 }
 
 /// `rule_overlap_groups` over the alternatives `non_lr_indices`, for a rule
@@ -69,7 +69,7 @@ pub fn overlap_groups_of(
     multi_alt: bool,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    has_gate: fn(&Alternative) -> bool,
+    meets_gate: fn(&Alternative) -> bool,
 ) -> RuleOverlap {
     let mut first_sets: List<List<i32>> = [];
     for let idx of non_lr_indices {
@@ -83,7 +83,7 @@ pub fn overlap_groups_of(
         &first_sets,
         analysis,
     );
-    let gated = non_lr_indices.iter_ref().any(|i: &i32| has_gate(&rule.alternatives[*i]));
+    let gated = non_lr_indices.iter_ref().any(|i: &i32| meets_gate(&rule.alternatives[*i]));
     let end_follow: List<i32> = if multi_alt && !gated { follow.for_probe(&rule.name) } else { [] };
     admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);
     let groups = compute_overlap_groups_of(&classes);

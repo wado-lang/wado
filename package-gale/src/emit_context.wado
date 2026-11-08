@@ -15,6 +15,7 @@ use {
     DecisionPredicates,
     PredicateSite,
     alt_has_gate,
+    alt_meets_gate,
     alt_scan_gate_conditions,
     gate_condition_for,
     predicates_met_entering,
@@ -487,8 +488,9 @@ impl EmitContext {
 
     /// `rule_overlap::rule_overlap_groups` for the rule being emitted.
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
-        let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
-        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, has_gate);
+        let site = self.predicate_site();
+        let meets_gate = |alt: &Alternative| alt_meets_gate(alt, &self.settings, &self.analysis, &site);
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, meets_gate);
     }
 
     /// Whether `rule` gets a value channel emitted: action execution is on and the
