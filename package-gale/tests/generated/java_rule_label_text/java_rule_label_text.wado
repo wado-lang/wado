@@ -1265,6 +1265,23 @@ impl Inspect for NodeKind {
     }
 }
 
+pub enum AAlt {
+    Pair,
+    Y,
+    Group,
+}
+
+impl CstStore {
+    pub fn a_alt(&self, node: i32) -> Option<AAlt> {
+        return match self.alt(node) {
+            0 => Option::Some(AAlt::Pair),
+            1 => Option::Some(AAlt::Y),
+            2 => Option::Some(AAlt::Group),
+            _ => null,
+        };
+    }
+}
+
 struct Parser {
     tokens: TokenStream,
     kinds: Array<i32>,
@@ -1741,6 +1758,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_LIT_x {
+        p.b.set_alt(0);
         vals._span_lo_my_label = p.pos;
         p.site = 1;
         let my_label = _parse_sub(p);
@@ -1757,12 +1775,14 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
         }
         return vals;
     } else if kind == TK_LIT_y {
+        p.b.set_alt(1);
         let my_label = p.take();
         if !p.speculating {
             p.emit(`${p.token_text(my_label)}\n`);
         }
         return vals;
     } else if kind == TK_LIT_g {
+        p.b.set_alt(2);
         let mut inner: Option<()> = null;
         p.take();
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }

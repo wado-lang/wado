@@ -1103,6 +1103,21 @@ impl Inspect for NodeKind {
     }
 }
 
+pub enum RAlt {
+    A1,
+    B1,
+}
+
+impl CstStore {
+    pub fn r_alt(&self, node: i32) -> Option<RAlt> {
+        return match self.alt(node) {
+            0 => Option::Some(RAlt::A1),
+            1 => Option::Some(RAlt::B1),
+            _ => null,
+        };
+    }
+}
+
 struct Parser {
     tokens: TokenStream,
     kinds: Array<i32>,
@@ -1546,6 +1561,7 @@ fn _parse_r__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_A {
+        p.b.set_alt(0);
         p.site = 0;
         let x = _parse_a(p);
         if !p.speculating {
@@ -1553,6 +1569,7 @@ fn _parse_r__inner(p: &mut Parser) -> () {
         }
         return;
     } else if kind == TK_B {
+        p.b.set_alt(1);
         p.site = 1;
         let x = _parse_b(p);
         if !p.speculating {
