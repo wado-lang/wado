@@ -62,7 +62,12 @@ variant core:prelude/types.wado//Option<u32> {  // TypeId(13)
     Some(u32),
 }
 
-variant wasi:http/types.wado//ErrorCode {  // TypeId(14)
+variant core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>> {  // TypeId(14)
+    None,
+    Some(ref null "core:prelude//$Resource"),
+}
+
+variant wasi:http/types.wado//ErrorCode {  // TypeId(15)
     DnsTimeout,
     DnsError(ref "wasi:http/types.wado//DnsErrorPayload"),
     DestinationNotFound,
@@ -102,11 +107,6 @@ variant wasi:http/types.wado//ErrorCode {  // TypeId(14)
     LoopDetected,
     ConfigurationError,
     InternalError(ref null "core:prelude/string.wado//String"),
-}
-
-variant core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>> {  // TypeId(15)
-    None,
-    Some(ref null "core:prelude//$Resource"),
 }
 
 variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(16)
@@ -161,84 +161,84 @@ struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(26)
     payload_0: u32,
 }
 
-struct wasi:http/types.wado//ErrorCode::DnsError {  // TypeId(27)
+struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some {  // TypeId(27)
+    discriminant: i32,
+    payload_0: ref null "core:prelude//$Resource",
+}
+
+struct wasi:http/types.wado//ErrorCode::DnsError {  // TypeId(28)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//DnsErrorPayload",
 }
 
-struct wasi:http/types.wado//ErrorCode::TlsAlertReceived {  // TypeId(28)
+struct wasi:http/types.wado//ErrorCode::TlsAlertReceived {  // TypeId(29)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//TlsAlertReceivedPayload",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpRequestBodySize {  // TypeId(29)
+struct wasi:http/types.wado//ErrorCode::HttpRequestBodySize {  // TypeId(30)
     discriminant: i32,
     payload_0: ref "core:prelude/types.wado//Option<u64>",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize {  // TypeId(30)
+struct wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize {  // TypeId(31)
     discriminant: i32,
     payload_0: ref "core:prelude/types.wado//Option<u32>",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize {  // TypeId(31)
+struct wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize {  // TypeId(32)
     discriminant: i32,
     payload_0: ref null "wasi:http/types.wado//FieldSizePayload",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize {  // TypeId(32)
+struct wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize {  // TypeId(33)
     discriminant: i32,
     payload_0: ref "core:prelude/types.wado//Option<u32>",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize {  // TypeId(33)
+struct wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize {  // TypeId(34)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//FieldSizePayload",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize {  // TypeId(34)
+struct wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize {  // TypeId(35)
     discriminant: i32,
     payload_0: ref "core:prelude/types.wado//Option<u32>",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize {  // TypeId(35)
+struct wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize {  // TypeId(36)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//FieldSizePayload",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpResponseBodySize {  // TypeId(36)
+struct wasi:http/types.wado//ErrorCode::HttpResponseBodySize {  // TypeId(37)
     discriminant: i32,
     payload_0: ref "core:prelude/types.wado//Option<u64>",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize {  // TypeId(37)
+struct wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize {  // TypeId(38)
     discriminant: i32,
     payload_0: ref "core:prelude/types.wado//Option<u32>",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize {  // TypeId(38)
+struct wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize {  // TypeId(39)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//FieldSizePayload",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding {  // TypeId(39)
+struct wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding {  // TypeId(40)
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct wasi:http/types.wado//ErrorCode::HttpResponseContentCoding {  // TypeId(40)
+struct wasi:http/types.wado//ErrorCode::HttpResponseContentCoding {  // TypeId(41)
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(41)
+struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(42)
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
-}
-
-struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some {  // TypeId(42)
-    discriminant: i32,
-    payload_0: ref null "core:prelude//$Resource",
 }
 
 struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(43)
