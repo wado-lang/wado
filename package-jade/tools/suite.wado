@@ -39,10 +39,20 @@ global SKIPPED_FILES: List<[String, String]> = [
     ],
 ];
 
+/// The files of `optional/format/` whose format Jade does not assert yet.
+global UNASSERTED_FORMATS: List<String> = [
+    "date-time", "date", "duration", "ecmascript-regex", "email", "hostname", "idn-email", "idn-hostname", "ipv4",
+    "ipv6", "iri-reference", "iri", "json-pointer", "regex", "relative-json-pointer", "time", "uri-template", "uri",
+];
+
+/// Where the files whose tests compile with `format` asserting lie.
+global FORMAT_DIR: String = "optional/format";
+
 export fn run() with (Stdout, Preopens) {
     // Read before removing, so a missing suite leaves the generated tests.
     let mut files = json_files("");
     files.extend(&json_files("optional"));
+    files.extend(&json_files(FORMAT_DIR));
     fs::remove_dir_all(&OUT).unwrap();
     fs::create_dir_all(&OUT).unwrap();
     let mut copied = HashSet::<String>::new();
@@ -76,6 +86,11 @@ fn skip_reason(file: &String) -> Option<String> {
             return Option::Some(why);
         }
     }
+    for let name of UNASSERTED_FORMATS {
+        if *file == fs::join(&FORMAT_DIR, `${name}.json`) {
+            return Option::Some("Jade does not assert this format yet");
+        }
+    }
     return null;
 }
 
@@ -86,6 +101,7 @@ fn test_file(file: &String, cases: &Node, copied: &mut HashSet<String>) -> Strin
 // vendor/JSON-Schema-Test-Suite/tests/draft2020-12/${*file}. Regenerate with
 // \`mise run suite-jade\`; do not edit.
 `;
+    let harness = if file.starts_with(`${FORMAT_DIR}/`) { "check_format" } else { "check" };
     let mut skipped: List<String> = [];
     let mut tests = "";
     let mut names = HashSet::<String>::new();
@@ -122,7 +138,7 @@ fn test_file(file: &String, cases: &Node, copied: &mut HashSet<String>) -> Strin
             let valid = t.get("valid").unwrap().as_bool().unwrap();
             tests.push_str(`
 test ${to_string(&name).unwrap()} {
-    check(
+    ${harness}(
         ${raw(&schema_text)},
         ${raw(&data)},
         ${valid},${remotes_arg}
@@ -138,7 +154,7 @@ test ${to_string(&name).unwrap()} {
     }
     if !tests.is_empty() {
         out.push_str(`
-use { check } from "../suite.wado";
+use { ${harness} } from "../suite.wado";
 `);
         if !embedded.is_empty() {
             out.push_str("\nglobal REMOTES: List<[String, String]> = [\n");

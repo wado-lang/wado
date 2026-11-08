@@ -1,0 +1,53 @@
+//! The `format` values a validator asserts when compiled to, each read strictly
+//! by the grammar Draft 2020-12 cites for it.
+
+use { Uri } from "core:uri";
+
+/// A format Jade asserts.
+internal enum Format {
+    UriReference,
+    Uuid,
+}
+
+impl Format {
+    /// The format `name` names, or none for one Jade does not assert.
+    internal fn named(name: &String) -> Option<Format> {
+        return match name.as_str_slice() {
+            "uri-reference" => Option::Some(UriReference),
+            "uuid" => Option::Some(Uuid),
+            _ => null,
+        };
+    }
+
+    internal fn name(&self) -> String {
+        return match self {
+            UriReference => "uri-reference",
+            Uuid => "uuid",
+        };
+    }
+
+    /// Whether `text` is a value of the format.
+    internal fn admits(&self, text: StrSlice) -> bool {
+        return match self {
+            UriReference => Uri::from_str(text) matches { Ok(_) },
+            Uuid => is_uuid(text),
+        };
+    }
+}
+
+/// Whether `text` is RFC 4122's `UUID`: 32 hex digits, grouped 8-4-4-4-12 by
+/// hyphens. `core:uuid` reads more, such as braces and a `urn:uuid:` prefix.
+fn is_uuid(text: StrSlice) -> bool {
+    if text.len() != 36 {
+        return false;
+    }
+    let mut i = 0;
+    for let c of text.chars() {
+        let hyphen = i == 8 || i == 13 || i == 18 || i == 23;
+        if hyphen != (c == '-') || !hyphen && !c.is_hexdigit() {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
+}

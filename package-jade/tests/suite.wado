@@ -1,13 +1,19 @@
 //! The harness the generated JSON Schema Test Suite tests call.
 
 use { Uri } from "core:uri";
-use { Document, Schema, SchemaSet, Validator } from "../src/lib.wado";
+use { CompileOptions, Document, Schema, SchemaSet, Validator } from "../src/lib.wado";
 use { DEFAULT_BASE } from "../src/validate.wado";
 
 /// Holds `data` to the validity `valid` against `schema`, both JSON text. A
 /// document `schema` refers to is loaded from `remotes`, each as its URI and
 /// its text.
-pub fn check(schema: String, data: String, valid: bool, remotes: &List<[String, String]> = &[]) {
+pub fn check(
+    schema: String,
+    data: String,
+    valid: bool,
+    remotes: &List<[String, String]> = &[],
+    options: CompileOptions = CompileOptions {},
+) {
     let base = Uri::from_str(&DEFAULT_BASE).unwrap();
     let mut set = SchemaSet::new();
     set.insert(base, Schema::parse(schema).unwrap());
@@ -19,8 +25,13 @@ pub fn check(schema: String, data: String, valid: bool, remotes: &List<[String, 
             }
         }
         return Result::Err("not embedded; run `mise run suite-jade`");
-    }).unwrap();
+    }, options).unwrap();
     let doc = Document::parse(data).unwrap();
     let result = validator.validate(&doc.root());
     assert result matches { Ok(_) } == valid, `${result:?}`;
+}
+
+/// `check`, with `format` asserting.
+pub fn check_format(schema: String, data: String, valid: bool) {
+    check(schema, data, valid, &[], CompileOptions { assert_format: true });
 }
