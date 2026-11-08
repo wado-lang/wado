@@ -236,7 +236,7 @@ impl Validator {
     {
         let [mut c, root] = Compiler::rooted(set, uri)?;
         c.resolve_reached()?;
-        return Result::Ok(c.into_validator(root));
+        return Result::Ok(Compiler::into_validator(c, root));
     }
 
     /// The document `set` holds under `uri` compiled, its references resolved
@@ -251,7 +251,7 @@ impl Validator {
     {
         let [mut c, root] = Compiler::rooted(set, uri)?;
         set.load_into(&mut c, fetch)?;
-        return Result::Ok(c.into_validator(root));
+        return Result::Ok(Compiler::into_validator(c, root));
     }
 
     /// Every keyword `instance` fails, once for each value failing it, or `Ok`
@@ -1055,10 +1055,11 @@ impl Compiler {
         return Result::Ok(out);
     }
 
-    /// The validator rooted at subschema `root`.
-    fn into_validator(&mut self, root: i32) -> Validator {
-        let dynamic_anchors = self.link();
-        return Validator { root, nodes: self.nodes, resources: self.resources, dynamic_anchors };
+    /// The validator `c` compiled, rooted at subschema `root`. It takes `c` by
+    /// value so its tables move rather than copy.
+    fn into_validator(mut c: Compiler, root: i32) -> Validator {
+        let dynamic_anchors = c.link();
+        return Validator { root, nodes: c.nodes, resources: c.resources, dynamic_anchors };
     }
 
     /// Points every reference at its target, and marks the targets more than

@@ -215,7 +215,7 @@ test "strict-tree schema, guards against misspelled properties: instance with mi
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-tree.json","$dynamicAnchor":"node","$ref":"tree.json","unevaluatedProperties":false}"#,
         #"{"children":[{"daat":1}]}"#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -224,7 +224,7 @@ test "strict-tree schema, guards against misspelled properties: instance with co
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-tree.json","$dynamicAnchor":"node","$ref":"tree.json","unevaluatedProperties":false}"#,
         #"{"children":[{"data":1}]}"#,
         true,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -233,7 +233,7 @@ test "tests for implementation dynamic anchor and reference link: incorrect pare
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible.json","$ref":"extendible-dynamic-ref.json","$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}"#,
         #"{"a":true}"#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -242,7 +242,7 @@ test "tests for implementation dynamic anchor and reference link: incorrect exte
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible.json","$ref":"extendible-dynamic-ref.json","$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}"#,
         #"{"elements":[{"b":1}]}"#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -251,7 +251,7 @@ test "tests for implementation dynamic anchor and reference link: correct extend
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible.json","$ref":"extendible-dynamic-ref.json","$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}"#,
         #"{"elements":[{"a":1}]}"#,
         true,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -260,7 +260,7 @@ test "$ref and $dynamicAnchor are independent of order - $defs first: incorrect 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-defs-first.json","allOf":[{"$ref":"extendible-dynamic-ref.json"},{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}]}"#,
         #"{"a":true}"#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -269,7 +269,7 @@ test "$ref and $dynamicAnchor are independent of order - $defs first: incorrect 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-defs-first.json","allOf":[{"$ref":"extendible-dynamic-ref.json"},{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}]}"#,
         #"{"elements":[{"b":1}]}"#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -278,7 +278,7 @@ test "$ref and $dynamicAnchor are independent of order - $defs first: correct ex
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-defs-first.json","allOf":[{"$ref":"extendible-dynamic-ref.json"},{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}}]}"#,
         #"{"elements":[{"a":1}]}"#,
         true,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -287,7 +287,7 @@ test "$ref and $dynamicAnchor are independent of order - $ref first: incorrect p
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-ref-first.json","allOf":[{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}},{"$ref":"extendible-dynamic-ref.json"}]}"#,
         #"{"a":true}"#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -296,7 +296,7 @@ test "$ref and $dynamicAnchor are independent of order - $ref first: incorrect e
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-ref-first.json","allOf":[{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}},{"$ref":"extendible-dynamic-ref.json"}]}"#,
         #"{"elements":[{"b":1}]}"#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -305,7 +305,7 @@ test "$ref and $dynamicAnchor are independent of order - $ref first: correct ext
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"http://localhost:1234/draft2020-12/strict-extendible-allof-ref-first.json","allOf":[{"$defs":{"elements":{"$dynamicAnchor":"elements","properties":{"a":true},"required":["a"],"additionalProperties":false}}},{"$ref":"extendible-dynamic-ref.json"}]}"#,
         #"{"elements":[{"a":1}]}"#,
         true,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -314,7 +314,7 @@ test "$ref to $dynamicRef finds detached $dynamicAnchor: number is valid" {
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/detached-dynamicref.json#/$defs/foo"}"#,
         #"1"#,
         true,
-        REMOTES,
+        &REMOTES,
     );
 }
 
@@ -323,7 +323,7 @@ test "$ref to $dynamicRef finds detached $dynamicAnchor: non-number is invalid" 
         #"{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"http://localhost:1234/draft2020-12/detached-dynamicref.json#/$defs/foo"}"#,
         #""a""#,
         false,
-        REMOTES,
+        &REMOTES,
     );
 }
 
