@@ -4325,7 +4325,13 @@ use { atn_blob_bytes, Atn } from "./atn.wado";
 use { build_atn, NON_GREEDY_G4, GREEDY_G4, LR_G4 } from "../tests/support/fixtures.wado";
 use { TokenKinds } from "./token_kinds.wado";
 use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY, ATN_TR_RULE } from "./runtime/atn.wado";
-use { AtnPredictor, atn_invocation_prec, atn_predict_once, atn_predict_with_stack, atn_unasked } from "./runtime/atn_predict.wado";
+use {
+    AtnPredictor,
+    atn_invocation_prec,
+    atn_predict_once,
+    atn_predict_with_stack,
+    atn_unasked,
+} from "./runtime/atn_predict.wado";
 use { atn_lr_loop_decision, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { Span } from "./runtime/lex.wado";
 use { Token } from "./g4/token.wado";
@@ -4497,7 +4503,17 @@ test "predict drops an alternative whose predicate fails from the viable ones" {
         mk(5),
     ];  // ID '(' ')' — only alt 0 is viable
     let kinds = to_kinds(&paren);
-    let pick = |false_preds: List<i32>| atn_predict_with_stack(&sim, d, &empty, &kinds, 0, eof, 0, &false_preds, |_| false);
+    let pick = |false_preds: List<i32>| atn_predict_with_stack(
+        &sim,
+        d,
+        &empty,
+        &kinds,
+        0,
+        eof,
+        0,
+        &false_preds,
+        |_| false,
+    );
     assert pick([]) == 0;
     assert pick([left_edge_pred_id(&g, 0, 1)]) == 0;
     assert pick([left_edge_pred_id(&g, 0, 0)]) == -1;

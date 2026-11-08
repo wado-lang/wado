@@ -2935,7 +2935,9 @@ fn gen_scan_gates_before<S: AsStrSlice>(
             },
             // A proven token waiting means the walk has consumed one.
             Escape(cond) => if proven_run == 0 {
-                w.line(`if ${ctx.scan_gate_cond(&cond)} { ${ctx.scan_gate_member(&ctx.settings.scan_edge_field)} = -1; }`);
+                w.line(
+                    `if ${ctx.scan_gate_cond(&cond)} { ${ctx.scan_gate_member(&ctx.settings.scan_edge_field)} = -1; }`,
+                );
             },
         }
     }
@@ -3685,11 +3687,11 @@ fn enter_alt_label_scope(
         }
         let holds_left_operand = left_operand matches { Some(name) && name == s.base };
         let init = if s.is_token {
-            "-1"
+            "-1";
         } else if holds_left_operand {
-            `Option::Some(${s.base})`
+            `Option::Some(${s.base})`;
         } else {
-            "null"
+            "null";
         };
         w.line(`let mut ${s.field}: ${shared_label_type(&s, ctx)} = ${init};`);
         if holds_left_operand {
@@ -6200,9 +6202,7 @@ fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// (`(S | ID)? m` on `f()`), a shape lookahead's included: its signatures
 /// cannot see past the body (`('-'? 'a')? 'a'` on `a`).
 fn optional_probe_decides(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
-    return r.body_scannable
-        && r.probe_contested
-        && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
+    return r.body_scannable && r.probe_contested && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Whether a probe has something to ask: a lowered continuation, or the runtime

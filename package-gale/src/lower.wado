@@ -2288,13 +2288,27 @@ fn lower_scan_repeat(
                     && has_nested_optional_in_alt(&g.alternatives[0])
                     && !alt_has_variable_repeat(&g.alternatives[0])
                     && !shape_optional_count_exceeds_cap(&g.alternatives[0].elements) {
-                    let plain = lower_scan_plain_repeat(rep, ctx, outer_follow, follow_arg, gate_caller_follow, outer_suffix);
+                    let plain = lower_scan_plain_repeat(
+                        rep,
+                        ctx,
+                        outer_follow,
+                        follow_arg,
+                        gate_caller_follow,
+                        outer_suffix,
+                    );
                     return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx, plain);
                 }
             }
         }
     }
-    return ScanElement::Repeat(lower_scan_plain_repeat(rep, ctx, outer_follow, follow_arg, gate_caller_follow, outer_suffix));
+    return ScanElement::Repeat(lower_scan_plain_repeat(
+        rep,
+        ctx,
+        outer_follow,
+        follow_arg,
+        gate_caller_follow,
+        outer_suffix,
+    ));
 }
 
 fn lower_scan_plain_repeat(
@@ -2399,7 +2413,10 @@ fn rebind_scan_repeat_caller_follow(
         return ScanElement::Repeat(rebind(re));
     }
     if let OptionalLookahead(ole) = se && let Some(re) = ole.as_repeat {
-        return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement { ..ole, as_repeat: Option::Some(rebind(re)) });
+        return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
+            ..ole,
+            as_repeat: Option::Some(rebind(re)),
+        });
     }
     return se;
 }

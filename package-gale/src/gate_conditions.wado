@@ -527,8 +527,12 @@ fn cond_and(a: ScanCond, b: ScanCond) -> ScanCond {
     if b matches { Never } || a matches { Always } {
         return b;
     }
-    let When(x) = a else { unreachable(); };
-    let When(y) = b else { unreachable(); };
+    let When(x) = a else {
+        unreachable();
+    };
+    let When(y) = b else {
+        unreachable();
+    };
     return ScanCond::When(`${and_operand(&x)} && ${and_operand(&y)}`);
 }
 
@@ -539,8 +543,12 @@ fn cond_or(a: ScanCond, b: ScanCond) -> ScanCond {
     if b matches { Always } || a matches { Never } {
         return b;
     }
-    let When(x) = a else { unreachable(); };
-    let When(y) = b else { unreachable(); };
+    let When(x) = a else {
+        unreachable();
+    };
+    let When(y) = b else {
+        unreachable();
+    };
     return ScanCond::When(`(${x} || ${y})`);
 }
 
@@ -602,7 +610,10 @@ fn alts_empty_paths(
     let mut out = NO_EMPTY_PATH;
     for let alt of alts {
         let paths = alt_empty_paths(alt, settings, analysis, site, visited);
-        out = EmptyPaths { escapes: cond_or(out.escapes, paths.escapes), free: cond_or(out.free, paths.free) };
+        out = EmptyPaths {
+            escapes: cond_or(out.escapes, paths.escapes),
+            free: cond_or(out.free, paths.free),
+        };
     }
     return out;
 }
