@@ -723,7 +723,7 @@ options.
   [diagnostics](#diagnostics).
 - A generator that logs through `core:log`'s `TextSink<WallClock>` imports a
   clock, so it is refused as below.
-- Both random interfaces answer zeros, which both permit.
+- Both random interfaces answer the same on every run, which both permit.
 - `wasi:random/random` is not provided, because WASI requires a deterministic
   environment to omit it.
 - A map under the default seed works as in any other program: `HashMap::new()`,

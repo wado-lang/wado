@@ -76,7 +76,7 @@ test {
 - Test blocks belong to the `test` world. Compiling for any other world leaves them out
 - [`core:eval`](./stdlib-core-eval.md) and [`core:fuel`](./stdlib-core-fuel.md) belong to the `test` world too. A program for any other world that reaches either does not compile
 - Only the test blocks of the file being tested run. A test block in a module it imports is compiled but not run, so each test runs once, from the file that declares it
-- `wasi:random/insecure` and `wasi:random/insecure-seed` answer zeros, which both interfaces permit, so a test that hashes or draws from them behaves the same on every run
+- `wasi:random/insecure` and `wasi:random/insecure-seed` answer the same on every run, which both interfaces permit, so a test that hashes or draws from them behaves the same on every run
 
 ### `#[expect_trap]` Attribute
 

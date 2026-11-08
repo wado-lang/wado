@@ -14,9 +14,9 @@ use crate::input_cache::InputCache;
 use crate::knobs::RuntimeKnobs;
 
 /// The interfaces that hand a cached run nothing its key does not decide:
-/// output, its types, exit, insecure randomness, which a test answers with
-/// zeros, and `core:fuel`, whose `spent` answers `None` since a metered run is
-/// never cached. Every other import is an effect whose answer can change
+/// output, its types, exit, insecure randomness, which a test answers the same
+/// on every run, and `core:fuel`, whose `spent` answers `None` since a metered
+/// run is never cached. Every other import is an effect whose answer can change
 /// between runs (a clock, secure randomness, a file, the network,
 /// `core:eval`), so it decides the outcome as much as the compile's inputs do.
 const OUTCOME_NEUTRAL_IMPORTS: &[&str] = &[
