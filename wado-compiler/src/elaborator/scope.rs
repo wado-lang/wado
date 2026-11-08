@@ -921,9 +921,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for tp in params.iter().filter(|p| !p.is_effect) {
             // `<F: fn(...)>` binds the parameter directly to the bound's function
             // type: the bound is surface syntax for "F is exactly this
-            // signature". Such params consume no `TypeParam` index slot, keeping
-            // the space dense so `substitute_type_params` — keyed by
-            // `TypeParam.index` — agrees with the signature's slot positions.
+            // signature". Such params take no slot, so a use site's arguments,
+            // which fill only the parameters binding a type, line up with them.
             let fn_bound_sig = if tp.is_pack {
                 None
             } else {

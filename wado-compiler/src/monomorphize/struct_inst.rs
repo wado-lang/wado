@@ -23,7 +23,7 @@ impl Monomorphizer {
         let substitution: TypeArgMap = generic
             .type_params
             .iter()
-            .filter_map(|param| param.id)
+            .map(|param| param.id)
             .zip(key.impl_type_args.iter().copied())
             .collect();
 

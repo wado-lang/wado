@@ -3101,7 +3101,6 @@ fn convert_local(local: &TirLocal) -> NirLocal {
 fn convert_type_param(tp: &TirTypeParam) -> NirTypeParam {
     NirTypeParam {
         name: tp.name.clone(),
-        is_effect: tp.is_effect,
         is_pack: tp.is_pack,
         bounds: tp.bounds.clone(),
         default: tp.default,

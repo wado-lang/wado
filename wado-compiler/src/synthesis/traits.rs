@@ -3586,10 +3586,9 @@ fn make_type_param_ids(
 ) -> Vec<TypeId> {
     type_params
         .iter()
-        .filter_map(|tp| {
-            let id = tp.id?;
-            assert_eq!(id.owner, owner, "a declaration owns its parameters");
-            Some(tt.make_declared_param(owner, tp.name.clone(), id.index, tp.is_pack))
+        .map(|tp| {
+            assert_eq!(tp.id.owner, owner, "a declaration owns its parameters");
+            tt.make_declared_param(owner, tp.name.clone(), tp.id.index, tp.is_pack)
         })
         .collect()
 }

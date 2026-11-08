@@ -436,45 +436,36 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .bind(name, BinderInScope::of(index, type_id, decl));
         TirTypeParam {
             name: name.to_string(),
-            is_effect: false,
             is_pack,
             bounds,
             default: None,
-            id: Some(TypeParamId {
+            id: TypeParamId {
                 owner: impl_def,
                 index,
-            }),
+            },
             projected,
         }
     }
 
-    /// A data declaration's parameters for the TIR.
-    pub(super) fn data_type_params(&mut self, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
-        self.project_type_params(params.iter())
-    }
-
-    /// A function's parameters for the TIR. An effect or `fn`-bound one takes
-    /// no slot.
-    fn fn_type_params(&mut self, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
-        self.project_type_params(params.iter().filter(|p| p.is_real_type_param()))
-    }
-
+    /// A declaration's parameters for the TIR: those taking a slot, which an
+    /// instance and an impl over it take one argument for. An effect or
+    /// `fn`-bound one takes none.
+    ///
     /// Resolved in this frame, where a default naming a sibling (`<A, B = A>`)
     /// reaches it and the frame binds each parameter; once the frame is torn
     /// down it cannot.
-    fn project_type_params<'p>(
+    pub(super) fn project_type_params(
         &mut self,
-        params: impl Iterator<Item = &'p ast::GenericParam>,
+        params: &[ast::GenericParam],
     ) -> Vec<TirTypeParam> {
         params
+            .iter()
+            .filter(|p| p.is_real_type_param())
             .map(|p| {
-                let id = p.is_real_type_param().then(|| {
-                    let binder = self.annotate_ctx.trait_ctx.type_params[&p.name].type_id;
-                    self.tysys.type_table.borrow().declared_param(binder)
-                });
+                let binder = self.annotate_ctx.trait_ctx.type_params[&p.name].type_id;
+                let id = self.tysys.type_table.borrow().declared_param(binder);
                 TirTypeParam {
                     name: p.name.clone(),
-                    is_effect: p.is_effect,
                     is_pack: p.is_pack,
                     bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                     default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
@@ -1788,7 +1779,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         scope.resolve_field_defaults(struct_decl, &struct_field_types);
 
-        let type_params = scope.data_type_params(&struct_decl.type_params);
+        let type_params = scope.project_type_params(&struct_decl.type_params);
         drop(scope);
 
         self.sem
@@ -2575,7 +2566,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let owner = self.tysys.def_at(decl_id);
         let type_params = self
             .enter_decl_params_scope(owner, params)
-            .data_type_params(params);
+            .project_type_params(params);
         self.sem.types.decl_type_params.insert(decl_id, type_params);
     }
 
@@ -2776,7 +2767,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         scope.walk_fn_body(func, return_type, &mut ctx);
 
-        let type_params = scope.fn_type_params(&func.type_params);
+        let type_params = scope.project_type_params(&func.type_params);
 
         let effects = scope.resolve_effects(&func.effects);
 
@@ -3045,7 +3036,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         self.walk_fn_body(func, return_type, &mut ctx);
 
-        let type_params = self.fn_type_params(&func.type_params);
+        let type_params = self.project_type_params(&func.type_params);
 
         // Store resolved param types for generic methods (before restoring type params scope)
         // so TypeParams have the correct ids for later inference at call sites.

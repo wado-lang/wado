@@ -137,14 +137,14 @@ fn instance_arg(
     if template
         .impl_type_params
         .iter()
-        .any(|p| p.id == Some(param))
+        .any(|p| p.id == param)
     {
         return key.impl_type_args.get(param.index as usize).copied();
     }
     let at = template
         .type_params
         .iter()
-        .position(|p| p.id == Some(param))?;
+        .position(|p| p.id == param)?;
     key.method_type_args.get(at).copied()
 }
 

@@ -1155,14 +1155,13 @@ impl<'a> Reify<'a> {
     /// scope, which is where the base type is resolved, not here.
     fn declared_type_params(owner: DefId, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
         (0u32..)
-            .zip(params)
+            .zip(params.iter().filter(|p| p.is_real_type_param()))
             .map(|(index, p)| TirTypeParam {
                 name: p.name.clone(),
-                is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.real_bounds().iter().map(|b| b.name.clone()).collect(),
                 default: None,
-                id: (!p.is_effect).then_some(TypeParamId { owner, index }),
+                id: TypeParamId { owner, index },
                 projected: false,
             })
             .collect()
@@ -10330,7 +10329,7 @@ fn bind_trait_contracts(
 }
 
 /// A call to `callee`, passing it `func`'s parameters and type parameters,
-/// which `callee` declares as well. A call passes no effect argument.
+/// which `callee` declares as well.
 fn call_with_params(
     func: &TirFunction,
     callee: &TirFunction,
@@ -10340,14 +10339,13 @@ fn call_with_params(
     let type_args: Vec<TypeId> = func
         .type_params
         .iter()
-        .filter_map(|param| {
-            let id = param.id?;
-            Some(type_table.make_declared_param(
-                id.owner,
+        .map(|param| {
+            type_table.make_declared_param(
+                param.id.owner,
                 param.name.clone(),
-                id.index,
+                param.id.index,
                 param.is_pack,
-            ))
+            )
         })
         .collect();
     assert_eq!(func.type_params.len(), callee.type_params.len());

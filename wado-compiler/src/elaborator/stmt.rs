@@ -378,7 +378,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        let type_params = scope.data_type_params(&struct_decl.type_params);
+        let type_params = scope.project_type_params(&struct_decl.type_params);
         drop(scope);
 
         self.sem

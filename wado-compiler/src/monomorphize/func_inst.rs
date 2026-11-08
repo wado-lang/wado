@@ -1094,7 +1094,7 @@ impl Monomorphizer {
             .filter(|p| !p.is_pack)
             .count();
         for param in &generic.impl_type_params {
-            let id = param.id.expect("an impl block's parameter binds a type");
+            let id = param.id;
             if param.is_pack && !param.projected {
                 // Read the shape off the declaration, never off `key`:
                 // `InstantiationKey` leaves `method_info` out of its equality
@@ -1141,8 +1141,7 @@ impl Monomorphizer {
             }
         }
 
-        // The arguments fill only the parameters binding a type.
-        let own = generic.type_params.iter().filter_map(|param| param.id);
+        let own = generic.type_params.iter().map(|param| param.id);
         substitution.extend(own.zip(key.method_type_args.iter().copied()));
 
         // A `T^Trait::method` receiver is written by name (the param named
@@ -1152,7 +1151,7 @@ impl Monomorphizer {
             .impl_type_params
             .iter()
             .chain(&generic.type_params)
-            .filter_map(|param| Some((param.name.clone(), param.id?)))
+            .map(|param| (param.name.clone(), param.id))
             .collect();
 
         // Mangle through `mangle_type_arg_for_generic` so the definition-side

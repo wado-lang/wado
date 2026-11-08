@@ -2172,20 +2172,18 @@ pub enum TirStmtKind {
     },
 }
 
-/// Generic type parameter in TIR (from AST `GenericParam`)
+/// A type parameter taking a slot, which an instance takes one argument for.
+/// An effect parameter and one written `<F: fn(...)>` take none, so the TIR
+/// carries neither.
 #[derive(Debug, Clone)]
 pub struct TirTypeParam {
     pub name: String,
-    /// Whether this is an effect parameter (`effect E`)
-    pub is_effect: bool,
     /// Whether this is a type pack parameter (`..T`)
     pub is_pack: bool,
     pub bounds: Vec<String>,
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
-    /// Which parameter it is; `None` for one that binds no type parameter: an
-    /// effect parameter, or one written `<F: fn(...)>`.
-    pub id: Option<TypeParamId>,
+    pub id: TypeParamId,
     /// Whether a blanket impl's bound projects it (`..F` in
     /// `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F>`). The instance key
     /// carries the projection's answer at the parameter's own slot, a pack
@@ -2288,8 +2286,7 @@ pub fn solve_row(
 pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
     impl_type_params
         .iter()
-        .filter_map(|p| p.id)
-        .map(|id| id.index + 1)
+        .map(|p| p.id.index + 1)
         .max()
         .unwrap_or(0)
 }
@@ -3394,11 +3391,10 @@ impl TirFunction {
             .is_some_and(LocalMethodName::is_closure_call)
     }
 
-    /// Returns true if this function has type params that need monomorphization
-    /// (excludes effect params, which are erased at compile time).
+    /// Whether this function has type params that need monomorphization.
     #[inline]
     pub fn has_real_type_params(&self) -> bool {
-        self.type_params.iter().any(|p| !p.is_effect)
+        !self.type_params.is_empty()
     }
 
     /// Whether monomorphization instantiates this function rather than

@@ -276,7 +276,6 @@ fn method_args_at(
     template
         .type_params
         .iter()
-        .filter(|param| !param.is_effect)
-        .map(|param| bound.get(&param.id?).copied())
+        .map(|param| bound.get(&param.id).copied())
         .collect()
 }
