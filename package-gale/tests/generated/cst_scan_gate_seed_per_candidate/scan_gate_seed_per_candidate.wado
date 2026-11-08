@@ -1355,10 +1355,7 @@ impl AtnPredictor {
                 return [alt, self.floor];
             }
         }
-        return [
-            atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, ask),
-            0,
-        ];
+        return [atn_predict_above(&mut ATN_DFA, sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, met, ask), 0];
     }
 
     fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
@@ -1858,8 +1855,7 @@ impl CfgSet {
     fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32, guard: i32) -> [i32, bool]
         contract alt + 1 < CFG_KEY_ALT_SLOT
     {
-        let k = (atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_GUARD_SLOT as i64
-            + guard as i64;
+        let k = (atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_GUARD_SLOT as i64 + guard as i64;
         let found = self.index.get(k);
         if found >= 0 {
             let merged = arena.merge(self.pctx[found], pctx);
@@ -1932,7 +1928,8 @@ fn atn_closure(
         if guard > ATN_CLOSURE_GUARD {
             break;
         }
-        if c.state == lr_loop_unconsumed && sim.tr_kind[sim.state_tr_start[c.state] + c.alt % ATN_FAILED_ALT] == ATN_TR_PRECEDENCE {
+        if c.state == lr_loop_unconsumed
+            && sim.tr_kind[sim.state_tr_start[c.state] + c.alt % ATN_FAILED_ALT] == ATN_TR_PRECEDENCE {
             continue;
         }
         let res = scratch.cset.add(arena, c.state, c.alt, c.pr, c.pctx, c.guard);
@@ -1951,13 +1948,7 @@ fn atn_closure(
     return scratch.rset.to_list();
 }
 
-fn atn_expand(
-    sim: &AtnSim,
-    arena: &mut CtxArena,
-    cur: &AtnConfig,
-    scratch: &mut ClosureScratch,
-    preds: &AtnPreds,
-) {
+fn atn_expand(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch, preds: &AtnPreds) {
     let work = &mut scratch.work;
     let rset = &mut scratch.rset;
     if cur.state == ATN_ACCEPT_EOF || atn_state_consumes(sim, cur.state) {
@@ -2194,7 +2185,7 @@ internal fn atn_predict_once(
     return alt;
 }
 
-internal fn atn_predict_with_stack<effect E>(
+internal fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
@@ -2203,8 +2194,8 @@ internal fn atn_predict_with_stack<effect E>(
     eof: i32,
     min_prec: i32 = 0,
     met: &List<i32> = &ATN_NO_PREDS.met,
-    ask: fn(i32) -> bool with E = atn_unasked,
-) -> i32 with E {
+    ask: fn(i32) -> bool = atn_unasked,
+) -> i32 {
     let mut dfa = AtnDfa::new();
     return atn_predict_above(&mut dfa, sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, met, ask);
 }
@@ -2226,7 +2217,19 @@ fn atn_predict_above<effect E>(
     let mut asked: List<i32> = [];
     loop {
         let mut held: List<i32> = [];
-        let [alt, _] = atn_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, &preds, &mut held);
+        let [alt, _] = atn_walk(
+            dfa,
+            sim,
+            decision,
+            rule_stack,
+            floor,
+            tokens,
+            start_pos,
+            eof,
+            min_prec,
+            &preds,
+            &mut held,
+        );
         held.sort();
         let mut fresh = false;
         for let label of held {
@@ -2359,7 +2362,13 @@ impl AtnDfa {
             if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
                 continue;
             }
-            seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: caller, pr: min_prec, guard: ATN_NO_GUARD });
+            seeds.push(AtnConfig {
+                state: sim.tr_target[start + j],
+                alt: j,
+                pctx: caller,
+                pr: min_prec,
+                guard: ATN_NO_GUARD,
+            });
         }
         let configs = atn_closure(sim, &mut self.arena, &seeds, &mut self.scratch, dstate, preds);
         return self.add_state(sim, configs, from);
