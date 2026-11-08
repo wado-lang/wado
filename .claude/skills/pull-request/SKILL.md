@@ -47,13 +47,6 @@ inside it.
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.
 
-If the branch touches what the stdlib tests or the benchmarks compile or run
-on, run `mise run update-baselines` and commit the update: the compiler, the
-stdlib, `benchmark/`, a `package-*` a benchmark imports (Gale), or wasmtime in
-`Cargo.lock`. CI fails on any difference from either baseline: the stdlib
-coverage, a region a test now reaches included, and the fuel benchmarks.
-`wado-compiler/lib/AGENTS.md` says what the coverage baseline may change.
-
 ## Title
 
 A short summary of the value the branch creates, not of what was edited. A
@@ -108,6 +101,12 @@ and cut every sentence a reader would skip.
 ## Just before opening
 
 Check mergeability again, as above: `main` moves while these steps run.
+
+Then run `mise run update-baselines` and commit the update. This is the only
+step that updates the baselines. CI fails on any difference from either one:
+the stdlib coverage, a region a test now reaches included, and the fuel
+benchmarks. `wado-compiler/lib/AGENTS.md` says what the coverage baseline may
+change.
 
 ## After opening
 
