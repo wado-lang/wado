@@ -8852,11 +8852,11 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             // Lookahead leaves one alternative viable; a false predicate on it
             // leaves none, so the pick falls through to no viable alternative.
             let gate = side_gate(side, &alts[*idx], ctx);
-            if gate.is_empty() {
-                emit_leaf_pick(w, side, &fn_name, *idx, ctx);
-            } else {
+            if !gate.is_empty() {
                 w.begin(`if ${gate}`);
-                emit_leaf_pick(w, side, &fn_name, *idx, ctx);
+            }
+            emit_leaf_pick(w, side, &fn_name, *idx, ctx);
+            if !gate.is_empty() {
                 w.end();
             }
         },
