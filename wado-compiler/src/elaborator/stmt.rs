@@ -361,9 +361,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .type_params_in(type_id)
-                    .iter()
-                    .any(|param| param.owner != def);
+                    .reaches_foreign_param(type_id, def);
                 if outer {
                     let field_type = scope.tysys.type_table.borrow().name(type_id);
                     let _ = scope.emit(TypeError::LocalStructOuterParam {

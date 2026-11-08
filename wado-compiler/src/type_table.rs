@@ -2565,12 +2565,11 @@ impl TypeTable {
         let (def, args, members): (Option<DefId>, &[TypeId], Vec<TypeId>) = match self.get(ty) {
             // `params` are the answers for the template `open` is inside. The
             // declaration's own type (no arguments) binds none of its
-            // parameters, which are free there as they are outside any template,
-            // and so is the enclosing function's that a local struct's member
-            // reaches through a local newtype.
+            // parameters, which are free there as they are outside any template.
             ResolvedType::TypeParam { id, .. } => {
                 return open.last().is_some_and(|(template, _)| {
-                    id.owner == *template && !params.is_empty() && params[id.index as usize]
+                    assert_eq!(id.owner, *template, "a member names its template's parameters");
+                    !params.is_empty() && params[id.index as usize]
                 });
             }
             ResolvedType::Resource { .. } => return self.is_resource_object(ty),
@@ -2692,8 +2691,7 @@ impl TypeTable {
         walked: &mut IndexSet<(TypeId, Option<DefId>, Vec<TypeId>)>,
     ) -> bool {
         let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
-            // Another declaration's parameter, reached as in `holds_affine_in`,
-            // is free here.
+            // A parameter `frame` does not bind is free here.
             ResolvedType::TypeParam { id, .. } => frame
                 .filter(|&(template, _)| template == id.owner)
                 .and_then(|(_, args)| args.get(id.index as usize).copied()),
@@ -5711,6 +5709,32 @@ impl TypeTable {
             self.collect_type_params_in(t, params);
             false
         });
+    }
+
+    /// Whether `id` names a parameter `owner` does not declare, looking also
+    /// into a newtype's base, which no argument of the newtype shows: a local
+    /// newtype reaches the enclosing function's parameter there.
+    #[must_use]
+    pub fn reaches_foreign_param(&self, id: TypeId, owner: DefId) -> bool {
+        self.reaches_param_outside(id, &[owner])
+    }
+
+    /// [`Self::reaches_foreign_param`] where every owner in `owners` declares.
+    /// A newtype's base names the newtype's own parameters, which its
+    /// arguments bind.
+    fn reaches_param_outside(&self, id: TypeId, owners: &[DefId]) -> bool {
+        if self
+            .type_param_id(id)
+            .is_some_and(|param| !owners.contains(&param.owner))
+        {
+            return true;
+        }
+        if let ResolvedType::Newtype { def, base_type, .. } = *self.get(id)
+            && self.reaches_param_outside(base_type, &[owners, &[def]].concat())
+        {
+            return true;
+        }
+        self.any_constituent(id, &mut |t| self.reaches_param_outside(t, owners))
     }
 
     /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in
