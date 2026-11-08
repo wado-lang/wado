@@ -4083,6 +4083,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // quiet. A struct that resolved to zero fields accepts none.
         let struct_fields_known = resolved_struct_fields.is_some();
         let struct_field_types: Vec<(String, TypeId)> = resolved_struct_fields.unwrap_or_default();
+        // A value is typed at this site's variables, never at the declaration's
+        // own parameters, which mean nothing here (#2574).
+        let inst = self
+            .struct_fields_of_written_decl(struct_decl)
+            .filter(|info| !info.type_param_type_ids.is_empty())
+            .cloned()
+            .map(|info| self.instantiate_struct_slots(&info, struct_lit.span));
+        let site_field_types: Vec<TypeId> = {
+            let declared: Vec<TypeId> = struct_field_types.iter().map(|&(_, t)| t).collect();
+            match &inst {
+                Some(inst) => self.instantiate_types(&declared, inst),
+                None => declared,
+            }
+        };
 
         // A named struct base is a complete `S`, so any field before the spread
         // (or a second spread) is fully overwritten and unused.
@@ -4147,10 +4161,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(provided_idx, field)| {
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
-                let expected_field_type = struct_field_types
+                let declared_at = struct_field_types
                     .iter()
-                    .find(|(name, _)| name == &field.name)
-                    .map(|(_, type_id)| *type_id);
+                    .position(|(name, _)| name == &field.name);
+                let expected_field_type = declared_at.map(|i| struct_field_types[i].1);
 
                 // A tuple literal under a field type naming a slot (`List<T>`)
                 // resolves as a plain tuple: the coercion needs the argument
@@ -4161,7 +4175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let effective_expected = if needs_deferred_coercion {
                     None
                 } else {
-                    expected_field_type
+                    declared_at.map(|i| site_field_types[i])
                 };
 
                 let type_id = self.resolve_expr(&field.value, ctx, effective_expected);
@@ -4200,10 +4214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.typecheck_value(&field.value, type_id, expected_type_id);
                 }
 
-                let decl_idx = struct_field_types
-                    .iter()
-                    .position(|(n, _)| n == &field.name)
-                    .unwrap_or(provided_idx);
+                let decl_idx = declared_at.unwrap_or(provided_idx);
 
                 ResolvedField {
                     name: field.name.clone(),
@@ -4333,22 +4344,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
             // parameters that never appear in a field, matching the
             // behaviour of plain function calls.
-            let type_args = self.infer_struct_type_args(
-                struct_decl,
-                &fields,
-                expected_type.or(spread_base_type),
-                struct_lit.span,
-            );
+            // An effect parameter alone takes no type argument.
+            let type_args = match inst {
+                Some(inst) => self.infer_struct_type_args(
+                    struct_decl,
+                    inst,
+                    &fields,
+                    expected_type.or(spread_base_type),
+                    struct_lit.span,
+                ),
+                None => Vec::new(),
+            };
 
             // Substitute type parameters in field value types.
             // This is necessary for empty array literals in self-referential fields
             // (e.g., `children: []` in `Node<K> { children: List<&Node<K>> }`)
             // which get typed with TypeParams before inference.
-            //
-            // Use map-based substitution (TypeId → TypeId) instead of index-based, so
-            // that only the struct's own TypeParam TypeIds are replaced. Index-based
-            // substitution incorrectly replaces TypeParams from outer scopes (e.g., impl
-            // type params) that happen to share the same index as the struct's TypeParams.
             let slots = self
                 .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.type_param_type_ids.clone())
@@ -4849,37 +4860,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// that is an instance of the same struct is unified in too, so a
     /// phantom parameter still lands concrete. Returns the *partial* result: an
     /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
-    pub(super) fn infer_struct_type_args(
-        &mut self,
-        struct_decl: Option<DefId>,
-        fields: &[ResolvedField],
-        expected_type: Option<TypeId>,
-        span: Span,
-    ) -> Vec<TypeId> {
-        let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl).cloned() else {
-            return vec![];
-        };
-        if struct_info.type_param_type_ids.is_empty() {
-            return vec![];
-        }
-
-        // Instantiate the declaration's slots. Inside a generic body the
-        // literal's fields carry the *enclosing* item's parameters, which can
-        // share `(name, index)` with the struct's own — `IterMap { inner:
-        // *self, f }` inside `Iterator::map<U>` renders both as `IterMap<I,
-        // U>` while meaning different things.
-        let inst = self.instantiate(
-            &struct_info.type_param_type_ids,
+    /// A struct literal's own variables for the declaration's slots.
+    fn instantiate_struct_slots(&mut self, info: &StructFieldInfo, span: Span) -> Instantiated {
+        self.instantiate(
+            &info.type_param_type_ids,
             &Instantiation {
                 kind: InstanceKind::Struct,
-                name: &struct_info.name,
+                name: &info.name,
                 span,
                 // A struct literal has no turbofish; its fields name the slots.
                 type_args: &[],
                 self_binding: None,
                 impl_args: &[],
             },
-        );
+        )
+    }
+
+    pub(super) fn infer_struct_type_args(
+        &mut self,
+        struct_decl: Option<DefId>,
+        inst: Instantiated,
+        fields: &[ResolvedField],
+        expected_type: Option<TypeId>,
+        span: Span,
+    ) -> Vec<TypeId> {
+        let struct_info = self
+            .struct_fields_of_written_decl(struct_decl)
+            .cloned()
+            .expect("an instantiated struct literal names its declaration");
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
         let field_types = self.instantiate_types(&decl_field_types, &inst);
         let decl_field_names: Vec<&str> = struct_info

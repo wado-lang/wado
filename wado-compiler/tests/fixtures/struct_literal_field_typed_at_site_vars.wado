@@ -1,0 +1,55 @@
+// A struct literal's field value is typed at the literal's own variables, not
+// at the declaration's parameters: `Wrap::empty()` leaves the `H` in
+// `Inner<H>` open, and `return r` settles it. Whatever the impl calls its
+// parameter, the declaration's `H` means nothing at the site. Issue #2574.
+use { println, Stdout } from "core:cli";
+
+struct Inner<H> {
+    items: List<H>,
+}
+
+struct Wrap<K, V> {
+    keys: List<K>,
+    values: List<V>,
+}
+
+impl<K, V> Wrap<K, V> {
+    fn empty() -> Wrap<K, V> {
+        return Wrap { keys: [], values: [] };
+    }
+}
+
+struct Holder<H> {
+    routes: Wrap<String, Inner<H>>,
+    count: i32,
+}
+
+impl<H> Holder<H> {
+    fn new() -> Holder<H> {
+        let mut r = Holder { routes: Wrap::empty(), count: 0 };
+        r.count += 1;
+        return r;
+    }
+}
+
+struct Other<H> {
+    routes: Wrap<String, Inner<H>>,
+    count: i32,
+}
+
+impl<X> Other<X> {
+    fn new() -> Other<X> {
+        let mut r = Other { routes: Wrap::empty(), count: 0 };
+        r.count += 2;
+        return r;
+    }
+}
+
+export fn run() with Stdout {
+    let h = Holder::<String>::new();
+    let o = Other::<i32>::new();
+    println(`${h.count} ${o.count}`);
+}
+
+__DATA__
+{"stdout": "1 2\n"}
