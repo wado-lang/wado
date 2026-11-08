@@ -76,7 +76,7 @@ function differs(current: Series[], baseline: Series[]): boolean {
     console.error(`${name}: ${b ?? "absent"} -> ${a ?? "absent"}${ratio}`);
   }
   if (moved) {
-    console.error(`\nfuel differs from ${BASELINE}: run \`mise run update-baselines\` and commit it`);
+    console.error(`\nfuel differs from ${BASELINE}`);
   }
   return moved;
 }
