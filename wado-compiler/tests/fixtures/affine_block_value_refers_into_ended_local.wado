@@ -1,0 +1,26 @@
+// A block's locals drop as it ends, so a reference into one cannot be the
+// block's value: the local is gone before anything reads the value.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+fn read(t: &Tok) -> i32 {
+    return t.n;
+}
+
+test {
+    assert read(b: { let t = make(1); &t }) == 1;
+}
+
+__DATA__
+{"compile_error": ":22:17: analysis error: the value of this labeled block refers into `t`, which dropped as its scope ended"}

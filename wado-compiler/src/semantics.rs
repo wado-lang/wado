@@ -2313,10 +2313,10 @@ mod tests {
         ));
         let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
         assert_eq!(markers["breaks_out"], [] as [String; 0]);
-        // Only the `panic("b")` the `let … else` arm runs.
+        // Only the `panic("b")` after the `let … else`.
         assert_eq!(markers["serves"], ["cold_path"]);
-        // The `let … else` itself, its else block's panic, and its arm's.
-        assert_eq!(markers["traps_after_a_loop"], ["cold_path"; 3]);
+        // Its else block's panic, and the `panic("b")` after it.
+        assert_eq!(markers["traps_after_a_loop"], ["cold_path"; 2]);
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

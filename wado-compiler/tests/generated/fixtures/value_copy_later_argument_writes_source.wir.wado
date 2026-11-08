@@ -491,12 +491,13 @@ fn "value_copy_later_argument_writes_source.wado/count"($mv$s$repr, $mv$s$used, 
 fn "value_copy_later_argument_writes_source.wado/run"() {
     let $load_1: ref "core:prelude/list.wado//List<i32>";
     let $load_3: i32;
+    let $load_107: i32;
     let x: ref "value_copy_later_argument_writes_source.wado//Pair";
     let $v1_1: ref null "value_copy_later_argument_writes_source.wado//Pair";
     let bump_u: ref struct;
     let held: ref "value_copy_later_argument_writes_source.wado//Holder";
     let $v1_54: ref "value_copy_later_argument_writes_source.wado//Pair";
-    let elements_133: ref "Array<value_copy_later_argument_writes_source.wado/Pair>";
+    let elements_135: ref "Array<value_copy_later_argument_writes_source.wado/Pair>";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:value_copy_later_argument_writes_source.wado::$modules_initialized);
         cold_path;
@@ -692,8 +693,9 @@ two(G, then: { bump_global(); G; }): "), used: 38 }, s3: struct.new "core:prelud
         $mv_field_1 = x.a;
         $mv_field_5 = struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         "value_copy_later_argument_writes_source.wado/bump_global_held"();
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
-        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
+        $load_3 = local.tee $v1_1(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } }).a;
+        $load_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1($v1_1.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_107($load_1.used))), 0, $array_clone_src_2, 0, $load_107); $array_clone_dst_3, used: $load_107 };
+        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $load_3, $load_1);
     }) != 1011) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f,[value_copy_later_argument_writes_source.wado/Pair,value_copy_later_argument_writes_source.wado/Pair,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$349a06b5021b774f" { h0: x, h1: ref.as_non_null($v1_1), h2: $mv_field_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:110
@@ -707,16 +709,16 @@ two(g, then: { bump_global_held(); g; }): "), used: 43 }, r2: struct.new "core:p
 two(g, then: { bump_global_held(); g; }): "), used: 43 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_10.used);
         unreachable;
     }
-    $mv_field_1 = builtin::array_len(local.tee elements_133(array.new_fixed<ref "value_copy_later_argument_writes_source.wado//Pair">(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: black_box(1), s: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } })));
+    $mv_field_1 = builtin::array_len(local.tee elements_135(array.new_fixed<ref "value_copy_later_argument_writes_source.wado//Pair">(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: black_box(1), s: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } })));
     if @unlikely(0 >= $mv_field_1) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_later_argument_writes_source.wado/Pair>^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"(0, $mv_field_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_later_argument_writes_source.wado:112"), used: 48 });
         unreachable;
     }
-    $v1_54 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: local.tee $mv_field_1(local.tee x(builtin::array_get_value<ref "value_copy_later_argument_writes_source.wado//Pair">(elements_133, 0)).a), s: struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
+    $v1_54 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: local.tee $mv_field_1(local.tee x(builtin::array_get_value<ref "value_copy_later_argument_writes_source.wado//Pair">(elements_135, 0)).a), s: struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
     if @unlikely(local.tee $mv_field_1(block -> i32 {
         $mv_field_5 = struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5($v1_54.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
-        builtin::array_get_value<ref "value_copy_later_argument_writes_source.wado//Pair">(elements_133, 0).a = 1001;
+        builtin::array_get_value<ref "value_copy_later_argument_writes_source.wado//Pair">(elements_135, 0).a = 1001;
         $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
     }) != 1011) {

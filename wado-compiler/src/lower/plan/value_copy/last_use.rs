@@ -863,9 +863,27 @@ impl<'a> Analyzer<'a> {
         });
     }
 
-    /// The access path a binding's value projects: a direct place, or a
-    /// receiver-aliasing accessor call whose receiver / first arg is a place.
+    /// The access path a binding's value projects: a direct place, a
+    /// receiver-aliasing accessor call whose receiver / first arg is a place,
+    /// or a control form every value of which projects the one same path.
     fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
+        if matches!(
+            value.kind,
+            TirExprKind::Match { .. }
+                | TirExprKind::If { .. }
+                | TirExprKind::Block(_)
+                | TirExprKind::LabeledBlock { .. }
+        ) {
+            let mut paths = Vec::new();
+            yielded_leaves(value, self.type_table, &mut |leaf| {
+                paths.push(self.source_path(leaf));
+            });
+            let first = paths.pop()??;
+            return paths
+                .into_iter()
+                .all(|path| path.as_ref() == Some(&first))
+                .then_some(first);
+        }
         // Sharing storage a call named rests on the argument it named being
         // a reference: `through_ref` is what makes a write through the referent's
         // owner refuse the share. A by-value argument is referenced by nobody, so its path

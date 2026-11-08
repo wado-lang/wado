@@ -390,13 +390,12 @@ fn "affine_generic_method_contract_moves_self_field.wado/$test_0"() {
     if ref.is_null($moved_3_3) == 0 {
         $moved_3_3.tok = ref.null none;
     }
-    $v0_6 = $load_0.id;
-    if ref.is_null($load_0) == 0 {
-    }
-    if @unlikely($v0_6 != 3) {
+    if @unlikely(local.tee $v0_6($load_0.id) != 3) {
         cold_path;
         "affine_generic_method_contract_moves_self_field.wado/$test_0$cold0"($v0_6);
         unreachable;
+    }
+    if ref.is_null($load_0) == 0 {
     }
 }
 

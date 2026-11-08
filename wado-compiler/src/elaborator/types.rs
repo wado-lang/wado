@@ -21,7 +21,9 @@ use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::missing_trait_message;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member, written_param_name};
+use crate::name::{
+    FqTraitName, FqTypeName, minted_name, unalias_namespace_member, written_param_name,
+};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId};
 use crate::token::Span;
@@ -3957,6 +3959,24 @@ impl FunctionContext {
         self.next_local
     }
 
+    /// A fresh local of the same type for each one allocated from `first` on,
+    /// in order; answers the first of them. A `let ... else` binds these in its
+    /// matched arm and hands them on to the locals its pattern names. Resolve
+    /// and reify both call it, which keeps their local indices in step. A
+    /// reference the pattern takes, as a constant's initializer may, moves to
+    /// the twin with every other use inside the pattern.
+    pub(super) fn twin_locals(&mut self, first: u32) -> u32 {
+        let twins = self.next_local;
+        for index in first..twins {
+            let type_id = self.locals[index as usize].type_id;
+            let twin = self.add_local(minted_name("twin", index), type_id, false, None);
+            if self.address_taken_locals.shift_remove(&index) {
+                self.address_taken_locals.insert(twin);
+            }
+        }
+        twins
+    }
+
     /// Add a local variable to the current scope.
     ///
     /// `defining_ast_id` identifies the source AST node that introduced this
@@ -4031,18 +4051,23 @@ impl FunctionContext {
         );
     }
 
-    /// Make local `index` of the current scope mutable, as `let mut [a, b]`
-    /// makes every binding its pattern names.
-    pub(super) fn make_mutable(&mut self, name: &str, index: u32) {
-        self.locals[index as usize].is_mut = true;
-        let local = self
-            .scopes
-            .last_mut()
-            .unwrap()
-            .get_mut(name)
-            .expect("the pattern bound `name` in the current scope");
-        assert_eq!(local.index, index);
-        local.is_mut = true;
+    /// Make each local a pattern bound in the current scope mutable, as
+    /// `let mut [a, b]` does.
+    pub(super) fn make_mutable(&mut self, bindings: &[(String, u32, TypeId)]) {
+        for (name, index, _) in bindings {
+            self.locals[*index as usize].is_mut = true;
+            let local = self
+                .scopes
+                .last_mut()
+                .unwrap()
+                .get_mut(name)
+                .expect("the pattern bound `name` in the current scope");
+            // A name the pattern binds twice, an error reported already, is
+            // in scope as its last binding.
+            if local.index == *index {
+                local.is_mut = true;
+            }
+        }
     }
 
     /// Whether a binding written in source took `name`, so a lookup of it that

@@ -1,0 +1,61 @@
+// A condition takes no struct literal, since its `{` opens the body. Inside any
+// delimiter the condition opens (a block, a `match`'s or a guard's braces,
+// brackets, an argument list), the body is not next, so a struct literal
+// parses as anywhere else.
+
+struct P {
+    x: i32,
+}
+
+impl P {
+    fn has(&self, p: P) -> bool {
+        return self.x == p.x;
+    }
+}
+
+fn branch(c: bool) -> i32 {
+    if let { x } = if c { P { x: 1 } } else { P { x: 2 } } && x > 0 {
+        return x;
+    }
+    return 0;
+}
+
+fn arm(n: i32) -> i32 {
+    if (match n { 0 => P { x: 3 }, _ => P { x: 4 } }).x > 3 {
+        return 1;
+    }
+    return 0;
+}
+
+fn method_argument(p: P) -> i32 {
+    if p.has(P { x: 1 }) {
+        return 1;
+    }
+    return 0;
+}
+
+fn index(values: List<i32>) -> i32 {
+    if values[P { x: 1 }.x] == 4 {
+        return 1;
+    }
+    return 0;
+}
+
+fn guard(v: i32) -> i32 {
+    if v matches { 0 && P { x: 1 }.x == 1 } {
+        return 1;
+    }
+    return 0;
+}
+
+test {
+    assert branch(true) == 1;
+    assert branch(false) == 2;
+    assert arm(0) == 0;
+    assert arm(1) == 1;
+    assert method_argument(P { x: 1 }) == 1;
+    assert method_argument(P { x: 2 }) == 0;
+    assert index([1, 4]) == 1;
+    assert guard(0) == 1;
+    assert guard(1) == 0;
+}

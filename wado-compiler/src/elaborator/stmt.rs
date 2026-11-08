@@ -707,7 +707,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let pattern = let_stmt.else_pattern();
-        self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
+        let first = ctx.local_count();
+        let bindings = self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
+        if let_stmt.is_mut {
+            ctx.make_mutable(&bindings);
+        }
+        ctx.twin_locals(first);
         if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "irrefutable pattern in `let ... else`: the else block can never run; \
@@ -1442,7 +1447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a let chain's operands in order, binding each pattern into
     /// `ctx` so later operands and the success path the caller resolves next
     /// can name it. Reify rebuilds the chain's nested `Match` / `If` shape
-    /// (`reify_let_chain_stmts`).
+    /// (`reify_let_chain`).
     pub(super) fn resolve_let_chain_operands(
         &mut self,
         elements: &[ConditionElement],
@@ -3359,7 +3364,8 @@ pub(super) fn collect_ast_pattern_binding_ids(
     }
 }
 
-/// Collect binding names, local indices, and types from a TIR pattern for or-pattern validation.
+/// The names, local indices and types a TIR pattern binds, by name. An
+/// or-pattern binds what its first alternative does.
 pub(super) fn collect_pattern_bindings_with_index(
     pattern: &TirPattern,
 ) -> Vec<(String, u32, tir::TypeId)> {
