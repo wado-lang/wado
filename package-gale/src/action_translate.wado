@@ -128,7 +128,7 @@ fn swallow_trailing_call(src: &StrSlice, end: i32) -> i32 {
 /// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
 /// correctly), falling back to `base` when the reference is not in the map.
 fn binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, is_token: bool, base: S) -> AltBinding {
-    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == base.as_str_slice()) {
+    return match bindings.iter_ref().find(|b: &AltBinding| b.binds(is_token, &base)) {
         Some(b) => *b,
         None => AltBinding {
             is_token,
@@ -145,11 +145,9 @@ fn rule_value(b: &AltBinding) -> String {
     return match b.reach {
         Bound => b.field,
         Shared => `${b.field}.unwrap()`,
-        Unmatched => UNMATCHED_RULE_VALUE,
+        Unmatched => "unreachable()",
     };
 }
-
-global UNMATCHED_RULE_VALUE: String = "unreachable()";
 
 /// The name a rule call's `.text` / `.ctx` captures are kept under.
 fn rule_capture(b: &AltBinding) -> String {

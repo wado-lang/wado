@@ -635,7 +635,7 @@ fn token_label_null_test(
 
 /// Whether the current alternative binds a token named `name`.
 fn token_is_bound<S: AsStrSlice>(bindings: &List<AltBinding>, name: S) -> bool {
-    return bindings.iter_ref().any(|b: &AltBinding| b.is_token && b.base == binding_name(name));
+    return bindings.iter_ref().any(|b: &AltBinding| b.binds(true, &binding_name(name)));
 }
 
 /// Whether `e` reduces (through parens and casts) to the `$ctx` special — the
@@ -937,7 +937,7 @@ fn attr_is_string(rule: &ParserRule, rules: &List<ParserRule>, text: &String, bi
         return true;
     }
     for let b of bindings {
-        if !b.is_token && b.base == label {
+        if b.binds(false, &label) {
             for let r of rules {
                 if r.name == b.ref_name {
                     return declares_string(&r.returns_decls, &member);

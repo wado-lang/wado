@@ -3613,10 +3613,9 @@ fn collect_label_sites(op: &Op, at: i32, nested: bool, out: &mut List<LabelSite>
     }
 }
 
-/// Make the bindings an alternative's actions see current, and declare where
-/// it starts the local each shared label writes (`LabelReach::Shared`), and
-/// hand back the bindings to restore once it ends.
-/// `elements[first_element + i]` is `ops[i]`'s.
+/// Make the bindings of the alternative starting here current, declaring the
+/// local each shared label writes (`LabelReach::Shared`), and hand back the
+/// bindings to restore once it ends. `elements[first_element + i]` is `ops[i]`'s.
 fn enter_alt_label_scope(
     w: &mut CodeWriter,
     elements: &List<Element>,
@@ -3628,6 +3627,9 @@ fn enter_alt_label_scope(
     contract elements.len() == first_element + ops.len()
 {
     let outer = *ctx.cursor.alt_bindings();
+    if !ctx.settings.emit_actions {
+        return outer;
+    }
     let mut sites: List<LabelSite> = [];
     for let mut i = 0; i < ops.len(); i += 1 {
         collect_label_sites(&ops[i], i, false, &mut sites);
@@ -3635,12 +3637,10 @@ fn enter_alt_label_scope(
     let mut shared: List<AltBinding> = [];
     for let site of &sites {
         let b = &site.binding;
-        if shared.iter_ref().any(|s| s.is_token == b.is_token && s.base == b.base) || !ctx.names_binding(&b.base) {
+        if shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)) || !ctx.names_binding(&b.base) {
             continue;
         }
-        let same: List<&LabelSite> = sites.iter_ref().filter(
-            |s| s.binding.is_token == b.is_token && s.binding.base == b.base,
-        ).collect();
+        let same: List<&LabelSite> = sites.iter_ref().filter(|s| s.binding.binds(b.is_token, &b.base)).collect();
         let read_first = actions.iter_ref().any(
             |a| a.before_index - first_element <= site.at && body_names_binding(&a.source.text, &b.base),
         )
@@ -3650,7 +3650,7 @@ fn enter_alt_label_scope(
         }
     }
     let mut bindings: List<AltBinding> = collect_alt_bindings(ops).into_iter().filter(
-        |b| !shared.iter_ref().any(|s| s.is_token == b.is_token && s.base == b.base),
+        |b| !shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)),
     ).collect();
     for let mut s of shared {
         let first = s.field;
@@ -3695,11 +3695,7 @@ fn gen_alt_elements(
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn";
-    let outer: List<AltBinding> = if ctx.settings.emit_actions {
-        enter_alt_label_scope(w, elements, ops, actions, 0, ctx);
-    } else {
-        [];
-    };
+    let outer = enter_alt_label_scope(w, elements, ops, actions, 0, ctx);
     let mut name_counts: List<[String, i32]> = [];
     // The emitter walks the surface elements + lowered ops in parallel: the
     // leaves/groups/repeats append to the `TreeBuilder`. The surface elements
@@ -3729,9 +3725,7 @@ fn gen_alt_elements(
         }
     }
     gen_alt_actions_at(w, actions, elements.len(), ctx, true);
-    if ctx.settings.emit_actions {
-        ctx.cursor.set_alt_bindings(outer);
-    }
+    ctx.cursor.set_alt_bindings(outer);
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
@@ -3931,20 +3925,10 @@ fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, base: S, field
     return String::new();
 }
 
-fn shared_rule_label<S: AsStrSlice>(ctx: &EmitContext, base: S) -> Option<AltBinding> {
-    if !ctx.settings.emit_actions {
-        return null;
-    }
-    return match ctx.cursor.shared_label(false, base) {
-        Some(label) => Option::Some(*label),
-        None => null,
-    };
-}
-
 /// A call whose result a shared label holds, which is `null` until one runs.
-fn gen_shared_rule_call(w: &mut CodeWriter, label: &AltBinding, callee: &String, args: &String, ctx: &mut EmitContext) {
+fn gen_shared_rule_call(w: &mut CodeWriter, local: &String, callee: &String, args: &String, ctx: &mut EmitContext) {
     ctx.cursor.note_ref(callee);
-    w.line(`${label.field} = Option::Some(${callee}(${args}));`);
+    w.line(`${local} = Option::Some(${callee}(${args}));`);
 }
 
 /// What the first element may take as proven: nothing once an action runs
@@ -4048,9 +4032,10 @@ fn gen_op_leaf(
             }
             args.extend(&call_args(&r, ctx));
             let callee = `_parse_${r.target_snake}`;
-            if let Some(label) = shared_rule_label(ctx, &r.dedup_base) {
+            if let Some(label) = ctx.cursor.shared_label(false, &r.dedup_base) {
+                let local = label.field;
                 gen_call_site_stamps(w, ctx, r.atn_call_site);
-                gen_shared_rule_call(w, &label, &callee, &args.join(", "), ctx);
+                gen_shared_rule_call(w, &local, &callee, &args.join(", "), ctx);
             } else {
                 let bind = leaf_binding(ctx, &r.dedup_base, &r.field, false);
                 w.call(CallStmt {
@@ -4554,20 +4539,14 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     // The suffix ops give the right operand's binding; the stripped leading
     // self-ref (`$l`) falls back to `prefix_self_ref.name`, which is exactly
     // the `let {name} = _lr_acc;` bound above.
-    let outer: List<AltBinding> = if ctx.settings.emit_actions {
-        enter_alt_label_scope(w, &rule.alternatives[lr.alt_index].elements, ops, actions, 1, ctx);
-    } else {
-        [];
-    };
+    let outer = enter_alt_label_scope(w, &rule.alternatives[lr.alt_index].elements, ops, actions, 1, ctx);
     let first_proven = element_proven_first(actions, proven_first, 1);
     for let mut i = 0; i < ops.len(); i += 1 {
         gen_alt_actions_at(w, actions, i + 1, ctx);
         gen_op(w, &ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
     }
     gen_alt_actions_at(w, actions, ops.len() + 1, ctx, true);
-    if ctx.settings.emit_actions {
-        ctx.cursor.set_alt_bindings(outer);
-    }
+    ctx.cursor.set_alt_bindings(outer);
     w.line("p.b.finish_node(p.last_end());");
     if emits_vals {
         w.line("_lr_acc = vals;");
@@ -7597,8 +7576,9 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut EmitConte
     let args = parse_call_args(rc, ctx).join(", ");
     let span_field = open_call_capture(w, op, ctx);
     gen_call_site_stamps(w, ctx, rc.atn_call_site);
-    if let Some(label) = shared_rule_label(ctx, &rc.dedup_base) {
-        gen_shared_rule_call(w, &label, &`_parse_${rc.target_snake}`, &args, ctx);
+    if let Some(label) = ctx.cursor.shared_label(false, &rc.dedup_base) {
+        let local = label.field;
+        gen_shared_rule_call(w, &local, &`_parse_${rc.target_snake}`, &args, ctx);
     } else {
         w.line(`${leaf_binding(ctx, &local_var, &local_var, false)}_parse_${rc.target_snake}(${args});`);
     }

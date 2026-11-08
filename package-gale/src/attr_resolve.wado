@@ -65,6 +65,13 @@ pub struct AltBinding {
     pub capture: String = "",
 }
 
+impl AltBinding {
+    /// Whether this binds the label a reference of that kind and base names.
+    pub fn binds<S: AsStrSlice>(&self, is_token: bool, base: S) -> bool {
+        return self.is_token == is_token && self.base == base.as_str_slice();
+    }
+}
+
 /// What a body finds where it reads a label. ANTLR4 keeps one in a field of
 /// the rule's context, which holds the last binding and is `null` before the
 /// first.
@@ -211,7 +218,7 @@ fn label_named<S: AsStrSlice>(env: &AttrEnv, name: S, bindings: &List<AltBinding
             first = Option::Some(*lab);
         }
         for let b of bindings {
-            if b.base == key && b.is_token == lab.is_token && binding_names(b, lab) {
+            if b.binds(lab.is_token, &key) && binding_names(b, lab) {
                 return Option::Some(*lab);
             }
         }

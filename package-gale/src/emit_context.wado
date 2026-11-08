@@ -194,9 +194,7 @@ impl EmitCursor {
 
     /// The alternative's shared local for a label, where it has one.
     pub fn shared_label<S: AsStrSlice>(&self, is_token: bool, base: S) -> Option<&AltBinding> {
-        return self.alt_bindings.iter_ref().find(
-            |b| b.reach matches { Shared } && b.is_token == is_token && b.base == base.as_str_slice(),
-        );
+        return self.alt_bindings.iter_ref().find(|b| b.reach matches { Shared } && b.binds(is_token, &base));
     }
 
     /// The rendered expected-token set the action about to be emitted would see.
