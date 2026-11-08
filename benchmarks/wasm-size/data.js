@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794147626329,
+  "lastUpdate": 1794174774365,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75801,6 +75801,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 404972,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a6150904fc033ec3fa4089bfb61a36083d000397",
+          "message": "Merge pull request #2587 from wado-lang/compiler/temporary-lifetime\n\nfix(compiler): decide each temporary's owner once, from the source's statements",
+          "timestamp": "2026-11-09T06:34:08+09:00",
+          "tree_id": "17d1a5f9f0e27d4b31110ee860a2325f3367d1b2",
+          "url": "https://github.com/wado-lang/wado/commit/a6150904fc033ec3fa4089bfb61a36083d000397"
+        },
+        "date": 1794174773070,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404954,
             "unit": "bytes"
           }
         ]
