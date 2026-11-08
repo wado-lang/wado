@@ -120,7 +120,7 @@ test "each property name keeps what its shared targets evaluated" {
 
 test "two schemas that name one URI are an error at compile" {
     let mut set = SchemaSet::new();
-    set.insert(uri("https://x.test/a.json"), Schema::parse(#"{"$id": "https://x.test/s"}"#).unwrap());
+    set.insert(uri("https://x.test/a.json"), Schema::parse(#"{"$id": "https://x.test/s", "$ref": "b.json"}"#).unwrap());
     set.insert(uri("https://x.test/b.json"), Schema::parse(#"{"$id": "https://x.test/s"}"#).unwrap());
     let e = invalid(Validator::compile_in(&set, &uri("https://x.test/a.json")));
     assert e.uri matches { Some(u) && `${u}` == "https://x.test/b.json" };
@@ -163,6 +163,27 @@ test "a reference into a held document at a place it lacks is an error at compil
     let s = invalid(Validator::compile_in(&set, &uri("https://x.test/root.json")));
     assert s.uri matches { Some(u) && `${u}` == "https://x.test/root.json" };
     assert s.pointer == "/$ref";
+}
+
+test "a document the compiled one never reaches is not compiled" {
+    let mut set = SchemaSet::new();
+    set.insert(uri("https://x.test/a.json"), Schema::parse(#"{"type": "integer"}"#).unwrap());
+    set.insert(uri("https://x.test/b.json"), Schema::parse(#"{"$ref": "nobody.json"}"#).unwrap());
+    let validator = Validator::compile_in(&set, &uri("https://x.test/a.json")).unwrap();
+    assert validator.validate(&Document::parse("1").unwrap().root()) matches { Ok(_) };
+    assert Validator::compile_in(&set, &uri("https://x.test/b.json")) matches { Err(Unresolved(_)) };
+}
+
+test "a reference reaches a schema another document identifies by its `$id`" {
+    let mut set = SchemaSet::new();
+    set.insert(uri("https://x.test/root.json"), Schema::parse(##"{"$ref": "https://y.test/int"}"##).unwrap());
+    set.insert(
+        uri("https://x.test/defs.json"),
+        Schema::parse(#"{"$defs": {"int": {"$id": "https://y.test/int", "type": "integer"}}}"#).unwrap(),
+    );
+    let validator = Validator::compile_in(&set, &uri("https://x.test/root.json")).unwrap();
+    assert validator.validate(&Document::parse("1").unwrap().root()) matches { Ok(_) };
+    assert validator.validate(&Document::parse(#""x""#).unwrap().root()) matches { Err(_) };
 }
 
 test "a set names the documents its references still need, then compiles" {

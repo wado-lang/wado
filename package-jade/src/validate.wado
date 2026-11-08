@@ -171,7 +171,8 @@ impl Validator {
     pub fn compile_in(set: &SchemaSet, uri: &Uri) -> Result<Validator, CompileError>
         contract set.holds(uri), "`uri` must name a document the set holds"
     {
-        let mut c = Compiler::of(set)?;
+        let mut c = Compiler { unloaded: set.documents };
+        c.load(uri)?;
         let dynamic_anchors = c.link()?;
         return Result::Ok(Validator {
             root: c.documents.get_str(&`${*uri}`).unwrap(),
@@ -741,6 +742,9 @@ struct Compiler {
     documents: HashMap<String, i32> = HashMap::new(),
     /// The URI of the document being added, as `Compiled.source` records it.
     source: Option<Uri> = null,
+    /// The supplied documents not added yet, which a reference adds once it
+    /// needs them.
+    unloaded: List<[Uri, Schema]> = [],
 }
 
 /// A reference, resolved against its base, to look up once every target is
@@ -754,11 +758,43 @@ struct PendingRef {
 impl Compiler {
     /// A compiler holding every document of `set`.
     fn of(set: &SchemaSet) -> Result<Compiler, SchemaError> {
-        let mut c = Compiler {};
-        for let [uri, schema] of &set.documents {
-            c.add_document(uri, schema)?;
-        }
+        let mut c = Compiler { unloaded: set.documents };
+        c.load_all()?;
         return Result::Ok(c);
+    }
+
+    /// Adds the supplied document retrieved from `uri`, answering whether one
+    /// was waiting.
+    fn load(&mut self, uri: &Uri) -> Result<bool, SchemaError> {
+        let Some(k) = self.unloaded.iter_ref().position(|d| d.0 == *uri) else {
+            return Result::Ok(false);
+        };
+        let [u, schema] = self.unloaded.remove(k);
+        self.add_document(&u, &schema)?;
+        return Result::Ok(true);
+    }
+
+    /// Adds every supplied document still waiting, answering whether there
+    /// was one.
+    fn load_all(&mut self) -> Result<bool, SchemaError> {
+        let waiting = self.unloaded;
+        self.unloaded = [];
+        for let [uri, schema] of &waiting {
+            self.add_document(uri, schema)?;
+        }
+        return Result::Ok(!waiting.is_empty());
+    }
+
+    /// Adds the meta-schema retrieved from `uri`, answering whether there is
+    /// one.
+    fn load_meta_schema(&mut self, uri: &Uri) -> Result<bool, SchemaError> {
+        for let [held, schema] of &META_SCHEMAS {
+            if *held == *uri {
+                self.add_document(held, schema)?;
+                return Result::Ok(true);
+            }
+        }
+        return Result::Ok(false);
     }
 
     fn add_document(&mut self, uri: &Uri, schema: &Schema) -> Result<(), SchemaError> {
@@ -924,7 +960,7 @@ impl Compiler {
     /// one keyword leads to. Returns the anchors a `$dynamicRef` may resolve
     /// through the dynamic scope.
     fn link(&mut self) -> Result<List<String>, CompileError> {
-        // Resolving a reference may add a meta-schema, and its references.
+        // Resolving a reference may add a document, and its references.
         let mut resolved: List<[i32, String]> = [];
         for let mut k = 0; k < self.refs.len(); k += 1 {
             let r = self.refs[k];
@@ -968,21 +1004,18 @@ impl Compiler {
         return Result::Ok(anchors);
     }
 
-    /// The subschema `r` names, and its fragment percent-decoded. A
-    /// meta-schema no document replaces is added the first time it is named.
+    /// The subschema `r` names, and its fragment percent-decoded. A document
+    /// is added the first time a reference needs it: the one retrieved from
+    /// the URI named, else the meta-schema no document replaces, else every
+    /// supplied one, since any of them may identify the URI by an `$id`.
     fn resolve(&mut self, r: &PendingRef) -> Result<[i32, String], CompileError> {
         if let Some(found) = self.lookup(&r.uri) {
             return Result::Ok(found);
         }
         let document = r.uri.without_fragment();
         let held = self.targets.contains_key(`${document}#`);
-        if !held {
-            for let [uri, schema] of &META_SCHEMAS {
-                if *uri == document {
-                    self.add_document(uri, schema)?;
-                    return self.resolve(r);
-                }
-            }
+        if !held && (self.load(&document)? || self.load_meta_schema(&document)? || self.load_all()?) {
+            return self.resolve(r);
         }
         let n = &self.nodes[r.node];
         let pointer = `${n.at}/${if r.dynamic { "$dynamicRef" } else { "$ref" }}`;
