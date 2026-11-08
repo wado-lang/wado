@@ -434,9 +434,7 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
             }
             _ => {}
         }
-        if let Some(mut binding) =
-            analyze_copy_binding(body, stmt, ctx.copy_value_id)
-        {
+        if let Some(mut binding) = analyze_copy_binding(body, stmt, ctx.copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable iff every read of the target sits after the
             // binding AND the source is not mutated in those statements (a
