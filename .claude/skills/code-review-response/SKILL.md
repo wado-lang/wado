@@ -9,8 +9,8 @@ A finding is a claim, not an instruction. The goal is a better codebase, never a
 cleared comment list.
 
 Act only on a finding worth acting on. A finding is worth it when you can name
-what it gains: a wrong answer, a crash, or a valid program refused, on a path a
-caller reaches. A finding whose value is unclear is skipped, however cheap the
+what it gains on a path a caller reaches, such as a wrong answer, a crash, a
+valid program refused, or a secret exposed. A finding whose value is unclear is skipped, however cheap the
 change. A reviewer is often wrong, and acting on every claim is how a branch
 fills with changes nobody needed.
 
