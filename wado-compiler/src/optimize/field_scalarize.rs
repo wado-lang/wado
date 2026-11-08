@@ -895,6 +895,10 @@ impl NirRefVisitor for AliasScan<'_> {
 /// and `let b = &mut a` leave two names for one heap object, and a write through
 /// either bypasses a scalar held under the other. A deep value copy is wrapped
 /// in `copy_value(...)` (an `ExprKind::Call`), so it does not match.
+///
+/// `let b = a.f` names an object `a` still reaches, as does a reference a call
+/// hands back, so a call given `a` writes it behind `b`'s scalar: `licm` binds
+/// `run.items` ahead of a loop whose calls take `run`.
 fn mark_gc_alias_pair(
     body: &Body,
     dst: Option<u32>,
@@ -902,11 +906,46 @@ fn mark_gc_alias_pair(
     type_table: &TypeTable,
     out: &mut IndexSet<u32>,
 ) {
-    let Some(src) = gc_alias_source(body, value, type_table) else {
-        return;
+    if let Some(src) = gc_alias_source(body, value, type_table) {
+        out.insert(src);
+        out.extend(dst);
+    } else if names_reachable_object(body, value, type_table) {
+        out.extend(dst);
+    }
+}
+
+/// Whether `value` is a GC object that a handle other than the binding reaches:
+/// a place inside another object, or a reference a call returns.
+fn names_reachable_object(body: &Body, value: ExprId, type_table: &TypeTable) -> bool {
+    let type_id = body.exprs[value].type_id;
+    if !is_gc_heap_type(type_id, type_table) {
+        return false;
+    }
+    let place = match &body.exprs[value].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } => match inner.as_expr() {
+            Some(inner) => inner,
+            None => return false,
+        },
+        _ => value,
     };
-    out.insert(src);
-    out.extend(dst);
+    match &body.exprs[place].kind {
+        ExprKind::FieldAccess { .. }
+        | ExprKind::Index { .. }
+        | ExprKind::Unary {
+            op: NirUnaryOp::Deref,
+            ..
+        } => true,
+        ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
+            matches!(
+                type_table.get(type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        }
+        _ => false,
+    }
 }
 
 /// The local `value` reads as a whole GC object, directly or through one reference.

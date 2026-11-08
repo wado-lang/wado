@@ -1,0 +1,40 @@
+// A local bound to a field's object is a second handle on it: `licm` hoists
+// `run.items` out of the loop, and a call taking `run` pushes onto the same
+// list. The hoisted local's `used` held in a scalar across that call wrote the
+// stale length back at the end of the iteration, dropping the pushed item.
+
+struct Log {
+    items: List<i32>,
+    calls: i32,
+    marks: List<i32>,
+}
+
+#[inline(never)]
+fn add(log: &mut Log, v: i32) {
+    log.calls += 1;
+    log.marks.push(log.calls);
+    log.items.push(v);
+}
+
+fn walk(keys: List<i32>, log: &mut Log, nested: Option<i32>) {
+    for let k of keys {
+        if k > 0 {
+            add(log, k);
+        }
+        if let Some(n) = nested {
+            let kept = log.items.len();
+            add(log, n);
+            log.items.truncate(kept);
+        }
+    }
+}
+
+export fn run() {
+    let mut log = Log { items: [], calls: 0, marks: [] };
+    walk(builtin::black_box([1, -2, 3] as List<i32>), &mut log, builtin::black_box(null));
+    assert log.items.len() == 2;
+    assert log.calls == 2;
+}
+
+__DATA__
+{"stdout": ""}
