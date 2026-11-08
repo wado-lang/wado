@@ -4,16 +4,22 @@ use { Uri } from "core:uri";
 use { Document, Schema, SchemaSet, Validator } from "../src/lib.wado";
 use { DEFAULT_BASE } from "../src/validate.wado";
 
-/// Holds `data` to the validity `valid` against `schema`, all JSON text, with
-/// `remotes` as the documents `schema` refers to, each as its URI and its text.
-pub fn check(schema: String, data: String, valid: bool, remotes: List<[String, String]> = []) {
+/// Holds `data` to the validity `valid` against `schema`, both JSON text. A
+/// document `schema` refers to is loaded from `remotes`, each as its URI and
+/// its text.
+pub fn check(schema: String, data: String, valid: bool, remotes: &List<[String, String]> = &[]) {
     let base = Uri::from_str(&DEFAULT_BASE).unwrap();
     let mut set = SchemaSet::new();
     set.insert(base, Schema::parse(schema).unwrap());
-    for let [uri, text] of remotes {
-        set.insert(Uri::from_str(uri).unwrap(), Schema::parse(text).unwrap());
-    }
-    let validator = Validator::compile_in(&set, &base).unwrap();
+    let validator = Validator::compile_loading(&mut set, &base, |u| {
+        let name = `${*u}`;
+        for let [uri, text] of remotes {
+            if *uri == name {
+                return Result::<Schema, String>::Ok(Schema::parse(*text).unwrap());
+            }
+        }
+        return Result::Err("not embedded; run `mise run suite-jade`");
+    }).unwrap();
     let doc = Document::parse(data).unwrap();
     let result = validator.validate(&doc.root());
     assert result matches { Ok(_) } == valid, `${result:?}`;

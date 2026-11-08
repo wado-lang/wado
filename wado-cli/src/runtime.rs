@@ -9,7 +9,7 @@ use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::fuel_host::{FuelRegion, add_to_linker as add_fuel_to_linker};
 use crate::knobs::RuntimeKnobs;
 use wado_host::guest::{GuestState, create_config, host_linker};
-pub use wado_host::guest::{InsecureRandom, Preopens, fuel_spent, new_store};
+pub use wado_host::guest::{Preopens, fuel_spent, new_store};
 pub use wado_host::options::{ProfileMode, parse_profile};
 use wado_host::process_host::ProcessGrant;
 
@@ -126,9 +126,7 @@ pub fn create_serve_engine(
 /// A store whose guest's stdout/stderr are captured into in-memory pipes instead
 /// of inherited — used by `wado test` so a test's own prints can be attributed
 /// to its result instead of racing directly onto the host's real stdout/stderr.
-/// Only a test, which serves no untrusted input, may make its insecure
-/// randomness [`InsecureRandom::Fixed`]. `eval` is the test's handle on
-/// `core:eval`, which only a test links.
+/// `eval` is the test's handle on `core:eval`, which only a test links.
 ///
 /// # Errors
 ///
@@ -139,14 +137,9 @@ pub fn create_test_store(
     program: &str,
     eval: EvalSession,
     process: ProcessGrant,
-    insecure_random: InsecureRandom,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
-    let (guest, stdout, stderr) = GuestState::new_capturing_stdio(
-        preopened_dirs,
-        &[program.to_owned()],
-        process,
-        insecure_random,
-    )?;
+    let (guest, stdout, stderr) =
+        GuestState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], process)?;
     let state = WasiState {
         eval: Some(eval),
         ..guest.into()

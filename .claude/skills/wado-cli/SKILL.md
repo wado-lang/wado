@@ -173,9 +173,10 @@ wado test --pgo                     # record the #[workload] tests into pgo/defa
 wado test --no-cache                # also rerun the files that passed before
 ```
 
-A file that passed is skipped while nothing it read has changed: the summary
-names it on a `cached:` line. A file whose tests perform an effect beyond
-writing to stdout or stderr (a clock, randomness, a file) always runs.
+A file that passed, or that runs no test, is skipped while nothing it read has
+changed: the summary names it on a `cached:` line. A file whose tests perform an
+effect beyond writing to stdout or stderr and drawing insecure randomness (a
+clock, secure randomness, a file) always runs.
 
 `--coverage` prints a per-file summary after the run. `coverage.json` names,
 for each region, the tests that ran it. `wado dump --coverage-plan file.wado`

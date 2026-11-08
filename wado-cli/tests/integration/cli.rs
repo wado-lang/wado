@@ -1657,6 +1657,32 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
     assert!(!tmp.path().join("build").exists());
 }
 
+/// `wasi:random/insecure` and `insecure-seed` answer the same on every run of
+/// `wado test`, so a test that hashes, or draws them, depends on nothing its
+/// compile did not read.
+#[test]
+fn test_test_caches_a_pass_that_drew_insecure_randomness() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("random_test.wado");
+    std::fs::write(
+        &main,
+        r#"use { Insecure } from "wasi:random";
+use { HashMap } from "core:collections";
+
+test "draws" {
+    let mut m = HashMap::<String, u64>::new();
+    m["k"] = Insecure::get_insecure_random_u64();
+    assert m.len() == 1;
+}
+"#,
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(&main).assert().success();
+
+    run().stdout(predicate::str::contains("cached:").not());
+    run().stdout(predicate::str::contains("cached:  1 files"));
+}
+
 /// The compile looked for a `wado-workspace.toml` above the package and found
 /// none, so one appearing there is a changed input.
 #[test]
@@ -2014,22 +2040,41 @@ fn test_test_keys_its_cache_by_the_compilers_environment() {
         .stdout(predicate::str::contains("cached:").not());
 }
 
+/// A file without tests compiles to the same outcome while nothing it read
+/// changed, whatever it imports, so its compile is cached like a pass.
+#[test]
+fn test_test_caches_the_compile_of_a_file_without_tests() {
+    let tmp = tempfile::tempdir().unwrap();
+    let empty = tmp.path().join("empty_test.wado");
+    let helper = tmp.path().join("helper.wado");
+    std::fs::write(&helper, "pub fn g() -> i32 {\n    return 1;\n}\n").unwrap();
+    std::fs::write(
+        &empty,
+        "use { println, Stdout } from \"core:cli\";\nuse { MonotonicClock } from \"wasi:clocks\";\nuse { g } from \"./helper.wado\";\n\npub fn f() with (Stdout, MonotonicClock) {\n    println(`${MonotonicClock::now()} ${g()}`);\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(&empty).assert();
+
+    run()
+        .success()
+        .stdout(predicate::str::contains("skip:"))
+        .stdout(predicate::str::contains("cached:").not());
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"))
+        .stdout(predicate::str::contains("skip:").not());
+    std::fs::write(&helper, "pub fn g() -> i32 {\n    return \"one\";\n}\n").unwrap();
+    run()
+        .failure()
+        .stdout(predicate::str::contains("compile: 0 ok, 1 failed"));
+}
+
 #[test]
 fn test_test_reports_on_every_run_what_a_cache_cannot_hold() {
     let tmp = tempfile::tempdir().unwrap();
-    let empty = tmp.path().join("empty_test.wado");
-    std::fs::write(&empty, "pub fn f() -> i32 {\n    return 1;\n}\n").unwrap();
     let fuel = tmp.path().join("fuel_test.wado");
     std::fs::write(&fuel, "test \"t\" {\n    assert 1 + 1 == 2;\n}\n").unwrap();
     for _ in 0..2 {
-        // A file without tests is a skip, which says it holds none.
-        wado()
-            .arg("test")
-            .arg(&empty)
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("skip:"))
-            .stdout(predicate::str::contains("cached:").not());
         wado()
             .args(["test", "--report-fuel"])
             .arg(&fuel)
