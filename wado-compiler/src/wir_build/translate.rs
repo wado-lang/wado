@@ -17,7 +17,8 @@ use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    CELL_FIELD, MangledName, closure_call_wrapper_name, closure_inspect_wrapper_name, multi_value_split_local,
+    CELL_FIELD, MangledName, closure_call_wrapper_name, closure_inspect_wrapper_name,
+    multi_value_split_local,
 };
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
