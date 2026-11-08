@@ -859,8 +859,7 @@ impl Compiler {
         }
         let mut node = Compiled { source: self.source, at, owner: r };
         self.nodes.push(node);
-        let document = self.added.len() - 1;
-        self.node_document.push(document);
+        self.node_document.push(self.added.len() - 1);
         let o = match schema {
             Bool(b) => {
                 node.always = Option::Some(*b);
@@ -878,20 +877,10 @@ impl Compiler {
             self.resources[r].dynamic_anchors[*a] = i;
         }
         if let Some(reference) = &o.reference {
-            self.added[document].refs.push(self.refs.len());
-            self.refs.push(PendingRef {
-                node: i,
-                uri: uri.resolve(&parse_uri(reference, `${at}/$ref`)?),
-                dynamic: false,
-            });
+            self.add_ref(i, uri.resolve(&parse_uri(reference, `${at}/$ref`)?), false);
         }
         if let Some(reference) = &o.dynamic_ref {
-            self.added[document].refs.push(self.refs.len());
-            self.refs.push(PendingRef {
-                node: i,
-                uri: uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?),
-                dynamic: true,
-            });
+            self.add_ref(i, uri.resolve(&parse_uri(reference, `${at}/$dynamicRef`)?), true);
         }
         node.type = o.type;
         node.const = o.const;
@@ -947,6 +936,11 @@ impl Compiler {
         }
         self.nodes[i] = node;
         return Result::Ok(i);
+    }
+
+    fn add_ref(&mut self, node: i32, uri: Uri, dynamic: bool) {
+        self.added[self.node_document[node]].refs.push(self.refs.len());
+        self.refs.push(PendingRef { node, uri, dynamic });
     }
 
     /// Points `uri` at subschema `i`. A URI identifies at most one schema, so
