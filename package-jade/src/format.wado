@@ -59,7 +59,7 @@ impl Format {
     /// Whether `text` is a value of the format.
     internal fn admits(&self, text: StrSlice) -> bool {
         return match self {
-            DateTime => whole(Scan::of(text), |s| full_date(s) && s.eat('T') && full_time(s)),
+            DateTime => whole(Scan::of(text), date_time),
             Date => whole(Scan::of(text), full_date),
             Time => whole(Scan::of(text), full_time),
             Duration => whole(Scan::of(text), duration),
@@ -459,22 +459,98 @@ fn address_literal(s: &mut Scan) -> bool {
 
 /// RFC 3339's `full-date`, its day within its month.
 fn full_date(s: &mut Scan) -> bool {
+    return calendar_date(s) matches { Some(_) };
+}
+
+/// RFC 3339's `full-date` as its year, month and day, the day within its
+/// month.
+fn calendar_date(s: &mut Scan) -> Option<[i32, i32, i32]> {
     let Some(year) = s.digits(4) else {
-        return false;
+        return null;
     };
     if !s.eat('-') {
-        return false;
+        return null;
     }
     let Some(month) = s.digits(2) else {
-        return false;
+        return null;
     };
     if !s.eat('-') {
-        return false;
+        return null;
     }
     let Some(day) = s.digits(2) else {
+        return null;
+    };
+    if month < 1 || month > 12 || day < 1 || day > days_in(year, month) {
+        return null;
+    }
+    return Option::Some([year, month, day]);
+}
+
+/// The date `delta` days, -1, 0 or 1, from `date`.
+fn plus_days(date: [i32, i32, i32], delta: i32) -> [i32, i32, i32]
+    contract -1 <= delta && delta <= 1
+{
+    let [year, month, day] = date;
+    if delta == 1 {
+        if day < days_in(year, month) {
+            return [year, month, day + 1];
+        }
+        return if month < 12 { [year, month + 1, 1] } else { [year + 1, 1, 1] };
+    }
+    if delta == -1 {
+        if day > 1 {
+            return [year, month, day - 1];
+        }
+        return if month > 1 { [year, month - 1, days_in(year, month - 1)] } else { [year - 1, 12, 31] };
+    }
+    return date;
+}
+
+/// The UTC days that ended in an inserted leap second, from the IERS's
+/// Bulletin C as IANA's `leap-seconds.list` records it. None has been removed.
+global LEAP_SECOND_DAYS: List<[i32, i32, i32]> = [
+    [1972, 6, 30],
+    [1972, 12, 31],
+    [1973, 12, 31],
+    [1974, 12, 31],
+    [1975, 12, 31],
+    [1976, 12, 31],
+    [1977, 12, 31],
+    [1978, 12, 31],
+    [1979, 12, 31],
+    [1981, 6, 30],
+    [1982, 6, 30],
+    [1983, 6, 30],
+    [1985, 6, 30],
+    [1987, 12, 31],
+    [1989, 12, 31],
+    [1990, 12, 31],
+    [1992, 6, 30],
+    [1993, 6, 30],
+    [1994, 6, 30],
+    [1995, 12, 31],
+    [1997, 6, 30],
+    [1998, 12, 31],
+    [2005, 12, 31],
+    [2008, 12, 31],
+    [2012, 6, 30],
+    [2015, 6, 30],
+    [2016, 12, 31],
+];
+
+/// RFC 3339's `date-time`. A leap second must end a UTC day that ended in one
+/// (Section 5.7), once the offset is taken away.
+fn date_time(s: &mut Scan) -> bool {
+    let Some(date) = calendar_date(s) else {
         return false;
     };
-    return 1 <= month && month <= 12 && 1 <= day && day <= days_in(year, month);
+    if !s.eat('T') {
+        return false;
+    }
+    let Some(clock) = time_of_day(s) else {
+        return false;
+    };
+    return !clock.leap || LEAP_SECOND_DAYS.contains(&plus_days(date, clock.utc_day));
 }
 
 fn days_in(year: i32, month: i32) -> i32 {
@@ -485,29 +561,40 @@ fn days_in(year: i32, month: i32) -> i32 {
     return if month == 4 || month == 6 || month == 9 || month == 11 { 30 } else { 31 };
 }
 
+fn full_time(s: &mut Scan) -> bool {
+    return time_of_day(s) matches { Some(_) };
+}
+
+/// What a `full-time` says of the day: whether its second is a leap second, and
+/// the UTC day its instant falls on, -1, 0 or 1 days from its own.
+struct Clock {
+    leap: bool,
+    utc_day: i32,
+}
+
 /// RFC 3339's `full-time`. A leap second must fall on the last minute of a UTC
 /// day, once the offset is taken away.
-fn full_time(s: &mut Scan) -> bool {
+fn time_of_day(s: &mut Scan) -> Option<Clock> {
     let Some(hour) = s.digits(2) else {
-        return false;
+        return null;
     };
     if !s.eat(':') {
-        return false;
+        return null;
     }
     let Some(minute) = s.digits(2) else {
-        return false;
+        return null;
     };
     if !s.eat(':') {
-        return false;
+        return null;
     }
     let Some(second) = s.digits(2) else {
-        return false;
+        return null;
     };
     if hour > 23 || minute > 59 || second > 60 {
-        return false;
+        return null;
     }
     if s.eat('.') && !s.some_digits() {
-        return false;
+        return null;
     }
     let mut offset = 0;
     if !s.eat('Z') {
@@ -516,24 +603,30 @@ fn full_time(s: &mut Scan) -> bool {
         } else if s.eat('-') {
             -1;
         } else {
-            return false;
+            return null;
         };
         let Some(h) = s.digits(2) else {
-            return false;
+            return null;
         };
         if !s.eat(':') {
-            return false;
+            return null;
         }
         let Some(m) = s.digits(2) else {
-            return false;
+            return null;
         };
         if h > 23 || m > 59 {
-            return false;
+            return null;
         }
         offset = sign * (h * 60 + m);
     }
     let day = 24 * 60;
-    return second < 60 || ((hour * 60 + minute - offset) % day + day) % day == day - 1;
+    let utc = hour * 60 + minute - offset;
+    let utc_day = utc.div_floor(day);
+    let leap = second == 60;
+    if leap && utc - utc_day * day != day - 1 {
+        return null;
+    }
+    return Option::Some(Clock { leap, utc_day });
 }
 
 /// RFC 3339 Appendix A's `duration`. A unit may follow only the next larger

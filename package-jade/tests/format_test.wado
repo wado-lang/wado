@@ -19,6 +19,19 @@ test "a duration's letters match in either case, as ABNF's strings do" {
     assert !admits("duration", "p1dt");
 }
 
+test "a date-time's leap second ends a UTC day that ended in one" {
+    assert admits("date-time", "2016-12-31T23:59:60Z");
+    assert admits("date-time", "1972-06-30T23:59:60Z");
+    assert !admits("date-time", "2000-01-15T23:59:60Z");
+    assert !admits("date-time", "2016-06-30T23:59:60Z");
+    // The offset moves the UTC day across the boundary either way.
+    assert admits("date-time", "2017-01-01T00:59:60+01:00");
+    assert admits("date-time", "2016-12-31T15:59:60-08:00");
+    assert !admits("date-time", "2016-12-30T15:59:60-08:00");
+    // A time names no day, so any day's last UTC minute may hold one.
+    assert admits("time", "23:59:60Z");
+}
+
 test "an email's address literal follows SMTP's rules, not the ipv4 and ipv6 formats'" {
     assert admits("email", "a@[001.2.3.4]");
     assert !admits("ipv4", "001.2.3.4");
