@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794143609506,
+  "lastUpdate": 1794147626329,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75757,6 +75757,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 404722,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2687800a26c098b29d407fea39930d65ef9ed4ee",
+          "message": "Merge pull request #2583 from wado-lang/ccr-f765b823-1j102r\n\nfix(gale): evaluate predicates and labels where ANTLR4 does",
+          "timestamp": "2026-11-08T23:01:45+09:00",
+          "tree_id": "b7bba686d955eefe63ecbb2a4d98874f8657db4c",
+          "url": "https://github.com/wado-lang/wado/commit/2687800a26c098b29d407fea39930d65ef9ed4ee"
+        },
+        "date": 1794147625081,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404972,
             "unit": "bytes"
           }
         ]
