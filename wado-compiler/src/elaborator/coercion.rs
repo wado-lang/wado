@@ -22,7 +22,7 @@ use crate::escape::{bytes_value, unescape_byte};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::module_source::ModuleSource;
-use crate::name::FqTraitName;
+use crate::name::{FqTraitName, TypeHead};
 use crate::tir::{InferVarId, ResolvedType, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -281,8 +281,17 @@ impl Scope {
         !vars.is_empty() && vars.iter().all(|&var| self.pending_owns(|own| own == var))
     }
 
-    /// Whether `var` belongs to a call whose literals are pending.
-    pub(super) fn awaits_pending_var(&self, tt: &TypeTable, var: InferVarId) -> bool {
+    /// Whether an argument of `trait_` names a variable belonging to a call
+    /// whose literals are pending.
+    pub(super) fn trait_awaits_pending_call(&self, tt: &TypeTable, trait_: &FqTraitName) -> bool {
+        trait_.args().iter().any(|arg| {
+            arg.mentions(&|head| {
+                matches!(head, TypeHead::Infer { var, .. } if self.awaits_pending_var(tt, *var))
+            })
+        })
+    }
+
+    fn awaits_pending_var(&self, tt: &TypeTable, var: InferVarId) -> bool {
         self.pending_owns(|own| matches!(tt.get(own), ResolvedType::InferVar(v) if *v == var))
     }
 

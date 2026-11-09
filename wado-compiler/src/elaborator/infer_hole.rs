@@ -23,7 +23,7 @@ use crate::elaborator::sem::types::{
     StaticMethodDispatch,
 };
 use crate::elaborator::types::VariantInfo;
-use crate::name::{FqTraitName, mangle_generic_name, written_param_name};
+use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
 use crate::tir;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
@@ -162,7 +162,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_binding: Option<SelfBinding>,
         impl_args: &[(String, TypeId)],
     ) -> Vec<DeclaredBound> {
-        let at_impl = self.tysys.call_site_types(&[], &[], impl_args);
+        // A variable stays named, for the re-check to read its answer; a
+        // parameter is the frame's, and only that frame spells it.
+        let at_impl: Vec<(FqTypeName, FqTypeName)> = {
+            let tt = self.tysys.type_table.borrow();
+            impl_args
+                .iter()
+                .filter(|&&(_, arg)| !tt.contains_rigid_param(arg) && !tt.contains_unknown(arg))
+                .map(|(name, arg)| (FqTypeName::binder(name), tt.fq_type_name(*arg)))
+                .collect()
+        };
         param
             .real_bounds()
             .into_iter()
@@ -239,6 +248,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         let bounds = self.declared_bounds(param, self_binding, impl_args);
+        self.defer_declared_bounds(param, type_arg, bounds, span);
+    }
+
+    /// [`Self::defer_bounds_to_answer`] for `bounds` already declared. A
+    /// settled `type_arg` defers them too where their own arguments name
+    /// variables still to be answered (`T: Pick<U>` with `U` awaiting `1.5`).
+    pub(super) fn defer_declared_bounds(
+        &mut self,
+        param: &GenericParam,
+        type_arg: TypeId,
+        bounds: Vec<DeclaredBound>,
+        span: Span,
+    ) {
         if bounds.is_empty() {
             return;
         }
@@ -633,11 +655,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if tt.contains_type_param(solution) {
                     return None;
                 }
-                Some(
-                    bounds
-                        .iter()
-                        .map(move |b| (solution, param_name.clone(), b.clone(), *span)),
-                )
+                let tt = &tt;
+                Some(bounds.iter().map(move |b| {
+                    // A bound argument may name a variable too (`T: Pick<U>`
+                    // with `U` awaiting a literal), answered by now.
+                    let trait_ = b.trait_.rewrite_args(&|name| match name.head() {
+                        TypeHead::Infer { var, .. } => Some(tt.fq_type_name(subst[var])),
+                        _ => None,
+                    });
+                    let bound = DeclaredBound {
+                        trait_,
+                        written: b.written.clone(),
+                    };
+                    (solution, param_name.clone(), bound, *span)
+                }))
             })
             .flatten()
             .collect();

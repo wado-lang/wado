@@ -2147,12 +2147,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declaring no slot of its own leaves the method's to its type
             // default, which is not the arguments' to answer.
             // A pack is settled below instead, never a slot to spell.
+            let spelled: Vec<bool> = (0..solving.len())
+                .map(|i| method_type_args.get(i).is_some_and(|&a| a != TypeTable::UNKNOWN))
+                .collect();
+            merge_turbofish_type_args(&mut method_type_args, &inferred);
+            // A slot bound only through another's associated type (`..V` off
+            // `Holes`, `A` off `T: Holder<Item = A>`) is projected off the
+            // owner the arguments settled, as the bare spelling projects it.
+            let merged = method_type_args.clone();
+            let real = RealTypeParams::of(&sig.own_params);
+            self.project_assoc_bound_args(Some(sig.def), &real, &mut method_type_args);
             let unanswered = solving.iter().enumerate().find(|&(i, slot)| {
                 !bindings.contains_key(slot)
                     && !sig.own_params[i].is_pack
-                    && method_type_args
-                        .get(i)
-                        .is_none_or(|&a| a == TypeTable::UNKNOWN)
+                    && !spelled[i]
+                    && method_type_args[i] == merged[i]
             });
             if let Some((i, _)) = unanswered
                 && !defaulted
@@ -2166,12 +2175,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return TypeTable::ERROR;
             }
-            merge_turbofish_type_args(&mut method_type_args, &inferred);
-            // A slot bound only through another's associated type (`..V` off
-            // `Holes`) is projected off the owner the arguments settled, as the
-            // bare spelling projects it.
-            let real = RealTypeParams::of(&sig.own_params);
-            self.project_assoc_bound_args(Some(sig.def), &real, &mut method_type_args);
             let reached = self.tysys.packs_args_reach(&param_types, args.len());
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
             self.instantiate_static_params(

@@ -1273,18 +1273,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
         let names = ImplParamSlots::of(&header.ty, &header.type_params);
-        for (&slot, &arg) in slots {
-            assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
-            let arg = self.apply_infer_holes(arg);
-            let param = names
-                .name_of(slot.index)
-                .and_then(|name| header.type_params.iter().find(|p| p.name == name));
-            let open = self.awaits_pending_call(arg)
-                || self.awaits_report(&self.tysys.type_table.borrow(), arg);
-            if let Some(param) = param
-                && open
-            {
-                self.defer_bounds_to_answer(param, arg, None, &[], span);
+        let impl_args: Vec<(String, TypeId)> = slots
+            .iter()
+            .filter_map(|(slot, &arg)| {
+                assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
+                Some((names.name_of(slot.index)?.to_string(), self.apply_infer_holes(arg)))
+            })
+            .collect();
+        for (name, arg) in &impl_args {
+            let Some(param) = header.type_params.iter().find(|p| &p.name == name) else {
+                continue;
+            };
+            let bounds = self.declared_bounds(param, None, &impl_args);
+            let open = self.awaits_pending_call(*arg) || {
+                let tt = self.tysys.type_table.borrow();
+                self.awaits_report(&tt, *arg)
+                    || bounds
+                        .iter()
+                        .any(|b| self.annotate_ctx.trait_awaits_pending_call(&tt, &b.trait_))
+            };
+            if open {
+                self.defer_declared_bounds(param, *arg, bounds, span);
             }
         }
     }

@@ -980,14 +980,10 @@ impl TypeSystem {
         if ctx.awaits_pending_call(&table, type_id) {
             return None;
         }
-        let awaits = |trait_: &FqTraitName| {
-            trait_.args().iter().any(|arg| {
-                arg.mentions(&|head| {
-                    matches!(head, TypeHead::Infer { var, .. } if ctx.awaits_pending_var(&table, *var))
-                })
-            })
-        };
-        let awaiting: Vec<bool> = bounds.iter().map(awaits).collect();
+        let awaiting: Vec<bool> = bounds
+            .iter()
+            .map(|trait_| ctx.trait_awaits_pending_call(&table, trait_))
+            .collect();
         drop(table);
         bounds
             .iter()
