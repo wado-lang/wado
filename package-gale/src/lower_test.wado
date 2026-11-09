@@ -6032,3 +6032,14 @@ test "a lookahead DFA's branches at different depths stay apart" {
     ]));
     assert forest.nodes.len() == 5;
 }
+
+test "lookahead DFA branches apart only in a long edge's last token stay apart" {
+    let kinds = 400;
+    let branch_to_alt = |last: i32| {
+        let mut tokens: List<i32> = (0..<300).collect();
+        tokens.push(last);
+        return SllDfa { nodes: [SllNode::Branch([edge(tokens, 1)]), SllNode::Alt(0)], kinds };
+    };
+    let mut forest = SllForest::new(kinds);
+    assert forest.add(&branch_to_alt(300)) != forest.add(&branch_to_alt(301));
+}

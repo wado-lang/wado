@@ -899,7 +899,7 @@ pub struct SllForest {
     depth: List<i32>,
     /// Per node, how many places read it: an edge, or a decision it starts.
     readers: List<i32>,
-    node_of_key: HashMap<String, i32>,
+    node_of_key: HashMap<[i32, SllNode], i32>,
 }
 
 impl SllForest {
@@ -925,7 +925,7 @@ impl SllForest {
                 dfa.nodes[n];
             };
             let read_at = if node matches { Branch(_) } { depth[n] } else { -1 };
-            let key = `${read_at} ${node:?}`;
+            let key = [read_at, node];
             node_of[n] = if let Some(id) = self.node_of_key.get(key) {
                 id;
             } else {
