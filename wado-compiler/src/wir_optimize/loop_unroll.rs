@@ -7,6 +7,8 @@
 //!
 //! gains a copy in front of it that leaves once any of the next `n` tests
 //! would, `EXIT | EXIT[v := STEP] | …`, and otherwise runs its body `n` times.
+//! A counted loop, `v > x` stepping `v += c`, tests only the furthest of them,
+//! in `i64` (see [`furthest_exit`]).
 //! The original loop then runs what is left, so every iteration runs as it
 //! did: the sums keep their order, and a float result its bits. The step may
 //! sit anywhere in the body: a `for` over an iterator the optimizer took apart
@@ -127,6 +129,7 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> 
     {
         return None;
     }
+    let leave = furthest_exit(exit, var, step, factor).unwrap_or(leave);
     let mut looped = Vec::with_capacity(factor * work.len() + 2);
     looped.push(WirInstr::BrIf {
         depth: 1,
@@ -143,6 +146,56 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> 
             label: None,
             body: looped,
         }],
+    })
+}
+
+/// One test in place of the copy's `factor`, for a loop leaving on `v > x` or
+/// `v >= x` (or the same written `x < v`, `x <= v`, signed or unsigned) and
+/// stepping `v += c` with a positive constant `c`: the furthest one,
+/// `v + (factor - 1) * c` against `x`, compared in `i64`. There the sum cannot
+/// wrap, so where it stays in range every nearer `v` does too, and each test the
+/// copy skips would have kept the loop going. Where it leaves early, the
+/// original loop runs those iterations.
+fn furthest_exit(exit: &WirInstr, var: &str, step: &WirInstr, factor: usize) -> Option<WirInstr> {
+    use WirInstr as I;
+    let WirInstr::I32Add(l, r) = step else {
+        return None;
+    };
+    let c = match (l.as_ref(), r.as_ref()) {
+        (I::LocalGet { name, .. }, I::I32Const(c)) | (I::I32Const(c), I::LocalGet { name, .. })
+            if name == var && *c > 0 =>
+        {
+            i64::from(*c)
+        }
+        _ => return None,
+    };
+    // `(v, x, signed, strict)` for `v > x` and its kin.
+    let (v, x, signed, strict) = match exit {
+        I::I32GtS(v, x) | I::I32LtS(x, v) => (v, x, true, true),
+        I::I32GeS(v, x) | I::I32LeS(x, v) => (v, x, true, false),
+        I::I32GtU(v, x) | I::I32LtU(x, v) => (v, x, false, true),
+        I::I32GeU(v, x) | I::I32LeU(x, v) => (v, x, false, false),
+        _ => return None,
+    };
+    if v.local_read() != Some(var) || Footprint::reads(x).has_local(var) {
+        return None;
+    }
+    let widen = |instr: &WirInstr| {
+        let instr = Box::new(instr.clone());
+        Box::new(if signed {
+            I::I64ExtendI32S(instr)
+        } else {
+            I::I64ExtendI32U(instr)
+        })
+    };
+    let reach = i64::try_from(factor - 1).expect("an unroll factor fits i64") * c;
+    let furthest = Box::new(I::I64Add(widen(v), Box::new(I::I64Const(reach))));
+    // Both sides widened fit `i64` with room, so a signed compare orders the
+    // unsigned ones too.
+    Some(if strict {
+        I::I64GtS(furthest, widen(x))
+    } else {
+        I::I64GeS(furthest, widen(x))
     })
 }
 
