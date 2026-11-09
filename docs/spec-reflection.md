@@ -218,7 +218,7 @@ base's. A member's `doc()` returns the comment on the member the same way.
 
 The text is the comment's lines joined by newlines, each without its `///` and
 one space after it, so it is the Markdown `wado doc` renders. A `//!` module
-comment is no type's and no member's.
+comment belongs to no type or member, so neither reads it.
 
 > Not yet implemented: neither `Reflect::doc()` nor `Member::doc()` is declared.
 

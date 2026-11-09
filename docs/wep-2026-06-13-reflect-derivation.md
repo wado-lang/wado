@@ -433,9 +433,8 @@ reflection carries them. `Member::doc()` reads a member's comment, and
 identity does: a generic body bounded by `T: JsonSchema` does not know which
 kind `T` is.
 
-The text is what `wado doc` renders: the lines joined by newlines, each without
-its `///` and one space after it. It stays Markdown, and splitting it into a
-title and a description is the library's policy, not reflection's.
+The text stays the Markdown `wado doc` renders. Splitting it into a title and a
+description is the library's policy, not reflection's.
 
 A newtype's comment is its own. It does not fall back to its base's, since a
 newtype documents what it adds, and a reader who wants the base's asks
