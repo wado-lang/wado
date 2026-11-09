@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794186465367,
+  "lastUpdate": 1794203006458,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75913,6 +75913,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a39194dfb23f769cf7e6df80268c1c6ddd82bad8"
         },
         "date": 1794186464496,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404932,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "da57536f765561e7595c591de73bc6ea33929d85",
+          "message": "Merge pull request #2592 from wado-lang/gale-predicates-in-prediction\n\nfix(gale): weigh the predicates prediction meets, as ANTLR4 does",
+          "timestamp": "2026-11-09T14:24:53+09:00",
+          "tree_id": "742522d49a67cc1c3d5aa2733f1eb261000a9a18",
+          "url": "https://github.com/wado-lang/wado/commit/da57536f765561e7595c591de73bc6ea33929d85"
+        },
+        "date": 1794203005539,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
