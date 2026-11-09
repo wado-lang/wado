@@ -239,29 +239,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let right = self.resolve_expr(right_ast, ctx, expected_type);
             let left = self.resolve_expr(left_ast, ctx, Some(right));
             (left, right)
-        } else {
-            if op.is_comparison()
-                && expected_type_use(left_ast, &self.tysys)
-                    > expected_type_use(right_ast, &self.tysys)
-            {
-                let right = self.resolve_expr(right_ast, ctx, expected_type);
-                let left_expected = if right == TypeTable::ERROR {
-                    expected_type
-                } else {
-                    Some(right)
-                };
-                let left = self.resolve_expr(left_ast, ctx, left_expected);
-                (left, right)
+        } else if op.is_comparison()
+            && expected_type_use(left_ast, &self.tysys) > expected_type_use(right_ast, &self.tysys)
+        {
+            let right = self.resolve_expr(right_ast, ctx, expected_type);
+            let left_expected = if right == TypeTable::ERROR {
+                expected_type
             } else {
-                let left = self.resolve_expr(left_ast, ctx, expected_type);
-                let right_expected = if op.is_comparison() && left != TypeTable::ERROR {
-                    Some(left)
-                } else {
-                    expected_type
-                };
-                let right = self.resolve_expr(right_ast, ctx, right_expected);
-                (left, right)
-            }
+                Some(right)
+            };
+            let left = self.resolve_expr(left_ast, ctx, left_expected);
+            (left, right)
+        } else {
+            let left = self.resolve_expr(left_ast, ctx, expected_type);
+            let right_expected = if op.is_comparison() && left != TypeTable::ERROR {
+                Some(left)
+            } else {
+                expected_type
+            };
+            let right = self.resolve_expr(right_ast, ctx, right_expected);
+            (left, right)
         }
     }
 
