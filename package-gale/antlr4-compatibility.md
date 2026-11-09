@@ -1120,7 +1120,8 @@ the compiled fast path:**
    (`Parser.atn`), so the scan ends where the parse will. Past the end of
    the rule the parse was entered at, the simulator continues as each call
    of that rule does, and so on through its callers' callers, as the jar
-   does. Only a rule no other rule calls ends at the end of the input. In a grammar that
+   does. It may also end there at the end of the input, which counts only
+   where no caller's continuation reads the `EOF` the grammar writes. In a grammar that
    carries the simulator, every other ambiguity the prediction tree gives up
    on goes to it as well (`ambiguity_routes`). The tournament picks the
    longest scan, and ANTLR4 the lowest alternative the rest of the input
