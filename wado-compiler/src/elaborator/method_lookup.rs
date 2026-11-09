@@ -1267,8 +1267,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         written.is_some_and(|written| tt.type_param_id(written).is_some() || written == key)
     }
 
-    /// Check the bounds impl `def` places on its parameters still open, once
-    /// they are answered.
+    /// Check the bounds impl `def` places on its parameters, where the
+    /// parameter or an argument of its bound is still open, once they are
+    /// answered.
     fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
@@ -1277,7 +1278,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter_map(|(slot, &arg)| {
                 assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
-                Some((names.name_of(slot.index)?.to_string(), self.apply_infer_holes(arg)))
+                Some((
+                    names.name_of(slot.index)?.to_string(),
+                    self.apply_infer_holes(arg),
+                ))
             })
             .collect();
         for (name, arg) in &impl_args {

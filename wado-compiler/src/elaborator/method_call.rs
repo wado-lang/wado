@@ -2148,7 +2148,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // default, which is not the arguments' to answer.
             // A pack is settled below instead, never a slot to spell.
             let spelled: Vec<bool> = (0..solving.len())
-                .map(|i| method_type_args.get(i).is_some_and(|&a| a != TypeTable::UNKNOWN))
+                .map(|i| {
+                    method_type_args
+                        .get(i)
+                        .is_some_and(|&a| a != TypeTable::UNKNOWN)
+                })
                 .collect();
             merge_turbofish_type_args(&mut method_type_args, &inferred);
             // A slot bound only through another's associated type (`..V` off
