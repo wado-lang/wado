@@ -396,14 +396,14 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
         l4: loop {
             break_if b3 ptr >= 64;
             ptr = local.tee current_28(ptr) + 1;
-            value_33 = base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32);
+            $v1_10 = "wasm:core:libm.wat/libm_expf"(local.tee value_33(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32)));
             if @unlikely(current_28 >= $sroa_$iter_0_start_74) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(current_28, $sroa_$iter_0_start_74, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("allocator_asset_memory.wado:17"), used: 30 });
                 unreachable;
             }
             $v3 = builtin::array_get_value<f32>($licm_repr_83, current_28);
-            if @unlikely(((local.tee $v1_10("wasm:core:libm.wat/libm_expf"(value_33)) == $v3) | (($v1_10 != $v1_10) & ($v3 != $v3))) == 0) {
+            if @unlikely((($v1_10 == $v3) | (($v1_10 != $v1_10) & ($v3 != $v3))) == 0) {
                 cold_path;
                 "allocator_asset_memory.wado/run$cold0"(before.repr, before.used, current_28, value_33, $v3, $v1_10);
                 unreachable;

@@ -657,13 +657,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_item(&mut self, item: &Item) {
         let id = get_item_id(item);
-
-        // Whatever the items before this one had no slot for, at the boundary
-        // the next parse will read it in, and above this item's leading run so
-        // that nothing lands between a doc comment and what it documents.
-        let leading_start = self.leading_start(id, get_item_span(item).start);
-        self.flush_comments_before(leading_start, Spacing::KeepBlankLines);
-        self.emit_leading_for(id, item.attrs());
+        self.open_member(id, get_item_span(item).start, item.attrs());
         self.emit_blank_lines_to(get_item_first_line(item));
 
         match item {
