@@ -16,6 +16,7 @@ use {
 use { Uri, UriReference } from "core:uri";
 use { Url, percent_encode } from "core:url";
 use { Uuid } from "core:uuid";
+use { Value } from "core:value";
 use { Document } from "./document.wado";
 use { Number } from "./number.wado";
 use { JsonTypes, Schema, SchemaObject, pointer_token } from "./schema.wado";
@@ -530,6 +531,14 @@ impl JsonSchema for ByteSlice {
 impl JsonSchema for () {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return of_type(JsonTypes::Null);
+    }
+}
+
+// Any JSON value, since `Value` writes itself as the value it holds rather than
+// as a variant.
+impl JsonSchema for Value {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::Bool(true);
     }
 }
 

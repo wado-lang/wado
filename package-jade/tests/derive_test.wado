@@ -14,6 +14,7 @@ use {
 use { Uri, UriReference } from "core:uri";
 use { Url } from "core:url";
 use { Uuid } from "core:uuid";
+use { Value } from "core:value";
 
 fn inline<T: JsonSchema>() -> String {
     let mut gen = SchemaGenerator::new();
@@ -90,6 +91,10 @@ test "an identifier is a string in its format" {
     assert inline::<UriReference>() == `{"type":"string","format":"uri-reference","x-wado-format":"core:uri#UriReference"}`;
     assert inline::<Uuid>() == `{"type":"string","format":"uuid","x-wado-format":"core:uuid#Uuid"}`;
     assert inline::<Url>() == `{"type":"string","x-wado-format":"core:url#Url"}`;
+}
+
+test "a Value is any JSON value, as it writes itself rather than as a variant" {
+    assert inline::<Value>() == "true";
 }
 
 test "unit is null" {
