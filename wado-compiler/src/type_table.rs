@@ -1142,8 +1142,8 @@ impl TypeTable {
         }
     }
 
-    /// The type parameters shape `id` mentions, by name: the frame its
-    /// synthesized methods are instantiated in at a substituted shape.
+    /// The type parameters shape `id` mentions, by the binder each spells: the
+    /// frame its synthesized methods are instantiated in at a substituted shape.
     #[must_use]
     pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<FqTypeName, TypeParamId> {
         self.anon_shape_params(id)
@@ -6296,7 +6296,9 @@ impl TypeTable {
             | ResolvedType::Variant { def, type_args } => {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
-            ResolvedType::TypeParam { id, name } => FqTypeName::binder_of(&self.defs, id.owner, name),
+            ResolvedType::TypeParam { id, name } => {
+                FqTypeName::binder_of(&self.defs, id.owner, name)
+            }
             ResolvedType::AssocParam {
                 owning_trait,
                 assoc_name,

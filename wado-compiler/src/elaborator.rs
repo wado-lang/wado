@@ -1138,7 +1138,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .contains_key(written)
         {
             return match owner {
-                Some(def) => self.tysys.impl_receiver_binder(def, written),
+                Some(def) => FqTypeName::binder_of(self.tysys.resolutions.defs(), def, written),
                 None => self.binder_in_scope(written),
             };
         }
@@ -1184,7 +1184,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.receiver_name_of_impl(
             &impl_block.ty,
             &impl_block.type_params,
-            Some(self.tysys.resolutions.defs().def_at(impl_block.id)),
+            self.tysys.resolutions.defs().def_at(impl_block.id),
         )
     }
 
@@ -1195,7 +1195,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         impl_ty: &ast::Type,
         type_params: &[ast::GenericParam],
-        owner: Option<DefId>,
+        owner: DefId,
     ) -> FqTypeName {
         // A function type's name is its whole signature, `mut` and effects
         // included, as `TypeTable::fn_receiver_name` spells a call's receiver.
@@ -1212,7 +1212,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
             }
         }
-        self.qualified_receiver_name_owned(&self.get_type_name(impl_ty), owner)
+        self.qualified_receiver_name_owned(&self.get_type_name(impl_ty), Some(owner))
     }
 
     /// The declaration `ns::Name` reaches from this module.
@@ -2058,18 +2058,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
         let struct_name = self.get_type_name(&impl_block.ty);
-        let impl_owner = Some(self.tysys.resolutions.defs().def_at(impl_block.id));
+        let impl_owner = self.tysys.resolutions.defs().def_at(impl_block.id);
         let mut scope = self.enter_impl_scope(impl_block);
         let trait_name = scope.impl_block_trait_name(impl_block);
-        // The node the scope bound the receiver to, so a method parameter
-        // shadowing the letter is a different binder.
-        let receiver_decl = scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(&struct_name)
-            .and_then(|b| b.decl);
-        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner.map(|def| (def, receiver_decl));
 
         if impl_block.is_synthesize_request {
             scope.resolve_synthesize_request_marker(impl_block, &struct_name);
@@ -2349,12 +2340,6 @@ impl TypeSystem {
                     .iter()
                     .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
             })
-    }
-
-    /// The binder naming the receiver parameter `written` of the `impl` block
-    /// `owner` — every pass that names a blanket's receiver asks here.
-    pub(super) fn impl_receiver_binder(&self, owner: DefId, written: &str) -> FqTypeName {
-        FqTypeName::binder_of(self.resolutions.defs(), owner, written)
     }
 
     /// The spelling `def` renders to in a mangled head — its declared name,

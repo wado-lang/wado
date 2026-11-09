@@ -2982,23 +2982,18 @@ mod tests {
     }
 
     #[test]
-    fn a_function_type_name_spells_as_its_mangle_and_substitutes_inside() {
-        let i32_ = FqTypeName::builtin("i32");
-        let t = FqTypeName::binder("T");
+    fn a_function_type_name_spells_as_its_mangle() {
         let inner = FqTypeName::function(false, vec![], FqTypeName::builtin("()"), vec![]);
         let f = FqTypeName::function(
             true,
-            vec![t.clone(), i32_.clone()],
+            vec![FqTypeName::binder("T"), FqTypeName::builtin("i32")],
             inner,
             vec![tir::EffectRef::Param { name: "E".into() }],
         );
         assert_eq!(f.to_mangled(), "fn mut(T,i32)->(fn()->())with(E)");
         assert_eq!(f.to_display(), "fn mut(T, i32) -> (fn() -> ()) with E");
         assert!(f.mentions_binder());
-        let at = f.substitute(&t, &i32_);
-        assert_eq!(at.to_mangled(), "fn mut(i32,i32)->(fn()->())with(E)");
-        assert!(!at.mentions_binder());
-        assert_eq!(at.head_only(), at);
+        assert_eq!(f.head_only(), f);
     }
 
     #[test]
@@ -4072,28 +4067,6 @@ impl FqTypeName {
             out.push('>');
         }
         out
-    }
-
-    /// This name with every occurrence of the type `old` replaced by `new` —
-    /// the whole name when it *is* `old`, and otherwise each argument,
-    /// recursively.
-    ///
-    /// A substitution over the structure. Rewriting the mangled spelling
-    /// instead means finding `old`'s mangling inside `self`'s and splicing,
-    /// which cannot tell a type from a type whose name contains it and leaves
-    /// the identity that produced the spelling unchanged.
-    #[must_use]
-    pub fn substitute(&self, old: &FqTypeName, new: &FqTypeName) -> FqTypeName {
-        if self == old {
-            return new.clone();
-        }
-        // A reference's pointee substitutes on its own: `&T` is `T` under a
-        // prefix, and `old` naming the pointee must reach it however many
-        // prefixes stand in front.
-        if let Some((outer, pointee)) = self.split_reference() {
-            return pointee.substitute(old, new).with_reference(outer);
-        }
-        self.descend(&|inner| inner.substitute(old, new))
     }
 
     /// This name with `at` applied at every position a type stands in, a

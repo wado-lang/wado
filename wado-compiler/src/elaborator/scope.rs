@@ -25,8 +25,8 @@ use super::types::TypeError;
 use super::util;
 use super::{AbstractSelections, Elaborator};
 use crate::defs::{DefId, DefTable};
-use crate::resolve::Resolutions;
 use crate::name::{FqTraitName, FqTypeName};
+use crate::resolve::Resolutions;
 use crate::token::Span;
 
 /// A type parameter as the declaration `owner` writes it: a method's `U` and
@@ -394,10 +394,6 @@ pub(super) struct TraitContext {
     /// of its calls selected through a declared bound, by the call's node.
     /// See [`Elaborator::abstract_selections`].
     pub(super) abstract_selections: Option<Rc<AbstractSelections>>,
-    /// The `impl` block whose type parameters are in scope, paired with the
-    /// node declaring its receiver binder — what names that binder in a mangle.
-    /// The node, not the spelling: a method parameter may shadow the letter.
-    pub(super) impl_owner: Option<(DefId, Option<ast::AstId>)>,
 }
 
 impl TraitContext {
@@ -464,9 +460,13 @@ impl TraitContext {
             .rev()
             .filter(|(shadowed, ..)| shadowed == name)
             .map(|(_, binder, _)| binder);
-        self.type_params.get(name).into_iter().chain(shadowed).find(|binder| {
-            binder.decl == Some(decl) || (binder.owner.is_some() && binder.owner == owner)
-        })
+        self.type_params
+            .get(name)
+            .into_iter()
+            .chain(shadowed)
+            .find(|binder| {
+                binder.decl == Some(decl) || (binder.owner.is_some() && binder.owner == owner)
+            })
     }
 
     /// The bounds the binder whose type is `type_id` carries, shadowed or not.
@@ -676,12 +676,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope
     }
 
-    /// Run `body` with `names` bound to `args` and no other type parameter in
-    /// scope, for resolving a type the declaration wrote against its arguments.
+    /// Run `body` with `space` bound and no other type parameter in scope, for
+    /// resolving a type the declaration wrote against its arguments.
     ///
     /// Nothing in `struct Marked<M: Mark = Zero>` means the `Zero` a caller
-    /// happens to declare. A name past `args` stays unbound, so a default
-    /// reaches only the parameters to its left.
+    /// happens to declare. A parameter past the settled arguments stays
+    /// unbound, so a default reaches only the parameters to its left.
     pub(super) fn with_type_param_args<R>(
         &mut self,
         space: &[(ParamRef, TypeId)],

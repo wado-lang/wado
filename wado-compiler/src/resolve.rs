@@ -1188,7 +1188,7 @@ impl AstVisitor<'_> for Resolver<'_> {
                 Item::Newtype(n) => (&n.type_params, None, Some(n.id)),
                 Item::BuiltinTypeDecl(d) => (&d.type_params, None, Some(d.id)),
                 Item::Resource(r) => (&r.type_params, Some(r.id), Some(r.id)),
-                    Item::Impl(i) => {
+                Item::Impl(i) => {
                     if let Some(head) = head_site(&i.ty) {
                         self.impl_heads.insert(i.id, head);
                     }

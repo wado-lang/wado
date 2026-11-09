@@ -828,11 +828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let params = self.type_lookup().declared_generic_params(def)?;
         let default = params.get(slot)?.default.clone()?;
-        let space: ParamSpace = params
-            .iter()
-            .map(|p| ParamRef::of(def, &p.name))
-            .zip(settled.iter().copied())
-            .collect();
+        let space = ParamRef::space(params, settled, &self.tysys.resolutions);
         let resolved = self.with_type_param_args(&space, |e| e.resolve_type(&default));
         if resolved == TypeTable::ERROR || resolved == TypeTable::UNKNOWN {
             // Nothing else reports a default: no application writes it, so the
@@ -940,15 +936,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .lookup_generic_newtype_of_decl(def)
             .cloned()
             .expect("`def` declares a generic newtype");
-        let space: ParamSpace = gn_info
-            .type_params
-            .iter()
-            .map(|p| ParamRef::of(def, &p.name))
-            .zip(type_args.iter().copied())
-            .collect();
-        let base_type_id = self.with_type_param_args(&space, |e| {
-            e.resolve_type(&gn_info.base_type_ast)
-        });
+        let space = ParamRef::space(&gn_info.type_params, &type_args, &self.tysys.resolutions);
+        let base_type_id =
+            self.with_type_param_args(&space, |e| e.resolve_type(&gn_info.base_type_ast));
         self.tysys
             .type_table
             .borrow_mut()
@@ -1227,16 +1217,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space
     }
 
-    /// Run `body` with `space` answering for the names its types were written
-    /// in, layered on this frame.
-    pub(super) fn in_space<R>(
-        &mut self,
-        space: &ParamSpace,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        self.with_type_params_bound(space, body)
-    }
-
     /// Run `body` in the frame `scoped` was written in: its parameter space and
     /// the `Self` it meant. Resolving a bound's own types needs both.
     pub(super) fn in_bound_frame<R>(
@@ -1246,13 +1226,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let binding = scoped.self_binding;
-        self.in_space(space, |e| e.under_self_binding(binding, body))
+        self.with_type_params_bound(space, |e| e.under_self_binding(binding, body))
     }
 
     /// `types` resolved with `space` answering for the names it was written in.
     fn resolve_in_space(&mut self, space: &ParamSpace, types: &[ast::Type]) -> Vec<TypeId> {
         let types = types.to_vec();
-        self.in_space(space, |e| {
+        self.with_type_params_bound(space, |e| {
             types.iter().map(|ty| e.resolve_type(ty)).collect()
         })
     }
@@ -1711,7 +1691,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id: site.base,
             declaring_trait: Some(owning_trait),
         };
-        let resolved = self.in_space(&declaring.space, |e| {
+        let resolved = self.with_type_params_bound(&declaring.space, |e| {
             e.under_self_binding(Some(self_binding), |e| e.resolve_type(ty))
         });
         (resolved != TypeTable::UNKNOWN).then_some(resolved)

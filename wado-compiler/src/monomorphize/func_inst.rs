@@ -1065,7 +1065,7 @@ impl Monomorphizer {
         let Some(methods) = self.structs.shape_methods.get(&origin).cloned() else {
             return Vec::new();
         };
-        let param_key_by_name = type_table.anon_shape_type_params(origin);
+        let param_key_by_binder = type_table.anon_shape_type_params(origin);
         let subject = type_table.fq_struct_head(StructDef::Anon(shape));
         let mut instances = Vec::new();
         for method in &methods {
@@ -1094,7 +1094,7 @@ impl Monomorphizer {
             instances.push(self.instantiate_with(
                 &method,
                 &params,
-                param_key_by_name.clone(),
+                param_key_by_binder.clone(),
                 identity,
                 type_table,
             ));
@@ -1172,7 +1172,7 @@ impl Monomorphizer {
         let own = generic.type_params.iter().map(|param| param.id);
         substitution.extend(own.zip(key.method_type_args.iter().copied()));
 
-        let param_key_by_name: IndexMap<FqTypeName, TypeParamId> = generic
+        let param_key_by_binder: IndexMap<FqTypeName, TypeParamId> = generic
             .impl_type_params
             .iter()
             .chain(&generic.type_params)
@@ -1228,27 +1228,27 @@ impl Monomorphizer {
         Some(self.instantiate_with(
             generic,
             &substitution,
-            param_key_by_name,
+            param_key_by_binder,
             identity,
             type_table,
         ))
     }
 
     /// `generic` with `substitution` applied throughout, under the identity the
-    /// caller gives the instance. `param_key_by_name` resolves a
+    /// caller gives the instance. `param_key_by_binder` resolves a
     /// `T^Trait::method` receiver to its slot by the parameter's binder.
     fn instantiate_with(
         &mut self,
         generic: &TirFunction,
         substitution: &TypeArgMap,
-        param_key_by_name: IndexMap<FqTypeName, TypeParamId>,
+        param_key_by_binder: IndexMap<FqTypeName, TypeParamId>,
         identity: InstanceIdentity,
         type_table: &mut TypeTable,
     ) -> TirFunction {
         // Claims are per instantiation: this function gets its own `locals`
         // table, so no slot it unrolls into is shared with another's.
         self.unrolled_local_claims.borrow_mut().clear();
-        self.current_param_substitution_key = param_key_by_name;
+        self.current_param_substitution_key = param_key_by_binder;
 
         // Substitute types in parameters
         let params: Vec<TirParam> = generic

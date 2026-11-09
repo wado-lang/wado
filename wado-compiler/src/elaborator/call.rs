@@ -26,8 +26,6 @@ use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound, TraitContext};
-use super::type_resolution::ParamSpace;
-use crate::resolve::{Resolution, Resolutions};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
@@ -36,6 +34,7 @@ use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::{DerivedAt, SelfBinding};
+use super::type_resolution::ParamSpace;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
@@ -52,6 +51,7 @@ use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, 
 use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
+use crate::resolve::{Resolution, Resolutions};
 use crate::{Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.

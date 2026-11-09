@@ -567,7 +567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let space =
                 self.with_self_binding(target, |e| e.inherited_space(trait_decl, &arg_ids, &via));
             let pick = vec![true; bound.type_args.len()];
-            let supertrait_trait = self.in_space(&space, |e| {
+            let supertrait_trait = self.with_type_params_bound(&space, |e| {
                 e.trait_named_with_resolved_args(named, &bound, &pick)
             });
             let supertrait = self.tysys.resolutions.defs().name(decl).to_string();
@@ -2158,7 +2158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((root, via)) = elaborated.inherited.clone() else {
             return own;
         };
-        let root_args = self.in_space(&own, |e| e.trait_args_of_bound(bounds, root));
+        let root_args = self.with_type_params_bound(&own, |e| e.trait_args_of_bound(bounds, root));
         self.inherited_space(root, &root_args, &via)
     }
 
@@ -2175,7 +2175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             written_self,
         } = candidate;
         let (bound, decl, written_self) = (bound.clone(), *decl, *written_self);
-        self.in_space(space, |e| {
+        self.with_type_params_bound(space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         })
     }
@@ -2433,11 +2433,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An inherited bound wrote its arguments in the declaring trait's
         // parameter space, so a spelling read here means the wrong binder.
         let pick = args_to_resolve(&bound);
-        let fq_trait_name = self.in_space(&space, |e| {
+        let fq_trait_name = self.with_type_params_bound(&space, |e| {
             e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
         });
 
-        let slots = self.in_space(&space, |e| {
+        let slots = self.with_type_params_bound(&space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         });
         let fq_trait_name = self
@@ -2798,9 +2798,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
                 let bounds = ScopedBound::pin_declared(param, self_binding);
-                let root_args = self.with_type_params_bound(&site, |e| {
-                    e.trait_args_of_bound(&bounds, root)
-                });
+                let root_args =
+                    self.with_type_params_bound(&site, |e| e.trait_args_of_bound(&bounds, root));
                 let pick = vec![true; bound.type_args.len()];
                 for &subject in &subjects {
                     // `Self` in the clause, or in a default the chain fills, is
@@ -2809,7 +2808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let binding = self.tysys.base_self_binding(subject, Some(root));
                     let space = self
                         .with_self_binding(binding, |e| e.inherited_space(root, &root_args, &via));
-                    self.in_space(&space, |e| {
+                    self.with_type_params_bound(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
                             e.with_self_binding(binding, |e| {
                                 e.trait_named_with_resolved_args(trait_, &bound, &pick)

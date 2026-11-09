@@ -2825,7 +2825,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
         recorded_sig: Option<&MethodSig>,
-        impl_def: Option<DefId>,
+        impl_def: DefId,
     ) {
         // `recorded_sig` is `None` for a trait's own default-bodied method,
         // which was written against the trait's `Self`, not this impl's.
@@ -2841,7 +2841,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.sem.decls.clear_fn_local_items();
 
         let frame = scope.enter_impl_method_frame(
-            impl_def.expect("a method resolves inside its impl block"),
+            impl_def,
             func,
             impl_type,
             trait_type,

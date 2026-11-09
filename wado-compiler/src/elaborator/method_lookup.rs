@@ -1,9 +1,9 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
 use super::scope::{BinderInScope, ParamRef, ScopedBound, trait_params_from_impl};
-use super::type_resolution::ParamSpace;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
+use super::type_resolution::ParamSpace;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -2362,9 +2362,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
         let blanket_binder = is_blanket_type_param.then(|| {
-            scope
-                .tysys
-                .impl_receiver_binder(impl_ref.0, &impl_struct_name)
+            FqTypeName::binder_of(
+                scope.tysys.resolutions.defs(),
+                impl_ref.0,
+                &impl_struct_name,
+            )
         });
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
