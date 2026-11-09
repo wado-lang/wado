@@ -7,7 +7,8 @@
 use { Deserialize, DeserializeError, Deserializer, Serialize, SerializeError, Serializer } from "core:serde";
 
 /// A URI (RFC 3986 §3): a URI reference with a scheme, so one that names a
-/// resource without a base, and one a reference resolves against.
+/// resource without a base, and one a reference resolves against. Two URIs are
+/// equal when their references are.
 pub struct Uri {
     reference: UriReference,
 }
@@ -95,7 +96,7 @@ impl Uri {
 
     /// The URI as `Display` writes it.
     pub fn to_string(&self) -> String {
-        return `${self}`;
+        return self.reference.to_string();
     }
 
     /// The fragment, without its `#`.
@@ -142,7 +143,7 @@ impl UriReference {
 
 impl Serialize for Uri {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        return s.serialize_string(&self.to_string());
+        return self.reference.serialize(s);
     }
 }
 

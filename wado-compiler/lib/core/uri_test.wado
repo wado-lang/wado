@@ -16,6 +16,7 @@ fn resolved(r: String) -> String {
 
 test "a URI has a scheme, and a reference need not" {
     assert reference("../x").to_string() == "../x";
+    assert `${uri("HTTP://a/b")}` == "http://a/b";
     let e = Uri::from_str("../x").unwrap_err();
     assert e.offset == 0;
     assert e.message == "a URI must have a scheme";
