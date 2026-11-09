@@ -3006,7 +3006,11 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         }
     }
     if !(kind_set_has(&SYNC_1, p.kinds[p.pos]) || p.kinds[p.pos] >= 7) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         let gd_atn = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
         if gd_atn < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);

@@ -3415,7 +3415,11 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 29;
         _parse_arm(p, 0);
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
-        while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_2 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_2 != 0 { break; }
             p.expect(TK_LIT_COMMA, &SYNC_4, false);
             p.site = 2;
             p.atn_ret_pending = 37;
@@ -3493,9 +3497,9 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 4;
     p.atn_ret_pending = 64;
     _parse_path(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_3)));
-    let opt_atn = atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_6 = atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_6 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_6 == 0 {
         p.expect(TK_LIT_LPAREN, &SYNC_6, false);
         if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_6, &EXPECTED_6); }
         let mut opt_scan_pos: i32 = -1;
@@ -3686,7 +3690,11 @@ fn _parse_pattern(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_IDENT, &SYNC_8, true);
-    while !p.recovering && atn_decide_10(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_16 = atn_decide_10(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_16 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_16 != 0 { break; }
         p.expect(TK_LIT_COLONCOLON, &SYNC_0, false);
         p.expect(TK_IDENT, &SYNC_8, true);
     }

@@ -3251,14 +3251,18 @@ fn _parse_body__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 33;
         _parse_stmt(p);
     }
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.site = 2;
         p.atn_ret_pending = 33;
         _parse_stmt(p);
     }
-    let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_1 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_1 == 0 {
         p.site = 3;
         p.atn_ret_pending = 39;
         _parse_expr(p);

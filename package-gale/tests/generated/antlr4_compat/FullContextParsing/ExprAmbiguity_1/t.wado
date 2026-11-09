@@ -3248,7 +3248,11 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, _p: i32 = 0) -> ExprVals 
     let mut vals = ExprVals {};
     vals._p = _p;
     p.expect(TK_ID, &SYNC_0, true);
-    while !p.recovering && p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[3, 5], &[3, 5], |_pred| match _pred { 3 => 5 >= vals._p, 5 => 4 >= vals._p, _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[3, 5], &[3, 5], |_pred| match _pred { 3 => 5 >= vals._p, 5 => 4 >= vals._p, _ => unreachable() });
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         if !((p.peek_kind() == TK_LIT_STAR && (5 >= vals._p)) || (p.peek_kind() == TK_LIT_PLUS && (4 >= vals._p))) { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_STAR && (5 >= vals._p) {

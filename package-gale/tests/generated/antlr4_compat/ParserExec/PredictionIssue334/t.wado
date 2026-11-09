@@ -3235,7 +3235,11 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 7;
     let item = _parse_item(p, 0);
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while !p.recovering && atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         let semicolon = p.expect(TK_SEMICOLON, &SYNC_1, false);
         p.site = 1;
         p.atn_ret_pending = 15;
@@ -3270,9 +3274,9 @@ fn _parse_file_(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_A, &SYNC_2, true);
-    let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_3 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_3 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_3 == 0 {
         p.expect(TK_B, &EMPTY_SYNC, true);
     }
     return;

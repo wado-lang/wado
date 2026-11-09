@@ -3089,7 +3089,10 @@ impl Parser {
 
 fn _parse_file__inner(p: &mut Parser) -> () {
     if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 11) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while (!_kind_set_0(p.peek_kind()) || atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 1) {
+    loop {
+        let rs_pick_0 = if !_kind_set_0(p.peek_kind()) { 1 } else { atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) };
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 1 { break; }
         p.any();
     }
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
@@ -3100,7 +3103,10 @@ fn _parse_file__inner(p: &mut Parser) -> () {
         p.atn_ret_pending = 14;
         _parse_constant(p);
         if !(kind_set_has(&SYNC_2, p.kinds[p.pos]) || p.kinds[p.pos] >= 11) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
-        while atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 1 {
+        loop {
+            let rs_pick_3 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_3 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_3 != 1 { break; }
             p.any();
         }
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }

@@ -3177,7 +3177,11 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
         }
     }
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_a {
             p.site = 0;

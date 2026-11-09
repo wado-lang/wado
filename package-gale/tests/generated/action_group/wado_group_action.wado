@@ -3135,7 +3135,11 @@ fn _parse_opt(p: &mut Parser) -> () {
 
 fn _parse_gated__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while !p.recovering && p.atn.predict(&ATN_SIM, 3, &p.kinds, p.pos, TK_EOF, 0, &[6], &[], |_pred| match _pred { 6 => pred_6(p), _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_5 = p.atn.predict(&ATN_SIM, 3, &p.kinds, p.pos, TK_EOF, 0, &[6], &[], |_pred| match _pred { 6 => pred_6(p), _ => unreachable() });
+        if rs_pick_5 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_5 != 0 { break; }
         if !((p.peek_kind() == TK_A) || (p.peek_kind() == TK_B && pred_6(p))) { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_A {

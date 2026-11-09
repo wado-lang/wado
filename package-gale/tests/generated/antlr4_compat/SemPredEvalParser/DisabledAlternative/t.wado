@@ -3013,7 +3013,11 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
         _parse_content(p);
     }
     if !(kind_set_has(&SYNC_1, p.kinds[p.pos]) || p.kinds[p.pos] >= 3) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
-    while !p.recovering && p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[0], &[], |_pred| match _pred { 0 => false, _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[0], &[], |_pred| match _pred { 0 => false, _ => unreachable() });
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.site = 0;
         p.atn_ret_pending = 9;
         _parse_content(p);

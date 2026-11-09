@@ -3053,7 +3053,10 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
     if kind == TK_LIT_LPAREN {
         p.take();
         if !(kind_set_has(&SYNC_2, p.kinds[p.pos]) || p.kinds[p.pos] >= 9) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
-        while (!_kind_set_1(p.peek_kind()) || atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0) == 1) {
+        loop {
+            let rs_pick_1 = if !_kind_set_1(p.peek_kind()) { 1 } else { atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0) };
+            if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_1 != 1 { break; }
             p.any();
         }
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
@@ -3064,7 +3067,11 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
         _first_iter: {
             p.any();
         }
-        while !p.recovering && (!_kind_set_2(p.peek_kind()) || atn_decide_3(&mut p.atn, &p.kinds, p.pos, 0) == 1) {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_2 = if !_kind_set_2(p.peek_kind()) { 1 } else { atn_decide_3(&mut p.atn, &p.kinds, p.pos, 0) };
+            if rs_pick_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_2 != 1 { break; }
             p.any();
         }
         p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);

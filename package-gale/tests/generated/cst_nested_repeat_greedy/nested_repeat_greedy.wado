@@ -3027,7 +3027,11 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             p.expect(TK_LIT_x, &SYNC_1, false);
         }
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
-        while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_0 != 0 { break; }
             p.expect(TK_LIT_x, &SYNC_1, false);
             if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
         }
@@ -3041,7 +3045,11 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             p.expect(TK_LIT_x, &SYNC_1, false);
         }
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
-        while !p.recovering && atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_1 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_1 != 0 { break; }
             p.expect(TK_LIT_x, &SYNC_1, false);
             if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
         }
@@ -3055,7 +3063,11 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             p.expect(TK_LIT_x, &SYNC_1, false);
         }
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
-        while !p.recovering && atn_decide_3(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_2 = atn_decide_3(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_2 != 0 { break; }
             p.expect(TK_LIT_x, &SYNC_1, false);
             if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
         }
@@ -3074,7 +3086,10 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     } else if kind == TK_LIT_f {
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-        while atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0) == 1 {
+        loop {
+            let rs_pick_5 = atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_5 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_5 != 1 { break; }
             p.expect(TK_LIT_x, &SYNC_1, false);
         }
         p.expect(TK_LIT_x, &SYNC_2, false);
@@ -3083,7 +3098,11 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     } else if kind == TK_LIT_g {
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-        while !p.recovering && atn_decide_6(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_6 = atn_decide_6(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_6 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_6 != 0 { break; }
             p.expect(TK_LIT_x, &SYNC_1, false);
             if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
         }

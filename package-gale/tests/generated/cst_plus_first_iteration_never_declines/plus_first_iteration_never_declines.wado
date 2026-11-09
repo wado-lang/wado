@@ -3178,7 +3178,11 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
         }
     }
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_A {
             p.take();
@@ -3188,9 +3192,9 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.expect(TK_D, &SYNC_0, true);
         }
     }
-    let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_2 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_2 == 0 {
         p.expect(TK_A, &SYNC_2, false);
         p.expect(TK_B, &SYNC_3, false);
         p.expect(TK_E, &EMPTY_SYNC, true);

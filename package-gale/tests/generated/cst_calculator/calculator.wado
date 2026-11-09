@@ -3436,7 +3436,11 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
     p.atn_ret_pending = 37;
     _parse_multiplying_expression(p, follow_then_opening(FOLLOW_MASK_3, 16, follow));
-    while !p.recovering && atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         p.expect_set(&SYNC_0, &EXPECTED_0);
         p.site = 4;
@@ -3465,7 +3469,11 @@ fn _parse_multiplying_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 5;
     p.atn_ret_pending = 52;
     _parse_pow_expression(p, follow_then_opening(FOLLOW_MASK_4, 16, follow));
-    while !p.recovering && atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_3 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_3 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_3 != 0 { break; }
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
         p.expect_set(&SYNC_1, &EXPECTED_1);
         p.site = 6;
@@ -3494,7 +3502,11 @@ fn _parse_pow_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 7;
     p.atn_ret_pending = 67;
     _parse_signed_atom(p, follow_then_opening(FOLLOW_MASK_5, 16, follow));
-    while !p.recovering && atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_6 = atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_6 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_6 != 0 { break; }
         p.expect(TK_POW, &SYNC_2, false);
         p.site = 8;
         p.atn_ret_pending = 75;

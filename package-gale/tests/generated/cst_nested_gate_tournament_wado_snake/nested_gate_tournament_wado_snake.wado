@@ -3866,14 +3866,18 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 29;
         _parse_stmt(p);
     }
-    while !p.recovering && p.atn.predict(&ATN_SIM, 1, &p.kinds, p.pos, TK_EOF, 0, &[2], &[], |_pred| match _pred { 2 => pred_2(p), _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = p.atn.predict(&ATN_SIM, 1, &p.kinds, p.pos, TK_EOF, 0, &[2], &[], |_pred| match _pred { 2 => pred_2(p), _ => unreachable() });
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.site = 2;
         p.atn_ret_pending = 29;
         _parse_stmt(p);
     }
-    let opt_atn = p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, 0, &[2], &[], |_pred| match _pred { 2 => pred_2(p), _ => unreachable() });
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_1 = p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, 0, &[2], &[], |_pred| match _pred { 2 => pred_2(p), _ => unreachable() });
+    if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_1 == 0 {
         p.site = 3;
         p.atn_ret_pending = 35;
         _parse_expr(p);

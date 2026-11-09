@@ -3206,9 +3206,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     p.expect(TK_LIT_RPAREN, &SYNC_2, true);
                 } else if _gk == TK_ID {
                     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-                    let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, min_prec);
-                    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-                    if opt_atn == 0 {
+                    let rs_pick_1 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, min_prec);
+                    if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+                    if rs_pick_1 == 0 {
                         p.site = 2;
                         p.atn_ret_pending = 36;
                         _parse_d(p);

@@ -3239,7 +3239,11 @@ fn _parse_para_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
         }
     }
-    while !p.recovering && p.atn.predict(&ATN_SIM, 1, &p.kinds, p.pos, TK_EOF, 0, &[1], &[], |_pred| match _pred { 1 => p.la(2) != TK_NL, _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = p.atn.predict(&ATN_SIM, 1, &p.kinds, p.pos, TK_EOF, 0, &[1], &[], |_pred| match _pred { 1 => p.la(2) != TK_NL, _ => unreachable() });
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         if !((p.peek_kind() == TK_LIT_s) || (p.peek_kind() == TK_X) || (p.peek_kind() == TK_NL && p.la(2) != TK_NL)) { break; }
         let grp_kind = p.peek_kind();
         if _kind_set_0(grp_kind) {

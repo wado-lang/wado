@@ -3235,7 +3235,11 @@ fn _parse_elems__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 2;
     p.atn_ret_pending = 31;
     _parse_alt(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_1 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_1 != 0 { break; }
         p.expect(TK_COMMA, &SYNC_1, false);
         p.site = 3;
         p.atn_ret_pending = 39;
@@ -3263,7 +3267,11 @@ fn _parse_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 4;
     p.atn_ret_pending = 44;
     _parse_item(p, follow_then_opening(FOLLOW_MASK_3, 16, follow));
-    while !p.recovering && atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_3 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_3 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_3 != 0 { break; }
         p.expect(TK_PIPE, &SYNC_1, false);
         p.site = 5;
         p.atn_ret_pending = 52;
@@ -3329,7 +3337,11 @@ fn _parse_item(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_3, true);
-    while !p.recovering && atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_6 = atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_6 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_6 != 0 { break; }
         p.expect(TK_COMMA, &SYNC_4, false);
         p.expect(TK_ID, &SYNC_3, true);
     }

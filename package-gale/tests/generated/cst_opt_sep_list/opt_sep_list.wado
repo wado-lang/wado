@@ -3160,21 +3160,25 @@ fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    let opt_atn = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_0 == 0 {
         p.site = 1;
         p.atn_ret_pending = 25;
         _parse_arm(p);
-        while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_2 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_2 != 0 { break; }
             p.expect(TK_LIT_COMMA, &SYNC_0, false);
             p.site = 2;
             p.atn_ret_pending = 33;
             _parse_arm(p);
         }
-        let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-        if opt_atn == 0 {
+        let rs_pick_4 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_4 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_4 == 0 {
             p.expect(TK_LIT_COMMA, &EMPTY_SYNC, true);
         }
     }
@@ -3304,7 +3308,11 @@ fn _parse_braced__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 60;
         _parse_arm(p);
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
-        while !p.recovering && atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_7 = atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_7 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_7 != 0 { break; }
             p.expect(TK_LIT_COMMA, &SYNC_0, false);
             p.site = 7;
             p.atn_ret_pending = 68;

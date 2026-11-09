@@ -3214,7 +3214,11 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 9;
         _parse_a(p);
     }
-    while !p.recovering && atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         if !p.speculating {
             p.i += 1; p.emit(`i=`); p.emit(`${p.i}\n`);
         }

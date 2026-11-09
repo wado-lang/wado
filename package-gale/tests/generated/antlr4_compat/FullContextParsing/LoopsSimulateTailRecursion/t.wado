@@ -3226,7 +3226,11 @@ struct ExprOrAssignVals {
 }
 
 fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    while !p.recovering && atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.site = 0;
         p.atn_ret_pending = 13;
         _parse_expr_or_assign(p, 0);
@@ -3319,9 +3323,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
     p.atn_ret_pending = 30;
     _parse_expr_primary(p);
-    let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_1 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_1 == 0 {
         p.expect(TK_LIT_LTMINUS, &SYNC_1, false);
         p.expect(TK_ID, &EMPTY_SYNC, true);
     }

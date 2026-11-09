@@ -3393,14 +3393,18 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 29;
         _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
     }
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.site = 2;
         p.atn_ret_pending = 29;
         _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
     }
-    let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 {
+    let rs_pick_1 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_1 == 0 {
         p.site = 3;
         p.atn_ret_pending = 35;
         _parse_expr(p);
@@ -3471,9 +3475,9 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 6;
         p.atn_ret_pending = 51;
         _parse_blk(p);
-        let opt_atn = atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0);
-        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-        if opt_atn == 0 {
+        let rs_pick_2 = atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_2 == 0 {
             p.expect(TK_SEMI, &EMPTY_SYNC, true);
         }
         return;

@@ -3445,7 +3445,11 @@ fn _parse_tail(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_tailed__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_x, &SYNC_1, true);
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_1 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_1 != 0 { break; }
         p.expect(TK_LIT_y, &SYNC_1, true);
     }
     return;

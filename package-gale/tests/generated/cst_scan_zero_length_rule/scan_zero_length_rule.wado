@@ -2986,7 +2986,11 @@ fn _parse_list__inner(p: &mut Parser) -> () {
     p.atn_ret_pending = 16;
     _parse_stmt(p);
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_1 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_1 != 0 { break; }
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         let mut _plus_first = true;
         while !p.recovering && (_plus_first || p.peek_kind() == TK_LIT_SEMI) {

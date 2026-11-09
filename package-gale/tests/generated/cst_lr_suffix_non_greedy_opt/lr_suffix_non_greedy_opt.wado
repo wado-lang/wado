@@ -3418,9 +3418,9 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: 
                 p.site = 2;
                 p.atn_ret_pending = 24;
                 _parse_e(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_1)), 0, lr_frame(0, min_prec, follow, lr_cont));
-                let opt_atn = atn_decide_1(&mut p.atn, &p.kinds, p.pos, min_prec);
-                if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-                if opt_atn == 1 {
+                let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, min_prec);
+                if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+                if rs_pick_0 == 1 {
                     p.expect(TK_LIT_else, &SYNC_0, false);
                     p.site = 3;
                     p.atn_ret_pending = 32;

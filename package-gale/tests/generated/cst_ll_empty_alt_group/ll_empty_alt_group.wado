@@ -3166,7 +3166,11 @@ fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 9;
         _parse_statement(p);
     }
-    while !p.recovering && atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.site = 0;
         p.atn_ret_pending = 9;
         _parse_statement(p);
@@ -3230,9 +3234,9 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
     p.site = 2;
     p.atn_ret_pending = 25;
     _parse_statement(p);
-    let opt_atn = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 1 {
+    let rs_pick_1 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+    if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_1 == 1 {
         p.expect(TK_LIT_else, &SYNC_0, false);
         p.site = 3;
         p.atn_ret_pending = 33;
