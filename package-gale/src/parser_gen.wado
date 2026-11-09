@@ -4230,17 +4230,12 @@ fn gen_group_body(
             );
             gen_group_shadow(w, dec, &var, &winner, lines, ctx);
         }
-        let refusable = !ctx.decisions.at_site(site).is_empty();
-        if refusable {
-            w.begin(`if ${var} < 0`);
-            w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
-            w.else_begin("else");
-        }
+        w.begin(`if ${var} < 0`);
+        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+        w.else_begin("else");
         let order: List<i32> = g.alts.iter_ref().map(|a| a.alt_index).collect();
         gen_alt_commit(w, &g.alts, &order, &var, ctx, nc);
-        if refusable {
-            w.end();
-        }
+        w.end();
         return;
     }
     gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc);
@@ -5067,7 +5062,7 @@ fn gen_op_optional(
     follow_gate: bool,
 ) {
     if optional_asks_simulator(r.non_greedy, r.atn_decides, r.gate_caller_follow, ctx) {
-        let enters = atn_enters_cond(ctx, r.atn_decision, r.non_greedy, PickSide::Parse);
+        let enters = atn_optional_enters(w, ctx, r.atn_decision, r.non_greedy, nc);
         w.begin(`if ${simulated_enters(w, r, enters, ctx, nc)}`);
         gen_op(w, &r.body, ctx, nc);
         w.end();
@@ -5340,7 +5335,7 @@ fn gen_op_repeat_optional_group(
     let opt = OptionalGroup { rep_op, g_op, g_elem, inner: &rep.element };
 
     if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx) {
-        let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, PickSide::Parse);
+        let enters = atn_optional_enters(w, ctx, rep_op.atn_decision, rep.non_greedy, name_counts);
         let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::GroupWalk(rep.element));
         opt.gen_present(w, ctx, &simulated);
         return;
@@ -5446,11 +5441,32 @@ fn optional_asks_simulator(non_greedy: bool, atn_decides: bool, gate_caller_foll
 /// many one rule holds. `build_repeat` orders a greedy repeat's edges
 /// `[enter=0, exit=1]` and a non-greedy one's `[exit=0, enter=1]`.
 fn atn_enters_cond(ctx: &mut EmitContext, site: i32, non_greedy: bool, side: PickSide) -> String {
+    let [call, enter] = atn_repeat_pick(ctx, site, non_greedy, side);
+    return `${call} == ${enter}`;
+}
+
+/// The simulator's call for repeat `site`, and the edge that enters it.
+fn atn_repeat_pick(ctx: &mut EmitContext, site: i32, non_greedy: bool, side: PickSide) -> [String, i32] {
     let decision = ctx.plan.atn_decision_site(site);
     assert decision >= 0, "a repeat the simulator decides marked the grammar as needing the ATN, which numbers every repeat's decision";
-    let enter = if non_greedy { 1 } else { 0 };
     let met = *ctx.decisions.at_site(site);
-    return `${atn_predict_call(decision, &met, side, ctx)} == ${enter}`;
+    return [atn_predict_call(decision, &met, side, ctx), if non_greedy { 1 } else { 0 }];
+}
+
+/// `atn_enters_cond` for a `?` the parse decides, with the pick bound first:
+/// a pick of neither edge is a no-viable-alternative, as the jar reports it.
+fn atn_optional_enters(
+    w: &mut CodeWriter,
+    ctx: &mut EmitContext,
+    site: i32,
+    non_greedy: bool,
+    nc: &mut List<[String, i32]>,
+) -> String {
+    let [call, enter] = atn_repeat_pick(ctx, site, non_greedy, PickSide::Parse);
+    let pick = dedup_name("opt_atn", nc);
+    w.line(`let ${pick} = ${call};`);
+    w.line(`if ${pick} < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }`);
+    return `${pick} == ${enter}`;
 }
 
 /// `atn_enters_cond` for a loop, asking the simulator only about `asked`
@@ -6141,7 +6157,7 @@ fn gen_op_repeat_with_follow_override(
         if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx)
             && rep_op.body_shape matches { LeafRuleCall | LeafOther } {
             let _ = dedup_name(&rep_op.field, name_counts);
-            let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, PickSide::Parse);
+            let enters = atn_optional_enters(w, ctx, rep_op.atn_decision, rep.non_greedy, name_counts);
             let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::LeafWalk(*follow));
             gen_optional_present(w, &rep_op.body, &simulated, ctx, &NO_KINDS);
         } else {
@@ -8244,7 +8260,7 @@ fn gen_group_branch_body(
             ctx,
             name_counts,
             Option::Some(var),
-            !ctx.decisions.at_site(site).is_empty(),
+            true,
         );
         return;
     }
@@ -9033,13 +9049,9 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 if side matches { Parse } && ctx.settings.prediction.verifies() {
                     gen_tournament_shadow(w, dec, &sorted_indices, &numbers, alts, rule_display, ctx);
                 }
-                // A verdict can exclude every alt (`_atn_alt == -1`), which
-                // the index dispatch would otherwise route to its last alt.
-                if !gates.is_empty() {
-                    w.begin("if _atn_alt < 0");
-                    emit_no_viable_pick(w, side, ctx);
-                    w.end();
-                }
+                w.begin("if _atn_alt < 0");
+                emit_no_viable_pick(w, side, ctx);
+                w.end();
                 emit_index_pick_dispatch(w, side, "_atn_alt", &sorted_indices, fn_name, rule_display, ctx, &numbers);
                 return;
             }

@@ -10,8 +10,8 @@ use {
     prediction_node_eq,
 } from "./prediction.wado";
 
-fn ambiguous(alts: List<i32>, reason: AmbiguityReason, branch_tokens: List<i32>) -> PredictionNode {
-    return PredictionNode::Ambiguous(AmbiguousNode { alts, reason, branch_tokens });
+fn ambiguous(alts: List<i32>, reason: AmbiguityReason) -> PredictionNode {
+    return PredictionNode::Ambiguous(AmbiguousNode { alts, reason });
 }
 
 fn dispatch(child: PredictionNode) -> PredictionNode {
@@ -26,46 +26,20 @@ fn dispatch(child: PredictionNode) -> PredictionNode {
     });
 }
 
-test "prediction_node_eq: identical Ambiguous leaves are equal" {
-    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
-    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
+test "prediction_node_eq: Ambiguous leaves over the same alternatives fold, whatever the reason" {
+    // Every reason emits the same decision among the alternatives, so
+    // splitting the branch on the label alone would duplicate identical code.
+    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict);
+    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth);
     assert prediction_node_eq(&a, &b);
-}
-
-test "prediction_node_eq: only AtEndConflict can route to the simulator, so it does not fold with another reason" {
-    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
-    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, [4]);
-    assert !prediction_node_eq(&a, &b);
-}
-
-test "prediction_node_eq: two non-AtEndConflict reasons fold" {
-    // Both lower to the same longest-match tournament, so splitting the
-    // branch on the label alone would duplicate identical code.
-    let a = ambiguous([0, 1], AmbiguityReason::MaxDepth, []);
-    let b = ambiguous([0, 1], AmbiguityReason::ConfigExplosion, []);
-    assert prediction_node_eq(&a, &b);
-}
-
-test "prediction_node_eq: branch tokens do not split a non-AtEndConflict node" {
-    let a = ambiguous([0, 1], AmbiguityReason::MaxDepth, [4]);
-    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, [5]);
-    assert prediction_node_eq(&a, &b);
-}
-
-test "prediction_node_eq: differing at-end branch tokens are not equal" {
-    // The other half of the ATN routing decision
-    // (`at_end_conflict_routes` overlaps these against the rule's FOLLOW).
-    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
-    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [5]);
-    assert !prediction_node_eq(&a, &b);
 }
 
 test "prediction_node_eq: a nested Ambiguous is compared through the Dispatch" {
     // A leaf difference must survive one level of nesting.
-    let a = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]));
-    let b = dispatch(ambiguous([0, 1], AmbiguityReason::MaxDepth, [4]));
+    let a = dispatch(ambiguous([0, 1], AmbiguityReason::MaxDepth));
+    let b = dispatch(ambiguous([0, 2], AmbiguityReason::MaxDepth));
     assert !prediction_node_eq(&a, &b);
-    let c = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]));
+    let c = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict));
     assert prediction_node_eq(&a, &c);
 }
 

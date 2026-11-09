@@ -27,9 +27,7 @@ pub variant PredictionNode {
 }
 
 /// Why static prediction could not isolate a single alternative at an
-/// `Ambiguous` leaf. `AtEndConflict` is the one the codegen reads (it can
-/// route to the ATN simulator); the rest label which edge of the static path
-/// was hit, for `gale dump`.
+/// `Ambiguous` leaf, which edge of the static path was hit, for `gale dump`.
 pub enum AmbiguityReason {
     /// Lookahead reached the static depth ceiling (k = max_depth) without
     /// isolating one alt: genuinely ATN-class, needs unbounded lookahead.
@@ -59,7 +57,6 @@ pub enum AmbiguityReason {
 pub struct AmbiguousNode {
     pub alts: List<i32>,
     pub reason: AmbiguityReason,
-    pub branch_tokens: List<i32> = [],
 }
 
 /// Build an `Ambiguous` node carrying its halt reason. Keeps the many
@@ -209,7 +206,6 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
                 PredictionNode::Ambiguous(AmbiguousNode {
                     alts: indices,
                     reason: prediction_first_ambiguous_reason(&child),
-                    branch_tokens: collect_at_end_branch_tokens(&child),
                 });
             } else {
                 PredictionNode::Consume(ConsumeNode { element: c.element, child });
@@ -237,34 +233,6 @@ fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
         },
         Leaf(_) => false,
     };
-}
-
-fn prediction_at_end_conflicts(node: &PredictionNode, out: &mut List<List<i32>>) {
-    match *node {
-        Ambiguous(a) => {
-            if let AtEndConflict = a.reason {
-                out.push(a.branch_tokens);
-            }
-        },
-        Consume(c) => prediction_at_end_conflicts(&c.child, out),
-        Dispatch(d) => {
-            for let b of &d.branches {
-                prediction_at_end_conflicts(&b.child, out);
-            }
-        },
-        Leaf(_) => {
-        },
-    }
-}
-
-fn collect_at_end_branch_tokens(node: &PredictionNode) -> List<i32> {
-    let mut sites: List<List<i32>> = [];
-    prediction_at_end_conflicts(node, &mut sites);
-    let mut tokens: List<i32> = [];
-    for let site of &sites {
-        dedup_append_arr(&mut tokens, site);
-    }
-    return tokens;
 }
 
 pub fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>) {
@@ -850,7 +818,6 @@ fn build_sll_node(
         return PredictionNode::Ambiguous(AmbiguousNode {
             alts,
             reason: AmbiguityReason::AtEndConflict,
-            branch_tokens,
         });
     }
 
@@ -990,7 +957,6 @@ fn try_expand_opaque(
             PredictionNode::Ambiguous(AmbiguousNode {
                 alts: expansion_alts(&all_configs, &opaque_alts),
                 reason: AmbiguityReason::AtEndConflict,
-                branch_tokens: all_tokens,
             }),
         );
     }
