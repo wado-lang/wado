@@ -17,23 +17,25 @@
 //!
 //! A struct's layout reaches the linear memory of a Component Model call only
 //! through the lift and lower code synthesized for it, which reads offsets off
-//! the WIT record and each field through a `FieldAccess`. `List` is the one
-//! struct whose layout is read outside NIR: `wir_build` indexes and builds it
-//! through its `SeqField`s, so it keeps every field.
+//! the WIT record and each field through a `FieldAccess`. A struct whose layout
+//! `wir_build` reads past NIR keeps every field
+//! (`CompilerItem::has_backend_layout`).
 
 use std::ops::ControlFlow;
 
 use crate::compiler_item::CompilerItem;
+use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::minted_name;
-use crate::nir::{NirLocal, StructInstance, struct_instance};
+use crate::nir::{FuncId, NirLocal, StructInstance, struct_instance};
 use crate::nir_arena::{
-    ArenaStructField, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand,
-    PatId, PatKind, StmtId, StmtKind, StmtNode, Tracked,
+    ArenaCallArg, ArenaStructField, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
+    Operand, PatId, PatKind, StmtId, StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
+use crate::primitive::PrimitiveType;
 use crate::tir::{GlobalInit, TypeId};
 use crate::type_table::TypeTable;
 
@@ -64,9 +66,11 @@ pub(super) fn remove_dead_fields(project: &mut NirPackage, exec: &Executor) -> b
     if renumbering.is_empty() {
         return false;
     }
+    let field_slot = FieldSlot::of_package(project);
     let rewrite = |calls| Rewrite {
         types,
         calls,
+        field_slot,
         renumbering: &renumbering,
     };
     for (i, func) in project.functions.iter().enumerate() {
@@ -104,7 +108,12 @@ fn renumber(project: &NirPackage, types: &TypeTable, live: &IndexSet<FieldKey>) 
         let Some(instance) = decl.instance() else {
             continue;
         };
-        if types.is_compiler_struct(decl.def, CompilerItem::List) {
+        if decl
+            .def
+            .decl()
+            .and_then(|def| types.compiler_type_item(def))
+            .is_some_and(CompilerItem::has_backend_layout)
+        {
             continue;
         }
         let mut next = 0;
@@ -141,6 +150,7 @@ fn live_fields(
 ) -> IndexSet<FieldKey> {
     let mut liveness = Liveness {
         types,
+        field_slot: FieldSlot::of_package(project),
         live: IndexSet::default(),
         held: IndexMap::default(),
         pending: Vec::new(),
@@ -175,6 +185,7 @@ fn live_fields(
 
 struct Liveness<'t> {
     types: &'t TypeTable,
+    field_slot: FieldSlot,
     live: IndexSet<FieldKey>,
     /// What each dead field's slots and assignments hold, walked once it lives.
     held: IndexMap<FieldKey, Vec<(Owner, Operand)>>,
@@ -298,6 +309,14 @@ impl Liveness<'_> {
                 self.hold(owner, body, calls, key.clone(), *expr);
                 self.hold(owner, body, calls, key, *value);
             }
+            ExprKind::Call { func_id, args, .. } => {
+                if let Some((holder, field_index)) = self.field_slot.of(body, *func_id, args)
+                    && let Some(key) = self.key(body, holder, field_index)
+                {
+                    self.read(key);
+                }
+                return false;
+            }
             ExprKind::Dead
             | ExprKind::PackedArray(_)
             | ExprKind::Local { .. }
@@ -306,7 +325,6 @@ impl Liveness<'_> {
             | ExprKind::Binary { .. }
             | ExprKind::Unary { .. }
             | ExprKind::Cast { .. }
-            | ExprKind::Call { .. }
             | ExprKind::CmRawCall { .. }
             | ExprKind::Index { .. }
             | ExprKind::If { .. }
@@ -324,6 +342,31 @@ impl Liveness<'_> {
             | ExprKind::Switch { .. } => return false,
         }
         true
+    }
+}
+
+/// `builtin::field_slot(holder, index)`, which lowering emits for a reference
+/// to a field held in a cell: a read of the field by its constant index.
+#[derive(Clone, Copy)]
+struct FieldSlot(Option<FuncId>);
+
+impl FieldSlot {
+    fn of_package(project: &NirPackage) -> Self {
+        Self(project.builtin_func_id("field_slot"))
+    }
+
+    /// The holder and the field index of a call to `field_slot`.
+    fn of(self, body: &Body, func_id: FuncId, args: &[ArenaCallArg]) -> Option<(Operand, u32)> {
+        if self.0 != Some(func_id) {
+            return None;
+        }
+        let [holder, index] = args else {
+            unreachable!("`field_slot` takes a holder and an index")
+        };
+        let index = body
+            .operand_const_int(index.expr)
+            .expect("`field_slot` takes a constant field index");
+        Some((holder.expr, u32::try_from(index).expect("a field index fits u32")))
     }
 }
 
@@ -357,6 +400,7 @@ fn assert_reads_no_field(body: &Body, v: ValueId) {
 struct Rewrite<'a> {
     types: &'a TypeTable,
     calls: CallFacts<'a>,
+    field_slot: FieldSlot,
     renumbering: &'a Renumbering,
 }
 
@@ -365,6 +409,24 @@ impl Rewrite<'_> {
         self.renumbering
             .get(&instance_of(self.types, type_id)?)
             .map(Vec::as_slice)
+    }
+
+    /// The new index of the field `e` reads, by a `FieldAccess` or a
+    /// `field_slot` call, when its struct loses a field: `None` inside for a
+    /// removed one.
+    fn reads(&self, body: &Body, e: ExprId) -> Option<Option<u32>> {
+        let kind = &body.exprs[e].kind;
+        let (receiver, field_index) = if let ExprKind::FieldAccess {
+            expr, field_index, ..
+        } = kind
+        {
+            (*expr, *field_index)
+        } else if let ExprKind::Call { func_id, args, .. } = kind {
+            self.field_slot.of(body, *func_id, args)?
+        } else {
+            return None;
+        };
+        Some(self.map(body.operand_type(receiver))?[field_index as usize])
     }
 
     /// Top down, so a dropped operand is never visited: what it reads may be a
@@ -411,14 +473,7 @@ impl Rewrite<'_> {
         };
         body.find_in_nodes_under(NodeRef::Expr(e), |node| {
             let NodeRef::Expr(e) = node else { return None };
-            let ExprKind::FieldAccess {
-                expr, field_index, ..
-            } = &body.exprs[e].kind
-            else {
-                return None;
-            };
-            let map = self.map(body.operand_type(*expr))?;
-            map[*field_index as usize].is_none().then_some(())
+            self.reads(body, e)?.is_none().then_some(())
         })
         .is_some()
     }
@@ -430,18 +485,23 @@ impl Rewrite<'_> {
         locals: &mut Option<&mut Tracked<Vec<NirLocal>>>,
         built: &mut IndexSet<ExprId>,
     ) {
-        match &body.exprs[e].kind {
-            ExprKind::FieldAccess {
-                expr, field_index, ..
-            } => {
-                let Some(map) = self.map(body.operand_type(*expr)) else {
-                    return;
-                };
-                let new = map[*field_index as usize].expect("a field the program reads is live");
-                if let ExprKind::FieldAccess { field_index, .. } = &mut body.exprs[e].kind {
-                    *field_index = new;
+        if let Some(new) = self.reads(body, e) {
+            let new = new.expect("a field the program reads is live");
+            match &mut body.exprs[e].kind {
+                ExprKind::FieldAccess { field_index, .. } => *field_index = new,
+                ExprKind::Call { args, .. } => {
+                    let index = Value::Int {
+                        value: u64::from(new),
+                        prim: PrimitiveType::I32,
+                    };
+                    let index = body.values.intern_const(index, TypeTable::I32);
+                    args[1].expr = Operand::Value(index);
                 }
+                other => unreachable!("only a field access or a `field_slot` reads, not {other:?}"),
             }
+            return;
+        }
+        match &body.exprs[e].kind {
             ExprKind::Assign { target, value } => {
                 if let ExprKind::FieldAccess {
                     expr, field_index, ..
@@ -468,6 +528,7 @@ impl Rewrite<'_> {
             | ExprKind::Unary { .. }
             | ExprKind::Cast { .. }
             | ExprKind::Call { .. }
+            | ExprKind::FieldAccess { .. }
             | ExprKind::CmRawCall { .. }
             | ExprKind::Index { .. }
             | ExprKind::If { .. }

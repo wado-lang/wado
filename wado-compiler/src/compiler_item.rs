@@ -1083,6 +1083,14 @@ impl CompilerItem {
         Self::ReflectTemplate,
     ];
 
+    /// Whether `wir_build` reads or builds this struct by its layout, past the
+    /// NIR that names its fields: a `List` through its [`SeqField`]s, and a
+    /// wide integer's constant halves for `builtin::v128_const`.
+    #[must_use]
+    pub const fn has_backend_layout(self) -> bool {
+        matches!(self, Self::List | Self::I128 | Self::U128)
+    }
+
     /// Snake-case name used as the argument of
     /// `#[compiler_item("...")]`.
     ///
