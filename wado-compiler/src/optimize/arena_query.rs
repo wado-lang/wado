@@ -22,6 +22,8 @@ use crate::nir_arena::{
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::niri::EditSink;
+use crate::optimize::const_folding::EngineSink;
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
 use crate::rarity::{Mark, Rarity};
@@ -627,15 +629,21 @@ pub(crate) fn unconditional_markers(
 
 /// Collapse the branch into `root` onto it, as far as its markers go: each one
 /// [`unconditional_markers`] finds becomes the empty block a unit statement is.
-pub(crate) fn shed_unconditional_markers(
+pub(super) fn shed_unconditional_markers(
     engine: &mut Engine,
     root: NodeRef,
     markers: MarkerBuiltins,
 ) {
-    for call in unconditional_markers(engine.body, root, |f| markers.mark(f).is_some()) {
-        let ExprNode { span, type_id, .. } = engine.body.exprs[call];
-        let empty = engine.alloc_block(Vec::new(), span);
-        engine.replace_expr_kind(call, ExprKind::plain_block(empty, type_id, "shed"));
+    let calls = unconditional_markers(engine.body, root, |f| markers.mark(f).is_some());
+    shed_marker_calls(&mut EngineSink { engine }, calls);
+}
+
+/// Replace each marker call in `calls` with the empty block a unit statement is.
+pub(crate) fn shed_marker_calls<S: EditSink>(sink: &mut S, calls: Vec<ExprId>) {
+    for call in calls {
+        let ExprNode { span, type_id, .. } = sink.body().exprs[call];
+        let empty = sink.alloc_block(Vec::new(), span);
+        sink.replace_kind(call, ExprKind::plain_block(empty, type_id, "shed"));
     }
 }
 

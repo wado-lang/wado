@@ -13,7 +13,7 @@ use crate::nir_arena::{
 };
 use crate::nir_value_graph::{Side, ValueKind, constant_kind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
-use crate::optimize::arena_query::unconditional_markers;
+use crate::optimize::arena_query::{shed_marker_calls, unconditional_markers};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
@@ -545,7 +545,9 @@ impl Interpreter<'_> {
     /// Whether writing a value over `e` would erase a marker: the interpreter
     /// runs one as a no-op, so `e` can have a value all the same.
     fn holds_rarity_marker(&self, body: &Body, e: ExprId) -> bool {
-        !self.unconditional_markers(body, NodeRef::Expr(e)).is_empty()
+        !self
+            .unconditional_markers(body, NodeRef::Expr(e))
+            .is_empty()
     }
 
     /// The markers that run wherever `root` does. Without the builtin map the
@@ -563,11 +565,8 @@ impl Interpreter<'_> {
     /// Shed the markers of the arm a constant branch takes, as
     /// [`crate::optimize::arena_query::shed_unconditional_markers`] does.
     fn shed_markers<S: EditSink>(&self, sink: &mut S, root: NodeRef) {
-        for call in self.unconditional_markers(sink.body(), root) {
-            let ExprNode { span, type_id, .. } = sink.body().exprs[call];
-            let empty = sink.alloc_block(Vec::new(), span);
-            sink.replace_kind(call, ExprKind::plain_block(empty, type_id, "shed"));
-        }
+        let calls = self.unconditional_markers(sink.body(), root);
+        shed_marker_calls(sink, calls);
     }
 
     fn const_fold_candidate(&mut self, body: &Body, e: ExprId) -> Option<Value> {
@@ -794,7 +793,12 @@ impl Interpreter<'_> {
         };
         if let Lattice::Const(Value::Bool(taken)) = self.operand_to_lattice(sink.body(), condition)
         {
-            if let Some(branch) = if taken { Some(then_branch) } else { else_branch } {
+            let chosen = if taken {
+                Some(then_branch)
+            } else {
+                else_branch
+            };
+            if let Some(branch) = chosen {
                 self.shed_markers(sink, NodeRef::Block(branch));
             }
             splice_chosen_if_branch(sink, e, taken, then_branch, else_branch);
