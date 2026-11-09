@@ -1,10 +1,11 @@
 //! Write-only local elimination for Wado NIR: a `let x = expr;` whose `x` is
 //! never read, address-taken, or escaped loses its binding — the whole statement
-//! when `expr` is pure, else a bare `Expr(expr)`. The NIR analog of
+//! when `expr` is pure, else a bare `Expr(expr)`. A store `x = expr;` no later
+//! read observes goes the same way. The NIR analog of
 //! `wir_optimize/elide_local.rs`; running here exposes the freshly dead
 //! expressions to the rest of the fixed-point loop, which the WIR pass cannot.
 
-use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
 use crate::optimize::dce::deletable_value;
@@ -45,14 +46,16 @@ impl Rule for ElideRule<'_> {
         let len = stmts.len();
         for (i, stmt) in stmts.into_iter().enumerate() {
             let is_tail = i + 1 == len;
+            // A dead store leaves its local bound and read.
+            let unbound = bound_local(engine, stmt).filter(|&local| !is_kept(engine, local));
             match classify(engine, stmt, is_tail, self) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => {
-                    elided.extend(bound_local(engine, stmt));
+                    elided.extend(unbound);
                     changed = true;
                 }
                 Action::Demote(value) => {
-                    elided.extend(bound_local(engine, stmt));
+                    elided.extend(unbound);
                     let span = engine.body.stmts[stmt].span;
                     new_stmts.push(engine.alloc_stmt(StmtKind::Expr(value.into()), span));
                     changed = true;
@@ -91,7 +94,7 @@ fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
 /// tree `Elider`: an unread `let x = value` or a bare `x = value` (assign at
 /// statement position) where `x` is unread is dropped when `value` is pure,
 /// otherwise demoted to `Expr(value)`.
-fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> Action {
+fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> Action {
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
@@ -132,7 +135,7 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index) {
+                if !is_kept(engine, index) || is_dead_store(engine, stmt, index) {
                     return if deletable(engine, value, rule) {
                         Action::Drop
                     } else {
@@ -159,6 +162,103 @@ fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
 /// A local is kept (not elidable) when it is read anywhere in the body.
 fn is_kept(engine: &Engine, local: u32) -> bool {
     engine.is_local_read(local) || engine.reads_promoted_local(local)
+}
+
+/// Whether no read of `local` can observe what `store` writes into it. A move
+/// leaves its marker this way, and once the local's drop folds the marker is
+/// what keeps the local from being bound once.
+///
+/// A read is ordered against the store by where it sits: one after it in
+/// evaluation order follows it, and so does one before it inside a loop
+/// enclosing both, unless the local's own `let` re-binds it on the way there.
+/// A read in a later sibling branch is taken to follow, which keeps a store the
+/// branch never reaches.
+fn is_dead_store(engine: &mut Engine, store: StmtId, local: u32) -> bool {
+    if engine.reads_promoted_local(local) || engine.body_address_taken().contains(&local) {
+        return false;
+    }
+    let def = engine.local_def(local);
+    let root = NodeRef::Block(engine.body.root());
+    let store_chain = ancestors(engine, NodeRef::Stmt(store));
+    assert_eq!(store_chain.last(), Some(&root), "the store is reachable");
+    !engine.local_reads(local).iter().any(|&mention| {
+        if engine.is_assign_target(mention) {
+            return false;
+        }
+        // The use index keeps a detached node too, and one never runs.
+        let read_chain = ancestors(engine, NodeRef::Expr(mention));
+        read_chain.last() == Some(&root) && read_follows(engine, &store_chain, &read_chain, def)
+    })
+}
+
+/// `node` and every ancestor up to the body root, innermost first.
+fn ancestors(engine: &Engine, node: NodeRef) -> Vec<NodeRef> {
+    std::iter::successors(Some(node), |&n| engine.parent_of(n)).collect()
+}
+
+/// Whether the read at the head of `read_chain` may run after the statement at
+/// the head of `store_chain`.
+fn read_follows(
+    engine: &Engine,
+    store_chain: &[NodeRef],
+    read_chain: &[NodeRef],
+    def: Option<StmtId>,
+) -> bool {
+    // The store's own value runs before it writes.
+    if read_chain.contains(&store_chain[0]) {
+        return false;
+    }
+    let shared = store_chain
+        .iter()
+        .rev()
+        .zip(read_chain.iter().rev())
+        .take_while(|(s, r)| s == r)
+        .count();
+    let common = &read_chain[read_chain.len() - shared..];
+    let store_branch = store_chain[store_chain.len() - shared - 1];
+    let read_branch = read_chain[read_chain.len() - shared - 1];
+    let mut order = Vec::new();
+    engine.body.for_each_child(common[0], |c| order.push(c));
+    let at = |n| {
+        order
+            .iter()
+            .position(|&c| c == n)
+            .expect("a child of its parent")
+    };
+    if at(read_branch) > at(store_branch) {
+        return true;
+    }
+    let Some(innermost_loop) = common
+        .iter()
+        .position(|&n| matches!(n, NodeRef::Stmt(s) if matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. })))
+    else {
+        return false;
+    };
+    !def.is_some_and(|def| {
+        rebinds_before(
+            engine,
+            def,
+            &read_chain[..read_chain.len() - shared + innermost_loop],
+        )
+    })
+}
+
+/// Whether `def` runs on every path from the top of the loop to the read at
+/// the head of `inside_loop`, its ancestors below that loop: it sits in one of
+/// their blocks, ahead of the statement leading to the read.
+fn rebinds_before(engine: &Engine, def: StmtId, inside_loop: &[NodeRef]) -> bool {
+    let Some(NodeRef::Block(block)) = engine.parent_of(NodeRef::Stmt(def)) else {
+        return false;
+    };
+    let Some(depth) = inside_loop.iter().position(|&n| n == NodeRef::Block(block)) else {
+        return false;
+    };
+    let NodeRef::Stmt(toward_read) = inside_loop[depth - 1] else {
+        unreachable!("a block's child is a statement");
+    };
+    let stmts = &engine.body.blocks[block].stmts;
+    let index = |s| stmts.iter().position(|&x| x == s);
+    index(def) < index(toward_read)
 }
 
 #[cfg(test)]

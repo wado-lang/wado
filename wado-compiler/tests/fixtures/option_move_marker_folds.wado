@@ -1,6 +1,9 @@
 // A move out of an `Option` place leaves its `None` there, and constant folding
 // reads that `None` as the move marker: `unwrap`'s drop of its emptied `self`
-// folds away, and with it the call that kept `unwrap` out of a loop.
+// folds away, and with it the call that kept `unwrap` out of a loop. Nothing
+// reads the marker then, so its store goes too, leaving `o` bound once: the
+// `Some` it was built with decides `unwrap`'s match, with no test and no panic
+// path, and no drop of `a`, `b` or `c` asks whether it was moved.
 
 global mut DROPS: i32 = 0;
 
@@ -40,6 +43,6 @@ __DATA__
 {
     "test": {},
     "wir_scope": "total",
-    "wir_pass": {"O2": ["nir/const_fold", "nir/inline"]},
-    "wir_not_expect:O2": ["::unwrap\"("]
+    "wir_pass": {"O2": ["nir/const_fold", "nir/inline", "nir/peephole/elide", "nir/peephole/known_case"]},
+    "wir_not_expect:O2": ["::unwrap\"(", "called Option::unwrap() on a None value", "ref.is_null("]
 }
