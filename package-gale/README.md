@@ -257,9 +257,10 @@ is faster and can build a different one.
 | `"longest"`         | tournament                       | refused: no parser is built            |
 | `"verify"`          | simulator, beside the tournament | simulator                              |
 
-`"exact"` builds the tree the ANTLR4 jar builds, on every input. The name means
-only that; it is not ANTLR4's `PredictionMode`, which chooses among the
-simulator's own algorithms. The static path keeps a decision only where it is
+`"exact"` builds the tree the ANTLR4 jar builds, on every input; where it does
+not yet is a bug, listed in [`TODO.md`](./TODO.md). The name means only that; it
+is not ANTLR4's `PredictionMode`, which chooses among the simulator's own
+algorithms. The static path keeps a decision only where it is
 proven to pick as the simulator does, and a decision moves to it only by such a
 proof, never because no input was found where the two differ.
 
