@@ -272,20 +272,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(rt) = body_expected {
             closure_ctx.return_type = rt;
         }
-        // A block body is a function body: only `return` gives it a value, so
-        // its last statement is walked as a statement.
-        let body_type = match &closure.body {
+        // A block body is a function body: its last statement is a
+        // statement, its type comes from its `return`s, and it owes one on
+        // every path that does not diverge. A single-expression body (`|c|
+        // c.to_ascii_uppercase()`) is its value.
+        let return_type = match &closure.body {
             ast::Expr::Block(block) => {
                 self.resolve_block(block, &mut closure_ctx, None);
+                // A closure body is its own label stack: a loop around the
+                // closure binds no `break` / `continue` written inside it.
+                self.validate_loop_jumps_ast(Some(block));
                 let body_type = if self.ast_block_always_exits(block) {
                     TypeTable::NEVER
                 } else {
                     TypeTable::UNIT
                 };
                 self.record_expression_type(closure.body.id(), body_type);
-                body_type
+                let mut return_types = self.ast_return_types_in_block(block);
+                self.settle_branch_holes(&mut return_types, None);
+                let return_type = declared_return
+                    .or(return_types.first().copied())
+                    .unwrap_or(body_type);
+                self.check_missing_return(return_type, block, closure.span);
+                return_type
             }
-            body => self.resolve_expr(body, &mut closure_ctx, body_expected),
+            body => {
+                let body_type = self.resolve_expr(body, &mut closure_ctx, body_expected);
+                declared_return.unwrap_or(body_type)
+            }
         };
 
         // Only the walk knows which `&mut`s reach a capture's own storage.
@@ -325,28 +339,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 declared_return,
             },
         );
-
-        // A closure body is its own label stack: a loop around the closure
-        // binds no `break` / `continue` written inside it.
-        if let ast::Expr::Block(ref block) = closure.body {
-            self.validate_loop_jumps_ast(Some(block));
-        }
-
-        // A block body takes its type from its `return`s, and owes one on
-        // every path that does not diverge, as a function body does. A
-        // single-expression body (`|c| c.to_ascii_uppercase()`) is its value.
-        let return_type = match &closure.body {
-            ast::Expr::Block(block) => {
-                let mut return_types = self.ast_return_types_in_block(block);
-                self.settle_branch_holes(&mut return_types, None);
-                let return_type = declared_return
-                    .or(return_types.first().copied())
-                    .unwrap_or(body_type);
-                self.check_missing_return(return_type, block, closure.span);
-                return_type
-            }
-            _ => declared_return.unwrap_or(body_type),
-        };
 
         // Project the closure's `fn(...)` / `fn mut(...)` type so the
         // caller's typecheck context (`expression_types[closure.id]`, etc.)
