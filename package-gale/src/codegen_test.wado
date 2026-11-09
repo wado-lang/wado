@@ -4633,6 +4633,23 @@ WS : ' ' -> skip ;
     assert out.stderr.contains(": the tournament picks 0, the simulator 1"), out.stderr;
 }
 
+#[timeout_ms(60000)]
+test "a loop the simulator decides stops at the end of the input" {
+    let g4 = "grammar L;
+@parser::members {
+boolean pred() { return true; }
+}
+s : '{' l '}' st* EOF ;
+l : st+ ;
+st : {this.pred()}? 'a' 'b' | 'c' ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Auto, AtnMode::Always] {
+        let got = parses(g4, "s", ["{ a", "{ c", "{ c } c", "{ a c"], &GenerateOptions { atn });
+        assert got == "{ a => error\n{ c => error\n{ c } c => (s { (l (st c)) } (st c))\n{ a c => error\n";
+    }
+}
+
 test "a left-recursive rule runs @after once per invocation, after its whole climb" {
     let got = parses("grammar T;
 s : e EOF ;
