@@ -101,6 +101,7 @@ let f: EnumCase<Point> = EnumCase {  // ERROR: field `discriminant` of struct
     value: Point { x: 0 },
     case_name: "x",
     wire_override: null,
+    doc: null,
 };
 ```
 
