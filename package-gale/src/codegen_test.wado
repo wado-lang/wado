@@ -2039,9 +2039,10 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_if_stmt__inner(");
     // The `??` enter/skip decision is the ATN simulator's, stamped at compile time,
-    // so the shape stays one `if` whose condition is the simulator call.
-    assert body.contains("if atn_decide_");
-    assert body.contains(") == 1");
+    // so the shape stays one `if` on the simulator's pick.
+    assert body.contains("let rs_pick_");
+    assert body.contains(" = atn_decide_");
+    assert body.contains("== 1 {");
     assert !body.contains("atn_ng_optional_enter(");
     assert !body.contains("if p.peek_kind() == TK_LIT_else");
     assert !body.contains("while p.peek_kind() == TK_LIT_else");
@@ -2131,7 +2132,8 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     // The atom fn carries `min_prec`, and the `??` enter check forwards it
     // to the simulator (stamped decision number, `== 1` for ENTER).
     assert output.contains("fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
-    assert output.contains("(&mut p.atn, &p.kinds, p.pos, min_prec) == 1");
+    assert output.contains("(&mut p.atn, &p.kinds, p.pos, min_prec);");
+    assert output.contains("== 1 {");
     assert output.contains("atn_predict_once(&ATN_SIM,");
 }
 
@@ -5169,21 +5171,23 @@ test "exact reads a directly entered rule's end as the jar does" {
 test "a simulator walk that dies picks the alternative that finished the rule, or none" {
     // Each decision reads past depth 5, so exact asks the simulator. The jar:
     // `x` takes its second alternative, which had ended `x`, and `s` reports
-    // the `c`. Under `q`, `r`, `o` and `p` no alternative had ended its rule,
-    // so the decision itself is a no-viable-alternative, a loop's or a `?`'s
-    // as much as a group's.
+    // the `c`. Under `q`, `r`, `o`, `p`, `t` and `n` no alternative had ended
+    // its rule, so the decision itself is a no-viable-alternative, a loop's
+    // (non-greedy too) or a `?`'s as much as a group's.
     let grammar = "grammar F;
 s : x E EOF
   | 'q' ( A A A A A A B | A A A A A A C ) EOF
   | 'r' ( A A A A A A B | A A A A A A C )* E EOF
   | 'o' ( A A A A A A B )? A A A A A A C E EOF
   | 'p' ( A A A A A A B | A A A A A A C )+ E EOF
+  | 't' ( A A A A A A B )* A A A A A A C E EOF
+  | 'n' ( A A A A A A B )*? A A A A A A C E EOF
   ;
 x : A A A A A A B | A A A A A A ;
 A : 'a' ; B : 'b' ; C : 'c' ; E : 'e' ;
 WS : ' ' -> skip ;
 ";
-    let body = wado`for let input of ["a a a a a a c", "q a a a a a a e", "r a a a a a a e", "o a a a a a a e", "p a a a a a a b a a a a a a e", "p a a a a a a e"] {
+    let body = wado`for let input of ["a a a a a a c", "q a a a a a a e", "r a a a a a a e", "o a a a a a a e", "p a a a a a a b a a a a a a e", "p a a a a a a e", "t a a a a a a e", "n a a a a a a e"] {
     let r = parse_s(input);
     println(\`\${to_string_tree(&r)} \${r.diagnostics[0].code:?}\`);
 }
@@ -5198,6 +5202,8 @@ WS : ' ' -> skip ;
         `(s o ${skipped}) DiagnosticCode::NoViableAlternative`,
         `(s p a a a a a a b ${skipped}) DiagnosticCode::NoViableAlternative`,
         `(s p ${skipped}) DiagnosticCode::NoViableAlternative`,
+        `(s t ${skipped}) DiagnosticCode::NoViableAlternative`,
+        `(s n ${skipped}) DiagnosticCode::NoViableAlternative`,
     ];
     for let i of 0..<want.len() {
         assert lines[i] == want[i], lines[i];

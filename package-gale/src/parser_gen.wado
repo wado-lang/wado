@@ -2257,7 +2257,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
 
     if re.kind matches { Optional }
         && optional_asks_simulator(re.non_greedy, re.atn_decides, re.gate_caller_follow, ctx) {
-        w.begin(`if ${atn_enters_cond(ctx, re.atn_decision, re.non_greedy, PickSide::Scan)}`);
+        w.begin(`if ${atn_scan_enters(ctx, re.atn_decision, re.non_greedy, &NO_KINDS, "")}`);
         gen_scan_iteration(w, re, &loop_admits, ctx, false);
         w.end();
         return;
@@ -2320,14 +2320,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
     let guard = if re.atn_decides {
-        atn_loop_enters_cond(
-            ctx,
-            re.atn_decision,
-            re.non_greedy,
-            &re.atn_asked_kinds,
-            `(${kind_at("tokens", "pos")})`,
-            PickSide::Scan,
-        );
+        atn_scan_enters(ctx, re.atn_decision, re.non_greedy, &re.atn_asked_kinds, `(${kind_at("tokens", "pos")})`);
     } else if re.non_greedy {
         non_greedy_static_enters(
             &loop_admits,
@@ -4760,22 +4753,27 @@ fn emit_lr_branch_body<S: AsStrSlice>(
 }
 
 /// Non-greedy `*?` / `+?` under the emitter: loop only while
-/// `compute_non_greedy_condition` says to enter, so the inner yields the
+/// `non_greedy_static_cond` or the simulator says to enter, so the inner yields the
 /// closing delimiter to the continuation. `??` lowers to `Plain` and so never
 /// reaches here.
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
-    let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
-    if non_greedy_probe_decides(r, ctx) {
+    let probed = non_greedy_probe_decides(r, ctx);
+    if probed || r.atn_decides {
         if let Plus = r.kind {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
         }
-        begin_non_greedy_probe_loop(w, r, ctx, nc);
+        if probed {
+            begin_non_greedy_probe_loop(w, r, ctx, nc);
+        } else {
+            begin_simulated_loop(w, r, ctx, nc);
+        }
         gen_op(w, &r.body, ctx, nc);
         w.end();
         return;
     }
+    let cond = non_greedy_static_cond(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
     let loops = cond != "false";
     match r.kind {
         Plus => {
@@ -5006,16 +5004,21 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
 
 /// Open the loop over the iterations of `r` the simulator enters. Under
 /// `prediction: "verify"` the static path picks beside it.
-fn begin_simulated_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
-    let enters = atn_enters_cond(ctx, r.atn_decision, false, PickSide::Parse);
-    if r.shadow matches { None } {
-        w.begin(`while !p.recovering && ${enters}`);
-        return;
-    }
+fn begin_simulated_loop(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+    stops_on_recovery: bool = true,
+) {
     w.begin("loop");
-    w.line("if p.recovering { break; }");
+    if stops_on_recovery {
+        w.line("if p.recovering { break; }");
+    }
+    let asked = if r.non_greedy { &r.atn_asked_kinds } else { &NO_KINDS };
+    let enters = atn_parse_enters(w, ctx, r.atn_decision, r.non_greedy, asked);
     let simulated = simulated_enters(w, r, enters, ctx, nc);
-    w.line(`if !${simulated} { break; }`);
+    w.line(`if ${negate_cond(&simulated)} { break; }`);
 }
 
 /// The simulator's answer `enters` on whether `r` enters here, bound to a
@@ -5062,7 +5065,7 @@ fn gen_op_optional(
     follow_gate: bool,
 ) {
     if optional_asks_simulator(r.non_greedy, r.atn_decides, r.gate_caller_follow, ctx) {
-        let enters = atn_optional_enters(w, ctx, r.atn_decision, r.non_greedy, nc);
+        let enters = atn_parse_enters(w, ctx, r.atn_decision, r.non_greedy);
         w.begin(`if ${simulated_enters(w, r, enters, ctx, nc)}`);
         gen_op(w, &r.body, ctx, nc);
         w.end();
@@ -5335,7 +5338,7 @@ fn gen_op_repeat_optional_group(
     let opt = OptionalGroup { rep_op, g_op, g_elem, inner: &rep.element };
 
     if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx) {
-        let enters = atn_optional_enters(w, ctx, rep_op.atn_decision, rep.non_greedy, name_counts);
+        let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep.non_greedy);
         let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::GroupWalk(rep.element));
         opt.gen_present(w, ctx, &simulated);
         return;
@@ -5434,18 +5437,12 @@ fn optional_asks_simulator(non_greedy: bool, atn_decides: bool, gate_caller_foll
     return ctx.plan.needs_atn && (non_greedy || atn_decides || gate_caller_follow && ctx.current_rule_asks_simulator());
 }
 
-/// Runtime entry condition for a repeat's next iteration: the ATN simulator
+/// The simulator's call for repeat `site`, and the edge that enters it: it
 /// decides enter vs exit with full context. The exact ATN decision number is
 /// stamped at compile time (`RepeatElement.atn_decision` ->
 /// `Atn.decision_sites`), so each repeat predicts its own decision, however
 /// many one rule holds. `build_repeat` orders a greedy repeat's edges
 /// `[enter=0, exit=1]` and a non-greedy one's `[exit=0, enter=1]`.
-fn atn_enters_cond(ctx: &mut EmitContext, site: i32, non_greedy: bool, side: PickSide) -> String {
-    let [call, enter] = atn_repeat_pick(ctx, site, non_greedy, side);
-    return `${call} == ${enter}`;
-}
-
-/// The simulator's call for repeat `site`, and the edge that enters it.
 fn atn_repeat_pick(ctx: &mut EmitContext, site: i32, non_greedy: bool, side: PickSide) -> [String, i32] {
     let decision = ctx.plan.atn_decision_site(site);
     assert decision >= 0, "a repeat the simulator decides marked the grammar as needing the ATN, which numbers every repeat's decision";
@@ -5453,33 +5450,39 @@ fn atn_repeat_pick(ctx: &mut EmitContext, site: i32, non_greedy: bool, side: Pic
     return [atn_predict_call(decision, &met, side, ctx), if non_greedy { 1 } else { 0 }];
 }
 
-/// `atn_enters_cond` for a `?` the parse decides, with the pick bound first:
-/// a pick of neither edge is a no-viable-alternative, as the jar reports it.
-fn atn_optional_enters(
+/// Whether the parse enters repeat `site`, asking the simulator only about
+/// `asked` (`RepeatOp.atn_asked_kinds`). The pick is bound first: a pick of
+/// neither edge is a no-viable-alternative, as the jar reports it.
+fn atn_parse_enters(
     w: &mut CodeWriter,
     ctx: &mut EmitContext,
     site: i32,
     non_greedy: bool,
-    nc: &mut List<[String, i32]>,
+    asked: &List<i32> = &NO_KINDS,
 ) -> String {
     let [call, enter] = atn_repeat_pick(ctx, site, non_greedy, PickSide::Parse);
-    let pick = dedup_name("opt_atn", nc);
-    w.line(`let ${pick} = ${call};`);
+    let pick = `rs_pick_${site}`;
+    if asked.is_empty() {
+        w.line(`let ${pick} = ${call};`);
+    } else {
+        w.line(`let ${pick} = if ${ctx.kind_negate_check_str(asked, &PEEK_KIND)} { ${enter} } else { ${call} };`);
+    }
     w.line(`if ${pick} < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }`);
     return `${pick} == ${enter}`;
 }
 
-/// `atn_enters_cond` for a loop, asking the simulator only about `asked`
-/// (`RepeatOp.atn_asked_kinds`), the kind at `lookahead`.
-fn atn_loop_enters_cond<S: AsStrSlice>(
+/// Whether a scan enters repeat `site`, asking the simulator only about
+/// `asked` (`RepeatOp.atn_asked_kinds`), the kind at `lookahead`. A scan
+/// reads a pick of neither edge as not entering, and fails further on.
+fn atn_scan_enters<S: AsStrSlice>(
     ctx: &mut EmitContext,
     site: i32,
     non_greedy: bool,
     asked: &List<i32>,
     lookahead: S,
-    side: PickSide,
 ) -> String {
-    let predicts = atn_enters_cond(ctx, site, non_greedy, side);
+    let [call, enter] = atn_repeat_pick(ctx, site, non_greedy, PickSide::Scan);
+    let predicts = `${call} == ${enter}`;
     if asked.is_empty() {
         return predicts;
     }
@@ -6157,7 +6160,7 @@ fn gen_op_repeat_with_follow_override(
         if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx)
             && rep_op.body_shape matches { LeafRuleCall | LeafOther } {
             let _ = dedup_name(&rep_op.field, name_counts);
-            let enters = atn_optional_enters(w, ctx, rep_op.atn_decision, rep.non_greedy, name_counts);
+            let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep.non_greedy);
             let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::LeafWalk(*follow));
             gen_optional_present(w, &rep_op.body, &simulated, ctx, &NO_KINDS);
         } else {
@@ -6183,7 +6186,6 @@ fn gen_op_repeat_non_greedy(
     name_counts: &mut List<[String, i32]>,
     follow: &List<i32>,
 ) {
-    let while_cond = compute_non_greedy_condition(rep_op, follow, &rep_op.caller_follow_second, ctx);
     let body = RepeatBody::of(rep_op, &NO_KINDS);
     let inner = &rep.element;
     let is_plus = rep.kind matches { Plus };
@@ -6197,11 +6199,15 @@ fn gen_op_repeat_non_greedy(
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
-    } else if while_cond != "false" {
+    } else if rep_op.atn_decides {
+        begin_simulated_loop(w, rep_op, ctx, name_counts, is_plus);
+    } else {
+        let while_cond = non_greedy_static_cond(rep_op, follow, &rep_op.caller_follow_second, ctx);
+        if while_cond == "false" {
+            return;
+        }
         let guard = if is_plus { `!p.recovering && ${and_operand(&while_cond)}` } else { while_cond };
         w.begin(`while ${guard}`);
-    } else {
-        return;
     }
     gen_repeat_iteration(w, &body, rep_op, inner, ctx, looped());
     w.end();
@@ -7439,22 +7445,13 @@ fn decided_entry<S: AsStrSlice>(decided: &Option<String>, plus_flag: S) -> Group
     return GroupEntry::Looped(plus_flag.to_string());
 }
 
-fn compute_non_greedy_condition(
+fn non_greedy_static_cond(
     rep_op: &RepeatOp,
     follow_first: &List<i32>,
     follow_second: &List<i32>,
     ctx: &mut EmitContext,
 ) -> String {
-    if rep_op.atn_decides {
-        return atn_loop_enters_cond(
-            ctx,
-            rep_op.atn_decision,
-            true,
-            &rep_op.atn_asked_kinds,
-            &PEEK_KIND,
-            PickSide::Parse,
-        );
-    }
+    assert !rep_op.atn_decides, "a non-greedy loop the simulator decides binds its pick each iteration (`begin_simulated_loop`)";
     return non_greedy_static_enters(
         &rep_op.body_admits,
         &rep_op.body_second_position_first,

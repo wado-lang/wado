@@ -3863,7 +3863,7 @@ fn lower_repeat_op<S: AsStrSlice>(
 }
 
 /// Inner second-position first set for the non-greedy 2-token
-/// disambiguation `compute_non_greedy_condition` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// disambiguation `non_greedy_static_cond` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut LowerContext) -> List<i32> {
     if let Group(g) = peel_labels(elem) {
@@ -3905,7 +3905,7 @@ fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
 /// second sub-position when the next element (at `start`) is itself a
 /// Repeat over a single-alt Group of ≥ 2 elements (the common
 /// `(',' x)*?` followed by `(',' y)*` disambiguation pattern). Returns
-/// `[]` otherwise — emit's `compute_non_greedy_condition` mirror
+/// `[]` otherwise — emit's `non_greedy_static_cond` mirror
 /// already handles the empty case.
 fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut LowerContext) -> List<i32> {
     if start >= elements.len() {
@@ -4247,7 +4247,7 @@ pub global BROAD_FIRST_SET_THRESHOLD: i32 = 20;
 /// True when no lookahead separates a non-greedy loop's body from its
 /// continuation, so the static exit condition collapses to the minimum
 /// match. Stamped on the op and its scan mirror, and consumed by emit's
-/// `compute_non_greedy_condition`, so all three decide on one answer.
+/// `non_greedy_static_cond`, so all three decide on one answer.
 pub fn non_greedy_static_undecided(
     body_first: &List<i32>,
     follow_first: &List<i32>,
