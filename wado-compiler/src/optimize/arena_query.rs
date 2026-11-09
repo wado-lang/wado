@@ -8,6 +8,8 @@
 //! exactly that, scoped to the *reachable* operands — the pool is append-only, so
 //! seeding from it wholesale would keep long-folded locals alive forever.
 
+use std::ops::ControlFlow;
+
 use cranelift_entity::EntityRef;
 
 use super::value_copy::mutation::{Witness, expr_witnesses};
@@ -15,7 +17,7 @@ use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
@@ -560,6 +562,12 @@ impl MarkerBuiltins {
         Self(Mark::ALL.map(|mark| (project.builtin_func_id(mark.builtin()), mark)))
     }
 
+    /// The builtins of a program that names no marker.
+    #[cfg(test)]
+    pub(crate) fn unnamed() -> Self {
+        Self(Mark::ALL.map(|mark| (None, mark)))
+    }
+
     /// What a call to `func` states, where `func` is a marker.
     pub(crate) fn mark(self, func: FuncId) -> Option<Mark> {
         self.0
@@ -579,6 +587,55 @@ impl MarkerBuiltins {
             .0
             .iter()
             .any(|&(named, mark)| named.is_some() && mark.states(rarity))
+    }
+}
+
+/// The calls to a marker that run wherever `root` does: those under no branch or
+/// loop within it. Such a marker states how rarely the branch into `root` is
+/// taken. Writing a value over `root` erases it while that branch stands, and
+/// collapsing that branch onto `root` leaves it stating the rarity of a branch
+/// that is gone, on the path the branch stood on.
+pub(crate) fn unconditional_markers(
+    body: &Body,
+    root: NodeRef,
+    is_marker: impl Fn(FuncId) -> bool,
+) -> Vec<ExprId> {
+    let mut found = Vec::new();
+    body.walk_nodes_under::<()>(root, |node| {
+        ControlFlow::Continue(match node {
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Call { func_id, .. } if is_marker(*func_id) => {
+                    found.push(e);
+                    false
+                }
+                ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Switch { .. } => false,
+                ExprKind::Binary {
+                    op: NirBinaryOp::And | NirBinaryOp::Or,
+                    ..
+                } => false,
+                _ => true,
+            },
+            NodeRef::Stmt(s) => !matches!(
+                body.stmts[s].kind,
+                StmtKind::If { .. } | StmtKind::Loop { .. }
+            ),
+            NodeRef::Block(_) | NodeRef::Pat(_) => true,
+        })
+    });
+    found
+}
+
+/// Collapse the branch into `root` onto it, as far as its markers go: each one
+/// [`unconditional_markers`] finds becomes the empty block a unit statement is.
+pub(crate) fn shed_unconditional_markers(
+    engine: &mut Engine,
+    root: NodeRef,
+    markers: MarkerBuiltins,
+) {
+    for call in unconditional_markers(engine.body, root, |f| markers.mark(f).is_some()) {
+        let ExprNode { span, type_id, .. } = engine.body.exprs[call];
+        let empty = engine.alloc_block(Vec::new(), span);
+        engine.replace_expr_kind(call, ExprKind::plain_block(empty, type_id, "shed"));
     }
 }
 

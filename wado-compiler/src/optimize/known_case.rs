@@ -9,16 +9,21 @@ use crate::nir_engine::{Engine, Rule};
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 
-use super::arena_query::{is_pure_nontrapping_operand_typed, single_payload_binding};
+use super::arena_query::{
+    MarkerBuiltins, is_pure_nontrapping_operand_typed, shed_unconditional_markers,
+    single_payload_binding,
+};
 
-pub(super) struct KnownCaseRule;
+pub(super) struct KnownCaseRule {
+    pub(super) markers: MarkerBuiltins,
+}
 
 impl Rule for KnownCaseRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         match &engine.body.exprs[id].kind {
             ExprKind::Match { expr, .. } => {
                 let scrutinee = *expr;
-                rewrite_match(engine, id, scrutinee)
+                rewrite_match(engine, id, scrutinee, self.markers)
             }
             ExprKind::VariantTest {
                 expr, case_index, ..
@@ -49,7 +54,12 @@ impl Rule for KnownCaseRule {
 /// Take the first arm the case can take: the ones before it are refused, and
 /// the ones after are unreachable once that arm is certain. Left as a match,
 /// lowering would still test the case and trap on the answer it cannot get.
-fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
+fn rewrite_match(
+    engine: &mut Engine,
+    id: ExprId,
+    scrutinee: Operand,
+    markers: MarkerBuiltins,
+) -> bool {
     let Some(case_index) = known_index(engine, scrutinee) else {
         return false;
     };
@@ -73,6 +83,9 @@ fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
     });
     if let Some((bound, payload_type)) = certain {
         let arm_body = arms[head].body;
+        if let Operand::Expr(e) = arm_body {
+            shed_unconditional_markers(engine, NodeRef::Expr(e), markers);
+        }
         return collapse_to_binding(
             engine,
             id,
@@ -321,7 +334,9 @@ mod tests {
             is_mut: false,
         }]);
         let mut buffers = EngineBuffers::default();
-        let rule = KnownCaseRule;
+        let rule = KnownCaseRule {
+            markers: MarkerBuiltins::unnamed(),
+        };
         let mut engine = Engine::new(body, &mut buffers, &mut locals, &[], &TEST_TYPES);
         engine.run(&[&rule]);
     }

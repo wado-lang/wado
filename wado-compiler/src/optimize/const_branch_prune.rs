@@ -9,7 +9,7 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::optimize::gate::{FunctionGate, GatedPass};
 
-use super::arena_query::has_break_to;
+use super::arena_query::{MarkerBuiltins, has_break_to, shed_unconditional_markers};
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::arena_query::is_pure_nontrapping_operand_typed;
 
@@ -20,7 +20,9 @@ pub fn prune_constant_branches(project: &mut NirPackage, gate: &mut FunctionGate
     if !gate.any_pending(GatedPass::BranchPrune, len) {
         return false;
     }
-    let rule = BranchPruneRule;
+    let rule = BranchPruneRule {
+        markers: MarkerBuiltins::of(project),
+    };
     let type_table = project.type_table.borrow();
     let type_table = &*type_table;
     let pure_builtin_callees = project.pure_builtin_callee_ids();
@@ -43,7 +45,9 @@ pub fn prune_constant_branches(project: &mut NirPackage, gate: &mut FunctionGate
 }
 
 /// Engine rule for constant branch pruning.
-pub(super) struct BranchPruneRule;
+pub(super) struct BranchPruneRule {
+    pub(super) markers: MarkerBuiltins,
+}
 
 impl Rule for BranchPruneRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
@@ -51,7 +55,7 @@ impl Rule for BranchPruneRule {
     }
 
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
-        eliminate_dead_stmts(engine, id)
+        eliminate_dead_stmts(engine, id, self.markers)
     }
 }
 
@@ -300,7 +304,7 @@ fn const_if_branch(body: &Body, stmt: StmtId) -> Option<ConstIf> {
 /// flattening unused-label / void wrapper blocks into it. A flattened-in inner
 /// block is emptied: the engine may later pop that now-orphaned block, and
 /// emptying it prevents re-parenting the (now shared) statement ids back to it.
-fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId) -> bool {
+fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, markers: MarkerBuiltins) -> bool {
     let stmts = engine.body.blocks[block].stmts.clone();
     let has_dead_after_terminator = stmts
         .iter()
@@ -387,6 +391,7 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId) -> bool {
         }
         if let Some(taken) = const_if_branch(engine.body, stmt) {
             if let ConstIf::Taken(tb) = taken {
+                shed_unconditional_markers(engine, NodeRef::Block(tb), markers);
                 let tb_stmts = engine.body.blocks[tb].stmts.clone();
                 if ends_with_terminator_stmt(engine.body, &tb_stmts) {
                     terminated = true;

@@ -43,7 +43,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
-use super::arena_query::{block_contains_loop, has_break_to};
+use super::arena_query::{MarkerBuiltins, block_contains_loop, has_break_to};
 use super::bounds;
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, FieldPath, InductionStep, VAR_OFFSET_MAX_DEPTH, break_guard_cmp,
@@ -194,6 +194,7 @@ pub(super) fn version_loops(
     let descriptors = cache.descriptors(project);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let markers = MarkerBuiltins::of(project);
     // Only a body with a loop is versioned, so a program with none pays nothing.
     if !project
         .functions
@@ -304,7 +305,7 @@ pub(super) fn version_loops(
             proofs: &proofs,
         };
         let elide_rule = ElideRule::new(calls);
-        let prune_rule = BranchPruneRule;
+        let prune_rule = BranchPruneRule { markers };
         let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
         if !plans.is_empty() {
             engine.run(&rules);

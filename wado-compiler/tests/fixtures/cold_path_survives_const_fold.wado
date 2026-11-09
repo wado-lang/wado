@@ -1,0 +1,68 @@
+// Regression test: folding a block to its constant value keeps the rarity
+// marker the block holds. The arm `0 => { builtin::cold_path(); 7 }` executes
+// to `7`, and writing `7` over the block erased the marker, so the branch into
+// the arm lost its hint. A payload-less case such as `None` folds the same way,
+// which is how a derived `Deserialize`'s missing-field arm lost the `cold_path`
+// a profile put there.
+//
+// The kept marker hints both tests: `state == 1` likely, since every path past
+// it is rare, and `state == 0` likely over the trapping arm, which is rarer
+// than a marked one.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn int_arm(state: i32, v: i32) -> i32 {
+    return match state {
+        1 => v,
+        0 => {
+            builtin::cold_path();
+            7
+        },
+        _ => unreachable(),
+    };
+}
+
+#[inline(never)]
+fn none_arm(state: i32, v: Option<String>) -> Option<String> {
+    return match state {
+        1 => v,
+        0 => {
+            builtin::cold_path();
+            null
+        },
+        _ => unreachable(),
+    };
+}
+
+#[inline(never)]
+fn let_arm(state: i32, v: i32) -> i32 {
+    return match state {
+        1 => v,
+        0 => {
+            let seven = rare: {
+                builtin::cold_path();
+                7
+            };
+            seven
+        },
+        _ => unreachable(),
+    };
+}
+
+export fn run() with Stdout {
+    println(`${int_arm(builtin::black_box(1), 3)}`);
+    println(`${none_arm(builtin::black_box(1), Option::Some("a")):?}`);
+    println(`${let_arm(builtin::black_box(1), 4)}`);
+}
+
+__DATA__
+{
+    "stdout": "3\nOption::Some(\"a\")\n4\n",
+    "wir_pass": {"O2": ["wir_build/branch_hints"]},
+    "wir_expect:O2": [
+        "if @likely(state == 1) -> i32 {\n        3;\n    } else if @likely(state == 0) -> i32 {\n        cold_path;\n        7;",
+        "if @likely(state == 1) -> ref null \"core:prelude/string.wado//String\" {\n        v;\n    } else if @likely(state == 0) -> ref null \"core:prelude/string.wado//String\" {\n        cold_path;\n        ref.null none;",
+        "if @likely(state == 1) -> i32 {\n        4;\n    } else if @likely(state == 0) -> i32 {\n        cold_path;\n        7;"
+    ]
+}

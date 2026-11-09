@@ -13,13 +13,14 @@ use crate::nir_arena::{
 };
 use crate::nir_value_graph::{Side, ValueKind, constant_kind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
+use crate::optimize::arena_query::unconditional_markers;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
-use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
+use super::{BodySink, CtfeBuiltin, EditSink, Interpreter, Lattice, PatBindings};
 use crate::token::Span;
 use crate::{compiler_trace, hashmap};
 
@@ -66,10 +67,9 @@ impl Interpreter<'_> {
                 None
             };
             if let Some((value, then_block, else_block)) = spliced {
-                if value {
-                    new_stmts.extend(sink.body().blocks[then_block].stmts.clone());
-                } else if let Some(eb) = else_block {
-                    new_stmts.extend(sink.body().blocks[eb].stmts.clone());
+                if let Some(taken) = if value { Some(then_block) } else { else_block } {
+                    self.shed_markers(sink, NodeRef::Block(taken));
+                    new_stmts.extend(sink.body().blocks[taken].stmts.clone());
                 }
                 continue;
             }
@@ -113,6 +113,9 @@ impl Interpreter<'_> {
     /// a fresh literal where the program yields an alias, which `ref.eq` can tell
     /// apart — and so is a leaf under it.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
+        if self.holds_rarity_marker(sink.body(), e) {
+            return false;
+        }
         let node_type = sink.body().exprs[e].type_id;
         if value.is_scalar() {
             if self.type_table.is_reference(node_type) {
@@ -533,7 +536,38 @@ impl Interpreter<'_> {
     /// receiver resolves through it. Env-bound reads belong to
     /// [`Self::flow_fold_value`] instead.
     pub fn const_fold_value(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        if self.holds_rarity_marker(body, e) {
+            return None;
+        }
         self.const_fold_candidate(body, e).filter(Value::is_scalar)
+    }
+
+    /// Whether writing a value over `e` would erase a marker: the interpreter
+    /// runs one as a no-op, so `e` can have a value all the same.
+    fn holds_rarity_marker(&self, body: &Body, e: ExprId) -> bool {
+        !self.unconditional_markers(body, NodeRef::Expr(e)).is_empty()
+    }
+
+    /// The markers that run wherever `root` does. Without the builtin map the
+    /// interpreter cannot run a marker, so no value it finds reaches past one,
+    /// and no branch it collapses is decided past one.
+    fn unconditional_markers(&self, body: &Body, root: NodeRef) -> Vec<ExprId> {
+        let Some(builtins) = self.facts.ctfe_builtins else {
+            return Vec::new();
+        };
+        unconditional_markers(body, root, |f| {
+            matches!(builtins.get(&f), Some(CtfeBuiltin::RarityMarker))
+        })
+    }
+
+    /// Shed the markers of the arm a constant branch takes, as
+    /// [`crate::optimize::arena_query::shed_unconditional_markers`] does.
+    fn shed_markers<S: EditSink>(&self, sink: &mut S, root: NodeRef) {
+        for call in self.unconditional_markers(sink.body(), root) {
+            let ExprNode { span, type_id, .. } = sink.body().exprs[call];
+            let empty = sink.alloc_block(Vec::new(), span);
+            sink.replace_kind(call, ExprKind::plain_block(empty, type_id, "shed"));
+        }
     }
 
     fn const_fold_candidate(&mut self, body: &Body, e: ExprId) -> Option<Value> {
@@ -760,6 +794,9 @@ impl Interpreter<'_> {
         };
         if let Lattice::Const(Value::Bool(taken)) = self.operand_to_lattice(sink.body(), condition)
         {
+            if let Some(branch) = if taken { Some(then_branch) } else { else_branch } {
+                self.shed_markers(sink, NodeRef::Block(branch));
+            }
             splice_chosen_if_branch(sink, e, taken, then_branch, else_branch);
             return true;
         }
@@ -851,7 +888,10 @@ impl Interpreter<'_> {
             return false;
         }
         let span = match body_op {
-            Operand::Expr(ex) => sink.body().exprs[ex].span,
+            Operand::Expr(ex) => {
+                self.shed_markers(sink, NodeRef::Expr(ex));
+                sink.body().exprs[ex].span
+            }
             Operand::Value(_) => arm.span,
         };
         let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);

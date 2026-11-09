@@ -1789,6 +1789,7 @@ struct BranchSettler {
     callees: CalleeMap,
     ctfe_builtins: CtfeBuiltinMap,
     pure_builtin_callees: IndexSet<FuncId>,
+    markers: MarkerBuiltins,
 }
 
 impl BranchSettler {
@@ -1797,6 +1798,7 @@ impl BranchSettler {
             callees: build_callee_map(project, &Executor::default(), |_| false),
             ctfe_builtins: build_ctfe_builtin_map(project),
             pure_builtin_callees: project.pure_builtin_callee_ids(),
+            markers: MarkerBuiltins::of(project),
         }
     }
 
@@ -1825,7 +1827,9 @@ impl BranchSettler {
         types: &TypeTable,
     ) {
         let fold = ConstFoldRule::new(types, &self.callees, &self.ctfe_builtins);
-        let prune = BranchPruneRule;
+        let prune = BranchPruneRule {
+            markers: self.markers,
+        };
         let mut engine = Engine::new(body, buffers, locals, params, types);
         engine.set_pure_builtin_callees(&self.pure_builtin_callees);
         engine.run(&[&fold, &prune]);

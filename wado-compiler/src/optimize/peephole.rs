@@ -15,6 +15,7 @@ use crate::nir_package::NirPackage;
 use crate::niri::{build_callee_map, build_ctfe_builtin_map};
 
 use super::aggregate_forward::AggregateForwardRule;
+use super::arena_query::MarkerBuiltins;
 use super::closure_devirt::build_closure_devirt;
 use super::const_branch_prune::BranchPruneRule;
 use super::const_folding::ConstFoldRule;
@@ -79,13 +80,14 @@ pub(super) fn run_peephole(
     let callees = build_callee_map(project, gate.exec(), |id| pending.contains(&id));
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let branch_prune_rule = BranchPruneRule;
+    let markers = MarkerBuiltins::of(project);
+    let branch_prune_rule = BranchPruneRule { markers };
     let aggregate_forward_rule = AggregateForwardRule;
     let bitset_rule = MatchToBitsetRule::new(select_id);
     let match_rule = MatchToSwitchRule::new(cold_path_id, unreachable_id);
     let if_chain_rule = IfChainToMatchRule;
     let tuple_projection_rule = TupleProjectionRule;
-    let known_case_rule = KnownCaseRule;
+    let known_case_rule = KnownCaseRule { markers };
     // Post-inline only: the closure-bearing field read it resolves through is
     // what `inline` exposes when an iterator adaptor's `next` is copied in.
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
