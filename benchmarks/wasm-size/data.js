@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794174774365,
+  "lastUpdate": 1794184236202,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75825,6 +75825,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a6150904fc033ec3fa4089bfb61a36083d000397"
         },
         "date": 1794174773070,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ff3b81b81d25e6116f44d2ae9d31e470e1b22b70",
+          "message": "Merge pull request #2589 from wado-lang/ccr-a7390310-jade-optional\n\nfeat(jade): assert every Draft 2020-12 format that needs no IDNA",
+          "timestamp": "2026-11-09T09:04:13+09:00",
+          "tree_id": "7cd0ddfc85ee7ea4428f3e1e90d4ca1d899d8511",
+          "url": "https://github.com/wado-lang/wado/commit/ff3b81b81d25e6116f44d2ae9d31e470e1b22b70"
+        },
+        "date": 1794184235410,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
