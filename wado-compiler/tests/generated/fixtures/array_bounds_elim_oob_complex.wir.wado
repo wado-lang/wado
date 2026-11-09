@@ -198,7 +198,6 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 fn "array_bounds_elim_oob_complex.wado/run"() with Stdout {
     let $load_1: ref Array<i32>;
     let arr: ref "core:prelude/list.wado//List<i32>";
-    cold_path;
     arr = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     if @unlikely(0 >= builtin::array_len(arr.repr)) {
         cold_path;
@@ -218,7 +217,6 @@ fn "array_bounds_elim_oob_complex.wado/run"() with Stdout {
     }
     builtin::array_set<i32>(arr.repr, 2, 3);
     arr.used = 3;
-    cold_path;
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(5, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_oob_complex.wado:19"), used: 37 });
     unreachable;
     drop(builtin::array_get_value<i32>(arr.repr, 5));

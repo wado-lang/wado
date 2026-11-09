@@ -389,9 +389,9 @@ fn "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]$spec
                 let $mv$$vr_11$0: i32;
                 let $mv$$vr_11$2: ref null "core:prelude/string.wado//String";
                 multivalue_bind [$mv$$vr_11$0, v, $mv$$vr_11$2] = "opt_sroa_variant_return_embedded_err_return.wado/checked$sroa[return]"(v);
-                v = (if $mv$$vr_11$0 == 0 -> i64 {
+                v = (if @likely($mv$$vr_11$0 == 0) -> i64 {
                     v;
-                } else if @unlikely($mv$$vr_11$0 == 1) -> i64 {
+                } else if @likely($mv$$vr_11$0 == 1) -> i64 {
                     cold_path;
                     $qm_e = ref.as_non_null($mv$$vr_11$2);
                     cold_path;

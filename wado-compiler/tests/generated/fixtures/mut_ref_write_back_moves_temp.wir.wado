@@ -1280,9 +1280,9 @@ fn "mut_ref_write_back_moves_temp.wado/mut_ref_write_back_moves_temp.wado/Reader
         let $mv$$local_5$1: bool;
         let $mv$$local_5$2: ref null "core:prelude/string.wado//String";
         multivalue_bind [$mv$$local_5$0, $mv$$local_5$1, $mv$$local_5$2] = "mut_ref_write_back_moves_temp.wado/mut_ref_write_back_moves_temp.wado/Graph^mut_ref_write_back_moves_temp.wado/Message::merge$sroa[return]"(m, self);
-        drop((if $mv$$local_5$0 == 0 -> bool {
+        drop((if @likely($mv$$local_5$0 == 0) -> bool {
             $mv$$local_5$1;
-        } else if @unlikely($mv$$local_5$0 == 1) -> bool {
+        } else if @likely($mv$$local_5$0 == 1) -> bool {
             cold_path;
             $qm_e = ref.as_non_null($mv$$local_5$2);
             cold_path;

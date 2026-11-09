@@ -45,43 +45,45 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//try_op_from_generic_marker.wado/$cm_export__$test_0" = fn();  // TypeId(14)
+type "functype//try_op_from_generic_marker.wado/$test_0" = fn();  // TypeId(14)
 
-type "functype//try_op_from_generic_marker.wado/$test_0$cold0" = fn();  // TypeId(15)
+type "functype//try_op_from_generic_marker.wado/$cm_export__$test_0" = fn();  // TypeId(15)
 
-type "functype//try_op_from_generic_marker.wado/$test_0$cold2" = fn();  // TypeId(16)
+type "functype//try_op_from_generic_marker.wado/$test_0$cold0" = fn();  // TypeId(16)
 
-type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
+type "functype//try_op_from_generic_marker.wado/$test_0$cold2" = fn();  // TypeId(17)
 
-type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(18)
+type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(19)
+type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(20)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(22)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(22)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(23)
+type "functype//core:rt/unreachable" = fn();  // TypeId(23)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(24)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(24)
 
-type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(25)
+type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(25)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(26)
+type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(26)
 
-type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(27)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
+type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(28)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(32)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -96,7 +98,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-fn "try_op_from_generic_marker.wado/$cm_export__$test_0"() {
+global global:try_op_from_generic_marker.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(120);
+
+fn "try_op_from_generic_marker.wado/$test_0"() {
     let $load_1: i32;
     let $local_4: ref null "core:prelude/string.wado//String";
     let $local_6: ref "try_op_from_generic_marker.wado//Slot<i64>";
@@ -105,10 +109,7 @@ fn "try_op_from_generic_marker.wado/$cm_export__$test_0"() {
     let $sroa_slot_35: ref "core:prelude/types.wado//Option<try_op_from_generic_marker.wado/Slot<core:prelude/string.wado/String>>";
     let $sroa_slot_37: ref null "try_op_from_generic_marker.wado//Slot<i64>";
     let $sroa_s_repr_38: ref null Array<u8>;
-    cold_path;
-    cold_path;
     $qm_e_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-    cold_path;
     $sroa_slot_35 = struct.new "core:prelude/types.wado//Option<try_op_from_generic_marker.wado/Slot<core:prelude/string.wado/String>>::Some" { discriminant: 1, payload_0: $qm_e_13 };
     if @unlikely((if block -> i32 {
         if ref.is_null(local.tee $local_4(ref.cast "core:prelude/types.wado//Option<try_op_from_generic_marker.wado/Slot<core:prelude/string.wado/String>>::Some"($sroa_slot_35).payload_0)) == 0 -> i32 {
@@ -125,29 +126,28 @@ fn "try_op_from_generic_marker.wado/$cm_export__$test_0"() {
         }
     } -> bool {
         drop(ref.cast "core:prelude/types.wado//Option<try_op_from_generic_marker.wado/Slot<core:prelude/string.wado/String>>::Some"($sroa_slot_35).payload_0);
-        $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-            $array_clone_src_1 = array.new_fixed<u8>(120);
+        $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
             if $load_1 != 1 {
-                break $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
             }
             i = 0;
             b5: block {
                 l6: loop {
                     break_if b5 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
-                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>(global:try_op_from_generic_marker.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>(global:try_op_from_generic_marker.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>(global:try_op_from_generic_marker.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>(global:try_op_from_generic_marker.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
                     i = i + 1;
                     continue l6;
@@ -156,14 +156,14 @@ fn "try_op_from_generic_marker.wado/$cm_export__$test_0"() {
             b11: block {
                 l12: loop {
                     break_if b11 i >= $load_1;
-                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                    if builtin::array_get_value<u8>($sroa_s_repr_38, i) != builtin::array_get_value<u8>(global:try_op_from_generic_marker.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
                     i = i + 1;
                     continue l12;
                 };
             };
-            break $inline__test_0_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
         };
     } else {
         0;
@@ -172,7 +172,6 @@ fn "try_op_from_generic_marker.wado/$cm_export__$test_0"() {
         "try_op_from_generic_marker.wado/$test_0$cold2"();
         unreachable;
     }
-    cold_path;
     $sroa_slot_37 = struct.new "try_op_from_generic_marker.wado//Slot<i64>::Full" { discriminant: 0, payload_0: 5_i64 };
     if @unlikely((if block -> i32 {
         if ref.test "try_op_from_generic_marker.wado//Slot<i64>::Full"(local.tee $local_6(ref.as_non_null($sroa_slot_37))) -> i32 {
@@ -190,6 +189,10 @@ fn "try_op_from_generic_marker.wado/$cm_export__$test_0"() {
         "try_op_from_generic_marker.wado/$test_0$cold0"();
         unreachable;
     }
+}
+
+fn "try_op_from_generic_marker.wado/$cm_export__$test_0"() {
+    "try_op_from_generic_marker.wado/$test_0"();
     "wasi/task-return"(0);
 }
 

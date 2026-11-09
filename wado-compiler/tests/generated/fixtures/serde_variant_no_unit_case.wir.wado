@@ -694,7 +694,7 @@ fn "serde_variant_no_unit_case.wado/run"() {
         multivalue_bind [new_used_246, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(de);
         v_27 = (if @likely(new_used_246 == 0) -> ref "serde_variant_no_unit_case.wado//NoUnit" {
             ref.as_non_null($mv$$vr_6$1);
-        } else if @unlikely(new_used_246 == 1) -> ref "serde_variant_no_unit_case.wado//NoUnit" {
+        } else if new_used_246 == 1 -> ref "serde_variant_no_unit_case.wado//NoUnit" {
             cold_path;
             $qm_e_26 = ref.as_non_null($mv$$vr_6$2);
             cold_path;
@@ -2150,9 +2150,9 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
     let $mv$$vr_19$1: ref null "core:prelude/string.wado//String";
     let $mv$$vr_19$2: ref null "core:serde//DeserializeError";
     multivalue_bind [quote, $mv$$vr_19$1, $mv$$vr_19$2] = "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]"($load_2.repr, $load_2.start, $load_2.end, quote, $load_0, $mv$prefix$valid);
-    s_25 = (if quote == 0 -> ref "core:prelude/string.wado//String" {
+    s_25 = (if @likely(quote == 0) -> ref "core:prelude/string.wado//String" {
         ref.as_non_null($mv$$vr_19$1);
-    } else if @unlikely(quote == 1) -> ref "core:prelude/string.wado//String" {
+    } else if @likely(quote == 1) -> ref "core:prelude/string.wado//String" {
         cold_path;
         $qm_e_27 = ref.as_non_null($mv$$vr_19$2);
         cold_path;
@@ -2165,9 +2165,9 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
     b262: block {
         l263: loop {
             break_if b262 $mv$prefix$stop != 92;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s_25, multivalue_bind [quote, $load_0, $mv$$vr_19$2] = "core:json/core:json/JsonDeserializer::read_escape$sroa[return]"(self); (if quote == 0 -> char {
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s_25, multivalue_bind [quote, $load_0, $mv$$vr_19$2] = "core:json/core:json/JsonDeserializer::read_escape$sroa[return]"(self); (if @likely(quote == 0) -> char {
                 $load_0;
-            } else if @unlikely(quote == 1) -> char {
+            } else if @likely(quote == 1) -> char {
                 cold_path;
                 $qm_e_27 = ref.as_non_null($mv$$vr_19$2);
                 cold_path;
@@ -2269,9 +2269,9 @@ fn "core:json/core:json/JsonDeserializer::read_unicode_escape$sroa[return]"(self
     let $mv$$vr_16$1: u32;
     let $mv$$vr_16$2: ref null "core:serde//DeserializeError";
     multivalue_bind [$mv$$vr_16$0, $mv$$vr_16$1, $mv$$vr_16$2] = "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self);
-    $mv$$vr_16$0 = (if $mv$$vr_16$0 == 0 -> u32 {
+    $mv$$vr_16$0 = (if @likely($mv$$vr_16$0 == 0) -> u32 {
         $mv$$vr_16$1;
-    } else if @unlikely($mv$$vr_16$0 == 1) -> u32 {
+    } else if @likely($mv$$vr_16$0 == 1) -> u32 {
         cold_path;
         $qm_e_3 = ref.as_non_null($mv$$vr_16$2);
         cold_path;
@@ -2300,9 +2300,9 @@ fn "core:json/core:json/JsonDeserializer::read_unicode_escape$sroa[return]"(self
         }) -> bool {
             self.pos = $load_2 + 2;
             multivalue_bind [$mv$$vr_16$1, $load_2, $mv$$vr_16$2] = "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self);
-            $mv$$vr_16$1 = (if $mv$$vr_16$1 == 0 -> u32 {
+            $mv$$vr_16$1 = (if @likely($mv$$vr_16$1 == 0) -> u32 {
                 $load_2;
-            } else if @unlikely($mv$$vr_16$1 == 1) -> u32 {
+            } else if @likely($mv$$vr_16$1 == 1) -> u32 {
                 cold_path;
                 $qm_e_3 = ref.as_non_null($mv$$vr_16$2);
                 cold_path;
@@ -2556,9 +2556,9 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_with_lead$sroa[return]"(self
         type_name = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 51, 50), used: 3 };
         let $mv$$vr_9$1: ref null "core:prelude/string.wado//String";
         multivalue_bind [lead, $mv$$vr_9$1, $match_8] = (let $mv_arg_2: ref "core:prelude/slice.wado//Slice<u8>"; $mv_arg_2 = self.input; "core:json/integral_digits$sroa[return]"(n_3.neg, n_3.int_digits, n_3.exp, n_3.mantissa_start, n_3.mantissa_end, $mv_arg_2.repr, $mv_arg_2.start, type_name, start_2));
-        digits_15 = (if lead == 0 -> ref "core:prelude/string.wado//String" {
+        digits_15 = (if @likely(lead == 0) -> ref "core:prelude/string.wado//String" {
             ref.as_non_null($mv$$vr_9$1);
-        } else if @unlikely(lead == 1) -> ref "core:prelude/string.wado//String" {
+        } else if @likely(lead == 1) -> ref "core:prelude/string.wado//String" {
             cold_path;
             $qm_e_5 = ref.as_non_null($match_8);
             cold_path;
@@ -2567,9 +2567,9 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_with_lead$sroa[return]"(self
             unreachable;
         });
         block {
-            lead = builtin::i32_wrap_i64($contract_arg_0 = struct.new "core:prelude/string.wado//StrSlice" { repr: digits_15.repr, start: 0, end: digits_15.used }; let $mv$$vr_17$1: i64; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [lead, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[min_abs]$spec0$dae[radix,max]"($contract_arg_0.repr, $contract_arg_0.end); (if lead == 0 -> i64 {
+            lead = builtin::i32_wrap_i64($contract_arg_0 = struct.new "core:prelude/string.wado//StrSlice" { repr: digits_15.repr, start: 0, end: digits_15.used }; let $mv$$vr_17$1: i64; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [lead, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[min_abs]$spec0$dae[radix,max]"($contract_arg_0.repr, $contract_arg_0.end); (if @likely(lead == 0) -> i64 {
                 $mv$$vr_17$1;
-            } else if @unlikely(lead == 1) -> i64 {
+            } else if @likely(lead == 1) -> i64 {
                 cold_path;
                 $qm_e_22 = ref.as_non_null($mv$$vr_17$2);
                 cold_path;
@@ -3082,7 +3082,7 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Deserialize::de
     let name_85: ref "core:prelude/string.wado//String";
     let offset: i64;
     let $av_235: i32;
-    va_23 = (if local.tee lead_81(local.tee $vr_74($inline_core_json_JsonDeserializer_core_serde_Deserializer__begin_variant__core_prelude_string_wado_String__sroa_return__1: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:json/JsonVariantAccess>, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
+    va_23 = (if @likely(local.tee lead_81(local.tee $vr_74($inline_core_json_JsonDeserializer_core_serde_Deserializer__begin_variant__core_prelude_string_wado_String__sroa_return__1: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:json/JsonVariantAccess>, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
         lead_81 = "core:json/core:json/JsonDeserializer::peek_after_whitespace"(d);
         $av_235 = d.pos;
         if @unlikely(lead_81 < 0) {
@@ -3093,9 +3093,9 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Deserialize::de
             let $mv$$vr_17$1: ref null "core:prelude/string.wado//String";
             let $mv$$vr_17$2: ref null "core:serde//DeserializeError";
             multivalue_bind [lead_81, $mv$$vr_17$1, $mv$$vr_17$2] = "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(d);
-            name_85 = (if lead_81 == 0 -> ref "core:prelude/string.wado//String" {
+            name_85 = (if @likely(lead_81 == 0) -> ref "core:prelude/string.wado//String" {
                 ref.as_non_null($mv$$vr_17$1);
-            } else if @unlikely(lead_81 == 1) -> ref "core:prelude/string.wado//String" {
+            } else if @likely(lead_81 == 1) -> ref "core:prelude/string.wado//String" {
                 cold_path;
                 $qm_e_84 = ref.as_non_null($mv$$vr_17$2);
                 cold_path;
@@ -3128,9 +3128,9 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Deserialize::de
                 break $thread_$inline_core_json_JsonDeserializer__open_container_0;
             };
             multivalue_bind [lead_81, $mv$$vr_17$1, $mv$$vr_17$2] = "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(d);
-            name_85 = (if lead_81 == 0 -> ref "core:prelude/string.wado//String" {
+            name_85 = (if @likely(lead_81 == 0) -> ref "core:prelude/string.wado//String" {
                 ref.as_non_null($mv$$vr_17$1);
-            } else if @unlikely(lead_81 == 1) -> ref "core:prelude/string.wado//String" {
+            } else if @likely(lead_81 == 1) -> ref "core:prelude/string.wado//String" {
                 cold_path;
                 $qm_e_84 = ref.as_non_null($mv$$vr_17$2);
                 cold_path;
@@ -3154,9 +3154,9 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Deserialize::de
             break $inline_core_json_JsonDeserializer_core_serde_Deserializer__begin_variant__core_prelude_string_wado_String__sroa_return__1: struct.new "tuple//[i32, core:prelude/types.wado/Option<core:json/JsonVariantAccess>, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: ref.null none, 2: "core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string or object for variant"), used: 37 }, builtin::i64_extend_i32_s($av_235)) };
         }
         unreachable;
-    }).0) == 0 -> ref "core:json//JsonVariantAccess" {
+    }).0) == 0) -> ref "core:json//JsonVariantAccess" {
         ref.as_non_null($vr_74.1);
-    } else if @unlikely(lead_81 == 1) -> ref "core:json//JsonVariantAccess" {
+    } else if @likely(lead_81 == 1) -> ref "core:json//JsonVariantAccess" {
         cold_path;
         $qm_e_84 = ref.as_non_null($vr_74.2);
         cold_path;
@@ -3215,9 +3215,9 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Deserialize::de
             }
             break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_i32_sroa_return__22: multivalue_bind [lead_81, $av_235, $mv$$vr_17$2] = "core:json/core:json/JsonDeserializer::parse_i32_with_lead$sroa[return]"(d, lead_81);
         };
-        lead_81 = (if lead_81 == 0 -> i32 {
+        lead_81 = (if @likely(lead_81 == 0) -> i32 {
             $av_235;
-        } else if @unlikely(lead_81 == 1) -> i32 {
+        } else if @likely(lead_81 == 1) -> i32 {
             cold_path;
             $qm_e_84 = ref.as_non_null($mv$$vr_17$2);
             cold_path;
@@ -3297,9 +3297,9 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Deserialize::de
         break $inline_core_prelude_array_wado_seq_eq_u8__33: 1;
     } {
         multivalue_bind [lead_81, $mv$$vr_17$1, $mv$$vr_17$2] = "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(va_23.de);
-        name_85 = (if lead_81 == 0 -> ref "core:prelude/string.wado//String" {
+        name_85 = (if @likely(lead_81 == 0) -> ref "core:prelude/string.wado//String" {
             ref.as_non_null($mv$$vr_17$1);
-        } else if @unlikely(lead_81 == 1) -> ref "core:prelude/string.wado//String" {
+        } else if @likely(lead_81 == 1) -> ref "core:prelude/string.wado//String" {
             cold_path;
             $qm_e_84 = ref.as_non_null($mv$$vr_17$2);
             cold_path;
@@ -3610,9 +3610,9 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<i32>$sroa[return]"(self)
     let $mv$$vr_9$1: ref null "core:prelude/string.wado//String";
     let $mv$$vr_9$2: ref null "core:serde//DeserializeError";
     multivalue_bind [$mv$$vr_9$0, $mv$$vr_9$1, $mv$$vr_9$2] = "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self);
-    self_10 = (if $mv$$vr_9$0 == 0 -> ref "core:prelude/string.wado//String" {
+    self_10 = (if @likely($mv$$vr_9$0 == 0) -> ref "core:prelude/string.wado//String" {
         ref.as_non_null($mv$$vr_9$1);
-    } else if @unlikely($mv$$vr_9$0 == 1) -> ref "core:prelude/string.wado//String" {
+    } else if @likely($mv$$vr_9$0 == 1) -> ref "core:prelude/string.wado//String" {
         cold_path;
         $qm_e_3 = ref.as_non_null($mv$$vr_9$2);
         cold_path;
@@ -3622,9 +3622,9 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<i32>$sroa[return]"(self)
     });
     let $mv$$vr_8$1: ref null "core:prelude/types.wado//Option<i32>";
     multivalue_bind [$mv$$vr_9$0, $mv$$vr_8$1, $mv$$vr_9$2] = (let $mv_field_1: ref Array<u8>; $mv_field_1 = self_10.repr; $mv$$vr_9$0 = self_10.used; "core:json/core:json/read_number_text<i32>$sroa[return]$spec0"($mv_field_1, $mv$$vr_9$0, start_1));
-    $mv$$vr_9$0 = (if @likely(ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_2((if $mv$$vr_9$0 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+    $mv$$vr_9$0 = (if @likely(ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_2((if @likely($mv$$vr_9$0 == 0) -> ref "core:prelude/types.wado//Option<i32>" {
         ref.as_non_null($mv$$vr_8$1);
-    } else if @unlikely($mv$$vr_9$0 == 1) -> ref "core:prelude/types.wado//Option<i32>" {
+    } else if @likely($mv$$vr_9$0 == 1) -> ref "core:prelude/types.wado//Option<i32>" {
         cold_path;
         $qm_e_3 = ref.as_non_null($mv$$vr_9$2);
         cold_path;

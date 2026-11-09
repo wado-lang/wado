@@ -3399,9 +3399,9 @@ fn "core:fs/core:fs/open_temp<core:prelude/string.wado/String>$sroa[return]"(tar
     let $sroa_view_repr_442: ref Array<u8>;
     $vr_145 = "core:fs/root$sroa[return]"();
     let $match_scrut_0: i32;
-    dir_3 = (if local.tee $match_scrut_0($vr_145.0) == 0 -> ref null "core:prelude//$Resource" {
+    dir_3 = (if @likely(local.tee $match_scrut_0($vr_145.0) == 0) -> ref null "core:prelude//$Resource" {
         ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:filesystem/types.wado/Descriptor>::Some"($vr_145.1).payload_0);
-    } else if @unlikely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
+    } else if @likely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
         cold_path;
         $qm_e = ref.as_non_null($vr_145.2);
         cold_path;
@@ -3523,9 +3523,9 @@ fn "core:fs/core:fs/open<core:prelude/string.wado/String>$dae[open_flags,flags]"
     let $vr_19: ref null "tuple//[i32, core:prelude/types.wado/Option<wasi:filesystem/types.wado/Descriptor>, core:prelude/types.wado/Option<core:fs/FsError>]";
     $vr_19 = "core:fs/root$sroa[return]"();
     let $match_scrut_0: i32;
-    dir = (if local.tee $match_scrut_0($vr_19.0) == 0 -> ref null "core:prelude//$Resource" {
+    dir = (if @likely(local.tee $match_scrut_0($vr_19.0) == 0) -> ref null "core:prelude//$Resource" {
         ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:filesystem/types.wado/Descriptor>::Some"($vr_19.1).payload_0);
-    } else if @unlikely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
+    } else if @likely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
         cold_path;
         $qm_e = ref.as_non_null($vr_19.2);
         cold_path;
@@ -3653,9 +3653,9 @@ fn "core:fs/core:fs/metadata<core:prelude/string.wado/String>"(path) with Preope
     let $vr_49: ref null "tuple//[i32, core:prelude/types.wado/Option<wasi:filesystem/types.wado/Descriptor>, core:prelude/types.wado/Option<core:fs/FsError>]";
     $vr_49 = "core:fs/root$sroa[return]"();
     let $match_scrut_0: i32;
-    dir = (if local.tee $match_scrut_0($vr_49.0) == 0 -> ref null "core:prelude//$Resource" {
+    dir = (if @likely(local.tee $match_scrut_0($vr_49.0) == 0) -> ref null "core:prelude//$Resource" {
         ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:filesystem/types.wado/Descriptor>::Some"($vr_49.1).payload_0);
-    } else if @unlikely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
+    } else if @likely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
         cold_path;
         $qm_e = ref.as_non_null($vr_49.2);
         cold_path;
@@ -4587,9 +4587,9 @@ fn "core:fs/core:fs/write<core:prelude/string.wado/String,core:prelude/string.wa
     let $vr_23: ref null "tuple//[i32, core:prelude/types.wado/Option<wasi:filesystem/types.wado/Descriptor>, core:prelude/types.wado/Option<core:fs/FsError>]";
     $vr_15 = "core:fs/core:fs/open_temp<core:prelude/string.wado/String>$sroa[return]"(path);
     let $match_scrut_0: i32;
-    file_4 = local.tee $pattern_temp_0((if local.tee $match_scrut_0($vr_15.0) == 0 -> ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" {
+    file_4 = local.tee $pattern_temp_0((if @likely(local.tee $match_scrut_0($vr_15.0) == 0) -> ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" {
         ref.as_non_null(ref.cast "core:prelude/types.wado//Option<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::Some"($vr_15.1).payload_0);
-    } else if @unlikely($match_scrut_0 == 1) -> ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" {
+    } else if @likely($match_scrut_0 == 1) -> ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" {
         cold_path;
         $qm_e_3 = ref.as_non_null($vr_15.2);
         cold_path;
@@ -4661,9 +4661,9 @@ fn "core:fs/core:fs/write<core:prelude/string.wado/String,core:prelude/string.wa
                 }
             }
             $inline_core_fs_rename__core_prelude_string_wado_String_core_prelude_string_wado_String__1: block -> ref null "core:fs//FsError" {
-                $drop_spill_10 = (if ref.is_null(local.tee $local_7((if ref.is_null(local.tee $local_7("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_stream_read_no_leak.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.rename-at"(local.tee $moved_11((if local.tee $match_scrut_0(local.tee $vr_23("core:fs/root$sroa[return]"()).0) == 0 -> ref null "core:prelude//$Resource" {
+                $drop_spill_10 = (if ref.is_null(local.tee $local_7((if ref.is_null(local.tee $local_7("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_stream_read_no_leak.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.rename-at"(local.tee $moved_11((if @likely(local.tee $match_scrut_0(local.tee $vr_23("core:fs/root$sroa[return]"()).0) == 0) -> ref null "core:prelude//$Resource" {
                     ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:filesystem/types.wado/Descriptor>::Some"($vr_23.1).payload_0);
-                } else if @unlikely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
+                } else if @likely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
                     cold_path;
                     $qm_e_3 = ref.as_non_null($vr_23.2);
                     cold_path;
@@ -4698,9 +4698,9 @@ fn "core:fs/core:fs/write<core:prelude/string.wado/String,core:prelude/string.wa
     }))) == 0 {
         $qm_e_3 = ref.as_non_null($drop_spill_10);
         drop($inline_core_fs_remove_file__core_prelude_string_wado_String__16: block -> ref null "core:fs//FsError" {
-            $drop_spill_10 = (if ref.is_null(local.tee $local_7((if ref.is_null(local.tee $local_7("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_stream_read_no_leak.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.unlink-file-at"(local.tee $moved_11((if local.tee $match_scrut_0(local.tee $vr_23("core:fs/root$sroa[return]"()).0) == 0 -> ref null "core:prelude//$Resource" {
+            $drop_spill_10 = (if ref.is_null(local.tee $local_7((if ref.is_null(local.tee $local_7("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("cm_stream_read_no_leak.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.unlink-file-at"(local.tee $moved_11((if @likely(local.tee $match_scrut_0(local.tee $vr_23("core:fs/root$sroa[return]"()).0) == 0) -> ref null "core:prelude//$Resource" {
                 ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:filesystem/types.wado/Descriptor>::Some"($vr_23.1).payload_0);
-            } else if @unlikely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
+            } else if @likely($match_scrut_0 == 1) -> ref null "core:prelude//$Resource" {
                 cold_path;
                 $qm_e_57 = ref.as_non_null($vr_23.2);
                 cold_path;
