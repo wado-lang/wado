@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794203006458,
+  "lastUpdate": 1794211621896,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75957,6 +75957,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/da57536f765561e7595c591de73bc6ea33929d85"
         },
         "date": 1794203005539,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404932,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f488548e30989d432c572b4137d36b83c6384141",
+          "message": "Merge pull request #2593 from wado-lang/ccr-a7390310-f47sn8\n\nfeat(core:uri)!: tell a URI from a URI reference in the type",
+          "timestamp": "2026-11-09T16:48:29+09:00",
+          "tree_id": "c89c1638e3b96cfa6be8d79b082af8ed63e6d6e5",
+          "url": "https://github.com/wado-lang/wado/commit/f488548e30989d432c572b4137d36b83c6384141"
+        },
+        "date": 1794211621317,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
