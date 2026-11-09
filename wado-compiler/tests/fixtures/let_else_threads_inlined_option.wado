@@ -1,0 +1,36 @@
+// A `let ... else` over an inlined helper returning `Option` takes the payload
+// where the helper finds it, as `match` does: the `Option` is never built. The
+// helper's `None` exit is a promoted `null`, which threading reads as that case.
+
+struct Act {
+    kind: i32,
+    at: i32,
+}
+
+#[inline(never)]
+fn first_at(acts: &List<Act>, from: i32) -> i32 {
+    let mut out = 0;
+    let Some(a) = acts.iter_ref().find(|a| a.kind == 1) else {
+        return out;
+    };
+    if a.at >= from {
+        out = a.at;
+    }
+    return out;
+}
+
+test {
+    let acts: List<Act> = [Act { kind: 0, at: 3 }, Act { kind: builtin::black_box(1), at: 7 }];
+    assert first_at(&acts, builtin::black_box(2)) == 7;
+    assert first_at(&acts, builtin::black_box(8)) == 0;
+    let none: List<Act> = [Act { kind: builtin::black_box(0), at: 3 }];
+    assert first_at(&none, builtin::black_box(2)) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_scope": "first_at",
+    "wir_pass": {"O2": ["nir/peephole"]},
+    "wir_not_expect:O2": ["ref.is_null("]
+}

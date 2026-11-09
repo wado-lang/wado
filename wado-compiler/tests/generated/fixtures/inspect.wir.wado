@@ -15445,6 +15445,7 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String,bool]^core:prel
     let new_used_205: i32;
     let start_206: i32;
     let x_233: i64;
+    let $sroa_slot_716: ref null Array<u8>;
     if @unlikely(local.tee new_used_205(f.used + 1) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_205);
@@ -15471,21 +15472,23 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String,bool]^core:prel
     new_used_205 = f.used;
     f.used = $mv$self$0;
     builtin::array_copy<u8>(local.tee $load_4(f.repr), new_used_205, global:inspect.wado::$const_obj_36, 0, 2);
-    $mv$self$1 = (if $mv$self$2 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+    if $mv$self$2 {
+        $sroa_slot_716 = array.new_fixed<u8>(116, 114, 117, 101);
+        $mv$self$0 = 4;
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    });
+        $sroa_slot_716 = array.new_data<u8>("false");
+        $mv$self$0 = 5;
+    }
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $mv$self$0($mv$self$1.used) == 0;
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 $mv$self$0 == 0;
             if @unlikely(local.tee $mv$self$2(f.used + $mv$self$0) > builtin::array_len($load_4)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, $mv$self$2);
             }
             new_used_205 = f.used;
             f.used = $mv$self$2;
-            builtin::array_copy<u8>(f.repr, new_used_205, $mv$self$1.repr, 0, $mv$self$0);
+            builtin::array_copy<u8>(f.repr, new_used_205, $sroa_slot_716, 0, $mv$self$0);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
