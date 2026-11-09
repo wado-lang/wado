@@ -897,12 +897,12 @@ pub struct SllForest {
     kinds: i32,
     /// Per node, how many places read it: an edge, or a decision it starts.
     readers: List<i32>,
-    node_of: HashMap<SllNode, i32>,
+    id_of: HashMap<SllNode, i32>,
 }
 
 impl SllForest {
     pub fn new(kinds: i32) -> SllForest {
-        return SllForest { nodes: [], kinds, readers: [], node_of: HashMap::new() };
+        return SllForest { nodes: [], kinds, readers: [], id_of: HashMap::new() };
     }
 
     /// Whether `node` is a branch more than one place reads, which is emitted
@@ -921,7 +921,7 @@ impl SllForest {
             } else {
                 dfa.nodes[n];
             };
-            node_of[n] = if let Some(id) = self.node_of.get(node) {
+            node_of[n] = if let Some(id) = self.id_of.get(node) {
                 id;
             } else {
                 if let Branch(edges) = &node {
@@ -931,7 +931,7 @@ impl SllForest {
                 }
                 self.nodes.push(node);
                 self.readers.push(0);
-                self.node_of[node] = self.nodes.len() - 1;
+                self.id_of[node] = self.nodes.len() - 1;
                 self.nodes.len() - 1;
             };
         }
