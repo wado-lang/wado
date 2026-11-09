@@ -14,7 +14,9 @@
 //!
 //! Where the entry value reads as no constant, the check's floor joins the
 //! residual too: `i >= FLOOR` at the version point, carried to every later
-//! value by a step the residual proves non-negative and clear of the wrap.
+//! value by a step the residual proves non-negative and clear of the wrap. A
+//! check that is a floor alone, its upper bound already proved, versions on
+//! those terms by themselves.
 //!
 //! A check under an in-body `if i + g < B` that `i + k < B` with `k <= g`, or
 //! a floor under `i + k`, follows from the guard once `i + g` cannot wrap: its
@@ -158,6 +160,25 @@ struct FastArm {
     fast_body: BlockId,
 }
 
+/// A leaf loop [`try_fill_idiom`] may collapse, under an unshifted guard
+/// `var CMP bound` at the head of its body.
+struct FillLoop {
+    /// The block whose repeating decides whether a conditional write may be
+    /// replayed once: the loop's own, or the version `if`'s.
+    parent: BlockId,
+    /// The block holding `loop_stmt`, where the fill replaces it.
+    block: BlockId,
+    loop_stmt: StmtId,
+    loop_body: BlockId,
+    /// The statement outside which a conditionally written local must not be
+    /// named.
+    scope: StmtId,
+    var: u32,
+    bound: BoundKey,
+    /// `true` for `var <= bound`, `false` for `var < bound`.
+    guard_le: bool,
+}
+
 /// Version eligible loops in every function. Returns whether anything changed.
 pub(super) fn version_loops(
     project: &mut NirPackage,
@@ -223,21 +244,42 @@ pub(super) fn version_loops(
         let binds = build_copy_bindings(&engine);
         let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
         collect_loops(engine.body, engine.body.root(), &mut loops);
-        let plans: Vec<Plan> = loops
-            .into_iter()
-            .filter_map(|(parent, loop_stmt, loop_body)| {
-                analyze_loop(
-                    &engine,
-                    &binds,
-                    &type_table,
-                    &frame,
+        let mut plans: Vec<Plan> = Vec::new();
+        // The leaf loops with no check to version, which may be a fill as they
+        // stand: one whose stores constant folding proved in bounds is as much
+        // a fill as one a version proves them in.
+        let mut unversioned: Vec<FillLoop> = Vec::new();
+        for (parent, loop_stmt, loop_body) in loops {
+            if let Some(plan) = analyze_loop(
+                &engine,
+                &binds,
+                &type_table,
+                &frame,
+                parent,
+                loop_stmt,
+                loop_body,
+            ) {
+                plans.push(plan);
+            } else if !block_contains_loop(engine.body, loop_body)
+                && let Some((0, var, bound, guard_le, 0)) =
+                    parse_loop_guard(&engine, &binds, loop_body)
+                // A wrapped `H + 1` counts past any `i32` array only when
+                // `var` is an `i32`.
+                && engine.locals()[var as usize].type_id == TypeTable::I32
+            {
+                unversioned.push(FillLoop {
                     parent,
+                    block: parent,
                     loop_stmt,
                     loop_body,
-                )
-            })
-            .collect();
-        if plans.is_empty() {
+                    scope: loop_stmt,
+                    var,
+                    bound,
+                    guard_le,
+                });
+            }
+        }
+        if plans.is_empty() && unversioned.is_empty() {
             continue;
         }
 
@@ -264,19 +306,41 @@ pub(super) fn version_loops(
         let elide_rule = ElideRule::new(calls);
         let prune_rule = BranchPruneRule;
         let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
-        engine.run(&rules);
+        if !plans.is_empty() {
+            engine.run(&rules);
+        }
 
         // Fill idiom over the cleaned fast arms; sweep again if it fired.
+        let fast_fills = plans
+            .iter()
+            .zip(&fast_arms)
+            .filter(|(plan, _)| {
+                plan.reload.is_none() && plan.guard_idx == 0 && plan.guard_offset == 0
+            })
+            .filter_map(|(plan, arm)| {
+                let [loop_stmt] = engine.body.blocks[arm.then_block].stmts[..] else {
+                    return None;
+                };
+                Some(FillLoop {
+                    parent: plan.parent,
+                    block: arm.then_block,
+                    loop_stmt,
+                    loop_body: arm.fast_body,
+                    scope: arm.version_if,
+                    var: plan.var,
+                    bound: plan.bound,
+                    guard_le: plan.guard_le,
+                })
+            })
+            .collect::<Vec<_>>();
         let mut filled = false;
-        for (plan, arm) in plans.iter().zip(&fast_arms) {
-            if plan.reload.is_none() {
-                filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
-            }
+        for fill in fast_fills.iter().chain(&unversioned) {
+            filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, fill);
         }
         if filled {
             engine.run(&rules);
         }
-        changed = true;
+        changed |= filled || !plans.is_empty();
     }
     changed
 }
@@ -376,7 +440,8 @@ fn guard_bound_local(
 struct Check {
     holder: NodeRef,
     cond: Operand,
-    limit: Limit,
+    /// `None` for a check that is floors alone.
+    limit: Option<Limit>,
     /// The strongest constant floor the check demands of `var`, or `i64::MIN`
     /// when it demands none. A floor under `var + shift` is demanded of `var`
     /// itself, which the shift's non-negativity makes sufficient.
@@ -527,15 +592,17 @@ fn parse_versionable_check(
         l.bound == g.bound && l.shift.is_konst() && l.shift.konst <= g.reach
     };
     let (limit, reach, rests_on) = match (limit, guard) {
-        (Some(l), Some(g)) if proved(&l, g) => (g.wrap_free(), g.reach, Some(g)),
-        (None, Some(g)) if !floors.is_empty() => (g.wrap_free(), g.reach, Some(g)),
-        (Some(l), _) => (l, l.shift.konst, None),
+        (Some(l), Some(g)) if proved(&l, g) => (Some(g.wrap_free()), g.reach, Some(g)),
+        (None, Some(g)) if !floors.is_empty() => (Some(g.wrap_free()), g.reach, Some(g)),
+        (Some(l), _) => (Some(l), l.shift.konst, None),
+        (None, None) if !floors.is_empty() => (None, 0, None),
         (None, _) => return None,
     };
+    let shift = limit.map_or(Shift::NONE, |l| l.shift);
     let mut floor = i64::MIN;
-    for (shift, f) in floors {
-        let below_index = shift.is_konst() && shift.konst <= reach;
-        if shift != limit.shift && !below_index {
+    for (floor_shift, f) in floors {
+        let below_index = floor_shift.is_konst() && floor_shift.konst <= reach;
+        if floor_shift != shift && !below_index {
             return None;
         }
         floor = floor.max(f);
@@ -543,7 +610,7 @@ fn parse_versionable_check(
     // A strided check demands `var >= 0` too: with the residual's
     // `stride >= 1`, `var * stride` then lies at or above `var`, clear of the
     // wrap.
-    if limit.shift.stride.is_some() {
+    if shift.stride.is_some() {
         floor = floor.max(0);
     }
     Some(Check {
@@ -832,19 +899,20 @@ fn analyze_loop(
     // every collected check before any of them is deleted.
     let demanded = checks.iter().map(|c| c.floor).max()?;
     let mut limits: Vec<Limit> = Vec::new();
-    for check in &checks {
+    for limit in checks.iter().filter_map(|c| c.limit) {
         // A constant shift on the guard's own bound decides the check: always
         // true unshifted under an unshifted guard, which is
         // `condition_implication`'s to refute, and never true past what the
         // guard admits, which leaves the check to the fast loop as it is.
-        let decided = check.limit.bound == h
-            && check.limit.shift.is_konst()
-            && (offset == 0 || check.limit.shift.konst + i64::from(guard_le) > offset);
-        if !decided && !limits.contains(&check.limit) {
-            limits.push(check.limit);
+        let decided = limit.bound == h
+            && limit.shift.is_konst()
+            && (offset == 0 || limit.shift.konst + i64::from(guard_le) > offset);
+        if !decided && !limits.contains(&limit) {
+            limits.push(limit);
         }
     }
-    if limits.is_empty() || limits.len() > MAX_LIMITS {
+    let floors_alone = checks.iter().any(|c| c.limit.is_none());
+    if (limits.is_empty() && !floors_alone) || limits.len() > MAX_LIMITS {
         return None;
     }
     // One consistent signedness for guard, check, and residual comparisons.
@@ -885,7 +953,7 @@ fn analyze_loop(
     invariant.extend(bound_local(h)?);
     for check in &checks {
         if let Some(g) = check.rests_on
-            && limits.contains(&check.limit)
+            && check.limit.is_some_and(|l| limits.contains(&l))
         {
             invariant.extend(bound_local(g.bound)?);
         }
@@ -920,6 +988,10 @@ fn analyze_loop(
             )?),
         },
     };
+    // Floors a constant entry already meets are `condition_implication`'s.
+    if limits.is_empty() && floor.is_none() {
+        return None;
+    }
     let step_local = floor.as_ref().and_then(|f| match f.step {
         InductionStep::Local(s) => Some(s),
         InductionStep::Const(..) => None,
@@ -1019,11 +1091,11 @@ fn local_read(engine: &mut Engine, index: u32, span: Span) -> Operand {
 }
 
 /// Read a local or constant bound as an operand of `var`'s type.
-fn bound_read(engine: &mut Engine, plan: &Plan, bound: BoundKey, span: Span) -> Operand {
+fn bound_read(engine: &mut Engine, var: u32, bound: BoundKey, span: Span) -> Operand {
     match bound {
         BoundKey::Local(b) => local_read(engine, b, span),
         BoundKey::Const(c) => {
-            let ty = engine.locals()[plan.var as usize].type_id;
+            let ty = engine.locals()[var as usize].type_id;
             engine.const_operand(ValueKind::Int(c as u64, ty), ty)
         }
         BoundKey::Field(root, _) => {
@@ -1167,7 +1239,7 @@ fn apply_version(
         span,
     );
     if let Some((lim, _)) = &reload {
-        let h = bound_read(engine, plan, plan.bound, span);
+        let h = bound_read(engine, plan.var, plan.bound, span);
         let init = alloc_local_set(engine, *lim, h, span);
         stmts.splice(pos..=pos, [init, if_stmt, slow_stmt]);
     } else {
@@ -1184,15 +1256,18 @@ fn apply_version(
 
 /// The condition under which the fast loop's checks all hold.
 fn residual(engine: &mut Engine, plan: &Plan, span: Span) -> Operand {
-    let mut residual = limit_terms(engine, plan, plan.limits[0], span);
-    for &limit in &plan.limits[1..] {
+    let mut residual = None;
+    for &limit in &plan.limits {
         let terms = limit_terms(engine, plan, limit, span);
-        residual = alloc_pred(engine, residual, NirBinaryOp::And, terms, span);
+        residual = Some(match residual {
+            Some(rest) => alloc_pred(engine, rest, NirBinaryOp::And, terms, span),
+            None => terms,
+        });
     }
-    if let Some(floor) = &plan.floor {
-        residual = and_floor_terms(engine, plan, floor, residual, span);
+    match &plan.floor {
+        Some(floor) => and_floor_terms(engine, plan, floor, residual, span),
+        None => residual.expect("`analyze_loop` plans a limit or a floor"),
     }
-    residual
 }
 
 /// `if !<the reloaded limits' terms> { $lim = floor }`: the re-test after a
@@ -1250,7 +1325,7 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
     }
     let ty = engine.locals()[plan.var as usize].type_id;
     let int = |e: &mut Engine, c: i64| e.const_operand(ValueKind::Int(c as u64, ty), ty);
-    let bound = |e: &mut Engine| bound_read(e, plan, limit.bound, span);
+    let bound = |e: &mut Engine| bound_read(e, plan.var, limit.bound, span);
     let less_konst = |e: &mut Engine| {
         let b = bound(e);
         if limit.shift.konst == 0 {
@@ -1288,7 +1363,7 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
     } else {
         NirBinaryOp::LtEq
     };
-    let h_read = bound_read(engine, plan, plan.bound, span);
+    let h_read = bound_read(engine, plan.var, plan.bound, span);
     let fits = alloc_pred(engine, h_read, op, room, span);
     conjoin(engine, clear, fits, span)
 }
@@ -1319,7 +1394,7 @@ fn wide_limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) 
     };
     let add = |e: &mut Engine, l, r| alloc_binary(e, l, NirBinaryOp::Add, r, TypeTable::I64, span);
     let mut clear = Vec::new();
-    let h_read = bound_read(engine, plan, plan.bound, span);
+    let h_read = bound_read(engine, plan.var, plan.bound, span);
     let mut reach = wide(engine, h_read);
     let below = plan.guard_offset + i64::from(!plan.guard_le);
     if below != 0 {
@@ -1359,7 +1434,7 @@ fn wide_limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) 
         let konst = long(engine, limit.shift.konst);
         reach = add(engine, reach, konst);
     }
-    let b_read = bound_read(engine, plan, limit.bound, span);
+    let b_read = bound_read(engine, plan.var, limit.bound, span);
     let b_wide = wide(engine, b_read);
     let fits = alloc_pred(engine, reach, NirBinaryOp::Lt, b_wide, span);
     conjoin(engine, clear, fits, span)
@@ -1372,14 +1447,14 @@ fn conjoin(engine: &mut Engine, terms: Vec<Operand>, last: Operand, span: Span) 
     })
 }
 
-/// Conjoin the floor terms onto `residual`: `var >= demanded`, `var <= MAX - g`
-/// under an offset guard, and the `step >= 0` / `H <= MAX - step` pair that
-/// says `var` rises without wrapping.
+/// Conjoin the floor terms onto the limits' `residual`, if any: `var >=
+/// demanded`, `var <= MAX - g` under an offset guard, and the `step >= 0` /
+/// `H <= MAX - step` pair that says `var` rises without wrapping.
 fn and_floor_terms(
     engine: &mut Engine,
     plan: &Plan,
     floor: &RuntimeFloor,
-    residual: Operand,
+    residual: Option<Operand>,
     span: Span,
 ) -> Operand {
     let ty = engine.locals()[plan.var as usize].type_id;
@@ -1388,7 +1463,10 @@ fn and_floor_terms(
     let var_read = local_read(engine, plan.var, span);
     let demanded = engine.const_operand(ValueKind::Int(floor.demanded as u64, ty), ty);
     let at_least = pred(engine, var_read, NirBinaryOp::GtEq, demanded);
-    let mut out = pred(engine, residual, NirBinaryOp::And, at_least);
+    let mut out = match residual {
+        Some(residual) => pred(engine, residual, NirBinaryOp::And, at_least),
+        None => at_least,
+    };
     // The first guard's `var + g` must not wrap; each later `var` is one the
     // guard admitted, plus a step the terms below keep clear of it.
     if plan.guard_offset != 0 {
@@ -1400,9 +1478,11 @@ fn and_floor_terms(
         out = pred(engine, out, NirBinaryOp::And, room);
     }
 
+    // A limit puts the last `i + 1` at or under `B`, and a `<` guard under `H`,
+    // so neither wraps.
+    let bounded = !plan.limits.is_empty() || !plan.guard_le;
     let headroom = match floor.step {
-        // The residual already puts the last `i + 1` at or under `B`, so no wrap.
-        InductionStep::Const(k) if k <= 1 => return out,
+        InductionStep::Const(k) if k <= 0 || (k == 1 && bounded) => return out,
         InductionStep::Const(k) => {
             let bits = floor.type_max.wrapping_sub(k as u64);
             engine.const_operand(ValueKind::Int(bits, ty), ty)
@@ -1417,7 +1497,7 @@ fn and_floor_terms(
             alloc_binary(engine, max, NirBinaryOp::Sub, step_read, ty, span)
         }
     };
-    let h_read = bound_read(engine, plan, plan.bound, span);
+    let h_read = bound_read(engine, plan.var, plan.bound, span);
     let no_wrap = pred(engine, h_read, NirBinaryOp::LtEq, headroom);
     pred(engine, out, NirBinaryOp::And, no_wrap)
 }
@@ -1448,7 +1528,9 @@ fn eliminate_checks_in_fast(
     for check in checks {
         // As in `condition_implication`: the elimination drops the condition
         // expression, so a condition that writes must stay.
-        if !plan.limits.contains(&check.limit) || !is_pure_operand(engine.body, check.cond) {
+        if !check.limit.is_none_or(|l| plan.limits.contains(&l))
+            || !is_pure_operand(engine.body, check.cond)
+        {
             continue;
         }
         let region = match check.rests_on {
@@ -1479,7 +1561,7 @@ fn constify_check_temp(
         return;
     };
     let konst = negated.is_some();
-    let limit = konst.then_some(check.limit);
+    let limit = check.limit.filter(|_| konst);
     let mut stack = region;
     while let Some(n) = stack.pop() {
         if let NodeRef::Stmt(s) = n
@@ -1565,38 +1647,27 @@ fn subtree_redefines(engine: &Engine, block: BlockId, locals: &[u32]) -> bool {
         .is_some()
 }
 
-/// Collapse a cleaned fast arm — `loop { if !(i CMP H) break; [local writes];
+/// Collapse a cleaned loop — `loop { if !(i CMP H) break; [local writes];
 /// array_set(A, i, CONST); i += 1 }` — into one `array_fill` followed by those
 /// writes replayed once at the last iterated `i`. The count is `H + 1 - i` for
-/// `<=` (the residual proving no overflow) and `H - i` for `<`; the wrapping
-/// `if` preserves the zero-iteration case exactly.
+/// `<=` and `H - i` for `<`; the wrapping `if` preserves the zero-iteration
+/// case exactly. Where a store would fall out of bounds, the loop traps at it
+/// and the fill traps whole, a wrapped `H + 1` included, so the two agree on
+/// every input.
 fn try_fill_idiom(
     engine: &mut Engine,
     binds: &Binds,
     descriptors: &[FunctionRef],
     fill_id: FuncId,
-    plan: &Plan,
-    arm: &FastArm,
+    fill: &FillLoop,
 ) -> bool {
-    // The fill form needs an unshifted guard at index 0 (no leading lets), whose
-    // count it reads; `plan` carries the guard layout from analysis, and
-    // `arm.fast_body` is its structural clone.
-    let (var, h, guard_le) = (plan.var, plan.bound, plan.guard_le);
-    if plan.guard_idx != 0 || plan.guard_offset != 0 {
-        return false;
-    }
-    // The then-block must still hold exactly the fast loop statement.
-    let then_stmts = engine.body.blocks[arm.then_block].stmts.clone();
-    let [loop_stmt] = then_stmts[..] else {
-        return false;
-    };
-    if !matches!(
-        engine.body.stmts[loop_stmt].kind,
-        StmtKind::Loop { body } if body == arm.fast_body
-    ) {
-        return false;
-    }
-    let stmts = engine.body.blocks[arm.fast_body].stmts.clone();
+    let (var, h, guard_le) = (fill.var, fill.bound, fill.guard_le);
+    let loop_stmt = fill.loop_stmt;
+    assert!(
+        matches!(engine.body.stmts[loop_stmt].kind, StmtKind::Loop { body } if body == fill.loop_body),
+        "a fill loop is the loop over its body"
+    );
+    let stmts = engine.body.blocks[fill.loop_body].stmts.clone();
     // Shape: guard first, then pure lets, one array_set, and `i += 1` last.
     let n = stmts.len();
     if n < 3 {
@@ -1691,8 +1762,8 @@ fn try_fill_idiom(
     // slow arm alone names the local, and the version `if` runs once.
     let mut conditional = effects.iter().flat_map(|e| &e.conditional).peekable();
     if conditional.peek().is_some()
-        && (block_repeats(engine.body, plan.parent)
-            || conditional.any(|&l| !confined_to(engine, l, arm.version_if)))
+        && (block_repeats(engine.body, fill.parent)
+            || conditional.any(|&l| !confined_to(engine, l, fill.scope)))
     {
         return false;
     }
@@ -1702,7 +1773,7 @@ fn try_fill_idiom(
 
     // `H + 1` (for `<=`) / `H` (for `<`) — the exclusive upper end.
     let upper = |engine: &mut Engine| -> Operand {
-        let h_read = bound_read(engine, plan, h, span);
+        let h_read = bound_read(engine, var, h, span);
         if guard_le {
             alloc_binary(
                 engine,
@@ -1755,9 +1826,9 @@ fn try_fill_idiom(
     // iteration saw (`H` for `<=`, `H - 1` for `<`) and run them once.
     if !middle.is_empty() {
         let last_iterated = if guard_le {
-            bound_read(engine, plan, h, span)
+            bound_read(engine, var, h, span)
         } else {
-            let h_read = bound_read(engine, plan, h, span);
+            let h_read = bound_read(engine, var, h, span);
             alloc_binary(
                 engine,
                 h_read,
@@ -1776,7 +1847,7 @@ fn try_fill_idiom(
 
     // `if i CMP H { ... }` preserves the zero-iteration case.
     let i_read2 = local_read(engine, var, span);
-    let h_read2 = bound_read(engine, plan, h, span);
+    let h_read2 = bound_read(engine, var, h, span);
     let op = if guard_le {
         NirBinaryOp::LtEq
     } else {
@@ -1792,7 +1863,12 @@ fn try_fill_idiom(
         },
         span,
     );
-    engine.set_block_stmts(arm.then_block, vec![fill_if]);
+    let stmts: Vec<StmtId> = engine.body.blocks[fill.block]
+        .stmts
+        .iter()
+        .map(|&s| if s == loop_stmt { fill_if } else { s })
+        .collect();
+    engine.set_block_stmts(fill.block, stmts);
     true
 }
 
