@@ -15,8 +15,7 @@ use {
     DecisionPredicates,
     PredicateSite,
     alt_has_gate,
-    MetGates,
-    alt_met_gates,
+    alt_meets_gate,
     alt_scan_gate_conditions,
     gate_condition_for,
     predicates_met_entering,
@@ -390,7 +389,7 @@ impl EmitContext {
 
     /// Whether an `Ambiguous` node's decision is a runtime-ATN prediction.
     pub fn ambiguous_routes_via_atn(&self, a: &AmbiguousNode) -> bool {
-        return !self.settings.prediction matches { Longest }
+        return self.settings.prediction.asks_simulator()
             && self.plan.needs_atn
             && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0
             && self.atn_body_alt_numbers(&a.alts) matches { Some(_) };
@@ -458,12 +457,6 @@ impl EmitContext {
         return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
-    /// `gate_conditions::alt_met_gates` for an alternative of the rule being
-    /// emitted.
-    pub fn alt_met_gates(&self, alt: &Alternative) -> MetGates {
-        return alt_met_gates(alt, &self.settings, &self.analysis, &self.predicate_site());
-    }
-
     /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
     /// rule being emitted.
     pub fn alt_scan_gate_conditions(&self, alt: &Alternative) -> String {
@@ -485,8 +478,9 @@ impl EmitContext {
 
     /// `rule_overlap::rule_overlap_groups` for the rule being emitted.
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
-        let met_gates = |alt: &Alternative| self.alt_met_gates(alt);
-        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, met_gates);
+        let site = self.predicate_site();
+        let meets_gate = |alt: &Alternative| alt_meets_gate(alt, &self.settings, &self.analysis, &site);
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, meets_gate);
     }
 
     /// Whether `rule` gets a value channel emitted: action execution is on and the

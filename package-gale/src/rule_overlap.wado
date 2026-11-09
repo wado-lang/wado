@@ -10,7 +10,6 @@ use { alt_classes, compute_overlap_groups_of } from "./alt_grouping.wado";
 use { PredictionNode, build_group_prediction_tree } from "./prediction.wado";
 use { dedup_append_arr } from "./list_util.wado";
 use { rule_is_left_recursive } from "./lr_util.wado";
-use { MetGates } from "./gate_conditions.wado";
 
 /// How a rule's non-LR alternatives group: the one answer the at-end conflict
 /// detection, the multi-alt emit and the dump all read, so none can drift.
@@ -45,7 +44,7 @@ fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
     return out;
 }
 
-/// How `rule`'s non-LR alternatives group by what they start with. `met_gates`
+/// How `rule`'s non-LR alternatives group by what they start with. `meets_gate`
 /// answers for the site asking: prediction is predicate-blind, so a rule whose
 /// alternative meets a predicate decides without its FOLLOW, in the tournament
 /// or the simulator that weighs it.
@@ -54,10 +53,10 @@ pub fn rule_overlap_groups(
     lowered_rule: &Rule,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    met_gates: fn(&Alternative) -> MetGates,
+    meets_gate: fn(&Alternative) -> bool,
 ) -> RuleOverlap {
     let multi_alt = lowered_rule matches { MultiAlt(_) };
-    return overlap_groups_of(rule, non_lr_alt_indices(lowered_rule), multi_alt, analysis, follow, met_gates);
+    return overlap_groups_of(rule, non_lr_alt_indices(lowered_rule), multi_alt, analysis, follow, meets_gate);
 }
 
 /// `rule_overlap_groups` over the alternatives `non_lr_indices`, for a rule
@@ -69,7 +68,7 @@ pub fn overlap_groups_of(
     multi_alt: bool,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    met_gates: fn(&Alternative) -> MetGates,
+    meets_gate: fn(&Alternative) -> bool,
 ) -> RuleOverlap {
     let mut first_sets: List<List<i32>> = [];
     for let idx of non_lr_indices {
@@ -83,7 +82,7 @@ pub fn overlap_groups_of(
         &first_sets,
         analysis,
     );
-    let gated = non_lr_indices.iter_ref().any(|i| !met_gates(&rule.alternatives[*i]) matches { None });
+    let gated = non_lr_indices.iter_ref().any(|i| meets_gate(&rule.alternatives[*i]));
     let end_follow: List<i32> = if multi_alt && !gated { follow.for_probe(&rule.name) } else { [] };
     admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);
     let groups = compute_overlap_groups_of(&classes);

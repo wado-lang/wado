@@ -5195,16 +5195,12 @@ WS : ' ' -> skip ;
     let got = run_beside(gen_source(grammar), body).stdout;
     let lines: List<String> = got.split("\n").map(|l| l.to_string()).collect();
     let skipped = "<skip a> <skip a> <skip a> <skip a> <skip a> <skip a> <skip e>";
-    let want: List<String> = [
+    let mut want: List<String> = [
         "(s (x a a a a a a) (<error> <skip c>) <missing 'e'>) DiagnosticCode::UnexpectedToken",
-        `(s q ${skipped}) DiagnosticCode::NoViableAlternative`,
-        `(s r ${skipped}) DiagnosticCode::NoViableAlternative`,
-        `(s o ${skipped}) DiagnosticCode::NoViableAlternative`,
-        `(s p a a a a a a b ${skipped}) DiagnosticCode::NoViableAlternative`,
-        `(s p ${skipped}) DiagnosticCode::NoViableAlternative`,
-        `(s t ${skipped}) DiagnosticCode::NoViableAlternative`,
-        `(s n ${skipped}) DiagnosticCode::NoViableAlternative`,
     ];
+    for let parsed of ["q", "r", "o", "p a a a a a a b", "p", "t", "n"] {
+        want.push(`(s ${parsed} ${skipped}) DiagnosticCode::NoViableAlternative`);
+    }
     for let i of 0..<want.len() {
         assert lines[i] == want[i], lines[i];
     }

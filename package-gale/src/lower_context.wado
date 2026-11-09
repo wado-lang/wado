@@ -15,8 +15,7 @@ use {
     PredicateSite,
     ScanEscapes,
     alt_has_gate,
-    MetGates,
-    alt_met_gates,
+    alt_meets_gate,
     alt_scan_checks,
     alt_scan_escapes,
     alt_scan_gate_conditions,
@@ -163,8 +162,7 @@ impl LowerContext {
     }
 
     /// Record a pick the static path makes and the simulator checks, which
-    /// routes nothing and so leaves the rule's other decisions as `never` makes
-    /// them.
+    /// routes nothing and so leaves the rule's other decisions as they are.
     pub fn mark_checks_with_simulator(&mut self) {
         assert self.settings.prediction.verifies(), "only `prediction: \"verify\"` checks the static path's picks";
         let idx = self.current_rule_index();
@@ -222,7 +220,7 @@ impl LowerContext {
 
     /// Whether the simulator decides a group's or a repeat's contested decision.
     pub fn simulator_takes_contested(&self) -> bool {
-        return !self.settings.prediction matches { Longest };
+        return self.settings.prediction.asks_simulator();
     }
 
     /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
@@ -245,16 +243,16 @@ impl LowerContext {
         return alt_scan_escapes(alt, &self.settings, &mut self.analysis, &site, from);
     }
 
-    /// `gate_conditions::alt_met_gates` for an alternative of the rule being
+    /// `gate_conditions::alt_meets_gate` for an alternative of the rule being
     /// lowered.
-    fn alt_met_gates(&self, alt: &Alternative) -> MetGates {
-        return alt_met_gates(alt, &self.settings, &self.analysis, &self.predicate_site());
+    fn alt_meets_gate(&self, alt: &Alternative) -> bool {
+        return alt_meets_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
     /// `rule_overlap::rule_overlap_groups` for the rule being lowered.
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
-        let met_gates = |alt: &Alternative| self.alt_met_gates(alt);
-        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, met_gates);
+        let meets_gate = |alt: &Alternative| self.alt_meets_gate(alt);
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, meets_gate);
     }
 
     /// Whether the simulator makes the choice among the alternatives
@@ -265,8 +263,8 @@ impl LowerContext {
         if !self.simulator_takes_contested() {
             return false;
         }
-        let met_gates = |alt: &Alternative| self.alt_met_gates(alt);
-        let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, met_gates);
+        let meets_gate = |alt: &Alternative| self.alt_meets_gate(alt);
+        let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, meets_gate);
         return overlap_ambiguous(rule, &overlap, &mut self.analysis);
     }
 }

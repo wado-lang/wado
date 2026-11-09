@@ -123,7 +123,7 @@ use {
     WildcardOp,
     ExcludedOp,
     RepeatOp,
-    RepeatShadow,
+    ContinuationProbe,
     RepeatBodyShape,
     RepeatStrategy,
     NonGreedyStrategy,
@@ -4337,12 +4337,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         probe_contested: stamps.probe_contested,
         static_exit_undecided: stamps.static_exit_undecided,
         atn_decides: stamps.atn_decides,
-        shadow: stamps.shadow.map(|probe: ContinuationProbe| RepeatShadow {
-            continuation_scan: probe.scan,
-            continuation_scannable: probe.scannable,
-            probe_asks_caller: probe.asks_caller,
-            probe_viable: probe.viable,
-        }),
+        shadow: stamps.shadow,
         atn_asked_kinds: stamps.atn_asked_kinds,
         probe_viable: stamps.probe.viable,
         duties: stamps.duties,
@@ -4602,13 +4597,6 @@ fn lower_decline_scan(
     };
 }
 
-/// The probe stamps of one Repeat, shared by its parse and scan twins.
-struct ContinuationProbe {
-    scan: List<ScanElement> = [],
-    scannable: bool = false,
-    asks_caller: bool = false,
-    viable: List<i32> = [],
-}
 
 /// The continuation for emit's probe, built only for the Repeat kinds whose
 /// decision can need it, and only where the scan's end settles the exit.

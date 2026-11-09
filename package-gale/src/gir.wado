@@ -979,13 +979,12 @@ impl IterationDuties {
     }
 }
 
-/// The continuation probe a contested repeat's static exit reads, kept where
-/// the simulator decides the repeat so the static pick can be checked against it.
-pub struct RepeatShadow {
-    pub continuation_scan: List<ScanElement>,
-    pub continuation_scannable: bool,
-    pub probe_asks_caller: bool,
-    pub probe_viable: List<i32>,
+/// The probe stamps of one Repeat, shared by its parse and scan twins.
+pub struct ContinuationProbe {
+    pub scan: List<ScanElement> = [],
+    pub scannable: bool = false,
+    pub asks_caller: bool = false,
+    pub viable: List<i32> = [],
 }
 
 pub struct RepeatOp {
@@ -1089,8 +1088,8 @@ pub struct RepeatOp {
     /// Repeat whose body and continuation can start on one token.
     pub atn_decides: bool = false,
     /// Under `prediction: "verify"`, where the simulator decides a contested
-    /// greedy repeat, what the static path would read to decide it instead.
-    pub shadow: Option<RepeatShadow> = null,
+    /// greedy repeat, the probe the static path would read to decide it instead.
+    pub shadow: Option<ContinuationProbe> = null,
     /// For a loop the simulator decides, the only tokens it needs asking
     /// about; any other enters. Empty where every token asks.
     pub atn_asked_kinds: List<i32> = [],

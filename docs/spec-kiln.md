@@ -182,8 +182,8 @@ export struct Options {
     /// e.g. `["statement"]`. Empty is byte-identical. See "Parsing a fragment"
     /// in the README.
     pub fragment_entries: List<String>,
-    /// How the parser predicts an alternative. "Choosing a prediction mode" in
-    /// the README lists the modes.
+    /// What the parser promises about its tree. "Choosing a prediction mode"
+    /// in the README lists the modes.
     pub prediction: PredictionMode = PredictionMode::Exact,
 }
 ```

@@ -30,6 +30,11 @@ pub enum PredictionMode {
 impl Deserialize for PredictionMode;
 
 impl PredictionMode {
+    /// Whether an ambiguity goes to the simulator rather than the tournament.
+    pub fn asks_simulator(&self) -> bool {
+        return !*self matches { Longest };
+    }
+
     /// Whether a decision settled without the simulator is checked against it.
     pub fn verifies(&self) -> bool {
         return *self matches { Verify };

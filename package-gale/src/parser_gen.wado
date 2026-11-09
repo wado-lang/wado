@@ -4224,7 +4224,7 @@ fn gen_group_body(
             gen_group_shadow(w, dec, &var, &winner, lines, ctx);
         }
         w.begin(`if ${var} < 0`);
-        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+        w.line(&NO_VIABLE_HERE);
         w.else_begin("else");
         let order: List<i32> = g.alts.iter_ref().map(|a| a.alt_index).collect();
         gen_alt_commit(w, &g.alts, &order, &var, ctx, nc);
@@ -4752,10 +4752,10 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     }
 }
 
-/// Non-greedy `*?` / `+?` under the emitter: loop only while
-/// `non_greedy_static_cond` or the simulator says to enter, so the inner yields the
-/// closing delimiter to the continuation. `??` lowers to `Plain` and so never
-/// reaches here.
+/// Non-greedy `*?` / `+?` under the emitter: loop only while the probe, the
+/// simulator or `non_greedy_static_cond` says to enter, so the inner yields
+/// the closing delimiter to the continuation. `??` lowers to `Plain` and so
+/// never reaches here.
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
     let probed = non_greedy_probe_decides(r, ctx);
     if probed || r.atn_decides {
@@ -5467,7 +5467,7 @@ fn atn_parse_enters(
     } else {
         w.line(`let ${pick} = if ${ctx.kind_negate_check_str(asked, &PEEK_KIND)} { ${enter} } else { ${call} };`);
     }
-    w.line(`if ${pick} < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }`);
+    w.line(`if ${pick} < 0 { ${NO_VIABLE_HERE} }`);
     return `${pick} == ${enter}`;
 }
 
@@ -6662,10 +6662,10 @@ fn gen_repeat_shadow<S: AsStrSlice>(
         ..*r,
         atn_decides: false,
         shadow: null,
-        continuation_scan: s.continuation_scan,
-        continuation_scannable: s.continuation_scannable,
-        probe_asks_caller: s.probe_asks_caller,
-        probe_viable: s.probe_viable,
+        continuation_scan: s.scan,
+        continuation_scannable: s.scannable,
+        probe_asks_caller: s.asks_caller,
+        probe_viable: s.viable,
     };
     let mut lines = CodeWriter::with_capacity(512);
     let static_enters = if !r.kind matches { Optional } {
@@ -7995,7 +7995,7 @@ fn gen_group_scan_dispatch(
     };
     if refusable {
         w.begin(`if ${winner_var} < 0`);
-        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+        w.line(&NO_VIABLE_HERE);
         w.else_begin("else");
     }
     for let mut k = 0; k < sorted_group.len(); k += 1 {
@@ -8652,11 +8652,14 @@ fn alt_scan_call<S: AsStrSlice, S1: AsStrSlice>(
     return CallStmt { form, callee: scan_fn, args };
 }
 
+/// The report of a decision that picked no alternative at the parse's position.
+global NO_VIABLE_HERE: String = "p.no_viable(\"no viable alternative\", p.peek_span(), &EMPTY_SYNC);";
+
 /// What a rule does when its choice finds no viable alternative.
 fn emit_no_viable_pick(w: &mut CodeWriter, side: PickSide, ctx: &EmitContext) {
     match side {
         Parse => {
-            w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+            w.line(&NO_VIABLE_HERE);
             emit_no_viable_return(w, ctx);
         },
         Scan => {
