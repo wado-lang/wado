@@ -941,7 +941,7 @@ impl<'a> Builder<'a> {
     fn holder_of(&self, recv_expr: ExprId, recv: Option<ValueId>) -> Holder {
         if self
             .body
-            .place_crosses_reference(recv_expr, Some(self.type_table))
+            .place_crosses_reference(recv_expr, self.type_table)
             && recv.is_none_or(|v| !self.owned_pointees.contains(&v))
         {
             let ty = self.body.exprs[recv_expr].type_id;

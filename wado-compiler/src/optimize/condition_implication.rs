@@ -1334,7 +1334,7 @@ fn write_through(engine: &Engine, place: ExprId, stored: Stored, sink: &mut impl
             if engine.aliased().contains(&root)
                 || engine
                     .body
-                    .place_crosses_reference(place, Some(engine.type_table()))
+                    .place_crosses_reference(place, engine.type_table())
             {
                 sink(Write::Aliased(stored));
             }
