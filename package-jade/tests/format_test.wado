@@ -1,0 +1,66 @@
+use { CompileOptions, Document, Schema, Validator } from "../src/lib.wado";
+
+/// Whether `text` is valid against `{"format": format}` with `format` asserting.
+fn admits(format: String, text: String) -> bool {
+    let schema = Schema::parse(`{"format": "${format}"}`).unwrap();
+    let validator = Validator::compile(&schema, CompileOptions { assert_format: true }).unwrap();
+    let doc = Document::parse(`"${text}"`).unwrap();
+    return validator.validate(&doc.root()) matches { Ok(_) };
+}
+
+test "format is an annotation unless asserting" {
+    let validator = Validator::compile(&Schema::parse(#"{"format": "uuid"}"#).unwrap()).unwrap();
+    assert validator.validate(&Document::parse(#""x""#).unwrap().root()) matches { Ok(_) };
+    assert !admits("uuid", "x");
+}
+
+test "a duration's letters match in either case, as ABNF's strings do" {
+    assert admits("duration", "p1dt2h");
+    assert !admits("duration", "p1dt");
+}
+
+test "a date-time's leap second ends a UTC day that ended in one" {
+    assert admits("date-time", "2016-12-31T23:59:60Z");
+    assert admits("date-time", "1972-06-30T23:59:60Z");
+    assert !admits("date-time", "2000-01-15T23:59:60Z");
+    assert !admits("date-time", "2016-06-30T23:59:60Z");
+    // The offset moves the UTC day across the boundary either way.
+    assert admits("date-time", "2017-01-01T00:59:60+01:00");
+    assert admits("date-time", "2016-12-31T15:59:60-08:00");
+    assert !admits("date-time", "2016-12-30T15:59:60-08:00");
+    // A time names no day, so any day's last UTC minute may hold one.
+    assert admits("time", "23:59:60Z");
+}
+
+test "an email's address literal follows SMTP's rules, not the ipv4 and ipv6 formats'" {
+    assert admits("email", "a@[001.2.3.4]");
+    assert !admits("ipv4", "001.2.3.4");
+    assert admits("email", "a@[IPv6:1:2:3:4:5:6::]");
+    assert !admits("email", "a@[IPv6:1:2:3:4:5:6:7::]");
+    assert admits("ipv6", "1:2:3:4:5:6:7::");
+}
+
+test "an iri admits a private-use character in its query alone" {
+    assert admits("iri", "http://example.com/?q=\u{E000}");
+    assert !admits("iri", "http://example.com/\u{E000}");
+    assert !admits("iri", "http://example.com/#\u{E000}");
+    assert admits("iri", "http://example.com/?q=\u{F0000}");
+}
+
+test "an iri admits no noncharacter at the end of a plane" {
+    assert admits("iri", "http://example.com/\u{1FFFD}");
+    assert !admits("iri", "http://example.com/\u{1FFFE}");
+    assert !admits("iri", "http://example.com/\u{FFFE}");
+}
+
+test "an iri admits no tag character, where plane 14's ucschar range has not begun" {
+    assert !admits("iri", "http://example.com/\u{E0001}");
+    assert admits("iri", "http://example.com/\u{E1000}");
+}
+
+test "a regex is ECMA-262's, whether or not Re can match it" {
+    // The JSON text escapes each backslash.
+    assert admits("regex", #"(a)(?<=a)\\1"#);
+    assert !admits("regex", #"(?<=a)\\1"#);
+    assert !admits("regex", #"(?i)a"#);
+}
