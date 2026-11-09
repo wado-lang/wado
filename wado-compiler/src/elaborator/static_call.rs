@@ -508,21 +508,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
-    /// a generic one applied to its own parameters.
-    /// The generic type `key`'s declaration declares, at the `args` the call
-    /// settled: the receiver an inherited default reads as `Self`.
-    fn declared_type_at(&mut self, key: &ImplTargetKey, args: &[TypeId]) -> Option<TypeId> {
+    /// The generic struct or variant `key`'s declaration declares, at the
+    /// `args` the call settled: the receiver an inherited default reads as
+    /// `Self`.
+    fn declared_type_at(&self, key: &ImplTargetKey, args: &[TypeId]) -> Option<TypeId> {
+        let def = key.decl()?;
+        let params = self.type_lookup().declared_type_param_ids(def)?;
         if args.is_empty() {
             return None;
         }
-        let declared = self.type_declared_by(Some(key))?;
-        let params = self.type_lookup().declared_type_param_ids(key.decl()?)?;
+        assert_eq!(params.len(), args.len(), "one argument per parameter");
         let mut table = self.tysys.type_table.borrow_mut();
-        let slots = table.bind_params(params, args);
-        Some(table.substitute_type_params(declared, &slots))
+        Some(table.make_generic_instance(def, args.to_vec()))
     }
 
+    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
+    /// a generic one applied to its own parameters.
     pub(super) fn declared_self_type(&self, def: DefId) -> Option<TypeId> {
         let lookup = self.type_lookup();
         let mut table = self.tysys.type_table.borrow_mut();
@@ -683,12 +684,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None => receiver_type,
                 }
                 .or_else(|| {
-                        let mut scope = self.enter_inherited_type_param_scope();
-                        let resolved =
-                            scope.resolve_unsited_type_name(receiver_name, Span::default());
-                        drop(scope);
-                        Some(resolved)
-                    });
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    let resolved = scope.resolve_unsited_type_name(receiver_name, Span::default());
+                    drop(scope);
+                    Some(resolved)
+                });
                 let (trait_decl, impl_def) = (supply.trait_decl, supply.impl_def);
                 self.callee_of_trait_declaration(
                     trait_decl,
@@ -732,12 +732,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params.defaults_module = Some(declaring.module.clone());
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if receiver_type.is_some() || !method_args.is_empty() {
-            let frame: Vec<TypeId> = receiver_type
-                .into_iter()
-                .flat_map(|receiver_type| {
-                    std::iter::once(receiver_type).chain(self.tysys.trait_args_of_impl(impl_def))
-                })
-                .collect();
+            let frame = receiver_type
+                .map(|receiver| self.tysys.trait_frame_at(impl_def, receiver))
+                .unwrap_or_default();
             let instantiated = sig.instantiate_call(&self.tysys.type_table, &frame, method_args);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
@@ -1113,9 +1110,10 @@ impl TypeSystem {
         if !declared.is_inherited() {
             return None;
         }
-        let instantiated = declared
-            .sig
-            .instantiate_call(&self.type_table, &self.inherited_frame(impl_def), &[]);
+        let instantiated =
+            declared
+                .sig
+                .instantiate_call(&self.type_table, &self.inherited_frame(impl_def), &[]);
         Some(StaticOffer {
             method_id: declared.sig.def,
             kind: CandidateKind::of(declared.sig.self_kind),
@@ -1160,20 +1158,32 @@ impl TypeSystem {
         })
     }
 
-    /// The trait's frame as block `impl_def` fills it: `Self` as the block's
-    /// target, its parameters open as a body the block wrote leaves them, then
-    /// the block's trait arguments. Without those, the default leaves them open
-    /// and every argument reaches every block.
-    fn inherited_frame(&self, impl_def: DefId) -> Vec<TypeId> {
-        std::iter::once(self.type_table.borrow().impl_target_whole(impl_def))
-            .chain(self.trait_args_of_impl(impl_def))
+    /// The trait's frame as block `impl_def` fills it for `receiver`: `Self`,
+    /// then the block's trait arguments at the receiver's own. Without those,
+    /// a default leaves them open and every argument reaches every block.
+    pub(super) fn trait_frame_at(&self, impl_def: DefId, receiver: TypeId) -> Vec<TypeId> {
+        let mut table = self.type_table.borrow_mut();
+        let receiver_args = table
+            .impl_target_decl(impl_def)
+            .and_then(|decl| table.args_at_decl(receiver, decl))
+            .unwrap_or_default();
+        let slots = table.impl_slots(impl_def, &receiver_args);
+        std::iter::once(receiver)
+            .chain(
+                self.signatures
+                    .impl_sig(impl_def)
+                    .trait_type_args
+                    .iter()
+                    .map(|&arg| table.substitute_type_params(arg, &slots)),
+            )
             .collect()
     }
 
-    /// The block's trait-reference arguments, which fill the trait's frame past
-    /// `Self`.
-    fn trait_args_of_impl(&self, impl_def: DefId) -> Vec<TypeId> {
-        self.signatures.impl_sig(impl_def).trait_type_args.clone()
+    /// [`Self::trait_frame_at`] the block's own target, its parameters open as
+    /// a body the block wrote leaves them.
+    fn inherited_frame(&self, impl_def: DefId) -> Vec<TypeId> {
+        let target = self.type_table.borrow().impl_target_whole(impl_def);
+        self.trait_frame_at(impl_def, target)
     }
 
     /// The receiver's type arguments: the ones a call carries, else the ones its

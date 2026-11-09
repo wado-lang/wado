@@ -4671,11 +4671,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Option<MethodSig> {
         let trait_env = &self.tysys.trait_env;
-        let (impl_def, mut sig) = trait_env.impl_index.get(key)?.iter().find_map(|&impl_def| {
-            let trait_decl = trait_env.impl_headers[&impl_def].trait_def()?;
-            let method = self.tysys.trait_sig_of(&trait_decl)?.method(method_name)?;
-            method.is_inherited().then(|| (impl_def, method.sig.clone()))
-        })?;
+        let (impl_def, mut sig) = trait_env
+            .impl_index
+            .get(key)?
+            .iter()
+            .find_map(|&impl_def| {
+                let trait_decl = trait_env.impl_headers[&impl_def].trait_def()?;
+                let method = self.tysys.trait_sig_of(&trait_decl)?.method(method_name)?;
+                method
+                    .is_inherited()
+                    .then(|| (impl_def, method.sig.clone()))
+            })?;
         let decl = key.decl()?;
         let receiver = self.declared_self_type(decl)?;
         let receiver_params = self
@@ -4683,20 +4689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .declared_type_param_ids(decl)
             .map(<[TypeId]>::to_vec)
             .unwrap_or_default();
-        let frame: Vec<TypeId> = {
-            let mut table = self.tysys.type_table.borrow_mut();
-            let slots = table.impl_slots(impl_def, &receiver_params);
-            std::iter::once(receiver)
-                .chain(
-                    self.tysys
-                        .signatures
-                        .impl_sig(impl_def)
-                        .trait_type_args
-                        .iter()
-                        .map(|&arg| table.substitute_type_params(arg, &slots)),
-                )
-                .collect()
-        };
+        let frame = self.tysys.trait_frame_at(impl_def, receiver);
         let in_frame = sig.decl.instantiate(&self.tysys.type_table, &frame);
         sig.decl.param_types = in_frame.param_types;
         if sig.decl.return_type.is_some() {
