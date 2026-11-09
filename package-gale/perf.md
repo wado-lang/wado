@@ -289,12 +289,12 @@ them recur: SQLite's 7,946 branches held 2,191 distinct ones. `SllForest` now
 makes one node of the nodes that decide alike, within a DFA and across the
 decisions, and emits a node more than one place reads once, as a function.
 
-| SQLite parser                  | before | after |
-| ------------------------------ | -----: | ----: |
-| `always`, source               | 9.5 MB | 3.0 MB |
-| `always`, Wasm at `-O2`        | 2.4 MB | 1.1 MB |
-| `auto`, source                 | 1.8 MB | 1.5 MB |
-| `auto`, Wasm at `-O2`          | 0.83 MB | 0.78 MB |
+| SQLite parser           |  before |   after |
+| ----------------------- | ------: | ------: |
+| `always`, source        |  9.5 MB |  3.0 MB |
+| `always`, Wasm at `-O2` |  2.4 MB |  1.1 MB |
+| `auto`, source          |  1.8 MB |  1.5 MB |
+| `auto`, Wasm at `-O2`   | 0.83 MB | 0.78 MB |
 
 The source is `gale gen --atn <mode>`. The Wasm is a `wado compile -O2` of a
 module that calls `parse`. TypeScript's `auto` parser went from 2.4 MB to

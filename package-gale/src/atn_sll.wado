@@ -789,17 +789,11 @@ impl DfaBuild {
         let mut out = self.nodes;
         for let mut n = 0; n < out.len(); n += 1 {
             if let Branch(edges) = &out[n] {
-                let mut led: List<SllEdge> = [];
-                for let e of edges {
-                    let to = if self.alias[e.to] >= 0 { self.alias[e.to] } else { e.to };
-                    for let t of &e.tokens {
-                        add_edge(&mut led, *t, to);
-                    }
-                }
-                for let e of &mut led {
-                    e.tokens.sort();
-                }
-                out[n] = SllNode::Branch(led);
+                out[n] = SllNode::Branch(redirected(edges, &|to: i32| if self.alias[to] >= 0 {
+                    self.alias[to];
+                } else {
+                    to;
+                }));
             }
         }
         return out;
@@ -819,6 +813,23 @@ fn rule_follows(atn: &Atn) -> List<List<i32>> {
         }
     }
     return follows;
+}
+
+/// `edges` led to `target(to)` in place of each `to`, one edge per target, in
+/// the order of their least tokens, so that a branch has one spelling.
+fn redirected(edges: &List<SllEdge>, target: &fn(i32) -> i32) -> List<SllEdge> {
+    let mut led: List<SllEdge> = [];
+    for let e of edges {
+        let to = target(e.to);
+        for let t of &e.tokens {
+            add_edge(&mut led, *t, to);
+        }
+    }
+    for let e of &mut led {
+        e.tokens.sort();
+    }
+    led.sort_by(|a: &SllEdge, b: &SllEdge| a.tokens[0].cmp(&b.tokens[0]));
+    return led;
 }
 
 fn add_edge(edges: &mut List<SllEdge>, token: i32, to: i32) {
@@ -909,17 +920,7 @@ impl SllForest {
         let mut node_of = List::<i32>::filled(dfa.nodes.len(), -1);
         for let n of successors_first(&dfa.nodes) {
             let node = if let Branch(edges) = &dfa.nodes[n] {
-                let mut led: List<SllEdge> = [];
-                for let e of edges {
-                    for let t of &e.tokens {
-                        add_edge(&mut led, *t, node_of[e.to]);
-                    }
-                }
-                for let e of &mut led {
-                    e.tokens.sort();
-                }
-                led.sort_by(|a: &SllEdge, b: &SllEdge| a.tokens[0].cmp(&b.tokens[0]));
-                SllNode::Branch(led);
+                SllNode::Branch(redirected(edges, &|to: i32| node_of[to]));
             } else {
                 dfa.nodes[n];
             };
@@ -949,10 +950,16 @@ impl SllForest {
 fn successors_first(nodes: &List<SllNode>) -> List<i32> {
     let mut order: List<i32> = [];
     let mut visited = List::<bool>::filled(nodes.len(), false);
-    let mut stack: List<[i32, i32]> = [[0, 0]];
+    let mut stack: List<[i32, i32]> = [
+        [0, 0],
+    ];
     visited[0] = true;
     while let Some([n, next]) = stack.last() {
-        let to = if let Branch(edges) = &nodes[n] && next < edges.len() { edges[next].to } else { -1 };
+        let to = if let Branch(edges) = &nodes[n] && next < edges.len() {
+            edges[next].to;
+        } else {
+            -1;
+        };
         if to >= 0 {
             stack[stack.len() - 1] = [n, next + 1];
             if !visited[to] {

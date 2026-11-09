@@ -5975,9 +5975,28 @@ test "a lookahead DFA's branches that decide alike merge" {
     let mut forest = SllForest::new(8);
     let start = forest.add(&SllDfa {
         nodes: [
-            SllNode::Branch([SllEdge { tokens: [1], to: 1 }, SllEdge { tokens: [2], to: 2 }]),
-            SllNode::Branch([SllEdge { tokens: [3], to: 3 }]),
-            SllNode::Branch([SllEdge { tokens: [3], to: 4 }]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [1],
+                    to: 1,
+                },
+                SllEdge {
+                    tokens: [2],
+                    to: 2,
+                },
+            ]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [3],
+                    to: 3,
+                },
+            ]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [3],
+                    to: 4,
+                },
+            ]),
             SllNode::Alt(0),
             SllNode::Alt(0),
         ],
@@ -5985,8 +6004,18 @@ test "a lookahead DFA's branches that decide alike merge" {
     });
     let merged: List<SllNode> = [
         SllNode::Alt(0),
-        SllNode::Branch([SllEdge { tokens: [3], to: 0 }]),
-        SllNode::Branch([SllEdge { tokens: [1, 2], to: 1 }]),
+        SllNode::Branch([
+            SllEdge {
+                tokens: [3],
+                to: 0,
+            },
+        ]),
+        SllNode::Branch([
+            SllEdge {
+                tokens: [1, 2],
+                to: 1,
+            },
+        ]),
     ];
     assert forest.nodes == merged;
     assert start == 2;
@@ -5996,11 +6025,39 @@ test "a lookahead DFA's branches that decide alike merge" {
 test "two lookahead DFAs share the branches that decide alike" {
     let mut forest = SllForest::new(8);
     let first = forest.add(&SllDfa {
-        nodes: [SllNode::Branch([SllEdge { tokens: [1], to: 1 }]), SllNode::Branch([SllEdge { tokens: [3], to: 2 }]), SllNode::Alt(0)],
+        nodes: [
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [1],
+                    to: 1,
+                },
+            ]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [3],
+                    to: 2,
+                },
+            ]),
+            SllNode::Alt(0),
+        ],
         kinds: 8,
     });
     let second = forest.add(&SllDfa {
-        nodes: [SllNode::Branch([SllEdge { tokens: [7], to: 1 }]), SllNode::Branch([SllEdge { tokens: [3], to: 2 }]), SllNode::Alt(0)],
+        nodes: [
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [7],
+                    to: 1,
+                },
+            ]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [3],
+                    to: 2,
+                },
+            ]),
+            SllNode::Alt(0),
+        ],
         kinds: 8,
     });
     assert forest.nodes.len() == 4;
@@ -6012,11 +6069,35 @@ test "a lookahead DFA's branches at different depths stay apart" {
     let mut forest = SllForest::new(8);
     forest.add(&SllDfa {
         nodes: [
-            SllNode::Branch([SllEdge { tokens: [1], to: 1 }, SllEdge { tokens: [2], to: 2 }]),
-            SllNode::Branch([SllEdge { tokens: [5], to: 3 }]),
-            SllNode::Branch([SllEdge { tokens: [6], to: 4 }]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [1],
+                    to: 1,
+                },
+                SllEdge {
+                    tokens: [2],
+                    to: 2,
+                },
+            ]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [5],
+                    to: 3,
+                },
+            ]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [6],
+                    to: 4,
+                },
+            ]),
             SllNode::Alt(0),
-            SllNode::Branch([SllEdge { tokens: [5], to: 3 }]),
+            SllNode::Branch([
+                SllEdge {
+                    tokens: [5],
+                    to: 3,
+                },
+            ]),
         ],
         kinds: 8,
     });
