@@ -327,6 +327,10 @@ pub(super) struct ReifyAssertSlot {
     pub(super) place_expr: Option<TirExpr>,
     /// The `bool` recording whether the capture site ran.
     pub(super) seen_local_index: Option<u32>,
+    /// What the slot declares ahead of the condition. Slots are numbered in
+    /// evaluation order, and reify may walk two operands the other way round
+    /// (to type one from the other), so these are bound in slot order.
+    pub(super) bindings: Vec<TirStmt>,
 }
 
 /// The callee a literal coercion names, as annotate resolved and mangled it
@@ -446,7 +450,6 @@ pub(super) struct ReifyAssertCaptureContext {
     /// Guard so the `reify_expr` hook doesn't re-fire on the same
     /// `AstId` during its own recursive reify call.
     pub(super) in_progress: IndexSet<AstId>,
-    pub(super) emitted_lets: Vec<TirStmt>,
 }
 
 /// Per-module reify pass: emits a [`TirModule`] from the AST plus the
@@ -3157,7 +3160,7 @@ impl<'a> Reify<'a> {
         cap_ctx.slots[slot_idx].local_index = local_index;
         cap_ctx.slots[slot_idx].type_id = Some(type_id);
         cap_ctx.slots[slot_idx].seen_local_index = seen_local_index;
-        cap_ctx.emitted_lets.extend(decls);
+        cap_ctx.slots[slot_idx].bindings.extend(decls);
 
         spliced
     }
@@ -3313,24 +3316,27 @@ impl<'a> Reify<'a> {
                             hoisted: *hoisted,
                             place_expr: None,
                             seen_local_index: None,
+                            bindings: Vec::new(),
                         },
                     )
                     .collect(),
                 ast_id_to_slot,
                 in_progress: IndexSet::default(),
-                emitted_lets: Vec::new(),
             }),
         );
 
         let cond_tir = self.reify_condition_expr(&assert_stmt.condition, ctx);
 
-        let actx = ctx
+        let mut actx = ctx
             .reify_assert_capture_ctx
             .take()
             .expect("reify_assert_capture_ctx survives condition reify");
 
-        let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(actx.emitted_lets.len() + 2);
-        inner_stmts.extend(actx.emitted_lets);
+        let mut inner_stmts: Vec<TirStmt> = actx
+            .slots
+            .iter_mut()
+            .flat_map(|slot| std::mem::take(&mut slot.bindings))
+            .collect();
 
         let cond_type = cond_tir.type_id;
         let cond_name = "$cond".to_string();

@@ -27,12 +27,21 @@ test "a bare case beside a static call" {
     assert Color::favorite() == Red;
     assert Red == Color::favorite();
     assert Color::favorite() != Green;
+    assert Red == Color::favorite() == Red;
 }
 
 test "a bare case on the left" {
     let c: Color = Green;
     assert Green == c;
     assert Red != c;
+}
+
+test "a bare case in a branch's tail" {
+    let c: Color = Green;
+    let warm = builtin::black_box(false);
+    assert (if warm { Red } else { Green }) == c;
+    assert (match warm { true => Red, false => Green }) == c;
+    assert (if warm { Red } else { if c == Red { Red } else { Green } }) == c;
 }
 
 test "a tuple literal still takes a variable's type" {

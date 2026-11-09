@@ -304,6 +304,43 @@ pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> Expecte
             ast::Expr::Ident(ident) => bare_case(ident),
             _ => ExpectedTypeUse::Ignores,
         },
+        // A branching operand hands the expected type on to each tail.
+        ast::Expr::If(if_expr) => {
+            if_tails_use(&if_expr.then_block, if_expr.else_block.as_ref(), tysys)
+        }
+        ast::Expr::Match(match_expr) => match_tails_use(match_expr, tysys),
+        ast::Expr::Block(block) => block_tail_use(block, tysys),
+        _ => ExpectedTypeUse::Ignores,
+    }
+}
+
+fn if_tails_use(
+    then_block: &ast::Block,
+    else_block: Option<&ast::Block>,
+    tysys: &TypeSystem,
+) -> ExpectedTypeUse {
+    let then_use = block_tail_use(then_block, tysys);
+    else_block.map_or(then_use, |block| then_use.max(block_tail_use(block, tysys)))
+}
+
+fn match_tails_use(match_expr: &ast::MatchExpr, tysys: &TypeSystem) -> ExpectedTypeUse {
+    match_expr
+        .arms
+        .iter()
+        .map(|arm| expected_type_use(&arm.body, tysys))
+        .max()
+        .unwrap_or(ExpectedTypeUse::Ignores)
+}
+
+/// A trailing `if` or `match` statement is the block's value, as
+/// `block_result_type` reads it.
+fn block_tail_use(block: &ast::Block, tysys: &TypeSystem) -> ExpectedTypeUse {
+    match block.stmts.last() {
+        Some(ast::Stmt::Expr(e)) => expected_type_use(&e.expr, tysys),
+        Some(ast::Stmt::If(if_stmt)) => {
+            if_tails_use(&if_stmt.then_block, if_stmt.else_block.as_ref(), tysys)
+        }
+        Some(ast::Stmt::Match(match_expr)) => match_tails_use(match_expr, tysys),
         _ => ExpectedTypeUse::Ignores,
     }
 }

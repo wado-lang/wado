@@ -1,0 +1,34 @@
+// A comparison resolves the operand that leans on the expected type after the
+// other one, whichever side it is on. Its captures still run in source order.
+
+use { println, Stdout } from "core:cli";
+
+fn left() -> i32 with Stdout {
+    println("left");
+    return 1;
+}
+
+fn right() -> Option<i32> with Stdout {
+    println("right");
+    return Option::Some(1);
+}
+
+fn second() -> i32 with Stdout {
+    println("second");
+    return 2;
+}
+
+fn pair() -> [i32, i32] with Stdout {
+    println("pair");
+    return [1, 2];
+}
+
+export fn run() with Stdout {
+    assert Some(left()) == right();
+    assert [left(), second()] == pair();
+}
+
+__DATA__
+{
+    "stdout": "left\nright\nleft\nsecond\npair\n"
+}
