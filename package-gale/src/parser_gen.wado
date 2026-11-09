@@ -4149,18 +4149,6 @@ fn expect_call(kind: i32, leaf_site: i32, ctx: &mut EmitContext) -> String {
 // Mirrors `cst_gen`'s emitter but against the builder-appending Parser, whose
 // match methods recover in place (infallible) instead of returning `Result`.
 
-fn gen_ops(
-    w: &mut CodeWriter,
-    ops: &List<Op>,
-    ctx: &mut EmitContext,
-    nc: &mut List<[String, i32]>,
-    proven_first: &List<i32> = &NO_KINDS,
-) {
-    for let mut i = 0; i < ops.len(); i += 1 {
-        gen_op(w, &ops[i], ctx, nc, if i == 0 { proven_first } else { &NO_KINDS });
-    }
-}
-
 fn gen_op(
     w: &mut CodeWriter,
     op: &Op,

@@ -1000,7 +1000,8 @@ test "atn verify leaves a decision the simulator makes unchecked" {
 }
 
 // On `a c d d` the jar enters the loop on the first `d`, and `never` leaves it
-// to the suffix's `D`. The trees are the jar's.
+// to the suffix's `D`. On `a c d d d` the jar takes `D` for the group, where the
+// tournament takes `D D`. The trees are the jar's.
 test "atn verify checks a contested repeat in a left-recursion suffix" {
     let g4 = "grammar R;
 s : e EOF ;
@@ -1015,17 +1016,19 @@ WS : ' ' -> skip ;
     let verify = GenerateOptions { atn: AtnMode::Verify };
     let agreed = parses_each(g4, [
         ["s", "a c d"],
-        ["s", "a c d d d"],
         ["s", "a c d c d"],
     ], &verify);
     assert agreed == "a c d => (s (e (e a) c d))
-a c d d d => (s (e (e a) c d d d))
 a c d c d => (s (e (e (e a) c d) c d))
 ";
-    let input = "a c d d";
-    let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
-    assert !out.status matches { Exited(0) };
-    assert out.stderr.contains(": the repeat picks "), out.stderr;
+    for let [input, report] of [
+        ["a c d d", ": the repeat picks "],
+        ["a c d d d", ": the tournament picks 1, the simulator 0"],
+    ] as List<[String, String]> {
+        let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+        assert !out.status matches { Exited(0) };
+        assert out.stderr.contains(report), out.stderr;
+    }
 }
 
 // The atom choice between the two `new` alternatives is the simulator's under
