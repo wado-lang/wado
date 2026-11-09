@@ -15,11 +15,11 @@ use crate::type_table::TypeTable;
 use crate::unparse::binary_op_str;
 
 use super::Elaborator;
-use super::control_flow::break_values;
 use super::coercion::{
     DeferredOperator, is_literal_arithmetic, is_primitive_literal_target,
     numeric_literal_pair_order, unary_passes_expected_type,
 };
+use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
@@ -319,7 +319,10 @@ pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> Expecte
             .fold(block_tail_use(&lb.block, tysys), ExpectedTypeUse::max),
         ast::Expr::WithHandler(with_expr) => block_tail_use(&with_expr.body, tysys),
         ast::Expr::Unary(unary)
-            if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Unchecked) =>
+            if matches!(
+                unary.op,
+                UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Unchecked
+            ) =>
         {
             expected_type_use(&unary.expr, tysys)
         }
