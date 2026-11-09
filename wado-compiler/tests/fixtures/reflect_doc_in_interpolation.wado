@@ -5,7 +5,10 @@ test {
     let doc = `${(|| {
         /// Inner doc.
         struct S { x: i32 }
-        return Reflect::<S>::doc();
-    })():?}`;
-    assert doc == "Option::Some(\"Inner doc.\")";
+        return Reflect::<S>::doc().unwrap();
+    })()}`;
+    assert doc == "Inner doc.";
 }
+
+__DATA__
+{"test": {}}
