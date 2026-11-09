@@ -19,12 +19,23 @@ fn first_at(acts: &List<Act>, from: i32) -> i32 {
     return out;
 }
 
+// A `null` exit selects an explicit `None` arm ahead of the `Some` arm.
+#[inline(never)]
+fn found_at(acts: &List<Act>) -> i32 {
+    return match acts.iter_ref().find(|a| a.kind == 1) {
+        None => -1,
+        Some(a) => a.at,
+    };
+}
+
 test {
     let acts: List<Act> = [Act { kind: 0, at: 3 }, Act { kind: builtin::black_box(1), at: 7 }];
     assert first_at(&acts, builtin::black_box(2)) == 7;
     assert first_at(&acts, builtin::black_box(8)) == 0;
     let none: List<Act> = [Act { kind: builtin::black_box(0), at: 3 }];
     assert first_at(&none, builtin::black_box(2)) == 0;
+    assert found_at(&acts) == 7;
+    assert found_at(&none) == -1;
 }
 
 __DATA__

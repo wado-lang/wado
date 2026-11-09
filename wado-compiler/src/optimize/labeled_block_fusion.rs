@@ -46,9 +46,8 @@ pub(super) struct LabeledBlockFusionRule<'t> {
     pub(super) types: &'t TypeTable,
 }
 
-/// What case an exit's value builds, for a labeled block of one type: a
-/// variant built in place, or a promoted `null` where the block's type gives
-/// it a case. Fusion and threading both read a variant exit through it.
+/// What case an exit's value builds, for a labeled block of one type. Fusion
+/// and threading both read a variant exit through it.
 #[derive(Clone, Copy)]
 struct ExitCases {
     null_case: Option<u32>,
@@ -63,20 +62,7 @@ impl ExitCases {
 
     /// The case `value` builds, with its payload.
     fn case_of(self, body: &Body, value: Option<Operand>) -> Option<(u32, Option<Operand>)> {
-        match value? {
-            Operand::Value(v) => self
-                .null_case
-                .filter(|_| matches!(body.values.kind(v), ValueKind::Null))
-                .map(|case| (case, None)),
-            Operand::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::VariantConstruct {
-                    case_index,
-                    payload,
-                    ..
-                } => Some((*case_index, *payload)),
-                _ => None,
-            },
-        }
+        body.built_case(value?, self.null_case)
     }
 }
 
@@ -1746,8 +1732,8 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
         .collect();
     let bound = f.value.renamed(&renames);
     let mut out = Vec::new();
-    match (&bound, value.and_then(Operand::as_expr)) {
-        (BoundValue::Variant { cases, .. }, _) => {
+    match &bound {
+        BoundValue::Variant { cases, .. } => {
             let (_, payload) = cases
                 .case_of(engine.body, value)
                 .expect("guarded by the fusion preconditions");
@@ -1757,14 +1743,16 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
                 emit_untaken_payload(engine, payload, f.span, &mut out);
             }
         }
-        (BoundValue::Slots { .. }, Some(tuple)) => {
+        BoundValue::Slots { .. } => {
+            let tuple = value
+                .and_then(Operand::as_expr)
+                .expect("guarded by the slot preconditions");
             let ExprKind::TupleLiteral { elements } = &engine.body.exprs[tuple].kind else {
                 unreachable!("guarded by check_lb_breaks_are_tagged_tuples")
             };
             let elements = elements.clone();
             emit_slot_lets(engine, &elements, arm, f, &bound, &mut out);
         }
-        (BoundValue::Slots { .. }, None) => unreachable!("guarded by the slot preconditions"),
     }
 
     let mut tail = None;
@@ -2348,9 +2336,9 @@ struct SlotTempSroa {
     slots: Vec<BoundSlot>,
     /// The name each slot is read under, for a materializing exit's projection.
     names: IndexMap<u32, String>,
-    /// The declaring `let mut slot = <zero>` each one needs ahead of the block,
-    /// or `()`, declaring one without a value, where its type has no zero.
-    zeros: Vec<(u32, TypeId, Operand)>,
+    /// The declaring `let mut slot = <init>` each one needs ahead of the block:
+    /// its type's zero, or `()`, declaring it without a value, where it has none.
+    inits: Vec<(u32, TypeId, Operand)>,
     span: Span,
 }
 
@@ -2410,7 +2398,7 @@ fn plan_slot_temp_sroa(
     let_s: StmtId,
     type_table: &TypeTable,
 ) -> Option<SlotTempSroa> {
-    let mut zeros: Vec<(u32, TypeId, Operand)> = Vec::new();
+    let mut inits: Vec<(u32, TypeId, Operand)> = Vec::new();
     let body = &*engine.body;
     let StmtKind::Let {
         local_index: temp_local,
@@ -2510,7 +2498,7 @@ fn plan_slot_temp_sroa(
     let option = OptionCases::of(type_table);
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
-        let zero = match pad {
+        let init = match pad {
             Some(pad) => materialize_pad(engine, pad, &option, span),
             None => engine.const_operand(ValueKind::Unit, TypeTable::UNIT),
         };
@@ -2520,14 +2508,14 @@ fn plan_slot_temp_sroa(
             local_index,
             type_id,
         });
-        zeros.push((local_index, type_id, zero));
+        inits.push((local_index, type_id, init));
     }
     Some(SlotTempSroa {
         temp_local,
         source,
         slots,
         names: reads.slot_names,
-        zeros,
+        inits,
         span,
     })
 }
@@ -2755,17 +2743,17 @@ fn perform_slot_temp_sroa(
     }
 
     let held = engine.alloc_stmt(held, span);
-    let mut kept = Vec::with_capacity(stmts.len() + plan.zeros.len() + lead.len());
+    let mut kept = Vec::with_capacity(stmts.len() + plan.inits.len() + lead.len());
     kept.extend_from_slice(&stmts[..i]);
     kept.extend_from_slice(&lead);
-    for (local_index, type_id, zero) in plan.zeros {
+    for (local_index, type_id, init) in plan.inits {
         let decl = engine.alloc_stmt(
             StmtKind::Let {
                 name: engine.local_name(local_index),
                 local_index,
                 is_mut: true,
                 type_id,
-                value: zero,
+                value: init,
                 skip_value_copy: false,
             },
             span,

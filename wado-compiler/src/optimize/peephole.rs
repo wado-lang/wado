@@ -85,7 +85,7 @@ pub(super) fn run_peephole(
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let if_chain_rule = IfChainToMatchRule::new(&type_table);
     let tuple_projection_rule = TupleProjectionRule;
-    let known_case_rule = KnownCaseRule;
+    let known_case_rule = KnownCaseRule { types: &type_table };
     // Post-inline only: the closure-bearing field read it resolves through is
     // what `inline` exposes when an iterator adaptor's `next` is copied in.
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));

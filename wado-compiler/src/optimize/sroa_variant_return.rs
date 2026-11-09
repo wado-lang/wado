@@ -1313,11 +1313,9 @@ impl Returns<'_> {
 /// Wado's `Option::None` literal, and it reaches NIR as a promoted pure value
 /// with no `ExprId` — the return type is what pins which variant it means.
 fn null_return_case(body: &Body, op: Operand, cand: &Candidate) -> Option<u32> {
-    let value = op.as_value()?;
-    if !matches!(body.values.kind(value), ValueKind::Null) {
-        return None;
-    }
-    cand.layout.null_case
+    op.as_value()?;
+    body.built_case(op, cand.layout.null_case)
+        .map(|(case, _)| case)
 }
 
 /// A `let t = VariantConstruct(…)` whose only mention is the `return t` asking
@@ -2254,10 +2252,7 @@ fn retain_rewritable_locals(
 /// A case construction of the candidate's variant, or the `null` that spells
 /// `Option::None`.
 fn builds_case(body: &Body, value: Operand, cand: &Candidate) -> bool {
-    match value {
-        Operand::Value(_) => null_return_case(body, value, cand).is_some(),
-        Operand::Expr(e) => matches!(body.exprs[e].kind, ExprKind::VariantConstruct { .. }),
-    }
+    body.built_case(value, cand.layout.null_case).is_some()
 }
 
 /// Turn every write to a candidate into the case's tuple.

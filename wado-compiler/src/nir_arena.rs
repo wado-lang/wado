@@ -848,6 +848,29 @@ impl Body {
         }
     }
 
+    /// The case `value` builds, with its payload: a variant built in place, or a
+    /// promoted `null` where its context's type gives it one (`null_case`, from
+    /// `TypeTable::null_case`).
+    pub fn built_case(
+        &self,
+        value: Operand,
+        null_case: Option<u32>,
+    ) -> Option<(u32, Option<Operand>)> {
+        match value {
+            Operand::Value(v) => null_case
+                .filter(|_| matches!(self.values.kind(v), ValueKind::Null))
+                .map(|case| (case, None)),
+            Operand::Expr(e) => match &self.exprs[e].kind {
+                ExprKind::VariantConstruct {
+                    case_index,
+                    payload,
+                    ..
+                } => Some((*case_index, *payload)),
+                _ => None,
+            },
+        }
+    }
+
     /// Whether a `let` of `type_id` binding `value` declares its local without
     /// a value, as `let x: T;` does: the unit it binds is no value of `T`, and
     /// the slot holds `T`'s Wasm default until its first assignment.
