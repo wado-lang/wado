@@ -158,7 +158,7 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> 
 /// original loop runs those iterations.
 fn furthest_exit(exit: &WirInstr, var: &str, step: &WirInstr, factor: usize) -> Option<WirInstr> {
     use WirInstr as I;
-    let WirInstr::I32Add(l, r) = step else {
+    let I::I32Add(l, r) = step else {
         return None;
     };
     let c = match (l.as_ref(), r.as_ref()) {
@@ -169,7 +169,6 @@ fn furthest_exit(exit: &WirInstr, var: &str, step: &WirInstr, factor: usize) -> 
         }
         _ => return None,
     };
-    // `(v, x, signed, strict)` for `v > x` and its kin.
     let (v, x, signed, strict) = match exit {
         I::I32GtS(v, x) | I::I32LtS(x, v) => (v, x, true, true),
         I::I32GeS(v, x) | I::I32LeS(x, v) => (v, x, true, false),
