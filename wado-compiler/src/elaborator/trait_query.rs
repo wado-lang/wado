@@ -2514,12 +2514,16 @@ impl TypeSystem {
             })
             .collect();
         let affine_params = ctx.trait_ctx.affine_params();
-        let unmet = |param: &str, type_arg: TypeId| {
+        // A bound may name another of the block's parameters (`U: Uses<T>`),
+        // which means what the receiver settles that one to.
+        let unmet = |param: &str, type_arg: TypeId, at: &[(FqTypeName, FqTypeName)]| {
             let (is_affine, bounds) = bounds_map.get(param)?;
             let missing = if !*is_affine && self.is_affine(type_arg, &affine_params) {
                 UnmetKind::Affine
             } else {
-                UnmetKind::Trait(self.unmet_bound(ctx, type_arg, bounds)?.clone())
+                let bounds: Vec<FqTraitName> =
+                    bounds.iter().map(|bound| spelled_at(bound, at)).collect();
+                UnmetKind::Trait(self.unmet_bound(ctx, type_arg, &bounds)?.clone())
             };
             Some(UnmetImplBound {
                 param: param.to_string(),
@@ -2534,7 +2538,7 @@ impl TypeSystem {
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
             let pointee = receiver.and_then(|id| self.pointee_of(id))?;
-            return unmet(inner.name.as_str(), pointee);
+            return unmet(inner.name.as_str(), pointee, &[]);
         }
         // An existence or bounds check that threaded no positions has nothing
         // to compare against.
@@ -2545,9 +2549,19 @@ impl TypeSystem {
         if let ast::Type::Generic(_) = impl_ty {
             let names = ImplParamSlots::of(&header.ty, type_params);
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
+            let at: Vec<(FqTypeName, FqTypeName)> = {
+                let tt = self.type_table.borrow();
+                slots
+                    .iter()
+                    .filter_map(|(slot, &arg)| {
+                        let name = names.name_of(slot.index)?;
+                        Some((FqTypeName::binder(name), tt.fq_type_name(arg)))
+                    })
+                    .collect()
+            };
             return slots
                 .iter()
-                .find_map(|(slot, &type_arg)| unmet(names.name_of(slot.index)?, type_arg));
+                .find_map(|(slot, &type_arg)| unmet(names.name_of(slot.index)?, type_arg, &at));
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
@@ -2560,7 +2574,7 @@ impl TypeSystem {
                 };
                 type_args
                     .iter()
-                    .find_map(|&type_arg| unmet(name.as_str(), type_arg))
+                    .find_map(|&type_arg| unmet(name.as_str(), type_arg, &[]))
             });
         }
         None
