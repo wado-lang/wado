@@ -1155,13 +1155,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Matched on the binding, not the spelling — a method parameter may shadow
     /// the receiver's letter (#1932).
     pub(super) fn binder_in_scope(&self, written: &str) -> FqTypeName {
-        let ctx = &self.annotate_ctx.trait_ctx;
-        if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
-            && ctx.type_params.get(written).and_then(|b| b.decl) == Some(*receiver_decl)
-        {
-            return self.tysys.impl_receiver_binder(*owner, written);
-        }
-        FqTypeName::binder(written)
+        let binder = self.annotate_ctx.trait_ctx.type_params.get(written);
+        self.binder_named(binder, written)
     }
 
     /// [`Self::binder_in_scope`] for the binder `binder` is, which `Self`
@@ -1171,13 +1166,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .tysys
             .binder_name(binder)
             .expect("a binder is a type parameter");
+        self.binder_named(self.annotate_ctx.trait_ctx.binder(binder), &name)
+    }
+
+    fn binder_named(&self, binder: Option<&scope::BinderInScope>, name: &str) -> FqTypeName {
         let ctx = &self.annotate_ctx.trait_ctx;
         if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
-            && ctx.binder(binder).and_then(|b| b.decl) == Some(*receiver_decl)
+            && binder.and_then(|b| b.decl) == Some(*receiver_decl)
         {
-            return self.tysys.impl_receiver_binder(*owner, &name);
+            return self.tysys.impl_receiver_binder(*owner, name);
         }
-        FqTypeName::binder(&name)
+        FqTypeName::binder(name)
     }
 
     /// The name an `impl` block's receiver registers under. One block, one

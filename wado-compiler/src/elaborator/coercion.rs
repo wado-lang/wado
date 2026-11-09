@@ -278,22 +278,18 @@ impl Scope {
             return false;
         }
         let vars = tt.infer_vars_in(ty);
-        !vars.is_empty()
-            && vars.iter().all(|var| {
-                self.pending_literals
-                    .iter()
-                    .any(|pending| pending.own_vars.contains(var))
-            })
+        !vars.is_empty() && vars.iter().all(|&var| self.pending_owns(|own| own == var))
     }
 
     /// Whether `var` belongs to a call whose literals are pending.
     pub(super) fn awaits_pending_var(&self, tt: &TypeTable, var: InferVarId) -> bool {
-        self.pending_literals.iter().any(|pending| {
-            pending
-                .own_vars
-                .iter()
-                .any(|&own| matches!(tt.get(own), ResolvedType::InferVar(v) if *v == var))
-        })
+        self.pending_owns(|own| matches!(tt.get(own), ResolvedType::InferVar(v) if *v == var))
+    }
+
+    fn pending_owns(&self, is_var: impl Fn(TypeId) -> bool) -> bool {
+        self.pending_literals
+            .iter()
+            .any(|pending| pending.own_vars.iter().copied().any(&is_var))
     }
 
     /// Whether a pending call holds literals waiting at the variable `var`.

@@ -909,7 +909,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        if self.tysys.type_table.borrow().type_param_id(self_ty).is_some() {
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .type_param_id(self_ty)
+            .is_some()
+        {
             self.record_type_param_reflect_dispatch(
                 self_ty,
                 trait_name,
@@ -1672,15 +1678,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         spec: ScalarReflectSpec,
         self_ty: TypeId,
     ) -> Option<TypeId> {
-        self.map_bound_pack(
-            self_ty,
-            spec.trait_item,
-            spec.members_assoc,
-            |tt, _| {
-                let def = tt.require_compiler_item_def(spec.member_struct_item);
-                tt.make_generic_instance(def, vec![self_ty])
-            },
-        )
+        self.map_bound_pack(self_ty, spec.trait_item, spec.members_assoc, |tt, _| {
+            let def = tt.require_compiler_item_def(spec.member_struct_item);
+            tt.make_generic_instance(def, vec![self_ty])
+        })
     }
 }
 

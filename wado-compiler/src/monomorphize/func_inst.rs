@@ -836,10 +836,7 @@ impl Monomorphizer {
         }
         let receiver = info.fq_struct_name();
         if receiver.projected().is_some() {
-            let bound = |name: &str| {
-                let key = self.current_param_substitution_key.get(name)?;
-                substitution.get(key).copied()
-            };
+            let bound = |name: &str| self.named_answer(substitution, name);
             return Self::type_at_instance(&receiver, &bound, type_table);
         }
         answer.or_else(|| {
@@ -857,13 +854,18 @@ impl Monomorphizer {
         info: &LocalMethodName,
         substitution: &TypeArgMap,
     ) -> Option<TypeId> {
-        let param = match info.receiver_param {
-            Some(param) => param,
-            None => *self
-                .current_param_substitution_key
-                .get(&info.base_struct_name())?,
-        };
-        substitution.get(&param).copied()
+        match info.receiver_param {
+            Some(param) => substitution.get(&param).copied(),
+            None => self.named_answer(substitution, &info.base_struct_name()),
+        }
+    }
+
+    /// What `substitution` fills the parameter the current frame names `name`
+    /// with.
+    fn named_answer(&self, substitution: &TypeArgMap, name: &str) -> Option<TypeId> {
+        substitution
+            .get(self.current_param_substitution_key.get(name)?)
+            .copied()
     }
 
     /// Resolve a `T^Trait::method` static call's dispatch receiver, in order:
@@ -2557,10 +2559,7 @@ impl Monomorphizer {
         if !trait_name.args_mention_binder() {
             return info;
         }
-        let bound = |name: &str| -> Option<TypeId> {
-            let key = self.current_param_substitution_key.get(name)?;
-            substitution.get(key).copied()
-        };
+        let bound = |name: &str| self.named_answer(substitution, name);
         let args: Vec<FqTypeName> = trait_name
             .args()
             .iter()
