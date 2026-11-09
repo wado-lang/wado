@@ -154,15 +154,6 @@ pub(super) fn collect_unresolved_null_tails_in_block(
     }
 }
 
-/// First return statement's value type discovered while walking
-/// `block`. AST mirror of `Elaborator::find_return_type_in_block`.
-pub(super) fn find_return_type_in_block(
-    ctx: CtrlFlowCtx<'_>,
-    block: &ast::Block,
-) -> Option<TypeId> {
-    return_types_in_block(ctx, block).into_iter().next()
-}
-
 /// Every return statement's value type in `block`, in source order.
 pub(super) fn return_types_in_block(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> Vec<TypeId> {
     let mut out = Vec::new();

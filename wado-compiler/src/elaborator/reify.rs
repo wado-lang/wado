@@ -55,7 +55,6 @@ use crate::defs::DefId;
 use crate::elaborator::assert::{MOVED, NOT_EVALUATED, render_local_name, seen_local_name};
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
-use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::method_lookup::adjusted_receiver_type;
@@ -6224,27 +6223,11 @@ impl<'a> Reify<'a> {
                 })
         });
 
-        // A block body with explicit `return X` has a NEVER/UNIT tail, so its
-        // logical return type comes from the returned expressions, which
-        // annotate already recorded (independent of the body TIR). Compute it
-        // now, before reifying the body: a `return X` statement reifies its
-        // value against `ctx.return_type` (see the `ast::Stmt::Return` arm), so
-        // leaving it UNKNOWN makes a bare `return null` emit a nullref against
-        // the non-null `(ref $Option)` slot another arm's `return
-        // Option::Some(..)` fixes — an invalid closure. Prefer an explicit
-        // expected fn return type; fall back to the block-return type.
-        let block_return_type = if let Expr::Block(ref block) = closure.body {
-            let ctrl_ctx = CtrlFlowCtx {
-                expression_types: &self.types.expression_types,
-                type_table: &self.tysys.type_table,
-            };
-            find_return_type_in_block(ctrl_ctx, block)
-        } else {
-            None
-        };
-        if let Some(rt) = body_expected.or(block_return_type) {
-            closure_ctx.return_type = rt;
-        }
+        // A `return X` reifies its value against `ctx.return_type` (the
+        // `ast::Stmt::Return` arm), so it is set before the body: left UNKNOWN,
+        // a bare `return null` emits a nullref against the non-null
+        // `(ref $Option)` slot another arm's `return Option::Some(..)` fixes.
+        closure_ctx.return_type = body_expected.unwrap_or(cap_info.return_type);
 
         // A block body is a function body, its last statement a statement.
         let body = match &closure.body {
@@ -6265,24 +6248,13 @@ impl<'a> Reify<'a> {
             &self.tysys.type_table.borrow(),
         );
 
-        // An explicit annotation wins; otherwise single-expression closure
-        // bodies (e.g. `|c| c.method()`) take their body's type as the return
-        // type directly, and block bodies use the return-expression type
-        // computed above.
-        // `block_return_type` reads `expression_types`, which a site that
-        // elaborated twice leaves empty for the committed pass; fall back to
-        // the body TIR, which is built by now either way.
-        let return_type = declared_return
-            .or(block_return_type)
-            .or_else(|| tir_block_return_type(&body))
-            .unwrap_or(body.type_id);
         let body = self.probe_expr(ProbeSite::Around, closure.body.id(), body);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
             cap_info.is_mutating,
             param_types,
-            return_type,
+            cap_info.return_type,
             Vec::new(),
         );
 
@@ -10452,46 +10424,6 @@ fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
     case_index.unwrap_or_else(|| {
         unreachable!("reify does not run on a pattern naming no case: `{case_name}`")
     })
-}
-
-/// First `return <value>` type reachable in a reified closure body.
-///
-/// TIR counterpart of `control_flow::find_return_type_in_block`, and must stay
-/// in step with it: a construct missing here is a `return` the closure's return
-/// type cannot see, which mistypes `$call` and fails core-Wasm validation.
-fn tir_block_return_type(body: &TirExpr) -> Option<tir::TypeId> {
-    fn in_block(block: &TirBlock) -> Option<tir::TypeId> {
-        block.stmts.iter().find_map(|stmt| match &stmt.kind {
-            TirStmtKind::Return { value } => value.as_ref().map(|v| v.type_id),
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => in_block(then_block).or_else(|| else_block.as_ref().and_then(in_block)),
-            TirStmtKind::Loop { body, .. } => in_block(body),
-            TirStmtKind::LabeledBlock { block, .. } => in_block(block),
-            TirStmtKind::VariadicForOf { body, .. } => in_block(body),
-            TirStmtKind::Let { value, .. } => in_expr(value),
-            TirStmtKind::Expr(e) => in_expr(e),
-            _ => None,
-        })
-    }
-
-    fn in_expr(expr: &TirExpr) -> Option<tir::TypeId> {
-        match &expr.kind {
-            TirExprKind::Block(block) => in_block(block),
-            TirExprKind::If {
-                then_branch,
-                else_branch,
-                ..
-            } => in_block(then_branch).or_else(|| else_branch.as_ref().and_then(in_block)),
-            TirExprKind::Match { arms, .. } => arms.iter().find_map(|arm| in_expr(&arm.body)),
-            TirExprKind::WithHandler { body, .. } => in_block(body),
-            _ => None,
-        }
-    }
-
-    in_expr(body)
 }
 
 /// The operations an interface declares a default implementation for, each

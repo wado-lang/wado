@@ -1017,6 +1017,8 @@ pub(crate) struct ClosureCaptureInfo {
     /// the answer — reify re-resolving the annotation has no `Self` bound and
     /// would disagree with what the caller was type-checked against.
     pub(crate) declared_return: Option<TypeId>,
+    /// The closure's return type, as its `fn` type states it.
+    pub(crate) return_type: TypeId,
 }
 
 /// One power-assert capture slot — a sub-expression of the assert

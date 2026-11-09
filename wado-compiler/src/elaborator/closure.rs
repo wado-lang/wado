@@ -339,6 +339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 captures: recorded_captures,
                 is_mutating: any_mutating_capture,
                 declared_return,
+                return_type,
             },
         );
 

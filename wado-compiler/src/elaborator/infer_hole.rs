@@ -938,6 +938,7 @@ fn sub_closure_captures(
         m.inner_type = sub(tt, m.inner_type, subst);
         m.ref_type = sub(tt, m.ref_type, subst);
     }
+    cc.return_type = sub(tt, cc.return_type, subst);
 }
 
 fn sub_sequence_coercion(
