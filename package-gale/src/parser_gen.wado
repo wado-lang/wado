@@ -4383,13 +4383,27 @@ fn gen_group_alt_body(
     proven: &List<i32> = &NO_KINDS,
 ) {
     let outer = ctx.cursor.enter_group_body(true);
-    let first_proven = element_proven_first(&alt.actions, proven);
-    for let mut i = 0; i < alt.ops.len(); i += 1 {
-        gen_alt_actions_at(w, &alt.actions, i, ctx);
-        gen_op(w, &alt.ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
-    }
-    gen_alt_actions_at(w, &alt.actions, alt.ops.len(), ctx);
+    gen_ops_with_actions(w, &alt.ops, &alt.actions, 0, ctx, nc, proven);
     ctx.cursor.leave_group_body(outer);
+}
+
+/// `ops` with `actions` run between them, where op `i` stands at surface
+/// position `first_index + i`.
+fn gen_ops_with_actions(
+    w: &mut CodeWriter,
+    ops: &List<Op>,
+    actions: &List<AltAction>,
+    first_index: i32,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+    proven: &List<i32>,
+) {
+    let first_proven = element_proven_first(actions, proven, first_index);
+    for let mut i = 0; i < ops.len(); i += 1 {
+        gen_alt_actions_at(w, actions, first_index + i, ctx);
+        gen_op(w, &ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
+    }
+    gen_alt_actions_at(w, actions, first_index + ops.len(), ctx);
 }
 
 /// Open arm `k` of the chain committing to the alternative `winner` names, the
@@ -4719,12 +4733,10 @@ fn emit_lr_branch_body<S: AsStrSlice>(
         emit_attr_inits(w, rule, ctx);
         capture_left_operand(w, &lr.prefix_self_ref.name, ctx);
     }
-    // Interleave the alt's actions with the suffix ops. The LR rewrite strips
-    // the leading self-ref (element 0), so an action at surface `before_index b`
-    // runs before suffix op `b - 1`: pass the original `before` to
-    // `gen_alt_actions_at` (before op `i` → `before == i + 1`, trailing →
-    // `before == ops.len() + 1`). The alt-initial gate (`before == 0`) is never
-    // reached here — it is an LR loop-entry decision, not a suffix action.
+    // The LR rewrite strips the leading self-ref (element 0), so suffix op `i`
+    // stands at surface position `i + 1`. The alt-initial gate (`before == 0`)
+    // is never reached here — it is an LR loop-entry decision, not a suffix
+    // action.
     let actions = &rule.alternatives[lr.alt_index].actions;
     let ops = &lr.suffix.ops;
     // The suffix ops give the right operand's binding; the stripped leading
@@ -4741,12 +4753,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
         ctx,
         left_operand,
     );
-    let first_proven = element_proven_first(actions, proven_first, 1);
-    for let mut i = 0; i < ops.len(); i += 1 {
-        gen_alt_actions_at(w, actions, i + 1, ctx);
-        gen_op(w, &ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
-    }
-    gen_alt_actions_at(w, actions, ops.len() + 1, ctx);
+    gen_ops_with_actions(w, ops, actions, 1, ctx, nc, proven_first);
     leave_after_labels(w, ctx);
     ctx.cursor.set_alt_bindings(outer);
     w.line("p.b.finish_node(p.last_end());");
@@ -5195,7 +5202,10 @@ fn gen_op_inner_for_storable_repeat(
             let Group(g_elem) = peel_labels(elem) else {
                 unreachable();
             };
-            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, group_atn(g_op, ctx));
+            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, group_atn(
+                g_op,
+                ctx,
+            ));
         },
         TransparentGroup => unreachable(),
     }
@@ -7754,7 +7764,9 @@ fn group_dispatches(g_op: &GroupOp) -> bool {
 /// rather than the surface alternatives (invariant 9). Its callers commit and
 /// never report, so no expected set comes with it.
 fn op_group_alt_decision(g: &GroupOp, ctx: &EmitContext) -> Option<List<DecisionBranch>> {
-    if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } || !group_atn(g, ctx) matches { Unasked } {
+    if g.alts.len() < 2
+        || group_token_only_kinds(&g.alts) matches { Some(_) }
+        || !group_atn(g, ctx) matches { Unasked } {
         return null;
     }
     return Option::Some(dispatch_branches(&g.dispatch));

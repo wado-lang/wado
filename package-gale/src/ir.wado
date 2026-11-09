@@ -513,9 +513,9 @@ fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
     };
 }
 
-/// Whether a `*` or `+` in `elements`, or the left-recursion loop a rule
-/// `rule_name` whose alternative they are takes over its suffix, has a body that
-/// can start with EOF: it matches EOF without advancing, so the loop never
+/// Whether `elements`, an alternative of rule `rule_name`, hold a closure whose
+/// body can start with EOF: a `*` or `+`, or the left-recursion loop over the
+/// alternative's suffix. It matches EOF without advancing, so the loop never
 /// leaves it. ANTLR4 rejects it too (error 186).
 fn alt_holds_eof_closure<S: AsStrSlice>(
     elements: &List<Element>,
