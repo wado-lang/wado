@@ -1,0 +1,38 @@
+// A block-bodied closure is a function body: only `return` gives it a value,
+// so its last statement is a statement, as a function's is. A trailing `if`
+// or `match` whose arms disagree is then no type error, and `|| { 1 }` returns
+// `()`.
+
+fn log_count() -> i32 {
+    return 1;
+}
+
+test "a trailing if or match is a statement" {
+    let c = builtin::black_box(false);
+    let mut flag = false;
+    let mut by_if = || {
+        if c { log_count() } else { flag = true }
+    };
+    by_if();
+    assert flag;
+
+    let k = builtin::black_box(1);
+    let mut hits = 0;
+    let mut by_match = || {
+        match k {
+            0 => log_count(),
+            _ => { hits += 1; },
+        }
+    };
+    by_match();
+    assert hits == 1;
+}
+
+test "a trailing value is discarded" {
+    let discard = || { 1 };
+    let unit: () = discard();
+    assert unit == ();
+}
+
+__DATA__
+{"test": {}}

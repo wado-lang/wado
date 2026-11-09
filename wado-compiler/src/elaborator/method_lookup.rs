@@ -1,8 +1,9 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
-use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
+use super::scope::{BinderInScope, ParamRef, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
 use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
+use super::type_resolution::ParamSpace;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -18,7 +19,7 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, StructDef,
-    SubstitutionContext, TemplateId, TypeId, positional_substitution,
+    SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId, positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -30,7 +31,7 @@ use super::call::{
 };
 use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::InferCtx;
-use super::instantiate::{InstanceKind, Instantiation};
+use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
@@ -86,10 +87,10 @@ fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader 
 }
 
 /// Each impl parameter the receiver settles to one type, with that type.
-pub(super) fn settled_impl_args(bindings: &[DefaultTypeBinding]) -> Vec<(String, TypeId)> {
+pub(super) fn settled_impl_args(bindings: &[DefaultTypeBinding]) -> ParamSpace {
     bindings
         .iter()
-        .filter_map(|binding| Some((binding.name.clone(), binding.settled.type_id()?)))
+        .filter_map(|binding| Some((binding.param.clone(), binding.settled.type_id()?)))
         .collect()
 }
 
@@ -202,7 +203,12 @@ pub(super) struct MethodInferenceInput<'a> {
     /// The matched `impl` block's parameters at the receiver's arguments
     /// ([`settled_impl_args`]), which a method bound may name: `R` in
     /// `fn go<T: Mix<R, Out = Q>, Q>` under `impl<R> Holder<R>`.
-    pub impl_args: &'a [(String, TypeId)],
+    pub impl_args: &'a [(ParamRef, TypeId)],
+    /// The slots as `args` were resolved through them
+    /// ([`Elaborator::resolve_args_through_slots`]), `None` where there are
+    /// none. Inference solves these same variables, which an argument such as
+    /// an unannotated closure was typed by.
+    pub inst: Option<&'a Instantiated>,
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
@@ -288,7 +294,7 @@ impl ImplParamSlots {
 fn target_arg_names(arg: &Type, name: &str) -> bool {
     match arg {
         Type::Named(n) => n.name == name,
-        Type::TypePackSpread(spread, _) => spread == name,
+        Type::TypePackSpread(spread) => spread.name == name,
         _ => false,
     }
 }
@@ -632,7 +638,7 @@ impl TypeSystem {
             .into_iter()
             .filter_map(|supplied| {
                 Some(DefaultTypeBinding {
-                    name: supplied.param.name.clone(),
+                    param: ParamRef::of(trait_decl, &supplied.param.name),
                     settled: SettledAs::Type(*supplied.arg?),
                     bounds: supplied.bounds,
                 })
@@ -1259,26 +1265,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .first()
             .copied();
         let tt = self.tysys.type_table.borrow();
-        written.is_some_and(|written| tt.param_slot(written).is_some() || written == key)
+        written.is_some_and(|written| tt.type_param_id(written).is_some() || written == key)
     }
 
-    /// Check the bounds impl `def` places on its parameters still open, once
-    /// they are answered.
-    fn defer_open_impl_bounds(&mut self, def: DefId, slots: &IndexMap<u32, TypeId>, span: Span) {
+    /// Check the bounds impl `def` places on its parameters, where the
+    /// parameter or an argument of its bound is still open, once they are
+    /// answered.
+    fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
         let names = ImplParamSlots::of(&header.ty, &header.type_params);
-        for (&slot, &arg) in slots {
-            let arg = self.apply_infer_holes(arg);
-            let param = names
-                .name_of(slot)
-                .and_then(|name| header.type_params.iter().find(|p| p.name == name));
-            let open = self.awaits_pending_call(arg)
-                || self.awaits_report(&self.tysys.type_table.borrow(), arg);
-            if let Some(param) = param
-                && open
-            {
-                self.defer_bounds_to_answer(param, arg, None, &[], span);
+        let impl_args: ParamSpace = slots
+            .iter()
+            .filter_map(|(slot, &arg)| {
+                assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
+                let name = names.name_of(slot.index)?;
+                Some((ParamRef::of(def, name), self.apply_infer_holes(arg)))
+            })
+            .collect();
+        for (bound, arg) in &impl_args {
+            let Some(param) = header.type_params.iter().find(|p| p.name == bound.name) else {
+                continue;
+            };
+            let bounds = self.declared_bounds(param, None, &impl_args);
+            let open = self.awaits_pending_call(*arg) || {
+                let tt = self.tysys.type_table.borrow();
+                self.awaits_report(&tt, *arg)
+                    || bounds
+                        .iter()
+                        .any(|b| self.annotate_ctx.trait_awaits_pending_call(&tt, &b.trait_))
+            };
+            if open {
+                self.defer_declared_bounds(param, *arg, bounds, span);
             }
         }
     }
@@ -1446,12 +1464,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve against. Number them from the index the declaration gave the
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
-        let base = slots.first().map_or(0, |&slot| self.declared_slot(slot));
+        let Some(&first) = slots.first() else {
+            return vec![None; method_type_params.len()];
+        };
+        let TypeParamId { owner, index: base } =
+            self.tysys.type_table.borrow().declared_param(first);
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.clear_binders();
-                scope.register_generic_params(method_type_params, base);
+                scope.register_generic_params(owner, method_type_params, base);
                 method_type_params
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
@@ -1494,15 +1516,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut known,
         );
         let mut bindings = slot_type_bindings(&self.tysys.type_table, own_ids, &known);
-        // A pack stays abstract through the walk — the call settles what it
-        // holds, never what it is — so `U::default()` dispatches on its bound
-        // rather than on a receiver. The declaration wrote that bound, and
-        // nothing at the call site carries it.
         let receiver_self = Some(declaring);
         for binding in &mut bindings {
-            if binding.settled.is_pack()
-                && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
-            {
+            let Some(param) = own_params.iter().find(|p| p.name == binding.param.name) else {
+                continue;
+            };
+            // The defaults are written in the declaration `own_params` belongs
+            // to: a trait's, for an impl restating the list without them.
+            binding.param = ParamRef::declared(param, &self.tysys.resolutions);
+            // A pack stays abstract through the walk — the call settles what
+            // it holds, never what it is — so `U::default()` dispatches on its
+            // bound rather than on a receiver. The declaration wrote that
+            // bound, and nothing at the call site carries it.
+            if binding.settled.is_pack() {
                 binding.bounds = ScopedBound::pin_declared(param, receiver_self);
             }
         }
@@ -1565,7 +1591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !turbofish_leaves_slot(&explicit, input.slots.len()) {
             return explicit;
         }
-        let inferred = self.infer_method_type_args(input, &explicit);
+        let inferred = self.infer_method_type_args(input);
         if explicit.is_empty() {
             return inferred;
         }
@@ -1637,8 +1663,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
-        let (names, ids): (Vec<String>, Vec<TypeId>) = input.impl_args.iter().cloned().unzip();
-        self.with_type_params_bound(&names, &ids, |e| {
+        let impl_args = input.impl_args.to_vec();
+        self.with_type_params_bound(&impl_args, |e| {
             e.bind_method_type_args_in_impl_frame(explicit, input)
         })
     }
@@ -1687,16 +1713,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// lookup so their slots are the ones the caller binds. Deliberately does not
     /// re-resolve the method's AST: a fresh scope would report spurious errors for
     /// a `Self::Item`. An unbound parameter is its variable, blamed at the
-    /// call. A slot `written` names (its turbofish, `UNKNOWN` for `_`) is
-    /// answered from it.
-    fn infer_method_type_args(
-        &mut self,
-        input: MethodInferenceInput<'_>,
-        written: &[TypeId],
-    ) -> Vec<TypeId> {
+    /// call.
+    fn infer_method_type_args(&mut self, input: MethodInferenceInput<'_>) -> Vec<TypeId> {
         let MethodInferenceInput {
             receiver_type,
-            method_name,
             slots,
             own_params,
             param_types,
@@ -1706,8 +1726,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected_return_type,
             trait_decl,
             declaring_module,
-            impl_args,
-            span,
+            inst,
+            ..
         } = input;
 
         // The declaration dispatch selected, in both its forms: the slots to
@@ -1720,21 +1740,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
 
-        let self_binding = Some(self.tysys.base_self_binding(receiver_type, trait_decl));
-        let inst = self.instantiate(
-            slots,
-            &Instantiation {
-                kind: InstanceKind::Method,
-                name: method_name,
-                span,
-                type_args: written,
-                self_binding,
-                impl_args,
-            },
-        );
-        self.record_slot_bounds(&inst, &method_type_params, self_binding, impl_args, span);
-        let param_types = self.instantiate_types(param_types, &inst);
-        let decl_return_type = self.instantiate_type(decl_return_type, &inst);
+        let inst = inst.expect("a method with slots resolves its arguments through them");
+        let param_types = self.instantiate_types(param_types, inst);
+        let decl_return_type = self.instantiate_type(decl_return_type, inst);
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
@@ -1752,7 +1760,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve method type params that appear only inside another method
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.
-        self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
+        let owner = slots
+            .first()
+            .and_then(|&slot| self.tysys.type_table.borrow().type_param_id(slot))
+            .map(|id| id.owner);
+        self.resolve_assoc_bound_args(owner, &method_type_params, &mut inferred);
         self.fill_defaulted_method_type_args(
             &method_type_params,
             receiver_type,
@@ -1761,14 +1773,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
-        // A slot answered with itself is not answered: a rigid parameter carried
-        // past here dies in codegen, so put the variable back and let the blame
-        // below report it at the call. A slot the enclosing scope declares is
-        // the caller forwarding its own generics, which monomorphization
-        // resolves. `defer_or_report_uninferred_fn_type_args` guards it too.
+        // A slot answered with itself, or with a variable the arguments left
+        // open, is not answered: carried past here it dies in codegen, so put
+        // the variable back and let the blame below report it at the call. A
+        // slot the enclosing scope declares is the caller forwarding its own
+        // generics, which monomorphization resolves.
+        // `defer_or_report_uninferred_fn_type_args` guards it too.
         let scope_params = self.scope_type_param_ids();
         for (i, answer) in inferred.iter_mut().enumerate() {
-            if slots.get(i) == Some(answer) && !scope_params.contains(answer) {
+            let open_var = {
+                let applied = self.apply_infer_holes(*answer);
+                self.tysys.type_table.borrow().is_infer_var(applied)
+                    && !self.awaits_pending_call(applied)
+            };
+            if (slots.get(i) == Some(answer) && !scope_params.contains(answer)) || open_var {
                 *answer = inst.vars[i];
             }
         }
@@ -1776,8 +1794,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // variable already carries the "cannot infer" diagnostic and the
         // module-end sweep, so nothing needs classifying here: what an
         // enclosing generic happens to be named cannot be confused with it.
-        self.record_instantiation(&inst, &inferred);
-        self.blame_unsolved(&inst, &inferred);
+        self.record_instantiation(inst, &inferred);
+        self.blame_unsolved(inst, &inferred);
         inferred
     }
 
@@ -2148,7 +2166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut entries = Vec::new();
             for (i, elem) in elems.iter().enumerate() {
                 match elem {
-                    Type::TypePackSpread(name, _) => {
+                    Type::TypePackSpread(ast::NamedType { name, .. }) => {
                         // Find the pack's index from the impl block's type_params
                         let pack_idx = header
                             .type_params
@@ -2225,7 +2243,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let Some(slot) = slots.of_name(&param.name) else {
                         continue;
                     };
-                    let Some(&bound) = filled.get(&slot) else {
+                    let id = TypeParamId {
+                        owner: impl_ref.0,
+                        index: slot,
+                    };
+                    let Some(&bound) = filled.get(&id) else {
                         continue;
                     };
                     Self::bind_type_param(&mut scope, Some(param), &param.name, slot, bound);
@@ -2269,11 +2291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // for itself.
             let bound = match receiver_type_id {
                 Some(recv_id) => recv_id,
-                None => scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(name.clone(), slot),
+                None => scope.tysys.blanket_param_slot(impl_ref.0, name),
             };
             Self::bind_type_param(
                 &mut scope,
@@ -2288,12 +2306,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // shape (generic, ref, blanket, variadic) — which a flat positional
         // list cannot express. Method-level slots stay abstract: inference
         // solves them at the call site.
-        let impl_slots: IndexMap<u32, TypeId> = scope
+        let impl_slots: TypeArgMap = scope
             .annotate_ctx
             .trait_ctx
             .type_params
             .values()
-            .map(|b| (b.index, b.type_id))
+            .map(|b| {
+                let id = TypeParamId {
+                    owner: impl_ref.0,
+                    index: b.index,
+                };
+                (id, b.type_id)
+            })
             .collect();
         // The same frame under the names the block wrote, which is what a
         // parameter default naming one (`v: T = T::default()`) spells. Taken
@@ -2305,7 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params
             .iter()
             .map(|(name, binder)| DefaultTypeBinding {
-                name: name.clone(),
+                param: ParamRef::of(impl_ref.0, name),
                 bounds: scope
                     .annotate_ctx
                     .trait_ctx
@@ -2342,9 +2366,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
         let blanket_binder = is_blanket_type_param.then(|| {
-            scope
-                .tysys
-                .impl_receiver_binder(impl_ref.0, &impl_struct_name)
+            FqTypeName::binder_of(
+                scope.tysys.resolutions.defs(),
+                impl_ref.0,
+                &impl_struct_name,
+            )
         });
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
@@ -2466,7 +2492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &default_method
                         .sig
                         .call_slots(tt, None, &declaring_args, &[]),
-                    &SlotProjections::from_iter([(0, own_assoc)]),
+                    &SlotProjections::from_iter([(TypeParamId::trait_self(trait_decl), own_assoc)]),
                     &EffectRows::default(),
                 );
 
@@ -3109,7 +3135,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // in the impl's frame; instantiating it with the receiver's
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
-                let mut slots = positional_substitution(&concrete_type_args);
+                let mut slots = s
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .impl_slots(impl_ref.0, &concrete_type_args);
                 if let Some(pointee) = pointee {
                     if !s
                         .tysys
@@ -3127,7 +3157,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .iter()
                             .filter(|p| p.is_real_type_param())
                             .position(|p| p.name == binder)?;
-                        slots = [(slot as u32, pointee)].into_iter().collect();
+                        let id = TypeParamId {
+                            owner: impl_ref.0,
+                            index: slot as u32,
+                        };
+                        slots = TypeArgMap::from_iter([(id, pointee)]);
                     }
                 }
 
@@ -3587,7 +3621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_args = settled_impl_args(&impl_type_bindings);
         // This path answers the call, so it runs the method's own inference too:
         // a subscript receiver does not decide whether an argument gets a type.
-        let args = self.resolve_args_through_slots(
+        let (args, inst) = self.resolve_args_through_slots(
             ctx,
             &method_call.args,
             &param_types,
@@ -3626,6 +3660,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: impl_module.clone(),
                 impl_args: &impl_args,
+                inst: inst.as_ref(),
                 span: method_call.span,
             },
         );
@@ -3812,7 +3847,7 @@ impl TypeSystem {
         }
         let instantiated = sig.instantiate_received(
             &self.type_table,
-            &positional_substitution(receiver_type_args.unwrap_or(&[])),
+            &positional_substitution(def, receiver_type_args.unwrap_or(&[])),
             &SlotProjections::default(),
             &EffectRows::default(),
         );

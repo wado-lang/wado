@@ -1,0 +1,31 @@
+// `g`'s bound `T: Pick<U>` at `g("s", v)` asks `String: Pick<V>`, `V` being
+// `h`'s own parameter. Nothing bounds `V`, so no impl answers it, and the call
+// is refused where it is written rather than once `h` is instantiated.
+use { println, Stdout } from "core:cli";
+
+trait Pick<U> with () {
+    fn pick(&self) -> String;
+}
+
+impl Pick<i32> for String {
+    fn pick(&self) -> String {
+        return "i32";
+    }
+}
+
+fn g<T: Pick<U>, U>(t: T, _u: U) -> String {
+    return t.pick();
+}
+
+fn h<V>(v: V) -> String {
+    return g("s", v);
+}
+
+export fn run() with Stdout {
+    println(h(true));
+}
+
+__DATA__
+{
+    "compile_error": ":21:12: analysis error: type 'String' does not implement trait 'Pick<V>' required by bound on 'T'"
+}

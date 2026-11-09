@@ -11,7 +11,10 @@ use crate::module_source::ModuleSource;
 use crate::monomorphize::{Pool, Templates};
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::written_impl_at;
-use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeId};
+use crate::tir::{
+    InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeArgMap, TypeId,
+    TypeParamId,
+};
 use crate::token::Span;
 use crate::type_table::{AnonStructId, ReceiverAssocTypes, TypeTable};
 
@@ -119,18 +122,18 @@ pub(super) struct Monomorphizer {
     pub structs: StructInstState,
     pub functions: FuncInstState,
     pub pool: Pool,
-    /// How many leading substitution slots of the function being instantiated
-    /// are its impl's type params rather than its own.
-    pub current_impl_type_param_count: usize,
+    /// The impl's type params of the function being instantiated, apart from
+    /// its own.
+    pub current_impl_type_params: Vec<TypeParamId>,
     /// The receiver head of the impl method being instantiated; only a call on
     /// that same head inherits its impl type args.
     pub current_impl_receiver: Option<FqTypeName>,
-    /// Each type param of the function being instantiated, by name, to its
-    /// substitution slot: `T^Trait::method` finds its receiver by name.
-    pub current_param_substitution_key: IndexMap<String, u32>,
-    /// Pack index to the pack's whole tuple while one unrolled element is
-    /// substituted, for a `[..T]` spelling that still means the whole.
-    pub pack_splice_bindings: RefCell<IndexMap<u32, TypeId>>,
+    /// Each type param of the function being instantiated, by the binder a
+    /// `T^Trait<U>::method` name spells it as.
+    pub current_param_substitution_key: IndexMap<FqTypeName, TypeParamId>,
+    /// Each pack's whole tuple while one unrolled element is substituted, for
+    /// a `[..T]` spelling that still means the whole.
+    pub pack_splice_bindings: RefCell<TypeArgMap>,
     /// Template local slots an unrolled copy already holds; shared, since a
     /// nested unroll competes for the same slots. Cleared per instantiation.
     pub unrolled_local_claims: RefCell<IndexSet<u32>>,
@@ -183,7 +186,7 @@ impl Monomorphizer {
                 concrete_names: IndexMap::default(),
             },
             pool: Pool::default(),
-            current_impl_type_param_count: 0,
+            current_impl_type_params: Vec::new(),
             current_impl_receiver: None,
             current_param_substitution_key: IndexMap::default(),
             pack_splice_bindings: RefCell::new(IndexMap::default()),
@@ -198,21 +201,21 @@ impl Monomorphizer {
         self.unrolled_local_claims.borrow_mut().insert(local)
     }
 
-    /// Bind `index`'s splice positions to `tuple` for the duration of one
+    /// Bind `pack`'s splice positions to `tuple` for the duration of one
     /// unrolled element body, returning the binding it displaced so a nested
     /// variadic for-of restores it (see [`Self::pack_splice_bindings`]).
-    pub fn bind_pack_splice(&self, index: u32, tuple: TypeId) -> Option<TypeId> {
-        self.pack_splice_bindings.borrow_mut().insert(index, tuple)
+    pub fn bind_pack_splice(&self, pack: TypeParamId, tuple: TypeId) -> Option<TypeId> {
+        self.pack_splice_bindings.borrow_mut().insert(pack, tuple)
     }
 
-    pub fn restore_pack_splice(&self, index: u32, previous: Option<TypeId>) {
+    pub fn restore_pack_splice(&self, pack: TypeParamId, previous: Option<TypeId>) {
         let mut bindings = self.pack_splice_bindings.borrow_mut();
         match previous {
             Some(tuple) => {
-                bindings.insert(index, tuple);
+                bindings.insert(pack, tuple);
             }
             None => {
-                bindings.shift_remove(&index);
+                bindings.shift_remove(&pack);
             }
         }
     }

@@ -79,6 +79,13 @@ generic-struct machinery unchanged: the monomorphizer already treats any
 `TirStruct` with non-empty type params as a template to expand, regardless of
 whether reify or this WEP's eager annotate-time emission produced it.
 
+## Roadmap
+
+1. **`Self` in a local struct of a trait default method.** Each inheriting impl
+   gets a struct of its own, whose `Self` field is that impl's type. Done when
+   `error_local_struct_self_in_trait_default.wado` compiles and prints `3 14`
+   at every optimization level, as a fixture that is no longer an error.
+
 ## Known gaps
 
 ### Cases of a local `enum`, `variant` or `flags`
@@ -114,7 +121,9 @@ A local item may name the enclosing function's and `impl`'s type parameters
 ([the spec](./spec-expressions.md#local-item-definitions)). Only a local newtype
 without parameters of its own does. A local struct's fields, and a generic local
 newtype's base, resolve with only the item's own parameters in scope. In a
-struct `T` fails as `unknown type`. Under `type Mixed<U> = [T, U];` the base
+struct `T` fails as `unknown type`. A field reaching `T` through a local newtype
+(`items: Items` under `type Items = List<T>;`) is refused: the struct is emitted
+once, so it cannot vary with `T`. Under `type Mixed<U> = [T, U];` the base
 is not `[T, U]`, so casting a `[T, i32]` to `Mixed<i32>` fails as a cast
 between unrelated types. It waits for a use case, since an item can take the
 parameter as its own (`struct Box<T>`).
@@ -123,5 +132,7 @@ parameter as its own (`struct Box<T>`).
 
 A local struct's `Self` is that struct. Inside an `impl` or `trait` method, the
 compiler resolves `Self` in the struct's field types to the type the `impl` is
-for instead. In a trait default method this also makes the struct differ per
-inheriting impl, while it is emitted once for all of them.
+for instead. In a generic `impl` that type names the impl's parameter, and in a
+trait default method it is the trait's own `Self`. The struct is emitted once,
+so it cannot vary with either, and such a field is refused as an outer
+parameter would be. The trait default method's case is on the roadmap.

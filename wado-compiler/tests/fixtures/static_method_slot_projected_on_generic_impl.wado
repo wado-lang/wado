@@ -1,0 +1,50 @@
+// A static method's slot bound only through another's associated type
+// (`A` off `T: Holder<Item = A>`) is answered by projecting it. Under a block
+// declaring slots of its own, the call was rejected as not inferring `A`
+// before the projection ran, though the same method on a plain block compiled.
+use { println, Stdout } from "core:cli";
+
+trait Holder with () {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+struct Cell {
+    v: i32,
+}
+
+impl Holder for Cell {
+    type Item = i32;
+    fn get(&self) -> i32 {
+        return self.v;
+    }
+}
+
+struct Reg<X> {
+    x: X,
+}
+
+impl<X> Reg<X> {
+    fn read<T: Holder<Item = A>, A>(t: T) -> A {
+        return t.get();
+    }
+}
+
+struct Plain {}
+
+impl Plain {
+    fn read<T: Holder<Item = A>, A>(t: T) -> A {
+        return t.get();
+    }
+}
+
+export fn run() with Stdout {
+    let a = Plain::read(Cell { v: 3 });
+    let b = Reg::<i32>::read(Cell { v: 4 });
+    println(`${a + b}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n"
+}

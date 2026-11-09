@@ -307,6 +307,7 @@ impl<'a> HoldsHandle<'a> {
                     return true;
                 }
                 let frame = EnvFrame {
+                    template: Some(*def),
                     args: type_args,
                     family: &[],
                     parent: env,
@@ -324,8 +325,8 @@ impl<'a> HoldsHandle<'a> {
                     None => self.cases(*def, Some(&frame), under_way, next),
                 }
             }
-            ResolvedType::TypeParam { index, .. } => env
-                .and_then(|frame| Some((*frame.args.get(*index as usize)?, frame.parent)))
+            ResolvedType::TypeParam { id, .. } => env
+                .and_then(|frame| Some((frame.arg(*id)?, frame.parent)))
                 .is_none_or(|(arg, parent)| self.walk(arg, parent, under_way, next)),
             _ => true,
         }

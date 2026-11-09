@@ -315,17 +315,14 @@ fn impl_method_return_type(op: &TirEffectOp, type_table: &TypeTable) -> TypeId {
 /// wrappers are synthesised against.
 fn substitute_operations(
     template: &[TirEffectOp],
+    resource: DefId,
     type_args: &[TypeId],
     type_table: &mut TypeTable,
 ) -> Vec<TirEffectOp> {
     if type_args.is_empty() {
         return template.to_vec();
     }
-    // One frame, and a declaration numbers its own parameters densely from
-    // zero, so the arguments *do* line up with the slots positionally. That is
-    // what `substitute_type_params` is for; `SubstitutionContext` exists for
-    // the case this is not — an impl and its method sharing one index space.
-    let subst = positional_substitution(type_args);
+    let subst = positional_substitution(resource, type_args);
     template
         .iter()
         .map(|op| {
@@ -3049,6 +3046,7 @@ fn synthesize_dispatch_infrastructure(
             .expect("active instantiation must have a declaration template in the effect index");
         let operations = substitute_operations(
             &template.operations,
+            key.effect.def(),
             &key.type_args,
             &mut type_table_rc.borrow_mut(),
         );

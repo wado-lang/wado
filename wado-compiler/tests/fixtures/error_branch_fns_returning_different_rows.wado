@@ -1,0 +1,31 @@
+// A function's return is invariant, so two branches returning functions of
+// different rows agree on no type. Joining the returns named a third type,
+// one neither branch converts to, and reported both against it.
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+fn hello() with Stdout {
+    println("out");
+}
+
+fn oops() with Stderr {
+    eprintln("err");
+}
+
+fn a() -> fn() with Stdout {
+    return hello;
+}
+
+fn b() -> fn() with Stderr {
+    return oops;
+}
+
+export fn run() with (Stdout, Stderr) {
+    let c = builtin::black_box(true);
+    let g = if c { a } else { b };
+    g()();
+}
+
+__DATA__
+{
+    "compile_error": ":24:29: analysis error: type mismatch: expected 'fn() -> (fn() -> () with Stdout)', found 'fn() -> (fn() -> () with Stderr)'"
+}

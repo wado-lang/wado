@@ -253,18 +253,14 @@ impl From<PurityError> for Diagnostic {
     }
 }
 
-/// The members of a nominal type, by the declaration's module and name.
-type MemberTable = IndexMap<(ModuleSource, String), Vec<TypeId>>;
-
-/// Every declaration's members: a struct's fields, a variant's case payloads.
+/// Every declaration's members, by the declaration: a struct's fields, a
+/// variant's case payloads.
 #[derive(Default)]
-struct MemberTables {
-    struct_fields: MemberTable,
-    variant_payloads: MemberTable,
-}
+struct MemberTables(IndexMap<DefId, Vec<TypeId>>);
 
 impl MemberTables {
     fn collect(sem: &Semantics, state: &AnnotateState) -> Self {
+        let defs = state.tysys.resolutions.defs();
         let mut tables = Self::default();
         for (src, module) in &sem.modules {
             let annotations = state.module_semantics.get(src).map(|m| &m.types);
@@ -274,16 +270,15 @@ impl MemberTables {
                         annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
                 {
                     tables
-                        .struct_fields
-                        .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
+                        .0
+                        .insert(defs.def_at(struct_decl.id), field_types.clone());
                 }
             }
         }
-        for info in state.tysys.data.variant_cases.values() {
-            tables.variant_payloads.insert(
-                (info.module_source.clone(), info.name.clone()),
-                info.cases.iter().map(|case| case.payload).collect(),
-            );
+        for (&def, info) in &state.tysys.data.variant_cases {
+            tables
+                .0
+                .insert(def, info.cases.iter().map(|case| case.payload).collect());
         }
         tables
     }
@@ -295,19 +290,17 @@ impl MemberTables {
     /// a slot (`&Array<T>`) would have to be substituted into, which interns a
     /// type, and this phase holds the table shared.
     fn of<'a>(&'a self, type_id: TypeId, tt: &'a TypeTable) -> impl Iterator<Item = TypeId> + 'a {
-        let key = tt
-            .nominal_head(type_id)
-            .map(|(name, module)| (module, name));
-        let fields = key.as_ref().and_then(|k| self.struct_fields.get(k));
-        let payloads = key.as_ref().and_then(|k| self.variant_payloads.get(k));
         let type_args = tt.nominal_type_args(type_id).unwrap_or_default();
-        fields
+        let decl = tt.nominal_def(type_id);
+        decl.and_then(|def| self.0.get(&def))
             .into_iter()
             .flatten()
-            .chain(payloads.into_iter().flatten())
             .map(move |&member| match tt.get(member) {
-                ResolvedType::TypeParam { index, .. } => {
-                    type_args.get(*index as usize).copied().unwrap_or(member)
+                // The declaration's own type binds none of its parameters.
+                ResolvedType::TypeParam { id, .. }
+                    if Some(id.owner) == decl && !type_args.is_empty() =>
+                {
+                    type_args[id.index as usize]
                 }
                 _ => member,
             })

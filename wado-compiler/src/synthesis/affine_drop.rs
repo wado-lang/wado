@@ -337,20 +337,27 @@ impl<'a> AffineTypes<'a> {
                 fields
                     .iter()
                     .map(|field| {
-                        let ty = tt.substitute_positional(field.type_id, &args);
+                        let ty = match decl {
+                            Some(decl) => tt.substitute_positional(field.type_id, decl, &args),
+                            None => field.type_id,
+                        };
                         (field.index, field.name.clone(), ty)
                     })
                     .collect(),
             )
-        } else if let Some(cases) = decl
-            .and_then(|decl| tt.variant_template_cases(decl))
-            .map(<[_]>::to_vec)
-        {
+        } else if let Some((variant, cases)) = decl.and_then(|decl| {
+            tt.variant_template_cases(decl)
+                .map(|cases| (decl, cases.to_vec()))
+        }) {
             Parts::Cases(
                 cases
                     .into_iter()
                     .map(|(name, index, payload)| {
-                        (name, index, tt.substitute_positional(payload, &args))
+                        (
+                            name,
+                            index,
+                            tt.substitute_positional(payload, variant, &args),
+                        )
                     })
                     .collect(),
             )

@@ -33,7 +33,7 @@ use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
     MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirGlobal, TirModule,
-    TirStruct, TypeId,
+    TirStruct, TypeArgMap, TypeId, TypeParamId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::{AnonStructId, TypeTable};
@@ -140,9 +140,9 @@ pub(crate) struct Pool {
     released: Vec<Rc<RefCell<TirFunction>>>,
     /// The struct and variant instances held since the drain last read them.
     instances: Vec<TypeId>,
-    /// Each generic variant's type parameter indices and case payloads, which
-    /// a held instance of it holds substituted.
-    generic_variants: IndexMap<DefId, (Vec<u32>, Vec<TypeId>)>,
+    /// Each generic variant's type parameters and case payloads, which a held
+    /// instance of it holds substituted.
+    generic_variants: IndexMap<DefId, (Vec<TypeParamId>, Vec<TypeId>)>,
     /// Each declaration's field and payload types, as declared. A value holds
     /// its members' values, which drop glue drops through their own impls.
     members: IndexMap<DefId, Vec<TypeId>>,
@@ -289,11 +289,7 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
                 pool.lay_out(payload, &type_table);
             }
         } else {
-            let params = variant
-                .type_params
-                .iter()
-                .map(|param| param.index)
-                .collect();
+            let params = variant.type_params.iter().map(|param| param.id).collect();
             pool.generic_variants
                 .insert(variant.def, (params, payloads.collect()));
         }
@@ -567,8 +563,7 @@ impl Monomorphizer {
                 unreachable!("only a variant instance is kept for the variant drain");
             };
             let (params, cases) = &self.pool.generic_variants[&def];
-            let substitution: IndexMap<u32, TypeId> =
-                params.iter().copied().zip(type_args).collect();
+            let substitution: TypeArgMap = params.iter().copied().zip(type_args).collect();
             for &payload in cases {
                 payloads.push(tt.substitute_type_params(payload, &substitution));
             }

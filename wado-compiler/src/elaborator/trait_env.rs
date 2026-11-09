@@ -540,7 +540,7 @@ impl BlanketImpl {
     /// Where every template name for this blanket comes from — one built from
     /// the spelling alone looks up a *different* template, silently.
     pub(crate) fn receiver_binder(&self, defs: &DefTable) -> name::FqTypeName {
-        name::FqTypeName::binder_of_impl(defs, self.def, &self.param)
+        name::FqTypeName::binder_of(defs, self.def, &self.param)
     }
 }
 
@@ -2727,9 +2727,11 @@ pub(super) fn args_at_impl_target(
     resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
     let target_id = written_type_arg(target, resolutions);
+    // `Self` is a keyword no parameter can take, so its spelling identifies it.
+    let is_self = |node: &name::FqTypeName| node.binder_name() == Some("Self");
     written
         .into_iter()
-        .map(|arg| arg.substitute(&name::FqTypeName::binder("Self"), &target_id))
+        .map(|arg| arg.rewrite(&|node| is_self(node).then(|| target_id.clone())))
         .collect()
 }
 
@@ -2752,7 +2754,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
-        ast::Type::TypePackSpread(name, _) => name::FqTypeName::pack_spread(name),
+        ast::Type::TypePackSpread(spread) => name::FqTypeName::pack_spread(&spread.name),
         ast::Type::Function(ft) => {
             let mut with_clause = Vec::new();
             for effect in &ft.effects {
@@ -2772,15 +2774,21 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             let head = match head_site(ty).map(|site| resolutions.get(site)) {
                 Some(Resolution::Def(def)) => name::FqTypeName::of_head(resolutions.defs(), def),
                 // `<F: fn(...)>` is that signature, spelled as the type it is.
-                Some(Resolution::Binder(binder)) => match resolutions.fn_bound_signature(binder) {
-                    Some(sig) => {
+                Some(Resolution::Binder(binder)) => {
+                    if let Some(sig) = resolutions.fn_bound_signature(binder) {
                         return written_type_arg(
                             &ast::Type::Function(Box::new(sig.clone())),
                             resolutions,
                         );
                     }
-                    None => name::FqTypeName::binder(&get_type_name_static(ty)),
-                },
+                    let written = get_type_name_static(ty);
+                    match resolutions.binder_owner(binder) {
+                        Some(owner) => {
+                            name::FqTypeName::binder_of(resolutions.defs(), owner, &written)
+                        }
+                        None => name::FqTypeName::binder(&written),
+                    }
+                }
                 // A projection names no type until its base is one, and the
                 // trait declaring the member is part of that name
                 // (WEP-2026-08-12). A site that must know resolves it at its own
@@ -2870,7 +2878,7 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
         ast::Type::MutReference(inner) => {
             name::ref_type_name(name::RefKind::Mut, &written_type_source(inner))
         }
-        ast::Type::TypePackSpread(pack, _) => name::type_pack_name(pack),
+        ast::Type::TypePackSpread(pack) => name::type_pack_name(&pack.name),
         ast::Type::Infer(_) => "_".to_string(),
         ast::Type::Error(_) => "<error>".to_string(),
     }

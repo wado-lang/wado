@@ -1,0 +1,47 @@
+// A closure argument typed only by the callee's slot (`|x| x` for `fn(T) -> T`)
+// waits for whatever answers the slot later: the binding's use, or a sibling
+// branch. A method call resolved its arguments through one instantiation and
+// inferred through another, so the closure kept a variable nothing answered and
+// its body was never built. A free function refused to wait at all, its
+// argument holding the call's own variable.
+use { println, Stdout } from "core:cli";
+
+struct H {}
+
+impl H {
+    fn forward<T>(&self, f: fn(T) -> T) -> fn(T) -> T {
+        return f;
+    }
+}
+
+fn forward<T>(f: fn(T) -> T) -> fn(T) -> T {
+    return f;
+}
+
+fn by_use(h: &H) -> fn(i32) -> i32 {
+    let g = h.forward(|x| x);
+    return g;
+}
+
+fn by_sibling(h: &H, c: bool) -> fn(i32) -> i32 {
+    let k = |x: i32| x + 1;
+    let g = if c { h.forward(|x| x * 2) } else { k };
+    return g;
+}
+
+fn free_by_sibling(c: bool) -> fn(i32) -> i32 {
+    let k = |x: i32| x + 1;
+    let g = if c { k } else { forward(|x| x * 3) };
+    return g;
+}
+
+export fn run() with Stdout {
+    let h = H {};
+    println(`${by_use(&h)(5)} ${by_sibling(&h, true)(5)} ${by_sibling(&h, false)(5)}`);
+    println(`${free_by_sibling(true)(5)} ${free_by_sibling(false)(5)}`);
+}
+
+__DATA__
+{
+    "stdout": "5 10 6\n6 15\n"
+}

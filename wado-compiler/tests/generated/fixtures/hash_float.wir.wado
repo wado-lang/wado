@@ -683,13 +683,13 @@ type "functype//hash_float.wado/hash_float.wado/$tmpl$ce9bda9252f81986^core:prel
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(212)
 
-type "functype//core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<bf16>) -> ref "core:collections/hashmap.wado//HashMap<bf16,()>";  // TypeId(213)
+type "functype//core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from" = fn(ref Array<bf16>) -> ref "core:collections/hashmap.wado//HashMap<bf16,()>";  // TypeId(213)
 
-type "functype//core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f16>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<f16>) -> ref "core:collections/hashmap.wado//HashMap<f16,()>";  // TypeId(214)
+type "functype//core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f16>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from" = fn(ref Array<f16>) -> ref "core:collections/hashmap.wado//HashMap<f16,()>";  // TypeId(214)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<hash_float.wado/$tmpl$ce9bda9252f81986,[bool]>" = fn(ref "hash_float.wado//$tmpl$ce9bda9252f81986") -> ref "core:prelude/string.wado//String";  // TypeId(215)
 
-type "functype//core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<f32>) -> ref "core:collections/hashmap.wado//HashMap<f32,()>";  // TypeId(216)
+type "functype//core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f32>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from" = fn(ref Array<f32>) -> ref "core:collections/hashmap.wado//HashMap<f32,()>";  // TypeId(216)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<hash_float.wado/$tmpl$e651684364ce8ab5,[core:prelude/types.wado/Option<i32>]>" = fn(ref "hash_float.wado//$tmpl$e651684364ce8ab5") -> ref "core:prelude/string.wado//String";  // TypeId(217)
 
@@ -1127,7 +1127,7 @@ fn "hash_float.wado/$test_1_f32_keys"() {
     let $licm_fps_16_97: ref Array<i32>;
     let $licm_keys_18_99: ref Array<f32>;
     let $mv$s_0$inner: ref "core:collections/hashmap.wado//HashMap<f32,()>";
-    multivalue_bind [$mv$s_0$inner] = "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<f32>(0_f32, -0_f32, builtin::f32_reinterpret_i32(2143289344), builtin::f32_reinterpret_i32(2143289344), 2.5_f32));
+    multivalue_bind [$mv$s_0$inner] = "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f32>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from"(array.new_fixed<f32>(0_f32, -0_f32, builtin::f32_reinterpret_i32(2143289344), builtin::f32_reinterpret_i32(2143289344), 2.5_f32));
     if @unlikely(local.tee $v0_1(local.tee $load_0($mv$s_0$inner.log).size) != 3) {
         cold_path;
         "hash_float.wado/$test_1_f32_keys$cold2"($v0_1);
@@ -1213,14 +1213,14 @@ fn "hash_float.wado/$test_1_f32_keys"() {
 fn "hash_float.wado/$test_2_half_precision_keys"() {
     let $v0_1: i32;
     let $mv$h$inner: ref "core:collections/hashmap.wado//HashMap<f16,()>";
-    multivalue_bind [$mv$h$inner] = "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f16>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<u16>(32768, 0, 32256, 32257));
+    multivalue_bind [$mv$h$inner] = "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f16>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from"(array.new_fixed<u16>(32768, 0, 32256, 32257));
     if @unlikely(local.tee $v0_1($mv$h$inner.log.size) != 2) {
         cold_path;
         "hash_float.wado/$test_2_half_precision_keys$cold1"($v0_1);
         unreachable;
     }
     let $mv$b$inner: ref "core:collections/hashmap.wado//HashMap<bf16,()>";
-    multivalue_bind [$mv$b$inner] = "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<u16>(32768, 0, 32704));
+    multivalue_bind [$mv$b$inner] = "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from"(array.new_fixed<u16>(32768, 0, 32704));
     if @unlikely(local.tee $v0_1($mv$b$inner.log.size) != 2) {
         cold_path;
         "hash_float.wado/$test_2_half_precision_keys$cold0"($v0_1);
@@ -3777,7 +3777,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     return out_3;
 }
 
-fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from"(elements) {
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<bf16>";
     let v: ref "core:collections/hashmap.wado//HashSeed";
     let end: i32;
@@ -3817,7 +3817,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^co
     return $sroa_set_inner_25;
 }
 
-fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f16>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f16>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from"(elements) {
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<f16>";
     let v: ref "core:collections/hashmap.wado//HashSeed";
     let end: i32;
@@ -3875,7 +3875,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<hash_float.
     return out_3;
 }
 
-fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f32>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f32>^core:prelude/traits.wado/From<Array<T#core:collections/hashmap.wado/1886>>::from"(elements) {
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<f32>";
     let v: ref "core:collections/hashmap.wado//HashSeed";
     let end: i32;

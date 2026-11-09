@@ -1,0 +1,16 @@
+// A block-bodied closure whose context expects a value owes a `return`, as one
+// declaring the type does: the expected `fn() -> i32` is what it must return.
+
+fn n() -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let f: fn() -> i32 = || {
+        n()
+    };
+    let _x = f();
+}
+
+__DATA__
+{"compile_error": ":9:26: analysis error: function with return type 'i32' must use explicit `return`"}

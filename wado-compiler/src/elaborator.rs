@@ -257,6 +257,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+        let owner = self.tysys.resolutions.defs().def_at(impl_block.id);
         for param in &impl_block.type_params {
             let Some(slot) = slots.of_name(&param.name) else {
                 continue;
@@ -276,6 +277,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 continue;
             }
             let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+                owner,
                 param.name.clone(),
                 slot,
                 param.is_pack,
@@ -712,7 +714,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .make_type_param(name, index)
+                    .make_type_param(def, name, index)
             })
             .collect();
         Some(self.generic_newtype_instance(def, params))
@@ -909,15 +911,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             return;
         }
-        if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
-            return;
-        }
-        if self.ast_block_always_exits(body) {
+        self.check_missing_return(return_type, body, func.span);
+    }
+
+    /// Emit when `body`, a function's or a closure's, can fall off its end
+    /// while it owes a `return_type` value.
+    pub(super) fn check_missing_return(&self, return_type: TypeId, body: &Block, span: Span) {
+        if return_type == TypeTable::UNIT
+            || return_type == TypeTable::NEVER
+            || self.ast_block_always_exits(body)
+        {
             return;
         }
         let _ = self.emit(types::TypeError::MissingReturn {
             return_type: self.tysys.type_table.borrow().name(return_type),
-            span: func.span,
+            span,
         });
     }
 
@@ -1136,7 +1144,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .contains_key(written)
         {
             return match owner {
-                Some(def) => self.tysys.impl_receiver_binder(def, written),
+                Some(def) => FqTypeName::binder_of(self.tysys.resolutions.defs(), def, written),
                 None => self.binder_in_scope(written),
             };
         }
@@ -1148,18 +1156,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The binder `written` names in the current type-param scope: owned by the
-    /// `impl` block in scope when it is that block's receiver, bare otherwise.
-    /// Matched on the binding, not the spelling — a method parameter may shadow
-    /// the receiver's letter (#1932).
+    /// The binder `written` names in the current type-param scope, owned by the
+    /// item declaring it. Matched on the binding, not the spelling — a method
+    /// parameter may shadow the receiver's letter (#1932).
     pub(super) fn binder_in_scope(&self, written: &str) -> FqTypeName {
-        let ctx = &self.annotate_ctx.trait_ctx;
-        if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
-            && ctx.type_params.get(written).and_then(|b| b.decl) == Some(*receiver_decl)
-        {
-            return self.tysys.impl_receiver_binder(*owner, written);
+        let binder = self.annotate_ctx.trait_ctx.type_params.get(written);
+        self.binder_named(binder, written)
+    }
+
+    /// [`Self::binder_in_scope`] for the binder `binder` is, which `Self`
+    /// reaches even where a method parameter shadows its letter.
+    pub(super) fn binder_of(&self, binder: TypeId) -> FqTypeName {
+        let name = self
+            .tysys
+            .binder_name(binder)
+            .expect("a binder is a type parameter");
+        self.binder_named(self.annotate_ctx.trait_ctx.binder(binder), &name)
+    }
+
+    fn binder_named(&self, binder: Option<&scope::BinderInScope>, name: &str) -> FqTypeName {
+        let table = self.tysys.type_table.borrow();
+        match binder {
+            Some(binder) if matches!(table.get(binder.type_id), ResolvedType::TypeParam { .. }) => {
+                table.fq_type_name(binder.type_id)
+            }
+            _ => FqTypeName::binder(name),
         }
-        FqTypeName::binder(written)
     }
 
     /// The name an `impl` block's receiver registers under. One block, one
@@ -1168,7 +1190,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.receiver_name_of_impl(
             &impl_block.ty,
             &impl_block.type_params,
-            Some(self.tysys.resolutions.defs().def_at(impl_block.id)),
+            self.tysys.resolutions.defs().def_at(impl_block.id),
         )
     }
 
@@ -1179,7 +1201,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         impl_ty: &ast::Type,
         type_params: &[ast::GenericParam],
-        owner: Option<DefId>,
+        owner: DefId,
     ) -> FqTypeName {
         // A function type's name is its whole signature, `mut` and effects
         // included, as `TypeTable::fn_receiver_name` spells a call's receiver.
@@ -1196,7 +1218,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
             }
         }
-        self.qualified_receiver_name_owned(&self.get_type_name(impl_ty), owner)
+        self.qualified_receiver_name_owned(&self.get_type_name(impl_ty), Some(owner))
     }
 
     /// The declaration `ns::Name` reaches from this module.
@@ -1820,7 +1842,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (decl_id, type_params, methods, is_resource) in decl_ops {
             let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
             let owner = defs.def_at(decl_id);
-            let ops = self.resolve_effect_ops(&type_params, &methods, is_resource.then_some(owner));
+            let ops = self.resolve_effect_ops(
+                owner,
+                &type_params,
+                &methods,
+                is_resource.then_some(owner),
+            );
             for method in &methods {
                 let op = defs.def_at(method.id);
                 self.sem
@@ -1906,7 +1933,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &effect_decl.methods,
                         OperationOwner::Interface,
                     );
-                    self.resolve_operation_param_defaults(&[], &effect_decl.methods, None);
+                    self.resolve_operation_param_defaults(
+                        self.tysys.def_at(effect_decl.id),
+                        &[],
+                        &effect_decl.methods,
+                        None,
+                    );
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
                     // `AstId` every other function's do.
@@ -1922,10 +1954,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         OperationOwner::Resource,
                     );
+                    let resource = self.tysys.def_at(resource_decl.id);
                     self.resolve_operation_param_defaults(
+                        resource,
                         &resource_decl.type_params,
                         &resource_decl.methods,
-                        Some(self.tysys.def_at(resource_decl.id)),
+                        Some(resource),
                     );
                 }
                 // Other items will be added as needed
@@ -2030,18 +2064,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
         let struct_name = self.get_type_name(&impl_block.ty);
-        let impl_owner = Some(self.tysys.resolutions.defs().def_at(impl_block.id));
+        let impl_owner = self.tysys.resolutions.defs().def_at(impl_block.id);
         let mut scope = self.enter_impl_scope(impl_block);
         let trait_name = scope.impl_block_trait_name(impl_block);
-        // The node the scope bound the receiver to, so a method parameter
-        // shadowing the letter is a different binder.
-        let receiver_decl = scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(&struct_name)
-            .and_then(|b| b.decl);
-        scope.annotate_ctx.trait_ctx.impl_owner = impl_owner.map(|def| (def, receiver_decl));
 
         if impl_block.is_synthesize_request {
             scope.resolve_synthesize_request_marker(impl_block, &struct_name);
@@ -2323,12 +2348,6 @@ impl TypeSystem {
             })
     }
 
-    /// The binder naming the receiver parameter `written` of the `impl` block
-    /// `owner` — every pass that names a blanket's receiver asks here.
-    pub(super) fn impl_receiver_binder(&self, owner: DefId, written: &str) -> FqTypeName {
-        FqTypeName::binder_of_impl(self.resolutions.defs(), owner, written)
-    }
-
     /// The spelling `def` renders to in a mangled head — its declared name,
     /// with a function-local declaration's disambiguator applied.
     pub(super) fn decl_mangled_name(&self, def: DefId) -> String {
@@ -2345,16 +2364,14 @@ impl TypeSystem {
     /// Each case's payload type of the variant `ty`, typed at this instance.
     pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
         let variant_info = self.variant_of_type(ty)?;
-        let type_args = self
-            .type_table
-            .borrow()
-            .nominal_type_args(ty)
-            .unwrap_or_default();
+        let mut table = self.type_table.borrow_mut();
+        let type_args = table.nominal_type_args(ty).unwrap_or_default();
+        let substitution = table.bind_params(&variant_info.type_param_type_ids, &type_args);
         Some(
             variant_info
                 .cases
                 .iter()
-                .map(|c| self.substitute_type_params(c.payload, &type_args))
+                .map(|c| table.substitute_type_params(c.payload, &substitution))
                 .collect(),
         )
     }

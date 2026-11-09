@@ -179,7 +179,8 @@ fn settled(head: TypeHead) -> Option<TypeHead> {
         TypeHead::Binder { .. }
         | TypeHead::ParamBucket { .. }
         | TypeHead::Projection(_)
-        | TypeHead::Unresolved(_) => None,
+        | TypeHead::Unresolved(_)
+        | TypeHead::Infer { .. } => None,
         TypeHead::Declared(_)
         | TypeHead::Shape { .. }
         | TypeHead::Builtin(_)

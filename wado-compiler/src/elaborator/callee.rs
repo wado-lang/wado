@@ -64,6 +64,16 @@ impl CalleeRef {
         }
     }
 
+    /// The declaration owning the type parameters a call's type arguments fill.
+    pub fn type_param_owner(&self) -> DefId {
+        match self {
+            Self::Declared { def, .. } | Self::Operation { def, .. } => *def,
+            Self::Rendered { name, .. } => {
+                unreachable!("a probe `{name}` is never called with type arguments")
+            }
+        }
+    }
+
     /// What a call of this instantiates.
     pub fn template(&self, signatures: &Signatures) -> Option<TemplateId> {
         match self {

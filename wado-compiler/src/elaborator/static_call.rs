@@ -323,7 +323,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_name,
             method_name,
             receiver_key,
-            receiver_type,
             &declaring_args,
         ));
         candidates.extend(self.blanket_candidates(method_name, receiver_type));
@@ -509,6 +508,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The generic struct or variant `key`'s declaration declares, at the
+    /// `args` the call settled: the receiver an inherited default reads as
+    /// `Self`.
+    fn declared_type_at(&self, key: &ImplTargetKey, args: &[TypeId]) -> Option<TypeId> {
+        let def = key.decl()?;
+        let params = self.type_lookup().declared_type_param_ids(def)?;
+        if args.is_empty() {
+            return None;
+        }
+        assert_eq!(params.len(), args.len(), "one argument per parameter");
+        let mut table = self.tysys.type_table.borrow_mut();
+        Some(table.make_generic_instance(def, args.to_vec()))
+    }
+
     /// The type a struct, resource, variant, enum or flags declaration `def` declares,
     /// a generic one applied to its own parameters.
     pub(super) fn declared_self_type(&self, def: DefId) -> Option<TypeId> {
@@ -656,15 +669,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // costs a scope to resolve, and this is the one rung that needs
                 // it. The key's declaration answers first, as the name may not
                 // reach it from the caller's frame.
-                let receiver_type = receiver_type
-                    .or_else(|| self.type_declared_by(Some(receiver_key)))
-                    .or_else(|| {
-                        let mut scope = self.enter_inherited_type_param_scope();
-                        let resolved =
-                            scope.resolve_unsited_type_name(receiver_name, Span::default());
-                        drop(scope);
-                        Some(resolved)
-                    });
+                let args = self
+                    .tysys
+                    .receiver_declaring_args(receiver_type, receiver_args, receiver_key.decl())
+                    .unwrap_or_default();
+                let receiver_type = match self.declared_type_at(receiver_key, &args) {
+                    Some(at_args) => Some(at_args),
+                    // A bare spelling of a generic declaration (`W::m()`) is
+                    // no instance: its parameters stay open for the call to
+                    // settle.
+                    None if args.is_empty() => {
+                        self.type_declared_by(Some(receiver_key)).or(receiver_type)
+                    }
+                    None => receiver_type,
+                }
+                .or_else(|| {
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    let resolved = scope.resolve_unsited_type_name(receiver_name, Span::default());
+                    drop(scope);
+                    Some(resolved)
+                });
                 let (trait_decl, impl_def) = (supply.trait_decl, supply.impl_def);
                 self.callee_of_trait_declaration(
                     trait_decl,
@@ -708,12 +732,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params.defaults_module = Some(declaring.module.clone());
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if receiver_type.is_some() || !method_args.is_empty() {
-            let frame: Vec<TypeId> = receiver_type
-                .into_iter()
-                .flat_map(|receiver_type| {
-                    std::iter::once(receiver_type).chain(self.tysys.trait_args_of_impl(impl_def))
-                })
-                .collect();
+            let frame = receiver_type
+                .map(|receiver| self.tysys.trait_frame_at(impl_def, receiver))
+                .unwrap_or_default();
             let instantiated = sig.instantiate_call(&self.tysys.type_table, &frame, method_args);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
@@ -904,7 +925,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_name: &str,
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
-        receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
     ) -> Vec<Candidate> {
         self.trait_impls_for_receiver(receiver_name, target_hint, receiver_args)
@@ -927,13 +947,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     origin,
                     selector,
                 };
-                let offer = self.tysys.impl_static_offer(
-                    header,
-                    impl_def,
-                    trait_decl,
-                    method_name,
-                    receiver_type,
-                )?;
+                let offer =
+                    self.tysys
+                        .impl_static_offer(header, impl_def, trait_decl, method_name)?;
                 Some(build(
                     offer.method_id,
                     offer.kind,
@@ -1067,7 +1083,6 @@ impl TypeSystem {
         impl_def: DefId,
         trait_decl: DefId,
         method_name: &str,
-        receiver_type: Option<TypeId>,
     ) -> Option<StaticOffer> {
         if let Some(method) = header.methods.iter().find(|m| m.name == method_name) {
             let sig = self
@@ -1081,7 +1096,7 @@ impl TypeSystem {
                 selector: self.written_selector(header, sig),
             });
         }
-        self.inherited_offer(trait_decl, impl_def, method_name, receiver_type)
+        self.inherited_offer(trait_decl, impl_def, method_name)
     }
 
     /// The candidate for the trait's default body, where the block wrote none.
@@ -1090,18 +1105,15 @@ impl TypeSystem {
         trait_decl: DefId,
         impl_def: DefId,
         method_name: &str,
-        receiver_type: Option<TypeId>,
     ) -> Option<StaticOffer> {
         let declared = self.signatures.trait_sig(trait_decl)?.method(method_name)?;
         if !declared.is_inherited() {
             return None;
         }
-        // Without the trait arguments after `Self`, the default leaves them
-        // open and every argument reaches every block.
-        let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
-            .chain(self.trait_args_of_impl(impl_def))
-            .collect();
-        let instantiated = declared.sig.instantiate_call(&self.type_table, &frame, &[]);
+        let instantiated =
+            declared
+                .sig
+                .instantiate_call(&self.type_table, &self.inherited_frame(impl_def), &[]);
         Some(StaticOffer {
             method_id: declared.sig.def,
             kind: CandidateKind::of(declared.sig.self_kind),
@@ -1146,10 +1158,32 @@ impl TypeSystem {
         })
     }
 
-    /// The block's trait-reference arguments, which fill the trait's frame past
-    /// `Self`.
-    fn trait_args_of_impl(&self, impl_def: DefId) -> Vec<TypeId> {
-        self.signatures.impl_sig(impl_def).trait_type_args.clone()
+    /// The trait's frame as block `impl_def` fills it for `receiver`: `Self`,
+    /// then the block's trait arguments at the receiver's own. Without those,
+    /// a default leaves them open and every argument reaches every block.
+    pub(super) fn trait_frame_at(&self, impl_def: DefId, receiver: TypeId) -> Vec<TypeId> {
+        let mut table = self.type_table.borrow_mut();
+        let receiver_args = table
+            .impl_target_decl(impl_def)
+            .and_then(|decl| table.args_at_decl(receiver, decl))
+            .unwrap_or_default();
+        let slots = table.impl_slots(impl_def, &receiver_args);
+        std::iter::once(receiver)
+            .chain(
+                self.signatures
+                    .impl_sig(impl_def)
+                    .trait_type_args
+                    .iter()
+                    .map(|&arg| table.substitute_type_params(arg, &slots)),
+            )
+            .collect()
+    }
+
+    /// [`Self::trait_frame_at`] the block's own target, its parameters open as
+    /// a body the block wrote leaves them.
+    fn inherited_frame(&self, impl_def: DefId) -> Vec<TypeId> {
+        let target = self.type_table.borrow().impl_target_whole(impl_def);
+        self.trait_frame_at(impl_def, target)
     }
 
     /// The receiver's type arguments: the ones a call carries, else the ones its

@@ -1,0 +1,39 @@
+// The blanket impl targets its second parameter. A static call substituted
+// the receiver for the first, so `ident`'s `Self` stayed the bare `T`.
+use { println, Stdout } from "core:cli";
+
+trait Holder with () {
+    type Item;
+    fn item(&self) -> Self::Item;
+}
+
+trait Ident with () {
+    fn ident(x: Self) -> Self;
+}
+
+impl<A, T: Holder<Item = A>> Ident for T {
+    fn ident(x: Self) -> Self {
+        return x;
+    }
+}
+
+struct Cell {
+    v: i32,
+}
+
+impl Holder for Cell {
+    type Item = i32;
+    fn item(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() with Stdout {
+    let c = Cell::ident(Cell { v: 4 });
+    println(`${c.item()}`);
+}
+
+__DATA__
+{
+    "stdout": "4\n"
+}

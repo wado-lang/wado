@@ -1,0 +1,61 @@
+// `Self::b()` inside a generic impl names the impl's own static, whatever
+// arguments the block's target writes, as `W::b()` does. A parameter bound to
+// a generic type reaches that type's static the same way.
+
+struct W<T> {
+    t: T,
+}
+
+impl<T> W<T> {
+    fn a(t: T) -> W<T> {
+        return Self::b(t);
+    }
+
+    fn b(t: T) -> W<T> {
+        return W { t };
+    }
+}
+
+struct Pair<X, Y> {
+    x: X,
+    y: Y,
+}
+
+impl<A, B> Pair<B, A> {
+    fn make(a: A, b: B) -> Self {
+        return Pair { x: b, y: a };
+    }
+
+    fn swapped_in(a: A, b: B) -> Pair<B, A> {
+        return Self::make(a, b);
+    }
+}
+
+trait Build with () {
+    fn build() -> Self;
+}
+
+impl Build for W<i32> {
+    fn build() -> W<i32> {
+        return W::b(7);
+    }
+}
+
+fn built<T: Build>() -> T {
+    return T::build();
+}
+
+test "Self:: reaches a generic impl's static" {
+    assert W::a(1).t == 1;
+    let p = Pair::swapped_in(2, "t");
+    assert p.x == "t";
+    assert p.y == 2;
+}
+
+test "a parameter bound to a generic type reaches its static" {
+    let w: W<i32> = built();
+    assert w.t == 7;
+}
+
+__DATA__
+{"test": {}}

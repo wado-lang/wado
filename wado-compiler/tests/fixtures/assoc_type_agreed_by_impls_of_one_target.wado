@@ -1,0 +1,16 @@
+// Two impls on one target each answer `Elem` over their own `T`, and agree:
+// `List<T>`'s `Sequence` and `FromIterator` both say `T`. Their answers are
+// compared at the instance, so `first_of` infers its `T` as `i32`.
+use { println, Stdout } from "core:cli";
+
+fn first_of<T, S: AsSlice<Elem = T>>(source: &S) -> T {
+    return source.at(0);
+}
+
+export fn run() with Stdout {
+    let source: List<i32> = [7, 8];
+    println(`${first_of(&source)}`);
+}
+
+__DATA__
+{"stdout": "7\n"}

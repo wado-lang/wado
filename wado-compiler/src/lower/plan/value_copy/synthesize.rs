@@ -27,7 +27,7 @@ use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::name::value_copy_helper_name;
 use crate::optimize::pass_dump;
-use crate::{hashmap, tir};
+use crate::tir;
 
 pub fn synthesize_helpers(
     project: &mut FlatPackage,
@@ -255,17 +255,13 @@ fn variant_cases_concrete(
                 .borrow()
                 .variant_template_cases(*def)
                 .map(<[_]>::to_vec)?;
-            let mut substitution = hashmap::IndexMap::default();
-            for (idx, ty) in type_args.iter().enumerate() {
-                substitution.insert(idx as u32, *ty);
-            }
             Some(
                 cases
                     .into_iter()
                     .map(|(case_name, index, payload)| {
                         let payload = type_table
                             .borrow_mut()
-                            .substitute_type_params(payload, &substitution);
+                            .substitute_positional(payload, *def, type_args);
                         (case_name, index, payload)
                     })
                     .collect(),

@@ -941,7 +941,7 @@ impl Planner<'_> {
         self.in_region(region, |p| p.visit_expr(operand));
     }
 
-    fn if_stmt(&mut self, s: &ast::IfStmt, after: bool) {
+    fn if_stmt(&mut self, s: &ast::IfExpr, after: bool) {
         self.visit_condition(&s.condition);
         self.if_branches(s.id, s.span, &s.then_block, s.else_block.as_ref(), after);
     }

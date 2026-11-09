@@ -13,15 +13,15 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, StructDef, TypeId};
+use crate::tir::{ResolvedType, StructDef, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
-    BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
-    trait_params_from_impl,
+    BinderInScope, BoundSelf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
+    TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
 use super::trait_env::{DefaultArg, ImplMethodHeader, InheritedBound, ViaClause};
@@ -237,10 +237,21 @@ pub(super) fn assoc_const_owner_of_path(
 
 /// A bound as the asking site states it: its arguments are spelled in the
 /// declaring item's parameter space, and become what the site wrote there.
-/// `None` where one stays a binder, which belongs to the site's own caller.
-fn asked_at(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
+/// `None` where an argument is yet to be decided — a variable, whose slot
+/// carries the bound to its answer, or a type already reported — or names a
+/// binder that is none of `frame_binders`.
+fn asked_at(
+    trait_: FqTraitName,
+    at_call: &[(FqTypeName, FqTypeName)],
+    frame_binders: &[FqTypeName],
+) -> Option<FqTraitName> {
     let asked = spelled_at(&trait_, at_call);
-    (!asked.args_mention_binder()).then_some(asked)
+    let undecided = |head: &TypeHead| match head {
+        TypeHead::Infer { .. } | TypeHead::Unresolved(_) => true,
+        TypeHead::Binder { .. } => !frame_binders.iter().any(|binder| binder.head() == head),
+        _ => false,
+    };
+    (!asked.args().iter().any(|arg| arg.mentions(&undecided))).then_some(asked)
 }
 
 /// `trait_` with each binder `at` settles replaced by what it settles it to.
@@ -556,7 +567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let space =
                 self.with_self_binding(target, |e| e.inherited_space(trait_decl, &arg_ids, &via));
             let pick = vec![true; bound.type_args.len()];
-            let supertrait_trait = self.in_space(&space, |e| {
+            let supertrait_trait = self.with_type_params_bound(&space, |e| {
                 e.trait_named_with_resolved_args(named, &bound, &pick)
             });
             let supertrait = self.tysys.resolutions.defs().name(decl).to_string();
@@ -615,8 +626,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let target = self.tysys.type_table.borrow().impl_target_whole(impl_def);
-        let mut slots: IndexMap<u32, TypeId> = IndexMap::default();
-        slots.insert(0, target);
+        let slot = |index| TypeParamId {
+            owner: trait_decl,
+            index,
+        };
+        let self_slot = TypeParamId::trait_self(trait_decl);
+        let mut slots = TypeArgMap::default();
+        slots.insert(self_slot, target);
         let defaults = header
             .type_params
             .iter()
@@ -638,14 +654,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // own module, which this frame cannot read from.
                 (None, Some(DefaultArg::Named(_)) | None) => return,
             };
-            slots.insert(supplied.slot, arg);
+            slots.insert(slot(supplied.slot), arg);
         }
         let answers: Vec<ProjectionAnswer> = impl_sig
             .associated_types
             .iter()
             .map(|(name, &answer)| ProjectionAnswer::at_any(trait_decl, name.clone(), answer))
             .collect();
-        let projections = SlotProjections::from_iter([(0, answers)]);
+        let projections = SlotProjections::from_iter([(self_slot, answers)]);
 
         for method in &impl_block.methods {
             let Some(declared) = trait_sig.method(&method.name) else {
@@ -670,10 +686,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .zip(written.own_type_params())
                 {
-                    let slot = table
-                        .param_slot(*from)
-                        .expect("a method's own type parameter is a slot");
-                    method_slots.insert(slot, *to);
+                    method_slots.insert(table.declared_param(*from), *to);
                 }
             }
             let expected = declared.sig.decl.instantiate_slots_with(
@@ -815,8 +828,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !pick.contains(&true) {
             return trait_;
         }
-        let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
-        self.with_type_params_bound(&names, type_args, |e| {
+        let space = ParamRef::space(params, type_args, &self.tysys.resolutions);
+        self.with_type_params_bound(&space, |e| {
             e.under_self_binding(self_binding, |e| {
                 e.trait_named_with_resolved_args(trait_, bound, &pick)
             })
@@ -966,20 +979,29 @@ impl TypeSystem {
     }
 
     /// The first of `bounds` that `type_id` does not answer, each at the
-    /// arguments it writes. One naming only variables a pending call is still to
-    /// answer may become a type that does, and is checked once it is answered.
+    /// arguments it writes. A type or argument naming only variables a pending
+    /// call is still to answer may become one that does, and is checked once it
+    /// is answered.
     fn unmet_bound<'b>(
         &self,
         ctx: &Scope,
         type_id: TypeId,
         bounds: &'b [FqTraitName],
     ) -> Option<&'b FqTraitName> {
-        if ctx.awaits_pending_call(&self.type_table.borrow(), type_id) {
+        let table = self.type_table.borrow();
+        if ctx.awaits_pending_call(&table, type_id) {
             return None;
         }
+        let awaiting: Vec<bool> = bounds
+            .iter()
+            .map(|trait_| ctx.trait_awaits_pending_call(&table, trait_))
+            .collect();
+        drop(table);
         bounds
             .iter()
-            .find(|trait_| !self.type_implements_trait(ctx, type_id, trait_))
+            .zip(awaiting)
+            .find(|&(trait_, awaits)| !awaits && !self.type_implements_trait(ctx, type_id, trait_))
+            .map(|(trait_, _)| trait_)
     }
 
     /// `answer` under the recursion guard. A question already open does not
@@ -1241,14 +1263,21 @@ impl TypeSystem {
     ) -> Option<bool> {
         // A member is read at the instance: `items: List<T>` is `List<i32>`
         // at `Gen<i32>`, however deep the parameter sits.
-        let at_instance =
-            |type_args: &[TypeId], tid: TypeId| self.substitute_type_params(tid, type_args);
+        let at_instance = |params: &[TypeId], type_args: &[TypeId], tid: TypeId| {
+            if type_args.is_empty() {
+                return tid;
+            }
+            let mut table = self.type_table.borrow_mut();
+            let substitution = table.bind_params(params, type_args);
+            table.substitute_type_params(tid, &substitution)
+        };
         let walk_struct = |info: &StructFieldInfo,
                            type_args: &[TypeId],
                            visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
          -> bool {
             info.fields.iter().all(|(fname, tid, _)| {
-                visit(StructuralMember::Field(fname), at_instance(type_args, *tid))
+                let member = at_instance(&info.type_param_type_ids, type_args, *tid);
+                visit(StructuralMember::Field(fname), member)
             })
         };
         let walk_variant = |info: &VariantInfo,
@@ -1259,10 +1288,8 @@ impl TypeSystem {
                 .iter()
                 .filter(|c| c.has_payload(&self.type_table.borrow()))
                 .all(|c| {
-                    visit(
-                        StructuralMember::Case(&c.name),
-                        at_instance(type_args, c.payload),
-                    )
+                    let member = at_instance(&info.type_param_type_ids, type_args, c.payload);
+                    visit(StructuralMember::Case(&c.name), member)
                 })
         };
         let resource = self.type_table.borrow().resource_def_in(resolved);
@@ -1457,22 +1484,23 @@ impl TypeSystem {
         // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
         trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(|sig| {
             sig.methods.values().any(|m| {
-                m.sig.self_kind == SelfKind::None && self.receiverless_method_mentions_self(&m.sig)
+                m.sig.self_kind == SelfKind::None
+                    && self.receiverless_method_mentions_self(trait_, &m.sig)
             })
         })
     }
 
     /// Whether a receiverless method's signature names `Self` — in a parameter,
     /// the return type, or a bound on one of its own type parameters. Slot 0 of
-    /// a trait method's frame is `Self`.
-    fn receiverless_method_mentions_self(&self, sig: &sig::MethodSig) -> bool {
+    /// a trait's frame is `Self`.
+    fn receiverless_method_mentions_self(&self, trait_: DefId, sig: &sig::MethodSig) -> bool {
         let table = self.type_table.borrow();
         let in_types = sig
             .decl
             .param_types
             .iter()
             .chain(sig.decl.return_type.iter())
-            .any(|t| table.contains_type_param_index(*t, 0));
+            .any(|t| table.mentions_param(*t, TypeParamId::trait_self(trait_)));
         in_types
             || sig
                 .own_params
@@ -1667,8 +1695,9 @@ impl TypeSystem {
                 .filter(|param| !param.is_pack)
                 .filter_map(|param| {
                     let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
-                    (!table.awaits_inference(arg))
-                        .then(|| (FqTypeName::binder(&param.name), table.fq_type_name(arg)))
+                    let binder = ParamRef::declared(param, &self.resolutions)
+                        .binder(self.resolutions.defs());
+                    (!table.awaits_inference(arg)).then(|| (binder, table.fq_type_name(arg)))
                 })
                 .collect();
             // All at once: a receiver argument spelled like another impl
@@ -2130,7 +2159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((root, via)) = elaborated.inherited.clone() else {
             return own;
         };
-        let root_args = self.in_space(&own, |e| e.trait_args_of_bound(bounds, root));
+        let root_args = self.with_type_params_bound(&own, |e| e.trait_args_of_bound(bounds, root));
         self.inherited_space(root, &root_args, &via)
     }
 
@@ -2139,7 +2168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         candidate: &BoundCandidate,
         self_type_id: TypeId,
-    ) -> IndexMap<u32, TypeId> {
+    ) -> TypeArgMap {
         let BoundCandidate {
             bound,
             space,
@@ -2147,7 +2176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             written_self,
         } = candidate;
         let (bound, decl, written_self) = (bound.clone(), *decl, *written_self);
-        self.in_space(space, |e| {
+        self.with_type_params_bound(space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         })
     }
@@ -2271,7 +2300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
-            &SlotProjections::from_iter([(0, answers)]),
+            &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
         );
         let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
         Some(instantiated.param_types[first_value_param..].to_vec())
@@ -2405,20 +2434,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An inherited bound wrote its arguments in the declaring trait's
         // parameter space, so a spelling read here means the wrong binder.
         let pick = args_to_resolve(&bound);
-        let fq_trait_name = self.in_space(&space, |e| {
+        let fq_trait_name = self.with_type_params_bound(&space, |e| {
             e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
         });
 
-        let slots = self.in_space(&space, |e| {
+        let slots = self.with_type_params_bound(&space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         });
         let fq_trait_name = self
             .tysys
-            .trait_named_from_slots(fq_trait_name, &bound, &slots);
+            .trait_named_from_slots(fq_trait_name, &bound, decl, &slots);
         let instantiated = sig.instantiate_received(
             &self.tysys.type_table,
             &slots,
-            &SlotProjections::from_iter([(0, answers)]),
+            &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
             &EffectRows::default(),
         );
         // A bare bound dispatches on the parameter itself, off no `impl` block.
@@ -2507,12 +2536,16 @@ impl TypeSystem {
             })
             .collect();
         let affine_params = ctx.trait_ctx.affine_params();
-        let unmet = |param: &str, type_arg: TypeId| {
+        // A bound may name another of the block's parameters (`U: Uses<T>`),
+        // which means what the receiver settles that one to.
+        let unmet = |param: &str, type_arg: TypeId, at: &[(FqTypeName, FqTypeName)]| {
             let (is_affine, bounds) = bounds_map.get(param)?;
             let missing = if !*is_affine && self.is_affine(type_arg, &affine_params) {
                 UnmetKind::Affine
             } else {
-                UnmetKind::Trait(self.unmet_bound(ctx, type_arg, bounds)?.clone())
+                let bounds: Vec<FqTraitName> =
+                    bounds.iter().map(|bound| spelled_at(bound, at)).collect();
+                UnmetKind::Trait(self.unmet_bound(ctx, type_arg, &bounds)?.clone())
             };
             Some(UnmetImplBound {
                 param: param.to_string(),
@@ -2527,7 +2560,7 @@ impl TypeSystem {
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
             let pointee = receiver.and_then(|id| self.pointee_of(id))?;
-            return unmet(inner.name.as_str(), pointee);
+            return unmet(inner.name.as_str(), pointee, &[]);
         }
         // An existence or bounds check that threaded no positions has nothing
         // to compare against.
@@ -2538,9 +2571,20 @@ impl TypeSystem {
         if let ast::Type::Generic(_) = impl_ty {
             let names = ImplParamSlots::of(&header.ty, type_params);
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
+            let at: Vec<(FqTypeName, FqTypeName)> = {
+                let tt = self.type_table.borrow();
+                slots
+                    .iter()
+                    .filter_map(|(slot, &arg)| {
+                        let name = names.name_of(slot.index)?;
+                        let binder = ParamRef::of(def, name).binder(self.resolutions.defs());
+                        Some((binder, tt.fq_type_name(arg)))
+                    })
+                    .collect()
+            };
             return slots
                 .iter()
-                .find_map(|(&slot, &type_arg)| unmet(names.name_of(slot)?, type_arg));
+                .find_map(|(slot, &type_arg)| unmet(names.name_of(slot.index)?, type_arg, &at));
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
@@ -2548,12 +2592,12 @@ impl TypeSystem {
         // checked against its bounds.
         if let ast::Type::Tuple(elements) = impl_ty {
             return elements.iter().find_map(|elem| {
-                let ast::Type::TypePackSpread(name, _) = elem else {
+                let ast::Type::TypePackSpread(ast::NamedType { name, .. }) = elem else {
                     return None;
                 };
                 type_args
                     .iter()
-                    .find_map(|&type_arg| unmet(name.as_str(), type_arg))
+                    .find_map(|&type_arg| unmet(name.as_str(), type_arg, &[]))
             });
         }
         None
@@ -2637,6 +2681,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.release_bounds(pending);
     }
 
+    /// The frame's own parameters, as a bound's arguments name them.
+    fn frame_binder_names(&self) -> Vec<FqTypeName> {
+        let tt = self.tysys.type_table.borrow();
+        self.annotate_ctx
+            .trait_ctx
+            .binders()
+            .iter()
+            .filter(|binder| matches!(tt.get(binder.type_id), ResolvedType::TypeParam { .. }))
+            .map(|binder| tt.fq_type_name(binder.type_id))
+            .collect()
+    }
+
     /// The single enforcement of trait bounds on a generic decl's type args,
     /// shared by every generic-call kind so the rule cannot drift. Only an arg
     /// that is one type in the frame is enforced: a rigid parameter meets a
@@ -2648,12 +2704,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
         self_binding: Option<SelfBinding>,
         span: Span,
     ) {
         let at_call = self.tysys.call_site_types(params, type_args, impl_args);
-        let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+        let frame_binders = self.frame_binder_names();
+        let site = ParamRef::space(params, type_args, &self.tysys.resolutions);
         for (i, param) in params.iter().enumerate() {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
@@ -2706,7 +2763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|trait_| {
                         self.bound_trait_at_args(trait_, bound, params, type_args, self_binding)
                     })
-                    .and_then(|trait_| asked_at(trait_, &at_call));
+                    .and_then(|trait_| asked_at(trait_, &at_call, &frame_binders));
                 for &subject in &subjects {
                     self.enforce_single_bound_args(
                         subject,
@@ -2718,7 +2775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A constraint may name another of the declaration's
                     // parameters, `N: ReflectNewtype<Base = B>`, which means
                     // what the call binds `B` to.
-                    self.with_type_params_bound(&site, type_args, |e| {
+                    self.with_type_params_bound(&site, |e| {
                         e.enforce_assoc_type_bounds(subject, bound, self_binding, span);
                     });
                 }
@@ -2742,9 +2799,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
                 let bounds = ScopedBound::pin_declared(param, self_binding);
-                let root_args = self.with_type_params_bound(&site, type_args, |e| {
-                    e.trait_args_of_bound(&bounds, root)
-                });
+                let root_args =
+                    self.with_type_params_bound(&site, |e| e.trait_args_of_bound(&bounds, root));
                 let pick = vec![true; bound.type_args.len()];
                 for &subject in &subjects {
                     // `Self` in the clause, or in a default the chain fills, is
@@ -2753,14 +2809,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let binding = self.tysys.base_self_binding(subject, Some(root));
                     let space = self
                         .with_self_binding(binding, |e| e.inherited_space(root, &root_args, &via));
-                    self.in_space(&space, |e| {
+                    self.with_type_params_bound(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
                             e.with_self_binding(binding, |e| {
                                 e.trait_named_with_resolved_args(trait_, &bound, &pick)
                             })
                         });
                         if let Some(trait_) =
-                            inherited.and_then(|trait_| asked_at(trait_, &at_call))
+                            inherited.and_then(|trait_| asked_at(trait_, &at_call, &frame_binders))
                         {
                             e.check_and_register_bound(subject, &trait_);
                         }
@@ -2985,8 +3041,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         decl: DefId,
         self_type_id: TypeId,
         written_self: BoundSelf,
-    ) -> IndexMap<u32, TypeId> {
-        let mut slots = IndexMap::from_iter([(0, self_type_id)]);
+    ) -> TypeArgMap {
+        let mut slots = TypeArgMap::from_iter([(TypeParamId::trait_self(decl), self_type_id)]);
         let Some(trait_params) = self.tysys.trait_decl_type_params_of(&decl) else {
             return slots;
         };
@@ -3009,7 +3065,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (slot, ty, scope) in written {
             let resolved =
                 self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
-            slots.insert(slot, resolved);
+            slots.insert(
+                TypeParamId {
+                    owner: decl,
+                    index: slot,
+                },
+                resolved,
+            );
         }
         slots
     }
@@ -3278,7 +3340,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let bounds = ScopedBound::pin_declared(param, Some(implementing));
                 let bound_to = slot.and_then(|slot| {
                     let &arg = concrete_type_args.get(slot as usize)?;
-                    Some(BinderInScope::undeclared(slot, arg))
+                    let param = ParamRef::declared(param, &scope.tysys.resolutions);
+                    Some(BinderInScope::standing_for(slot, arg, &param))
                 });
                 match bound_to {
                     Some(binder) => scope.bind_param(&param.name, binder, bounds),
@@ -3293,7 +3356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Also check blanket impls: `impl<I: Trait> OtherTrait for I`.
         // For example, `impl<I: Iterator> IntoIterator for I` applies to StrUtf8ByteIter.
         struct BlanketImplInfo {
-            blanket_param_name: String,
+            blanket_param: ParamRef,
             blanket_param_bounds: Vec<ast::TraitBound>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this blanket implements, as its own header names it.
@@ -3329,7 +3392,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     };
                     result.push(BlanketImplInfo {
-                        blanket_param_name: blanket_param.name.clone(),
+                        blanket_param: ParamRef::of(blanket.def, &blanket_param.name),
                         blanket_param_bounds: blanket_param.bounds.clone(),
                         assoc_types: header.associated_types.clone(),
                         trait_key,
@@ -3350,8 +3413,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             scope.set_self_binding(implementing);
             scope.bind_param(
-                &info.blanket_param_name,
-                BinderInScope::undeclared(0, concrete_type_id),
+                &info.blanket_param.name,
+                BinderInScope::standing_for(0, concrete_type_id, &info.blanket_param),
                 ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
 
@@ -3663,16 +3726,16 @@ impl TypeSystem {
         &self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
     ) -> Vec<(FqTypeName, FqTypeName)> {
         let tt = self.type_table.borrow();
-        params
+        let defs = self.resolutions.defs();
+        // A pack spells no one type; its binder stays, and the bound with it.
+        ParamRef::space(params, type_args, &self.resolutions)
             .iter()
-            .map(|param| param.name.as_str())
-            .zip(type_args.iter().copied())
-            .chain(impl_args.iter().map(|(name, arg)| (name.as_str(), *arg)))
-            .filter(|(_, arg)| !tt.contains_type_param(*arg))
-            .map(|(name, arg)| (FqTypeName::binder(name), tt.fq_type_name(arg)))
+            .chain(impl_args)
+            .filter(|(_, arg)| !tt.any_type_pack(*arg, &|_| true))
+            .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
             .collect()
     }
 
@@ -3682,7 +3745,8 @@ impl TypeSystem {
         &self,
         fq: FqTraitName,
         bound: &ast::TraitBound,
-        slots: &IndexMap<u32, TypeId>,
+        decl: DefId,
+        slots: &TypeArgMap,
     ) -> FqTraitName {
         if !bound.type_args.iter().any(names_no_type) {
             return fq;
@@ -3693,7 +3757,13 @@ impl TypeSystem {
                 .type_args
                 .get(i)
                 .filter(|ty| names_no_type(ty))
-                .and_then(|_| slots.get(&(1 + i as u32)).copied())
+                .and_then(|_| {
+                    let slot = TypeParamId {
+                        owner: decl,
+                        index: 1 + i as u32,
+                    };
+                    slots.get(&slot).copied()
+                })
         })
     }
 }

@@ -676,7 +676,8 @@ assert add_one(41) == 42;
 assert make_point(1, 2).y == 2;
 ```
 
-A block body requires explicit `return`:
+A block body is a function body. It returns a value only through `return`, and
+its last statement is a statement, so `|| { 1 }` returns `()`:
 
 <!-- {"fixture":"spec_functions_closures.wado"} -->
 

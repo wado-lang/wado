@@ -146,7 +146,7 @@ fn collect_type_heads(ty: &ast::Type, out: &mut Vec<(AstId, String)>) {
                 collect_type_heads(element, out);
             }
         }
-        ast::Type::TypePackSpread(_, _) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
+        ast::Type::TypePackSpread(_) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
     }
 }
 
@@ -250,12 +250,7 @@ impl VariantCaseData {
 /// Variant info: module source, type parameters, and cases
 #[derive(Clone)]
 pub(crate) struct VariantInfo {
-    /// Canonical type name (original declaration name, not import alias).
-    /// `pub(crate)` alongside `module_source` so the Semantics-based effect
-    /// checker can key its payload map by the declaration, now that the
-    /// registry no longer spells one out in its key.
-    pub(crate) name: String,
-    pub(crate) module_source: ModuleSource,
+    pub(super) module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
     /// The declaration's real type parameters, like
@@ -298,7 +293,6 @@ impl VariantInfo {
         type_param_type_ids: Vec<TypeId>,
     ) -> Self {
         Self {
-            name: decl.name.clone(),
             module_source,
             defined_at: decl.id,
             type_params: RealTypeParams::of(&decl.type_params),
@@ -1517,6 +1511,16 @@ pub enum TypeError {
     /// `export(World::name)` where `World` names no world.
     ExportTargetNotWorld {
         world: String,
+        span: Span,
+    },
+
+    /// A local struct's field reaches a type parameter of the enclosing item,
+    /// through `Self` or a local newtype: the struct is emitted once, so it
+    /// cannot vary with that parameter.
+    LocalStructOuterParam {
+        struct_name: String,
+        field: String,
+        field_type: String,
         span: Span,
     },
 
@@ -3108,6 +3112,18 @@ impl TypeError {
             TypeError::ExportTargetNotWorld { world, span } => (
                 Code::UnknownType,
                 format!("`{world}` in `export(…)` is not a world in scope"),
+                *span,
+            ),
+            TypeError::LocalStructOuterParam {
+                struct_name,
+                field,
+                field_type,
+                span,
+            } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "field '{field}' of local struct `{struct_name}` is `{field_type}`, which names a type parameter of the enclosing item; declare the parameter on the struct instead"
+                ),
                 *span,
             ),
             TypeError::WireDefaultAttr { field, span } => (

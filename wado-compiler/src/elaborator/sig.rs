@@ -7,7 +7,7 @@ use crate::ast::{AstId, Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{EffectRows, TemplateId, TypeId, positional_substitution};
+use crate::tir::{EffectRows, TemplateId, TypeArgMap, TypeId, TypeParamId};
 use crate::type_table::TypeTable;
 
 use super::sem::decls::FunctionSig;
@@ -402,7 +402,7 @@ impl MethodSig {
         declaring: Option<&ImplSig>,
         declaring_args: &[TypeId],
         method_args: &[TypeId],
-    ) -> IndexMap<u32, TypeId> {
+    ) -> TypeArgMap {
         let aligned = declaring.and_then(|sig| sig.spelled_slots(type_table, declaring_args));
         let positional = aligned.is_none();
         let mut substitution = aligned.unwrap_or_default();
@@ -418,9 +418,7 @@ impl MethodSig {
                 if arg == TypeTable::UNKNOWN {
                     continue;
                 }
-                if let Some(index) = table.param_slot(*slot) {
-                    substitution.insert(index, arg);
-                }
+                substitution.insert(table.declared_param(*slot), arg);
             }
         }
         substitution
@@ -429,27 +427,31 @@ impl MethodSig {
     /// The signature as a receiver reads it: the declaring block's slots filled
     /// from `substitution`, the method's own moved past every frame's.
     ///
-    /// The receiver may bring a caller's own parameter in, and slots are filled
-    /// by index. Left at their indices, the method's own would be filled later
-    /// together with a caller's parameter of the same index.
+    /// The receiver may bring the caller's own parameters in, and a recursive
+    /// call's caller is this method. Left in place, the method's own would be
+    /// filled later together with the caller's same parameter.
     pub(crate) fn instantiate_received(
         &self,
         type_table: &RefCell<TypeTable>,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         projections: &SlotProjections,
         bound: &EffectRows,
     ) -> ReceivedSig {
-        let renames: IndexMap<u32, u32> = {
+        let renames: IndexMap<TypeParamId, TypeParamId> = {
             let table = type_table.borrow();
             self.own_type_params()
                 .iter()
-                .filter_map(|&(_, id)| table.param_slot(id))
-                .map(|index| {
+                .map(|&(_, id)| {
+                    let param = table.declared_param(id);
                     assert!(
-                        index < MOVED_SLOT_BASE,
+                        param.index < MOVED_SLOT_BASE,
                         "a frame's slots must stay below the moved ones"
                     );
-                    (index, MOVED_SLOT_BASE + index)
+                    let moved = TypeParamId {
+                        owner: param.owner,
+                        index: MOVED_SLOT_BASE + param.index,
+                    };
+                    (param, moved)
                 })
                 .collect()
         };
@@ -463,7 +465,7 @@ impl MethodSig {
             .map(|&(_, id)| {
                 table.substitute_type_params_moving(
                     id,
-                    &IndexMap::default(),
+                    &TypeArgMap::default(),
                     &SlotProjections::default(),
                     &renames,
                 )
@@ -581,7 +583,7 @@ impl ImplSig {
     pub(crate) fn instantiate_slots(
         &self,
         type_table: &RefCell<TypeTable>,
-        slots: &IndexMap<u32, TypeId>,
+        slots: &TypeArgMap,
     ) -> InstantiatedImplSig {
         let mut table = type_table.borrow_mut();
         InstantiatedImplSig {
@@ -606,14 +608,18 @@ impl ImplSig {
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
-    ) -> Option<IndexMap<u32, TypeId>> {
+    ) -> Option<TypeArgMap> {
         let mut table = type_table.borrow_mut();
         let positions = table.impl_target_args(self.def).len();
         if positions == 0 || receiver_args.len() < positions {
             return None;
         }
         let mut slots = table.impl_slots(self.def, &receiver_args[..positions]);
-        for (slot, &arg) in (positions as u32..).zip(&receiver_args[positions..]) {
+        for (index, &arg) in (positions as u32..).zip(&receiver_args[positions..]) {
+            let slot = TypeParamId {
+                owner: self.def,
+                index,
+            };
             slots.entry(slot).or_insert(arg);
         }
         Some(slots)
@@ -651,17 +657,19 @@ impl DeclSig {
         type_table: &RefCell<TypeTable>,
         type_args: &[TypeId],
     ) -> InstantiatedSig {
-        self.instantiate_slots(type_table, &positional_substitution(type_args))
+        let substitution = type_table
+            .borrow()
+            .bind_params(&self.type_param_ids(), type_args);
+        self.instantiate_slots(type_table, &substitution)
     }
 
-    /// Fill slots by index rather than by position, for a caller that already
-    /// holds a slot map. Equivalent to [`Self::instantiate`] when the map is
-    /// dense from zero; the two differ only when the caller knows a
-    /// non-contiguous subset, which positional arguments cannot express.
+    /// Fill the parameters `substitution` names, for a caller that already
+    /// holds a map: a subset positional arguments cannot express, or the
+    /// declaring frame's parameters beside the signature's own.
     pub(crate) fn instantiate_slots(
         &self,
         type_table: &RefCell<TypeTable>,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
     ) -> InstantiatedSig {
         self.instantiate_slots_with(type_table, substitution, &SlotProjections::default())
     }
@@ -672,7 +680,7 @@ impl DeclSig {
     pub(crate) fn instantiate_slots_with(
         &self,
         type_table: &RefCell<TypeTable>,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         projections: &SlotProjections,
     ) -> InstantiatedSig {
         self.instantiate_bound(
@@ -691,7 +699,7 @@ impl DeclSig {
     pub(crate) fn instantiate_bound(
         &self,
         type_table: &RefCell<TypeTable>,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         projections: &SlotProjections,
         bound: &EffectRows,
     ) -> InstantiatedSig {
@@ -709,10 +717,10 @@ impl DeclSig {
     fn instantiate_moving(
         &self,
         type_table: &RefCell<TypeTable>,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         projections: &SlotProjections,
         bound: &EffectRows,
-        renames: &IndexMap<u32, u32>,
+        renames: &IndexMap<TypeParamId, TypeParamId>,
     ) -> InstantiatedSig {
         let mut table = type_table.borrow_mut();
         let mut rows = bound.clone();
@@ -743,7 +751,9 @@ mod tests {
 
     /// `fn id<T>(x: T) -> T` instantiated at `T = i32`.
     fn generic_identity(table: &RefCell<TypeTable>) -> DeclSig {
-        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
+        let t = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "T".to_string(), 0);
         DeclSig {
             type_params: vec![("T".to_string(), t)],
             param_types: vec![t],
@@ -778,7 +788,9 @@ mod tests {
     #[test]
     fn instantiate_substitutes_inside_containers() {
         let table = RefCell::new(TypeTable::new());
-        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
+        let t = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "T".to_string(), 0);
         let list_of_t = table.borrow_mut().make_ref(t);
         let sig = DeclSig {
             type_params: vec![("T".to_string(), t)],
@@ -797,8 +809,12 @@ mod tests {
     #[test]
     fn a_partial_instantiation_leaves_trailing_slots_abstract() {
         let table = RefCell::new(TypeTable::new());
-        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
-        let u = table.borrow_mut().make_type_param("U".to_string(), 1);
+        let t = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "T".to_string(), 0);
+        let u = table
+            .borrow_mut()
+            .make_type_param(DefId::for_test(0), "U".to_string(), 1);
         let sig = DeclSig {
             type_params: vec![("T".to_string(), t), ("U".to_string(), u)],
             param_types: vec![t, u],
@@ -831,8 +847,8 @@ mod tests {
     /// `impl<V> Index<i32> for Map<u8, V> { type Output = V; }` — the
     /// concrete `u8` position binds nothing, so `V` keeps its own slot.
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
-        let v = table.borrow_mut().make_type_param("V".to_string(), 1);
         let def = DefId::for_test(1);
+        let v = table.borrow_mut().make_type_param(def, "V".to_string(), 1);
         table.borrow_mut().record_impl_target(
             def,
             TypeTable::UNKNOWN,
@@ -857,8 +873,12 @@ mod tests {
             .borrow_mut()
             .impl_slots(sig.def, &[TypeTable::U8, TypeTable::BOOL]);
 
+        let v = TypeParamId {
+            owner: sig.def,
+            index: 1,
+        };
         assert_eq!(slots.len(), 1);
-        assert_eq!(slots.get(&1), Some(&TypeTable::BOOL));
+        assert_eq!(slots.get(&v), Some(&TypeTable::BOOL));
     }
 
     #[test]
@@ -877,7 +897,11 @@ mod tests {
         let table = RefCell::new(TypeTable::new());
         let sig = partially_concrete_impl(&table);
 
-        let inst = sig.instantiate_slots(&table, &[(1, TypeTable::BOOL)].into_iter().collect());
+        let v = TypeParamId {
+            owner: sig.def,
+            index: 1,
+        };
+        let inst = sig.instantiate_slots(&table, &TypeArgMap::from_iter([(v, TypeTable::BOOL)]));
 
         assert_eq!(inst.associated_types.get("Output"), Some(&TypeTable::BOOL));
         assert_eq!(inst.trait_type_args, vec![TypeTable::I32]);

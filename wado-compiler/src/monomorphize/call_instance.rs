@@ -2,10 +2,9 @@
 //! rewrite looks up, keyed by the template the call recorded.
 
 use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, BlanketReceiver};
-use crate::hashmap::IndexMap;
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TemplateId, TirExpr,
-    TirExprKind, TirFunction, TypeId,
+    TirExprKind, TirFunction, TypeArgMap, TypeId,
 };
 use crate::type_table::TypeTable;
 
@@ -264,7 +263,7 @@ fn method_args_at(
         return Some(recorded.method_type_args.clone());
     }
     let receiver_slots = usize::from(site.receiver.is_some());
-    let mut bound: IndexMap<u32, TypeId> = IndexMap::default();
+    let mut bound = TypeArgMap::default();
     for (param, arg) in template.params.iter().skip(receiver_slots).zip(site.args) {
         let written = type_table.peel_refs(param.type_id);
         let concrete = type_table.peel_refs(arg.expr.type_id);
@@ -274,11 +273,9 @@ fn method_args_at(
             }
         }
     }
-    let offset = template.impl_type_params.len() as u32;
     template
         .type_params
         .iter()
-        .filter(|param| !param.is_effect)
-        .map(|param| bound.get(&(offset + param.index)).copied())
+        .map(|param| bound.get(&param.id).copied())
         .collect()
 }

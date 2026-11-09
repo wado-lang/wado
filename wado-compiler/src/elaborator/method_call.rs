@@ -27,13 +27,13 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
-use super::scope::ScopedBound;
+use super::scope::{ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{DerivedAt, OnBoundTrait, SelfBinding};
-use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
+use super::types::{FunctionContext, MethodInfo, MethodOwner, RealTypeParams, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator};
 use crate::compiler_item::CompilerItem;
@@ -251,10 +251,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let declaring = self.declaring_space(*owning_trait, assoc_name, trait_args.as_deref());
         let mut space = declaring.space.clone();
+        let resolutions = &self.tysys.resolutions;
         space.extend(
             decl.type_params
                 .iter()
-                .map(|param| param.name.clone())
+                .map(|param| ParamRef::declared(param, resolutions))
                 .zip(args.iter().copied()),
         );
         let sig = tt
@@ -763,7 +764,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_args = settled_impl_args(&impl_type_bindings);
         // Only the method's own slots: the lookup instantiated the declaring
         // level already, so `Self::Item` is concrete here and `Acc` is not.
-        let mut args: Vec<TypeId> = self.resolve_args_through_slots(
+        let (mut args, inst) = self.resolve_args_through_slots(
             ctx,
             args_ast,
             &expected_param_types,
@@ -920,6 +921,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: Some(callee_module.clone()),
                 impl_args: &impl_args,
+                inst: inst.as_ref(),
                 span,
             },
         );
@@ -1126,11 +1128,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         // Build method_info with base struct name, then apply impl and method type args
-        let is_type_param_receiver = self
-            .tysys
-            .type_table
-            .borrow()
-            .receiver_head_awaits_substitution(base_type_id);
         let base_receiver = match matched_ref_kind {
             Some(kind) => Receiver::of_ref_impl(kind, &receiver_struct_name),
             None => Receiver::Type(base_struct_name),
@@ -1138,7 +1135,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
-        method_info.is_type_param_receiver = is_type_param_receiver;
+        self.tysys
+            .type_table
+            .borrow()
+            .mark_receiver(&mut method_info, base_type_id);
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
 
@@ -2148,12 +2148,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declaring no slot of its own leaves the method's to its type
             // default, which is not the arguments' to answer.
             // A pack is settled below instead, never a slot to spell.
+            let spelled: Vec<bool> = (0..solving.len())
+                .map(|i| {
+                    method_type_args
+                        .get(i)
+                        .is_some_and(|&a| a != TypeTable::UNKNOWN)
+                })
+                .collect();
+            merge_turbofish_type_args(&mut method_type_args, &inferred);
+            // A slot bound only through another's associated type (`..V` off
+            // `Holes`, `A` off `T: Holder<Item = A>`) is projected off the
+            // owner the arguments settled, as the bare spelling projects it.
+            let merged = method_type_args.clone();
+            let real = RealTypeParams::of(&sig.own_params);
+            self.project_assoc_bound_args(Some(sig.def), &real, &mut method_type_args);
             let unanswered = solving.iter().enumerate().find(|&(i, slot)| {
                 !bindings.contains_key(slot)
                     && !sig.own_params[i].is_pack
-                    && method_type_args
-                        .get(i)
-                        .is_none_or(|&a| a == TypeTable::UNKNOWN)
+                    && !spelled[i]
+                    && method_type_args[i] == merged[i]
             });
             if let Some((i, _)) = unanswered
                 && !defaulted
@@ -2167,7 +2180,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return TypeTable::ERROR;
             }
-            merge_turbofish_type_args(&mut method_type_args, &inferred);
             let reached = self.tysys.packs_args_reach(&param_types, args.len());
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
             self.instantiate_static_params(
@@ -2591,7 +2603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The template is written against the blanket param, so `-> Self` /
         // `-> T` lands on the receiver at the call site.
-        let blanket_slot = self.tysys.blanket_param_slot(&blanket_param);
+        let blanket_slot = self.tysys.blanket_param_slot(blanket_def, &blanket_param);
         let return_type = SubstitutionContext::new()
             .bind(&[blanket_slot], &[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
@@ -2599,6 +2611,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
         // as a Wasm validation failure.
         let param_types = self.blanket_static_param_types(
+            blanket_def,
             &blanket_module,
             &blanket_param,
             method,
@@ -2678,6 +2691,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// types the instantiation will actually take.
     fn blanket_static_param_types(
         &mut self,
+        blanket: DefId,
         blanket_module: &ModuleSource,
         blanket_param: &str,
         method: &str,
@@ -2688,7 +2702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .lookup_static_method_sig_keyed(blanket_param, method, Some(&key))
             .map(|sig| sig.value_param_types())
             .unwrap_or_default();
-        let blanket_slot = self.tysys.blanket_param_slot(blanket_param);
+        let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
         let mut tt = self.tysys.type_table.borrow_mut();
         template
             .iter()
@@ -3276,7 +3290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // candidate here too.
             let Some(offer) =
                 self.tysys
-                    .impl_static_offer(header, impl_def, trait_decl, method_name, recv.ty)
+                    .impl_static_offer(header, impl_def, trait_decl, method_name)
             else {
                 continue;
             };
@@ -3401,6 +3415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_static_method_call_from_qualified(
         &mut self,
         struct_name: &str,
+        receiver_type: TypeId,
         method_name: &str,
         args: &[TypeId],
         impl_type_args: &[TypeId],
@@ -3629,7 +3644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let declaring_trait = self.tysys.signatures.declaring_trait(sig);
                 let receiver = match &newtype_dispatch {
                     Some((_, base, _)) => *base,
-                    None => self.resolve_unsited_type_name(struct_name, span),
+                    None => receiver_type,
                 };
                 self.value_default_slot_bindings(
                     &own_params,
@@ -3819,11 +3834,17 @@ impl TypeSystem {
         (name, key)
     }
 
-    /// The blanket impl's one type parameter, `T` in `impl<T> Trait for T`.
-    fn blanket_param_slot(&self, blanket_param: &str) -> TypeId {
-        self.type_table
-            .borrow_mut()
-            .make_type_param(blanket_param.to_string(), 0)
+    /// The type parameter the blanket impl `blanket` targets, `T` in
+    /// `impl<A, T: Holder<Item = A>> Trait for T`: its declared slot, which
+    /// need not be the first.
+    pub(super) fn blanket_param_slot(&self, blanket: DefId, blanket_param: &str) -> TypeId {
+        let table = self.type_table.borrow();
+        let slot = table.impl_target_whole(blanket);
+        assert!(
+            matches!(table.get(slot), ResolvedType::TypeParam { name, .. } if name == blanket_param),
+            "a blanket impl targets its own parameter"
+        );
+        slot
     }
 
     /// The first row of a tuple `zip` whose layout differs from row zero's.
@@ -3878,12 +3899,9 @@ impl TypeSystem {
             return false;
         }
         let table = self.type_table.borrow();
-        // By the numbering, not the count: a concrete head argument leaves a
-        // gap, so the block's last slot sits past how many names it contributed.
         match table.get(table.peel_refs(param)) {
-            ResolvedType::TypeParam { index, name }
-            | ResolvedType::TypePack { index, name, .. } => {
-                *index < sig.method_slot_base && !header.ty.mentions(name)
+            ResolvedType::TypeParam { id, name } | ResolvedType::TypePack { id, name, .. } => {
+                sig.declaring_impl == Some(id.owner) && !header.ty.mentions(name)
             }
             _ => false,
         }
