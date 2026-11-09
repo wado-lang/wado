@@ -88,6 +88,13 @@ pub struct SllDfa {
     pub kinds: i32,
 }
 
+impl SllDfa {
+    /// Whether some tokens settle the decision without the simulator.
+    pub fn decides(&self) -> bool {
+        return self.nodes.iter_ref().any(|n| n matches { Alt(_) });
+    }
+}
+
 struct SllConfig {
     state: i32,
     alt: i32,
@@ -868,6 +875,118 @@ fn prune_asking(nodes: List<SllNode>) -> List<SllNode> {
     return out;
 }
 
+/// The lookahead DFAs of the decisions a parser predicts through, as one
+/// graph in which the nodes that decide alike are one node: an alternative's
+/// nodes, and the branches at one depth whose tokens lead to the same nodes,
+/// within one DFA or across two.
+pub struct SllForest {
+    pub nodes: List<SllNode>,
+    /// The token kinds every DFA reads, `0..kinds`.
+    kinds: i32,
+    /// Per node, how many tokens past its decision a branch reads; a leaf's
+    /// is -1, since it reads none.
+    depth: List<i32>,
+    /// Per node, how many places read it: an edge, or a decision it starts.
+    readers: List<i32>,
+    node_of_key: HashMap<String, i32>,
+}
+
+impl SllForest {
+    pub fn new(kinds: i32) -> SllForest {
+        return SllForest { nodes: [], kinds, depth: [], readers: [], node_of_key: HashMap::new() };
+    }
+
+    /// Whether `node` is a branch more than one place reads, which is emitted
+    /// once, as a function.
+    pub fn shared(&self, node: i32) -> bool {
+        return self.readers[node] > 1 && self.nodes[node] matches { Branch(_) };
+    }
+
+    /// Add `dfa`, and return the node its start is.
+    pub fn add(&mut self, dfa: &SllDfa) -> i32 {
+        assert dfa.kinds == self.kinds;
+        let depth = node_depths(&dfa.nodes);
+        let mut node_of = List::<i32>::filled(dfa.nodes.len(), -1);
+        for let n of successors_first(&dfa.nodes) {
+            let node = if let Branch(edges) = &dfa.nodes[n] {
+                let mut led: List<SllEdge> = [];
+                for let e of edges {
+                    for let t of &e.tokens {
+                        add_edge(&mut led, *t, node_of[e.to]);
+                    }
+                }
+                for let e of &mut led {
+                    e.tokens.sort();
+                }
+                led.sort_by(|a: &SllEdge, b: &SllEdge| a.tokens[0].cmp(&b.tokens[0]));
+                SllNode::Branch(led);
+            } else {
+                dfa.nodes[n];
+            };
+            let read_at = if node matches { Branch(_) } { depth[n] } else { -1 };
+            let key = `${read_at} ${node:?}`;
+            node_of[n] = if let Some(id) = self.node_of_key.get(key) {
+                id;
+            } else {
+                if let Branch(edges) = &node {
+                    for let e of edges {
+                        self.readers[e.to] += 1;
+                    }
+                }
+                self.nodes.push(node);
+                self.depth.push(read_at);
+                self.readers.push(0);
+                self.node_of_key[key] = self.nodes.len() - 1;
+                self.nodes.len() - 1;
+            };
+        }
+        self.readers[node_of[0]] += 1;
+        return node_of[0];
+    }
+}
+
+/// The nodes reached from node 0, each after every node its edges lead to.
+fn successors_first(nodes: &List<SllNode>) -> List<i32> {
+    let mut order: List<i32> = [];
+    let mut visited = List::<bool>::filled(nodes.len(), false);
+    let mut stack: List<[i32, i32]> = [[0, 0]];
+    visited[0] = true;
+    while let Some([n, next]) = stack.last() {
+        let to = if let Branch(edges) = &nodes[n] && next < edges.len() { edges[next].to } else { -1 };
+        if to >= 0 {
+            stack[stack.len() - 1] = [n, next + 1];
+            if !visited[to] {
+                visited[to] = true;
+                stack.push([to, 0]);
+            }
+        } else {
+            order.push(n);
+            stack.pop();
+        }
+    }
+    return order;
+}
+
+/// How many tokens past the decision each node reads at, or -1 where no edge
+/// reaches it.
+fn node_depths(nodes: &List<SllNode>) -> List<i32> {
+    let mut depth = List::<i32>::filled(nodes.len(), -1);
+    depth[0] = 0;
+    let mut queue: List<i32> = [0];
+    for let mut i = 0; i < queue.len(); i += 1 {
+        let n = queue[i];
+        if let Branch(edges) = &nodes[n] {
+            for let e of edges {
+                if depth[e.to] < 0 {
+                    depth[e.to] = depth[n] + 1;
+                    queue.push(e.to);
+                }
+                assert !nodes[e.to] matches { Branch(_) } || depth[e.to] == depth[n] + 1, "every path to a branch reads as many tokens";
+            }
+        }
+    }
+    return depth;
+}
 
 /// The function a parser predicts `decision` through: it matches the DFA's
 /// tokens, and asks the simulator where the DFA leaves the decision open.
@@ -924,15 +1043,16 @@ pub fn atn_verified_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsSt
     return `${ATN_VERIFIED}(${decision}, ${atn_picker_code(&picker)}, ${atn}, ${tokens}, ${pos}, ${prec}, ${answer})`;
 }
 
-/// Emit `sll_decide_fn_name(decision)`. Returns whether it reaches
-/// `ATN_VERIFIED`, which `verify` routes each of its answers through.
+/// Emit `sll_decide_fn_name(decision)`, which reads the DFA `forest` holds
+/// from node `start`.
 pub fn gen_sll_decide_fn(
     w: &mut CodeWriter,
     decision: i32,
-    dfa: &SllDfa,
+    start: i32,
+    forest: &SllForest,
     analysis: &GrammarAnalysis,
     verify: bool,
-) -> bool {
+) {
     let mut f = FnSpec::new(sll_decide_fn_name(decision));
     f.add_param("atn", "&mut AtnPredictor");
     f.add_param("tokens", "&Array<i32>");
@@ -940,64 +1060,33 @@ pub fn gen_sll_decide_fn(
     f.add_param("min_prec", "i32");
     f.set_return_type("i32");
     f.emit_begin(w);
-    let shape = SllShape::of(dfa, decision);
     let answer = |a: String| if verify {
         atn_verified_call(decision, AtnPicker::LookaheadDfa, "atn", "tokens", "pos", "min_prec", a);
     } else {
         a;
     };
-    gen_sll_node(w, dfa, &shape, 0, analysis, &answer);
+    gen_sll_node(w, forest, start, analysis, &answer);
     w.line(`return atn_predict_once(&ATN_SIM, ${decision}, atn, tokens, pos, TK_EOF, min_prec);`);
     w.end();
     w.blank();
-    for let n of 1..<dfa.nodes.len() {
-        if shape.shared[n] {
-            w.begin(`fn ${shape.helper_name(n)}(tokens: &Array<i32>, pos: i32) -> i32`);
-            gen_sll_branch(w, dfa, &shape, n, analysis, &|a: String| a);
+}
+
+/// Emit each branch `forest` reaches from more than one place as a function
+/// returning the alternative it decides, or -1 where it asks.
+pub fn gen_sll_shared_fns(w: &mut CodeWriter, forest: &SllForest, analysis: &GrammarAnalysis) {
+    for let n of 0..<forest.nodes.len() {
+        if forest.shared(n) {
+            w.begin(`fn ${sll_node_fn_name(n)}(tokens: &Array<i32>, pos: i32) -> i32`);
+            gen_sll_branch(w, forest, n, analysis, &|a: String| a);
             w.line("return -1;");
             w.end();
             w.blank();
         }
     }
-    return verify && dfa.nodes.iter_ref().any(|n| n matches { Alt(_) });
 }
 
-/// Where each node of a DFA is read. The DFA is a DAG, so a branch more than
-/// one edge reaches is emitted once, as a function returning the alternative
-/// it decides or -1 where it asks.
-struct SllShape {
-    decision: i32,
-    /// How many tokens past `pos` a branch reads; each path to it has as many.
-    depth: List<i32>,
-    shared: List<bool>,
-}
-
-impl SllShape {
-    fn of(dfa: &SllDfa, decision: i32) -> SllShape {
-        let mut depth = List::<i32>::filled(dfa.nodes.len(), -1);
-        let mut into = List::<i32>::filled(dfa.nodes.len(), 0);
-        depth[0] = 0;
-        let mut queue: List<i32> = [0];
-        for let mut i = 0; i < queue.len(); i += 1 {
-            let n = queue[i];
-            if let Branch(edges) = &dfa.nodes[n] {
-                for let e of edges {
-                    into[e.to] += 1;
-                    if depth[e.to] < 0 {
-                        depth[e.to] = depth[n] + 1;
-                        queue.push(e.to);
-                    }
-                    assert !dfa.nodes[e.to] matches { Branch(_) } || depth[e.to] == depth[n] + 1, "every path to a branch reads as many tokens";
-                }
-            }
-        }
-        let shared: List<bool> = (0..<dfa.nodes.len()).map(|n| into[n] > 1 && dfa.nodes[n] matches { Branch(_) }).collect();
-        return SllShape { decision, depth, shared };
-    }
-
-    fn helper_name(&self, node: i32) -> String {
-        return `${sll_decide_fn_name(self.decision)}_${node}`;
-    }
+fn sll_node_fn_name(node: i32) -> String {
+    return `atn_dfa_${node}`;
 }
 
 /// The call `atn_verified_against(decision, …, answer)` that checks `answer`,
@@ -1060,22 +1149,21 @@ fn asking_tokens(edges: &List<SllEdge>, kinds: i32) -> List<i32> {
 /// `answer` renders what a decided alternative, an expression, is returned as.
 fn gen_sll_node(
     w: &mut CodeWriter,
-    dfa: &SllDfa,
-    shape: &SllShape,
+    forest: &SllForest,
     node: i32,
     analysis: &GrammarAnalysis,
     answer: &fn(String) -> String,
 ) {
-    match &dfa.nodes[node] {
+    match &forest.nodes[node] {
         Alt(a) => w.line(`return ${answer(`${*a}`)};`),
         Ask => {
         },
         Branch(_) => {
-            if shape.shared[node] {
-                w.line(`let alt = ${shape.helper_name(node)}(tokens, pos);`);
+            if forest.shared(node) {
+                w.line(`let alt = ${sll_node_fn_name(node)}(tokens, pos);`);
                 w.line(`if alt >= 0 { return ${answer("alt")}; }`);
             } else {
-                gen_sll_branch(w, dfa, shape, node, analysis, answer);
+                gen_sll_branch(w, forest, node, analysis, answer);
             }
         },
     }
@@ -1084,31 +1172,30 @@ fn gen_sll_node(
 /// The match branch `node` reads its token in.
 fn gen_sll_branch(
     w: &mut CodeWriter,
-    dfa: &SllDfa,
-    shape: &SllShape,
+    forest: &SllForest,
     node: i32,
     analysis: &GrammarAnalysis,
     answer: &fn(String) -> String,
 ) {
-    let Branch(edges) = &dfa.nodes[node] else {
+    let Branch(edges) = &forest.nodes[node] else {
         unreachable();
     };
-    let depth = shape.depth[node];
+    let depth = forest.depth[node];
     let at = if depth == 0 { "pos" } else { `pos + ${depth}` };
     // The widest edge takes `_` where the tokens that ask are fewer to name: a
     // DFA over an expression reads a keyword set at many nodes. A numeric
     // `type(N)` lexes a kind past `kinds`, which `_` must leave asking: a
     // wildcard may take it where the widest edge does not.
-    let asking = asking_tokens(edges, dfa.kinds);
+    let asking = asking_tokens(edges, forest.kinds);
     let widest = (0..<edges.len()).max_by_key(|i| edges[i].tokens.len()).unwrap();
     let fallback = if edges[widest].tokens.len() > asking.len() { widest } else { -1 };
-    let known_kind = if fallback < 0 { "" } else { ` && tokens[${at}] < ${dfa.kinds}` };
+    let known_kind = if fallback < 0 { "" } else { ` && tokens[${at}] < ${forest.kinds}` };
     w.begin(`if ${at} < tokens.len()${known_kind}`);
     w.begin(`match tokens[${at}]`);
     for let mut i = 0; i < edges.len(); i += 1 {
         if i != fallback {
             w.begin(`${analysis.token_names_of(&edges[i].tokens).join(" | ")} =>`);
-            gen_sll_node(w, dfa, shape, edges[i].to, analysis, answer);
+            gen_sll_node(w, forest, edges[i].to, analysis, answer);
             w.end_with(",");
         }
     }
@@ -1119,7 +1206,7 @@ fn gen_sll_branch(
             w.line(`${analysis.token_names_of(&asking).join(" | ")} => {},`);
         }
         w.begin("_ =>");
-        gen_sll_node(w, dfa, shape, edges[fallback].to, analysis, answer);
+        gen_sll_node(w, forest, edges[fallback].to, analysis, answer);
         w.end_with(",");
     }
     w.end_with(";");
