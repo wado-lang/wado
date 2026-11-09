@@ -2966,7 +2966,10 @@ impl Parser {
 
 fn _parse_ng_labelled__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 1 {
+    loop {
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 1 { break; }
         p.expect(TK_A, &SYNC_1, false);
         p.expect(TK_B, &SYNC_0, false);
     }
@@ -2997,7 +3000,10 @@ fn _parse_ng_labelled(p: &mut Parser) -> () {
 
 fn _parse_ng_bare__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0) == 1 {
+    loop {
+        let rs_pick_4 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_4 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_4 != 1 { break; }
         p.expect(TK_A, &SYNC_1, false);
         p.expect(TK_B, &SYNC_0, false);
     }

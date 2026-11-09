@@ -3268,7 +3268,11 @@ fn _parse_items__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 1;
     p.atn_ret_pending = 17;
     _parse_item(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
-    while !p.recovering && atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.expect(TK_LIT_COMMA, &SYNC_0, false);
         p.site = 2;
         p.atn_ret_pending = 25;
@@ -3341,9 +3345,9 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     } else if kind == TK_ID {
         p.take();
-        let opt_atn = atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0);
-        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-        if opt_atn == 0 {
+        let rs_pick_6 = atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_6 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_6 == 0 {
             p.site = 5;
             p.atn_ret_pending = 53;
             _parse_targs(p, follow);

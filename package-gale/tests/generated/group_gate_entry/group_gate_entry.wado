@@ -3059,9 +3059,9 @@ impl Parser {
 
 fn _parse_opt__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    let opt_atn = p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[0], &[], |_pred| match _pred { 0 => pred_0(p), _ => unreachable() });
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 && ((p.peek_kind() == TK_A && pred_0(p)) || (p.peek_kind() == TK_B)) {
+    let rs_pick_0 = p.atn.predict(&ATN_SIM, 0, &p.kinds, p.pos, TK_EOF, 0, &[0], &[], |_pred| match _pred { 0 => pred_0(p), _ => unreachable() });
+    if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_0 == 0 && ((p.peek_kind() == TK_A && pred_0(p)) || (p.peek_kind() == TK_B)) {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_A && pred_0(p) {
             p.expect(TK_A, &SYNC_1, false);
@@ -3092,7 +3092,11 @@ fn _parse_opt(p: &mut Parser) -> () {
 
 fn _parse_star__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while !p.recovering && p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, 0, &[1], &[], |_pred| match _pred { 1 => pred_0(p), _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_2 = p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, 0, &[1], &[], |_pred| match _pred { 1 => pred_0(p), _ => unreachable() });
+        if rs_pick_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_2 != 0 { break; }
         if !((p.peek_kind() == TK_A && pred_0(p)) || (p.peek_kind() == TK_B)) { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_A && pred_0(p) {
@@ -3125,7 +3129,10 @@ fn _parse_star(p: &mut Parser) -> () {
 
 fn _parse_nongreedy__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while p.atn.predict(&ATN_SIM, 4, &p.kinds, p.pos, TK_EOF, 0, &[2], &[], |_pred| match _pred { 2 => pred_0(p), _ => unreachable() }) == 1 {
+    loop {
+        let rs_pick_4 = p.atn.predict(&ATN_SIM, 4, &p.kinds, p.pos, TK_EOF, 0, &[2], &[], |_pred| match _pred { 2 => pred_0(p), _ => unreachable() });
+        if rs_pick_4 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_4 != 1 { break; }
         if !((p.peek_kind() == TK_A && pred_0(p)) || (p.peek_kind() == TK_B)) { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_A && pred_0(p) {
@@ -3157,7 +3164,11 @@ fn _parse_nongreedy(p: &mut Parser) -> () {
 
 fn _parse_list_label__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while !p.recovering && p.atn.predict(&ATN_SIM, 6, &p.kinds, p.pos, TK_EOF, 0, &[3], &[], |_pred| match _pred { 3 => pred_0(p), _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_6 = p.atn.predict(&ATN_SIM, 6, &p.kinds, p.pos, TK_EOF, 0, &[3], &[], |_pred| match _pred { 3 => pred_0(p), _ => unreachable() });
+        if rs_pick_6 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_6 != 0 { break; }
         if !((p.peek_kind() == TK_A && pred_0(p)) || (p.peek_kind() == TK_B)) { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_A && pred_0(p) {
@@ -3225,7 +3236,11 @@ fn _parse_nested(p: &mut Parser) -> () {
 
 fn _parse_solo_star__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-    while !p.recovering && p.atn.predict(&ATN_SIM, 9, &p.kinds, p.pos, TK_EOF, 0, &[5], &[], |_pred| match _pred { 5 => pred_0(p), _ => unreachable() }) == 0 {
+    loop {
+        if p.recovering { break; }
+        let rs_pick_10 = p.atn.predict(&ATN_SIM, 9, &p.kinds, p.pos, TK_EOF, 0, &[5], &[], |_pred| match _pred { 5 => pred_0(p), _ => unreachable() });
+        if rs_pick_10 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_10 != 0 { break; }
         if !(p.peek_kind() == TK_A && pred_0(p)) { break; }
         p.expect(TK_A, &SYNC_3, false);
         p.expect(TK_B, &SYNC_1, false);
@@ -3252,9 +3267,9 @@ fn _parse_solo_star(p: &mut Parser) -> () {
 
 fn _parse_solo_opt__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-    let opt_atn = p.atn.predict(&ATN_SIM, 10, &p.kinds, p.pos, TK_EOF, 0, &[6], &[], |_pred| match _pred { 6 => pred_0(p), _ => unreachable() });
-    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-    if opt_atn == 0 && (p.peek_kind() == TK_A && pred_0(p)) {
+    let rs_pick_12 = p.atn.predict(&ATN_SIM, 10, &p.kinds, p.pos, TK_EOF, 0, &[6], &[], |_pred| match _pred { 6 => pred_0(p), _ => unreachable() });
+    if rs_pick_12 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_12 == 0 && (p.peek_kind() == TK_A && pred_0(p)) {
         p.expect(TK_A, &SYNC_1, false);
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
@@ -3281,9 +3296,9 @@ fn _parse_shape_opt__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_A {
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-        let opt_atn = p.atn.predict(&ATN_SIM, 12, &p.kinds, p.pos, TK_EOF, 0, &[7], &[], |_pred| match _pred { 7 => pred_0(p), _ => unreachable() });
-        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
-        if opt_atn == 0 && (p.peek_kind() == TK_A && pred_0(p)) {
+        let rs_pick_14 = p.atn.predict(&ATN_SIM, 12, &p.kinds, p.pos, TK_EOF, 0, &[7], &[], |_pred| match _pred { 7 => pred_0(p), _ => unreachable() });
+        if rs_pick_14 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_14 == 0 && (p.peek_kind() == TK_A && pred_0(p)) {
             p.site = 0;
             p.atn_ret_pending = 118;
             _parse_ra(p);

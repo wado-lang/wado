@@ -3297,7 +3297,11 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
                 p.emit(`${(if inner matches { None } { "null" } else { p.text_between(vals._span_lo_inner, vals._span_hi_inner) })}\n`);
             }
         }
-        while !p.recovering && atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        loop {
+            if p.recovering { break; }
+            let rs_pick_1 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
+            if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_1 != 0 { break; }
             vals._span_lo_inner = p.pos;
             p.site = 3;
             p.atn_ret_pending = 31;
