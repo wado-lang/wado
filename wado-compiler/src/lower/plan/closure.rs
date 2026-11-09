@@ -2014,7 +2014,8 @@ fn functor_arg_type(
 }
 
 /// Finds an assignment to a fn-param, whose `fn(...)` value the param retyped to
-/// `&$Closure_N` cannot hold.
+/// `&$Closure_N` cannot hold, or a `&` / `&mut` of one, whose cell would hold
+/// that `&$Closure_N` where a `&mut fn(...)` is expected.
 struct UnspecializableFnParam<'a> {
     fn_param_indices: &'a [u32],
     found: bool,
@@ -2026,8 +2027,16 @@ impl TirRefVisitor for UnspecializableFnParam<'_> {
         if self.found || matches!(expr.kind, TirExprKind::Closure { .. }) {
             return;
         }
-        if let TirExprKind::Assign { target, .. } = &expr.kind
-            && matches!(&target.kind, TirExprKind::Local { index, .. } if self.fn_param_indices.contains(index))
+        let place = match &expr.kind {
+            TirExprKind::Assign { target, .. } => Some(target),
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: inner,
+            } => Some(inner),
+            _ => None,
+        };
+        if let Some(place) = place
+            && matches!(&place.kind, TirExprKind::Local { index, .. } if self.fn_param_indices.contains(index))
         {
             self.found = true;
             return;
