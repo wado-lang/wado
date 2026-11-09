@@ -3140,8 +3140,8 @@ fn _parse_x(p: &mut Parser) -> () {
 }
 
 fn _parse_nb__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if p.peek_kind() == TK_LIT_w && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
-        p.take();
+    if atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        p.expect(TK_LIT_w, &EMPTY_SYNC, true);
     }
     return;
 }
@@ -3262,5 +3262,20 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LIT_c => {
+                return 1;
+            },
+            TK_LIT_w => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);
 }
 

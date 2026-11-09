@@ -3736,9 +3736,8 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_tail__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    while !p.recovering && p.peek_kind() == TK_LIT_z {
-        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        p.take();
+    while !p.recovering && atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        p.expect(TK_LIT_z, &SYNC_2, true);
     }
     return;
 }
@@ -3761,66 +3760,12 @@ fn _parse_tail(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_e__inner_alt_1(p: &mut Parser, min_prec: i32) -> () {
     p.expect(TK_LIT_case, &SYNC_0, false);
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    let mut opt_enter: bool = false;
-    if _kind_set_0(p.peek_kind()) {
-        opt_enter_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            p.atn.stack.push(34);
-            pos = scan_e(tokens, pos, &mut p.atn, &mut p.memo, 0);
-            p.atn.stack.pop();
-            if pos < 0 { break opt_enter_scan; }
-            sg_0_done: {
-                sg_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_when { break sg_0; }
-                    pos += 1;
-                    p.atn.stack.push(40);
-                    pos = scan_e(tokens, pos, &mut p.atn, &mut p.memo, 0);
-                    p.atn.stack.pop();
-                    if pos < 0 { break sg_0; }
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_0; }
-                    pos += 1;
-                    p.atn.stack.push(44);
-                    pos = scan_e(tokens, pos, &mut p.atn, &mut p.memo, 0);
-                    p.atn.stack.pop();
-                    if pos < 0 { break sg_0; }
-                    break sg_0_done;
-                }
-                break opt_enter_scan;
-            }
-            while pos < tokens.len() && tokens[pos] == TK_LIT_when {
-                let sp = pos;
-                sg_1_done: {
-                    sg_1: {
-                        pos += 1;
-                        p.atn.stack.push(40);
-                        pos = scan_e(tokens, pos, &mut p.atn, &mut p.memo, 0);
-                        p.atn.stack.pop();
-                        if pos < 0 { break sg_1; }
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_1; }
-                        pos += 1;
-                        p.atn.stack.push(44);
-                        pos = scan_e(tokens, pos, &mut p.atn, &mut p.memo, 0);
-                        p.atn.stack.pop();
-                        if pos < 0 { break sg_1; }
-                        break sg_1_done;
-                    }
-                    pos = -1;
-                }
-                if pos < 0 { pos = sp; break; }
-                if pos == sp { break; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break opt_enter_scan; }
-            pos += 1;
-            opt_enter = true;
-        }
-    }
-    if opt_enter {
+    if atn_decide_2(&mut p.atn, &p.kinds, p.pos, min_prec) == 0 {
         p.site = 4;
         p.atn_ret_pending = 34;
         _parse_e(p);
     }
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     let mut _plus_first = true;
     while !p.recovering && (_plus_first || p.peek_kind() == TK_LIT_when) {
         _plus_first = false;
@@ -3832,9 +3777,9 @@ fn _parse_e__inner_alt_1(p: &mut Parser, min_prec: i32) -> () {
         p.site = 6;
         p.atn_ret_pending = 44;
         _parse_e(p);
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    p.expect(TK_LIT_end, &SYNC_4, true);
+    p.expect(TK_LIT_end, &SYNC_5, true);
     return;
 }
 
@@ -3842,112 +3787,55 @@ fn scan_e__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &m
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_case { return -1; }
     pos += 1;
-    let mut cont_done_0 = false;
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
+    if atn_decide_2(atn, tokens, pos, min_prec) == 0 {
         let sp = pos;
         atn.stack.push(34);
         pos = scan_e(tokens, pos, atn, memo, 0);
         atn.stack.pop();
-        if pos < 0 {
-            pos = sp;
-        } else {
-            let mut opt_ok: bool = false;
-            opt_probe: {
-                sg_2_done: {
-                    sg_2: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_when { break sg_2; }
-                        pos += 1;
-                        atn.stack.push(40);
-                        pos = scan_e(tokens, pos, atn, memo, 0);
-                        atn.stack.pop();
-                        if pos < 0 { break sg_2; }
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_2; }
-                        pos += 1;
-                        atn.stack.push(44);
-                        pos = scan_e(tokens, pos, atn, memo, 0);
-                        atn.stack.pop();
-                        if pos < 0 { break sg_2; }
-                        break sg_2_done;
-                    }
-                    break opt_probe;
-                }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_when {
-                    let sp = pos;
-                    sg_3_done: {
-                        sg_3: {
-                            pos += 1;
-                            atn.stack.push(40);
-                            pos = scan_e(tokens, pos, atn, memo, 0);
-                            atn.stack.pop();
-                            if pos < 0 { break sg_3; }
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_3; }
-                            pos += 1;
-                            atn.stack.push(44);
-                            pos = scan_e(tokens, pos, atn, memo, 0);
-                            atn.stack.pop();
-                            if pos < 0 { break sg_3; }
-                            break sg_3_done;
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break opt_probe; }
-                pos += 1;
-                opt_ok = true;
-            }
-            if opt_ok {
-                cont_done_0 = true;
-            } else {
-                pos = sp;
-            }
-        }
+        if pos < 0 { pos = sp; }
     }
-    if !cont_done_0 {
-        sg_4_done: {
-            sg_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_when { break sg_4; }
+    sg_0_done: {
+        sg_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_when { break sg_0; }
+            pos += 1;
+            atn.stack.push(40);
+            pos = scan_e(tokens, pos, atn, memo, 0);
+            atn.stack.pop();
+            if pos < 0 { break sg_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_0; }
+            pos += 1;
+            atn.stack.push(44);
+            pos = scan_e(tokens, pos, atn, memo, 0);
+            atn.stack.pop();
+            if pos < 0 { break sg_0; }
+            break sg_0_done;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_LIT_when {
+        let sp = pos;
+        sg_1_done: {
+            sg_1: {
                 pos += 1;
                 atn.stack.push(40);
                 pos = scan_e(tokens, pos, atn, memo, 0);
                 atn.stack.pop();
-                if pos < 0 { break sg_4; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_4; }
+                if pos < 0 { break sg_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_1; }
                 pos += 1;
                 atn.stack.push(44);
                 pos = scan_e(tokens, pos, atn, memo, 0);
                 atn.stack.pop();
-                if pos < 0 { break sg_4; }
-                break sg_4_done;
+                if pos < 0 { break sg_1; }
+                break sg_1_done;
             }
-            return -1;
+            pos = -1;
         }
-        while pos < tokens.len() && tokens[pos] == TK_LIT_when {
-            let sp = pos;
-            sg_5_done: {
-                sg_5: {
-                    pos += 1;
-                    atn.stack.push(40);
-                    pos = scan_e(tokens, pos, atn, memo, 0);
-                    atn.stack.pop();
-                    if pos < 0 { break sg_5; }
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_5; }
-                    pos += 1;
-                    atn.stack.push(44);
-                    pos = scan_e(tokens, pos, atn, memo, 0);
-                    atn.stack.pop();
-                    if pos < 0 { break sg_5; }
-                    break sg_5_done;
-                }
-                pos = -1;
-            }
-            if pos < 0 { pos = sp; break; }
-            if pos == sp { break; }
-        }
-        if pos >= tokens.len() || tokens[pos] != TK_LIT_end { return -1; }
-        pos += 1;
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
     }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_end { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -4126,16 +4014,29 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [3841];
 global EXPECTED_0: List<i32> = [TK_ID, TK_LIT_case, TK_LIT_end, TK_LIT_then, TK_LIT_when];
 global SYNC_1: List<i32> = [68];
-global SYNC_2: List<i32> = [512];
-global EXPECTED_2: List<i32> = [TK_LIT_when];
-global SYNC_3: List<i32> = [2560];
-global EXPECTED_3: List<i32> = [TK_LIT_end, TK_LIT_when];
-global SYNC_4: List<i32> = [128];
+global SYNC_2: List<i32> = [64];
+global SYNC_3: List<i32> = [512];
+global EXPECTED_3: List<i32> = [TK_LIT_when];
+global SYNC_4: List<i32> = [2560];
+global EXPECTED_4: List<i32> = [TK_LIT_end, TK_LIT_when];
+global SYNC_5: List<i32> = [128];
 
 global FOLLOW_SETS: List<List<i32>> = [[4]];
 global FOLLOW_MASK_1: i64 = 1;
 
 global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x04\x00\x06\x00\x3e\x00\x0c\x00\x00\x00\x02\x00\x04\x00\x06\x00\x16\x00\x1b\x00\x1f\x00\x2d\x00\x33\x00\x3a\x00\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x06\x09\x01\x01\x07\x04\x05\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x08\x09\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x04\x05\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x04\x00\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x00\x00\x00\x01\x00\x04\x00\x05\x00\x00\x00\x01\x00\x04\x00\x00\x00\x06\x00\x09\x00\x15\x00\x1c\x00\x3b\x00\x0b\x00\x02\x00\x0c\x00\x0d\x00\x05\x00\x0f\x00\x10\x00\x11\x00\x03\x00\x13\x00\x14\x00\x0a\x00\x17\x00\x04\x00\x19\x00\x18\x00\x16\x00\x1a\x00\x1b\x00\x17\x00\x1e\x00\x32\x00\x34\x00\x1f\x00\x20\x00\x22\x00\x21\x00\x24\x00\x05\x00\x21\x00\x26\x00\x2e\x00\x27\x00\x28\x00\x05\x00\x2a\x00\x2b\x00\x2c\x00\x05\x00\x25\x00\x24\x00\x2f\x00\x30\x00\x31\x00\x1d\x00\x07\x00\x1d\x00\x37\x00\x35\x00\x06\x00\x34\x00\x38\x00\x39\x00\x05\x00\x36\x00\x3d\x00\x08\x00\x3e\x00\x3c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x29\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x33\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x05\x00\x00\x00\x09\x00\x0a\x00\x0b\x00\x08\x00"));
+
+fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LIT_z => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
 
 fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
@@ -4216,6 +4117,57 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_ID | TK_LIT_case | TK_LIT_then | TK_LIT_end => {
+                return 0;
+            },
+            TK_LIT_when => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_ID | TK_LIT_case | TK_LIT_then | TK_LIT_end => {
+                            return 1;
+                        },
+                        TK_LIT_PLUS => {
+                            return 0;
+                        },
+                        TK_LIT_when => {
+                            if pos + 2 < tokens.len() {
+                                match tokens[pos + 2] {
+                                    TK_ID | TK_LIT_case | TK_LIT_when | TK_LIT_end => {
+                                        return 0;
+                                    },
+                                    TK_LIT_PLUS => {
+                                        return 1;
+                                    },
+                                    TK_LIT_then => {
+                                        if pos + 3 < tokens.len() {
+                                            match tokens[pos + 3] {
+                                                TK_ID | TK_LIT_case | TK_LIT_when | TK_LIT_end => {
+                                                    return 1;
+                                                },
+                                                TK_LIT_PLUS => {
+                                                    return 0;
+                                                },
+                                                _ => {},
+                                            };
+                                        }
+                                    },
+                                    _ => {},
+                                };
+                            }
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, min_prec);
 }
 
 fn atn_lr_decide_4(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {

@@ -3630,123 +3630,6 @@ impl Parser {
     }
 }
 
-fn scan_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if kind == TK_NOT {
-        pos = start + 1;
-        try_0: {
-            atn.stack.push(7);
-            pos = scan_expression(tokens, pos, atn, memo, follow, 3);
-            atn.stack.pop();
-            if pos < 0 { break try_0; }
-            return pos;
-        }
-        return -1;
-    } else if kind == TK_IDENTIFIER {
-        pos = start + 1;
-        return pos;
-    }
-    return -1;
-}
-
-fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    sg_2_done: {
-        sg_2: {
-            if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_2; }
-            pos += 1;
-            atn.stack.push(18);
-            pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
-            atn.stack.pop();
-            if pos < 0 { break sg_2; }
-            break sg_2_done;
-        }
-        return -1;
-    }
-    while pos < tokens.len() && tokens[pos] == TK_AND && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
-        let sp = pos;
-        sg_3_done: {
-            sg_3: {
-                pos += 1;
-                atn.stack.push(18);
-                pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
-                atn.stack.pop();
-                if pos < 0 { break sg_3; }
-                break sg_3_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    sg_4_done: {
-        sg_4: {
-            if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_4; }
-            pos += 1;
-            atn.stack.push(26);
-            pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
-            atn.stack.pop();
-            if pos < 0 { break sg_4; }
-            break sg_4_done;
-        }
-        return -1;
-    }
-    while pos < tokens.len() && tokens[pos] == TK_OR && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
-        let sp = pos;
-        sg_5_done: {
-            sg_5: {
-                pos += 1;
-                atn.stack.push(26);
-                pos = scan_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
-                atn.stack.pop();
-                if pos < 0 { break sg_5; }
-                break sg_5_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let memo_at = memo.find(0, pos, min_prec, follow, 0, &());
-    if memo_at >= 0 {
-        return memo.end_of(memo_at);
-    }
-    let memo_gate = ();
-    let memo_callers = atn.hide_callers();
-    let memo_end = scan_expression__walk(tokens, pos, atn, memo, follow, min_prec);
-    if !atn.reveal_callers(memo_callers) { memo.put(0, pos, min_prec, follow, 0, memo_gate, memo_end, ()); }
-    return memo_end;
-}
-
-fn scan_expression__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expression_atom(tokens, pos, atn, memo, min_prec, follow);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_decide_1(atn, tokens, pos, min_prec, follow);
-        if _atn_alt == 0 {
-            pos = scan_expression_lr_1(tokens, pos, atn, memo, min_prec, follow);
-            if pos < 0 { return -1; }
-        } else if _atn_alt == 1 {
-            pos = scan_expression_lr_2(tokens, pos, atn, memo, min_prec, follow);
-            if pos < 0 { return -1; }
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
 fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
@@ -3787,29 +3670,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.atn_ret_pending = 18;
                 _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
             }
-            loop {
-                if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-                let mut rep_scan_pos: i32 = -1;
-                rep_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    sg_0_done: {
-                        sg_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_0; }
-                            pos += 1;
-                            p.atn.stack.push(18);
-                            pos = scan_expression(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
-                            p.atn.stack.pop();
-                            if pos < 0 { break sg_0; }
-                            break sg_0_done;
-                        }
-                        break rep_scan;
-                    }
-                    if pos <= p.pos { break rep_scan; }
-                    rep_scan_pos = pos;
-                }
-                if rep_scan_pos < 0 { break; }
+            while !p.recovering && atn_decide_2(&mut p.atn, &p.kinds, p.pos, min_prec) == 0 {
                 p.expect(TK_AND, &SYNC_0, false);
                 p.site = 2;
                 p.atn_ret_pending = 18;
@@ -3825,29 +3686,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.atn_ret_pending = 26;
                 _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
             }
-            loop {
-                if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-                let mut rep_scan_pos_2: i32 = -1;
-                rep_scan_2: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    sg_1_done: {
-                        sg_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_1; }
-                            pos += 1;
-                            p.atn.stack.push(26);
-                            pos = scan_expression(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
-                            p.atn.stack.pop();
-                            if pos < 0 { break sg_1; }
-                            break sg_1_done;
-                        }
-                        break rep_scan_2;
-                    }
-                    if pos <= p.pos { break rep_scan_2; }
-                    rep_scan_pos_2 = pos;
-                }
-                if rep_scan_pos_2 < 0 { break; }
+            while !p.recovering && atn_decide_3(&mut p.atn, &p.kinds, p.pos, min_prec) == 0 {
                 p.expect(TK_OR, &SYNC_0, false);
                 p.site = 4;
                 p.atn_ret_pending = 26;
@@ -3938,6 +3777,30 @@ global FOLLOW_MASK_0: i64 = 513;
 global FOLLOW_MASK_1: i64 = 515;
 
 global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x01\x00\x04\x00\x1d\x00\x07\x00\x00\x00\x02\x00\x0a\x00\x13\x00\x1b\x00\x02\x03\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x07\x04\x05\x01\x01\x01\x01\x08\x09\x04\x05\x01\x01\x01\x01\x08\x09\x01\x00\x00\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x05\x05\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x03\x00\x05\x00\x09\x00\x0b\x00\x06\x00\x07\x00\x01\x00\x04\x00\x0a\x00\x04\x00\x0e\x00\x16\x00\x0c\x00\x02\x00\x0b\x00\x10\x00\x14\x00\x11\x00\x12\x00\x01\x00\x0f\x00\x0e\x00\x15\x00\x0d\x00\x18\x00\x1c\x00\x19\x00\x1a\x00\x01\x00\x17\x00\x16\x00\x1d\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"));
+
+fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_OR => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_AND => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 3, atn, tokens, pos, TK_EOF, min_prec);
+}
 
 fn atn_lr_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {
     if pos < tokens.len() && tokens[pos] < 7 {

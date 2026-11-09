@@ -3221,38 +3221,6 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if kind == TK_LET {
-        pos = start + 1;
-        try_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-            pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_EQ { break try_0; }
-            pos += 1;
-            pos = scan_expr(tokens, pos, atn, memo, 0);
-            if pos < 0 { break try_0; }
-            if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_0; }
-            pos += 1;
-            return pos;
-        }
-        return -1;
-    } else if kind == TK_LB {
-        try_1: {
-            pos = scan_blk(tokens, pos, atn, memo);
-            if pos < 0 { break try_1; }
-            if pos < tokens.len() && tokens[pos] == TK_SEMI && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
-                pos += 1;
-            }
-            return pos;
-        }
-        return -1;
-    }
-    return -1;
-}
-
 fn scan_blk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
@@ -3376,56 +3344,12 @@ fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-    let mut _plus_first = true;
-    loop {
-        if p.recovering { break; }
-        if !_plus_first {
-            if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_stmt(tokens, pos, &mut p.atn, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
-                if pos < 0 { break rep_scan; }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos >= 0 {
-                let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 1 && p.kinds[p.pos] == TK_RB)) {
-                    let mut decline_dead: bool = false;
-                    decline_scan: {
-                        let tokens = &p.kinds;
-                        let mut pos: i32 = p.pos;
-                        if pos < tokens.len() && _kind_set_1(tokens[pos]) {
-                            let sp = pos;
-                            pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, 0);
-                            if pos < 0 { pos = sp; }
-                        }
-                        let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if probe_kind == TK_RB && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
-                    }
-                    if decline_dead { break; }
-                }
-            }
-            if rep_scan_pos < 0 {
-                if _kind_set_2(p.peek_kind()) {
-                    let _rec_pos = p.pos;
-                    let _rec_cp = p.b.checkpoint();
-                    let _rec_outer = p.speculating;
-                    p.speculating = true;
-                    p.site = 2;
-                    p.atn_ret_pending = 29;
-                    _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
-                    p.speculating = _rec_outer;
-                    p.recovering = false;
-                    p.pos = _rec_pos;
-                    p.b.truncate(_rec_cp);
-                }
-                break;
-            }
-        }
-        _plus_first = false;
+    _first_iter: {
+        p.site = 2;
+        p.atn_ret_pending = 29;
+        _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
+    }
+    while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
         p.site = 2;
         p.atn_ret_pending = 29;
         _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
@@ -3441,7 +3365,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_stmts__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if _kind_set_3(kind) {
+    if _kind_set_2(kind) {
         if kind == TK_LET {
             return _parse_stmts__inner_alt_0(p, follow);
         } else if kind == TK_LB {
@@ -3497,8 +3421,8 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 6;
         p.atn_ret_pending = 51;
         _parse_blk(p);
-        if p.peek_kind() == TK_SEMI && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
-            p.take();
+        if atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+            p.expect(TK_SEMI, &EMPTY_SYNC, true);
         }
         return;
     }
@@ -3678,19 +3602,7 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
     return String::new();
 }
 
-fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_ID | TK_LB | TK_LET | TK_RB };
-}
-
-fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_ID | TK_LB };
-}
-
 fn _kind_set_2(k: i32) -> bool {
-    return k matches { TK_LB | TK_LET };
-}
-
-fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_ID | TK_LB | TK_LET };
 }
 
@@ -3723,31 +3635,8 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                 return 0;
             },
             TK_LB => {
-                if pos + 1 < tokens.len() {
-                    match tokens[pos + 1] {
-                        TK_ID => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_RB => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_LET | TK_SEMI | TK_LB | TK_RB | TK_ID => {
-                                                    return 0;
-                                                },
-                                                TK_DOT => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
-                                    },
-                                    _ => {},
-                                };
-                            }
-                        },
-                        _ => {},
-                    };
-                }
+                let alt = atn_dfa_4(tokens, pos + 1);
+                if alt >= 0 { return alt; }
             },
             TK_ID => {
                 return 1;
@@ -3756,6 +3645,25 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LET => {
+                return 0;
+            },
+            TK_LB => {
+                let alt = atn_dfa_4(tokens, pos + 1);
+                if alt >= 0 { return alt; }
+            },
+            TK_RB | TK_ID => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);
 }
 
 fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
@@ -3771,5 +3679,49 @@ fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_4(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LET | TK_LB | TK_RB | TK_ID => {
+                return 1;
+            },
+            TK_SEMI => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 4, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_dfa_4(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_ID => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_RB => {
+                            if pos + 2 < tokens.len() {
+                                match tokens[pos + 2] {
+                                    TK_LET | TK_SEMI | TK_LB | TK_RB | TK_ID => {
+                                        return 0;
+                                    },
+                                    TK_DOT => {
+                                        return 1;
+                                    },
+                                    _ => {},
+                                };
+                            }
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 

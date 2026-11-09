@@ -3233,29 +3233,29 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
         try_3: {
             if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                 let sp = pos;
-                sg_9_done: {
-                    sg_9: {
+                sg_8_done: {
+                    sg_8: {
                         atn.stack.push(95);
                         pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         atn.stack.pop();
-                        if pos < 0 { break sg_9; }
+                        if pos < 0 { break sg_8; }
                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                             let sp = pos;
-                            sg_10_done: {
-                                sg_10: {
+                            sg_9_done: {
+                                sg_9: {
                                     pos += 1;
                                     atn.stack.push(103);
                                     pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                                     atn.stack.pop();
-                                    if pos < 0 { break sg_10; }
-                                    break sg_10_done;
+                                    if pos < 0 { break sg_9; }
+                                    break sg_9_done;
                                 }
                                 pos = -1;
                             }
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        break sg_9_done;
+                        break sg_8_done;
                     }
                     pos = -1;
                 }
@@ -3274,14 +3274,14 @@ fn scan_path(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_IDENT { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_COLONCOLON && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+    while atn_decide_10(atn, tokens, pos, 0) == 0 {
         let sp = pos;
-        sg_8_done: {
-            sg_8: {
+        sg_7_done: {
+            sg_7: {
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_8; }
+                if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_7; }
                 pos += 1;
-                break sg_8_done;
+                break sg_7_done;
             }
             pos = -1;
         }
@@ -3327,7 +3327,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
         pos = scan_arm(tokens, pos, &mut p.atn, 0);
         p.atn.stack.pop();
         if pos < 0 { break opt_scan; }
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+        while atn_decide_1(&mut p.atn, tokens, pos, 0) == 0 {
             let sp = pos;
             sg_0_done: {
                 sg_0: {
@@ -3368,43 +3368,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.atn_ret_pending = 29;
         _parse_arm(p, 0);
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
-        loop {
-            if p.recovering { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                sg_2_done: {
-                    sg_2: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_2; }
-                        pos += 1;
-                        p.atn.stack.push(37);
-                        pos = scan_arm(tokens, pos, &mut p.atn, 0);
-                        p.atn.stack.pop();
-                        if pos < 0 { break sg_2; }
-                        break sg_2_done;
-                    }
-                    break rep_scan;
-                }
-                if pos <= p.pos { break rep_scan; }
-                let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if rep_body_end_kind != TK_LIT_COMMA {
-                    let rep_body_end = pos;
-                    let mut rep_body_end_ok = false;
-                    rep_body_end_scan: {
-                        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                            pos += 1;
-                        }
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break rep_body_end_scan; }
-                        pos += 1;
-                        rep_body_end_ok = true;
-                    }
-                    pos = rep_body_end;
-                    if !rep_body_end_ok { break rep_scan; }
-                }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
+        while !p.recovering && atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
             p.expect(TK_LIT_COMMA, &SYNC_4, false);
             p.site = 2;
             p.atn_ret_pending = 37;
@@ -3495,14 +3459,14 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
-                sg_3_done: {
-                    sg_3: {
+                sg_2_done: {
+                    sg_2: {
                         pos += 1;
                         p.atn.stack.push(84);
                         pos = scan_pattern(tokens, pos, &mut p.atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         p.atn.stack.pop();
-                        if pos < 0 { break sg_3; }
-                        break sg_3_done;
+                        if pos < 0 { break sg_2; }
+                        break sg_2_done;
                     }
                     pos = -1;
                 }
@@ -3531,46 +3495,48 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn scan_pattern__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
     let mut pos = pos;
+    atn.stack.push(64);
     pos = scan_path(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_3)));
+    atn.stack.pop();
     if pos < 0 { return -1; }
     if atn_decide_5(atn, tokens, pos, 0) == 0 {
         let sp = pos;
-        sg_4_done: {
-            sg_4: {
+        sg_3_done: {
+            sg_3: {
                 pos += 1;
                 if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
-                    sg_5_done: {
-                        sg_5: {
+                    sg_4_done: {
+                        sg_4: {
                             atn.stack.push(76);
                             pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                             atn.stack.pop();
-                            if pos < 0 { break sg_5; }
+                            if pos < 0 { break sg_4; }
                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
-                                sg_6_done: {
-                                    sg_6: {
+                                sg_5_done: {
+                                    sg_5: {
                                         pos += 1;
                                         atn.stack.push(84);
                                         pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                                         atn.stack.pop();
-                                        if pos < 0 { break sg_6; }
-                                        break sg_6_done;
+                                        if pos < 0 { break sg_5; }
+                                        break sg_5_done;
                                     }
                                     pos = -1;
                                 }
                                 if pos < 0 { pos = sp; break; }
                                 if pos == sp { break; }
                             }
-                            break sg_5_done;
+                            break sg_4_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_3; }
                 pos += 1;
-                break sg_4_done;
+                break sg_3_done;
             }
             pos = -1;
         }
@@ -3610,14 +3576,14 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
-                sg_7_done: {
-                    sg_7: {
+                sg_6_done: {
+                    sg_6: {
                         pos += 1;
                         p.atn.stack.push(103);
                         pos = scan_pattern(tokens, pos, &mut p.atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         p.atn.stack.pop();
-                        if pos < 0 { break sg_7; }
-                        break sg_7_done;
+                        if pos < 0 { break sg_6; }
+                        break sg_6_done;
                     }
                     pos = -1;
                 }
@@ -3667,9 +3633,8 @@ fn _parse_pattern(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_IDENT, &SYNC_8, true);
-    while !p.recovering && p.peek_kind() == TK_LIT_COLONCOLON {
-        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        p.take();
+    while !p.recovering && atn_decide_10(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        p.expect(TK_LIT_COLONCOLON, &SYNC_0, false);
         p.expect(TK_IDENT, &SYNC_8, true);
     }
     return;
@@ -3788,6 +3753,31 @@ global FOLLOW_MASK_4: i64 = 7;
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x05\x00\x0b\x00\x78\x00\x0e\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x18\x00\x1e\x00\x27\x00\x35\x00\x39\x00\x41\x00\x47\x00\x4d\x00\x5a\x00\x60\x00\x6f\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x04\x05\x04\x05\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x04\x05\x04\x05\x01\x01\x04\x05\x04\x05\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x01\x01\x01\x01\x04\x05\x04\x05\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x04\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x0b\x00\x11\x00\x2e\x00\x36\x00\x6c\x00\x0d\x00\x02\x00\x03\x00\x0f\x00\x10\x00\x0c\x00\x13\x00\x04\x00\x14\x00\x15\x00\x16\x00\x17\x00\x18\x00\x19\x00\x1b\x00\x1a\x00\x2c\x00\x1d\x00\x1a\x00\x05\x00\x1f\x00\x21\x00\x20\x00\x28\x00\x23\x00\x27\x00\x24\x00\x25\x00\x05\x00\x22\x00\x1f\x00\x2a\x00\x29\x00\x1c\x00\x2b\x00\x29\x00\x2d\x00\x12\x00\x30\x00\x06\x00\x07\x00\x32\x00\x33\x00\x34\x00\x35\x00\x2f\x00\x38\x00\x3a\x00\x40\x00\x59\x00\x08\x00\x39\x00\x37\x00\x3c\x00\x3b\x00\x3e\x00\x3d\x00\x3b\x00\x3f\x00\x37\x00\x09\x00\x42\x00\x44\x00\x43\x00\x37\x00\x46\x00\x43\x00\x47\x00\x48\x00\x4a\x00\x49\x00\x57\x00\x4c\x00\x49\x00\x07\x00\x4e\x00\x50\x00\x4f\x00\x4b\x00\x52\x00\x56\x00\x53\x00\x54\x00\x07\x00\x51\x00\x4e\x00\x58\x00\x45\x00\x5a\x00\x5b\x00\x5d\x00\x5c\x00\x6a\x00\x5f\x00\x5c\x00\x07\x00\x61\x00\x63\x00\x62\x00\x5e\x00\x65\x00\x69\x00\x66\x00\x67\x00\x07\x00\x64\x00\x61\x00\x6b\x00\x37\x00\x6e\x00\x0a\x00\x6f\x00\x70\x00\x72\x00\x71\x00\x6d\x00\x74\x00\x78\x00\x75\x00\x76\x00\x77\x00\x73\x00\x70\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x26\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x41\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x4d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x55\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x60\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x68\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 
+fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LIT_COMMA => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_IDENT | TK_LIT_U5f | TK_LIT_mut | TK_LIT_LPAREN => {
+                            return 0;
+                        },
+                        TK_LIT_RBRACE => {
+                            return 1;
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            TK_LIT_RBRACE => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);
+}
+
 fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
@@ -3832,5 +3822,20 @@ fn atn_decide_5(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 5, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_10(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LIT_COMMA | TK_LIT_EQGT | TK_LIT_LPAREN | TK_LIT_RPAREN => {
+                return 1;
+            },
+            TK_LIT_COLONCOLON => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 10, atn, tokens, pos, TK_EOF, min_prec);
 }
 

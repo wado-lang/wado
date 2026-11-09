@@ -3204,41 +3204,9 @@ fn _parse_tree(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_3, true);
-    loop {
-        if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        if p.peek_kind() != TK_SEP { break; }
-        let sp_pending = p.pending;
-        let sp_pos = p.pos;
-        let sp_cp = p.b.checkpoint();
-        let sp_outer = p.speculating;
-        p.speculating = true;
+    while !p.recovering && atn_decide_3(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
         p.expect(TK_SEP, &SYNC_4, false);
         p.expect(TK_ID, &SYNC_3, true);
-        p.speculating = sp_outer;
-        if p.recovering || p.pos <= sp_pos {
-            p.recovering = false;
-            p.pos = sp_pos;
-            p.b.truncate(sp_cp);
-            p.pending = sp_pending;
-            break;
-        }
-        let sp_end = p.pos;
-        p.pos = sp_pos;
-        if sp_end >= 0 {
-            let decline_kind = if sp_end < p.kinds.len() { p.kinds[sp_end] } else { TK_EOF };
-            if !(_kind_set_1(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(sp_end == p.pos + 2 && p.kinds[p.pos] == TK_SEP && p.kinds[p.pos + 1] == TK_STAR || sp_end == p.pos + 4 && p.kinds[p.pos] == TK_SEP && p.kinds[p.pos + 1] == TK_LBRACE && p.kinds[p.pos + 2] == TK_ID && p.kinds[p.pos + 3] == TK_RBRACE)) {
-                let mut decline_dead: bool = false;
-                decline_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_1(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
-                }
-                if decline_dead { p.b.truncate(sp_cp); p.pending = sp_pending; break; }
-            }
-        }
-        p.pos = sp_end;
     }
     return;
 }
@@ -3318,10 +3286,6 @@ fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_ID | TK_SEP };
 }
 
-fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_EOF | TK_SEP };
-}
-
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [3];
 global EXPECTED_0: List<i32> = [TK_ID, TK_SEP];
@@ -3364,5 +3328,27 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_SEP => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_ID => {
+                            return 0;
+                        },
+                        TK_STAR | TK_LBRACE => {
+                            return 1;
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 3, atn, tokens, pos, TK_EOF, min_prec);
 }
 
