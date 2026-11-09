@@ -284,8 +284,9 @@ pub(super) fn collect_unresolved_null_breaks(
     probe.spans
 }
 
-/// The values every `break <label>: <value>` inside `block` yields, an inner
-/// labeled block reusing the name shadowing it.
+/// The values every `break <label>: <value>` inside `block` yields, one nested
+/// in another's value included, an inner labeled block reusing the name
+/// shadowing it.
 pub(super) fn break_values<'t>(block: &'t ast::Block, label: &str) -> Vec<&'t ast::Expr> {
     let mut probe = BreakValues {
         label,
@@ -305,7 +306,7 @@ impl<'t> AstTreeProbe<'t> for BreakValues<'_, 't> {
         match stmt {
             ast::Stmt::Break(b) if b.label.as_deref() == Some(self.label) => {
                 self.values.extend(b.value.as_deref());
-                Step::Skip
+                Step::Descend
             }
             ast::Stmt::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
             _ => Step::Descend,

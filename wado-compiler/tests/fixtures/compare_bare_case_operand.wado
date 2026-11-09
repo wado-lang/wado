@@ -61,6 +61,9 @@ test "a bare case in any form that hands the expected type on" {
     let warm = builtin::black_box(false);
     assert (pick: { if warm { break pick: Red; } Green }) == c;
     assert (pick: { if warm { Red } else { break pick: Green; } }) == c;
+    assert (pick: {
+        break pick: if warm { Color::Red } else { if !warm { break pick: Green; } Color::Red };
+    }) == c;
     let mut quiet = Quiet {};
     assert (with Noop => &mut quiet do { Green }) == c;
     assert &Green == &c;
