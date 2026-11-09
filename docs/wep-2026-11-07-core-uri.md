@@ -41,7 +41,7 @@ impl Display for Uri;            // recomposition (§5.3), as for UriReference
 
 `UriReference` has `fragment` and `without_fragment` too. Each type derives
 `Eq` and `Hash`, so it keys a `HashMap`. Two values are equal when their
-components are equal as written. Each serializes as its text, which is what
+components are equal as written, the scheme's case aside. Each serializes as its text, which is what
 JSON Schema's `uri` and `uri-reference` formats describe.
 
 ### What a `UriReference` holds
@@ -55,7 +55,7 @@ compares it as a whole.
 A component outside the grammar of Appendix A is a `UriError` at its byte
 offset, so every value is one RFC 3986 admits. Only ASCII is admitted: an IRI
 (RFC 3987) is not a URI. A `Uri` is a `UriReference` whose scheme is present;
-text without one is a `UriError` at offset 0.
+a reference without one is a `UriError` at offset 0.
 
 ### Resolution
 
