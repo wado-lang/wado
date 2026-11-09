@@ -663,15 +663,8 @@ impl<'a> Unparser<'a> {
         // that nothing lands between a doc comment and what it documents.
         let leading_start = self.leading_start(id, get_item_span(item).start);
         self.flush_comments_before(leading_start, Spacing::KeepBlankLines);
-        let last_comment_was_doc = self.emit_leading_for(id, item.attrs());
-
-        // Anchor the leading-blank computation to the first attribute, not to
-        // the item's own line — otherwise repeated formatting passes would grow
-        // blank lines between doc comments and attrs. A trailing doc comment
-        // belongs to the item, so don't insert any blanks above it either.
-        if !last_comment_was_doc {
-            self.emit_blank_lines_to(get_item_first_line(item));
-        }
+        self.emit_leading_for(id, item.attrs());
+        self.emit_blank_lines_to(get_item_first_line(item));
 
         match item {
             Item::Use(u) => self.unparse_use(u),
@@ -3001,19 +2994,14 @@ impl<'a> Unparser<'a> {
     }
 
     /// Emit `trivia.leading_of(id)` written before `attrs`, each on its own
-    /// indented line with the usual blank-line padding, and return whether the
-    /// last was a `///` doc comment. Items use that to decide whether to insert
-    /// a blank line between leading docs and the item itself.
-    fn emit_leading_for(&mut self, id: AstId, attrs: &[Attribute]) -> bool {
+    /// indented line with the usual blank-line padding.
+    fn emit_leading_for(&mut self, id: AstId, attrs: &[Attribute]) {
         let end = attrs.first().map_or(usize::MAX, |attr| attr.span.start);
-        let mut last_was_doc = false;
         for comment in self.leading_of(id) {
             if comment.span.start < end && self.emitted_comments.insert(comment.span.start) {
                 self.emit_on_own_line(comment, Spacing::KeepBlankLines);
-                last_was_doc = comment.kind == CommentKind::DocLine;
             }
         }
-        last_was_doc
     }
 
     /// Emit `comment` on an indented line of its own, after the blank lines
