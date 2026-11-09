@@ -486,14 +486,15 @@ Give the four `wasm-size` programs the same pass at `-Os`: no benchmark covers
 
 For each row that differs, diff the two `wado dump --wir -O2` outputs function by
 function, which names what moved. A correctness fix is held to byte-identical
-output on every program it does not fix. Then time only the rows whose hot path
-moved, back to back, and read the rest as unmoved.
+output on every program it does not fix. Then time only the rows that differ,
+back to back. A row whose bytes are identical has not moved.
 
-A row can move while its hot functions compile to the same bytes. A change
-elsewhere in the module shifts where they land, and Cranelift aligns a function
-to 32 bytes on x86-64, half a cache line. That moved `json_catalog` deserialize
-by 1.5%. Time both arms again with `WADO_RUN_FLAGS="--function-alignment 64"`: a
-gap that closes was placement, and the arms with it pinned are the ones to read.
+A row that differs can move while its hot functions compile to the same bytes.
+A change elsewhere in the module shifts where they land, and Cranelift aligns a
+function to 32 bytes on x86-64, half a cache line. That moved `json_catalog`
+deserialize by 1.5%. Time both arms again with
+`WADO_RUN_FLAGS="--function-alignment 64"`: a gap that closes was placement, and
+the arms with it pinned are the ones to read.
 
 `ab.ts` decides each row by whether the arms' `[min, max]` overlap, not by the
 delta: on a 5 ms benchmark a 6% gap between bests sits inside one arm's own

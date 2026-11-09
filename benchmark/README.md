@@ -328,9 +328,9 @@ per second (higher is better).
 
 | Implementation          |  Throughput |   ms/iter | vs best |
 | ----------------------- | ----------: | --------: | ------- |
-| Java (ANTLR4)           | 977.97 KB/s | 43.750 ms | 1.00x   |
-| **Wado** (Gale)         | 473.17 KB/s | 90.423 ms | 2.07x   |
-| **Wado** (Gale, no-pgo) | 472.80 KB/s | 90.495 ms | 2.07x   |
+| Java (ANTLR4)           | 973.47 KB/s | 43.952 ms | 1.00x   |
+| **Wado** (Gale)         | 460.66 KB/s | 92.879 ms | 2.11x   |
+| **Wado** (Gale, no-pgo) | 459.66 KB/s | 93.080 ms | 2.12x   |
 
 Every row runs in-process and warm, emitting a parser and no listeners: Gale a
 Wado recursive-descent one from memory, ANTLR4 Java onto disk. Gale generates
@@ -409,18 +409,18 @@ wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-cold-pat
 | `compute/fts`            |   1,359,789,394 | 1,420,789,480 | 1,363,789,589 |           +4.2% |                  -0.3% |
 | `compute/mandelbrot`     |   3,905,984,584 | 3,905,984,584 | 3,905,984,584 |           +0.0% |                  +0.0% |
 | `compute/sieve`          |     147,908,811 |   147,908,767 |   147,908,767 |           +0.0% |                  +0.0% |
-| `gale/generate`          |   1,271,628,804 | 1,286,888,394 | 1,268,798,582 |           +1.4% |                  +0.2% |
+| `gale/generate`          |   1,304,286,141 | 1,319,605,797 | 1,299,444,940 |           +1.6% |                  +0.4% |
 | `gale/sqlite/highlight`  |      21,036,981 |    20,372,459 |    20,371,549 |           +0.0% |                  +3.3% |
 | `gale/sqlite/parse`      |      13,988,313 |    13,406,880 |    13,405,970 |           +0.0% |                  +4.3% |
 | `ml/microgpt/infer`      |   1,085,324,444 | 1,136,843,797 | 1,099,950,210 |           +3.4% |                  -1.3% |
 | `ml/microgpt/train`      |   1,354,492,067 | 1,381,959,745 | 1,360,562,514 |           +1.6% |                  -0.4% |
-| `serde/cbor/canada/de`   |      96,750,655 |   117,544,274 |    96,448,839 |          +21.9% |                  +0.3% |
+| `serde/cbor/canada/de`   |      96,750,655 |   117,544,275 |    96,448,840 |          +21.9% |                  +0.3% |
 | `serde/cbor/canada/ser`  |      84,118,672 |    87,639,967 |    83,672,688 |           +4.7% |                  +0.5% |
 | `serde/cbor/catalog/de`  |      40,409,797 |    44,761,155 |    40,167,563 |          +11.4% |                  +0.6% |
 | `serde/cbor/catalog/ser` |      13,884,832 |    16,730,776 |    13,656,265 |          +22.5% |                  +1.7% |
 | `serde/cbor/twitter/de`  |      28,049,468 |    29,031,202 |    27,953,020 |           +3.9% |                  +0.3% |
 | `serde/cbor/twitter/ser` |       7,273,990 |     8,584,629 |     7,276,737 |          +18.0% |                  -0.0% |
-| `serde/json/canada/de`   |     281,172,947 |   320,140,951 |   282,488,379 |          +13.3% |                  -0.5% |
+| `serde/json/canada/de`   |     281,172,947 |   320,140,952 |   282,488,380 |          +13.3% |                  -0.5% |
 | `serde/json/canada/ser`  |     257,556,205 |   255,510,421 |   255,159,698 |           +0.1% |                  +0.9% |
 | `serde/json/catalog/de`  |     118,186,539 |   121,276,423 |   118,382,020 |           +2.4% |                  -0.2% |
 | `serde/json/catalog/ser` |      21,268,351 |    22,542,724 |    21,459,975 |           +5.0% |                  -0.9% |
@@ -458,7 +458,7 @@ reads `noise` where the two builds' ranges overlap, as `ab.ts` judges:
 | zlib_bench / Wado / decompress |           0.904 |           +6.7% |                  -0.9% |
 | sqlite_parse / Wado            |           0.730 |           noise |                 +17.9% |
 | syntax_highlight / Wado        |           1.025 |           -0.2% |                 +13.8% |
-| gale_gen / Wado                |          91.032 |           noise |                  noise |
+| gale_gen / Wado                |          93.753 |           noise |                  +0.9% |
 | gale_html / Wado               |          17.476 |           -0.6% |                  +7.6% |
 
 ## Running
