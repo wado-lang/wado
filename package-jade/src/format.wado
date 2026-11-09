@@ -1,7 +1,7 @@
 //! The `format` values a validator asserts when compiled to, each read strictly
 //! by the grammar Draft 2020-12 cites for it.
 
-use { Uri } from "core:uri";
+use { Uri, UriReference } from "core:uri";
 use { validate_ecma262_syntax } from "lib:re";
 
 /// A format Jade asserts.
@@ -66,7 +66,7 @@ impl Format {
             Email => whole(Scan::of(text), mailbox),
             Ipv4 => whole(Scan::of(text), |s| dotted_quad(s, Leading::Unpadded)),
             Ipv6 => is_ipv6(&Scan::of(text).chars, 1, Leading::Unpadded),
-            Uri => is_uri_reference(text) && has_scheme(text),
+            Uri => Uri::from_str(text) matches { Ok(_) },
             UriReference => is_uri_reference(text),
             Iri => is_iri_reference(text) && has_scheme(text),
             IriReference => is_iri_reference(text),
@@ -454,7 +454,7 @@ fn address_literal(s: &mut Scan) -> bool {
         // groups of zeros."
         return is_ipv6(&address, 2, Leading::Padded);
     }
-    return whole(Scan { chars: literal.chars }, |s| dotted_quad(s, Leading::Padded));
+    return whole(Scan { chars: literal.chars }, |quad| dotted_quad(quad, Leading::Padded));
 }
 
 /// RFC 3339's `full-date`, its day within its month.
@@ -663,7 +663,7 @@ fn units(s: &mut Scan) -> String {
 
 /// Whether `text` is RFC 3986's `URI-reference`.
 fn is_uri_reference(text: StrSlice) -> bool {
-    return Uri::from_str(text) matches { Ok(_) };
+    return UriReference::from_str(text) matches { Ok(_) };
 }
 
 /// Whether `text` begins with RFC 3986's `scheme ":"`. A `relative-ref` cannot,

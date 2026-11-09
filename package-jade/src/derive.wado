@@ -13,7 +13,7 @@ use {
     PlainYearMonth,
     ZonedDateTime,
 } from "core:temporal";
-use { Uri } from "core:uri";
+use { Uri, UriReference } from "core:uri";
 use { Url, percent_encode } from "core:url";
 use { Uuid } from "core:uuid";
 use { Document } from "./document.wado";
@@ -478,7 +478,13 @@ impl JsonSchema for ZonedDateTime {
 
 impl JsonSchema for Uri {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return text_of("core:uri#Uri", Option::Some("uri-reference"));
+        return text_of("core:uri#Uri", Option::Some("uri"));
+    }
+}
+
+impl JsonSchema for UriReference {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return text_of("core:uri#UriReference", Option::Some("uri-reference"));
     }
 }
 

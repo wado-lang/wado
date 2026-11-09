@@ -1,4 +1,4 @@
-# WEP: URI References as Identifiers (`core:uri`)
+# WEP: URIs and URI References as Identifiers (`core:uri`)
 
 ## Context
 
@@ -16,43 +16,50 @@ a URI only names a schema, and two names are compared.
 
 ## Decision
 
-`core:uri` implements RFC 3986 for URI references used as identifiers. It reads
-one, resolves one against a base, and writes one back. Every scheme is read the
-same way, by the generic syntax.
+`core:uri` implements RFC 3986 for URIs and URI references used as
+identifiers. It reads one, resolves a reference against a URI, and writes one
+back. Every scheme is read the same way, by the generic syntax.
+
+The two types follow RFC 3986's two rules. A `UriReference` is a
+`URI-reference` (§4.1): a URI, or a relative reference. A `Uri` is a `URI`
+(§3), one with a scheme. Only a `Uri` is a base, so the type says what §5.1
+requires of one, and a reference resolved against it is a `Uri` again.
 
 ```text
-pub struct Uri { … }   // components private, valid by construction
+pub struct Uri { … }            // components private, valid by construction
+pub struct UriReference { … }
 
-impl FromStr for Uri;              // URI-reference (§4.1), or a UriError
+impl FromStr for Uri;            // URI (§3), or a UriError
+impl FromStr for UriReference;   // URI-reference (§4.1), or a UriError
 impl Uri {
-    pub fn resolve(&self, reference: &Uri) -> Uri;   // §5.2; self needs a scheme
+    pub fn resolve(&self, reference: &UriReference) -> Uri;   // §5.2
     pub fn fragment(&self) -> Option<StrSlice>;
     pub fn without_fragment(&self) -> Uri;
 }
-impl Display for Uri;              // recomposition (§5.3)
+impl Display for Uri;            // recomposition (§5.3), as for UriReference
 ```
 
-`Uri` derives `Eq` and `Hash`, so it keys a `HashMap`. Two values are equal
-when their components are equal as written. It serializes as its text, which
-is what JSON Schema's `uri-reference` format describes.
+`UriReference` has `fragment` and `without_fragment` too. Each type derives
+`Eq` and `Hash`, so it keys a `HashMap`. Two values are equal when their
+components are equal as written. Each serializes as its text, which is what
+JSON Schema's `uri` and `uri-reference` formats describe.
 
-### What a `Uri` holds
+### What a `UriReference` holds
 
-A `Uri` holds the five components of §3: scheme, authority, path, query and
-fragment. Scheme, authority, query and fragment may be absent, which is
+A `UriReference` holds the five components of §3: scheme, authority, path,
+query and fragment. Scheme, authority, query and fragment may be absent, which is
 distinct from present and empty: `a?` has an empty query, and `a` has none.
 The authority is one component, not a host and a port, since an identifier
 compares it as a whole.
 
 A component outside the grammar of Appendix A is a `UriError` at its byte
-offset, so every `Uri` is one RFC 3986 admits. Only ASCII is admitted: an IRI
-(RFC 3987) is not a URI.
+offset, so every value is one RFC 3986 admits. Only ASCII is admitted: an IRI
+(RFC 3987) is not a URI. A `Uri` is a `UriReference` whose scheme is present;
+text without one is a `UriError` at offset 0.
 
 ### Resolution
 
 `resolve` is the algorithm of §5.2.2 with the dot-segment removal of §5.2.4.
-The base must have a scheme, as §5.1 requires; a call with one that does not
-breaks the function's contract.
 
 A result with no authority whose path starts `//` would read back with that
 path as its authority, which §3.3 forbids. `resolve` writes `/.` before such a

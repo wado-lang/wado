@@ -1,4 +1,4 @@
-use { Uri, UriError } from "core:uri";
+use { Uri, UriError, UriReference } from "core:uri";
 use { HashMap } from "core:collections";
 use { from_string, to_string } from "core:json";
 
@@ -6,8 +6,20 @@ fn uri(text: String) -> Uri {
     return Uri::from_str(text).unwrap();
 }
 
-fn resolved(reference: String) -> String {
-    return uri("http://a/b/c/d;p?q").resolve(&uri(reference)).to_string();
+fn reference(text: String) -> UriReference {
+    return UriReference::from_str(text).unwrap();
+}
+
+fn resolved(r: String) -> String {
+    return uri("http://a/b/c/d;p?q").resolve(&reference(r)).to_string();
+}
+
+test "a URI has a scheme, and a reference need not" {
+    assert reference("../x").to_string() == "../x";
+    let e = Uri::from_str("../x").unwrap_err();
+    assert e.offset == 0;
+    assert e.message == "a URI must have a scheme";
+    assert Uri::from_str("a b") matches { Err(UriError { offset: 1, .. }) };
 }
 
 test "a reference writes back as it was read" {
@@ -16,7 +28,7 @@ test "a reference writes back as it was read" {
         "urn:example:weather?=op=map&lat=39.56&lon=-104.85&datetime=1969-07-21T02:56:15Z", "file:///c:/folder/file.json",
         "http://[::1]:80/", "mailto:a@b.c", "#/$defs/a%25b", "?", "#", "", "../x", "//host",
     ] as List<String> {
-        assert uri(text).to_string() == text;
+        assert reference(text).to_string() == text;
     }
 }
 
@@ -81,19 +93,19 @@ test "the abnormal examples of RFC 3986 section 5.4.2" {
 }
 
 test "a base with an authority and an empty path merges under the root" {
-    assert uri("http://a").resolve(&uri("b")).to_string() == "http://a/b";
+    assert uri("http://a").resolve(&reference("b")).to_string() == "http://a/b";
 }
 
 test "a base path with no slash gives way to the reference's whole path" {
     let base = uri("urn:x");
-    assert base.resolve(&uri("y")).to_string() == "urn:y";
-    assert base.resolve(&uri("../g")).to_string() == "urn:g";
-    assert base.resolve(&uri("./g")).to_string() == "urn:g";
-    assert base.resolve(&uri(".")).to_string() == "urn:";
+    assert base.resolve(&reference("y")).to_string() == "urn:y";
+    assert base.resolve(&reference("../g")).to_string() == "urn:g";
+    assert base.resolve(&reference("./g")).to_string() == "urn:g";
+    assert base.resolve(&reference(".")).to_string() == "urn:";
 }
 
 test "a path resolved to start with two slashes keeps them out of the authority" {
-    let r = uri("foo:").resolve(&uri("/.//bar"));
+    let r = uri("foo:").resolve(&reference("/.//bar"));
     assert r.to_string() == "foo:/.//bar";
     assert uri(r.to_string()) == r;
 }
@@ -117,45 +129,50 @@ test "an IP literal is an IPv6 address or an IPvFuture" {
 
 test "a base without an authority merges into its path" {
     let base = uri("urn:uuid:deadbeef");
-    assert base.resolve(&uri("#/$defs/a")).to_string() == "urn:uuid:deadbeef#/$defs/a";
-    assert uri("file:///folder/file.json").resolve(&uri("#foo")).to_string() == "file:///folder/file.json#foo";
+    assert base.resolve(&reference("#/$defs/a")).to_string() == "urn:uuid:deadbeef#/$defs/a";
+    assert uri("file:///folder/file.json").resolve(&reference("#foo")).to_string() == "file:///folder/file.json#foo";
 }
 
 test "text outside the grammar is an error at its offset" {
-    assert Uri::from_str("a b").unwrap_err().offset == 1;
-    assert Uri::from_str("http://a/%zz").unwrap_err().offset == 9;
-    assert Uri::from_str("http://a/%2").unwrap_err().offset == 9;
-    assert Uri::from_str("1http:x").unwrap_err().offset == 0;
-    assert Uri::from_str("a b:x").unwrap_err().offset == 1;
-    assert Uri::from_str(":x").unwrap_err().offset == 0;
-    assert Uri::from_str("a?b c").unwrap_err().offset == 3;
-    assert Uri::from_str("http://a b@c/").unwrap_err().offset == 8;
-    assert Uri::from_str("http://a b/").unwrap_err().offset == 8;
-    assert Uri::from_str("http://[a%b]/").unwrap_err().offset == 7;
-    assert Uri::from_str("http://[::1]x/").unwrap_err().offset == 12;
-    assert Uri::from_str("a#b#c").unwrap_err().offset == 3;
-    assert Uri::from_str("http://a:8x/").unwrap_err().offset == 10;
-    assert Uri::from_str("http://[::1/").unwrap_err().offset == 7;
-    assert Uri::from_str("http://a/é").unwrap_err().offset == 9;
-    assert `${Uri::from_str("a b").unwrap_err()}` == "invalid character in path at offset 1";
+    for let [text, offset] of [
+        ["a b", 1],
+        ["http://a/%zz", 9],
+        ["http://a/%2", 9],
+        ["1http:x", 0],
+        ["a b:x", 1],
+        [":x", 0],
+        ["a?b c", 3],
+        ["http://a b@c/", 8],
+        ["http://a b/", 8],
+        ["http://[a%b]/", 7],
+        ["http://[::1]x/", 12],
+        ["a#b#c", 3],
+        ["http://a:8x/", 10],
+        ["http://[::1/", 7],
+        ["http://a/é", 9],
+        ["%", 0],
+    ] as List<[String, i32]> {
+        assert UriReference::from_str(text).unwrap_err().offset == offset, text;
+    }
+    assert `${UriReference::from_str("a b").unwrap_err()}` == "invalid character in path at offset 1";
 }
 
-test "a reference keys a map by its components" {
+test "a URI or a reference keys a map by its components" {
     let mut names = HashMap::<Uri, i32>::new();
     names[uri("http://a/b")] = 1;
     assert names.get(uri("http://a/b")) matches { Some(1) };
     assert names.get(uri("http://a/b#")) matches { None };
     assert uri("HTTP://a/b") == uri("http://a/b");
+    let mut refs = HashMap::<UriReference, i32>::new();
+    refs[reference("../b")] = 1;
+    assert refs.get(reference("../b")) matches { Some(1) };
 }
 
-test "a reference goes over the wire as its text" {
+test "a URI or a reference goes over the wire as its text" {
     assert to_string(&uri("HTTP://a/b#c")).unwrap() == #""http://a/b#c""#;
-    assert from_string::<Uri>(#""../x""#).unwrap() == uri("../x");
-    assert from_string::<Uri>(#""a b""#).unwrap_err().message == "invalid URI reference: invalid character in path at offset 1";
-    assert from_string::<Uri>("1") matches { Err(_) };
-}
-
-test "an error is a UriError" {
-    let e: UriError = Uri::from_str("%").unwrap_err();
-    assert e.offset == 0;
+    assert from_string::<Uri>(#""../x""#).unwrap_err().message == "invalid URI: a URI must have a scheme at offset 0";
+    assert to_string(&reference("../x")).unwrap() == #""../x""#;
+    assert from_string::<UriReference>(#""../x""#).unwrap() == reference("../x");
+    assert from_string::<UriReference>(#""a b""#).unwrap_err().message == "invalid URI reference: invalid character in path at offset 1";
+    assert from_string::<UriReference>("1") matches { Err(_) };
 }
