@@ -2490,7 +2490,9 @@ fn atn_walk(
             }
             return [verdict, true];
         }
-        fallback = dfa.state_first[s];
+        if pos > start_pos {
+            fallback = dfa.state_first[s];
+        }
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let ended = atn_move(sim, &dfa.state_configs[s], eof, eof);
