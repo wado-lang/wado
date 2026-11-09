@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794211621896,
+  "lastUpdate": 1794221137083,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76001,6 +76001,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f488548e30989d432c572b4137d36b83c6384141"
         },
         "date": 1794211621317,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404932,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "17869814a077675296e8c6772eb579de51b18a9f",
+          "message": "Merge pull request #2594 from wado-lang/gale-atn-modes\n\nperf(gale): emit each lookahead DFA node once, cutting `atn: \"always\"` parsers to a third",
+          "timestamp": "2026-11-09T19:30:28+09:00",
+          "tree_id": "13c867ce60948dddb42e6ca29e3fdcd9022112e9",
+          "url": "https://github.com/wado-lang/wado/commit/17869814a077675296e8c6772eb579de51b18a9f"
+        },
+        "date": 1794221136049,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
