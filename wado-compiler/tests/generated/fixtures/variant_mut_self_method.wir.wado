@@ -1405,8 +1405,8 @@ fn "core:prelude/traits.wado/variant_mut_self_method.wado/G<i32>^core:prelude/tr
     let $load_4: ref Array<u8>;
     let new_used_23: i32;
     let start_24: i32;
-    let start_407: i32;
-    let x_419: i64;
+    let start_409: i32;
+    let x_421: i64;
     if self.discriminant == 0 {
         if @unlikely(local.tee new_used_23(f.used + 1) > builtin::array_len(f.repr)) {
             cold_path;
@@ -1437,13 +1437,13 @@ fn "core:prelude/traits.wado/variant_mut_self_method.wado/G<i32>^core:prelude/tr
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_24);
         }
-        start_407 = f.used;
+        start_409 = f.used;
         f.used = start_24;
-        builtin::array_copy<u8>(f.repr, start_407, global:core:prelude/traits.wado::$const_obj_64, 0, 1);
+        builtin::array_copy<u8>(f.repr, start_409, global:core:prelude/traits.wado::$const_obj_64, 0, 1);
         start_24 = new_used_23 < 0;
-        new_used_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_419(x_419 = builtin::i64_extend_i32_s(new_used_23); select i64(x_419 < 0_i64, 0_i64 - x_419, x_419)));
+        new_used_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_421(x_421 = builtin::i64_extend_i32_s(new_used_23); select i64(x_421 < 0_i64, 0_i64 - x_421, x_421)));
         start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(f, start_24, new_used_23);
-        "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(f.repr), start_24, x_419, new_used_23);
+        "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(f.repr), start_24, x_421, new_used_23);
         if @unlikely(local.tee new_used_23(f.used + 1) > builtin::array_len($load_4)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_23);

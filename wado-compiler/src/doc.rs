@@ -2,10 +2,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use serde::Serialize;
 
 use crate::ast::{
-    AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
-    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
-    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
-    written_params,
+    AssociatedConst, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock,
+    InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl, StructField,
+    TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name, written_params,
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -13,7 +12,6 @@ use crate::lexer::is_ident_continue;
 use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
-use crate::token::Span;
 use crate::unparse::{
     get_item_id, unparse_assoc_type_decl, unparse_attributes, unparse_bound_arguments_into,
     unparse_contract_clause, unparse_enum_signature, unparse_function_signature,
@@ -333,18 +331,18 @@ fn extract_doc_filtered(
             continue;
         }
         match item {
-            Item::Trait(t) => traits.push(build_doc_trait(t, trivia)),
-            Item::Struct(s) => structs.push(build_doc_struct(s, &impls, trivia, include_private)),
-            Item::Newtype(t) => types.push(build_doc_type(t, &impls, trivia, include_private)),
-            Item::Global(g) => globals.push(build_doc_global(g, trivia)),
-            Item::Enum(e) => enums.push(build_doc_enum(e, trivia)),
-            Item::Variant(v) => variants.push(build_doc_variant(v, trivia)),
-            Item::Flags(f) => flags.push(build_doc_flags(f, trivia)),
-            Item::Interface(e) => effects.push(build_doc_interface(e, trivia)),
+            Item::Trait(t) => traits.push(build_doc_trait(t)),
+            Item::Struct(s) => structs.push(build_doc_struct(s, &impls, include_private)),
+            Item::Newtype(t) => types.push(build_doc_type(t, &impls, include_private)),
+            Item::Global(g) => globals.push(build_doc_global(g)),
+            Item::Enum(e) => enums.push(build_doc_enum(e)),
+            Item::Variant(v) => variants.push(build_doc_variant(v)),
+            Item::Flags(f) => flags.push(build_doc_flags(f)),
+            Item::Interface(e) => effects.push(build_doc_interface(e)),
             Item::Resource(r) => {
-                resources.push(build_doc_resource(r, &impls, trivia, include_private));
+                resources.push(build_doc_resource(r, &impls, include_private));
             }
-            Item::Function(f) => functions.push(build_doc_function(f, trivia)),
+            Item::Function(f) => functions.push(build_doc_function(f)),
             _ => {}
         }
     }
@@ -401,7 +399,7 @@ fn dedent_synopsis(body: &str) -> String {
         .join("\n")
 }
 
-fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
+fn build_doc_trait(t: &TraitDecl) -> DocTrait {
     let sig = unparse_trait_header(t);
 
     let associated_types: Vec<String> = t
@@ -416,29 +414,19 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
         .filter(|m| !m.is_contract_holder())
         .map(|m| {
             let contracts = t.method_contracts(&m.name).map(unparse_contract_clause);
-            build_doc_function_with(m, contracts.collect(), trivia)
+            build_doc_function_with(m, contracts.collect())
         })
         .collect();
 
     DocTrait {
         signature: sig,
-        // Pass `t.attrs` so the doc comment lookup bridges over any
-        // `#[compiler_item("...")]` (or other) attribute that sits
-        // between the `///` block and the `pub trait` keyword.
-        // Without it the doc tool stops at the attribute line and the
-        // generated stdlib reference loses the trait's description.
-        doc: extract_doc_comment_with_attrs(trivia, t.id, &t.span, &t.attrs),
+        doc: t.doc.clone(),
         associated_types,
         methods,
     }
 }
 
-fn build_doc_struct(
-    s: &StructDecl,
-    impls: &[DocImpl],
-    trivia: &TriviaMap,
-    include_private: bool,
-) -> DocStruct {
+fn build_doc_struct(s: &StructDecl, impls: &[DocImpl], include_private: bool) -> DocStruct {
     // A hidden field still flags the struct as having hidden state via
     // `has_private_fields`, so the rendered signature gets a `..`
     // placeholder. With `include_private`, nothing is hidden.
@@ -452,18 +440,17 @@ fn build_doc_struct(
         .map(|f| DocField {
             name: f.name.clone(),
             ty: render_type(&f.ty),
-            doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
+            doc: f.doc.clone(),
         })
         .collect();
 
-    let (methods, trait_impls) =
-        collect_impl_methods_for_type(&s.name, impls, trivia, include_private);
-    let constants = collect_impl_constants_for_type(&s.name, impls, trivia, include_private);
+    let (methods, trait_impls) = collect_impl_methods_for_type(&s.name, impls, include_private);
+    let constants = collect_impl_constants_for_type(&s.name, impls, include_private);
 
     DocStruct {
         name: s.name.clone(),
         signature: unparse_struct_signature(s, !include_private),
-        doc: extract_doc_comment_with_attrs(trivia, s.id, &s.span, &s.attrs),
+        doc: s.doc.clone(),
         fields,
         has_private_fields,
         constants,
@@ -472,12 +459,7 @@ fn build_doc_struct(
     }
 }
 
-fn build_doc_type(
-    t: &Newtype,
-    impls: &[DocImpl],
-    trivia: &TriviaMap,
-    include_private: bool,
-) -> DocType {
+fn build_doc_type(t: &Newtype, impls: &[DocImpl], include_private: bool) -> DocType {
     let mut sig = String::new();
     if t.visibility.is_public() {
         sig.push_str("pub ");
@@ -487,20 +469,19 @@ fn build_doc_type(
     sig.push_str(" = ");
     sig.push_str(&render_type(&t.ty));
 
-    let (methods, trait_impls) =
-        collect_impl_methods_for_type(&t.name, impls, trivia, include_private);
+    let (methods, trait_impls) = collect_impl_methods_for_type(&t.name, impls, include_private);
     DocType {
         name: t.name.clone(),
         base_type: render_type(&t.ty),
         signature: sig,
-        doc: extract_doc_comment(trivia, t.id, &t.span),
-        constants: collect_impl_constants_for_type(&t.name, impls, trivia, include_private),
+        doc: t.doc.clone(),
+        constants: collect_impl_constants_for_type(&t.name, impls, include_private),
         methods,
         trait_impls,
     }
 }
 
-fn build_doc_global(g: &GlobalDecl, trivia: &TriviaMap) -> DocGlobal {
+fn build_doc_global(g: &GlobalDecl) -> DocGlobal {
     let mut sig = String::new();
     if g.visibility.is_public() {
         sig.push_str("pub ");
@@ -518,27 +499,27 @@ fn build_doc_global(g: &GlobalDecl, trivia: &TriviaMap) -> DocGlobal {
         ty: render_type(&g.ty),
         mutable: g.mutable,
         signature: sig,
-        doc: extract_doc_comment(trivia, g.id, &g.span),
+        doc: g.doc.clone(),
     }
 }
 
-fn build_doc_enum(e: &EnumDecl, trivia: &TriviaMap) -> DocEnum {
+fn build_doc_enum(e: &EnumDecl) -> DocEnum {
     let cases = e
         .cases
         .iter()
         .map(|c| DocEnumCase {
             name: c.name.clone(),
-            doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &c.attrs),
+            doc: c.doc.clone(),
         })
         .collect();
     DocEnum {
         signature: unparse_enum_signature(e),
         cases,
-        doc: extract_doc_comment_with_attrs(trivia, e.id, &e.span, &e.attrs),
+        doc: e.doc.clone(),
     }
 }
 
-fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
+fn build_doc_variant(v: &VariantDecl) -> DocVariant {
     let mut sig = String::new();
     if v.visibility.is_public() {
         sig.push_str("pub ");
@@ -553,7 +534,7 @@ fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
         .map(|c| DocVariantCase {
             name: c.name.clone(),
             payload: c.payload.as_ref().map(render_type),
-            doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &c.attrs),
+            doc: c.doc.clone(),
         })
         .collect();
 
@@ -561,11 +542,11 @@ fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
         name: v.name.clone(),
         signature: sig,
         cases,
-        doc: extract_doc_comment_with_attrs(trivia, v.id, &v.span, &v.attrs),
+        doc: v.doc.clone(),
     }
 }
 
-fn build_doc_flags(f: &FlagsDecl, trivia: &TriviaMap) -> DocFlags {
+fn build_doc_flags(f: &FlagsDecl) -> DocFlags {
     let mut sig = String::new();
     if f.visibility.is_public() {
         sig.push_str("pub ");
@@ -578,23 +559,18 @@ fn build_doc_flags(f: &FlagsDecl, trivia: &TriviaMap) -> DocFlags {
         .iter()
         .map(|m| DocFlagsMember {
             name: m.name.clone(),
-            doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
+            doc: m.doc.clone(),
         })
         .collect();
     DocFlags {
         name: f.name.clone(),
         signature: sig,
         members,
-        doc: extract_doc_comment_with_attrs(
-            trivia,
-            f.id,
-            &f.span,
-            f.attributes.as_deref().unwrap_or(&[]),
-        ),
+        doc: f.doc.clone(),
     }
 }
 
-fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
+fn build_doc_interface(e: &InterfaceDecl) -> DocEffect {
     let mut sig = String::new();
     if e.visibility.is_public() {
         sig.push_str("pub ");
@@ -602,28 +578,19 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
     sig.push_str("interface ");
     sig.push_str(&e.name);
 
-    let methods: Vec<DocFunction> = e
-        .methods
-        .iter()
-        .map(|m| build_doc_operation(m, trivia))
-        .collect();
+    let methods: Vec<DocFunction> = e.methods.iter().map(build_doc_operation).collect();
 
     DocEffect {
         name: e.name.clone(),
         signature: sig,
         methods,
-        doc: extract_doc_comment_with_attrs(trivia, e.id, &e.span, &e.attrs),
+        doc: e.doc.clone(),
     }
 }
 
 /// A resource's declared members plus, like a struct, whatever an `impl` adds —
 /// `Stream<T>::read_to_end` is not in the `resource` body.
-fn build_doc_resource(
-    r: &ResourceDecl,
-    impls: &[DocImpl],
-    trivia: &TriviaMap,
-    include_private: bool,
-) -> DocResource {
+fn build_doc_resource(r: &ResourceDecl, impls: &[DocImpl], include_private: bool) -> DocResource {
     let mut sig = String::new();
     if r.visibility.is_public() {
         sig.push_str("pub ");
@@ -632,35 +599,31 @@ fn build_doc_resource(
     sig.push_str(&r.name);
     sig.push_str(&render_generic_params(&r.type_params));
 
-    let mut methods: Vec<DocFunction> = r
-        .methods
-        .iter()
-        .map(|m| build_doc_operation(m, trivia))
-        .collect();
-    let (inherent, _) = collect_impl_methods_for_type(&r.name, impls, trivia, include_private);
+    let mut methods: Vec<DocFunction> = r.methods.iter().map(build_doc_operation).collect();
+    let (inherent, _) = collect_impl_methods_for_type(&r.name, impls, include_private);
     methods.extend(inherent);
 
     DocResource {
         name: r.name.clone(),
         signature: sig,
         methods,
-        doc: extract_doc_comment_with_attrs(trivia, r.id, &r.span, &r.attrs),
+        doc: r.doc.clone(),
     }
 }
 
 /// An interface operation or a resource method, neither of which the parser
 /// lets carry a `contract` clause.
-fn build_doc_operation(m: &Function, trivia: &TriviaMap) -> DocFunction {
+fn build_doc_operation(m: &Function) -> DocFunction {
     DocFunction {
         signature: render_interface_method_signature(m),
         attrs: unparse_attributes(&m.attrs),
         contracts: Vec::new(),
-        doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
+        doc: m.doc.clone(),
     }
 }
 
-fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
-    build_doc_function_with(f, own_contracts(f), trivia)
+fn build_doc_function(f: &Function) -> DocFunction {
+    build_doc_function_with(f, own_contracts(f))
 }
 
 fn own_contracts(f: &Function) -> Vec<String> {
@@ -669,70 +632,13 @@ fn own_contracts(f: &Function) -> Vec<String> {
 
 /// `contracts` are the clauses that bind `f`, which a trait method's trait
 /// declares.
-fn build_doc_function_with(
-    f: &Function,
-    contracts: Vec<String>,
-    trivia: &TriviaMap,
-) -> DocFunction {
+fn build_doc_function_with(f: &Function, contracts: Vec<String>) -> DocFunction {
     DocFunction {
         signature: unparse_function_signature(f),
         attrs: unparse_attributes(&f.attrs),
         contracts,
-        doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
+        doc: f.doc.clone(),
     }
-}
-
-/// Extract doc text from a comment.
-///
-/// The lexer stores comment text *after* the `//` prefix.
-/// So `/// foo` → text is `/ foo`, and `//! foo` → text is `! foo`.
-/// We need to strip the leading `/` or `!` and the optional space.
-fn doc_text(comment: &Comment) -> &str {
-    let text = &comment.text;
-    let rest = match comment.kind {
-        CommentKind::DocLine => text.strip_prefix('/').unwrap_or(text),
-        CommentKind::ModuleDoc => text.strip_prefix('!').unwrap_or(text),
-        _ => text,
-    };
-    rest.strip_prefix(' ').unwrap_or(rest)
-}
-
-fn extract_doc_comment(trivia: &TriviaMap, id: AstId, span: &Span) -> Option<String> {
-    extract_doc_comment_with_attrs(trivia, id, span, &[])
-}
-
-fn extract_doc_comment_with_attrs(
-    trivia: &TriviaMap,
-    id: AstId,
-    span: &Span,
-    attrs: &[Attribute],
-) -> Option<String> {
-    let leading = trivia.leading_of(id);
-    // When attributes are present, the doc comment is before the first attribute,
-    // not immediately before the keyword. Use the first attribute's line as the
-    // start to bridge the gap.
-    let item_line = attrs.first().map_or(span.line, |a| a.span.line);
-    let mut expected_line = item_line;
-    let mut doc_comments: Vec<&Comment> = Vec::new();
-
-    for comment in leading.iter().rev() {
-        if comment.kind != CommentKind::DocLine {
-            break;
-        }
-        if comment.span.line >= expected_line || expected_line - comment.span.line > 1 {
-            break;
-        }
-        expected_line = comment.span.line;
-        doc_comments.push(comment);
-    }
-
-    if doc_comments.is_empty() {
-        return None;
-    }
-
-    doc_comments.reverse();
-    let text: Vec<&str> = doc_comments.iter().map(|c| doc_text(c)).collect();
-    Some(text.join("\n"))
 }
 
 fn extract_module_doc(trivia: &TriviaMap, module: &Module) -> Option<String> {
@@ -747,7 +653,7 @@ fn extract_module_doc(trivia: &TriviaMap, module: &Module) -> Option<String> {
     let doc_lines: Vec<&str> = leading
         .iter()
         .filter(|c| c.kind == CommentKind::ModuleDoc)
-        .map(doc_text)
+        .map(Comment::doc_text)
         .collect();
 
     if doc_lines.is_empty() {
@@ -962,7 +868,6 @@ pub fn extract_stdlib_doc_with(
             let sub_parsed = parse_stdlib_for_doc(se_source, sub_source);
             let prim_types = collect_primitive_types_from_module(
                 &sub_parsed.ast,
-                &sub_parsed.trivia,
                 include_private,
                 &scope.at(se_source),
             );
@@ -982,7 +887,6 @@ pub fn extract_stdlib_doc_with(
                 let se_parsed = parse_stdlib_for_doc(sub_se, se_source);
                 let prim_types = collect_primitive_types_from_module(
                     &se_parsed.ast,
-                    &se_parsed.trivia,
                     include_private,
                     &sub_scope.at(sub_se),
                 );
@@ -990,12 +894,8 @@ pub fn extract_stdlib_doc_with(
             }
         }
         // Also check the re-exported module itself
-        let prim_types = collect_primitive_types_from_module(
-            &sub_parsed.ast,
-            &sub_parsed.trivia,
-            include_private,
-            &sub_scope,
-        );
+        let prim_types =
+            collect_primitive_types_from_module(&sub_parsed.ast, include_private, &sub_scope);
         merge_primitive_types(&mut doc.primitive_types, prim_types);
     }
 
@@ -1119,7 +1019,6 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
 fn collect_impl_methods_for_type(
     type_name: &str,
     impls: &[DocImpl],
-    trivia: &TriviaMap,
     include_private: bool,
 ) -> (Vec<DocFunction>, Vec<DocTraitImpl>) {
     let mut inherent_methods = Vec::new();
@@ -1137,7 +1036,7 @@ fn collect_impl_methods_for_type(
 
         if let Some(ref trait_ty) = i.trait_type {
             let methods: Vec<DocFunction> = methods
-                .map(|(m, contracts)| build_doc_function_with(m, contracts.clone(), trivia))
+                .map(|(m, contracts)| build_doc_function_with(m, contracts.clone()))
                 .collect();
             if methods.is_empty() {
                 continue;
@@ -1151,7 +1050,7 @@ fn collect_impl_methods_for_type(
         } else {
             for (m, contracts) in methods {
                 if include_private || m.visibility.is_public() || m.is_export {
-                    inherent_methods.push(build_doc_function_with(m, contracts.clone(), trivia));
+                    inherent_methods.push(build_doc_function_with(m, contracts.clone()));
                 }
             }
         }
@@ -1164,7 +1063,6 @@ fn collect_impl_methods_for_type(
 fn collect_impl_constants_for_type(
     type_name: &str,
     impls: &[DocImpl],
-    trivia: &TriviaMap,
     include_private: bool,
 ) -> Vec<DocFunction> {
     let mut constants = Vec::new();
@@ -1174,14 +1072,14 @@ fn collect_impl_constants_for_type(
         }
         for c in &i.constants {
             if include_private || c.visibility.is_public() {
-                constants.push(build_doc_const(c, trivia));
+                constants.push(build_doc_const(c));
             }
         }
     }
     constants
 }
 
-fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
+fn build_doc_const(c: &AssociatedConst) -> DocFunction {
     let mut sig = String::new();
     if c.visibility.is_public() {
         sig.push_str("pub ");
@@ -1194,7 +1092,7 @@ fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
         signature: sig,
         attrs: Vec::new(),
         contracts: Vec::new(),
-        doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &[]),
+        doc: c.doc.clone(),
     }
 }
 
@@ -1214,7 +1112,6 @@ fn collect_side_effect_import_sources(module: &Module) -> Vec<String> {
 /// Collect `impl` blocks on primitive types from a parsed module, grouping by type name.
 fn collect_primitive_types_from_module(
     module: &Module,
-    trivia: &TriviaMap,
     include_private: bool,
     scope: &DocScope,
 ) -> Vec<DocPrimitiveType> {
@@ -1223,9 +1120,9 @@ fn collect_primitive_types_from_module(
 
     for prim_name in PrimitiveType::all_primitive_names() {
         let (methods, trait_impls) =
-            collect_impl_methods_for_type(prim_name, &impls, trivia, include_private);
+            collect_impl_methods_for_type(prim_name, &impls, include_private);
 
-        let constants = collect_impl_constants_for_type(prim_name, &impls, trivia, include_private);
+        let constants = collect_impl_constants_for_type(prim_name, &impls, include_private);
 
         if constants.is_empty() && methods.is_empty() && trait_impls.is_empty() {
             continue;

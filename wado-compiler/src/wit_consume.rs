@@ -514,6 +514,7 @@ impl Builder {
             visibility: Visibility::Public,
             attrs,
             methods,
+            doc: iface.docs.contents.clone(),
             span: syn(),
         }));
     }
@@ -550,6 +551,7 @@ impl Builder {
             effects_source: EffectsSource::Written,
             holds_contracts_of: None,
             body: None,
+            doc: func.docs.contents.clone(),
             span: syn(),
         }
     }
@@ -649,6 +651,7 @@ impl Builder {
             effects_source: EffectsSource::Written,
             holds_contracts_of: None,
             body: None,
+            doc: func.docs.contents.clone(),
             span: syn(),
         }));
     }
@@ -677,6 +680,7 @@ impl Builder {
                         ty: self.map_type(resolve, f.ty, fq),
                         attrs: vec![self.cm_name_attr(&f.name)],
                         default: None,
+                        doc: f.docs.contents.clone(),
                         span: syn(),
                     })
                     .collect();
@@ -691,6 +695,7 @@ impl Builder {
                     type_params: Vec::new(),
                     fields,
                     attrs: vec![cm],
+                    doc: td.docs.contents.clone(),
                     span: syn(),
                 }));
             }
@@ -703,6 +708,7 @@ impl Builder {
                         name: c.name.to_upper_camel_case(),
                         name_span: syn(),
                         attrs: vec![self.cm_name_attr(&c.name)],
+                        doc: c.docs.contents.clone(),
                         span: syn(),
                     })
                     .collect();
@@ -716,6 +722,7 @@ impl Builder {
                     type_params: Vec::new(),
                     cases,
                     attrs: vec![cm],
+                    doc: td.docs.contents.clone(),
                     span: syn(),
                 }));
             }
@@ -729,6 +736,7 @@ impl Builder {
                         name_span: syn(),
                         payload: c.ty.map(|t| self.map_type(resolve, t, fq)),
                         attrs: vec![self.cm_name_attr(&c.name)],
+                        doc: c.docs.contents.clone(),
                         span: syn(),
                     })
                     .collect();
@@ -743,6 +751,7 @@ impl Builder {
                     type_params: Vec::new(),
                     cases,
                     attrs: vec![cm],
+                    doc: td.docs.contents.clone(),
                     span: syn(),
                 }));
             }
@@ -755,6 +764,7 @@ impl Builder {
                         name: m.name.to_upper_camel_case(),
                         name_span: syn(),
                         attrs: vec![self.cm_name_attr(&m.name)],
+                        doc: m.docs.contents.clone(),
                         span: syn(),
                     })
                     .collect();
@@ -767,6 +777,7 @@ impl Builder {
                     is_export: false,
                     attributes: Some(vec![cm]),
                     flags,
+                    doc: td.docs.contents.clone(),
                     span: syn(),
                 }));
             }
@@ -782,6 +793,7 @@ impl Builder {
                     type_params: Vec::new(),
                     ty,
                     attrs: vec![cm],
+                    doc: td.docs.contents.clone(),
                     span: syn(),
                 }));
             }
@@ -805,6 +817,7 @@ impl Builder {
                     parent: None,
                     attrs: vec![cm],
                     methods,
+                    doc: td.docs.contents.clone(),
                     span: syn(),
                 }));
             }
