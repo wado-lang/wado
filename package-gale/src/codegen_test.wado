@@ -5180,6 +5180,29 @@ WS : ' ' -> skip ;
     assert chained == "x; => (a x)\nx;; => (a x ;)\nx;q => (a x ;)\n";
 }
 
+// `expression` calls only itself, so every continuation past its end comes
+// back to it, and none reads the end of the input.
+test "exact ends a directly entered rule that only calls itself at the end of the input" {
+    let got = parses_each("grammar L;
+expression
+    : NOT expression
+    | expression (AND expression)+
+    | expression (OR expression)+
+    | IDENTIFIER
+    ;
+AND : 'and' ;
+OR : 'or' ;
+NOT : 'not' ;
+IDENTIFIER : [a-zA-Z_][a-zA-Z0-9_]* ;
+WS : [ \\t\\r\\n]+ -> skip ;
+", [
+        ["expression", "a and b"],
+        ["expression", "not a or b"],
+        ["expression", "a"],
+    ]);
+    assert got == "a and b => (expression (expression a) and (expression b))\nnot a or b => (expression (expression not (expression a)) or (expression b))\na => (expression a)\n";
+}
+
 test "a simulator walk that dies picks the alternative that finished the rule, or none" {
     // Each decision reads past depth 5, so exact asks the simulator. The jar:
     // `x` takes its second alternative, which had ended `x`, and `s` reports

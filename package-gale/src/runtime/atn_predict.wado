@@ -442,7 +442,7 @@ impl CtxArena {
     }
 
     fn returns_below(&self, node: i32, caller: i32, below: &mut List<i32>, stays: &mut List<i32>) -> bool {
-        if node == CTX_ANY_CALLER || below.contains(&node) {
+        if below.contains(&node) {
             return true;
         }
         if node == caller || node == CTX_EMPTY || node == CTX_UNKNOWN || stays.contains(&node) {
@@ -450,7 +450,7 @@ impl CtxArena {
         }
         let s = self.node_start[node];
         for let mut e = s; e < s + self.node_len[node]; e += 1 {
-            if self.returns_below(self.parent[e], caller, below, stays) {
+            if self.ret[e] == CTX_ANY_CALLER_RETURN || self.returns_below(self.parent[e], caller, below, stays) {
                 below.push(node);
                 return true;
             }
