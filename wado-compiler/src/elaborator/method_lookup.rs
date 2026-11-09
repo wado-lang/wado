@@ -1516,15 +1516,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut known,
         );
         let mut bindings = slot_type_bindings(&self.tysys.type_table, own_ids, &known);
-        // A pack stays abstract through the walk — the call settles what it
-        // holds, never what it is — so `U::default()` dispatches on its bound
-        // rather than on a receiver. The declaration wrote that bound, and
-        // nothing at the call site carries it.
         let receiver_self = Some(declaring);
         for binding in &mut bindings {
-            if binding.settled.is_pack()
-                && let Some(param) = own_params.iter().find(|p| p.name == binding.param.name)
-            {
+            let Some(param) = own_params.iter().find(|p| p.name == binding.param.name) else {
+                continue;
+            };
+            // The defaults are written in the declaration `own_params` belongs
+            // to: a trait's, for an impl restating the list without them.
+            binding.param = ParamRef::declared(param, &self.tysys.resolutions);
+            // A pack stays abstract through the walk — the call settles what
+            // it holds, never what it is — so `U::default()` dispatches on its
+            // bound rather than on a receiver. The declaration wrote that
+            // bound, and nothing at the call site carries it.
+            if binding.settled.is_pack() {
                 binding.bounds = ScopedBound::pin_declared(param, receiver_self);
             }
         }
