@@ -23,7 +23,8 @@ assert r.fragment() matches { Some("/$defs/id") };
 ### `pub struct Uri`
 
 A URI (RFC 3986 §3): a URI reference with a scheme, so one that names a
-resource without a base, and one a reference resolves against.
+resource without a base, and one a reference resolves against. Two URIs are
+equal when their references are.
 
 _Fields are private._
 
