@@ -263,7 +263,8 @@ rule's ambiguity to the simulator, or `"always"` a group's or a `?` `*` `+`'s,
 the parser asks the simulator as well and panics where its answer differs from
 the static pick. So does a left-recursion loop's choice of suffix, in a rule
 whose atom choice `"auto"` routes. The lookahead DFA and LR table `"auto"` reads
-there are checked the same way. Where the decision meets a predicate, the
+there are checked the same way. A non-greedy `??` `*?` `+?` the static path
+decides is not checked. Where the decision meets a predicate, the
 simulator is handed the predicate's verdict, and what the predicate prints for
 the check is taken back out of the output. A predicate that changes the parser's
 state changes it again for the check, so under `"verify"` it can change the

@@ -2171,6 +2171,26 @@ test "an optional over an empty alternative is accepted" {
     assert parse_checked(g) matches { Ok(_) }, "`( A B | )?` is a plain optional";
 }
 
+// A `*` / `+` whose body can start with EOF never advances past it either, so
+// it is rejected as ANTLR4 does (error 186). EOF later in the body, or under a
+// `?`, is accepted.
+
+test "a closure whose body can start with EOF is rejected" {
+    let direct = "grammar EE;\nr : A ({true}? EOF)* ;\nA : 'a' ;";
+    assert parse_checked(direct) matches { Err(_) };
+    let behind_nullable = "grammar EN;\nr : (A? EOF)+ ;\nA : 'a' ;";
+    assert parse_checked(behind_nullable) matches { Err(_) };
+    let through_rule = "grammar EC;\nr : x* B ;\nx : EOF ;\nB : 'b' ;";
+    assert parse_checked(through_rule) matches { Err(_) };
+}
+
+test "EOF past a closure body's start or under an optional is accepted" {
+    let later = "grammar EA;\nr : (A EOF)* B ;\nA : 'a' ; B : 'b' ;";
+    assert parse_checked(later) matches { Ok(_) };
+    let optional = "grammar EO2;\nr : (A | EOF)? B ;\nA : 'a' ; B : 'b' ;";
+    assert parse_checked(optional) matches { Ok(_) };
+}
+
 test "a lexer closure over an empty alternative is rejected" {
     let g = "grammar EL;\nr : A ;\nA : ( 'a'? )+ ;";
     assert parse_checked(g) matches { Err(_) }, "a lexer closure matching empty loops forever too";

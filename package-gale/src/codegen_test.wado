@@ -4633,6 +4633,60 @@ WS : ' ' -> skip ;
     assert out.stderr.contains(": the tournament picks 0, the simulator 1"), out.stderr;
 }
 
+// The scan cannot answer `$d>0`, a local it does not simulate, but it still
+// answers the `{false}?` beside it, so the first alternative fails in the scan
+// as in the parse. The tree is the jar's.
+#[timeout_ms(120000)]
+test "a gate keeps the predicates a scan answers beside one it cannot" {
+    let g4 = "grammar F1;
+s : r EOF ;
+r : q B | {true}? A B C? ;
+q locals [int d=1] : {false}? {$d>0}? A ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", ["a b"], &GenerateOptions { atn }) == "a b => (s (r a b))\n";
+    }
+}
+
+// A group inside a left-recursive suffix parses as the simulator picks where
+// the simulator decides it, and `verify` checks the tournament's pick there.
+// The longest match takes `a B`, which leaves the suffix's `B` nothing to
+// match; the jar takes `a`.
+#[timeout_ms(120000)]
+test "a group in a left-recursive suffix takes the simulator's pick" {
+    let g4 = |suffix: String| `grammar F2;
+s : e EOF ;
+e : e '.' ${suffix} | ID ;
+a : A ;
+A : 'a' ; B : 'b' ; ID : [x-z]+ ;
+WS : ' ' -> skip ;
+`;
+    let tree = "x . a b => (s (e (e x) . (a a) b))\n";
+    for let atn of [AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4("({true}? a | a B) B"), "s", ["x . a b"], &GenerateOptions { atn }) == tree;
+    }
+    assert parses(g4("(a | a B) B"), "s", ["x . a b"], &GenerateOptions { atn: AtnMode::Always }) == tree;
+    let verify = gen_with(g4("(a | a B) B?"), &GenerateOptions { atn: AtnMode::Verify }).source;
+    let out = eval_beside(verify, wado`show("x . a b", parse_s("x . a b"));\n`, SHOW_FN);
+    assert out.stderr.contains(": the tournament picks 1, the simulator 0"), out.stderr;
+}
+
+// `x` matches empty, so entering it consumes nothing, but it still adds a node.
+// The trees are the jar's.
+#[timeout_ms(120000)]
+test "verify takes an optional entered through an empty rule as entered" {
+    let g4 = "grammar F5;
+s : x? 'z' EOF ;
+x : 'c'? ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Verify] {
+        assert parses(g4, "s", ["z", "c z"], &GenerateOptions { atn }) == "z => (s x z)\nc z => (s (x c) z)\n";
+    }
+}
+
 #[timeout_ms(60000)]
 test "a loop the simulator decides stops at the end of the input" {
     let g4 = "grammar L;

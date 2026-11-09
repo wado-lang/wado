@@ -4216,7 +4216,24 @@ fn gen_group_body(
         gen_ops(w, &g.alts[0].ops, ctx, nc, proven);
         return;
     }
-    gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, decided);
+    if decided matches { Some(_) } {
+        gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, decided);
+        return;
+    }
+    let atn = group_atn(g, ctx);
+    if let Decides([dec, site]) = atn {
+        let var = dedup_name("gd_atn", nc);
+        let met = *ctx.decisions.at_site(site);
+        w.line(`let ${var} = ${atn_predict_call(dec, &met, PickSide::Parse, ctx)};`);
+        w.begin(`if ${var} < 0`);
+        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+        w.else_begin("else");
+        let order: List<i32> = g.alts.iter_ref().map(|a| a.alt_index).collect();
+        gen_alt_commit(w, &g.alts, &order, &var, ctx, nc);
+        w.end();
+        return;
+    }
+    gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, null, &atn);
 }
 
 fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody {
@@ -4230,7 +4247,8 @@ fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody {
 
 /// Group-alt dispatch under the GIR walker (used for LR-suffix group bodies).
 /// A `decided` caller names the winner and this commits to it; otherwise
-/// `Direct` emits a token-led chain and `Tournament` the longest-match scan.
+/// `Direct` emits a token-led chain and `Tournament` the longest-match scan,
+/// each tournament checked where `atn` says the simulator checks it.
 fn gen_alt_dispatch(
     w: &mut CodeWriter,
     alts: &List<AltBody>,
@@ -4239,6 +4257,7 @@ fn gen_alt_dispatch(
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
     decided: Option<String> = null,
+    atn: &GroupAtn = &GroupAtn::Unasked,
 ) {
     if let Some(var) = decided {
         gen_alt_commit(w, alts, &dispatch_alt_order(dispatch), &var, ctx, nc);
@@ -4248,6 +4267,7 @@ fn gen_alt_dispatch(
         Direct(d) => d,
         Tournament(td) => {
             let winner = gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc);
+            check_group_tournament(w, atn, &winner, &td.alts, ctx);
             gen_alt_commit(w, alts, &td.alts, &winner, ctx, nc);
             return;
         },
@@ -4270,6 +4290,7 @@ fn gen_alt_dispatch(
             gen_ops(&mut body, &alt_by_index(alts, picked[0]).ops, ctx, nc, &branch_proven_first(&branches, i));
         } else {
             let winner = gen_scan_winner_tournament(&mut body, picked, scan_alts, ctx, nc);
+            check_group_tournament(&mut body, atn, &winner, picked, ctx);
             gen_alt_commit(&mut body, alts, picked, &winner, ctx, nc);
         }
         bodies.push(body);
@@ -4282,6 +4303,16 @@ fn gen_alt_dispatch(
         w.line(`let _ = ${expect_set_call(ctx, &all_first)};`);
     }
     close_decision_chain(w, &emitted);
+}
+
+/// Under `atn: "verify"`, check the tournament's pick `winner` among
+/// `candidates` where `atn` says the simulator checks the group.
+fn check_group_tournament(w: &mut CodeWriter, atn: &GroupAtn, winner: &String, candidates: &List<i32>, ctx: &mut EmitContext) {
+    let Checks([dec, site]) = *atn else {
+        return;
+    };
+    let check = AtnCheck { decision: dec, numbers: *candidates, met: *ctx.decisions.at_site(site) };
+    emit_atn_check(w, &check, winner, candidates, ctx);
 }
 
 /// The alternatives a baked dispatch decides between, in emission order.
@@ -4915,7 +4946,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         follow_gate,
     );
     if let Optional = r.kind {
-        let at = begin_iteration_check(w, r, ctx, "");
+        let at = begin_optional_check(w, r, ctx);
         gen_op_optional(w, r, ctx, nc, follow_gate);
         gen_exit_check_or_entered(w, r, ctx, &at);
         return;
@@ -6026,7 +6057,7 @@ fn gen_op_repeat_with_follow_override(
             let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, PickSide::Parse);
             gen_optional_present(w, &rep_op.body, "", &enters, ctx, &NO_KINDS);
         } else {
-            let at = begin_iteration_check(w, rep_op, ctx, "");
+            let at = begin_optional_check(w, rep_op, ctx);
             gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
             gen_exit_check_or_entered(w, rep_op, ctx, &at);
         }
@@ -6586,7 +6617,22 @@ fn gen_exit_check<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mu
     gen_verified_check(w, "", [call]);
 }
 
-/// Check a `?` whose check `check` began: it entered where it consumed a token.
+/// Begin the check of the `?` `rep_op`, or `null` where it is not checked.
+fn begin_optional_check(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext) -> Option<IterationCheck> {
+    let check = begin_iteration_check(w, rep_op, ctx, "");
+    if check matches { Some(_) } {
+        w.line(`let ${optional_rows_name(rep_op, ctx)} = p.b.checkpoint();`);
+    }
+    return check;
+}
+
+fn optional_rows_name(rep_op: &RepeatOp, ctx: &EmitContext) -> String {
+    return `_rc_rows_${repeat_check_decision(rep_op, ctx)}`;
+}
+
+/// Check a `?` whose check `begin_optional_check` began: it entered where it
+/// consumed a token or built a row, as a body matching empty through a rule
+/// call does.
 fn gen_exit_check_or_entered(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
@@ -6596,7 +6642,8 @@ fn gen_exit_check_or_entered(
     let Some(c) = check else {
         return;
     };
-    let call = iteration_verified_call(rep_op, ctx, c, `if p.pos > ${c.at} { 0 } else { 1 }`);
+    let rows = optional_rows_name(rep_op, ctx);
+    let call = iteration_verified_call(rep_op, ctx, c, `if p.pos > ${c.at} || p.b.checkpoint() > ${rows} { 0 } else { 1 }`);
     gen_verified_check(w, "", [call]);
 }
 
