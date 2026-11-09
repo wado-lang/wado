@@ -420,6 +420,7 @@ impl Lowering {
                 args,
             ),
             TypeHead::Unresolved(_) => return Err(Unsaid::Failed),
+            TypeHead::Infer { .. } => return Err(Unsaid::Open),
             TypeHead::Function {
                 is_mut,
                 signature,

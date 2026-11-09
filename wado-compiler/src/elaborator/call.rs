@@ -5660,7 +5660,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // callee is minted per instantiation.
             let trait_module = found_trait.module().cloned();
             let mut method_info = LocalMethodName::new(
-                self.binder_in_scope(type_param_name),
+                self.binder_of(type_param_type_id),
                 Some(found_trait),
                 method_name.to_string(),
             );

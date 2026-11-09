@@ -286,6 +286,16 @@ impl Scope {
             })
     }
 
+    /// Whether `var` belongs to a call whose literals are pending.
+    pub(super) fn awaits_pending_var(&self, tt: &TypeTable, var: InferVarId) -> bool {
+        self.pending_literals.iter().any(|pending| {
+            pending
+                .own_vars
+                .iter()
+                .any(|&own| matches!(tt.get(own), ResolvedType::InferVar(v) if *v == var))
+        })
+    }
+
     /// Whether a pending call holds literals waiting at the variable `var`.
     pub(super) fn literals_wait_at(&self, var: TypeId) -> bool {
         self.pending_literals

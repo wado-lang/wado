@@ -1,0 +1,42 @@
+// A bound naming another impl parameter (`T: Pick<U>`) is asked once the
+// receiver settles that parameter. Here `U` waits on the literal `1`, so the
+// bound asked `String: Pick<?1>`, an inference variable lowered as a type no
+// declaration names, and the compiler panicked.
+use { println, Stdout } from "core:cli";
+
+trait Pick<U> with () {
+    fn pick(&self) -> String;
+}
+
+impl Pick<i32> for String {
+    fn pick(&self) -> String {
+        return "i32";
+    }
+}
+
+impl Pick<bool> for String {
+    fn pick(&self) -> String {
+        return "bool";
+    }
+}
+
+struct H<T, U> {
+    t: T,
+    u: U,
+}
+
+impl<T: Pick<U>, U> H<T, U> {
+    fn m<V>(&self, _o: V) -> String {
+        return self.t.pick();
+    }
+}
+
+export fn run() with Stdout {
+    println(H { t: "s", u: 1 }.m(true));
+    println(H { t: "s", u: false }.m(1));
+}
+
+__DATA__
+{
+    "stdout": "i32\nbool\n"
+}

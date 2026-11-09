@@ -375,6 +375,22 @@ impl TraitContext {
         binders.into_values().collect()
     }
 
+    /// The binder whose type is `type_id`, shadowed or not.
+    pub(super) fn binder(&self, type_id: TypeId) -> Option<&BinderInScope> {
+        self.type_params
+            .values()
+            .chain(self.shadowed.iter().map(|(_, binder, _)| binder))
+            .find(|binder| binder.type_id == type_id)
+    }
+
+    /// The bounds the binder whose type is `type_id` carries, shadowed or not.
+    pub(super) fn bounds_of(&self, type_id: TypeId) -> Vec<&ScopedBound> {
+        self.binders()
+            .into_iter()
+            .find(|binder| binder.type_id == type_id)
+            .map_or_else(Vec::new, |binder| binder.bounds)
+    }
+
     /// Bind `name` to `binder`, keeping the binder it shadows with its bounds.
     pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
         // The name already reaching this binder shadows nothing.

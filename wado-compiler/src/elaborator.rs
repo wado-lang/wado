@@ -1164,6 +1164,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         FqTypeName::binder(written)
     }
 
+    /// [`Self::binder_in_scope`] for the binder `binder` is, which `Self`
+    /// reaches even where a method parameter shadows its letter.
+    pub(super) fn binder_of(&self, binder: TypeId) -> FqTypeName {
+        let name = self
+            .tysys
+            .binder_name(binder)
+            .expect("a binder is a type parameter");
+        let ctx = &self.annotate_ctx.trait_ctx;
+        if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
+            && ctx.binder(binder).and_then(|b| b.decl) == Some(*receiver_decl)
+        {
+            return self.tysys.impl_receiver_binder(*owner, &name);
+        }
+        FqTypeName::binder(&name)
+    }
+
     /// The name an `impl` block's receiver registers under. One block, one
     /// name: two spellings of it register two templates.
     pub(super) fn impl_receiver_name(&self, impl_block: &ImplBlock) -> FqTypeName {

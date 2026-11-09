@@ -967,20 +967,33 @@ impl TypeSystem {
     }
 
     /// The first of `bounds` that `type_id` does not answer, each at the
-    /// arguments it writes. One naming only variables a pending call is still to
-    /// answer may become a type that does, and is checked once it is answered.
+    /// arguments it writes. A type or argument naming only variables a pending
+    /// call is still to answer may become one that does, and is checked once it
+    /// is answered.
     fn unmet_bound<'b>(
         &self,
         ctx: &Scope,
         type_id: TypeId,
         bounds: &'b [FqTraitName],
     ) -> Option<&'b FqTraitName> {
-        if ctx.awaits_pending_call(&self.type_table.borrow(), type_id) {
+        let table = self.type_table.borrow();
+        if ctx.awaits_pending_call(&table, type_id) {
             return None;
         }
+        let awaits = |trait_: &FqTraitName| {
+            trait_.args().iter().any(|arg| {
+                arg.mentions(&|head| {
+                    matches!(head, TypeHead::Infer { var, .. } if ctx.awaits_pending_var(&table, *var))
+                })
+            })
+        };
+        let awaiting: Vec<bool> = bounds.iter().map(awaits).collect();
+        drop(table);
         bounds
             .iter()
-            .find(|trait_| !self.type_implements_trait(ctx, type_id, trait_))
+            .zip(awaiting)
+            .find(|&(trait_, awaits)| !awaits && !self.type_implements_trait(ctx, type_id, trait_))
+            .map(|(trait_, _)| trait_)
     }
 
     /// `answer` under the recursion guard. A question already open does not

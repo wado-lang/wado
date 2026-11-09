@@ -6348,6 +6348,11 @@ impl TypeTable {
                 self.fq_type_name_spelled_in(*return_type, rows),
                 if rowless { Vec::new() } else { effects.clone() },
             ),
+            ResolvedType::InferVar(var) => FqTypeName::infer(*var),
+            // What the solver reads as failed where a type id carries it.
+            ResolvedType::Unknown | ResolvedType::Error => {
+                FqTypeName::unresolved(&self.mangle_type_name(id))
+            }
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the mangled spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),

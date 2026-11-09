@@ -2623,6 +2623,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// expected result type; the same rule lives inline in
     /// `resolve_match_expr` for arm bodies.
     pub(super) fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+        // An indefinite branch (`[null]`) is resolved again against the
+        // result type, which reports it there if it still disagrees.
+        if self.tysys.type_table.borrow().is_indefinite(actual) {
+            return;
+        }
         let result = self.assignable(actual, expected, span);
         if matches!(result, TypeCheckResult::Incompatible) {
             let (expected_name, found_name) = self
@@ -2807,15 +2812,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         match expr {
             ast::Expr::Block(block) => self.collect_block_numeric_literal_tails(block, target, out),
-            ast::Expr::If(if_expr) => {
-                out.branches.push(if_expr.id);
-                self.collect_if_numeric_literal_tails(
-                    &if_expr.then_block,
-                    if_expr.else_block.as_ref(),
-                    target,
-                    out,
-                )
-            }
+            ast::Expr::If(if_expr) => self.collect_if_numeric_literal_tails(if_expr, target, out),
             ast::Expr::Match(match_expr) => {
                 self.collect_match_numeric_literal_tails(match_expr, target, out)
             }
@@ -2839,14 +2836,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(ast::Stmt::Expr(e)) => self.collect_numeric_literal_tails(&e.expr, target, out),
             // `block_result_type` reads a trailing `if` / `match` statement as
             // the block's value, so `else { if … }` retargets like `else if …`.
-            // A trailing `if` records no type: reify recomputes one from the
-            // branches it has just built.
-            Some(ast::Stmt::If(if_stmt)) => self.collect_if_numeric_literal_tails(
-                &if_stmt.then_block,
-                if_stmt.else_block.as_ref(),
-                target,
-                out,
-            ),
+            Some(ast::Stmt::If(if_expr)) => {
+                self.collect_if_numeric_literal_tails(if_expr, target, out)
+            }
             Some(ast::Stmt::Match(match_expr)) => {
                 self.collect_match_numeric_literal_tails(match_expr, target, out)
             }
@@ -2863,19 +2855,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !tails.literals.is_empty()
     }
 
-    /// The two halves of an `if`, in either its expression or its statement
-    /// spelling. A missing `else` is `()`, which no numeric target accepts.
+    /// The two halves of an `if`. A missing `else` is `()`, which no numeric
+    /// target accepts.
     fn collect_if_numeric_literal_tails<'a>(
         &self,
-        then_block: &'a ast::Block,
-        else_block: Option<&'a ast::Block>,
+        if_expr: &'a IfExpr,
         target: TypeId,
         out: &mut NumericLiteralTails<'a>,
     ) -> bool {
-        let Some(else_block) = else_block else {
+        let Some(else_block) = &if_expr.else_block else {
             return false;
         };
-        self.collect_block_numeric_literal_tails(then_block, target, out)
+        out.branches.push(if_expr.id);
+        self.collect_block_numeric_literal_tails(&if_expr.then_block, target, out)
             && self.collect_block_numeric_literal_tails(else_block, target, out)
     }
 
@@ -3102,19 +3094,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `translate_match` drops each arm's value there.
         if type_id != TypeTable::UNIT {
             for &(arm_type, arm_span) in &arm_bodies {
-                let result = self.assignable(arm_type, type_id, arm_span);
-                if matches!(result, TypeCheckResult::Incompatible) {
-                    let (expected_name, found_name) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .names_for_mismatch(type_id, arm_type);
-                    let _ = self.emit(TypeError::TypeMismatch {
-                        expected: expected_name,
-                        found: found_name,
-                        span: arm_span,
-                    });
-                }
+                self.check_branch_type(arm_type, type_id, arm_span);
             }
         }
 
@@ -3727,9 +3707,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The `Base` a `ReflectNewtype<Base = …>` bound on the type parameter
     /// `ty` names, or `None` where `ty` carries no such bound.
     fn newtype_base_bound(&mut self, ty: TypeId) -> Option<TypeId> {
-        let name = self.tysys.binder_name(ty)?;
         let base = self
-            .bound_assoc_bindings(&name, CompilerItem::ReflectNewtype, REFLECT_NEWTYPE_BASE)
+            .bound_assoc_bindings(ty, CompilerItem::ReflectNewtype, REFLECT_NEWTYPE_BASE)
             .into_iter()
             .next()?;
         Some(self.resolve_type(&base))

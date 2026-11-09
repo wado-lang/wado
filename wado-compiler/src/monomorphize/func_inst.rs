@@ -820,14 +820,29 @@ impl Monomorphizer {
     }
 
     /// The concrete type a `T^Trait::method` receiver dispatches on: what
-    /// [`Self::receiver_param_answer`] says, else (a synthesised receiver) the
-    /// lowest slot.
+    /// [`Self::receiver_param_answer`] says, what a projection receiver
+    /// (`T::Item`) binds at the instance, else, for a receiver no call
+    /// recorded, the lowest slot. A recorded receiver `substitution` does not
+    /// fill is left for the substitution that does.
     fn receiver_substitution_tid(
         &self,
         info: &LocalMethodName,
         substitution: &TypeArgMap,
+        type_table: &TypeTable,
     ) -> Option<TypeId> {
-        self.receiver_param_answer(info, substitution).or_else(|| {
+        let answer = self.receiver_param_answer(info, substitution);
+        if info.receiver_param.is_some() {
+            return answer;
+        }
+        let receiver = info.fq_struct_name();
+        if receiver.projected().is_some() {
+            let bound = |name: &str| {
+                let key = self.current_param_substitution_key.get(name)?;
+                substitution.get(key).copied()
+            };
+            return Self::type_at_instance(&receiver, &bound, type_table);
+        }
+        answer.or_else(|| {
             substitution
                 .iter()
                 .min_by_key(|(param, _)| param.index)
@@ -1589,9 +1604,8 @@ impl Monomorphizer {
 
                     // Build the new method info with substituted type names.
                     let mut new_info = if info.is_type_param_receiver {
-                        // The struct name is a type parameter (e.g., T^Ord::cmp);
-                        // resolve the concrete receiver by the param's name.
-                        match self.receiver_substitution_tid(&info, substitution) {
+                        // The struct name is a type parameter (e.g., T^Ord::cmp).
+                        match self.receiver_substitution_tid(&info, substitution, type_table) {
                             Some(concrete_tid) => {
                                 let dispatch_tid =
                                     self.type_param_dispatch_tid(concrete_tid, &info, type_table);
@@ -1656,7 +1670,7 @@ impl Monomorphizer {
                     // name stays `S^…` for a user struct named `S`, and skipping
                     // it there leaves the instance unresolved at WIR build.
                     let receiver_tid = self
-                        .receiver_substitution_tid(&info, substitution)
+                        .receiver_substitution_tid(&info, substitution, type_table)
                         .map(|tid| self.type_param_dispatch_tid(tid, &info, type_table));
                     let receiver_is_concrete = receiver_tid.is_some_and(|tid| {
                         !matches!(
@@ -2433,7 +2447,7 @@ impl Monomorphizer {
         if !info.is_type_param_receiver {
             return false;
         }
-        let Some(self_tid) = self.receiver_substitution_tid(info, substitution) else {
+        let Some(self_tid) = self.receiver_substitution_tid(info, substitution, type_table) else {
             return false;
         };
         let (ref_kind, inner) = match type_table.get(self_tid) {

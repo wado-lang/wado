@@ -1458,6 +1458,7 @@ impl Receiver {
                 | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
                 | TypeHead::Unresolved(_)
+                | TypeHead::Infer { .. }
                 | TypeHead::Projection { .. }
                 | TypeHead::Tuple
                 | TypeHead::Function { .. } => None,
@@ -3547,6 +3548,9 @@ pub enum TypeHead {
     /// A written name that reaches no declaration, by its spelling. Resolving
     /// it reported the error, so nothing asks about it again.
     Unresolved(String),
+    /// A type inference has yet to answer, with its spelling. No impl answers
+    /// it until then.
+    Infer { var: tir::InferVarId, name: String },
     /// A function type, its signature held as names so a binder inside one
     /// stays a binder and the solver can match it. The signature is the head:
     /// it is the shape itself, not an instantiation of one, so no name carries
@@ -3615,6 +3619,7 @@ impl TypeHead {
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
             | Self::Unresolved(name)
+            | Self::Infer { name, .. }
             | Self::Binder { name, .. } => name,
             Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
@@ -3633,6 +3638,7 @@ impl TypeHead {
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
             | Self::Unresolved(name)
+            | Self::Infer { name, .. }
             | Self::Binder { name, .. } => name,
             Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
@@ -3650,6 +3656,7 @@ impl TypeHead {
             | Self::ParamBucket { .. }
             | Self::Builtin(_)
             | Self::Unresolved(_)
+            | Self::Infer { .. }
             | Self::Binder { .. }
             | Self::Projection { .. }
             | Self::Tuple
@@ -3665,6 +3672,7 @@ impl TypeHead {
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
             Self::Builtin(_)
             | Self::Unresolved(_)
+            | Self::Infer { .. }
             | Self::Binder { .. }
             | Self::Projection { .. }
             | Self::Tuple
@@ -3829,6 +3837,14 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Unresolved(name.to_string()))
     }
 
+    #[must_use]
+    pub fn infer(var: tir::InferVarId) -> Self {
+        Self::of_head_kind(TypeHead::Infer {
+            var,
+            name: var.to_string(),
+        })
+    }
+
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,
     /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
@@ -3898,22 +3914,27 @@ impl FqTypeName {
     /// name in some template's own parameter space rather than a type.
     #[must_use]
     pub fn mentions_binder(&self) -> bool {
-        let head_mentions = match &self.head {
-            TypeHead::Binder { .. } => true,
-            TypeHead::Projection(head) => {
-                head.base.mentions_binder()
-                    || head
-                        .trait_args
-                        .iter()
-                        .flatten()
-                        .any(FqTypeName::mentions_binder)
-            }
-            TypeHead::Function { signature, .. } => {
-                signature.iter().any(FqTypeName::mentions_binder)
-            }
-            _ => false,
-        };
-        head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
+        self.mentions(&|head| matches!(head, TypeHead::Binder { .. }))
+    }
+
+    /// Whether `pred` holds of this name's head or of a head inside it.
+    pub fn mentions(&self, pred: &impl Fn(&TypeHead) -> bool) -> bool {
+        let head_mentions = pred(&self.head)
+            || match &self.head {
+                TypeHead::Projection(head) => {
+                    head.base.mentions(pred)
+                        || head
+                            .trait_args
+                            .iter()
+                            .flatten()
+                            .any(|arg| arg.mentions(pred))
+                }
+                TypeHead::Function { signature, .. } => {
+                    signature.iter().any(|ty| ty.mentions(pred))
+                }
+                _ => false,
+            };
+        head_mentions || self.args.iter().any(|arg| arg.mentions(pred))
     }
 
     /// Whether some substitution for either side's binders and projections
@@ -3931,6 +3952,7 @@ impl FqTypeName {
             | TypeHead::ParamBucket { .. }
             | TypeHead::Builtin(_)
             | TypeHead::Unresolved(_)
+            | TypeHead::Infer { .. }
             | TypeHead::Tuple
             | TypeHead::Function { .. } => false,
         };
@@ -4021,7 +4043,9 @@ impl FqTypeName {
             TypeHead::ParamBucket { module, name } => {
                 out.push_str(&format!("{module}/{name}#param"));
             }
-            TypeHead::Builtin(name) | TypeHead::Unresolved(name) => out.push_str(name),
+            TypeHead::Builtin(name)
+            | TypeHead::Unresolved(name)
+            | TypeHead::Infer { name, .. } => out.push_str(name),
             TypeHead::Binder { name, owner } => match owner {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.mangled())),
                 None => out.push_str(name),
