@@ -3241,15 +3241,8 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                             }
                         },
                         TK_PIPEPIPE => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_INT => {
-                                        let alt = atn_decide_0_10(tokens, pos);
-                                        if alt >= 0 { return alt; }
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_5(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -3259,15 +3252,8 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_PIPE => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_INT => {
-                                        let alt = atn_decide_0_10(tokens, pos);
-                                        if alt >= 0 { return alt; }
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_5(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -3279,14 +3265,21 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
     return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
 }
 
-fn atn_decide_0_10(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
-            TK_BANG => {
-                return 1;
-            },
-            TK_SEMI => {
-                return 0;
+fn atn_dfa_5(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_INT => {
+                if pos + 3 < tokens.len() {
+                    match tokens[pos + 3] {
+                        TK_BANG => {
+                            return 1;
+                        },
+                        TK_SEMI => {
+                            return 0;
+                        },
+                        _ => {},
+                    };
+                }
             },
             _ => {},
         };

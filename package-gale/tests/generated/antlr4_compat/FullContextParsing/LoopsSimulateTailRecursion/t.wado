@@ -3438,17 +3438,8 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_ID => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_ID | TK_LIT_LPAREN => {
-                                                    return 1;
-                                                },
-                                                TK_LIT_PLUSPLUS => {
-                                                    return 0;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_dfa_2(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -3465,17 +3456,8 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_LIT_RPAREN => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_ID | TK_LIT_LPAREN => {
-                                                    return 1;
-                                                },
-                                                TK_LIT_PLUSPLUS => {
-                                                    return 0;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_dfa_2(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -3511,5 +3493,20 @@ fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 3, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_dfa_2(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 3 < tokens.len() {
+        match tokens[pos + 3] {
+            TK_ID | TK_LIT_LPAREN => {
+                return 1;
+            },
+            TK_LIT_PLUSPLUS => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
