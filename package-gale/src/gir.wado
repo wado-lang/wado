@@ -37,7 +37,7 @@
 //! would invite drift without semantic benefit.
 
 use { Level } from "core:log";
-use { Visibility, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource } from "./ir.wado";
+use { Visibility, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource, AltAction } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { sets_overlap } from "./token_kinds.wado";
 
@@ -712,6 +712,9 @@ pub struct AltBody {
     /// The precedence a prefix-LR alt's trailing operand climbs from, or 0.
     /// The one source for the parse call, its scan twin, and the ATN edge.
     pub prefix_self_ref_min_prec: i32,
+    /// A group alternative's actions, positioned by `ops` index, which the
+    /// op-only walker runs; empty on a rule's own alternative.
+    pub actions: List<AltAction> = [],
 }
 
 /// One lowered op — the per-position unit of work in a parse-time

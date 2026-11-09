@@ -263,16 +263,26 @@ rule's ambiguity to the simulator, or `"always"` a group's or a `?` `*` `+`'s,
 the parser asks the simulator as well and panics where its answer differs from
 the static pick. So does a left-recursion loop's choice of suffix, in a rule
 whose atom choice `"auto"` routes. The lookahead DFA and LR table `"auto"` reads
-there are checked the same way. A decision a predicate gates is not checked yet,
-and neither is a `?` at a rule's end that `"auto"` hands the simulator. It is
-for testing the static path against the simulator over real inputs, not for
-use.
+there are checked the same way. A non-greedy `??` `*?` `+?` the static path
+decides is not checked. Where the decision meets a predicate, the simulator is
+handed the predicate's verdict, and what the predicate prints for the check is
+taken back out of the output. A predicate that changes the parser's state
+changes it again for the check, so under `"verify"` it can change the parse. On
+input that has no parse, a check panics where the static path picks otherwise
+than the simulator before the parse fails, and can where both sides are
+recovering. It is for testing the static path against the simulator over real
+inputs, not for use. The generated
+SQLite parser is 1.0 MB under `"never"`, 2.0 MB under `"verify"`, 1.8 MB under
+`"auto"` and 9.5 MB under `"always"` (`gale gen --atn <mode>`).
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
 stays with the tournament, and a `?` at a rule's end goes to the simulator when
-the rule asks it anyway. A `?` `*` `+` is ambiguous where its body and what
-follows it can start on one token; under `"always"`, one at the end of its
-alternative counts too, since its caller's continuation is not known there. The
+the rule asks it anyway. A group's or a `?` `*` `+`'s ambiguity that meets a
+predicate goes to the simulator under `"auto"` as well, since the static path
+cannot weigh the predicate's verdict against what follows. A `?` `*` `+` is
+ambiguous where its body and what follows it can start on one token; where the
+simulator takes it, one at the end of its alternative counts too, since its
+caller's continuation is not known there. The
 decisions only the simulator can make are the `between` shape above, `??`, a
 non-greedy loop's exit no lookahead locates, and a group's choice between its
 empty alternative and another. A lexer rule the lexer simulator matches is not

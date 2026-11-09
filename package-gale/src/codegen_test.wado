@@ -1000,7 +1000,8 @@ test "atn verify leaves a decision the simulator makes unchecked" {
 }
 
 // On `a c d d` the jar enters the loop on the first `d`, and `never` leaves it
-// to the suffix's `D`. The trees are the jar's.
+// to the suffix's `D`. On `a c d d d` the jar takes `D` for the group, where the
+// tournament takes `D D`. The trees are the jar's.
 test "atn verify checks a contested repeat in a left-recursion suffix" {
     let g4 = "grammar R;
 s : e EOF ;
@@ -1015,17 +1016,19 @@ WS : ' ' -> skip ;
     let verify = GenerateOptions { atn: AtnMode::Verify };
     let agreed = parses_each(g4, [
         ["s", "a c d"],
-        ["s", "a c d d d"],
         ["s", "a c d c d"],
     ], &verify);
     assert agreed == "a c d => (s (e (e a) c d))
-a c d d d => (s (e (e a) c d d d))
 a c d c d => (s (e (e (e a) c d) c d))
 ";
-    let input = "a c d d";
-    let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
-    assert !out.status matches { Exited(0) };
-    assert out.stderr.contains(": the repeat picks "), out.stderr;
+    for let [input, report] of [
+        ["a c d d", ": the repeat picks "],
+        ["a c d d d", ": the tournament picks 1, the simulator 0"],
+    ] as List<[String, String]> {
+        let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+        assert !out.status matches { Exited(0) };
+        assert out.stderr.contains(report), out.stderr;
+    }
 }
 
 // The atom choice between the two `new` alternatives is the simulator's under
@@ -1082,6 +1085,55 @@ test "atn verify checks a mid operand's loop against the simulator" {
 a between b between c and d and e and f => (s (e (e a) between (e (e b) between (e (e c) and (e d)) and (e e)) and (e f)))
 a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and (e d)) and (e e)))
 ";
+}
+
+// The first loop's iteration ends with a checked `?`, emitted into the loop's
+// own scope, so each check's locals must be the loop's alone. The trees are
+// the jar's.
+test "atn verify checks a repeat nested in a checked loop's iteration" {
+    let g4 = "grammar D;
+s : '{' l? '}' EOF ;
+l : (';' w)* d w (';' w d?)* ;
+d : ID ':' ID w ;
+w : C* ;
+ID : [a-z]+ ;
+C : '#' ;
+WS : ' ' -> skip ;
+";
+    assert parses(
+        g4,
+        "s",
+        ["{ a : b }", "{ ; a : b # ; c : d ; }", "{ a : b ; ; }"],
+        &GenerateOptions { atn: AtnMode::Verify },
+    ) == "{ a : b } => (s { (l (d a : b w) w) })
+{ ; a : b # ; c : d ; } => (s { (l ; w (d a : b (w #)) w ; w (d c : d w) ; w) })
+{ a : b ; ; } => (s { (l (d a : b w) w ; w ; w) })
+";
+}
+
+// `ID e?` ends an atom, so its `?` competes with the loop's `args` and with
+// the caller's FOLLOW. On the last two inputs the jar enters it and `never`
+// does not. The trees are the jar's.
+test "atn verify checks an optional ending a left-recursive atom" {
+    let g4 = "grammar N;
+s : e EOF ;
+e : e '.' ID | 'new' e args | 'new' e | e args | ID e? | args ;
+args : '(' e? ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses(g4, "s", ["a", "a ( )", "new a ( )", "a . b"], &verify) == "a => (s (e a))
+a ( ) => (s (e a (e (args ( )))))
+new a ( ) => (s (e new (e a) (args ( ))))
+a . b => (s (e (e a) . b))
+";
+    let source = gen_with(g4, &verify).source;
+    for let input of ["new a ( ) ( )", "a new b ( ) ( )"] {
+        let out = eval_beside(source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+        assert !out.status matches { Exited(0) }, input;
+        assert out.stderr.contains(": the repeat picks "), out.stderr;
+    }
 }
 
 // The mid operand's rest opens with a group of loop operators, so it climbs
@@ -1176,34 +1228,112 @@ new new a ( ) ( ) ( ) => (s (e new (e new (e (e a) (args ( ))) (args ( ))) (args
 ";
 }
 
-// The simulator is handed no predicate's verdict, so `atn: \"verify\"` leaves a
-// decision unchecked that meets one through a rule it calls: the loop's `op`,
-// the repeat's `q`, the group's `r`. The trees are the jar's.
-test "atn verify leaves a decision meeting a called rule's predicate unchecked" {
+// Each decision meets a predicate through a rule it calls: the loop's `op`, the
+// repeat's `q`, the group's `r`. A simulator handed no verdict would enter
+// each, where `never` leaves it. `_vq_out` holds the output a check that asks
+// a predicate takes back. The trees are the jar's.
+test "atn verify hands the simulator the verdicts of the predicates a decision meets" {
     let verify = GenerateOptions { atn: AtnMode::Verify };
-    assert parses("grammar P;
-s : e ('+' ID)? EOF ;
-e : e op e | ID ;
-op : {false}? '+' | '-' ;
-ID : [a-z]+ ;
-WS : ' ' -> skip ;
-", "s", ["a + b", "a - b + c"], &verify) == "a + b => (s (e a) + b)
-a - b + c => (s (e (e a) (op -) (e b)) + c)
-";
-    assert parses("grammar R;
+    let cases: List<[String, List<String>, String]> = [
+        [
+            "grammar P;\ns : e ('+' ID)? EOF ;\ne : e op e | ID ;\nop : {false}? '+' | '-' ;\nID : [a-z]+ ;\nWS : ' ' -> skip ;\n",
+            ["a + b", "a - b + c"],
+            "a + b => (s (e a) + b)\na - b + c => (s (e (e a) (op -) (e b)) + c)\n",
+        ],
+        [
+            "grammar R;\ns : q* 'a'? EOF ;\nq : {false}? 'a' | 'b' ;\nWS : ' ' -> skip ;\n",
+            ["a", "b a"],
+            "a => (s a)\nb a => (s (q b) a)\n",
+        ],
+        [
+            "grammar T;\ns : (r | 'a' 'c'?) EOF ;\nr : {false}? 'a' 'c' | 'b' ;\nWS : ' ' -> skip ;\n",
+            ["a c", "b"],
+            "a c => (s a c)\nb => (s (r b))\n",
+        ],
+    ];
+    for let [g4, inputs, trees] of cases {
+        assert gen_with(g4, &verify).source.contains("_vq_out"), g4;
+        assert parses(g4, "s", inputs, &verify) == trees;
+    }
+}
+
+// The repeat's check asks `q`'s predicate again, and takes back what it
+// prints. The trees are the jar's.
+test "atn verify prints what never prints" {
+    let g4 = "grammar P;
+@parser::members {
+boolean pred(boolean v) {
+	System.out.println(\"eval=\" + v);
+	return v;
+}
+}
 s : q* 'a'? EOF ;
-q : {false}? 'a' | 'b' ;
+q : {this.pred(true)}? 'a' | 'b' ;
 WS : ' ' -> skip ;
-", "s", ["a", "b a"], &verify) == "a => (s a)
-b a => (s (q b) a)
 ";
-    assert parses("grammar T;
-s : (r | 'a' 'c'?) EOF ;
-r : {false}? 'a' 'c' | 'b' ;
+    let inputs: List<String> = ["a", "b a"];
+    let never = parses(g4, "s", inputs, &GenerateOptions { atn: AtnMode::Never });
+    assert never.starts_with("a => (s (q a)) [eval=true\n"), never;
+    assert never.contains("b a => (s (q b) (q a)) [eval=true\n"), never;
+    assert parses(g4, "s", inputs, &GenerateOptions { atn: AtnMode::Verify }) == never;
+}
+
+// A contested decision meeting a predicate needs both the continuation and the
+// verdict, so `auto` hands it the simulator: the loop's `q`, the group's and
+// the `+`'s alternative. The trees and output are the jar's.
+test "atn auto lets the simulator decide a contested decision meeting a predicate" {
+    let p = "grammar P;
+@parser::members {
+boolean pred(boolean v) {
+	System.out.println(\"eval=\" + v);
+	return v;
+}
+}
+s : q* 'a'? EOF ;
+q : {this.pred(false)}? 'a' | 'b' ;
 WS : ' ' -> skip ;
-", "s", ["a c", "b"], &verify) == "a c => (s a c)
-b => (s (r b))
 ";
+    let g = "grammar G;\ns : ({true}? a | a B) B EOF ;\na : A+ ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n";
+    let r = "grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n";
+    for let atn of [AtnMode::Auto, AtnMode::Always] {
+        let options = GenerateOptions { atn };
+        assert parses(p, "s", ["b a", "a"], &options) == "b a => (s (q b) a) [eval=false\n]\na => (s a) [eval=false\n]\n";
+        assert parses(g, "s", ["a b", "a b b"], &options) == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
+        assert parses(r, "u", ["a a b", "a b a b"], &options) == "a a b => (u a a b)\na b a b => (u a b a b)\n";
+    }
+}
+
+// Each decision meets a predicate that holds, and on each input the jar takes
+// another pick than `never`: the jar parses `a b`, `a a b` and
+// `new a < b > . c`, and reads `Z Z X` as `(r (a (b Z Z)) X)`.
+test "atn verify checks a decision meeting a predicate" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    for let [g4, rule, input, picker] of [
+        [
+            "grammar T;\nr : a X* EOF ;\na : {true}? b | b X ;\nb : Z Z ;\nX : 'X' ;\nZ : 'Z' ;\nWS : ' ' -> skip ;\n",
+            "r", "Z Z X", "the tournament",
+        ],
+        [
+            "grammar G;\ns : ({true}? a | a B) B EOF ;\na : A+ ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n", "s",
+            "a b", "the tournament",
+        ],
+        [
+            "grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n", "u", "a a b",
+            "the repeat",
+        ],
+        [
+            "grammar L;\ns : e EOF ;\ne : e '.' ID | 'new' e targs? '(' e? ')' | 'new' e targs? | e '(' e? ')' | e {true}? '<' e | e '>' e | ID ;\ntargs : '<' ID '>' ;\nID : [a-z]+ ;\nWS : ' ' -> skip ;\n",
+            "s", "new a < b > . c", "the left-recursion loop",
+        ],
+    ] {
+        let out = eval_beside(
+            gen_with(g4, &verify).source,
+            wado`show("${input}", parse_${rule}("${input}"));\n`,
+            SHOW_FN,
+        );
+        assert !out.status matches { Exited(0) }, input;
+        assert out.stderr.contains(`: ${picker} picks `), out.stderr;
+    }
 }
 
 // Prediction evaluates a predicate exactly where it reaches one before
@@ -1364,6 +1494,34 @@ D a b a c => (s D a b a c)
     }
 }
 
+// The actions written in a group's alternative run where the group sits in a
+// left-recursive suffix too, a predicate included. On `x . a b` the simulator
+// takes `a`, as the jar does, and its predicate fails; the tournament takes
+// `a B`. The trees and the output are the jar's.
+#[timeout_ms(240000)]
+test "a group in a left-recursive suffix runs its alternative's actions" {
+    let printing = "grammar N5;
+s : e EOF ;
+e : e '.' (a {System.out.println(\"p\");} | c) | ID ;
+a : A ;
+c : C ;
+A : 'a' ; C : 'c' ; ID : [x-z]+ ;
+WS : ' ' -> skip ;
+";
+    let gated = "grammar N5;
+s : e EOF ;
+e : e '.' (a {false}? | a B) B? | ID ;
+a : A ;
+A : 'a' ; B : 'b' ; ID : [x-z]+ ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Auto, AtnMode::Always] {
+        assert parses(printing, "s", ["x . a"], &GenerateOptions { atn }) == "x . a => (s (e (e x) . (a a))) [p\n]\n";
+        assert parses(gated, "s", ["x . a"], &GenerateOptions { atn }) == "x . a => error\n";
+    }
+    assert parses(gated, "s", ["x . a b"], &GenerateOptions { atn: AtnMode::Always }) == "x . a b => error\n";
+}
+
 test "prediction answers a predicate only on the paths that reach it without running an action" {
     let g4 = "grammar T;
 s : 'A' a EOF | 'B' b EOF | 'C' c EOF | 'D' d EOF | 'F' f EOF | 'G' h EOF
@@ -1482,26 +1640,30 @@ x a => (s (r x q a))
     }
 }
 
+// `verify` parses only the inputs that have a parse: on the others it may
+// panic first, where its pick differs from the simulator's.
 test "prediction leaves a predicate past a consumed token to the parse" {
-    for let atn of [AtnMode::Never, AtnMode::Verify] {
-        let options = GenerateOptions { atn };
-        assert parses("grammar G;
+    let g = "grammar G;
 s : x EOF ;
 x : 'a' q | 'a' 'b' 'c' ;
 q : {false}? 'b' 'c' | 'd' ;
 WS : ' ' -> skip ;
-", "s", ["a b c", "a d"], &options) == "a b c => error
-a d => (s (x a (q d)))
 ";
-        assert parses("grammar M;
+    let m = "grammar M;
 s : e EOF ;
 e : e 'x' e p | e '+' e | ID ;
 p : {false}? '+' ID | 'z' ;
 ID : [a-y]+ ;
 WS : ' ' -> skip ;
-", "s", ["a x b + c z", "a x b z", "a x b + c + d", "a x b z + c"], &options) == "a x b + c z => (s (e (e a) x (e (e b) + (e c)) (p z)))
+";
+    let never = GenerateOptions { atn: AtnMode::Never };
+    assert parses(g, "s", ["a b c"], &never) == "a b c => error\n";
+    assert parses(m, "s", ["a x b + c + d"], &never) == "a x b + c + d => error\n";
+    for let atn of [AtnMode::Never, AtnMode::Verify] {
+        let options = GenerateOptions { atn };
+        assert parses(g, "s", ["a d"], &options) == "a d => (s (x a (q d)))\n";
+        assert parses(m, "s", ["a x b + c z", "a x b z", "a x b z + c"], &options) == "a x b + c z => (s (e (e a) x (e (e b) + (e c)) (p z)))
 a x b z => (s (e (e a) x (e b) (p z)))
-a x b + c + d => error
 a x b z + c => (s (e (e (e a) x (e b) (p z)) + (e c)))
 ";
     }
@@ -4433,6 +4595,142 @@ ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["a b"]);
     assert got == "a b => error\n";
+}
+
+// `q` tells its alternatives apart on its second token, so the one `b c`
+// leaves viable is predicated, and a false predicate leaves none. The jar
+// reports no viable alternative at `b`.
+test "a predicate on the one alternative deeper lookahead leaves removes it" {
+    let g4 = "grammar X;\ns : x EOF ;\nx : 'a' q | 'a' 'b' 'c' ;\nq : {false}? 'b' 'c' | 'b' 'd' ;\nWS : ' ' -> skip ;\n";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        let got = parses(g4, "s", ["a b c", "a b d"], &GenerateOptions { atn });
+        assert got == "a b c => error\na b d => (s (x a (q b d)))\n", got;
+    }
+}
+
+// Both alternatives end on `a c d`, and only what follows `r` would tell them
+// apart, but the first meets a false predicate inside its group: the jar takes
+// the second.
+test "a predicate inside a group decides a tie at the rule's end" {
+    let g4 = "grammar Z;\ns : r EOF ;\nr : ({false}? 'a' 'b'? 'c')? 'd' | 'a' 'c' 'd' 'e'? ;\nWS : ' ' -> skip ;\n";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        let got = parses(g4, "s", ["a c d", "d", "a c d e"], &GenerateOptions { atn });
+        assert got == "a c d => (s (r a c d))\nd => (s (r d))\na c d e => (s (r a c d e))\n", got;
+    }
+}
+
+// As above, with a predicate a scan cannot answer, since it calls a member,
+// and the second alternative calling a rule, so the tree names the pick. The
+// tournament cannot weigh it, so `auto` hands the tie to the simulator, and
+// `verify` reports where `never` picks otherwise.
+test "a member predicate inside a group decides a tie at the rule's end" {
+    let g4 = |verdict: String| `grammar Y;
+@parser::members {
+boolean pred(boolean v) { return v; }
+}
+s : r EOF ;
+r : ({this.pred(${verdict})}? 'a' 'b'? 'c')? 'd' | x 'd' 'e'? ;
+x : 'a' 'c' ;
+WS : ' ' -> skip ;
+`;
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4("true"), "s", ["a c d"], &GenerateOptions { atn }) == "a c d => (s (r a c d))\n";
+    }
+    for let atn of [AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4("false"), "s", ["a c d"], &GenerateOptions { atn }) == "a c d => (s (r (x a c) d))\n";
+    }
+    let verify = gen_with(g4("false"), &GenerateOptions { atn: AtnMode::Verify }).source;
+    let out = eval_beside(verify, wado`show("a c d", parse_s("a c d"));\n`, SHOW_FN);
+    assert out.stderr.contains(": the tournament picks 0, the simulator 1"), out.stderr;
+}
+
+// The scan cannot answer `$d>0`, a local it does not simulate, but it still
+// answers the `{false}?` beside it, so the first alternative fails in the scan
+// as in the parse. The tree is the jar's.
+#[timeout_ms(120000)]
+test "a gate keeps the predicates a scan answers beside one it cannot" {
+    let g4 = "grammar F1;
+s : r EOF ;
+r : q B | {true}? A B C? ;
+q locals [int d=1] : {false}? {$d>0}? A ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4, "s", ["a b"], &GenerateOptions { atn }) == "a b => (s (r a b))\n";
+    }
+}
+
+// A loop deciding its group's alternative as it enters leaves a group the
+// simulator decides to the simulator, and `verify` checks it. The longest match
+// takes `a B`; the jar takes `a`, then `b` on the next iteration.
+#[timeout_ms(120000)]
+test "a repeated group the simulator decides takes the simulator's pick" {
+    let g4 = "grammar N4;
+s : (a | a B | b)* C EOF ;
+a : A ;
+b : B ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["a b c"], &GenerateOptions { atn: AtnMode::Always }) == "a b c => (s (a a) (b b) c)\n";
+    let verify = gen_with(g4, &GenerateOptions { atn: AtnMode::Verify }).source;
+    let out = eval_beside(verify, wado`show("a b c", parse_s("a b c"));\n`, SHOW_FN);
+    assert out.stderr.contains(": the tournament picks 1, the simulator 0"), out.stderr;
+}
+
+// A group inside a left-recursive suffix parses as the simulator picks where
+// the simulator decides it, and `verify` checks the tournament's pick there.
+// The longest match takes `a B`, which leaves the suffix's `B` nothing to
+// match; the jar takes `a`.
+#[timeout_ms(120000)]
+test "a group in a left-recursive suffix takes the simulator's pick" {
+    let g4 = |suffix: String| `grammar F2;
+s : e EOF ;
+e : e '.' ${suffix} | ID ;
+a : A ;
+A : 'a' ; B : 'b' ; ID : [x-z]+ ;
+WS : ' ' -> skip ;
+`;
+    let tree = "x . a b => (s (e (e x) . (a a) b))\n";
+    for let atn of [AtnMode::Auto, AtnMode::Always] {
+        assert parses(g4("({true}? a | a B) B"), "s", ["x . a b"], &GenerateOptions { atn }) == tree;
+    }
+    assert parses(g4("(a | a B) B"), "s", ["x . a b"], &GenerateOptions { atn: AtnMode::Always }) == tree;
+    let verify = gen_with(g4("(a | a B) B?"), &GenerateOptions { atn: AtnMode::Verify }).source;
+    let out = eval_beside(verify, wado`show("x . a b", parse_s("x . a b"));\n`, SHOW_FN);
+    assert out.stderr.contains(": the tournament picks 1, the simulator 0"), out.stderr;
+}
+
+// `x` matches empty, so entering it consumes nothing, but it still adds a node.
+// The trees are the jar's.
+#[timeout_ms(120000)]
+test "verify takes an optional entered through an empty rule as entered" {
+    let g4 = "grammar F5;
+s : x? 'z' EOF ;
+x : 'c'? ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Verify] {
+        assert parses(g4, "s", ["z", "c z"], &GenerateOptions { atn }) == "z => (s x z)\nc z => (s (x c) z)\n";
+    }
+}
+
+#[timeout_ms(60000)]
+test "a loop the simulator decides stops at the end of the input" {
+    let g4 = "grammar L;
+@parser::members {
+boolean pred() { return true; }
+}
+s : '{' l '}' st* EOF ;
+l : st+ ;
+st : {this.pred()}? 'a' 'b' | 'c' ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Auto, AtnMode::Always] {
+        let got = parses(g4, "s", ["{ a", "{ c", "{ c } c", "{ a c"], &GenerateOptions { atn });
+        assert got == "{ a => error\n{ c => error\n{ c } c => (s { (l (st c)) } (st c))\n{ a c => error\n";
+    }
 }
 
 test "a left-recursive rule runs @after once per invocation, after its whole climb" {

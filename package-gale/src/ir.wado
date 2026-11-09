@@ -463,6 +463,15 @@ fn check_epsilon_closure(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), P
             if elements_hold_epsilon_closure(&alt.elements, ctx) {
                 return Result::Err(epsilon_closure_error(&rule.name));
             }
+            if alt_holds_eof_closure(&alt.elements, &rule.name, &grammar.parser_rules, ctx) {
+                return Result::Err(
+                    ParseError::new(
+                        `rule "${rule.name}" contains a closure with at least one alternative that can match EOF`,
+                        Span::new(0, 0),
+                        ["a closure whose body cannot start with EOF"],
+                    ),
+                );
+            }
         }
     }
     let lexer_nullable = lexer_nullable_table(&grammar.lexer_rules);
@@ -502,6 +511,85 @@ fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
             }
         },
     };
+}
+
+/// Whether `elements`, an alternative of rule `rule_name`, hold a closure whose
+/// body can start with EOF: a `*` or `+`, or the left-recursion loop over the
+/// alternative's suffix. It matches EOF without advancing, so the loop never
+/// leaves it. ANTLR4 rejects it too (error 186).
+fn alt_holds_eof_closure<S: AsStrSlice>(
+    elements: &List<Element>,
+    rule_name: S,
+    rules: &List<ParserRule>,
+    ctx: &LeftCornerCtx,
+) -> bool {
+    return alt_leads_with_self_ref(elements, rule_name)
+        && sequence_starts_with_eof(elements, 1, rules, ctx, &mut List::filled(rules.len(), false))
+        || elements_hold_eof_closure(elements, rules, ctx);
+}
+
+fn elements_hold_eof_closure(elements: &List<Element>, rules: &List<ParserRule>, ctx: &LeftCornerCtx) -> bool {
+    return elements.iter_ref().any(|e| element_holds_eof_closure(e, rules, ctx));
+}
+
+fn element_holds_eof_closure(elem: &Element, rules: &List<ParserRule>, ctx: &LeftCornerCtx) -> bool {
+    return match elem {
+        TokenRef(_) | Literal(_) | Wildcard(_) | RuleRef(_) => false,
+        Not(n) => element_holds_eof_closure(&n.element, rules, ctx),
+        Label(l) => element_holds_eof_closure(&l.element, rules, ctx),
+        Group(g) => g.alternatives.iter_ref().any(|a| elements_hold_eof_closure(&a.elements, rules, ctx)),
+        Repeat(rep) => rep.kind matches { Star | Plus }
+            && element_starts_with_eof(&rep.element, rules, ctx, &mut List::filled(rules.len(), false))
+            || element_holds_eof_closure(&rep.element, rules, ctx),
+    };
+}
+
+/// Whether `elem` can match EOF before consuming a token. `entered` marks the
+/// rules already walked, so a cycle through a nullable prefix ends.
+fn element_starts_with_eof(
+    elem: &Element,
+    rules: &List<ParserRule>,
+    ctx: &LeftCornerCtx,
+    entered: &mut List<bool>,
+) -> bool {
+    return match elem {
+        TokenRef(t) => t.name == "EOF",
+        Literal(_) | Wildcard(_) | Not(_) => false,
+        Label(l) => element_starts_with_eof(&l.element, rules, ctx, entered),
+        Repeat(rep) => element_starts_with_eof(&rep.element, rules, ctx, entered),
+        Group(g) => g.alternatives.iter_ref().any(|a| sequence_starts_with_eof(&a.elements, 0, rules, ctx, entered)),
+        RuleRef(r) => match ctx.index.get(r.name) {
+            Some(i) => rule_starts_with_eof(i, rules, ctx, entered),
+            None => false,
+        },
+    };
+}
+
+fn rule_starts_with_eof(i: i32, rules: &List<ParserRule>, ctx: &LeftCornerCtx, entered: &mut List<bool>) -> bool {
+    if entered[i] {
+        return false;
+    }
+    entered[i] = true;
+    return rules[i].alternatives.iter_ref().any(|a| sequence_starts_with_eof(&a.elements, 0, rules, ctx, entered));
+}
+
+fn sequence_starts_with_eof(
+    elements: &List<Element>,
+    from: i32,
+    rules: &List<ParserRule>,
+    ctx: &LeftCornerCtx,
+    entered: &mut List<bool>,
+) -> bool {
+    for let mut i = from; i < elements.len(); i += 1 {
+        let e = &elements[i];
+        if element_starts_with_eof(e, rules, ctx, entered) {
+            return true;
+        }
+        if !element_nullable(e, &ctx.index, &ctx.nullable, false) {
+            return false;
+        }
+    }
+    return false;
 }
 
 /// Least-fixed-point nullability over the lexer rules, so a closure over an
