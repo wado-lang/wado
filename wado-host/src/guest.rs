@@ -396,6 +396,16 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: &Runtime
     let mut config = default_config(opt_level);
     config.collector(knobs.collector);
     config.gc_heap_initial_size(knobs.gc_heap_initial_size);
+    if let Some(bytes) = knobs.function_alignment {
+        // SAFETY: a minimum alignment changes where code lands, never what it
+        // computes, so no setting of it can miscompile.
+        unsafe {
+            config.cranelift_flag_set(
+                "log2_min_function_alignment",
+                &bytes.trailing_zeros().to_string(),
+            );
+        }
+    }
     if knobs.report_fuel {
         meter_fuel(&mut config);
     }
