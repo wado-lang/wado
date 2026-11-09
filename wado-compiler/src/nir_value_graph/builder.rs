@@ -455,7 +455,7 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Char(c) => pool.char(c),
         ValueKind::Null => pool.null(),
         ValueKind::Unit => pool.unit(),
-        ValueKind::Const(key, t) => pool.constant(key.value(), t),
+        ValueKind::Const(..) | ValueKind::UnitCase { .. } => pool.intern(k),
         ValueKind::Opaque(_)
         | ValueKind::Binary { .. }
         | ValueKind::Unary { .. }
@@ -491,6 +491,7 @@ fn reintern_live_rooted(
         | ValueKind::Char(_)
         | ValueKind::Null
         | ValueKind::Unit
+        | ValueKind::UnitCase { .. }
         | ValueKind::Const(..) => reintern_const(live, kind),
         ValueKind::Binary { op, lhs, rhs, ty } => {
             let l = reintern_live_rooted(scratch, live, lhs, live_base, type_table)?;
@@ -884,8 +885,13 @@ impl<'a> Builder<'a> {
     /// literal built.
     fn known_moved(&mut self, place: Operand) -> Option<ValueId> {
         let value = self.walked_value(place)?;
-        let moved = match self.pool.kind(value) {
+        let kind = self.pool.kind(value);
+        let moved = match kind {
             ValueKind::Null => true,
+            ValueKind::UnitCase { .. } => {
+                let marker = value_kind_to_const(kind, None).expect("a unit case is a constant");
+                const_eval::is_moved_marker(&marker, self.type_table?)
+            }
             _ if self.owned_pointees.contains(&value) => false,
             _ => return None,
         };

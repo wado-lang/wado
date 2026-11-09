@@ -1051,6 +1051,7 @@ impl LengthOnly<'_> {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..) => false,
         }
     }

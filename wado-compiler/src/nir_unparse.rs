@@ -566,6 +566,22 @@ impl<'a> NirUnparser<'a> {
                 self.output
                     .push_str(&self.type_table.mangle_type_arg_for_generic(target));
             }
+            ValueKind::UnitCase {
+                variant_type,
+                case_index,
+            } => {
+                let ResolvedType::Variant { def, .. } = self.type_table.get(variant_type) else {
+                    panic!("a unit case's type is a variant: {variant_type:?}")
+                };
+                let (case_name, ..) = &self
+                    .type_table
+                    .variant_template_cases(*def)
+                    .expect("a variant registers its cases")[case_index as usize];
+                self.output
+                    .push_str(&self.type_table.mangle_type_arg_for_generic(variant_type));
+                self.output.push_str("::");
+                self.output.push_str(case_name);
+            }
             _ => {
                 let op = Operand::Value(v);
                 match Value::from_operand(body, op, self.type_table).filter(Value::is_scalar) {

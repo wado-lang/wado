@@ -115,6 +115,7 @@ impl FieldConst {
             ValueKind::Char(c) => Some(FieldConst::Char(*c)),
             ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..)
             | ValueKind::Opaque(_)
             | ValueKind::Binary { .. }

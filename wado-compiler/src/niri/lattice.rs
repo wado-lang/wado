@@ -7,7 +7,9 @@
 use std::sync::Arc;
 
 use crate::compiler_item::SeqField;
-use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, prim_of};
+use crate::const_eval::{
+    MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, is_moved_marker, prim_of,
+};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, StmtKind};
@@ -647,7 +649,7 @@ impl Interpreter<'_> {
             CtfeBuiltin::IsMoved => match args {
                 [place] => match self.operand_lattice_folded(body, place.expr) {
                     Lattice::Const(value) => {
-                        Lattice::Const(Value::Bool(matches!(value, Value::Null)))
+                        Lattice::Const(Value::Bool(is_moved_marker(&value, self.type_table)))
                     }
                     _ => Lattice::Unevaluated,
                 },

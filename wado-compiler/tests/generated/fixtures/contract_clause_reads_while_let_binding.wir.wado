@@ -73,9 +73,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
+global global:contract_clause_reads_while_let_binding.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
+
 fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
     let $load_0: i32;
     let keys_0: ref "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>";
+    let k_11: ref "contract_clause_reads_while_let_binding.wado//Key";
     let out_44: ref "core:prelude/string.wado//String";
     let is_negative_107: bool;
     let x: i64;
@@ -83,16 +86,17 @@ fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let start_194: i32;
-    keys_0 = struct.new "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>" { repr: array.new_fixed<ref "contract_clause_reads_while_let_binding.wado//Key">(struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none }), used: 1 };
+    keys_0 = struct.new "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>" { repr: array.new_fixed<ref "contract_clause_reads_while_let_binding.wado//Key">(struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: global:contract_clause_reads_while_let_binding.wado::$const_obj_0 }), used: 1 };
     b0: block {
         l1: loop {
             $fused_$inline_next_sroa_keys_used__2: block {
                 if local.tee $load_0(keys_0.used) < 3 {
+                    k_11 = struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none };
                     if @unlikely($load_0 >= builtin::array_len(keys_0.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<contract_clause_reads_while_let_binding.wado/Key>::grow"(keys_0);
                     }
-                    builtin::array_set<ref "contract_clause_reads_while_let_binding.wado//Key">(keys_0.repr, $load_0, struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none });
+                    builtin::array_set<ref "contract_clause_reads_while_let_binding.wado//Key">(keys_0.repr, $load_0, k_11);
                     keys_0.used = $load_0 + 1;
                     break $fused_$inline_next_sroa_keys_used__2;
                 }

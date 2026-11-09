@@ -910,12 +910,12 @@ fn "hash_float.wado/$test_0_zeroes_and_nans_are_one_key_each"() {
     let bits_157: u64;
     let $sroa_h_state_202: u64;
     let $sroa_h_key_203: u64;
-    let mask_212: i32;
-    let s_213: i32;
-    let e_214: i32;
-    let $licm_fps_16_225: ref Array<i32>;
-    let $licm_keys_18_227: ref Array<f64>;
-    let $licm_fps_16_243: ref Array<i32>;
+    let mask_210: i32;
+    let s_211: i32;
+    let e_212: i32;
+    let $licm_fps_16_223: ref Array<i32>;
+    let $licm_keys_18_225: ref Array<f64>;
+    let $licm_fps_16_241: ref Array<i32>;
     v = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v.k1 };
     m = struct.new "core:collections/hashmap.wado//HashMap<f64,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<f64,i32>" { keys: builtin::array_new<f64>(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v };
     $inline_core_collections_hashmap_wado_HashMap_f64_i32___insert_10: block {
@@ -977,21 +977,21 @@ fn "hash_float.wado/$test_0_zeroes_and_nans_are_one_key_each"() {
             $sroa_h_key_203 = (v.k1 ^ -7046029254386353131_i64) | 1_i64;
             multivalue_bind [$sroa_h_state_202, $sroa_h_key_203] = i64.mul_wide_u($sroa_h_state_202, $sroa_h_key_203);
             existing_22 = builtin::i32_wrap_i64(multivalue_bind [$sroa_h_state_202, $sroa_h_key_203] = i64.mul_wide_u($sroa_h_state_202 ^ $sroa_h_key_203, -4658895280553007687_i64); $sroa_h_state_202 ^ $sroa_h_key_203 >>u 32_i64);
-            mask_212 = builtin::array_len(local.tee $load_26(m.table)) - 1;
-            s_213 = existing_22 >>u m.shift;
-            $licm_fps_16_225 = m.fps;
-            $licm_keys_18_227 = $load_20.keys;
+            mask_210 = builtin::array_len(local.tee $load_26(m.table)) - 1;
+            s_211 = existing_22 >>u m.shift;
+            $licm_fps_16_223 = m.fps;
+            $licm_keys_18_225 = $load_20.keys;
             block {
                 l11: loop {
-                    if local.tee e_214(builtin::array_get_value<i32>($load_26, s_213)) == -1 {
-                        break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec0_dae_key__0: -1 - s_213;
+                    if local.tee e_212(builtin::array_get_value<i32>($load_26, s_211)) == -1 {
+                        break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec0_dae_key__0: -1 - s_211;
                     }
-                    if builtin::array_get_value<i32>($licm_fps_16_225, e_214) == existing_22 {
-                        if builtin::array_get_value<f64>($licm_keys_18_227, e_214) == 0 {
-                            break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec0_dae_key__0: s_213;
+                    if builtin::array_get_value<i32>($licm_fps_16_223, e_212) == existing_22 {
+                        if builtin::array_get_value<f64>($licm_keys_18_225, e_212) == 0 {
+                            break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec0_dae_key__0: s_211;
                         }
                     }
-                    s_213 = (s_213 + 1) & mask_212;
+                    s_211 = (s_211 + 1) & mask_210;
                     continue l11;
                 };
             };
@@ -1053,21 +1053,21 @@ fn "hash_float.wado/$test_0_zeroes_and_nans_are_one_key_each"() {
                 bits_157 = builtin::i64_reinterpret_f64(-1.5);
                 multivalue_bind [$sroa_h_state_202, $sroa_h_key_203] = i64.mul_wide_u($sroa_h_state_202 ^ bits_157, $sroa_h_key_203);
                 existing_22 = builtin::i32_wrap_i64(multivalue_bind [$sroa_h_state_202, $sroa_h_key_203] = i64.mul_wide_u($sroa_h_state_202 ^ $sroa_h_key_203, -4658895280553007687_i64); $sroa_h_state_202 ^ $sroa_h_key_203 >>u 32_i64);
-                mask_212 = builtin::array_len(local.tee $licm_fps_16_225(m.table)) - 1;
-                s_213 = existing_22 >>u m.shift;
-                $licm_fps_16_243 = m.fps;
-                $licm_keys_18_227 = $load_20.keys;
+                mask_210 = builtin::array_len(local.tee $licm_fps_16_223(m.table)) - 1;
+                s_211 = existing_22 >>u m.shift;
+                $licm_fps_16_241 = m.fps;
+                $licm_keys_18_225 = $load_20.keys;
                 block {
                     l27: loop {
-                        if local.tee e_214(builtin::array_get_value<i32>($licm_fps_16_225, s_213)) == -1 {
-                            break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec1_dae_key__1: -1 - s_213;
+                        if local.tee e_212(builtin::array_get_value<i32>($licm_fps_16_223, s_211)) == -1 {
+                            break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec1_dae_key__1: -1 - s_211;
                         }
-                        if builtin::array_get_value<i32>($licm_fps_16_243, e_214) == existing_22 {
-                            if builtin::array_get_value<f64>($licm_keys_18_227, e_214) == -1.5 {
-                                break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec1_dae_key__1: s_213;
+                        if builtin::array_get_value<i32>($licm_fps_16_241, e_212) == existing_22 {
+                            if builtin::array_get_value<f64>($licm_keys_18_225, e_212) == -1.5 {
+                                break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_slot_sroa_key_value__spec1_dae_key__1: s_211;
                             }
                         }
-                        s_213 = (s_213 + 1) & mask_212;
+                        s_211 = (s_211 + 1) & mask_210;
                         continue l27;
                     };
                 };
@@ -1077,16 +1077,16 @@ fn "hash_float.wado/$test_0_zeroes_and_nans_are_one_key_each"() {
             }
             break $inline_core_collections_hashmap_wado_HashMap_f64_i32___find_index_sroa_key_value__spec1_2: select i32(builtin::array_get_value<bool>($load_20.alive, existing_22), local.tee existing_22(builtin::array_get_value<i32>(m.table, existing_22)), -1);
         }) < 0 {
-            mask_212 = 0;
+            mask_210 = 0;
             existing_22 = 0;
             break $inline_core_collections_entries_wado_EntryLog_f64_i32___value_at_sroa_return__35;
         }
-        mask_212 = 1;
+        mask_210 = 1;
         existing_22 = builtin::array_get_value<i32>($load_26, existing_22);
         break $inline_core_collections_entries_wado_EntryLog_f64_i32___value_at_sroa_return__35;
     };
     if @unlikely($inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__37: block -> bool {
-        if local.tee self_106((if mask_212 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+        if local.tee self_106((if mask_210 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
         } else {
             struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: existing_22 };
@@ -1100,7 +1100,7 @@ fn "hash_float.wado/$test_0_zeroes_and_nans_are_one_key_each"() {
     } == 0) {
         cold_path;
         let $mv_arg_4: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<hash_float.wado/$tmpl$e651684364ce8ab5,[core:prelude/types.wado/Option<i32>]>"(struct.new "hash_float.wado//$tmpl$e651684364ce8ab5" { h0: (if mask_212 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<hash_float.wado/$tmpl$e651684364ce8ab5,[core:prelude/types.wado/Option<i32>]>"(struct.new "hash_float.wado//$tmpl$e651684364ce8ab5" { h0: (if mask_210 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
         } else {
             struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: existing_22 };

@@ -1197,9 +1197,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(358)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]" = fn(ref null "Array<core:prelude/types.wado/Subtask>", i32, i32) -> i32;  // TypeId(359)
+type "functype//core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "wasi:filesystem/types.wado//ErrorCode", ref "core:prelude/format.wado//Formatter");  // TypeId(359)
 
-type "functype//core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "wasi:filesystem/types.wado//ErrorCode", ref "core:prelude/format.wado//Formatter");  // TypeId(360)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]" = fn(ref null "Array<core:prelude/types.wado/Subtask>", i32, i32) -> i32;  // TypeId(360)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0" = fn(ref Array<u8>, i32) -> i32;  // TypeId(361)
 
@@ -8340,37 +8340,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/tr
     }
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]"($mv$self$repr, $mv$self$used, handle) {
-    let at: i32;
-    let ref_val: ref null "core:prelude//$Resource";
-    let $sroa_$iter_0_index_18: i32;
-    at = 0;
-    $sroa_$iter_0_index_18 = 0;
-    b1285: block {
-        l1286: loop {
-            break_if b1285 $sroa_$iter_0_index_18 >= $mv$self$used;
-            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($mv$self$repr, $sroa_$iter_0_index_18);
-            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
-            let $mv$$vr_7$0: i32;
-            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
-            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
-            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
-            if (if $mv$$vr_7$0 == 0 -> bool {
-                $mv$$vr_7$1.handle == handle;
-            } else {
-                0;
-            }) {
-                return at;
-            }
-            at = at + 1;
-            continue l1286;
-        };
-    };
-    cold_path;
-    "core:rt/unreachable"();
-    unreachable;
-}
-
 fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let $load_0: i32;
     let $load_1: ref "core:prelude/string.wado//String";
@@ -8560,6 +8529,37 @@ fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/t
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec7"($load_1, global:core:prelude/traits.wado::$const_obj_97);
         "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/types.wado/Option<core:prelude/string.wado/String>>"(let $mv_value_1: ref null "core:prelude/string.wado//String"; multivalue_bind [$mv_value_1] = "wasi:filesystem/types.wado/$case_ref$wasi:filesystem/types.wado/ErrorCode$core:prelude/types.wado/Option<core:prelude/string.wado/String>$sroa[v.value]$spec0$dae[index]"(self); struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: $mv_value_1 }, f);
     }
+}
+
+fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]"($mv$self$repr, $mv$self$used, handle) {
+    let at: i32;
+    let ref_val: ref null "core:prelude//$Resource";
+    let $sroa_$iter_0_index_18: i32;
+    at = 0;
+    $sroa_$iter_0_index_18 = 0;
+    b1322: block {
+        l1323: loop {
+            break_if b1322 $sroa_$iter_0_index_18 >= $mv$self$used;
+            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($mv$self$repr, $sroa_$iter_0_index_18);
+            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
+            let $mv$$vr_7$0: i32;
+            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
+            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
+            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
+            if (if $mv$$vr_7$0 == 0 -> bool {
+                $mv$$vr_7$1.handle == handle;
+            } else {
+                0;
+            }) {
+                return at;
+            }
+            at = at + 1;
+            continue l1323;
+        };
+    };
+    cold_path;
+    "core:rt/unreachable"();
+    unreachable;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0"($mv$bytes$repr, $mv$bytes$end) {

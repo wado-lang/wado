@@ -1242,6 +1242,7 @@ impl HeapFrame {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..) => {}
         }
     }
@@ -1934,6 +1935,7 @@ fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..) => {}
         }
     }

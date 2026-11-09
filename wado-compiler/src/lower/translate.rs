@@ -1793,17 +1793,21 @@ impl FunctionTranslator<'_, '_> {
             // from the pool by the extractor): `Null` → `None`/`ref.null`,
             // string → `seq_literal`, unit → no runtime value.
             TirExprKind::Null => {
+                let types = self.base.type_table.borrow();
                 // At a primitive slot a `ref.null` reaches codegen and fails
                 // Wasm validation, naming an offset rather than this site.
                 assert!(
-                    !matches!(
-                        self.base.type_table.borrow().get(expr.type_id),
-                        ResolvedType::Primitive(_)
-                    ),
+                    !matches!(types.get(expr.type_id), ResolvedType::Primitive(_)),
                     "[lower] `null` typed as a primitive: a synthesized placeholder \
                      at a primitive slot needs a zero of that type, not a reference null"
                 );
-                Some(ValueKind::Null)
+                Some(match types.null_case(expr.type_id) {
+                    Some(case_index) => ValueKind::UnitCase {
+                        variant_type: expr.type_id,
+                        case_index,
+                    },
+                    None => ValueKind::Null,
+                })
             }
             // String / bytes literals are no longer atomic pool values; they
             // lower to a `StructLiteral` over a packed `Array<u8>` repr in

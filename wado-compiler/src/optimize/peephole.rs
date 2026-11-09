@@ -85,7 +85,7 @@ pub(super) fn run_peephole(
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let if_chain_rule = IfChainToMatchRule::new(&type_table);
     let tuple_projection_rule = TupleProjectionRule;
-    let known_case_rule = KnownCaseRule { types: &type_table };
+    let known_case_rule = KnownCaseRule;
     // Post-inline only: the closure-bearing field read it resolves through is
     // what `inline` exposes when an iterator adaptor's `next` is copied in.
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
@@ -142,8 +142,7 @@ pub(super) fn run_peephole(
         // One rule, two entry points: `apply_block` fuses the value-discarding
         // if-let shape, `apply_expr` threads the value-producing `match LB`
         // (`?`) shape. Both only exist post-inline.
-        let labeled_block_fusion_rule =
-            (!pre_inline).then_some(LabeledBlockFusionRule { types: type_table });
+        let labeled_block_fusion_rule = (!pre_inline).then_some(LabeledBlockFusionRule);
         // Scalarizes the `[tag, slots…]` temp fusion leaves behind — the
         // value-producing `let x = f()?` consumer it cannot relocate. Ordered
         // after fusion, which produces the better code where it applies and

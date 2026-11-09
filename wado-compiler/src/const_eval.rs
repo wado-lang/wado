@@ -366,6 +366,20 @@ impl Value {
     }
 }
 
+/// Whether `value` is what a move leaves in the place it empties, as
+/// `is_moved` reads it: `null`, or the `None` of an `Option` place.
+pub(crate) fn is_moved_marker(value: &Value, types: &TypeTable) -> bool {
+    match value {
+        Value::Null => true,
+        Value::Variant {
+            type_id,
+            case_index,
+            payload: None,
+        } => types.null_case(*type_id) == Some(*case_index),
+        _ => false,
+    }
+}
+
 /// Evaluate a binary op on two compile-time values.
 pub(crate) fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
     match (left, right) {

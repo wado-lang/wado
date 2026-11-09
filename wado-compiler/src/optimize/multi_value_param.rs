@@ -304,6 +304,7 @@ impl<'a> ParamScope<'_, 'a> {
                 | ValueKind::Char(_)
                 | ValueKind::Null
                 | ValueKind::Unit
+                | ValueKind::UnitCase { .. }
                 | ValueKind::Const(..) => false,
             };
             ControlFlow::Continue(descend)

@@ -150,11 +150,6 @@ struct Layout {
     case_names: Vec<String>,
     /// Payload type per case, for typing a pattern binding.
     case_payloads: Vec<TypeId>,
-    /// The case a promoted `ValueKind::Null` denotes: `Option::None`, and only
-    /// for an `Option` instance. `wir_build` reads a promoted `Null` the same
-    /// way (`translate.rs`, `ValueKind::Null`), so this is the same decision,
-    /// made earlier.
-    null_case: Option<u32>,
     /// For the `Some` a wrapped slot carries and the `None` a pad mints.
     option: OptionCases,
 }
@@ -1025,7 +1020,6 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
 
     let type_table = project.type_table.borrow();
     let option = OptionCases::of(&type_table);
-    let null_case = type_table.null_case(variant_type);
 
     Some(Layout {
         tuple_type,
@@ -1034,7 +1028,6 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         case_slots,
         case_names,
         case_payloads,
-        null_case,
         option,
     })
 }
@@ -1261,7 +1254,7 @@ impl Returns<'_> {
     fn value_scalarizable(&self, op: Operand) -> bool {
         let (body, cand) = (self.body, self.cand);
         let Some(expr) = op.as_expr() else {
-            return null_return_case(body, op, cand).is_some();
+            return promoted_case(body, op).is_some();
         };
         if self.type_table.is_never(body.exprs[expr].type_id) {
             return true;
@@ -1309,13 +1302,11 @@ impl Returns<'_> {
     }
 }
 
-/// The case index a `return null` in this candidate produces. `null` is
-/// Wado's `Option::None` literal, and it reaches NIR as a promoted pure value
-/// with no `ExprId` — the return type is what pins which variant it means.
-fn null_return_case(body: &Body, op: Operand, cand: &Candidate) -> Option<u32> {
+/// The case a promoted payload-less case returns, such as `return null`: it
+/// has no `ExprId` to rewrite in place.
+fn promoted_case(body: &Body, op: Operand) -> Option<u32> {
     op.as_value()?;
-    body.built_case(op, cand.layout.null_case)
-        .map(|(case, _)| case)
+    body.built_case(op).map(|(case, _)| case)
 }
 
 /// A `let t = VariantConstruct(…)` whose only mention is the `return t` asking
@@ -1785,7 +1776,7 @@ impl ReturnRewrite<'_> {
     fn value(&mut self, body: &mut Body, op: Operand) -> Option<Operand> {
         let (cand, span) = (self.cand, self.span);
         let Some(expr) = op.as_expr() else {
-            return null_tuple(body, op, cand, span);
+            return promoted_case_tuple(body, op, cand, span);
         };
         if self.type_table.is_never(body.exprs[expr].type_id) {
             return None;
@@ -1870,10 +1861,15 @@ fn rewrite_construct(body: &mut Body, construct: ExprId, cand: &Candidate, span:
     body.exprs[construct].type_id = cand.layout.tuple_type;
 }
 
-/// The tuple of the case a promoted `null` denotes, as a node of its own: a
-/// value has no `ExprId` to overwrite. `None` where `op` is no `null`.
-fn null_tuple(body: &mut Body, op: Operand, cand: &Candidate, span: Span) -> Option<Operand> {
-    let case = null_return_case(body, op, cand)?;
+/// The tuple of the case a promoted payload-less case denotes, as a node of its
+/// own: a value has no `ExprId` to overwrite. `None` where `op` is no case.
+fn promoted_case_tuple(
+    body: &mut Body,
+    op: Operand,
+    cand: &Candidate,
+    span: Span,
+) -> Option<Operand> {
+    let case = promoted_case(body, op)?;
     let tuple = build_result_tuple(body, cand, case, None, span);
     Some(Operand::Expr(body.exprs.push(ExprNode {
         kind: tuple,
@@ -2176,10 +2172,10 @@ fn retain_rewritable_locals(
                 if let StmtKind::Let {
                     local_index, value, ..
                 } = &body.stmts[s].kind
-                    && let Some(cand) = candidates.get(local_index)
+                    && candidates.contains_key(local_index)
                 {
                     defined.insert(*local_index);
-                    if !builds_case(body, *value, cand) {
+                    if body.built_case(*value).is_none() {
                         refused.insert(*local_index);
                     }
                 }
@@ -2198,7 +2194,7 @@ fn retain_rewritable_locals(
                 ExprKind::Assign { target, value } => {
                     if let Some(local) = of(Operand::Expr(*target)) {
                         sanctioned.insert(*target);
-                        if !builds_case(body, *value, &candidates[&local]) {
+                        if body.built_case(*value).is_none() {
                             refused.insert(local);
                         }
                     }
@@ -2249,12 +2245,6 @@ fn retain_rewritable_locals(
     candidates.retain(|local, _| defined.contains(local) && !refused.contains(local));
 }
 
-/// A case construction of the candidate's variant, or the `null` that spells
-/// `Option::None`.
-fn builds_case(body: &Body, value: Operand, cand: &Candidate) -> bool {
-    body.built_case(value, cand.layout.null_case).is_some()
-}
-
 /// Turn every write to a candidate into the case's tuple.
 fn rewrite_variant_local_defs(body: &mut Body, candidates: &IndexMap<u32, Candidate>, span: Span) {
     let mut lets: Vec<(StmtId, u32)> = Vec::new();
@@ -2303,7 +2293,7 @@ fn case_tuple(body: &mut Body, value: Operand, cand: &Candidate, span: Span) -> 
             rewrite_construct(body, construct, cand, span);
             value
         }
-        None => null_tuple(body, value, cand, span).expect("validated as a case"),
+        None => promoted_case_tuple(body, value, cand, span).expect("validated as a case"),
     }
 }
 

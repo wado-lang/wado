@@ -43,6 +43,14 @@ pub(crate) fn value_kind_to_const(kind: &ValueKind, prim: Option<PrimitiveType>)
         ValueKind::Const(key, _) => key.value().clone(),
         ValueKind::Null => Value::Null,
         ValueKind::Unit => Value::Unit,
+        ValueKind::UnitCase {
+            variant_type,
+            case_index,
+        } => Value::Variant {
+            type_id: *variant_type,
+            case_index: *case_index,
+            payload: None,
+        },
         ValueKind::Opaque(_)
         | ValueKind::Binary { .. }
         | ValueKind::Unary { .. }
@@ -309,8 +317,16 @@ pub enum ValueKind {
     Float(u64, TypeId),
     Bool(bool),
     Char(char),
+    /// A bare reference placeholder. It builds no variant case: `Option`'s
+    /// `None`, `null` in source, is a [`Self::UnitCase`].
     Null,
     Unit,
+    /// A payload-less case of `variant_type`. The type is part of the
+    /// hash-cons key, so the case a value builds is read off the value alone.
+    UnitCase {
+        variant_type: TypeId,
+        case_index: u32,
+    },
     /// A constant the scalar cases above cannot name: a `String`, a `List`, a
     /// struct, a variant.
     ///
@@ -390,6 +406,7 @@ impl ValueKind {
             | Self::Char(_)
             | Self::Null
             | Self::Unit
+            | Self::UnitCase { .. }
             | Self::Const(..) => true,
             Self::Opaque(_)
             | Self::Binary { .. }
@@ -402,9 +419,9 @@ impl ValueKind {
     }
 
     /// Whether this constant may be frozen into an operand slot: it lowers to a
-    /// `const` instruction, so a rule may duplicate it at a use site. A
-    /// [`Self::Const`] aggregate may not — materialising one is an allocation
-    /// `const_object_globalization` places.
+    /// `const` instruction, or a payload-less case's tag alone, so a rule may
+    /// duplicate it at a use site. A [`Self::Const`] aggregate may not —
+    /// materialising one is an allocation `const_object_globalization` places.
     #[must_use]
     pub fn is_operand_constant(&self) -> bool {
         match self {
@@ -413,7 +430,8 @@ impl ValueKind {
             | Self::Bool(_)
             | Self::Char(_)
             | Self::Null
-            | Self::Unit => true,
+            | Self::Unit
+            | Self::UnitCase { .. } => true,
             Self::Const(..)
             | Self::Opaque(_)
             | Self::Binary { .. }
@@ -435,6 +453,7 @@ impl ValueKind {
             | Self::Char(_)
             | Self::Null
             | Self::Unit
+            | Self::UnitCase { .. }
             | Self::Const(..)
             | Self::Opaque(_)
             | Self::Binary { .. }
@@ -455,6 +474,7 @@ impl ValueKind {
             | Self::Char(_)
             | Self::Null
             | Self::Unit
+            | Self::UnitCase { .. }
             | Self::Const(..)
             | Self::Opaque(_)
             | Self::Binary { .. }
@@ -475,6 +495,7 @@ impl ValueKind {
             | Self::Bool(_)
             | Self::Null
             | Self::Unit
+            | Self::UnitCase { .. }
             | Self::Const(..)
             | Self::Opaque(_)
             | Self::Binary { .. }
@@ -592,7 +613,10 @@ impl ValuePool {
             | ValueKind::Const(_, t)
             | ValueKind::Binary { ty: t, .. }
             | ValueKind::Unary { ty: t, .. }
-            | ValueKind::Cast { target: t, .. } => Some(*t),
+            | ValueKind::Cast { target: t, .. }
+            | ValueKind::UnitCase {
+                variant_type: t, ..
+            } => Some(*t),
             ValueKind::Bool(_)
             | ValueKind::Char(_)
             | ValueKind::Null
@@ -660,6 +684,14 @@ impl ValuePool {
             Value::Char(c) => ValueKind::Char(*c),
             Value::Null => ValueKind::Null,
             Value::Unit => ValueKind::Unit,
+            Value::Variant {
+                case_index,
+                payload: None,
+                ..
+            } => ValueKind::UnitCase {
+                variant_type: ty,
+                case_index: *case_index,
+            },
             Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
                 ValueKind::Const(ConstKey::new(value.clone()), ty)
             }
@@ -758,6 +790,7 @@ impl ValuePool {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..) => 0,
         }
     }
@@ -838,6 +871,7 @@ impl ValuePool {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..) => {}
         }
     }
@@ -1035,6 +1069,7 @@ impl ValuePool {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..)
             | ValueKind::Opaque(_) => false,
         }

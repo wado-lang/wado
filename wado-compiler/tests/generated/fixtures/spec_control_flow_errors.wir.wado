@@ -1049,9 +1049,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(290)
 
-type "functype//core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "wasi:filesystem/types.wado//ErrorCode", ref "core:prelude/format.wado//Formatter");  // TypeId(291)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]" = fn(ref null "Array<core:prelude/types.wado/Subtask>", i32, i32) -> i32;  // TypeId(291)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]" = fn(ref null "Array<core:prelude/types.wado/Subtask>", i32, i32) -> i32;  // TypeId(292)
+type "functype//core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "wasi:filesystem/types.wado//ErrorCode", ref "core:prelude/format.wado//Formatter");  // TypeId(292)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0" = fn(ref Array<u8>, i32) -> i32;  // TypeId(293)
 
@@ -7131,6 +7131,37 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return digit_count;
 }
 
+fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]"($mv$self$repr, $mv$self$used, handle) {
+    let at: i32;
+    let ref_val: ref null "core:prelude//$Resource";
+    let $sroa_$iter_0_index_18: i32;
+    at = 0;
+    $sroa_$iter_0_index_18 = 0;
+    b1055: block {
+        l1056: loop {
+            break_if b1055 $sroa_$iter_0_index_18 >= $mv$self$used;
+            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($mv$self$repr, $sroa_$iter_0_index_18);
+            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
+            let $mv$$vr_7$0: i32;
+            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
+            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
+            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
+            if (if $mv$$vr_7$0 == 0 -> bool {
+                $mv$$vr_7$1.handle == handle;
+            } else {
+                0;
+            }) {
+                return at;
+            }
+            at = at + 1;
+            continue l1056;
+        };
+    };
+    cold_path;
+    "core:rt/unreachable"();
+    unreachable;
+}
+
 fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let self_46: ref "core:prelude/string.wado//String";
     let new_used_58: i32;
@@ -8019,9 +8050,9 @@ fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/t
                 new_used_58 = 0;
                 start_59 = f.indent;
                 $licm_repr_2419 = local.tee self_46(f.buf).repr;
-                b1208: block {
-                    l1209: loop {
-                        break_if b1208 new_used_58 >= start_59;
+                b1212: block {
+                    l1213: loop {
+                        break_if b1212 new_used_58 >= start_59;
                         if @unlikely(local.tee new_used_2151(self_46.used + 2) > builtin::array_len($licm_repr_2419)) {
                             cold_path;
                             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_46, new_used_2151);
@@ -8031,7 +8062,7 @@ fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/t
                         self_46.used = new_used_2151;
                         builtin::array_copy<u8>($licm_repr_2419, start_2152, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
                         new_used_58 = new_used_58 + 1;
-                        continue l1209;
+                        continue l1213;
                     };
                 };
                 "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(payload, f);
@@ -8059,9 +8090,9 @@ fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/t
                 new_used_58 = 0;
                 start_59 = f.indent;
                 $licm_repr_2419 = local.tee self_46(f.buf).repr;
-                b1214: block {
-                    l1215: loop {
-                        break_if b1214 new_used_58 >= start_59;
+                b1218: block {
+                    l1219: loop {
+                        break_if b1218 new_used_58 >= start_59;
                         if @unlikely(local.tee new_used_2151(self_46.used + 2) > builtin::array_len($licm_repr_2419)) {
                             cold_path;
                             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_46, new_used_2151);
@@ -8071,7 +8102,7 @@ fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/t
                         self_46.used = new_used_2151;
                         builtin::array_copy<u8>($licm_repr_2419, start_2152, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
                         new_used_58 = new_used_58 + 1;
-                        continue l1215;
+                        continue l1219;
                     };
                 };
                 if @unlikely(local.tee new_used_58(local.tee self_46(f.buf).used + 1) > builtin::array_len(self_46.repr)) {
@@ -8100,37 +8131,6 @@ fn "core:prelude/traits.wado/wasi:filesystem/types.wado/ErrorCode^core:prelude/t
             builtin::array_copy<u8>(self_46.repr, start_59, global:core:prelude/traits.wado::$const_obj_4, 0, 1);
         };
     }
-}
-
-fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::member_at$sroa[self.members]"($mv$self$repr, $mv$self$used, handle) {
-    let at: i32;
-    let ref_val: ref null "core:prelude//$Resource";
-    let $sroa_$iter_0_index_18: i32;
-    at = 0;
-    $sroa_$iter_0_index_18 = 0;
-    b1220: block {
-        l1221: loop {
-            break_if b1220 $sroa_$iter_0_index_18 >= $mv$self$used;
-            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($mv$self$repr, $sroa_$iter_0_index_18);
-            $sroa_$iter_0_index_18 = $sroa_$iter_0_index_18 + 1;
-            let $mv$$vr_7$0: i32;
-            let $mv$$vr_7$1: ref null "core:prelude/types.wado//ResourceId";
-            let $mv$$vr_7$2: ref null "core:prelude/types.wado//ReadyEvent";
-            multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1, $mv$$vr_7$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(ref_val);
-            if (if $mv$$vr_7$0 == 0 -> bool {
-                $mv$$vr_7$1.handle == handle;
-            } else {
-                0;
-            }) {
-                return at;
-            }
-            at = at + 1;
-            continue l1221;
-        };
-    };
-    cold_path;
-    "core:rt/unreachable"();
-    unreachable;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$spec0"($mv$bytes$repr, $mv$bytes$end) {

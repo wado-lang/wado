@@ -189,6 +189,7 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
         | ValueKind::Char(_)
         | ValueKind::Null
         | ValueKind::Unit
+        | ValueKind::UnitCase { .. }
         | ValueKind::Const(..)
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }

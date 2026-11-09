@@ -289,6 +289,7 @@ impl<'a> CostWalk<'a> {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Select { .. }
             | ValueKind::LoopPhi { .. }
             | ValueKind::FieldAccess { .. } => false,
@@ -466,6 +467,7 @@ impl<'a> CostWalk<'a> {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Opaque(_) => 0,
             // An aggregate constant materialises — as a `global.get` once
             // `const_object_globalization` has placed it, as the allocation

@@ -1417,6 +1417,20 @@ impl FunctionTranslator<'_, '_> {
             .type_id
     }
 
+    /// A payload-less case of `variant_type`, as a promoted `UnitCase` names it.
+    pub(super) fn translate_unit_case(
+        &mut self,
+        variant_type: TypeId,
+        case_index: u32,
+    ) -> WirInstr {
+        let case_name = self
+            .variant_case_at(variant_type, case_index)
+            .1
+            .name
+            .clone();
+        self.translate_variant_construct(variant_type, case_index, &case_name, None, variant_type)
+    }
+
     /// Translate variant construction: `Shape::Circle(5.0)`
     pub(super) fn translate_variant_construct(
         &mut self,
