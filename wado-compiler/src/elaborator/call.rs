@@ -972,13 +972,9 @@ impl TypeSystem {
             {
                 return self.callee_ident_for_type_param("Self", suffix, self_type_id);
             }
-            let self_name = self.type_table.borrow().name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
             // *provides* the trait whose default body this is.
-            return CalleeIdentKind::Rewritten {
-                spelled: format!("{self_name}::{suffix}"),
-                receiver: self_type_id,
-            };
+            return self.rewritten_callee(self_type_id, suffix);
         }
 
         if let Some(&BinderInScope { type_id, .. }) =
@@ -1014,12 +1010,22 @@ impl TypeSystem {
                 type_param_type_id: type_id,
             };
         }
-        // Consumed as a declaration name: the static resolution keys on what an
-        // `impl` header writes, which carries no module.
-        let concrete_name = self.type_table.borrow().fq_type_name(type_id).to_display();
+        self.rewritten_callee(type_id, suffix)
+    }
+
+    /// `receiver::suffix()`, spelled as a declaration name: the static
+    /// resolution keys on what an `impl` header writes, which carries no module
+    /// and no arguments. The arguments travel in `receiver`, which a
+    /// `W<T>::b` spelling would leave no index answering.
+    fn rewritten_callee<'a>(&self, receiver: TypeId, suffix: &str) -> CalleeIdentKind<'a> {
+        let table = self.type_table.borrow();
+        let head = match table.nominal_def(table.peel_refs(receiver)) {
+            Some(def) => self.resolutions.defs().name(def).to_string(),
+            None => table.fq_type_name(receiver).to_display(),
+        };
         CalleeIdentKind::Rewritten {
-            spelled: format!("{concrete_name}::{suffix}"),
-            receiver: type_id,
+            spelled: format!("{head}::{suffix}"),
+            receiver,
         }
     }
 }

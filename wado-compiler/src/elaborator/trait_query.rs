@@ -630,8 +630,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner: trait_decl,
             index,
         };
+        let self_slot = TypeParamId::trait_self(trait_decl);
         let mut slots = TypeArgMap::default();
-        slots.insert(slot(0), target);
+        slots.insert(self_slot, target);
         let defaults = header
             .type_params
             .iter()
@@ -660,7 +661,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|(name, &answer)| ProjectionAnswer::at_any(trait_decl, name.clone(), answer))
             .collect();
-        let projections = SlotProjections::from_iter([(slot(0), answers)]);
+        let projections = SlotProjections::from_iter([(self_slot, answers)]);
 
         for method in &impl_block.methods {
             let Some(declared) = trait_sig.method(&method.name) else {
