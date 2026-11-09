@@ -839,16 +839,19 @@ fn "mut_ref_write_back_variant_field.wado/$test_2_an_indirect_call_writes_back_t
 }
 
 fn "mut_ref_write_back_variant_field.wado/$test_3_a_generic_variant_field_writes_back_too"() {
-    let $load_0: ref null "core:prelude/string.wado//String";
+    let $load_1: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
     let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>";
+    let $write_back_before_4: ref null "core:prelude/string.wado//String";
     let a_end: i32;
     let i: i32;
     let $sroa_c_slot_18: ref null "core:prelude/string.wado//String";
     let $licm_repr_19: ref Array<u8>;
-    "mut_ref_write_back_variant_field.wado/refill"(local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>" { value: local.tee $sroa_c_slot_18(ref.null none) }));
-    if ref.eq(local.tee $load_0($write_back_3.value), $sroa_c_slot_18) == 0 {
-        $sroa_c_slot_18 = $load_0;
+    $sroa_c_slot_18 = ref.null none;
+    $write_back_before_4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>" { value: ref.null none }).value;
+    "mut_ref_write_back_variant_field.wado/refill"($write_back_3);
+    if ref.eq(local.tee $load_1($write_back_3.value), $write_back_before_4) == 0 {
+        $sroa_c_slot_18 = $load_1;
     }
     if @unlikely((if ref.is_null($sroa_c_slot_18) == 0 -> bool {
         t = ref.as_non_null($sroa_c_slot_18);

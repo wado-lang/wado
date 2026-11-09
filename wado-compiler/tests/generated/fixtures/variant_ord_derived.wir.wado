@@ -651,7 +651,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
-global global:variant_ord_derived.wado::$const_obj_1: ref "variant_ord_derived.wado//Shape" = struct.new "variant_ord_derived.wado//Shape" { 0 };
 global global:variant_ord_derived.wado::$const_obj_3: ref "variant_ord_derived.wado//Shape" = struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 3 };
 global global:core:prelude/traits.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 120), used: 3 };
 global global:core:prelude/traits.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
@@ -680,16 +679,17 @@ global global:core:prelude/traits.wado::$const_obj_70: ref "core:prelude/string.
 global global:core:prelude/traits.wado::$const_obj_73: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 114, 114), used: 3 };
 global global:core:prelude/traits.wado::$const_obj_75: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 115, 117, 108, 116), used: 6 };
 global global:core:prelude/traits.wado::$const_obj_76: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 107), used: 2 };
+global global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0: ref "variant_ord_derived.wado//Shape" = struct.new "variant_ord_derived.wado//Shape" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "variant_ord_derived.wado/$test_0_case_order_decides_across_cases"() {
     let $v1_0: ref "variant_ord_derived.wado//Shape";
     let $v1_3: ref "variant_ord_derived.wado//Shape";
     $v1_0 = struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 0 };
-    if @unlikely(("variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(global:variant_ord_derived.wado::$const_obj_1, $v1_0) == 0) == 0) {
+    if @unlikely(("variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0, $v1_0) == 0) == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_ord_derived.wado/$tmpl$73b86b42ef83a49a,[variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape]>"(struct.new "variant_ord_derived.wado//$tmpl$73b86b42ef83a49a" { h0: global:variant_ord_derived.wado::$const_obj_1, h1: $v1_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_case_order_decides_across_cases at variant_ord_derived.wado:23
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_ord_derived.wado/$tmpl$73b86b42ef83a49a,[variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape]>"(struct.new "variant_ord_derived.wado//$tmpl$73b86b42ef83a49a" { h0: global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0, h1: $v1_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_case_order_decides_across_cases at variant_ord_derived.wado:23
 condition: Shape::Dot < Shape::Line(0)
 Shape::Dot: "), used: 142 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_case_order_decides_across_cases at variant_ord_derived.wado:23
 condition: Shape::Dot < Shape::Line(0)
@@ -724,9 +724,9 @@ Shape::Box([0, 0]): "), used: 21 }, r1: struct.new "core:prelude/string.wado//St
 Shape::Box([0, 0]): "), used: 21 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(("variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(local.tee $v1_0(struct.new "variant_ord_derived.wado//Shape::Box" { discriminant: 3, payload_0: struct.new "tuple//[i32, i32]" { 0: 0, 1: 0 } }), global:variant_ord_derived.wado::$const_obj_1) == 2) == 0) {
+    if @unlikely(("variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(local.tee $v1_0(struct.new "variant_ord_derived.wado//Shape::Box" { discriminant: 3, payload_0: struct.new "tuple//[i32, i32]" { 0: 0, 1: 0 } }), global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0) == 2) == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_ord_derived.wado/$tmpl$73b86b42ef83a49a,[variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape]>"(struct.new "variant_ord_derived.wado//$tmpl$73b86b42ef83a49a" { h0: $v1_0, h1: global:variant_ord_derived.wado::$const_obj_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_case_order_decides_across_cases at variant_ord_derived.wado:26
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_ord_derived.wado/$tmpl$73b86b42ef83a49a,[variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape]>"(struct.new "variant_ord_derived.wado//$tmpl$73b86b42ef83a49a" { h0: $v1_0, h1: global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_case_order_decides_across_cases at variant_ord_derived.wado:26
 condition: Shape::Box([0, 0]) > Shape::Dot
 Shape::Box([0, 0]): "), used: 154 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_case_order_decides_across_cases at variant_ord_derived.wado:26
 condition: Shape::Box([0, 0]) > Shape::Dot
@@ -780,7 +780,7 @@ Shape::Box([2, 0]): "), used: 21 }, r1: struct.new "core:prelude/string.wado//St
 Shape::Box([2, 0]): "), used: 21 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(("variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(global:variant_ord_derived.wado::$const_obj_1, global:variant_ord_derived.wado::$const_obj_1) == 1) == 0) {
+    if @unlikely(("variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0, global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0) == 1) == 0) {
         cold_path;
         "variant_ord_derived.wado/$test_1_payloads_decide_within_a_case$cold1"();
         unreachable;
@@ -794,9 +794,9 @@ Shape::Box([2, 0]): "), used: 21 }, s2: struct.new "core:prelude/string.wado//St
 
 fn "variant_ord_derived.wado/$test_2_a_bound_and_sort_reach_it"() {
     let shapes: ref "core:prelude/list.wado//List<variant_ord_derived.wado/Shape>";
+    let $v3: ref "variant_ord_derived.wado//Shape";
     let $v4: ref "variant_ord_derived.wado//Shape";
     let a_7: ref "variant_ord_derived.wado//Shape";
-    let b_8: ref "variant_ord_derived.wado//Shape";
     let elements_14: ref "Array<variant_ord_derived.wado/Shape>";
     let $vc_payload_2_30: ref "core:prelude/string.wado//String";
     let a_end_36: i32;
@@ -811,22 +811,20 @@ fn "variant_ord_derived.wado/$test_2_a_bound_and_sort_reach_it"() {
     let $sroa_$sroa_$zip_0_1_14_0_19: i32;
     let $sroa_$sroa_$zip_0_1_14_1_20: i32;
     let $av_95: i32;
-    a_7 = struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 5 };
-    b_8 = global:variant_ord_derived.wado::$const_obj_1;
-    if @unlikely(((if "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(a_7, b_8) == 0 -> ref "variant_ord_derived.wado//Shape" {
+    if @unlikely(((if "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(local.tee a_7(struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 5 }), global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0) == 0 -> ref "variant_ord_derived.wado//Shape" {
         a_7;
     } else {
-        b_8;
+        global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0;
     }).discriminant == 0) == 0) {
         cold_path;
         "variant_ord_derived.wado/$test_2_a_bound_and_sort_reach_it$cold0"();
         unreachable;
     }
-    "variant_ord_derived.wado/core:prelude/list.wado/List<variant_ord_derived.wado/Shape>::sort_by$$Closure_1$dae[cmp]"(local.tee shapes(struct.new "core:prelude/list.wado//List<variant_ord_derived.wado/Shape>" { repr: array.new_fixed<ref "variant_ord_derived.wado//Shape">(struct.new "variant_ord_derived.wado//Shape::Label" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 2 }, global:variant_ord_derived.wado::$const_obj_1, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 1 }), used: 4 }));
+    "variant_ord_derived.wado/core:prelude/list.wado/List<variant_ord_derived.wado/Shape>::sort_by$$Closure_1$dae[cmp]"(local.tee shapes(struct.new "core:prelude/list.wado//List<variant_ord_derived.wado/Shape>" { repr: array.new_fixed<ref "variant_ord_derived.wado//Shape">(struct.new "variant_ord_derived.wado//Shape::Label" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 2 }, global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 1 }), used: 4 }));
     a_7 = struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 1 };
-    b_8 = struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 2 };
+    $v3 = struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: 2 };
     $v4 = struct.new "variant_ord_derived.wado//Shape::Label" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } };
-    $av_95 = builtin::array_len(local.tee elements_14(array.new_fixed<ref "variant_ord_derived.wado//Shape">(global:variant_ord_derived.wado::$const_obj_1, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: ref.cast "variant_ord_derived.wado//Shape::Line"(a_7).payload_0 }, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: ref.cast "variant_ord_derived.wado//Shape::Line"(b_8).payload_0 }, $av_95 = local.tee $vc_payload_2_30(ref.cast "variant_ord_derived.wado//Shape::Label"($v4).payload_0).used; struct.new "variant_ord_derived.wado//Shape::Label" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_2_30.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_95)), 0, $array_clone_src_1, 0, $av_95); $array_clone_dst_2, used: $av_95 } })));
+    $av_95 = builtin::array_len(local.tee elements_14(array.new_fixed<ref "variant_ord_derived.wado//Shape">(global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: ref.cast "variant_ord_derived.wado//Shape::Line"(a_7).payload_0 }, struct.new "variant_ord_derived.wado//Shape::Line" { discriminant: 1, payload_0: ref.cast "variant_ord_derived.wado//Shape::Line"($v3).payload_0 }, $av_95 = local.tee $vc_payload_2_30(ref.cast "variant_ord_derived.wado//Shape::Label"($v4).payload_0).used; struct.new "variant_ord_derived.wado//Shape::Label" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_2_30.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_95)), 0, $array_clone_src_1, 0, $av_95); $array_clone_dst_2, used: $av_95 } })));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_variant_ord_derived_wado_Shape__14: block -> bool {
         if local.tee a_end_36(shapes.used) != $av_95 {
             break $inline_core_prelude_array_wado_seq_eq_variant_ord_derived_wado_Shape__14: 0;
@@ -935,7 +933,7 @@ fn "variant_ord_derived.wado/$test_2_a_bound_and_sort_reach_it"() {
         break $inline_core_prelude_array_wado_seq_eq_variant_ord_derived_wado_Shape__14: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $vc_payload_2_30("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_ord_derived.wado/$tmpl$79a8bae14de80702,[core:prelude/list.wado/List<variant_ord_derived.wado/Shape>,variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape]>"(struct.new "variant_ord_derived.wado//$tmpl$79a8bae14de80702" { h0: "variant_ord_derived.wado/$value_copy$core:prelude/list.wado/List<variant_ord_derived.wado/Shape>"(shapes), h1: global:variant_ord_derived.wado::$const_obj_1, h2: a_7, h3: b_8, h4: $v4, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_bound_and_sort_reach_it at variant_ord_derived.wado:41
+        "core:rt/panic"(local.tee $vc_payload_2_30("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_ord_derived.wado/$tmpl$79a8bae14de80702,[core:prelude/list.wado/List<variant_ord_derived.wado/Shape>,variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape,variant_ord_derived.wado/Shape]>"(struct.new "variant_ord_derived.wado//$tmpl$79a8bae14de80702" { h0: "variant_ord_derived.wado/$value_copy$core:prelude/list.wado/List<variant_ord_derived.wado/Shape>"(shapes), h1: global:core:builtin::$unit_case$variant_ord_derived.wado//Shape$0, h2: a_7, h3: $v3, h4: $v4, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_bound_and_sort_reach_it at variant_ord_derived.wado:41
 condition: shapes == [ Shape::Dot, Shape::Line(1), Shape::Line(2), Shape::Label(\"a\"), ]
 shapes: "), used: 181 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_bound_and_sort_reach_it at variant_ord_derived.wado:41
 condition: shapes == [ Shape::Dot, Shape::Line(1), Shape::Line(2), Shape::Label(\"a\"), ]

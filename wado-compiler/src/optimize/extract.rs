@@ -362,9 +362,8 @@ pub(super) fn freeze_pure_arith(
                 .as_ref()
                 .map(|e| e.body_call_writes(body))
                 .unwrap_or_default();
-            let mut engine = Engine::new(body, buffers, locals, params);
+            let mut engine = Engine::new(body, buffers, locals, params, type_table);
             engine.set_alias_sets(alias);
-            engine.set_value_graph_type_table(type_table);
             engine.seed_params();
             engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
             engine.set_call_writes(call_writes);
@@ -858,13 +857,11 @@ pub(super) fn extract_const(e: &mut Engine, rep: ValueId, at: ExprId) -> Option<
     }
     let vk = e.value_kind(rep).clone();
     let type_id = e.body.exprs[at].type_id;
-    let prim = e
-        .value_graph_type_table()
-        .and_then(|tt| prim_of(type_id, tt))
+    let tt = e.type_table();
+    let prim = prim_of(type_id, tt)
         // An enum case is its discriminant, which lowers to `i32`; the type
         // itself is not a primitive, so `prim_of` cannot name its width.
         .or_else(|| {
-            let tt = e.value_graph_type_table()?;
             matches!(tt.get(type_id), ResolvedType::Enum { .. }).then_some(PrimitiveType::I32)
         });
     value_kind_to_const(&vk, prim)
@@ -900,7 +897,7 @@ mod tests {
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::Tracked;
     use crate::nir_arena::{BlockId, BlockNode, Body, ExprNode, StmtId, StmtKind, StmtNode};
-    use crate::nir_engine::{EngineBuffers, Rule};
+    use crate::nir_engine::{EngineBuffers, Rule, TEST_TYPES};
     use crate::tir;
     use crate::token::Span;
     use crate::type_table::TypeTable;
@@ -955,7 +952,7 @@ mod tests {
 
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let rule = ExtractLiteralRule;
         let rules: Vec<&dyn Rule> = vec![&rule];
         let changed = eng.run(&rules);
@@ -1000,7 +997,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         // Uses at positions 0 and 2 -> insert before position 0.
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
         assert_eq!(b, eng.body.root());
@@ -1037,7 +1034,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[tu, eu]).unwrap();
         // Common dominator is the root block, at the `if` statement (position 1),
         // not inside either branch.
@@ -1073,7 +1070,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[tu, outer_u]).unwrap();
         assert_eq!(b, eng.body.root());
         assert_eq!(s, outer_s);
@@ -1095,7 +1092,7 @@ mod tests {
         body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         assert_eq!(materialise_point(&eng, &[in_u, out_u]), None);
     }
 
@@ -1115,7 +1112,7 @@ mod tests {
         body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
         assert_eq!(b, loop_body);
         assert_eq!(s, s0);
@@ -1150,7 +1147,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[bu2, bu0]).unwrap();
         assert_eq!(b, then_b);
         assert_eq!(s, b0);

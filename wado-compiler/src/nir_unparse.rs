@@ -513,21 +513,7 @@ impl<'a> NirUnparser<'a> {
 
     fn unparse_operand(&mut self, body: &Body, op: Operand) {
         match op {
-            Operand::Value(v) => {
-                // A pure constant renders as its literal; other graph values
-                // (opaques, derived nodes) render as `%id`.
-                if matches!(body.values.kind(v), ValueKind::Unit) {
-                    self.output.push_str("()");
-                } else if let Some(value) =
-                    Value::from_operand(body, op, self.type_table).filter(Value::is_scalar)
-                {
-                    // Scalars only: an aggregate constant has no NIR literal
-                    // form, and `format_repr` panics rather than invent one.
-                    self.output.push_str(&value.format_repr());
-                } else {
-                    self.unparse_value(body, v);
-                }
-            }
+            Operand::Value(v) => self.unparse_value(body, v),
             Operand::Expr(e) => self.unparse_expr(body, e),
         }
     }
@@ -582,7 +568,10 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str("::");
                 self.output.push_str(case_name);
             }
+            ValueKind::Unit => self.output.push_str("()"),
             _ => {
+                // A constant renders as its literal; an aggregate has none, and
+                // `format_repr` panics rather than invent one.
                 let op = Operand::Value(v);
                 match Value::from_operand(body, op, self.type_table).filter(Value::is_scalar) {
                     Some(value) => self.output.push_str(&value.format_repr()),

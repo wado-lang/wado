@@ -184,7 +184,7 @@ fn fold_function(
     visitor
         .interpreter
         .record_alias_classes(alias_classes(body, type_table).to_classes());
-    let mut engine = Engine::new(body, buffers, locals, params);
+    let mut engine = Engine::new(body, buffers, locals, params, type_table);
     let root = engine.body.root();
     visitor.visit_block(&mut engine, root)
 }

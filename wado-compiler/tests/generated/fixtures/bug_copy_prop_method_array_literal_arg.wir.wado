@@ -1708,7 +1708,6 @@ fn "bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_liter
     let $licm_arith_42: bool;
     let $sroa_$iter_0_index_58: i32;
     let $hfs_call_62: ref null "bug_copy_prop_method_array_literal_arg.wado//Token";
-    let $hfs_call_63: ref null "bug_copy_prop_method_array_literal_arg.wado//Err";
     self_20 = local.tee $load_0(self.tokens).used;
     if @unlikely(local.tee $load_2(self.pos) >=u self_20) {
         cold_path;
@@ -1737,9 +1736,8 @@ fn "bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_liter
                         unreachable;
                     }
                     $hfs_call_62 = struct.new "bug_copy_prop_method_array_literal_arg.wado//Token" { kind: builtin::array_get_value<ref "bug_copy_prop_method_array_literal_arg.wado//Token">($licm_repr_41, $load_2).kind };
-                    $hfs_call_63 = ref.null none;
                     self.pos = $load_2;
-                    return 0, $hfs_call_62, $hfs_call_63;
+                    return 0, $hfs_call_62, ref.null none;
                 }
                 if @unlikely(((0 <= $load_2) & ($load_2 < $licm_used_40)) == 0) {
                     cold_path;
@@ -1750,9 +1748,8 @@ fn "bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_liter
                 self_20 = builtin::array_get_value<ref "bug_copy_prop_method_array_literal_arg.wado//Token">($licm_repr_41, $load_2).kind;
                 $load_2 = $load_2 + 1;
                 $hfs_call_62 = struct.new "bug_copy_prop_method_array_literal_arg.wado//Token" { kind: self_20 };
-                $hfs_call_63 = ref.null none;
                 self.pos = $load_2;
-                return 0, $hfs_call_62, $hfs_call_63;
+                return 0, $hfs_call_62, ref.null none;
             }
             continue l174;
         };

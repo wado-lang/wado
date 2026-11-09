@@ -73,8 +73,8 @@ fn run_globals(
             buffers,
             &mut no_locals,
             &[],
+            type_table,
         );
-        engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(pure_builtin_callees);
         changed |= engine.run(&[rule]);
     }

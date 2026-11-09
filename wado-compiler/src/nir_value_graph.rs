@@ -16,6 +16,31 @@ use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 
+/// The kind that names `value` at `ty`: [`value_kind_to_const`]'s inverse. A
+/// scalar ([`Value::is_scalar`]) unboxes; anything else is a boxed
+/// [`ValueKind::Const`].
+pub(crate) fn constant_kind(value: &Value, ty: TypeId) -> ValueKind {
+    match value {
+        Value::Int { value, .. } => ValueKind::Int(*value, ty),
+        Value::Float { value, .. } => ValueKind::Float(value.to_bits(), ty),
+        Value::Bool(b) => ValueKind::Bool(*b),
+        Value::Char(c) => ValueKind::Char(*c),
+        Value::Null => ValueKind::Null,
+        Value::Unit => ValueKind::Unit,
+        Value::Variant {
+            type_id,
+            case_index,
+            payload: None,
+        } => ValueKind::UnitCase {
+            variant_type: *type_id,
+            case_index: *case_index,
+        },
+        Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
+            ValueKind::Const(ConstKey::new(value.clone()), ty)
+        }
+    }
+}
+
 /// The constant a [`ValueKind`] denotes, as niri's
 /// [`crate::const_eval::Value`] — the one projection between the two, which
 /// everything else delegates to.
@@ -677,26 +702,7 @@ impl ValuePool {
     /// chooses between an unboxed scalar kind and a boxed [`ValueKind::Const`],
     /// so `Int(7)` and `Const(Int 7)` never become two ids for one value.
     pub fn constant(&mut self, value: &Value, ty: TypeId) -> ValueId {
-        let kind = match value {
-            Value::Int { value, .. } => ValueKind::Int(*value, ty),
-            Value::Float { value, .. } => ValueKind::Float(value.to_bits(), ty),
-            Value::Bool(b) => ValueKind::Bool(*b),
-            Value::Char(c) => ValueKind::Char(*c),
-            Value::Null => ValueKind::Null,
-            Value::Unit => ValueKind::Unit,
-            Value::Variant {
-                case_index,
-                payload: None,
-                ..
-            } => ValueKind::UnitCase {
-                variant_type: ty,
-                case_index: *case_index,
-            },
-            Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
-                ValueKind::Const(ConstKey::new(value.clone()), ty)
-            }
-        };
-        self.intern(kind)
+        self.intern(constant_kind(value, ty))
     }
 
     /// Allocate a fresh `Opaque` value. Each call returns a `ValueId`
@@ -1146,7 +1152,7 @@ impl ValuePool {
         lhs: ValueId,
         rhs: ValueId,
         ty: TypeId,
-        type_table: Option<&TypeTable>,
+        type_table: &TypeTable,
     ) -> ValueId {
         // `false || x` and `true && x` are `x`, either way round: the constant
         // side decides nothing and the other side is kept, so no evaluation is
@@ -1180,13 +1186,13 @@ impl ValuePool {
         {
             return rhs;
         }
-        let folded = type_table
-            .filter(|_| pass_dump::decides("nir/value_pool/fold_const"))
-            .and_then(|tt| {
-                let l = self.const_of(lhs, tt)?;
-                let r = self.const_of(rhs, tt)?;
+        let folded = pass_dump::decides("nir/value_pool/fold_const")
+            .then(|| {
+                let l = self.const_of(lhs, type_table)?;
+                let r = self.const_of(rhs, type_table)?;
                 eval_binary(l, op, r)
-            });
+            })
+            .flatten();
         match folded {
             Some(v) => self.intern_const(v, ty),
             None => self.binary(op, lhs, rhs, ty),
@@ -1200,12 +1206,11 @@ impl ValuePool {
         op: NirUnaryOp,
         operand: ValueId,
         ty: TypeId,
-        type_table: Option<&TypeTable>,
+        type_table: &TypeTable,
     ) -> ValueId {
-        let folded = type_table.and_then(|tt| {
-            let v = self.const_of(operand, tt)?;
-            eval_unary(op, v)
-        });
+        let folded = self
+            .const_of(operand, type_table)
+            .and_then(|v| eval_unary(op, v));
         match folded {
             Some(v) => self.intern_const(v, ty),
             None => self.unary(op, operand, ty),
@@ -1218,12 +1223,11 @@ impl ValuePool {
         &mut self,
         operand: ValueId,
         target: TypeId,
-        type_table: Option<&TypeTable>,
+        type_table: &TypeTable,
     ) -> ValueId {
-        let folded = type_table.and_then(|tt| {
-            let v = self.const_of(operand, tt)?;
-            eval_cast(v, prim_of(target, tt)?)
-        });
+        let folded = self
+            .const_of(operand, type_table)
+            .and_then(|v| eval_cast(v, prim_of(target, type_table)?));
         match folded {
             Some(v) => self.intern_const(v, target),
             None => self.cast(operand, target),

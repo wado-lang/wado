@@ -215,10 +215,7 @@ pub(super) fn run_peephole(
             .into_iter()
             .filter_map(|(name, rule)| enabled.contains(&name).then_some(rule))
             .collect();
-        let mut engine = Engine::new(body, buffers, locals, params);
-        // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
-        // bodies; the extractor reads `prim` from the type table for literal repr.
-        engine.set_value_graph_type_table(type_table);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         let changed = engine.run(&rules);
         let copies = engine.copied_locals().to_vec();

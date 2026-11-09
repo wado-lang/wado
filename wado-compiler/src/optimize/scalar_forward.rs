@@ -28,7 +28,8 @@ use crate::nir_value_graph::ValueKind;
 /// value-parameter temps.
 pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
-    let rule = ScalarForwardRule::new(&type_table);
+    let type_table = &*type_table;
+    let rule = ScalarForwardRule::new(type_table);
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::ScalarForward, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
@@ -41,7 +42,7 @@ pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -
         let Some(body) = body else {
             return false;
         };
-        let mut engine = Engine::new(body, buffers, locals, params);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.run(&[&rule])
     })
 }

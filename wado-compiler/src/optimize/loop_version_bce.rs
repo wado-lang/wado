@@ -215,9 +215,8 @@ pub(super) fn version_loops(
             &first_param_types,
             &call_immutability,
         );
-        let mut engine = Engine::new(body, &mut buffers, locals, params);
+        let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(&type_table);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
@@ -1810,7 +1809,7 @@ struct Effects {
 /// raises it, so a statement that may trap is not replayable either.
 fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option<Effects> {
     let body = &engine.body;
-    let types = engine.value_graph_type_table();
+    let types = Some(engine.type_table());
     let mut eff = Effects {
         reads: Vec::new(),
         writes: Vec::new(),

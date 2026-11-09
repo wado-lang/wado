@@ -212,7 +212,7 @@ fn known_index(engine: &mut Engine, operand: Operand) -> Option<u32> {
 /// A fold reads the case out of the scrutinee and drops it, so nothing may
 /// observe it running.
 fn droppable(engine: &Engine, scrutinee: Operand) -> bool {
-    is_pure_nontrapping_operand_typed(engine.body, scrutinee, engine.value_graph_type_table())
+    is_pure_nontrapping_operand_typed(engine.body, scrutinee, Some(engine.type_table()))
 }
 
 /// Whether `pattern` refuses every value of case `case`. Only a case pattern
@@ -247,7 +247,7 @@ mod tests {
     use crate::nir::NirLocal;
     use crate::nir_arena::Tracked;
     use crate::nir_arena::{BlockNode, ExprNode, StmtId, StmtNode};
-    use crate::nir_engine::EngineBuffers;
+    use crate::nir_engine::{EngineBuffers, TEST_TYPES};
     use crate::nir_value_graph::ValueKind;
     use crate::token::Span;
     use crate::type_table::TypeTable;
@@ -324,7 +324,7 @@ mod tests {
         }]);
         let mut buffers = EngineBuffers::default();
         let rule = KnownCaseRule;
-        let mut engine = Engine::new(body, &mut buffers, &mut locals, &[]);
+        let mut engine = Engine::new(body, &mut buffers, &mut locals, &[], &TEST_TYPES);
         engine.run(&[&rule]);
     }
 

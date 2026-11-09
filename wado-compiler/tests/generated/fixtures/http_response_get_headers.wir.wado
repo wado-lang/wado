@@ -401,8 +401,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:http_response_get_headers.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 99, 104, 101, 99, 107), used: 7 };
-global global:http_response_get_headers.wado::$const_obj_1: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
 global global:http_response_get_headers.wado::$const_obj_3: ref "core:prelude/list.wado//List<u8>" = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" { 0 };
 global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$0: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 0 };
@@ -453,7 +453,7 @@ fn "http_response_get_headers.wado/$cm_task_entry__handle"(request) {
     $sroa_$pattern_temp_0_0_189 = builtin::i32_wrap_i64(local.tee $cm_pair_184("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_190 = builtin::i32_wrap_i64($cm_pair_184 >> 32_i64);
     drop("http_response_get_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(local.tee headers("http_response_get_headers.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:http_response_get_headers.wado::$const_obj_0, global:http_response_get_headers.wado::$const_obj_3));
-    response = local.tee $pattern_temp_1("http_response_get_headers.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, global:http_response_get_headers.wado::$const_obj_1, $sroa_$pattern_temp_0_0_189)).0;
+    response = local.tee $pattern_temp_1("http_response_get_headers.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, $sroa_$pattern_temp_0_0_189)).0;
     _tx_future = $pattern_temp_1.1;
     if @unlikely("http_response_get_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"(local.tee $sroa_$pattern_temp_0_0_189("http_response_get_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.get-headers"(response)), global:http_response_get_headers.wado::$const_obj_0) == 0) {
         cold_path;

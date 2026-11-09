@@ -31,7 +31,7 @@ pub fn split_and_conditions(project: &mut NirPackage) -> bool {
             ..
         } = func.parts();
         if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params);
+            let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
             changed |= engine.run(&[&rule]);
         }
     }

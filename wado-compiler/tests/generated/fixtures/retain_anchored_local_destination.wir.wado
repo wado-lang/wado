@@ -95,12 +95,15 @@ fn "retain_anchored_local_destination.wado/fill"(p) {
 }
 
 fn "retain_anchored_local_destination.wado/$cm_export__$test_0_a_bounded_retention_leaves_the_write_back_standing"() {
-    let $load_0: ref null "core:prelude/string.wado//String";
+    let $load_1: ref null "core:prelude/string.wado//String";
     let $write_back_1: ref "core:prelude//$Cell<retain_anchored_local_destination.wado/Payload>";
+    let $write_back_before_2: ref null "core:prelude/string.wado//String";
     let $sroa_b_item_7: ref null "core:prelude/string.wado//String";
-    "retain_anchored_local_destination.wado/fill"(local.tee $write_back_1(struct.new "core:prelude//$Cell<retain_anchored_local_destination.wado/Payload>" { value: local.tee $sroa_b_item_7(ref.null none) }));
-    if ref.eq(local.tee $load_0($write_back_1.value), $sroa_b_item_7) == 0 {
-        $sroa_b_item_7 = $load_0;
+    $sroa_b_item_7 = ref.null none;
+    $write_back_before_2 = local.tee $write_back_1(struct.new "core:prelude//$Cell<retain_anchored_local_destination.wado/Payload>" { value: ref.null none }).value;
+    "retain_anchored_local_destination.wado/fill"($write_back_1);
+    if ref.eq(local.tee $load_1($write_back_1.value), $write_back_before_2) == 0 {
+        $sroa_b_item_7 = $load_1;
     }
     if @unlikely((ref.is_null($sroa_b_item_7) == 0) == 0) {
         cold_path;

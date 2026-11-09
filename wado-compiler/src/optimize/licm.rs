@@ -261,9 +261,8 @@ pub fn apply_licm(
             &first_param_types,
             &call_immutability,
         );
-        let mut engine = Engine::new(body, buffers, locals, params);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(type_table);
         engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
@@ -2976,12 +2975,7 @@ fn is_hoistable_value(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>
 
 fn value_is_invariant(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>) -> bool {
     match pool.kind(v) {
-        ValueKind::Int(..)
-        | ValueKind::Float(..)
-        | ValueKind::Bool(_)
-        | ValueKind::Char(_)
-        | ValueKind::Null
-        | ValueKind::Unit => true,
+        k if k.is_operand_constant() => true,
         ValueKind::Opaque(oid) => pool
             .opaque_local(*oid)
             .is_some_and(|idx| entry_locals.contains(&idx)),

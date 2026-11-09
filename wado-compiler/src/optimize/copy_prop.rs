@@ -1078,7 +1078,7 @@ pub fn propagate_copies(
             ..
         } = func.parts();
         let body = body.expect("checked above");
-        let mut engine = Engine::new(body, buffers, locals, params);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         let changed = engine.run(&[&rule]);
         if changed {
             compiler_trace!("opt_loop", "copy_prop changed {name}");

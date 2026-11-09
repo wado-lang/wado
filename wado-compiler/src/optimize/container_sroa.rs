@@ -307,6 +307,8 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     // `List<Tuple>::m` calls to per-field `List<F>::m` callees shifts the
     // function's call edges, which only costs propagation precision, not
     // correctness.
+    let type_table = project.type_table.borrow();
+    let type_table: &TypeTable = &type_table;
     gate.sweep_pending_par(GatedPass::ContainerSroa, &pending, |buffers, fid| {
         let Some(plan) = plans.get(&fid) else {
             return false;
@@ -326,10 +328,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
             ..
         } = func.parts();
         let body = body.expect("a planned function has a body");
-        let mut engine = Engine::new(body, buffers, locals, params);
-        // A promoted constant capacity is re-materialized during the rewrite;
-        // `materialize_operand` falls back to a decimal repr without the type
-        // table, which is exact for the non-negative capacity ints.
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.run(&[&rule])
     })
 }

@@ -1838,8 +1838,7 @@ impl BranchSettler {
     ) {
         let fold = ConstFoldRule::new(types, &self.callees, &self.ctfe_builtins);
         let prune = BranchPruneRule;
-        let mut engine = Engine::new(body, buffers, locals, params);
-        engine.set_value_graph_type_table(types);
+        let mut engine = Engine::new(body, buffers, locals, params, types);
         engine.set_pure_builtin_callees(&self.pure_builtin_callees);
         engine.run(&[&fold, &prune]);
     }
@@ -1989,7 +1988,7 @@ fn substitute_fields(
     types: &TypeTable,
     bindings: &IndexMap<u32, FieldConsts>,
 ) -> bool {
-    let mut engine = Engine::new(body, buffers, locals, params);
+    let mut engine = Engine::new(body, buffers, locals, params, types);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
     engine.body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
@@ -2023,7 +2022,7 @@ fn substitute_locals(
     types: &TypeTable,
     bindings: &IndexMap<u32, FieldConst>,
 ) -> bool {
-    let mut engine = Engine::new(body, buffers, locals, params);
+    let mut engine = Engine::new(body, buffers, locals, params, types);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
     engine.body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node

@@ -1888,7 +1888,6 @@ impl FunctionTranslator<'_, '_> {
         pool: &mut ValuePool,
         type_table: &TypeTable,
     ) -> Option<ValueId> {
-        let tt = Some(type_table);
         let v = match &expr.kind {
             TirExprKind::IntLiteral { value, .. } => {
                 pool.alloc_unshared(ValueKind::Int(*value, expr.type_id), expr.type_id)
@@ -1902,18 +1901,18 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Binary { left, op, right } => {
                 let lhs = self.constant_arith_in(left, pool, type_table)?;
                 let rhs = self.constant_arith_in(right, pool, type_table)?;
-                pool.binary_folded(convert_binary_op(*op), lhs, rhs, expr.type_id, tt)
+                pool.binary_folded(convert_binary_op(*op), lhs, rhs, expr.type_id, type_table)
             }
             TirExprKind::Unary { op, expr: inner } => {
                 let operand = self.constant_arith_in(inner, pool, type_table)?;
-                pool.unary_folded(convert_unary_op(*op), operand, expr.type_id, tt)
+                pool.unary_folded(convert_unary_op(*op), operand, expr.type_id, type_table)
             }
             TirExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
                 let operand = self.constant_arith_in(inner, pool, type_table)?;
-                pool.cast_folded(operand, *target_type, tt)
+                pool.cast_folded(operand, *target_type, type_table)
             }
             _ => return None,
         };

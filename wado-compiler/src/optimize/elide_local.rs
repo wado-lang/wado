@@ -7,7 +7,6 @@
 use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
-use super::arena_query;
 use crate::optimize::dce::deletable_value;
 use crate::optimize::mod_ref::CallFacts;
 
@@ -150,15 +149,11 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
 }
 
 /// Whether the value of a dead binding may go with it: no observable effect and
-/// no trap, since a trap is observable too. With a type table this is
-/// [`super::dce::deletable_value`], which answers a call by its summary: that is
-/// what lets a dead call to a pure helper leave rather than linger as a
-/// `drop(f(x))`. Without one only the structural predicate can answer.
+/// no trap, since a trap is observable too. [`super::dce::deletable_value`]
+/// answers a call by its summary: that is what lets a dead call to a pure helper
+/// leave rather than linger as a `drop(f(x))`.
 fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
-    match engine.value_graph_type_table() {
-        Some(types) => deletable_value(engine.body, value, types, rule.calls),
-        None => arena_query::is_pure_nontrapping_operand_typed(engine.body, value, None),
-    }
+    deletable_value(engine.body, value, engine.type_table(), rule.calls)
 }
 
 /// A local is kept (not elidable) when it is read anywhere in the body.
@@ -176,7 +171,7 @@ mod tests {
     use crate::call_args::CallArgs;
     use crate::nir::{FuncId, NirLocal};
     use crate::nir_arena::{BlockNode, Body, ExprNode, StmtNode};
-    use crate::nir_engine::EngineBuffers;
+    use crate::nir_engine::{EngineBuffers, TEST_TYPES};
     use crate::optimize::bounds::Proofs;
     use crate::optimize::mod_ref::FnEffect;
     use crate::token::Span;
@@ -229,7 +224,7 @@ mod tests {
         };
         let rule = ElideRule::new(calls);
         let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals, &[]);
+        let mut engine = Engine::new(body, &mut buffers, locals, &[], &TEST_TYPES);
         engine.run(&[&rule]);
     }
 
@@ -268,15 +263,13 @@ mod tests {
             ..FnEffect::default()
         }];
         let proofs = Proofs::from_iter(proven_callee.map(|f| (call, FuncId::new(f))));
-        let types = TypeTable::new();
         let calls = CallFacts {
             effects: &effects,
             proofs: &proofs,
         };
         let rule = ElideRule::new(calls);
         let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[]);
-        engine.set_value_graph_type_table(&types);
+        let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[], &TEST_TYPES);
         engine.run(&[&rule]);
         body.blocks[body.root()]
             .stmts

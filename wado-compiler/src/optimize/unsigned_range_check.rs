@@ -33,8 +33,7 @@ pub fn fuse_unsigned_range_checks(project: &mut NirPackage) -> bool {
             ..
         } = func.parts();
         if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params);
-            engine.set_value_graph_type_table(&type_table);
+            let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
             // A snapshot, as condition implication's: a fused check writes no
             // local, so no bind it holds goes stale.
             let rule = UnsignedRangeCheckRule {

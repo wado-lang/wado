@@ -171,9 +171,8 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             &first_param_types,
             &call_immutability,
         );
-        let mut engine = Engine::new(body, buffers, locals, params);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(type_table);
         engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
@@ -640,11 +639,9 @@ pub(super) fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool
             _ => return false,
         },
     };
-    let types = engine.value_graph_type_table();
+    let types = engine.type_table();
     field_index == SeqField::Len.index()
-        && receiver_type
-            .zip(types)
-            .is_some_and(|(t, types)| types.is_seq_container(types.peel_refs(t)))
+        && receiver_type.is_some_and(|t| types.is_seq_container(types.peel_refs(t)))
 }
 
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
@@ -1099,9 +1096,7 @@ fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
 /// than read as the negative it would order as.
 fn pool_int_const(engine: &Engine, v: ValueId) -> Option<i64> {
     let (val, ty) = engine.body.values.kind(v).as_int()?;
-    let signed = engine
-        .value_graph_type_table()
-        .is_some_and(|types| !types.is_unsigned_int(ty));
+    let signed = !engine.type_table().is_unsigned_int(ty);
     (signed || i64::try_from(val).is_ok()).then_some(val as i64)
 }
 
@@ -1175,9 +1170,7 @@ impl Stored {
         kinds: &[TypeId],
         reached: &mut hashmap::IndexMap<(TypeId, TypeId), bool>,
     ) -> bool {
-        let types = engine
-            .value_graph_type_table()
-            .expect("kinds are read off the type table");
+        let types = engine.type_table();
         let mut reaches = |ty: TypeId| {
             kinds.iter().any(|&k| {
                 *reached
@@ -1222,9 +1215,8 @@ impl Stored {
 /// The kinds of object `op` reads a field, an element or a box of, by
 /// [`TypeTable::object_kind`]; `None` where it reads what this cannot name.
 fn read_kinds(engine: &Engine, op: Operand) -> Option<Vec<TypeId>> {
-    let types = engine.value_graph_type_table()?;
     let mut kinds = Vec::new();
-    collect_read_kinds(engine, types, op, &mut kinds).then_some(kinds)
+    collect_read_kinds(engine, engine.type_table(), op, &mut kinds).then_some(kinds)
 }
 
 fn collect_read_kinds(
@@ -1342,7 +1334,7 @@ fn write_through(engine: &Engine, place: ExprId, stored: Stored, sink: &mut impl
             if engine.aliased().contains(&root)
                 || engine
                     .body
-                    .place_crosses_reference(place, engine.value_graph_type_table())
+                    .place_crosses_reference(place, Some(engine.type_table()))
             {
                 sink(Write::Aliased(stored));
             }
@@ -1371,11 +1363,10 @@ fn reachable_elsewhere(engine: &Engine, root: u32) -> bool {
 /// Whether `local` may name storage rather than hold a value. A local minted
 /// past the type table's reach might.
 fn is_reference(engine: &Engine, local: u32) -> bool {
-    engine.locals().get(local as usize).is_none_or(|l| {
-        engine
-            .value_graph_type_table()
-            .is_none_or(|types| types.is_reference(l.type_id))
-    })
+    engine
+        .locals()
+        .get(local as usize)
+        .is_none_or(|l| engine.type_table().is_reference(l.type_id))
 }
 
 /// Whether anything under `node` may change what one of `roots` holds for the
@@ -1659,9 +1650,11 @@ fn refute_past_cap(engine: &mut Engine, node: NodeRef, binds: &Binds, var: u32, 
 
 /// The most `var`'s integer type holds, where the type table says.
 fn local_int_max(engine: &Engine, var: u32) -> Option<i64> {
-    let types = engine.value_graph_type_table()?;
     let local = &engine.locals()[var as usize];
-    let (_, max) = types.primitive_head(local.type_id)?.int_range()?;
+    let (_, max) = engine
+        .type_table()
+        .primitive_head(local.type_id)?
+        .int_range()?;
     i64::try_from(max).ok()
 }
 
@@ -2412,7 +2405,7 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     // The eliminated bounds check drops this inline clamp with its branch, so a
     // trapping (or effectful) arm would erase a trap the program takes: the
     // deletion predicate must be non-trapping, not just pure.
-    if !is_pure_nontrapping_expr_typed(engine.body, e, engine.value_graph_type_table()) {
+    if !is_pure_nontrapping_expr_typed(engine.body, e, Some(engine.type_table())) {
         return None;
     }
     let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
@@ -2529,10 +2522,7 @@ struct Site {
 
 /// The range of the integer type `ty`, when `i64` holds all of it.
 fn int_range(engine: &Engine, ty: TypeId) -> Option<(i64, i64)> {
-    let (min, max) = engine
-        .value_graph_type_table()?
-        .primitive_head(ty)?
-        .int_range()?;
+    let (min, max) = engine.type_table().primitive_head(ty)?.int_range()?;
     Some((i64::try_from(min).ok()?, i64::try_from(max).ok()?))
 }
 
