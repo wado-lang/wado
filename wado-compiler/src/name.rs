@@ -4039,7 +4039,7 @@ impl FqTypeName {
                 out.push_str(&format!("{module}/{name}#param"));
             }
             TypeHead::Builtin(name) | TypeHead::Unresolved(name) | TypeHead::Infer { name, .. } => {
-                out.push_str(name)
+                out.push_str(name);
             }
             TypeHead::Binder { name, owner } => match owner {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.mangled())),

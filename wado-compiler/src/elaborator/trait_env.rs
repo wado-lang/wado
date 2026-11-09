@@ -2774,23 +2774,21 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             let head = match head_site(ty).map(|site| resolutions.get(site)) {
                 Some(Resolution::Def(def)) => name::FqTypeName::of_head(resolutions.defs(), def),
                 // `<F: fn(...)>` is that signature, spelled as the type it is.
-                Some(Resolution::Binder(binder)) => match resolutions.fn_bound_signature(binder) {
-                    Some(sig) => {
+                Some(Resolution::Binder(binder)) => {
+                    if let Some(sig) = resolutions.fn_bound_signature(binder) {
                         return written_type_arg(
                             &ast::Type::Function(Box::new(sig.clone())),
                             resolutions,
                         );
                     }
-                    None => {
-                        let written = get_type_name_static(ty);
-                        match resolutions.binder_owner(binder) {
-                            Some(owner) => {
-                                name::FqTypeName::binder_of(resolutions.defs(), owner, &written)
-                            }
-                            None => name::FqTypeName::binder(&written),
+                    let written = get_type_name_static(ty);
+                    match resolutions.binder_owner(binder) {
+                        Some(owner) => {
+                            name::FqTypeName::binder_of(resolutions.defs(), owner, &written)
                         }
+                        None => name::FqTypeName::binder(&written),
                     }
-                },
+                }
                 // A projection names no type until its base is one, and the
                 // trait declaring the member is part of that name
                 // (WEP-2026-08-12). A site that must know resolves it at its own
