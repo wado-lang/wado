@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794221137083,
+  "lastUpdate": 1794252331721,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76045,6 +76045,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/17869814a077675296e8c6772eb579de51b18a9f"
         },
         "date": 1794221136049,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404932,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b73dbc93dbd76030dd14efd07a11e5210b55ce5f",
+          "message": "Merge pull request #2595 from wado-lang/ccr-a7390310-f47sn8\n\nfeat(reflect): doc comments reach reflection, and Jade's schemas carry them",
+          "timestamp": "2026-11-10T04:08:18+09:00",
+          "tree_id": "845690b2095e918c077ecdfd3b66ca5812bef133",
+          "url": "https://github.com/wado-lang/wado/commit/b73dbc93dbd76030dd14efd07a11e5210b55ce5f"
+        },
+        "date": 1794252331284,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
