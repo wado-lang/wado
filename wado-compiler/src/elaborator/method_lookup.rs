@@ -30,7 +30,7 @@ use super::call::{
 };
 use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::InferCtx;
-use super::instantiate::{InstanceKind, Instantiation};
+use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
@@ -203,6 +203,11 @@ pub(super) struct MethodInferenceInput<'a> {
     /// ([`settled_impl_args`]), which a method bound may name: `R` in
     /// `fn go<T: Mix<R, Out = Q>, Q>` under `impl<R> Holder<R>`.
     pub impl_args: &'a [(String, TypeId)],
+    /// The slots as `args` were resolved through them
+    /// ([`Elaborator::resolve_args_through_slots`]), `None` where there are
+    /// none. Inference solves these same variables, which an argument such as
+    /// an unannotated closure was typed by.
+    pub inst: Option<&'a Instantiated>,
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
@@ -1570,7 +1575,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !turbofish_leaves_slot(&explicit, input.slots.len()) {
             return explicit;
         }
-        let inferred = self.infer_method_type_args(input, &explicit);
+        let inferred = self.infer_method_type_args(input);
         if explicit.is_empty() {
             return inferred;
         }
@@ -1692,16 +1697,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// lookup so their slots are the ones the caller binds. Deliberately does not
     /// re-resolve the method's AST: a fresh scope would report spurious errors for
     /// a `Self::Item`. An unbound parameter is its variable, blamed at the
-    /// call. A slot `written` names (its turbofish, `UNKNOWN` for `_`) is
-    /// answered from it.
-    fn infer_method_type_args(
-        &mut self,
-        input: MethodInferenceInput<'_>,
-        written: &[TypeId],
-    ) -> Vec<TypeId> {
+    /// call.
+    fn infer_method_type_args(&mut self, input: MethodInferenceInput<'_>) -> Vec<TypeId> {
         let MethodInferenceInput {
             receiver_type,
-            method_name,
             slots,
             own_params,
             param_types,
@@ -1711,8 +1710,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected_return_type,
             trait_decl,
             declaring_module,
-            impl_args,
-            span,
+            inst,
+            ..
         } = input;
 
         // The declaration dispatch selected, in both its forms: the slots to
@@ -1725,21 +1724,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
 
-        let self_binding = Some(self.tysys.base_self_binding(receiver_type, trait_decl));
-        let inst = self.instantiate(
-            slots,
-            &Instantiation {
-                kind: InstanceKind::Method,
-                name: method_name,
-                span,
-                type_args: written,
-                self_binding,
-                impl_args,
-            },
-        );
-        self.record_slot_bounds(&inst, &method_type_params, self_binding, impl_args, span);
-        let param_types = self.instantiate_types(param_types, &inst);
-        let decl_return_type = self.instantiate_type(decl_return_type, &inst);
+        let inst = inst.expect("a method with slots resolves its arguments through them");
+        let param_types = self.instantiate_types(param_types, inst);
+        let decl_return_type = self.instantiate_type(decl_return_type, inst);
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
@@ -1787,8 +1774,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // variable already carries the "cannot infer" diagnostic and the
         // module-end sweep, so nothing needs classifying here: what an
         // enclosing generic happens to be named cannot be confused with it.
-        self.record_instantiation(&inst, &inferred);
-        self.blame_unsolved(&inst, &inferred);
+        self.record_instantiation(inst, &inferred);
+        self.blame_unsolved(inst, &inferred);
         inferred
     }
 
@@ -3616,7 +3603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_args = settled_impl_args(&impl_type_bindings);
         // This path answers the call, so it runs the method's own inference too:
         // a subscript receiver does not decide whether an argument gets a type.
-        let args = self.resolve_args_through_slots(
+        let (args, inst) = self.resolve_args_through_slots(
             ctx,
             &method_call.args,
             &param_types,
@@ -3655,6 +3642,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: impl_module.clone(),
                 impl_args: &impl_args,
+                inst: inst.as_ref(),
                 span: method_call.span,
             },
         );

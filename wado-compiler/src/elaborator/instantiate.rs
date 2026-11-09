@@ -266,7 +266,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots`, carry their bounds, resolve the arguments against
     /// them, and settle the answers back. One call, so no path can take part of
     /// the sequence and hand a closure a rigid slot nothing can construct.
-    /// `ret` declares its return type in the slots' frame.
+    /// `ret` declares its return type in the slots' frame. The instantiation
+    /// comes back for the call's inference to solve: a second one would leave
+    /// the variables the arguments were typed by unanswered.
     pub(super) fn resolve_args_through_slots(
         &mut self,
         ctx: &mut FunctionContext,
@@ -276,9 +278,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         own_params: &[GenericParam],
         of: &Instantiation<'_>,
         ret: Option<ExpectedReturn>,
-    ) -> Vec<TypeId> {
+    ) -> (Vec<TypeId>, Option<Instantiated>) {
         if slots.is_empty() {
-            return self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
+            let args = self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
+            return (args, None);
         }
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.impl_args, of.span);
@@ -290,7 +293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut args =
             self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst), ret);
         self.settle_onto_slots(&inst, &mut args, ret);
-        args
+        (args, Some(inst))
     }
 
     /// Settle the walk's variables, substituting through `args`. A slot no

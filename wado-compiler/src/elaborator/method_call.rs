@@ -763,7 +763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_args = settled_impl_args(&impl_type_bindings);
         // Only the method's own slots: the lookup instantiated the declaring
         // level already, so `Self::Item` is concrete here and `Acc` is not.
-        let mut args: Vec<TypeId> = self.resolve_args_through_slots(
+        let (mut args, inst) = self.resolve_args_through_slots(
             ctx,
             args_ast,
             &expected_param_types,
@@ -920,6 +920,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: Some(callee_module.clone()),
                 impl_args: &impl_args,
+                inst: inst.as_ref(),
                 span,
             },
         );

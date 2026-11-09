@@ -3659,7 +3659,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, name)| name.clone())
             .collect();
         let owner = format!("`{prefix}::{suffix}`");
-        let defers = self.defers_uninferred(args, expected_type);
+        let own: Vec<TypeId> = impl_type_args
+            .iter()
+            .chain(method_type_args.iter())
+            .copied()
+            .collect();
+        let defers = self.defers_uninferred(args, &own, expected_type);
         let message = TypeError::cannot_infer_message(&names, &owner, &turbofish);
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let impl_params: &[ast::GenericParam] = sig
@@ -3695,9 +3700,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a slot nothing at the call site answers waits for a sink the
     /// call's value reaches, a sibling branch's type among them. It does where
-    /// no type is expected of the call and its arguments hold no variable.
-    fn defers_uninferred(&self, args: &[TypeId], expected_type: Option<TypeId>) -> bool {
-        expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a))
+    /// no type is expected of the call and its arguments hold no variable but
+    /// the call's own `type_args`, as a closure argument typed by them does.
+    fn defers_uninferred(
+        &self,
+        args: &[TypeId],
+        type_args: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        expected_type.is_none()
+            && args.iter().all(|&a| {
+                tt.infer_vars_in(a)
+                    .iter()
+                    .all(|var| type_args.contains(var))
+            })
     }
 
     /// Each of `sig`'s declaring block's parameters whose argument in
@@ -3889,7 +3906,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        if !self.defers_uninferred(args, expected_type) {
+        if !self.defers_uninferred(args, type_args, expected_type) {
             self.report_uninferred_fn_type_args(callee, type_args, span);
             return;
         }
