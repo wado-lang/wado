@@ -19,9 +19,9 @@ use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, ResolvedType, StructDef,
-    TemplateShape, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
-    TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
-    TirTypeParam, TraitRef, TypeId,
+    TemplateShape, TirBinaryOp, TirBlock, TirEnumCase, TirExpr, TirExprKind, TirFlagsMember,
+    TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirStructField, TirTypeParam, TirVariantCase, TraitRef, TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -482,6 +482,7 @@ struct ReflectFieldInfo {
     /// The declared default (`f: T = expr`), reified in the struct's own
     /// context — `default_slot()` relocates its locals into the synthesized body.
     default_expr: Option<Box<TirExpr>>,
+    doc: Option<String>,
 }
 
 /// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for
@@ -495,6 +496,7 @@ struct ReflectTarget {
     fields: Vec<ReflectFieldInfo>,
     openness: Openness,
     wire_name_policy: Option<NamePolicy>,
+    doc: Option<String>,
     span: Span,
 }
 
@@ -537,6 +539,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
                     default_expr: f.default_expr.clone(),
+                    doc: f.doc.clone(),
                 })
                 .collect(),
             openness: match s
@@ -547,6 +550,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                 None => Openness::Open,
             },
             wire_name_policy: s.wire_name_policy,
+            doc: s.doc.clone(),
             span: s.span,
         })
         .collect()
@@ -568,6 +572,7 @@ fn generate_struct_reflect_methods(
         fields,
         openness,
         wire_name_policy: name_policy,
+        doc,
         span,
     } = target;
     let span = *span;
@@ -577,12 +582,14 @@ fn generate_struct_reflect_methods(
         .map(|f| (f.name.clone(), f.type_id, f.index))
         .collect();
 
-    let decl_name_fn = generate_decl_name_fn(
+    let root_fns = env.root.methods(
+        type_table,
         receiver,
-        &type_table.borrow().struct_reflect_name(*def),
-        env.string_type,
-        &env.root_trait_name,
-        &env.decl_name_method,
+        &RootFacts {
+            display_name: &type_table.borrow().struct_reflect_name(*def),
+            wire_name_policy: *name_policy,
+            doc: doc.as_deref(),
+        },
         span,
     );
 
@@ -680,24 +687,8 @@ fn generate_struct_reflect_methods(
         slots_tuple_type,
         span,
     );
-    let wire_name_policy_fn = generate_wire_name_policy_fn(
-        receiver,
-        env.case_style_type,
-        *name_policy,
-        type_table.borrow().compiler_items(),
-        &env.root_trait_name,
-        &env.wire_name_policy_method,
-        span,
-    );
-
-    let mut functions = vec![
-        decl_name_fn,
-        members_fn,
-        from_fields_fn,
-        default_slot_fn,
-        empty_slots_fn,
-        wire_name_policy_fn,
-    ];
+    let mut functions = Vec::from(root_fns);
+    functions.extend([members_fn, from_fields_fn, default_slot_fn, empty_slots_fn]);
     for f in &mut functions {
         f.impl_type_params.clone_from(type_params);
     }
@@ -783,21 +774,15 @@ pub(crate) const REFLECT_HOLES_ASSOC: &str = "Holes";
 /// registry and reused across every struct's `ReflectStruct` synthesis in that
 /// module.
 struct ReflectSynthEnv {
-    string_type: TypeId,
-    case_style_type: TypeId,
+    root: ReflectRootEnv,
     member_struct_name: String,
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: DefId,
-    /// `decl_name` is declared on the identity root, not on the kind, so the
-    /// mangled name it is minted under names `Reflect` (WEP 2026-06-13).
-    root_trait_name: FqTraitName,
-    decl_name_method: String,
     members_method: String,
     from_fields_method: String,
     default_slot_method: String,
     empty_slots_method: String,
-    wire_name_policy_method: String,
 }
 
 /// The member-handle struct a reflect kind's synthesised bodies construct
@@ -814,18 +799,14 @@ fn resolve_member_struct(tt: &TypeTable, item: CompilerItem) -> (String, DefId) 
 
 impl ReflectSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let root = ReflectRootEnv::resolve(tt);
         let (member_struct_name, member_struct_def) =
             resolve_member_struct(tt, CompilerItem::ReflectStructField);
         let items = tt.compiler_items();
         Self {
-            string_type,
-            case_style_type,
+            root,
             member_struct_name,
             member_struct_def,
-            root_trait_name: items.trait_fq(CompilerItem::Reflect),
-            decl_name_method: items.method_name(CompilerItem::ReflectDeclName).to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectStructMembers)
                 .to_string(),
@@ -837,9 +818,6 @@ impl ReflectSynthEnv {
                 .to_string(),
             empty_slots_method: items
                 .method_name(CompilerItem::ReflectStructEmptySlots)
-                .to_string(),
-            wire_name_policy_method: items
-                .method_name(CompilerItem::ReflectWireNamePolicy)
                 .to_string(),
         }
     }
@@ -963,7 +941,7 @@ fn reflect_meta_int_field(
 
 /// Build `Struct^ReflectStruct::members()` as
 /// `return [Field { index: 0, field_name: "f", wire_override: …, has_default: …,
-/// is_secret: … }, …];` — one fat member per field, each typed `StructField<S, F_k>`.
+/// is_secret: …, doc: … }, …];` — one fat member per field, each typed `StructField<S, F_k>`.
 fn generate_struct_members_fn(
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
@@ -977,33 +955,23 @@ fn generate_struct_members_fn(
     let method_info = trait_method_info(receiver, reflect_trait_name, &env.members_method);
     let qualified_name = method_info.to_mangled_name();
 
-    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
-
     let elements = fields
         .iter()
         .zip(member_types)
         .map(|(f, member_type)| {
-            let wire_override = optional_string_literal(
-                type_table,
-                env.string_type,
-                option_string_type,
-                f.wire_name_override.as_deref(),
-                span,
-            );
+            let optional_string = |value: &Option<String>| {
+                env.root.optional_string(type_table, value.as_deref(), span)
+            };
             let field_fields = vec![
                 reflect_meta_int_field("index", i64::from(f.index), TypeTable::I32, 0, span),
                 TirStructField {
                     name: "field_name".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::StringLiteral(f.name.clone()),
-                        env.string_type,
-                        span,
-                    ),
+                    value: env.root.string_literal(&f.name, span),
                     field_index: 1,
                 },
                 TirStructField {
                     name: "wire_override".to_string(),
-                    value: wire_override,
+                    value: optional_string(&f.wire_name_override),
                     field_index: 2,
                 },
                 TirStructField {
@@ -1015,6 +983,11 @@ fn generate_struct_members_fn(
                     name: "is_secret".to_string(),
                     value: bool_lit(f.is_secret, span),
                     field_index: 4,
+                },
+                TirStructField {
+                    name: "doc".to_string(),
+                    value: optional_string(&f.doc),
+                    field_index: 5,
                 },
             ];
             TirExpr::new(
@@ -1255,32 +1228,6 @@ fn generate_struct_from_fields_fn(
         method_info,
         vec![fields_param(fields_tuple_type)],
         struct_type,
-        body,
-        vec![],
-    )
-}
-
-/// Build `T^Reflect*::wire_name_policy() -> CaseStyle` as
-/// `return CaseStyle::<case>;`. Shared by all four reflect kinds.
-fn generate_wire_name_policy_fn(
-    receiver: &FqTypeName,
-    case_style_type: TypeId,
-    name_policy: Option<NamePolicy>,
-    items: &CompilerItems,
-    reflect_trait_name: &FqTraitName,
-    wire_name_policy_method: &str,
-    span: Span,
-) -> TirFunction {
-    let method_info = trait_method_info(receiver, reflect_trait_name, wire_name_policy_method);
-    let qualified_name = method_info.to_mangled_name();
-    let construct = compiler_enum_case(case_style_item(name_policy), case_style_type, items, span);
-    let body = TirBlock::new(vec![return_stmt(construct, span)], span);
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        vec![],
-        case_style_type,
         body,
         vec![],
     )
@@ -1541,27 +1488,95 @@ fn generate_read_helper(
     )
 }
 
-/// Build `Type^ReflectKind::decl_name() -> String { return "Type"; }` —
-/// shared by every kind's synthesis.
-///
-/// `display_name` is the caller's because it belongs to the declaration
-/// namespace: an anonymous shape's head is its mangle, module paths and all.
-fn generate_decl_name_fn(
-    receiver: &FqTypeName,
-    display_name: &str,
+/// The `Reflect` root every kind's impl answers, resolved once per module.
+struct ReflectRootEnv {
     string_type: TypeId,
-    reflect_trait_name: &FqTraitName,
-    decl_name_method: &str,
-    span: Span,
-) -> TirFunction {
-    constant_method(
-        trait_method_info(receiver, reflect_trait_name, decl_name_method),
-        TirExpr::new(
-            TirExprKind::StringLiteral(display_name.to_string()),
+    option_string_type: TypeId,
+    case_style_type: TypeId,
+    trait_name: FqTraitName,
+    decl_name_method: String,
+    wire_name_policy_method: String,
+    doc_method: String,
+}
+
+/// What a declaration answers through the `Reflect` root.
+struct RootFacts<'a> {
+    /// The caller's because it belongs to the declaration namespace: an
+    /// anonymous shape's head is its mangle, module paths and all.
+    display_name: &'a str,
+    wire_name_policy: Option<NamePolicy>,
+    doc: Option<&'a str>,
+}
+
+impl ReflectRootEnv {
+    fn resolve(tt: &mut TypeTable) -> Self {
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let option_string_type = tt.make_option(string_type);
+        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let items = tt.compiler_items();
+        let method = |item| items.method_name(item).to_string();
+        Self {
             string_type,
+            option_string_type,
+            case_style_type,
+            trait_name: items.trait_fq(CompilerItem::Reflect),
+            decl_name_method: method(CompilerItem::ReflectDeclName),
+            wire_name_policy_method: method(CompilerItem::ReflectWireNamePolicy),
+            doc_method: method(CompilerItem::ReflectDoc),
+        }
+    }
+
+    /// `decl_name()`, `wire_name_policy()` and `doc()`, each returning its
+    /// constant.
+    fn methods(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        receiver: &FqTypeName,
+        facts: &RootFacts<'_>,
+        span: Span,
+    ) -> [TirFunction; 3] {
+        let constant = |method: &str, value| {
+            constant_method(trait_method_info(receiver, &self.trait_name, method), value)
+        };
+        let decl_name = self.string_literal(facts.display_name, span);
+        let policy = compiler_enum_case(
+            case_style_item(facts.wire_name_policy),
+            self.case_style_type,
+            type_table.borrow().compiler_items(),
             span,
-        ),
-    )
+        );
+        [
+            constant(&self.decl_name_method, decl_name),
+            constant(&self.wire_name_policy_method, policy),
+            constant(
+                &self.doc_method,
+                self.optional_string(type_table, facts.doc, span),
+            ),
+        ]
+    }
+
+    /// `Option::Some("…")` holding `value`, or `null` where there is none.
+    fn optional_string(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        value: Option<&str>,
+        span: Span,
+    ) -> TirExpr {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        match value {
+            Some(s) => option_some(self.string_literal(s, span), self.option_string_type, items),
+            None => common::option_none(self.option_string_type, items),
+        }
+    }
+
+    fn string_literal(&self, value: &str, span: Span) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::StringLiteral(value.to_string()),
+            self.string_type,
+            span,
+        )
+    }
 }
 
 /// A static method returning `value`, a constant of the type it is synthesized for.
@@ -1723,24 +1738,17 @@ fn generate_template_reflect_impls(
             trait_method_info(receiver, template_trait_name, &members_method),
             span,
         );
-        let mut functions = vec![
-            generate_decl_name_fn(
-                receiver,
-                &display_name,
-                env.string_type,
-                &env.root_trait_name,
-                &env.decl_name_method,
-                span,
-            ),
-            generate_wire_name_policy_fn(
-                receiver,
-                env.case_style_type,
-                None,
-                module.type_table.borrow().compiler_items(),
-                &env.root_trait_name,
-                &env.wire_name_policy_method,
-                span,
-            ),
+        let root_facts = RootFacts {
+            display_name: &display_name,
+            wire_name_policy: None,
+            doc: None,
+        };
+        let mut functions =
+            Vec::from(
+                env.root
+                    .methods(&module.type_table, receiver, &root_facts, span),
+            );
+        functions.extend([
             members_fn,
             tail_fn(&tail_method, false),
             tail_fn(&raw_tail_method, true),
@@ -1748,7 +1756,7 @@ fn generate_template_reflect_impls(
                 trait_method_info(receiver, template_trait_name, &hashes_method),
                 common::int_literal(target.shape.quote.hash_count() as i64, span),
             ),
-        ];
+        ]);
         // An open shape's hole bridges would group its holes by a parameter,
         // which two holes may share only once substituted, so each concrete
         // shape a substitution reaches mints its own after monomorphization.
@@ -1830,7 +1838,6 @@ fn generate_template_members_fn(
     method_info: LocalMethodName,
     span: Span,
 ) -> TirFunction {
-    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
     let rows: Vec<Vec<TirStructField>> = shape
         .holes
         .iter()
@@ -1840,13 +1847,9 @@ fn generate_template_members_fn(
                 reflect_meta_int_field("index", k as i64, TypeTable::I32, 0, span),
                 TirStructField {
                     name: "spec".to_string(),
-                    value: optional_string_literal(
-                        type_table,
-                        env.string_type,
-                        option_string_type,
-                        hole.spec.as_deref(),
-                        span,
-                    ),
+                    value: env
+                        .root
+                        .optional_string(type_table, hole.spec.as_deref(), span),
                     field_index: 1,
                 },
             ]
@@ -1936,12 +1939,12 @@ struct ReflectVariantTarget {
     /// The head every synthesised method of this target hangs off.
     receiver: FqTypeName,
     type_params: Vec<TirTypeParam>,
-    /// Per-case `(name, index, payload type, #[wire(name)])`; unit cases
-    /// carry `()` as their payload.
-    cases: Vec<(String, u32, TypeId, Option<String>)>,
+    /// A unit case carries `()` as its payload.
+    cases: Vec<TirVariantCase>,
     span: Span,
     wire_name_policy: Option<NamePolicy>,
     wire_tag: Option<String>,
+    doc: Option<String>,
 }
 
 /// Select the variants in `module` that need a synthesized `ReflectVariant`
@@ -1959,21 +1962,11 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
             def: v.def,
             receiver: FqTypeName::declared(module.type_table.borrow().defs(), v.def),
             type_params: v.type_params.clone(),
-            cases: v
-                .cases
-                .iter()
-                .map(|c| {
-                    (
-                        c.name.clone(),
-                        c.index,
-                        c.payload,
-                        c.wire_name_override.clone(),
-                    )
-                })
-                .collect(),
+            cases: v.cases.clone(),
             span: v.span,
             wire_name_policy: v.wire_name_policy,
             wire_tag: v.wire_tag.clone(),
+            doc: v.doc.clone(),
         })
         .collect()
 }
@@ -1981,42 +1974,31 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every variant's `ReflectVariant` synthesis.
 struct ReflectVariantSynthEnv {
-    string_type: TypeId,
+    root: ReflectRootEnv,
     member_struct_name: String,
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: DefId,
-    root_trait_name: FqTraitName,
-    decl_name_method: String,
     discriminant_method: String,
     cases_method: String,
-    case_style_type: TypeId,
-    wire_name_policy_method: String,
     wire_tag_method: String,
 }
 
 impl ReflectVariantSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let root = ReflectRootEnv::resolve(tt);
         let (member_struct_name, member_struct_def) =
             resolve_member_struct(tt, CompilerItem::ReflectVariantCase);
         let items = tt.compiler_items();
         Self {
-            string_type,
+            root,
             member_struct_name,
             member_struct_def,
-            root_trait_name: items.trait_fq(CompilerItem::Reflect),
-            decl_name_method: items.method_name(CompilerItem::ReflectDeclName).to_string(),
             discriminant_method: items
                 .method_name(CompilerItem::ReflectVariantDiscriminant)
                 .to_string(),
             cases_method: items
                 .method_name(CompilerItem::ReflectVariantMembers)
-                .to_string(),
-            case_style_type,
-            wire_name_policy_method: items
-                .method_name(CompilerItem::ReflectWireNamePolicy)
                 .to_string(),
             wire_tag_method: items
                 .method_name(CompilerItem::ReflectVariantWireTag)
@@ -2041,12 +2023,14 @@ fn generate_variant_reflect_methods(
 ) -> Vec<TirFunction> {
     let span = target.span;
 
-    let decl_name_fn = generate_decl_name_fn(
+    let root_fns = env.root.methods(
+        type_table,
         &target.receiver,
-        target.receiver.head().name(),
-        env.string_type,
-        &env.root_trait_name,
-        &env.decl_name_method,
+        &RootFacts {
+            display_name: target.receiver.head().name(),
+            wire_name_policy: target.wire_name_policy,
+            doc: target.doc.as_deref(),
+        },
         span,
     );
 
@@ -2064,13 +2048,12 @@ fn generate_variant_reflect_methods(
         let member_types: Vec<TypeId> = target
             .cases
             .iter()
-            .map(|(_, _, payload, _)| {
-                tt.make_generic_instance(env.member_struct_def, vec![variant_type, *payload])
+            .map(|case| {
+                tt.make_generic_instance(env.member_struct_def, vec![variant_type, case.payload])
             })
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
-        let payloads_tuple_type =
-            tt.make_tuple(target.cases.iter().map(|(_, _, p, _)| *p).collect());
+        let payloads_tuple_type = tt.make_tuple(target.cases.iter().map(|c| c.payload).collect());
         register_reflect_assoc_types(
             &mut tt,
             variant_type,
@@ -2107,26 +2090,11 @@ fn generate_variant_reflect_methods(
         span,
     );
 
-    let wire_name_policy_fn = generate_wire_name_policy_fn(
-        &target.receiver,
-        env.case_style_type,
-        target.wire_name_policy,
-        type_table.borrow().compiler_items(),
-        &env.root_trait_name,
-        &env.wire_name_policy_method,
-        span,
-    );
-
     let wire_tag_fn =
         generate_variant_wire_tag_fn(type_table, env, variant_trait_name, target, span);
 
-    let mut functions = vec![
-        decl_name_fn,
-        discriminant_fn,
-        cases_fn,
-        wire_name_policy_fn,
-        wire_tag_fn,
-    ];
+    let mut functions = Vec::from(root_fns);
+    functions.extend([discriminant_fn, cases_fn, wire_tag_fn]);
     for f in &mut functions {
         f.impl_type_params.clone_from(&target.type_params);
     }
@@ -2144,26 +2112,6 @@ fn generate_variant_reflect_methods(
     functions
 }
 
-/// `Option::Some("…")` holding `value`, or `null` where there is none.
-fn optional_string_literal(
-    type_table: &RefCell<TypeTable>,
-    string_type: TypeId,
-    option_string_type: TypeId,
-    value: Option<&str>,
-    span: Span,
-) -> TirExpr {
-    let tt = type_table.borrow();
-    let items = tt.compiler_items();
-    match value {
-        Some(s) => option_some(
-            TirExpr::new(TirExprKind::StringLiteral(s.to_string()), string_type, span),
-            option_string_type,
-            items,
-        ),
-        None => common::option_none(option_string_type, items),
-    }
-}
-
 /// Build `Variant^ReflectVariant::wire_tag()` as `return Option::Some("…");`, or
 /// `return null;` for a variant that declares no tag.
 fn generate_variant_wire_tag_fn(
@@ -2174,28 +2122,15 @@ fn generate_variant_wire_tag_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(&target.receiver, variant_trait_name, &env.wire_tag_method);
-    let qualified_name = method_info.to_mangled_name();
-    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
-    let tag = optional_string_literal(
-        type_table,
-        env.string_type,
-        option_string_type,
-        target.wire_tag.as_deref(),
-        span,
-    );
-    let body = TirBlock::new(vec![return_stmt(tag, span)], span);
-    make_synthetic_method(
-        qualified_name,
+    constant_method(
         method_info,
-        vec![],
-        option_string_type,
-        body,
-        vec![],
+        env.root
+            .optional_string(type_table, target.wire_tag.as_deref(), span),
     )
 }
 
 /// Build `Variant^ReflectVariant::members()` as
-/// `return [Case { index: 0, case_name: "…", wire_override: …, is_unit: … }, …];`
+/// `return [Case { index: 0, case_name: "…", wire_override: …, is_unit: …, doc: … }, …];`
 /// — one fat member per case, each typed `Case<Variant, P_k>` and carrying the
 /// `Member` metadata alongside the payload bridge.
 fn generate_variant_cases_fn(
@@ -2210,54 +2145,47 @@ fn generate_variant_cases_fn(
     let method_info = trait_method_info(&target.receiver, variant_trait_name, &env.cases_method);
     let qualified_name = method_info.to_mangled_name();
 
-    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
-
     let elements = target
         .cases
         .iter()
         .zip(member_types)
-        .map(
-            |((case_name, index, payload, wire_name_override), member_type)| {
-                let wire_override = optional_string_literal(
-                    type_table,
-                    env.string_type,
-                    option_string_type,
-                    wire_name_override.as_deref(),
-                    span,
-                );
-                let case_fields = vec![
-                    reflect_meta_int_field("index", i64::from(*index), TypeTable::I32, 0, span),
-                    TirStructField {
-                        name: "case_name".to_string(),
-                        value: TirExpr::new(
-                            TirExprKind::StringLiteral(case_name.clone()),
-                            env.string_type,
-                            span,
-                        ),
-                        field_index: 1,
-                    },
-                    TirStructField {
-                        name: "wire_override".to_string(),
-                        value: wire_override,
-                        field_index: 2,
-                    },
-                    TirStructField {
-                        name: "is_unit".to_string(),
-                        value: bool_lit(*payload == TypeTable::UNIT, span),
-                        field_index: 3,
-                    },
-                ];
-                TirExpr::new(
-                    TirExprKind::StructLiteral {
-                        struct_type: *member_type,
-                        struct_name: env.member_struct_name.clone(),
-                        fields: case_fields,
-                    },
-                    *member_type,
-                    span,
-                )
-            },
-        )
+        .map(|(case, member_type)| {
+            let optional_string = |value: &Option<String>| {
+                env.root.optional_string(type_table, value.as_deref(), span)
+            };
+            let case_fields = vec![
+                reflect_meta_int_field("index", i64::from(case.index), TypeTable::I32, 0, span),
+                TirStructField {
+                    name: "case_name".to_string(),
+                    value: env.root.string_literal(&case.name, span),
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "wire_override".to_string(),
+                    value: optional_string(&case.wire_name_override),
+                    field_index: 2,
+                },
+                TirStructField {
+                    name: "is_unit".to_string(),
+                    value: bool_lit(case.payload == TypeTable::UNIT, span),
+                    field_index: 3,
+                },
+                TirStructField {
+                    name: "doc".to_string(),
+                    value: optional_string(&case.doc),
+                    field_index: 4,
+                },
+            ];
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: *member_type,
+                    struct_name: env.member_struct_name.clone(),
+                    fields: case_fields,
+                },
+                *member_type,
+                span,
+            )
+        })
         .collect();
     let tuple = TirExpr::new(
         TirExprKind::TupleLiteral { elements },
@@ -2284,7 +2212,7 @@ fn generate_variant_cases_fn(
 /// (WEP 2026-06-13 §3e).
 pub(super) fn generate_case_bridge_helpers(
     type_table: &RefCell<TypeTable>,
-    cases: &[(String, u32, TypeId, Option<String>)],
+    cases: &[TirVariantCase],
     variant_type: TypeId,
     ref_variant_type: TypeId,
     span: Span,
@@ -2296,13 +2224,13 @@ pub(super) fn generate_case_bridge_helpers(
 
     let mut by_payload: hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         hashmap::IndexMap::default();
-    for (case_name, index, payload, _) in cases {
-        let mangled = type_table.borrow().mangle_type_arg_erased(*payload);
+    for case in cases {
+        let mangled = type_table.borrow().mangle_type_arg_erased(case.payload);
         by_payload
             .entry(mangled)
-            .or_insert_with(|| (*payload, Vec::new()))
+            .or_insert_with(|| (case.payload, Vec::new()))
             .1
-            .push((case_name.clone(), *index));
+            .push((case.name.clone(), case.index));
     }
 
     let mut helpers = Vec::new();
@@ -2640,17 +2568,10 @@ fn generate_enum_reflect_impls(
         .map(|e| ReflectEnumTarget {
             def: e.def,
             receiver: FqTypeName::declared(module.type_table.borrow().defs(), e.def),
-            cases: e
-                .cases
-                .iter()
-                .map(|c| ReflectEnumCaseRow {
-                    name: c.name.clone(),
-                    index: c.index,
-                    wire_name_override: c.wire_name_override.clone(),
-                })
-                .collect(),
+            cases: e.cases.clone(),
             span: e.span,
             wire_name_policy: e.wire_name_policy,
+            doc: e.doc.clone(),
         })
         .collect();
     if targets.is_empty() {
@@ -2677,16 +2598,11 @@ struct ReflectEnumTarget {
     def: DefId,
     /// The head every synthesised method of this target hangs off.
     receiver: FqTypeName,
-    cases: Vec<ReflectEnumCaseRow>,
+    /// A case's discriminant is its index.
+    cases: Vec<TirEnumCase>,
     span: Span,
     wire_name_policy: Option<NamePolicy>,
-}
-
-/// One case of a `ReflectEnumTarget`; its discriminant is its index.
-struct ReflectEnumCaseRow {
-    name: String,
-    index: u32,
-    wire_name_override: Option<String>,
+    doc: Option<String>,
 }
 
 /// Which payload-free kind an env was resolved for: one env type serves both,
@@ -2729,42 +2645,31 @@ const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
 /// registry and reused across every payload-free type's reflect synthesis.
 struct ScalarReflectSynthEnv {
     kind: ScalarKind,
-    string_type: TypeId,
-    case_style_type: TypeId,
+    root: ReflectRootEnv,
     member_struct_name: String,
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: DefId,
-    root_trait_name: FqTraitName,
-    decl_name_method: String,
     /// `discriminant(&self)` on an enum, `bits(&self)` on a flags type.
     value_method: String,
     /// `from_discriminant(raw)` / `from_bits(raw)`.
     from_value_method: String,
     members_method: String,
-    wire_name_policy_method: String,
 }
 
 impl ScalarReflectSynthEnv {
     fn resolve(tt: &mut TypeTable, kind: &ScalarReflectItems) -> Self {
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let root = ReflectRootEnv::resolve(tt);
         let (member_struct_name, member_struct_def) = resolve_member_struct(tt, kind.member_struct);
         let items = tt.compiler_items();
         Self {
             kind: kind.kind,
-            string_type,
-            case_style_type,
+            root,
             member_struct_name,
             member_struct_def,
-            root_trait_name: items.trait_fq(CompilerItem::Reflect),
-            decl_name_method: items.method_name(CompilerItem::ReflectDeclName).to_string(),
             value_method: items.method_name(kind.value).to_string(),
             from_value_method: items.method_name(kind.from_value).to_string(),
             members_method: items.method_name(kind.members).to_string(),
-            wire_name_policy_method: items
-                .method_name(CompilerItem::ReflectWireNamePolicy)
-                .to_string(),
         }
     }
 }
@@ -2780,12 +2685,14 @@ fn generate_enum_reflect_methods(
     assert_eq!(env.kind, ScalarKind::Enum);
     let span = target.span;
 
-    let decl_name_fn = generate_decl_name_fn(
+    let root_fns = env.root.methods(
+        type_table,
         &target.receiver,
-        target.receiver.head().name(),
-        env.string_type,
-        &env.root_trait_name,
-        &env.decl_name_method,
+        &RootFacts {
+            display_name: target.receiver.head().name(),
+            wire_name_policy: target.wire_name_policy,
+            doc: target.doc.as_deref(),
+        },
         span,
     );
 
@@ -2839,28 +2746,14 @@ fn generate_enum_reflect_methods(
         span,
     );
 
-    let wire_name_policy_fn = generate_wire_name_policy_fn(
-        &target.receiver,
-        env.case_style_type,
-        target.wire_name_policy,
-        type_table.borrow().compiler_items(),
-        &env.root_trait_name,
-        &env.wire_name_policy_method,
-        span,
-    );
-
-    vec![
-        decl_name_fn,
-        discriminant_fn,
-        from_discriminant_fn,
-        members_fn,
-        wire_name_policy_fn,
-    ]
+    let mut functions = Vec::from(root_fns);
+    functions.extend([discriminant_fn, from_discriminant_fn, members_fn]);
+    functions
 }
 
 /// Build `Enum^ReflectEnum::members() -> Self::Members` as
 /// `return [EnumCase { discriminant: k, value: Enum::Case_k, case_name: "…",
-/// wire_override: … }, …];` — one `EnumCase<Enum>` per case, packed into the
+/// wire_override: …, doc: … }, …];` — one `EnumCase<Enum>` per case, packed into the
 /// homogeneous `Members` tuple.
 fn generate_enum_members_fn(
     type_table: &RefCell<TypeTable>,
@@ -2874,35 +2767,30 @@ fn generate_enum_members_fn(
 ) -> TirFunction {
     let method_info = trait_method_info(&target.receiver, enum_trait_name, &env.members_method);
 
-    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
-
     let rows = target
         .cases
         .iter()
         .map(|case| {
-            let ReflectEnumCaseRow {
-                name: case_name,
-                index,
-                wire_name_override,
-            } = case;
-            let wire_override = optional_string_literal(
-                type_table,
-                env.string_type,
-                option_string_type,
-                wire_name_override.as_deref(),
-                span,
-            );
+            let optional_string = |value: &Option<String>| {
+                env.root.optional_string(type_table, value.as_deref(), span)
+            };
             let value = TirExpr::new(
                 TirExprKind::EnumConstruct {
                     enum_type,
-                    case_index: *index,
-                    case_name: case_name.clone(),
+                    case_index: case.index,
+                    case_name: case.name.clone(),
                 },
                 enum_type,
                 span,
             );
             vec![
-                reflect_meta_int_field("discriminant", i64::from(*index), TypeTable::I32, 0, span),
+                reflect_meta_int_field(
+                    "discriminant",
+                    i64::from(case.index),
+                    TypeTable::I32,
+                    0,
+                    span,
+                ),
                 TirStructField {
                     name: "value".to_string(),
                     value,
@@ -2910,17 +2798,18 @@ fn generate_enum_members_fn(
                 },
                 TirStructField {
                     name: "case_name".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::StringLiteral(case_name.clone()),
-                        env.string_type,
-                        span,
-                    ),
+                    value: env.root.string_literal(&case.name, span),
                     field_index: 2,
                 },
                 TirStructField {
                     name: "wire_override".to_string(),
-                    value: wire_override,
+                    value: optional_string(&case.wire_name_override),
                     field_index: 3,
+                },
+                TirStructField {
+                    name: "doc".to_string(),
+                    value: optional_string(&case.doc),
+                    field_index: 4,
                 },
             ]
         })
@@ -2981,7 +2870,7 @@ fn generate_enum_from_discriminant_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
-    for ReflectEnumCaseRow {
+    for TirEnumCase {
         name: case_name,
         index,
         ..
@@ -3076,6 +2965,7 @@ fn generate_newtype_reflect_impls(
                 receiver: FqTypeName::declared(tt.defs(), nt.def),
                 display_name: tt.decl_name(nt.def).to_string(),
                 type_params: nt.type_params.clone(),
+                doc: nt.doc.clone(),
                 span: nt.span,
             })
             .collect()
@@ -3084,58 +2974,25 @@ fn generate_newtype_reflect_impls(
         return;
     }
 
-    let (
-        string_type,
-        case_style_type,
-        root_trait_name,
-        decl_name_method,
-        policy_method,
-        newtype_trait_key,
-    ) = {
-        let mut tt = module.type_table.borrow_mut();
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
-        let items = tt.compiler_items();
-        (
-            string_type,
-            case_style_type,
-            items.trait_fq(CompilerItem::Reflect),
-            items.method_name(CompilerItem::ReflectDeclName).to_string(),
-            items
-                .method_name(CompilerItem::ReflectWireNamePolicy)
-                .to_string(),
-            newtype_trait_name.canonical().expect(KEYED),
-        )
-    };
+    let root = ReflectRootEnv::resolve(&mut module.type_table.borrow_mut());
+    let newtype_trait_key = newtype_trait_name.canonical().expect(KEYED);
 
     let mut generated = Vec::new();
     for target in &targets {
-        let mut decl_name = generate_decl_name_fn(
-            &target.receiver,
-            &target.display_name,
-            string_type,
-            &root_trait_name,
-            &decl_name_method,
-            target.span,
-        );
-        // A generic declaration is one impl over `N<T, …>`, instantiated per
-        // use — the shape the struct kind already takes.
-        decl_name.impl_type_params.clone_from(&target.type_params);
-        generated.push(Rc::new(RefCell::new(decl_name)));
-
-        // Reached only over a base with no `Reflect` kind: over one with a kind,
-        // dispatch answers with the base's policy (`TypeTable::wire_policy_subject`).
-        let mut policy = generate_wire_name_policy_fn(
-            &target.receiver,
-            case_style_type,
-            None,
-            module.type_table.borrow().compiler_items(),
-            &root_trait_name,
-            &policy_method,
-            target.span,
-        );
-        policy.impl_type_params.clone_from(&target.type_params);
-        generated.push(Rc::new(RefCell::new(policy)));
+        let facts = RootFacts {
+            display_name: &target.display_name,
+            // Reached only over a base with no `Reflect` kind: over one with a
+            // kind, dispatch answers with the base's policy
+            // (`TypeTable::wire_policy_subject`).
+            wire_name_policy: None,
+            doc: target.doc.as_deref(),
+        };
+        for mut method in root.methods(&module.type_table, &target.receiver, &facts, target.span) {
+            // A generic declaration is one impl over `N<T, …>`, instantiated
+            // per use — the shape the struct kind already takes.
+            method.impl_type_params.clone_from(&target.type_params);
+            generated.push(Rc::new(RefCell::new(method)));
+        }
 
         ctx.record_impl(&target.receiver, &newtype_trait_key);
     }
@@ -3155,6 +3012,8 @@ struct ReflectNewtypeTarget {
     /// Empty for `type N = T`; the parameters the impl is written over for
     /// `type N<T> = …`.
     type_params: Vec<TirTypeParam>,
+    /// The newtype's own comment, never its base's.
+    doc: Option<String>,
     span: Span,
 }
 
@@ -3187,13 +3046,10 @@ fn generate_flags_reflect_impls(
             Some(ReflectFlagsTarget {
                 flags_type,
                 receiver: FqTypeName::declared(module.type_table.borrow().defs(), f.def),
-                members: f
-                    .members
-                    .iter()
-                    .map(|m| (m.name.clone(), m.bitmask))
-                    .collect(),
+                members: f.members.clone(),
                 span: f.span,
                 wire_name_policy: f.wire_name_policy,
+                doc: f.doc.clone(),
             })
         })
         .collect();
@@ -3223,10 +3079,10 @@ struct ReflectFlagsTarget {
     flags_type: TypeId,
     /// The head every synthesised method of this target hangs off.
     receiver: FqTypeName,
-    /// Per-member `(name, bitmask)`.
-    members: Vec<(String, u32)>,
+    members: Vec<TirFlagsMember>,
     span: Span,
     wire_name_policy: Option<NamePolicy>,
+    doc: Option<String>,
 }
 
 /// Synthesize one flags type's `decl_name()`, `bits(&self)`, `from_bits(raw)`,
@@ -3240,12 +3096,14 @@ fn generate_flags_reflect_methods(
     assert_eq!(env.kind, ScalarKind::Flags);
     let span = target.span;
 
-    let decl_name_fn = generate_decl_name_fn(
+    let root_fns = env.root.methods(
+        type_table,
         &target.receiver,
-        target.receiver.head().name(),
-        env.string_type,
-        &env.root_trait_name,
-        &env.decl_name_method,
+        &RootFacts {
+            display_name: target.receiver.head().name(),
+            wire_name_policy: target.wire_name_policy,
+            doc: target.doc.as_deref(),
+        },
         span,
     );
 
@@ -3286,6 +3144,7 @@ fn generate_flags_reflect_methods(
         span,
     );
     let members_fn = generate_flags_members_fn(
+        type_table,
         env,
         flags_trait_name,
         target,
@@ -3294,30 +3153,17 @@ fn generate_flags_reflect_methods(
         span,
     );
 
-    let wire_name_policy_fn = generate_wire_name_policy_fn(
-        &target.receiver,
-        env.case_style_type,
-        target.wire_name_policy,
-        type_table.borrow().compiler_items(),
-        &env.root_trait_name,
-        &env.wire_name_policy_method,
-        span,
-    );
-
-    vec![
-        decl_name_fn,
-        bits_fn,
-        from_bits_fn,
-        members_fn,
-        wire_name_policy_fn,
-    ]
+    let mut functions = Vec::from(root_fns);
+    functions.extend([bits_fn, from_bits_fn, members_fn]);
+    functions
 }
 
 /// Build `Flags^ReflectFlags::members() -> Self::Members` as
-/// `return [FlagsBit { bit: b, value: (b as Flags), member_name: "…" }, …];` —
-/// one `FlagsBit<Flags>` per member, packed into the homogeneous `Members`
+/// `return [FlagsBit { bit: b, value: (b as Flags), member_name: "…", doc: … }, …];`
+/// — one `FlagsBit<Flags>` per member, packed into the homogeneous `Members`
 /// tuple.
 fn generate_flags_members_fn(
+    type_table: &RefCell<TypeTable>,
     env: &ScalarReflectSynthEnv,
     flags_trait_name: &FqTraitName,
     target: &ReflectFlagsTarget,
@@ -3330,18 +3176,18 @@ fn generate_flags_members_fn(
     let rows = target
         .members
         .iter()
-        .map(|(member_name, bitmask)| {
+        .map(|member| {
             let bit_u32 = TirExpr::new(
                 TirExprKind::IntLiteral {
-                    value: u64::from(*bitmask),
-                    repr: bitmask.to_string(),
+                    value: u64::from(member.bitmask),
+                    repr: member.bitmask.to_string(),
                 },
                 TypeTable::U32,
                 span,
             );
             let value = common::cast(bit_u32, target.flags_type);
             vec![
-                reflect_meta_int_field("bit", i64::from(*bitmask), TypeTable::U64, 0, span),
+                reflect_meta_int_field("bit", i64::from(member.bitmask), TypeTable::U64, 0, span),
                 TirStructField {
                     name: "value".to_string(),
                     value,
@@ -3349,12 +3195,15 @@ fn generate_flags_members_fn(
                 },
                 TirStructField {
                     name: "member_name".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::StringLiteral(member_name.clone()),
-                        env.string_type,
-                        span,
-                    ),
+                    value: env.root.string_literal(&member.name, span),
                     field_index: 2,
+                },
+                TirStructField {
+                    name: "doc".to_string(),
+                    value: env
+                        .root
+                        .optional_string(type_table, member.doc.as_deref(), span),
+                    field_index: 3,
                 },
             ]
         })
@@ -3416,7 +3265,7 @@ fn generate_flags_from_bits_fn(
     let valid_mask: u64 = target
         .members
         .iter()
-        .fold(0u64, |acc, (_, bitmask)| acc | u64::from(*bitmask));
+        .fold(0u64, |acc, member| acc | u64::from(member.bitmask));
     let u64_literal = |value: u64| {
         TirExpr::new(
             TirExprKind::IntLiteral {

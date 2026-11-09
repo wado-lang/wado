@@ -444,11 +444,9 @@ A `//!` module comment is not carried. No consumer asks for it.
 
 ## Roadmap
 
-1. [ ] `Reflect::doc()` and `Member::doc()`. Done when every kind and every
+1. [x] `Reflect::doc()` and `Member::doc()`. Done when every kind and every
    member handle answers as [Doc Comments](./spec-reflection.md#doc-comments)
-   states, and Jade's B writes `description` and `title` from them. A comment
-   lives in the `TriviaMap` that `wado doc` reads, and nothing carries it as
-   far as the synthesis yet.
+   states, and Jade's B writes `description` and `title` from them.
 
 ## Known gaps
 

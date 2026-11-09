@@ -57,8 +57,8 @@ a program means.
 
 - `///` documents the declaration that follows it: an item, or a field, case or
   method inside one. Consecutive `///` lines form one doc string. Attributes may
-  stand between the doc comment and the declaration, but a blank line may not:
-  it detaches the comment.
+  stand between the doc comment and the declaration, but a blank line or an
+  ordinary comment may not: either detaches the comment.
 - `//!` documents the module. The `//!` lines ahead of the first item form the
   module's doc string.
 - `////` and longer runs of `/` are ordinary line comments.

@@ -134,6 +134,15 @@ kind carries the attribute, and it says the same thing on each: the
 root answers so a caller need not know which kind it holds. A newtype
 answers with the policy of the declaration it wraps.
 
+#### `fn doc() -> Option<String>`
+
+`#[compiler_item("reflect_doc")]`
+
+The `///` comment on the declaration, or `None`: its lines joined by
+`\n`, each without its `///` and one space after it. Every instantiation
+of a generic type answers with its declaration's comment, and a newtype
+with its own, never its base's.
+
 ### `pub trait ReflectStruct: Reflect with ()`
 
 Compile-time struct introspection. The compiler synthesizes an impl for
@@ -183,6 +192,10 @@ The source field name.
 `#[compiler_item("member_wire_name_override")]`
 
 The raw `#[wire(name)]` value (casing not applied), or `None`.
+
+#### `fn doc(&self) -> Option<String>`
+
+The member's `///` comment, as `Reflect::doc` reads a declaration's.
 
 ### `pub trait ReflectVariant: Reflect with ()`
 
@@ -580,9 +593,16 @@ Returns None when iteration is complete.
 
 #### `fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C`
 
+Collects the remaining elements into any `FromIterator` target,
+defaulting to `List<Self::Item>`.
+
 #### `fn count(&mut self) -> i32`
 
+Counts the number of remaining elements in the iterator.
+
 #### `fn map<U, effect E, F: fn mut(Self::Item) -> U with E>(self, f: F) -> IterMap<Self, F> with ()`
+
+Transforms each element using a function.
 
 #### `fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc with _) -> Acc with _`
 
@@ -613,7 +633,11 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 #### `fn nth(&mut self, n: i32) -> Option<Self::Item>`
 
+Returns the nth element (0-indexed), advancing the iterator up to and including it.
+
 #### `fn position(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> Option<i32> with _`
+
+Returns the 0-based index of the first element for which `pred` returns true, or None.
 
 #### `fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item with _) -> Option<Self::Item> with _`
 
@@ -644,6 +668,8 @@ Returns an adapter that yields the first element, then every `step`-th after it.
 
 #### `fn chain<affine J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with ()`
 
+Returns an adapter that yields all elements of `self`, then all elements of `other`.
+
 #### `fn zip<affine J: Iterator>(self, other: J) -> IterZip<Self, J> with ()`
 
 Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
@@ -654,11 +680,19 @@ Adds the remaining elements. None for an empty iterator.
 
 #### `fn product<P: Product<Elem = Self::Item> = Self::Item>(&mut self) -> Option<P>`
 
+Multiplies the remaining elements. None for an empty iterator.
+
 #### `fn min<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
+
+The smallest remaining element, the first on ties. None for an empty iterator.
 
 #### `fn max<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
 
+The largest remaining element, the last on ties. None for an empty iterator.
+
 #### `fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _`
+
+The smallest remaining element under `cmp`, the first on ties.
 
 #### `fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _`
 
@@ -852,6 +886,9 @@ Overlapping windows of `size` consecutive elements.
 #### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>`
 
 - `contract size > 0`
+
+Non-overlapping chunks of up to `size` elements; the last may be
+shorter.
 
 ### `pub trait AsStrSlice: Eq<String> + Display with ()`
 
@@ -1224,6 +1261,8 @@ An owned, fixed-length byte buffer.
 
 ### `pub type ByteList = List<u8>`
 
+An owned, growable byte buffer.
+
 #### `pub fn to_hex(&self) -> String`
 
 Renders the bytes as a lowercase hexadecimal string, two digits per
@@ -1234,6 +1273,8 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 ##### `fn as_byte_slice(&self) -> ByteSlice`
 
 ### `pub type ByteSlice = Slice<u8>`
+
+A view referencing a byte buffer.
 
 #### `impl AsByteSlice for ByteSlice`
 
@@ -3482,6 +3523,8 @@ The payload of this case in `v`. Traps unless `holds(v)`.
 
 ##### `fn wire_name_override(&self) -> Option<String>`
 
+##### `fn doc(&self) -> Option<String>`
+
 #### `impl Inspect for VariantCase<T, P>`
 
 ##### `fn inspect(&self, f: &mut Formatter)`
@@ -3512,6 +3555,8 @@ The enum value for this case.
 
 ##### `fn wire_name_override(&self) -> Option<String>`
 
+##### `fn doc(&self) -> Option<String>`
+
 #### `impl Inspect for EnumCase<T>`
 
 ##### `fn inspect(&self, f: &mut Formatter)`
@@ -3541,6 +3586,8 @@ The flags value with only this bit set.
 ##### `fn name(&self) -> String`
 
 ##### `fn wire_name_override(&self) -> Option<String>`
+
+##### `fn doc(&self) -> Option<String>`
 
 #### `impl Inspect for FlagsBit<T>`
 
@@ -3626,6 +3673,8 @@ The value of this field in `v`.
 ##### `fn name(&self) -> String`
 
 ##### `fn wire_name_override(&self) -> Option<String>`
+
+##### `fn doc(&self) -> Option<String>`
 
 #### `impl Inspect for StructField<T, F>`
 

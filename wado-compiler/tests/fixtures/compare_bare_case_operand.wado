@@ -1,0 +1,44 @@
+// A bare case names no type of its own, so a comparison resolves it after the
+// other operand and hands it that operand's type: whichever side it is on, and
+// even beside a static call, which consults the expected type too.
+
+enum Color {
+    Red,
+    Green,
+}
+
+impl Color {
+    fn favorite() -> Color {
+        return Red;
+    }
+}
+
+struct Box {}
+
+impl Box {
+    fn label() -> Option<String> {
+        return Option::Some("a");
+    }
+}
+
+test "a bare case beside a static call" {
+    assert Box::label() == Some("a");
+    assert Some("a") == Box::label();
+    assert Color::favorite() == Red;
+    assert Red == Color::favorite();
+    assert Color::favorite() != Green;
+}
+
+test "a bare case on the left" {
+    let c: Color = Green;
+    assert Green == c;
+    assert Red != c;
+}
+
+test "a tuple literal still takes a variable's type" {
+    let t: [i64, i64] = [1, 2];
+    assert [1, 2] == t;
+}
+
+__DATA__
+{"test": {}}

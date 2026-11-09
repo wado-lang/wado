@@ -3,7 +3,7 @@
 
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::defs::DefId;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{FunctionRef, ResolvedType, TemplateShape, TypeId};
@@ -22,6 +22,17 @@ use crate::synthesis::traits::{
     REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
 };
 use crate::{hashmap, tir};
+
+/// The compiler item of the `Reflect` method named `method`, if it names one.
+fn root_method(items: &CompilerItems, method: &str) -> Option<CompilerItem> {
+    [
+        CompilerItem::ReflectDeclName,
+        CompilerItem::ReflectWireNamePolicy,
+        CompilerItem::ReflectDoc,
+    ]
+    .into_iter()
+    .find(|&item| method == items.method_name(item))
+}
 
 /// The two payload-free kinds share one static-call resolution shape, differing
 /// only in their compiler items, subject kind, and scalar type (`i32` / `u64`).
@@ -855,12 +866,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|def| self.tysys.on_bound_of(def))?;
         let tt = self.tysys.type_table.borrow();
         let (dispatch, declares) = match trait_ {
-            OnBoundTrait::Reflect => {
-                let items = tt.compiler_items();
-                let declares = method == items.method_name(CompilerItem::ReflectDeclName)
-                    || method == items.method_name(CompilerItem::ReflectWireNamePolicy);
-                (ReflectDispatch::Root, declares)
-            }
+            OnBoundTrait::Reflect => (
+                ReflectDispatch::Root,
+                root_method(tt.compiler_items(), method).is_some(),
+            ),
             OnBoundTrait::ReflectStruct => (
                 ReflectDispatch::Struct,
                 StructMethods::resolve(&tt).declares(method),
@@ -908,20 +917,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let (trait_name, is_policy) = {
+        let (trait_name, asked) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_fq(CompilerItem::Reflect),
-                method == items.method_name(CompilerItem::ReflectWireNamePolicy),
+                root_method(items, &method)
+                    .expect("`reflect_dispatch_of` admits the root's methods only"),
             )
         };
+        let is_policy = asked == CompilerItem::ReflectWireNamePolicy;
         let result = {
             let mut tt = self.tysys.type_table.borrow_mut();
-            if is_policy {
-                tt.make_compiler_enum(CompilerItem::CaseStyle)
-            } else {
-                tt.make_compiler_struct(CompilerItem::String)
+            match asked {
+                CompilerItem::ReflectWireNamePolicy => {
+                    tt.make_compiler_enum(CompilerItem::CaseStyle)
+                }
+                CompilerItem::ReflectDoc => {
+                    let string = tt.make_compiler_struct(CompilerItem::String);
+                    tt.make_option(string)
+                }
+                CompilerItem::ReflectDeclName => tt.make_compiler_struct(CompilerItem::String),
+                other => unreachable!("`{other:?}` is not a method of `Reflect`"),
             }
         };
 

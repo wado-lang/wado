@@ -40,7 +40,7 @@ use super::coercion::{
     unary_passes_expected_type,
 };
 use super::expr::UnionSource;
-use super::operators::takes_shape_from_expected_type;
+use super::operators::expected_type_use;
 use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::transposition::Transposition;
 use super::typecheck::{admits_condition, widens};
@@ -1114,10 +1114,12 @@ impl<'a> Reify<'a> {
                     index: i as u32,
                     span: case.span,
                     wire_name_override: wire_name_override(&case.attrs),
+                    doc: case.doc.clone(),
                 })
                 .collect(),
             span: enum_decl.span,
             wire_name_policy: wire_name_policy(&enum_decl.attrs),
+            doc: enum_decl.doc.clone(),
         }
     }
 
@@ -1140,12 +1142,14 @@ impl<'a> Reify<'a> {
                     name: member.name.clone(),
                     bitmask: member.bitmask,
                     span: m.span,
+                    doc: m.doc.clone(),
                 })
                 .collect(),
             span: flags_decl.span,
             wire_name_policy: wire_name_policy(
                 flags_decl.attributes.as_deref().unwrap_or_default(),
             ),
+            doc: flags_decl.doc.clone(),
         })
     }
 
@@ -1188,6 +1192,7 @@ impl<'a> Reify<'a> {
             type_params: Self::declared_type_params(&newtype_decl.type_params),
             type_id: type_id.filter(|_| !generic),
             span: newtype_decl.span,
+            doc: newtype_decl.doc.clone(),
         })
     }
 
@@ -1228,6 +1233,7 @@ impl<'a> Reify<'a> {
             fields,
             span: struct_decl.span,
             wire_name_policy,
+            doc: struct_decl.doc.clone(),
         }
     }
 
@@ -1298,6 +1304,7 @@ impl<'a> Reify<'a> {
                 fields,
                 span: struct_decl.span,
                 wire_name_policy: wire_name_policy(&struct_decl.attrs),
+                doc: struct_decl.doc.clone(),
             },
         );
     }
@@ -1320,6 +1327,7 @@ impl<'a> Reify<'a> {
                 type_params: Self::declared_type_params(&newtype_decl.type_params),
                 type_id: type_id.filter(|_| !generic),
                 span: newtype_decl.span,
+                doc: newtype_decl.doc.clone(),
             },
         );
     }
@@ -1340,6 +1348,7 @@ impl<'a> Reify<'a> {
                 payload: data.payload,
                 span: case.span,
                 wire_name_override: wire_name_override(&case.attrs),
+                doc: case.doc.clone(),
             })
             .collect();
 
@@ -1367,6 +1376,7 @@ impl<'a> Reify<'a> {
             span: variant_decl.span,
             wire_name_policy: wire_name_policy(&variant_decl.attrs),
             wire_tag: wire_value(&variant_decl.attrs, "tag"),
+            doc: variant_decl.doc.clone(),
         }
     }
 
@@ -1973,6 +1983,7 @@ impl<'a> Reify<'a> {
                 .iter()
                 .any(|a| a.name == WIRE && a.has_arg("positional")),
             default_expr,
+            doc: field.doc.clone(),
         }
     }
 
@@ -4574,8 +4585,8 @@ impl<'a> Reify<'a> {
                 |expr| expr.type_id,
             )
         } else if binary.op.is_comparison()
-            && takes_shape_from_expected_type(&binary.left)
-            && !takes_shape_from_expected_type(&binary.right)
+            && expected_type_use(&binary.left, &self.tysys)
+                > expected_type_use(&binary.right, &self.tysys)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
             let left = self.reify_expr(&binary.left, ctx, None);

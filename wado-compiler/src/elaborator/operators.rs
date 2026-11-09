@@ -240,9 +240,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let left = self.resolve_expr(left_ast, ctx, Some(right));
             (left, right)
         } else {
-            let left_lit = op.is_comparison() && takes_shape_from_expected_type(left_ast);
-            let right_lit = op.is_comparison() && takes_shape_from_expected_type(right_ast);
-            if left_lit && !right_lit {
+            if op.is_comparison()
+                && expected_type_use(left_ast, &self.tysys)
+                    > expected_type_use(right_ast, &self.tysys)
+            {
                 let right = self.resolve_expr(right_ast, ctx, expected_type);
                 let left_expected = if right == TypeTable::ERROR {
                     expected_type
@@ -273,20 +274,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Whether an operand's own elaboration would consult the expected type, so a
-/// comparison resolves the *other* side first and hands this one its type.
-/// Syntactic on purpose: reify decides the same order with no synthesis to
-/// ask, and a type-dependent order would desync the two walks inside a tuple
-/// `for-of`. A form left out just resolves on its own, so a subset is safe.
-pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
-    match expr {
-        ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
-        // A namespaced call (`Color::from_str(s)`) reads as a static path
-        // too; a plain call's return type is its own.
-        ast::Expr::Call(call) => {
-            matches!(&call.callee, ast::Expr::Ident(id) if id.segments.len() >= 2)
+/// How far an operand's own elaboration leans on the expected type. A
+/// comparison resolves the operand that leans further after the other, and
+/// hands it the other's type.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum ExpectedTypeUse {
+    Ignores,
+    Consults,
+    /// A bare case (`Some(x)`, `Red`) names no type without it.
+    Requires,
+}
+
+/// Read off the syntax and the resolve walk, never a type: reify decides the
+/// same order with no synthesis to ask, and a type-dependent order would
+/// desync the two walks inside a tuple `for-of`. A form left out just resolves
+/// on its own, so a subset is safe.
+pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> ExpectedTypeUse {
+    let bare_case = |ident: &ast::IdentExpr| {
+        if tysys.bare_case_at(ident.id).is_some() {
+            ExpectedTypeUse::Requires
+        } else {
+            ExpectedTypeUse::Ignores
         }
-        _ => false,
+    };
+    match expr {
+        ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => ExpectedTypeUse::Consults,
+        ast::Expr::Ident(ident) => bare_case(ident),
+        ast::Expr::Call(call) => match &call.callee {
+            // A namespaced call (`Color::from_str(s)`) reads as a static path
+            // too; a plain call's return type is its own.
+            ast::Expr::Ident(ident) if ident.segments.len() >= 2 => ExpectedTypeUse::Consults,
+            ast::Expr::Ident(ident) => bare_case(ident),
+            _ => ExpectedTypeUse::Ignores,
+        },
+        _ => ExpectedTypeUse::Ignores,
     }
 }
 

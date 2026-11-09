@@ -517,6 +517,8 @@ pub enum CompilerItem {
     /// Every kind carries the attribute and it says the same thing on each, so
     /// the root states it once.
     ReflectWireNamePolicy,
+    /// `Reflect::doc` — the declaration's `///` comment.
+    ReflectDoc,
     /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
     /// insert behind `map[k] = v`, which the `map<K, V>` lift builds pairs with.
     TreeMapIndexAssign,
@@ -953,6 +955,7 @@ impl CompilerItem {
         Self::ListLoaded,
         Self::ReflectDeclName,
         Self::ReflectWireNamePolicy,
+        Self::ReflectDoc,
         Self::TreeMapIndexAssign,
         Self::MapEntriesIterNext,
         Self::TreeMapLen,
@@ -1232,6 +1235,7 @@ impl CompilerItem {
             Self::ListLoaded => "list_loaded",
             Self::ReflectDeclName => "reflect_decl_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
+            Self::ReflectDoc => "reflect_doc",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
             Self::MapEntriesIterNext => "map_entries_iter_next",
             Self::TreeMapLen => "tree_map_len",
@@ -1491,6 +1495,7 @@ impl CompilerItem {
             | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
+            | Self::ReflectDoc
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaultSlot
@@ -1875,6 +1880,7 @@ impl CompilerItem {
             | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
+            | Self::ReflectDoc
             | Self::TreeMapIndexAssign
             | Self::MapEntriesIterNext
             | Self::TreeMapLen

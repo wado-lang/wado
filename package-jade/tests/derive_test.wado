@@ -214,6 +214,57 @@ test "a tagged variant is one of its cases, each holding its name under the tag"
     assert standalone::<Event>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Event","$defs":{"Event":{"oneOf":[{"$ref":"#/$defs/Point","properties":{"kind":{"const":"Moved"}},"required":["kind"]},{"type":"object","properties":{"kind":{"const":"Closed"}},"required":["kind"]}]},"Point":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number","default":0}},"required":["x"]}}}`;
 }
 
+/// A place on the map.
+///
+/// Measured from the top left.
+struct Place {
+    /// How far across.
+    x: f64,
+    /// Where it was last seen.
+    ///
+    /// Updated hourly.
+    seen: Point,
+    y: f64,
+}
+
+test "a doc comment is a title and a description: a definition's, a property's" {
+    assert standalone::<Place>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Place","$defs":{"Place":{"title":"A place on the map.","description":"Measured from the top left.","type":"object","properties":{"x":{"description":"How far across.","type":"number"},"seen":{"$ref":"#/$defs/Point","title":"Where it was last seen.","description":"Updated hourly."},"y":{"type":"number"}},"required":["x","seen","y"]},"Point":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number","default":0}},"required":["x"]}}}`;
+}
+
+/// One line, then
+/// a second, so no title.
+///
+/// Another paragraph.
+variant Signal {
+    /// Raised.
+    Up(i32),
+    /// Lowered.
+    ///
+    ///
+    /// Blank lines between.
+    Down,
+}
+
+test "a case's comment describes its oneOf branch" {
+    assert standalone::<Signal>() == #`{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Signal","$defs":{"Signal":{"description":"One line, then\na second, so no title.\n\nAnother paragraph.","oneOf":[{"description":"Raised.","type":"object","properties":{"Up":{"type":"integer","minimum":-2147483648,"maximum":2147483647}},"required":["Up"],"maxProperties":1},{"title":"Lowered.","description":"Blank lines between.","const":"Down"}]}}}`#;
+}
+
+/// A shade.
+enum Shade {
+    /// Has no place in the schema.
+    Dark,
+}
+
+/// Rights.
+flags Rights {
+    Own,
+}
+
+test "an enum's and a flags type's comments describe their definitions" {
+    assert standalone::<Shade>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Shade","$defs":{"Shade":{"description":"A shade.","type":"string","enum":["Dark"]}}}`;
+    assert standalone::<Rights>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Rights","$defs":{"Rights":{"description":"Rights.","type":"array","items":{"type":"string","enum":["Own"]},"uniqueItems":true}}}`;
+}
+
 type UserName = String;
 
 test "a newtype takes its base's schema" {

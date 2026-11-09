@@ -1,0 +1,124 @@
+// `Reflect::<T>::doc()` answers the `///` comment on `T`'s declaration, and a
+// member's `doc()` the comment on the member: the lines joined by `\n`, each
+// without its `///` and one space after it.
+
+/// A point on the plane.
+///
+/// Both coordinates are in pixels.
+struct Point {
+    /// The horizontal coordinate.
+    x: i32,
+    y: i32,
+}
+
+/// Wraps one value.
+#[wire(name_policy = "camelCase")]
+struct Wrap<T> {
+    ///Not indented.
+    #[wire(name = "v")]
+    value: T,
+}
+
+// An ordinary comment is not a doc comment.
+struct Undocumented {
+    // Nor here.
+    field: i32,
+}
+
+/// Cut off from the struct by the blank line.
+
+struct Detached {
+    /// Cut off by the ordinary comment below.
+    // An ordinary comment.
+    field: i32,
+}
+
+/// A shape.
+variant Shape {
+    /// A circle of the given radius.
+    Circle(f64),
+    Empty,
+}
+
+/// A color.
+enum Color {
+    /// The color of fire.
+    Red,
+    Green,
+}
+
+/// Permissions.
+flags Perm {
+    /// May read.
+    Read,
+    Write,
+}
+
+/// Distance in meters.
+type Meters = f64;
+
+/// Never inherited by `Alias`.
+struct Base {
+    field: i32,
+}
+
+type Alias = Base;
+
+fn doc_of<T: Reflect>() -> Option<String> {
+    return Reflect::<T>::doc();
+}
+
+test "every kind answers its declaration's comment" {
+    assert Reflect::<Point>::doc() == Some("A point on the plane.\n\nBoth coordinates are in pixels.");
+    assert Reflect::<Wrap<i32>>::doc() == Some("Wraps one value.");
+    assert Reflect::<Wrap<String>>::doc() == Some("Wraps one value.");
+    assert Reflect::<Shape>::doc() == Some("A shape.");
+    assert Reflect::<Color>::doc() == Some("A color.");
+    assert Reflect::<Perm>::doc() == Some("Permissions.");
+    assert Reflect::<Meters>::doc() == Some("Distance in meters.");
+}
+
+test "only a `///` block directly above the declaration counts" {
+    assert Reflect::<Undocumented>::doc() == null;
+    assert Reflect::<Detached>::doc() == null;
+}
+
+test "a newtype answers its own comment, never its base's" {
+    assert Reflect::<Base>::doc() == Some("Never inherited by `Alias`.");
+    assert Reflect::<Alias>::doc() == null;
+}
+
+test "a bound reaches the root" {
+    assert doc_of::<Point>() == Some("A point on the plane.\n\nBoth coordinates are in pixels.");
+    assert doc_of::<Alias>() == null;
+}
+
+test "every member answers its own comment" {
+    let [x, y] = ReflectStruct::<Point>::members();
+    assert x.doc() == Some("The horizontal coordinate.");
+    assert y.doc() == null;
+
+    let [value] = ReflectStruct::<Wrap<i32>>::members();
+    assert value.doc() == Some("Not indented.");
+
+    let [field] = ReflectStruct::<Undocumented>::members();
+    assert field.doc() == null;
+
+    let [detached] = ReflectStruct::<Detached>::members();
+    assert detached.doc() == null;
+
+    let [circle, empty] = ReflectVariant::<Shape>::members();
+    assert circle.doc() == Some("A circle of the given radius.");
+    assert empty.doc() == null;
+
+    let [red, green] = ReflectEnum::<Color>::members();
+    assert red.doc() == Some("The color of fire.");
+    assert green.doc() == null;
+
+    let [read, write] = ReflectFlags::<Perm>::members();
+    assert read.doc() == Some("May read.");
+    assert write.doc() == null;
+}
+
+__DATA__
+{"test": {}}

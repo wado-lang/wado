@@ -210,17 +210,45 @@ test "the tag is reported as written" {
 
 ### Doc Comments
 
-`Reflect::<T>::doc()` returns the `///` comment on the type's declaration, and
-`None` where the declaration has none or the type has no declaration, such as
-a reference or a function type. Every instantiation of a generic type answers
-with its declaration's comment. A newtype answers with its own comment, not its
-base's. A member's `doc()` returns the comment on the member the same way.
+`Reflect::<T>::doc()` returns the
+[doc comment](./spec-lexical.md#comments) on the type's declaration, and `None`
+where the declaration has none or the type has no declaration, such as an
+anonymous struct or a tagged template's type. Every instantiation of a generic
+type answers with its declaration's comment. A newtype answers with its own
+comment, not its base's. A member's `doc()` returns the comment on the member
+the same way.
 
-The text is the comment's lines joined by newlines, each without its `///` and
-one space after it, so it is the Markdown `wado doc` renders. A `//!` module
-comment belongs to no type or member, so neither reads it.
+The text is the doc string: the comment's lines joined by newlines, each without
+its `///` and one space after it, so it is the Markdown `wado doc` renders. A
+`//!` module comment belongs to no type or member, so neither reads it.
 
-> Not yet implemented: neither `Reflect::doc()` nor `Member::doc()` is declared.
+<!-- {"fixture":"spec_reflection_doc.wado"} -->
+
+```wado
+/// A point on the plane.
+///
+/// Both coordinates are in pixels.
+struct Point {
+    /// Distance from the left edge.
+    x: i32,
+    y: i32,
+}
+
+/// Distance in meters.
+type Meters = f64;
+
+type Location = Point;
+
+test {
+    assert Reflect::<Point>::doc() == Some("A point on the plane.\n\nBoth coordinates are in pixels.");
+    assert Reflect::<Meters>::doc() == Some("Distance in meters.");
+    assert Reflect::<Location>::doc() == null;
+
+    let [x, y] = ReflectStruct::<Point>::members();
+    assert x.doc() == Some("Distance from the left edge.");
+    assert y.doc() == null;
+}
+```
 
 ## Members
 

@@ -145,6 +145,13 @@ pub trait Reflect with () {
     /// answers with the policy of the declaration it wraps.
     #[compiler_item("reflect_wire_name_policy")]
     fn wire_name_policy() -> CaseStyle;
+
+    /// The `///` comment on the declaration, or `None`: its lines joined by
+    /// `\n`, each without its `///` and one space after it. Every instantiation
+    /// of a generic type answers with its declaration's comment, and a newtype
+    /// with its own, never its base's.
+    #[compiler_item("reflect_doc")]
+    fn doc() -> Option<String>;
 }
 
 /// Compile-time struct introspection. The compiler synthesizes an impl for
@@ -218,6 +225,9 @@ pub affine trait Member with () {
     /// The raw `#[wire(name)]` value (casing not applied), or `None`.
     #[compiler_item("member_wire_name_override")]
     fn wire_name_override(&self) -> Option<String>;
+
+    /// The member's `///` comment, as `Reflect::doc` reads a declaration's.
+    fn doc(&self) -> Option<String>;
 }
 
 /// Compile-time variant introspection. The compiler synthesizes an impl for
@@ -348,6 +358,7 @@ pub struct VariantCase<affine T, affine P> {
     case_name: String,
     wire_override: Option<String>,
     is_unit: bool,
+    doc: Option<String>,
 }
 
 impl<affine T, affine P> VariantCase<T, P> {
@@ -398,6 +409,10 @@ impl<affine T, affine P> Member for VariantCase<T, P> {
     fn wire_name_override(&self) -> Option<String> {
         return self.wire_override;
     }
+
+    fn doc(&self) -> Option<String> {
+        return self.doc;
+    }
 }
 
 /// A case handle minted by `ReflectEnum::members()`: an enum case carries
@@ -409,6 +424,7 @@ pub struct EnumCase<T> {
     value: T,
     case_name: String,
     wire_override: Option<String>,
+    doc: Option<String>,
 }
 
 impl<T: ReflectEnum> EnumCase<T> {
@@ -436,6 +452,10 @@ impl<T> Member for EnumCase<T> {
     fn wire_name_override(&self) -> Option<String> {
         return self.wire_override;
     }
+
+    fn doc(&self) -> Option<String> {
+        return self.doc;
+    }
 }
 
 /// A bit handle minted by `ReflectFlags::members()`: the member holds the
@@ -446,6 +466,7 @@ pub struct FlagsBit<T> {
     bit: u64,
     value: T,
     member_name: String,
+    doc: Option<String>,
 }
 
 impl<T: ReflectFlags> FlagsBit<T> {
@@ -472,6 +493,10 @@ impl<T> Member for FlagsBit<T> {
 
     fn wire_name_override(&self) -> Option<String> {
         return Option::None;
+    }
+
+    fn doc(&self) -> Option<String> {
+        return self.doc;
     }
 }
 
@@ -541,6 +566,7 @@ pub struct StructField<affine T, affine F> {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    doc: Option<String>,
 }
 
 impl<affine T, affine F> StructField<T, F> {
@@ -579,6 +605,10 @@ impl<affine T, affine F> Member for StructField<T, F> {
 
     fn wire_name_override(&self) -> Option<String> {
         return self.wire_override;
+    }
+
+    fn doc(&self) -> Option<String> {
+        return self.doc;
     }
 }
 
@@ -657,6 +687,9 @@ impl<affine T, affine F> Inspect for StructField<T, F> {
         struct_field(f, "is_secret", false);
         self.is_secret.inspect(f);
         struct_field_end(f);
+        struct_field(f, "doc", false);
+        inspect_option_string(&self.doc, f);
+        struct_field_end(f);
         struct_close(f);
     }
 }
@@ -675,6 +708,9 @@ impl<affine T, affine P> Inspect for VariantCase<T, P> {
         struct_field_end(f);
         struct_field(f, "is_unit", false);
         self.is_unit.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "doc", false);
+        inspect_option_string(&self.doc, f);
         struct_field_end(f);
         struct_close(f);
     }
@@ -695,6 +731,9 @@ impl<T: Inspect> Inspect for EnumCase<T> {
         struct_field(f, "wire_override", false);
         inspect_option_string(&self.wire_override, f);
         struct_field_end(f);
+        struct_field(f, "doc", false);
+        inspect_option_string(&self.doc, f);
+        struct_field_end(f);
         struct_close(f);
     }
 }
@@ -710,6 +749,9 @@ impl<T: Inspect> Inspect for FlagsBit<T> {
         struct_field_end(f);
         struct_field(f, "member_name", false);
         self.member_name.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "doc", false);
+        inspect_option_string(&self.doc, f);
         struct_field_end(f);
         struct_close(f);
     }

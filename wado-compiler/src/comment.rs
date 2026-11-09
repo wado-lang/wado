@@ -32,6 +32,44 @@ pub enum CommentKind {
     ModuleDoc,
 }
 
+impl Comment {
+    /// The text after the `///` or `//!` marker and one space after it.
+    pub fn doc_text(&self) -> &str {
+        let rest = match self.kind {
+            CommentKind::DocLine => self.text.strip_prefix('/').unwrap_or(&self.text),
+            CommentKind::ModuleDoc => self.text.strip_prefix('!').unwrap_or(&self.text),
+            CommentKind::Line | CommentKind::Block => &self.text,
+        };
+        rest.strip_prefix(' ').unwrap_or(rest)
+    }
+}
+
+/// The doc comment of a declaration whose first line is `item_line`: the `///`
+/// lines of `leading` that end it, each on the line above the next, joined by
+/// newlines. Any other comment, or a blank line, ends the block.
+pub fn doc_block(leading: &[Comment], item_line: usize) -> Option<String> {
+    let mut expected_line = item_line;
+    let mut start = leading.len();
+    for comment in leading.iter().rev() {
+        if comment.kind != CommentKind::DocLine || comment.span.line + 1 != expected_line {
+            break;
+        }
+        expected_line = comment.span.line;
+        start -= 1;
+    }
+    let block = &leading[start..];
+    if block.is_empty() {
+        return None;
+    }
+    Some(
+        block
+            .iter()
+            .map(Comment::doc_text)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}
+
 /// Trivia (currently: comments) attached to AST nodes by [`AstId`]. `leading` is
 /// filled by the parser in DFS order, so a comment lands on the outermost node
 /// starting at its position — `/*flag=*/true` belongs to the literal, not the

@@ -24,7 +24,7 @@ use crate::ast::{
     WorldExportInterface, WorldImport, repeat_outside_signature,
 };
 use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
-use crate::comment::{Comment, TriviaMap};
+use crate::comment::{Comment, TriviaMap, doc_block};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, string_value};
 use crate::lexer::{
@@ -79,6 +79,9 @@ pub struct Parser {
     comments: Vec<Comment>,
     /// Index of the next unattached comment in `comments`.
     comment_cursor: usize,
+    /// Every comment the lexer read, ordered by position. Kept whether or not
+    /// `comments` is, since a declaration's doc comment is part of the AST.
+    source_comments: Arc<[Comment]>,
     /// The `{` tokens of the interpolations parsed so far, which the template
     /// token hides from `tokens` as it hides their comments.
     interpolation_braces: Vec<Span>,
@@ -260,6 +263,7 @@ impl Parser {
             tokens,
             None,
             None,
+            Arc::from([]),
             Vec::new(),
         )
     }
@@ -277,14 +281,15 @@ impl Parser {
             lex.tokens,
             lex.shebang,
             lex.data_section,
+            Arc::from(lex.comments.as_slice()),
             lex.comments,
         )
     }
 
-    /// Like [`Parser::from_lex`] but drops the comment stream. Used by the
-    /// loader and other non-formatter paths where trivia is allocated then
-    /// thrown away — clearing it up front skips the per-AST-id comment-cursor
-    /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
+    /// Like [`Parser::from_lex`] but keeps no trivia. Used by the loader and
+    /// other non-formatter paths where trivia is allocated then thrown away —
+    /// clearing it up front skips the per-AST-id comment-cursor walk and
+    /// `Comment::clone` into [`crate::comment::TriviaMap`].
     pub fn from_lex_no_trivia(lex: LexResult) -> Self {
         Self::build(
             lex.space,
@@ -292,6 +297,7 @@ impl Parser {
             lex.tokens,
             lex.shebang,
             lex.data_section,
+            Arc::from(lex.comments),
             Vec::new(),
         )
     }
@@ -302,6 +308,7 @@ impl Parser {
         tokens: Vec<Token>,
         shebang: Option<String>,
         data_section: Option<String>,
+        source_comments: Arc<[Comment]>,
         comments: Vec<Comment>,
     ) -> Self {
         // Filter `TokenKind::Error` tokens at construction time so no parser
@@ -329,6 +336,7 @@ impl Parser {
             next_ast_id: 0,
             comments,
             comment_cursor: 0,
+            source_comments,
             interpolation_braces: Vec::new(),
             trivia: TriviaMap::new(),
             errors: Vec::new(),
@@ -468,6 +476,23 @@ impl Parser {
             }
         }
         id
+    }
+
+    /// The doc comment of the declaration whose first token, an attribute's
+    /// included, is the current one: the `///` block between it and the
+    /// token before, which a comment on that token's own line does not start.
+    fn doc_comment_here(&self) -> Option<String> {
+        let first = self.tokens.get(self.pos)?;
+        let previous = self.pos.checked_sub(1).map(|p| self.tokens[p].span);
+        let after = previous.map_or(0, |p| p.end);
+        let to = self
+            .source_comments
+            .partition_point(|c| c.span.start < first.span.start);
+        let before = &self.source_comments[..to];
+        let from = before.partition_point(|c| {
+            c.span.start < after || previous.is_some_and(|p| c.span.line == p.end_line)
+        });
+        doc_block(&before[from..], first.span.line)
     }
 
     /// Consume and return the parser's accumulated trivia. Call this once
@@ -1416,6 +1441,32 @@ impl Parser {
     // Parsing
 
     fn parse_item(&mut self) -> ParseResult<Item> {
+        let doc = self.doc_comment_here();
+        let mut item = self.parse_undocumented_item()?;
+        let doc_slot = match &mut item {
+            Item::Function(d) => &mut d.doc,
+            Item::Interface(d) => &mut d.doc,
+            Item::Struct(d) => &mut d.doc,
+            Item::Enum(d) => &mut d.doc,
+            Item::Variant(d) => &mut d.doc,
+            Item::Flags(d) => &mut d.doc,
+            Item::Newtype(d) => &mut d.doc,
+            Item::Trait(d) => &mut d.doc,
+            Item::Resource(d) => &mut d.doc,
+            Item::Global(d) => &mut d.doc,
+            Item::Use(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Impl(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Error(_) => return Ok(item),
+        };
+        *doc_slot = doc;
+        Ok(item)
+    }
+
+    fn parse_undocumented_item(&mut self) -> ParseResult<Item> {
         // Parse any leading attributes
         let attrs = self.parse_attributes()?;
 
@@ -1628,6 +1679,7 @@ impl Parser {
             mutable,
             visibility,
             attributes,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
@@ -1943,6 +1995,7 @@ impl Parser {
             parent,
             attrs,
             methods,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
@@ -2445,6 +2498,7 @@ impl Parser {
             },
             holds_contracts_of: None,
             body,
+            doc: None,
             span,
         };
         Ok((func, contracts))
@@ -2545,6 +2599,7 @@ impl Parser {
                 stmts: contracts,
                 span,
             }),
+            doc: None,
             span,
         })
     }
@@ -5945,6 +6000,7 @@ impl Parser {
             visibility,
             attrs,
             methods,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
@@ -5954,6 +6010,7 @@ impl Parser {
     /// as a trait method is: a signature terminated by `;`, or a signature
     /// followed by a block — the operation's default implementation.
     fn parse_interface_method(&mut self) -> ParseResult<Function> {
+        let doc = self.doc_comment_here();
         // Attributes on the method (e.g. `#[cm("...")]`) carry through.
         let attrs = self.parse_attributes()?;
 
@@ -5981,7 +6038,7 @@ impl Parser {
                 "an interface operation takes no `contract` clause yet",
             ));
         }
-        Ok(func)
+        Ok(Function { doc, ..func })
     }
 
     /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`
@@ -6254,6 +6311,7 @@ impl Parser {
             type_params,
             fields,
             attrs,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
@@ -6262,6 +6320,7 @@ impl Parser {
         let mut fields = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            let doc = self.doc_comment_here();
             let attrs = self.parse_attributes()?;
             reject_resource_linearity(&attrs)?;
             let id = self.alloc_ast_id();
@@ -6301,6 +6360,7 @@ impl Parser {
                 ty,
                 attrs,
                 default,
+                doc,
                 span,
             });
 
@@ -6330,8 +6390,7 @@ impl Parser {
 
         let mut cases = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            let case_attrs = self.parse_attributes()?;
-            cases.push(self.parse_enum_case(case_attrs)?);
+            cases.push(self.parse_enum_case()?);
             if !self.check(&TokenKind::RBrace) {
                 self.expect(&TokenKind::Comma)?;
             }
@@ -6348,11 +6407,14 @@ impl Parser {
             type_params,
             cases,
             attrs,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
 
-    fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
+    fn parse_enum_case(&mut self) -> ParseResult<EnumCase> {
+        let doc = self.doc_comment_here();
+        let attrs = self.parse_attributes()?;
         reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
@@ -6364,6 +6426,7 @@ impl Parser {
             name,
             name_span,
             attrs,
+            doc,
             span: start_span,
         })
     }
@@ -6390,6 +6453,7 @@ impl Parser {
 
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            let flag_doc = self.doc_comment_here();
             let flag_attrs = self.parse_attributes()?;
             reject_resource_linearity(&flag_attrs)?;
             let flag_id = self.alloc_ast_id();
@@ -6400,6 +6464,7 @@ impl Parser {
                 name: flag_name,
                 name_span: flag_name_span,
                 attrs: flag_attrs,
+                doc: flag_doc,
                 span: flag_span,
             });
             // Comma is optional for the last item
@@ -6418,6 +6483,7 @@ impl Parser {
             is_export,
             attributes: if attrs.is_empty() { None } else { Some(attrs) },
             flags,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
@@ -6448,8 +6514,7 @@ impl Parser {
 
         let mut cases = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            let case_attrs = self.parse_attributes()?;
-            cases.push(self.parse_variant_case(case_attrs)?);
+            cases.push(self.parse_variant_case()?);
             if !self.check(&TokenKind::RBrace) {
                 self.expect(&TokenKind::Comma)?;
             }
@@ -6467,11 +6532,14 @@ impl Parser {
             type_params,
             cases,
             attrs,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
 
-    fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
+    fn parse_variant_case(&mut self) -> ParseResult<VariantCase> {
+        let doc = self.doc_comment_here();
+        let attrs = self.parse_attributes()?;
         reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
@@ -6510,6 +6578,7 @@ impl Parser {
             name_span,
             payload,
             attrs,
+            doc,
             span,
         })
     }
@@ -6586,6 +6655,7 @@ impl Parser {
             type_params,
             ty,
             attrs,
+            doc: None,
             span: start_span.merge(&end_span),
         }))
     }
@@ -6687,6 +6757,7 @@ impl Parser {
                 break;
             }
 
+            let doc = self.doc_comment_here();
             let attrs = self.parse_attributes()?;
 
             // Check if this is an associated type binding: `type Name = Type;`
@@ -6755,11 +6826,13 @@ impl Parser {
                         visibility: member_vis,
                         ty: const_ty,
                         value: const_value,
+                        doc,
                         span: const_span.merge(&end),
                     });
                 } else {
                     let id = self.alloc_ast_id();
-                    methods.push(self.parse_function(id, member_vis, false, false, attrs, true)?);
+                    let method = self.parse_function(id, member_vis, false, false, attrs, true)?;
+                    methods.push(Function { doc, ..method });
                 }
             }
         }
@@ -6903,6 +6976,7 @@ impl Parser {
         let mut associated_types = Vec::new();
         let mut methods = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            let doc = self.doc_comment_here();
             let attrs = self.parse_attributes()?;
 
             // An associated type declaration: `type Name;`, `affine type Name;`
@@ -6972,6 +7046,7 @@ impl Parser {
                 let holder = (!contracts.is_empty())
                     .then(|| self.contract_holder(&method, fn_pos, contracts))
                     .transpose()?;
+                method.doc = doc;
                 methods.push(method);
                 methods.extend(holder);
             }
@@ -6991,6 +7066,7 @@ impl Parser {
             associated_types,
             methods,
             attrs,
+            doc: None,
             span: start_span.merge(&end_span),
         })
     }
@@ -7352,6 +7428,7 @@ impl Parser {
             lex_result.tokens,
             None,
             None,
+            Arc::clone(&self.source_comments),
             Vec::new(),
         );
         parser.next_ast_id = self.next_ast_id;

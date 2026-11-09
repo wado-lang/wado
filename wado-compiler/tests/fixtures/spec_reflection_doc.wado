@@ -1,0 +1,26 @@
+/// A point on the plane.
+///
+/// Both coordinates are in pixels.
+struct Point {
+    /// Distance from the left edge.
+    x: i32,
+    y: i32,
+}
+
+/// Distance in meters.
+type Meters = f64;
+
+type Location = Point;
+
+test {
+    assert Reflect::<Point>::doc() == Some("A point on the plane.\n\nBoth coordinates are in pixels.");
+    assert Reflect::<Meters>::doc() == Some("Distance in meters.");
+    assert Reflect::<Location>::doc() == null;
+
+    let [x, y] = ReflectStruct::<Point>::members();
+    assert x.doc() == Some("Distance from the left edge.");
+    assert y.doc() == null;
+}
+
+__DATA__
+{"test": {}}

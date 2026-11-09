@@ -3633,6 +3633,7 @@ pub struct TirStruct {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
     pub wire_name_policy: Option<NamePolicy>,
+    pub doc: Option<String>,
 }
 
 impl TirStruct {
@@ -3667,6 +3668,7 @@ impl TirStruct {
                 .collect(),
             span,
             wire_name_policy: None,
+            doc: None,
         }
     }
 }
@@ -3703,6 +3705,7 @@ pub struct TirField {
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
+    pub doc: Option<String>,
 }
 
 impl TirField {
@@ -3725,6 +3728,7 @@ impl TirField {
             serde_default: false,
             serde_positional: false,
             default_expr: None,
+            doc: None,
         }
     }
 }
@@ -3744,6 +3748,7 @@ pub struct TirEnum {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
     pub wire_name_policy: Option<NamePolicy>,
+    pub doc: Option<String>,
 }
 
 /// A case in a TIR enum.
@@ -3755,6 +3760,7 @@ pub struct TirEnumCase {
     pub span: Span,
     /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
+    pub doc: Option<String>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -3772,6 +3778,7 @@ pub struct TirFlags {
     pub members: Vec<TirFlagsMember>,
     pub span: Span,
     pub wire_name_policy: Option<NamePolicy>,
+    pub doc: Option<String>,
 }
 
 /// A member of a flags type
@@ -3781,6 +3788,7 @@ pub struct TirFlagsMember {
     /// Bitmask value: `1 << index`
     pub bitmask: u32,
     pub span: Span,
+    pub doc: Option<String>,
 }
 
 /// A variant type declaration (tagged union, distinct from enum)
@@ -3803,6 +3811,7 @@ pub struct TirVariantDecl {
     /// `#[wire(tag = "...")]` — the key an internally tagged case is written
     /// under.
     pub wire_tag: Option<String>,
+    pub doc: Option<String>,
 }
 
 /// A case in a variant declaration
@@ -3822,6 +3831,7 @@ pub struct TirVariantCase {
     pub span: Span,
     /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -3838,6 +3848,7 @@ pub struct TirNewtype {
     /// and instantiated per use, the way a generic struct's are.
     pub type_id: Option<TypeId>,
     pub span: Span,
+    pub doc: Option<String>,
 }
 
 /// Test declaration metadata
