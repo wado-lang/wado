@@ -41,8 +41,28 @@ internal struct Hole {
 }
 
 /// The tree of `pattern` with `holes` in their places, ordered by offset, and
-/// how many capturing groups it holds.
+/// how many capturing groups it holds. Err holds a syntax error, or else the
+/// first construct ECMA-262 admits and Re cannot match.
 internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> Result<[Node, i32], PatternError> {
+    let [node, p] = read_pattern(pattern, syntax, holes)?;
+    if let Some(e) = p.unsupported {
+        return Err(e);
+    }
+    return Ok([node, p.groups]);
+}
+
+/// Whether `pattern` is an ECMA-262 `Pattern`, read as the `u` flag reads it.
+/// What Re cannot match, such as a lookahead or a backreference, is Ok here.
+/// Two of Re's own rules still apply: groups nest at most `MAX_NESTING` deep,
+/// and `\p{…}` names what `core:icu` knows.
+pub fn validate_ecma262_syntax<S: AsStrSlice>(pattern: S) -> Result<(), PatternError> {
+    read_pattern(pattern.as_str_slice(), Syntax::Plain, [])?;
+    return Ok(());
+}
+
+/// The tree of `pattern`, and the parser that read it whole. Err holds a
+/// syntax error.
+fn read_pattern(pattern: StrSlice, syntax: Syntax, holes: List<Hole>) -> Result<[Node, Parser], PatternError> {
     let mut p = Parser {
         src: pattern,
         pos: 0,
@@ -50,6 +70,10 @@ internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
         depth: 0,
         groups: 0,
         names: HashSet::new(),
+        all_names: HashSet::new(),
+        declared: [],
+        references: [],
+        unsupported: null,
         holes,
         next_hole: 0,
         blocked: false,
@@ -64,7 +88,20 @@ internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
         return Err(p.error_here("unmatched `)`"));
     }
     assert p.next_hole == p.holes.len(), "a parse that reaches the end takes every hole";
-    return Ok([node, p.groups]);
+    p.check_references()?;
+    return Ok([node, p]);
+}
+
+/// What a backreference names: a group's number, as the digits written, or
+/// its name.
+variant Target {
+    Number(StrSlice),
+    Name(String),
+}
+
+struct Reference {
+    at: i32,
+    target: Target,
 }
 
 struct Parser {
@@ -73,7 +110,16 @@ struct Parser {
     syntax: Syntax,
     depth: i32,
     groups: i32,
+    /// The names of the groups that may take part in a match beside one read
+    /// here (MightBothParticipate).
     names: HashSet<String>,
+    all_names: HashSet<String>,
+    /// The names `names` gained, in order, so that a `|` can take back those
+    /// of the alternative it ends.
+    declared: List<String>,
+    references: List<Reference>,
+    /// The first construct read that ECMA-262 admits and Re cannot match.
+    unsupported: Option<PatternError>,
     holes: List<Hole>,
     /// The first hole not taken yet.
     next_hole: i32,
@@ -184,6 +230,39 @@ impl Parser {
         if !self.names.insert(name) {
             return Err(self.error_at(at, `two groups are named \`${name}\``));
         }
+        if !self.all_names.insert(name) {
+            self.refuse(at, `two groups in different alternatives are named \`${name}\`, which Re does not support`);
+        }
+        self.declared.push(name);
+        return Ok(());
+    }
+
+    /// Records that Re cannot match what ECMA-262 admits at `at`. Reading goes
+    /// on, so that a syntax error after it is still the one reported.
+    fn refuse(&mut self, at: i32, message: String) {
+        if self.unsupported matches { None } {
+            self.unsupported = Some(self.error_at(at, message));
+        }
+    }
+
+    // A backreference may precede its group, so these early errors of
+    // AtomEscape wait for the whole pattern.
+    fn check_references(&self) -> Result<(), PatternError> {
+        let groups = `${self.groups}`;
+        for let r of &self.references {
+            match r.target {
+                Number(digits) => {
+                    if decimal_order(digits, groups.as_str_slice()) == Ordering::Greater {
+                        return Err(self.error_at(r.at, `the pattern has no group ${digits}`));
+                    }
+                },
+                Name(name) => {
+                    if !self.all_names.contains(name) {
+                        return Err(self.error_at(r.at, `the pattern has no group named \`${name}\``));
+                    }
+                },
+            }
+        }
         return Ok(());
     }
 
@@ -272,9 +351,22 @@ impl Parser {
 
     // Disjunction :: Alternative ( `|` Disjunction )?
     fn disjunction(&mut self) -> Result<Node, PatternError> {
+        let mark = self.declared.len();
         let mut alternatives: List<Node> = [self.alternative()?];
+        let mut set_aside: List<String> = [];
         while self.eat('|') {
+            // A group in one alternative never takes part beside a group in
+            // another, so the next may reuse their names.
+            while self.declared.len() > mark {
+                let name = self.declared.pop().unwrap();
+                self.names.remove(name);
+                set_aside.push(name);
+            }
             alternatives.push(self.alternative()?);
+        }
+        for let name of set_aside {
+            self.names.insert(name);
+            self.declared.push(name);
         }
         return Ok(collapse(alternatives, |nodes| Node::Alternation(nodes)));
     }
@@ -322,30 +414,48 @@ impl Parser {
         }
         // `{` is a SyntaxCharacter, so in Unicode mode one that does not open
         // a valid QuantifierPrefix is an error rather than a literal.
-        let min = self.decimal(start)?;
-        let mut max: Option<u32> = Some(min);
+        let min = self.count(start)?;
+        let mut max: Option<[i32, StrSlice]> = Some(min);
         if self.eat(',') {
-            max = if self.peek_is('}') { null } else { Some(self.decimal(start)?) };
+            max = if self.peek_is('}') { null } else { Some(self.count(start)?) };
         }
         self.expect('}', "`{` must close a count such as `{2}`, `{2,}` or `{2,5}`")?;
-        if let Some(m) = max && m < min {
+        if let Some(m) = max && decimal_order(m.1, min.1) == Ordering::Less {
             return Err(self.error_at(start, "the count's maximum is below its minimum"));
         }
-        return Ok(Some([min, max]));
+        let min_value = self.count_value(min);
+        let max_value: Option<u32> = if let Some(m) = max {
+            Some(self.count_value(m));
+        } else {
+            null;
+        };
+        return Ok(Some([min_value, max_value]));
     }
 
-    fn decimal(&mut self, start: i32) -> Result<u32, PatternError> {
+    /// DecimalDigits in a count, and where they start.
+    fn count(&mut self, start: i32) -> Result<[i32, StrSlice], PatternError> {
+        let from = self.pos;
+        let digits = self.digits();
+        if digits.is_empty() {
+            return Err(self.error_at(start, "a count needs a number, as in `{2}`"));
+        }
+        return Ok([from, digits]);
+    }
+
+    fn count_value(&mut self, count: [i32, StrSlice]) -> u32 {
+        let Ok(value) = u32::from_str(count.1) else {
+            self.refuse(count.0, `a count may be at most ${u32::MAX}`);
+            return u32::MAX;
+        };
+        return value;
+    }
+
+    fn digits(&mut self) -> StrSlice {
         let from = self.pos;
         while let Some(c) = self.peek() && c.is_ascii_digit() {
             self.bump();
         }
-        if from == self.pos {
-            return Err(self.error_at(start, "a count needs a number, as in `{2}`"));
-        }
-        return u32::from_str(self.src.slice(from, self.pos)).map_err(|_e| self.error_at(
-            from,
-            `a count may be at most ${u32::MAX}`,
-        ));
+        return self.src.slice(from, self.pos);
     }
 
     /// The atom, and whether a quantifier may follow it.
@@ -359,7 +469,22 @@ impl Parser {
             '^' => Ok([Node::Start, false]),
             '$' => Ok([Node::End, false]),
             '.' => Ok([Node::Any, true]),
-            '(' => Ok([self.group(start)?, true]),
+            '(' => {
+                // In Unicode mode, Term admits no quantified Assertion.
+                if self.looking_at("?=") || self.looking_at("?!") {
+                    return Ok([
+                        self.lookaround(start, 2, "lookahead `(?=` `(?!` cannot be matched in linear time")?,
+                        false,
+                    ]);
+                }
+                if self.looking_at("?<=") || self.looking_at("?<!") {
+                    return Ok([
+                        self.lookaround(start, 3, "lookbehind `(?<=` `(?<!` cannot be matched in linear time")?,
+                        false,
+                    ]);
+                }
+                Ok([self.group(start)?, true]);
+            },
             '[' => Ok([Node::Set(self.class(start)?), true]),
             '\\' => self.atom_escape(start),
             '*' | '+' | '?' => Err(self.error_at(start, "nothing to repeat")),
@@ -381,12 +506,6 @@ impl Parser {
             let body = self.disjunction()?;
             self.close_group(start)?;
             return Ok(Node::Group(Group { index: Some(index), name: null, body }));
-        }
-        if self.looking_at("=") || self.looking_at("!") {
-            return Err(self.error_at(start, "lookahead `(?=` `(?!` cannot be matched in linear time"));
-        }
-        if self.looking_at("<=") || self.looking_at("<!") {
-            return Err(self.error_at(start, "lookbehind `(?<=` `(?<!` cannot be matched in linear time"));
         }
         if self.eat('<') {
             self.groups += 1;
@@ -416,10 +535,7 @@ impl Parser {
         self.expect(':', "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:`")?;
         if add & Flag::IgnoreCase != Flag::none() {
             let at = start + 2 + self.src.slice(start + 2, dash).find("i").unwrap();
-            return Err(self.error_at(
-                at,
-                "the `i` modifier needs simple case folding, which core:icu does not offer yet",
-            ));
+            self.refuse(at, "the `i` modifier needs simple case folding, which core:icu does not offer yet");
         }
         let body = self.disjunction()?;
         self.close_group(start)?;
@@ -427,6 +543,20 @@ impl Parser {
             return Ok(Node::Group(Group { index: null, name: null, body }));
         }
         return Ok(Node::Modified(Modified { add, remove, body }));
+    }
+
+    /// A lookaround after its `(`, whose opener runs `len` bytes on. Its groups
+    /// count and its names are claimed, though Re cannot match it, so no tree
+    /// is built.
+    fn lookaround(&mut self, start: i32, len: i32, why: String) -> Result<Node, PatternError> {
+        self.refuse(start, why);
+        let at = self.pos;
+        self.pos += len;
+        return self.inside(at, |p| {
+            p.disjunction()?;
+            p.close_group(start)?;
+            return Ok(Node::Concat([]));
+        });
     }
 
     fn close_group(&mut self, start: i32) -> Result<(), PatternError> {
@@ -503,8 +633,24 @@ impl Parser {
                 self.bump();
                 Ok([Node::NotWordBoundary, false]);
             },
-            '1'..='9' => Err(self.error_at(start, "a backreference cannot be matched in linear time")),
-            'k' => Err(self.error_at(start, "a backreference `\\k<name>` cannot be matched in linear time")),
+            // DecimalEscape :: NonZeroDigit DecimalDigits?
+            '1'..='9' => {
+                self.refuse(start, "a backreference cannot be matched in linear time");
+                let digits = self.digits();
+                self.references.push(Reference { at: start, target: Target::Number(digits) });
+                Ok([Node::Concat([]), true]);
+            },
+            // AtomEscape :: `k` GroupName
+            'k' => {
+                self.refuse(start, "a backreference `\\k<name>` cannot be matched in linear time");
+                self.bump();
+                if !self.eat('<') {
+                    return Err(self.error_at(start, "`\\k` must be followed by `<name>`"));
+                }
+                let name = self.group_name()?;
+                self.references.push(Reference { at: start, target: Target::Name(name) });
+                Ok([Node::Concat([]), true]);
+            },
             _ => {
                 if let Some(set) = self.class_escape(start)? {
                     return Ok([single(set), true]);
@@ -698,6 +844,24 @@ impl Parser {
         let code = self.character_escape(start)?;
         return Ok(ClassItem::Range([code, code]));
     }
+}
+
+/// How two DecimalDigits compare by their MV, however many digits they hold.
+fn decimal_order(a: StrSlice, b: StrSlice) -> Ordering {
+    let a = without_leading_zeros(a);
+    let b = without_leading_zeros(b);
+    if a.len() != b.len() {
+        return a.len().cmp(&b.len());
+    }
+    return a.cmp(&b);
+}
+
+fn without_leading_zeros(digits: StrSlice) -> StrSlice {
+    let mut from = 0;
+    while from < digits.len() && digits.byte_at(from) == b'0' {
+        from += 1;
+    }
+    return digits.slice(from, digits.len());
 }
 
 fn property_ranges(text: StrSlice) -> Option<List<[u32, u32]>> {

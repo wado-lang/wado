@@ -1,0 +1,37 @@
+// A `let ... else` binding several names hands each its value from the matched
+// payload: the tuple its desugaring carries them in is never built. Each
+// binding is a reference no zero value can stand in for before the match
+// assigns it.
+
+struct Shape {
+    axes: List<String>,
+}
+
+#[inline(never)]
+fn store(k: i32) -> Option<[String, Shape]> {
+    if k > 0 {
+        return Option::Some(["n", Shape { axes: ["P"] }]);
+    }
+    return null;
+}
+
+#[inline(never)]
+fn measure(k: i32) -> i32 {
+    let Some([name, value]) = store(k) else {
+        return 0;
+    };
+    return name.len() + value.axes.len();
+}
+
+test {
+    assert measure(builtin::black_box(1)) == 2;
+    assert measure(builtin::black_box(0)) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_scope": "measure",
+    "wir_pass": {"O2": ["nir/peephole"]},
+    "wir_not_expect:O2": ["struct.new \"tuple//"]
+}
