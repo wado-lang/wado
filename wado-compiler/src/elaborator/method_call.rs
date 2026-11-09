@@ -3290,7 +3290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // candidate here too.
             let Some(offer) =
                 self.tysys
-                    .impl_static_offer(header, impl_def, trait_decl, method_name, recv.ty)
+                    .impl_static_offer(header, impl_def, trait_decl, method_name)
             else {
                 continue;
             };

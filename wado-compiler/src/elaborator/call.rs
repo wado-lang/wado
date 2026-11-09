@@ -4581,7 +4581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             .or_else(|| {
                 let key = self.static_receiver_key(struct_name, receiver_key);
-                self.tysys.inherited_default_method_sig(&key, method_name)
+                self.inherited_default_method_sig(&key, method_name)
             })
         else {
             let key = self.static_receiver_key(struct_name, receiver_key);
@@ -4636,8 +4636,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (vec![], vec![]);
         }
         // A slot the arguments reach only through a bound's associated type
-        // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`) is projected
-        // off the owner the arguments did settle.
+        // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`, or the
+        // block's own `impl<T: Tr<Out = U>, U>`) is projected off the owner
+        // the arguments did settle.
         let names: Vec<ParamRef> = {
             let table = self.tysys.type_table.borrow();
             sig.decl
@@ -4650,11 +4651,94 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         };
-        self.resolve_assoc_bounds_in(&sig.own_params, split, &names, &mut inferred);
+        let mut owners = self.declaring_params(&names[..split]);
+        owners.extend(sig.own_params.iter().cloned());
+        self.resolve_assoc_bounds_in(&owners, 0, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),
         )
+    }
+
+    /// The signature of a trait default `key` inherits without overriding it,
+    /// which no impl block lists and so every impl-keyed index misses. Read in
+    /// the receiver declaration's frame: `Self` is the declaration at its own
+    /// parameters, which the call infers as it does a block's, and the block's
+    /// trait arguments are written in them.
+    fn inherited_default_method_sig(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let trait_env = &self.tysys.trait_env;
+        let (impl_def, mut sig) = trait_env.impl_index.get(key)?.iter().find_map(|&impl_def| {
+            let trait_decl = trait_env.impl_headers[&impl_def].trait_def()?;
+            let method = self.tysys.trait_sig_of(&trait_decl)?.method(method_name)?;
+            method.is_inherited().then(|| (impl_def, method.sig.clone()))
+        })?;
+        let decl = key.decl()?;
+        let receiver = self.declared_self_type(decl)?;
+        let receiver_params = self
+            .type_lookup()
+            .declared_type_param_ids(decl)
+            .map(<[TypeId]>::to_vec)
+            .unwrap_or_default();
+        let frame: Vec<TypeId> = {
+            let mut table = self.tysys.type_table.borrow_mut();
+            let slots = table.impl_slots(impl_def, &receiver_params);
+            std::iter::once(receiver)
+                .chain(
+                    self.tysys
+                        .signatures
+                        .impl_sig(impl_def)
+                        .trait_type_args
+                        .iter()
+                        .map(|&arg| table.substitute_type_params(arg, &slots)),
+                )
+                .collect()
+        };
+        let in_frame = sig.decl.instantiate(&self.tysys.type_table, &frame);
+        sig.decl.param_types = in_frame.param_types;
+        if sig.decl.return_type.is_some() {
+            sig.decl.return_type = Some(in_frame.return_type);
+        }
+        let own = sig.decl.type_params.split_off(sig.declaring_split());
+        sig.decl.type_params = {
+            let table = self.tysys.type_table.borrow();
+            receiver_params
+                .iter()
+                .map(|&id| (table.name(id), id))
+                .chain(own)
+                .collect()
+        };
+        sig.declaring_slot_count = receiver_params.len() as u32;
+        sig.method_slot_base = sig.declaring_slot_count;
+        sig.declaring_impl = None;
+        Some(sig)
+    }
+
+    /// The declaring slots' parameters as their declaration wrote them, in the
+    /// signature's order: a block's head orders them as written, the signature
+    /// by target position (`impl<A, B> Pair<B, A>`).
+    fn declaring_params(&self, declaring: &[ParamRef]) -> Vec<ast::GenericParam> {
+        declaring
+            .iter()
+            .map(|slot| {
+                let owner = slot.owner.expect("a declaring slot has a declaration");
+                let written = match self.tysys.trait_env.impl_headers.get(&owner) {
+                    Some(header) => &header.type_params[..],
+                    None => self
+                        .type_lookup()
+                        .declared_generic_params(owner)
+                        .expect("a declaring slot's declaration takes parameters"),
+                };
+                written
+                    .iter()
+                    .find(|p| ParamRef::declared(p, &self.tysys.resolutions) == *slot)
+                    .expect("every declaring slot is a parameter its declaration wrote")
+                    .clone()
+            })
+            .collect()
     }
 
     /// [`Self::infer_static_method_type_args`] on a newtype declaring nothing of
@@ -5363,30 +5447,6 @@ impl TypeSystem {
             return vec![];
         };
         self.packs_args_reach(&decl.param_types, arg_count)
-    }
-
-    /// The signature of a trait default `key` inherits without overriding it,
-    /// which no impl block lists and so every impl-keyed index misses.
-    fn inherited_default_method_sig(
-        &self,
-        key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        let trait_env = &self.trait_env;
-        let mut sig = trait_env
-            .impl_index
-            .get(key)?
-            .iter()
-            .filter_map(|impl_def| trait_env.impl_headers[impl_def].trait_def())
-            .find_map(|trait_decl| {
-                let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
-                method.is_inherited().then(|| method.sig.clone())
-            })?;
-        let split = sig.declaring_split();
-        sig.decl.type_params.drain(..split);
-        sig.declaring_slot_count = 0;
-        sig.method_slot_base = 0;
-        Some(sig)
     }
 
     /// A builtin's return type, `TypeParam`-based for a generic one.
