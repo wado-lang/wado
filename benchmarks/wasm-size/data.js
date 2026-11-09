@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794252331721,
+  "lastUpdate": 1794256411265,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76089,6 +76089,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b73dbc93dbd76030dd14efd07a11e5210b55ce5f"
         },
         "date": 1794252331284,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404932,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6ac4f5a61e800aa0b3572ffb1017bcde1d7c102",
+          "message": "Merge pull request #2596 from wado-lang/claude/emi-fix-20261110\n\nfix(EMI): a `mut` fn param whose address is taken, and closure-local deferred lets, no longer miscompile",
+          "timestamp": "2026-11-10T05:18:06+09:00",
+          "tree_id": "0603cfe8172de4ca3c398d0045e3b5c6d76c113a",
+          "url": "https://github.com/wado-lang/wado/commit/f6ac4f5a61e800aa0b3572ffb1017bcde1d7c102"
+        },
+        "date": 1794256410538,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
