@@ -1,0 +1,55 @@
+// Every closure literal's row is a variable of its own, so two closures of one
+// signature are two types until branches join them. The join's row covers both
+// branches without widening either: `f(1)` below performs nothing, though `f`
+// shares a join with a closure that prints. Two closed rows join as their union.
+use { println, Stdout } from "core:cli";
+
+fn pure(o: Option<i32>, k: i32) -> i32 {
+    let f = |x: i32| x;
+    let h = |x: i32| x + 1;
+    let by_if = if k == 0 { f } else { h };
+    let by_match = match k {
+        0 => f,
+        _ => h,
+    };
+    let by_label = pick: {
+        if k == 0 {
+            break pick: f;
+        }
+        h
+    };
+    let by_tail = tail: {
+        if k == 0 { f } else { h }
+    };
+    let by_chain = if let Some(v) = o && v > 0 { f } else { h };
+    let _loud = match k {
+        0 => f,
+        _ => |x: i32| {
+            println("never called");
+            return x;
+        },
+    };
+    return by_if(1) + by_match(10) + by_label(100) + by_tail(1000) + by_chain(10000) + f(0);
+}
+
+fn loud() with Stdout {
+    println("loud");
+}
+
+fn quiet() {}
+
+fn either(c: bool) -> fn() with Stdout {
+    let g = if c { loud } else { quiet };
+    return g;
+}
+
+export fn run() with Stdout {
+    println(`${pure(Option::Some(1), 0)} ${pure(null, 1)}`);
+    either(true)();
+    either(false)();
+}
+
+__DATA__
+{
+    "stdout": "11111 11116\nloud\n"
+}

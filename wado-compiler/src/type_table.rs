@@ -733,6 +733,56 @@ impl TypeTable {
         self.is_resource_subtype(b_def, a_def).then_some(a)
     }
 
+    /// The type two branches agree on: [`Self::resource_join`]'s, or for two
+    /// function types taking the same parameters, one each converts to. It
+    /// joins the returns, is `fn mut` where either is, and has a row covering
+    /// both: their union where both are closed, else a fresh variable, which
+    /// the effect check solves from the rows the caller records flowing into it.
+    pub fn branch_join(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if a == b {
+            return Some(a);
+        }
+        if let Some(joined) = self.resource_join(a, b) {
+            return Some(joined);
+        }
+        let (
+            ResolvedType::Function {
+                is_mut: a_mut,
+                params: a_params,
+                return_type: a_return,
+                effects: a_row,
+            },
+            ResolvedType::Function {
+                is_mut: b_mut,
+                params: b_params,
+                return_type: b_return,
+                effects: b_row,
+            },
+        ) = (self.get(a).clone(), self.get(b).clone())
+        else {
+            return None;
+        };
+        if a_params != b_params {
+            return None;
+        }
+        let return_type = self.branch_join(a_return, b_return)?;
+        let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
+        let row = if a_row == b_row {
+            a_row
+        } else if open(&a_row) || open(&b_row) {
+            vec![self.mint_effect_var()]
+        } else {
+            let mut union = a_row;
+            for effect in b_row {
+                if !union.contains(&effect) {
+                    union.push(effect);
+                }
+            }
+            union
+        };
+        Some(self.make_function_with_mut(a_mut || b_mut, a_params, return_type, row))
+    }
+
     /// The resource `ty` is a handle to, where it takes no type arguments:
     /// only such a resource extends another.
     #[must_use]

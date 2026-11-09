@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::ast::{
     self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt,
+    ForOfStmt, ForStmt, IfExpr, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt,
     TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
@@ -124,16 +124,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
                     continue;
                 }
+                // Neither goes through the `resolve_expr` wrapper, so each
+                // records its type for `ast_block_result_type` to read.
                 if let Stmt::If(if_stmt) = s {
-                    self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type, tail_value);
+                    let ty = self.resolve_if_expr(if_stmt, ctx, expected_type);
+                    self.record_expression_type(if_stmt.id, ty);
                     continue;
                 }
                 if let Stmt::Match(match_expr) = s {
                     let ty = self.resolve_match_expr(match_expr, ctx, expected_type);
-                    // `resolve_match_expr` does not go through the
-                    // `resolve_expr` wrapper; record the type explicitly (as
-                    // the stmt-position arm does) so `ast_block_result_type`
-                    // can read a trailing match's value type.
                     self.record_expression_type(match_expr.id, ty);
                     continue;
                 }
@@ -1409,35 +1408,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.typecheck_returned(&tr_stmt.value, value_type, expected, tr_stmt.span);
     }
 
-    /// Reify rebuilds the `If` / if-let-chain TIR from the AST + the
+    /// A statement-position `if`, whose value nothing reads. Reify rebuilds
+    /// the `If` / if-let-chain TIR from the AST + the
     /// `DesugarKind::IfLetChain` tag; this walk only resolves the condition
     /// and blocks for their facts.
-    pub(super) fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) {
-        self.resolve_if_stmt_with_expected(if_stmt, ctx, None, false);
-    }
-
-    /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for
-    /// coercion. Used when an if statement is the last statement in a block
-    /// that needs type coercion (e.g., a match arm returning `List<T>` from an
-    /// if-else with tuple literals).
-    fn resolve_if_stmt_with_expected(
-        &mut self,
-        if_stmt: &IfStmt,
-        ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-        tail_value: bool,
-    ) {
+    pub(super) fn resolve_if_stmt(&mut self, if_stmt: &IfExpr, ctx: &mut FunctionContext) {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
                 self.resolve_condition_expr(expr, ctx);
-                self.resolve_block_with_position(
-                    &if_stmt.then_block,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                );
+                self.resolve_block(&if_stmt.then_block, ctx, None);
                 if let Some(b) = &if_stmt.else_block {
-                    self.resolve_block_with_position(b, ctx, expected_type, tail_value);
+                    self.resolve_block(b, ctx, None);
                 }
             }
             ast::Condition::LetChain { elements, .. } => {
@@ -1445,17 +1426,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve else_block in the outer scope (chain bindings are not
                 // visible there) for its facts.
                 if let Some(b) = &if_stmt.else_block {
-                    self.resolve_block_with_position(b, ctx, expected_type, tail_value);
+                    self.resolve_block(b, ctx, None);
                 }
 
                 let ctx = &mut ctx.enter_scope();
                 self.resolve_let_chain_operands(elements, ctx);
-                self.resolve_block_with_position(
-                    &if_stmt.then_block,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                );
+                self.resolve_block(&if_stmt.then_block, ctx, None);
             }
         }
     }

@@ -2866,7 +2866,7 @@ pub enum Stmt {
     /// `task return expr;` — delivers the async task result without terminating the function.
     /// Only valid inside `export async fn` bodies.
     TaskReturn(TaskReturnStmt),
-    If(IfStmt),
+    If(IfExpr),
     While(WhileStmt),
     For(ForStmt),
     ForOf(ForOfStmt),
@@ -3061,15 +3061,6 @@ impl Condition {
     pub fn is_always_true(&self) -> bool {
         matches!(self, Self::Expr(Expr::Literal(lit)) if matches!(lit.value, Literal::Bool(true)))
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct IfStmt {
-    pub id: AstId,
-    pub condition: Condition,
-    pub then_block: Block,
-    pub else_block: Option<Block>,
-    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -4014,6 +4005,7 @@ pub struct IndexExpr {
     pub unchecked: Option<Span>,
 }
 
+/// An `if`, in expression and in statement position alike.
 #[derive(Debug, Clone)]
 pub struct IfExpr {
     pub id: AstId,

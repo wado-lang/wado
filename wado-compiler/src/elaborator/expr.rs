@@ -758,11 +758,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::LabeledBlock(lb) => self.resolve_branching(expected_type, |this, expected| {
                 let overlays_before = this.tuple_overlay_counts();
                 let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected);
-                // A labeled block yields via `break label: value`, not a tail
-                // expression, so its trailing statement stays in statement
-                // position (a discarded tail `match` may have arms of
-                // differing types).
-                this.resolve_block(&lb.block, &mut frame, expected);
+                // The trailing statement is a branch beside the `break`s.
+                this.resolve_block_value(&lb.block, &mut frame, expected);
                 let target = frame.finish();
 
                 // Reify rebuilds the `LabeledBlock` from the AST, re-running
@@ -823,8 +820,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .chain(std::iter::once(tail_type))
             .collect();
         self.settle_branch_holes(&mut branch_types, expected_type);
-        let result_type =
-            expected_type.unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
+        let result_type = expected_type
+            .or_else(|| self.agreed_branch_type(&branch_types))
+            .unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
 
         self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
 
@@ -2548,8 +2546,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         then_checked: bool,
     ) -> TypeId {
         let expected_type = self.settled_result_expectation(expected_type);
-        let type_id = if let Some(ty) = expected_type {
-            ty
+        // `None` once a mismatch is reported: the branches are not checked again.
+        let (type_id, check_then) = if let Some(ty) = expected_type {
+            (ty, Some(!then_checked))
         } else {
             let (then_type, else_type) = self.if_branch_types(if_expr);
             // `never` is the bottom type and an indefinite branch defers to its
@@ -2558,7 +2557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.agreed_branch_type(&[then_type, else_type]),
                 &if_expr.else_block,
             ) {
-                (Some(agreed), _) => agreed,
+                (Some(agreed), _) => (agreed, Some(true)),
                 (None, None) => {
                     if then_type != TypeTable::UNIT {
                         let type_name = self.tysys.type_table.borrow().name(then_type);
@@ -2568,7 +2567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: if_expr.then_block.span,
                         });
                     }
-                    TypeTable::UNIT
+                    (TypeTable::UNIT, None)
                 }
                 (None, Some(else_block)) => {
                     let (then_name, else_name) = self
@@ -2581,7 +2580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found: else_name,
                         span: else_block.span,
                     });
-                    then_type
+                    (then_type, None)
                 }
             }
         };
@@ -2593,9 +2592,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
 
         // A settled expectation skipped agreement, so each branch is checked here
-        // lest one push the wrong type; `Unit` is statement position, where none is kept.
-        if expected_type.is_some() && type_id != TypeTable::UNIT {
-            if !then_checked {
+        // lest one push the wrong type. An agreed type may be a join neither
+        // branch was, whose row the check makes each branch's flow into. `Unit`
+        // is statement position, where none is kept.
+        if let Some(check_then) = check_then
+            && type_id != TypeTable::UNIT
+        {
+            if check_then {
                 let then_type = self.ast_block_result_type(&if_expr.then_block);
                 self.check_branch_type(then_type, type_id, if_expr.then_block.span);
             }
@@ -2964,7 +2967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match self.branch_decidedness(a).cmp(&self.branch_decidedness(b)) {
             Ordering::Less => Some(b),
             Ordering::Greater => Some(a),
-            Ordering::Equal => self.tysys.type_table.borrow().resource_join(a, b),
+            Ordering::Equal => self.tysys.type_table.borrow_mut().branch_join(a, b),
         }
     }
 

@@ -72,7 +72,11 @@ pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> Typ
             // matches). `Stmt::Match` is an AST surface for the expression
             // form, so it is read like one.
             ast::Stmt::Match(m) => ctx.type_of_id(m.id),
-            ast::Stmt::If(if_stmt) => if_stmt.else_block.as_ref().and_then(|else_block| {
+            // A value-position `if` records its type as a `match` does. A
+            // statement's is its branches' agreement, which says whether it
+            // diverges.
+            ast::Stmt::If(if_stmt) => ctx.type_of_id(if_stmt.id).or_else(|| {
+                let else_block = if_stmt.else_block.as_ref()?;
                 let (then_type, else_type) = (
                     block_result_type(ctx, &if_stmt.then_block),
                     block_result_type(ctx, else_block),

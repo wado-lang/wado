@@ -10,7 +10,7 @@ use crate::ast::{
     ConditionElement, ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EffectsSource,
     EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt,
     FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt,
+    FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr,
     ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MAX_GENERIC_PARAMS, MatchArm,
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
@@ -3348,7 +3348,7 @@ impl Parser {
         let end_span = else_block.as_ref().map_or(&then_block.span, |b| &b.span);
         let span = start_span.merge(end_span);
 
-        Ok(Stmt::If(IfStmt {
+        Ok(Stmt::If(IfExpr {
             id,
             condition,
             then_block,

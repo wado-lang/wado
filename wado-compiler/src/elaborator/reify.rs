@@ -2064,7 +2064,12 @@ impl<'a> Reify<'a> {
                 TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span)
             }
             ast::Stmt::If(if_stmt) => {
-                self.reify_if_stmt_with_expected(if_stmt, ctx, expected_type, tail_value)
+                let recorded = self
+                    .ann_expression_types(if_stmt.id)
+                    .expect("a value-position `if` records its type");
+                let expected = branch_expectation(expected_type, recorded);
+                let tir = self.reify_if_expr(if_stmt, ctx, expected, recorded);
+                TirStmt::new(TirStmtKind::Expr(tir), if_stmt.span)
             }
             ast::Stmt::Match(match_expr) => {
                 let recorded = self
@@ -2075,10 +2080,11 @@ impl<'a> Reify<'a> {
                 TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)
             }
             ast::Stmt::LabeledBlock(labeled_block) => {
-                let block = self.reify_block(
+                let block = self.reify_block_with_position(
                     &labeled_block.block,
                     &mut ctx.enter_labeled_block(labeled_block.label.clone(), expected_type),
                     expected_type,
+                    tail_value,
                 );
                 TirStmt::new(
                     TirStmtKind::LabeledBlock {
@@ -2960,6 +2966,7 @@ impl<'a> Reify<'a> {
                     elements,
                     |r, ctx| r.reify_block_with_position(&w.body, ctx, None, false).stmts,
                     Some(&else_block),
+                    None,
                     &mut ctx.enter_scope(),
                     *cond_span,
                 )]
@@ -4105,6 +4112,7 @@ impl<'a> Reify<'a> {
                         s
                     },
                     Some(&else_block),
+                    None,
                     &mut ctx.enter_scope(),
                     *cond_span,
                 )]
@@ -4174,12 +4182,15 @@ impl<'a> Reify<'a> {
     /// element becomes a two-arm Match (pattern arm recurses, wildcard falls
     /// back to `else_block`), an `Expr` element a single-branch `If`; the
     /// recursion bottoms out after the last element by reifying the success
-    /// path with `then`.
+    /// path with `then`. `value` is the type the elaborator recorded for a
+    /// chain whose value is read; a statement's is its branches' agreement,
+    /// which says whether it diverges.
     fn reify_let_chain(
         &mut self,
         elements: &[ast::ConditionElement],
         then: impl FnOnce(&mut Self, &mut FunctionContext) -> Vec<TirStmt>,
         else_block: Option<&TirBlock>,
+        value: Option<TypeId>,
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirStmt {
@@ -4190,7 +4201,7 @@ impl<'a> Reify<'a> {
             if rest.is_empty() {
                 then(r, ctx)
             } else {
-                vec![r.reify_let_chain(rest, then, else_block, ctx, span)]
+                vec![r.reify_let_chain(rest, then, else_block, value, ctx, span)]
             }
         };
         match first {
@@ -4217,8 +4228,9 @@ impl<'a> Reify<'a> {
                     .as_ref()
                     .map_or(TypeTable::UNIT, |b| tir::block_result_type(&tt, b));
                 let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
-                let match_type =
-                    agree_branch_types(&tt, then_type, else_type).unwrap_or(TypeTable::UNIT);
+                let match_type = value.unwrap_or_else(|| {
+                    agree_branch_types(&tt, then_type, else_type).unwrap_or(TypeTable::UNIT)
+                });
                 drop(tt);
                 let then_body = TirExpr::new(TirExprKind::Block(inner_block), then_type, span);
                 let else_body = match else_tir {
@@ -4260,89 +4272,23 @@ impl<'a> Reify<'a> {
                 let condition = self.reify_condition_expr(expr, ctx);
                 let condition = self.probe_expr(ProbeSite::Around, expr.id(), condition);
                 let inner_block = TirBlock::new(inner(self, ctx), span);
-                TirStmt::new(
-                    TirStmtKind::If {
+                let kind = match value {
+                    Some(value) => TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::If {
+                            condition: Box::new(condition),
+                            then_branch: inner_block,
+                            else_branch: else_block.cloned(),
+                        },
+                        value,
+                        span,
+                    )),
+                    None => TirStmtKind::If {
                         condition,
                         then_block: inner_block,
                         else_block: else_block.cloned(),
                     },
-                    span,
-                )
-            }
-        }
-    }
-
-    /// Reify a trailing stmt-position `if` whose value flows out as the
-    /// enclosing block's result. Mirrors
-    /// `Elaborator::resolve_if_stmt_with_expected`: the
-    /// `LetChain` arm reuses the let-chain lowering with `expected_type`
-    /// threaded through so the chain's then/else blocks stay
-    /// value-producing; the `Expr` arm emits an `If` *expression*
-    /// statement (not a value-dropping stmt `If`) so the branch values
-    /// become the block result.
-    fn reify_if_stmt_with_expected(
-        &mut self,
-        if_stmt: &ast::IfStmt,
-        ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-        tail_value: bool,
-    ) -> TirStmt {
-        match &if_stmt.condition {
-            ast::Condition::LetChain { elements, .. } => {
-                let else_block = self.else_branch(
-                    if_stmt.else_block.as_ref(),
-                    if_stmt.id,
-                    if_stmt.span,
-                    |r, b| r.reify_block_with_position(b, ctx, expected_type, tail_value),
-                );
-                self.reify_let_chain(
-                    elements,
-                    |r, ctx| {
-                        r.reify_block_with_position(
-                            &if_stmt.then_block,
-                            ctx,
-                            expected_type,
-                            tail_value,
-                        )
-                        .stmts
-                    },
-                    else_block.as_ref(),
-                    &mut ctx.enter_scope(),
-                    if_stmt.span,
-                )
-            }
-            ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_condition_expr(cond_expr, ctx);
-                let then_branch = self.reify_block_with_position(
-                    &if_stmt.then_block,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                );
-                let else_branch = self.else_branch(
-                    if_stmt.else_block.as_ref(),
-                    if_stmt.id,
-                    if_stmt.span,
-                    |r, b| r.reify_block_with_position(b, ctx, expected_type, tail_value),
-                );
-                let tt = self.tysys.type_table.borrow();
-                let then_type = tir::block_result_type(&tt, &then_branch);
-                let else_type = else_branch
-                    .as_ref()
-                    .map_or(TypeTable::UNIT, |b| tir::block_result_type(&tt, b));
-                let result_type =
-                    agree_branch_types(&tt, then_type, else_type).unwrap_or(TypeTable::UNIT);
-                drop(tt);
-                let if_expr = TirExpr::new(
-                    TirExprKind::If {
-                        condition: Box::new(condition),
-                        then_branch,
-                        else_branch,
-                    },
-                    result_type,
-                    if_stmt.span,
-                );
-                TirStmt::new(TirStmtKind::Expr(if_expr), if_stmt.span)
+                };
+                TirStmt::new(kind, span)
             }
         }
     }
@@ -4353,7 +4299,7 @@ impl<'a> Reify<'a> {
     /// trailing position; reify follows suit by passing `None` to the
     /// branches). `Condition::LetChain` mirrors the expression-level
     /// `IfLetChain` desugar.
-    fn reify_if_stmt(&mut self, if_stmt: &ast::IfStmt, ctx: &mut FunctionContext) -> TirStmt {
+    fn reify_if_stmt(&mut self, if_stmt: &ast::IfExpr, ctx: &mut FunctionContext) -> TirStmt {
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
                 let condition = self.reify_condition_expr(cond_expr, ctx);
@@ -4391,6 +4337,7 @@ impl<'a> Reify<'a> {
                     elements,
                     |r, ctx| r.reify_block(&if_stmt.then_block, ctx, None).stmts,
                     else_block.as_ref(),
+                    None,
                     &mut ctx.enter_scope(),
                     if_stmt.span,
                 )
@@ -4412,12 +4359,9 @@ impl<'a> Reify<'a> {
             ast::Condition::Expr(e) => e,
             ast::Condition::LetChain { elements, .. } => {
                 // Mirror `Elaborator::resolve_if_expr`'s
-                // `Condition::LetChain` arm: the
-                // chain reduces to a `Block` of nested Match /
-                // If stmts via `reify_let_chain`. The
-                // overall block's result type is the recorded
-                // `expected_type` (or `recorded_type` as a
-                // fallback when no expectation propagated).
+                // `Condition::LetChain` arm: the chain reduces to a `Block`
+                // of nested Match / If nodes via `reify_let_chain`, each of
+                // the recorded type.
                 let else_block = self.else_branch(
                     if_expr.else_block.as_ref(),
                     if_expr.id,
@@ -4431,6 +4375,7 @@ impl<'a> Reify<'a> {
                             .stmts
                     },
                     else_block.as_ref(),
+                    Some(recorded_type),
                     &mut ctx.enter_scope(),
                     if_expr.span,
                 );
