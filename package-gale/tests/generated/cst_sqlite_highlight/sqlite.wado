@@ -2284,10 +2284,7 @@ fn atn_pop_into_callers(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scr
     let rule = cur.state / 2;
     let first = sim.rule_follow_start[rule];
     let end = sim.rule_follow_start[rule + 1];
-    if first == end {
-        scratch.rset.add(arena, ATN_ACCEPT_EOF, atn_settled_alt(cur.alt), cur.pr, CTX_EMPTY, cur.guard);
-        return;
-    }
+    scratch.rset.add(arena, ATN_ACCEPT_EOF, atn_settled_alt(cur.alt), cur.pr, CTX_EMPTY, cur.guard);
     for let mut f = first; f < end; f += 1 {
         scratch.work.push(AtnConfig { ..*cur, state: sim.rule_follow[f], pctx: CTX_ANY_CALLER, pr: 0 });
     }
@@ -56041,11 +56038,10 @@ fn atn_verified(decision: i32, picker: i32, atn: &mut AtnPredictor, tokens: &Arr
 
 fn atn_verified_against(decision: i32, picker: i32, pos: i32, verdict: [i32, bool], alt: i32) -> i32 {
     let [simulated, viable] = verdict;
-    if !viable {
-        return alt;
+    if viable {
+        atn_shadow(decision, picker, pos, alt, simulated);
     }
-    atn_shadow(decision, picker, pos, alt, simulated);
-    return simulated;
+    return alt;
 }
 
 fn atn_shadow(decision: i32, picker: i32, pos: i32, alt: i32, simulated: i32) {
