@@ -6018,7 +6018,7 @@ test "two lookahead DFAs share the branches that decide alike" {
     assert forest.shared(1);
 }
 
-test "a lookahead DFA's branches at different depths stay apart" {
+test "a lookahead DFA's branches at different depths that decide alike merge" {
     let mut forest = SllForest::new(8);
     forest.add(&dfa_of([
         SllNode::Branch([
@@ -6030,7 +6030,8 @@ test "a lookahead DFA's branches at different depths stay apart" {
         SllNode::Alt(0),
         SllNode::Branch([edge([5], 3)]),
     ]));
-    assert forest.nodes.len() == 5;
+    assert forest.nodes.len() == 4;
+    assert forest.shared(1), "a branch at depth 1 and one at depth 2 read it";
 }
 
 test "lookahead DFA branches apart only in a long edge's last token stay apart" {
