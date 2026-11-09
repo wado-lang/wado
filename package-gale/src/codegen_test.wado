@@ -1491,6 +1491,34 @@ D a b a c => (s D a b a c)
     }
 }
 
+// The actions written in a group's alternative run where the group sits in a
+// left-recursive suffix too, a predicate included. On `x . a b` the simulator
+// takes `a`, as the jar does, and its predicate fails; the tournament takes
+// `a B`. The trees and the output are the jar's.
+#[timeout_ms(240000)]
+test "a group in a left-recursive suffix runs its alternative's actions" {
+    let printing = "grammar N5;
+s : e EOF ;
+e : e '.' (a {System.out.println(\"p\");} | c) | ID ;
+a : A ;
+c : C ;
+A : 'a' ; C : 'c' ; ID : [x-z]+ ;
+WS : ' ' -> skip ;
+";
+    let gated = "grammar N5;
+s : e EOF ;
+e : e '.' (a {false}? | a B) B? | ID ;
+a : A ;
+A : 'a' ; B : 'b' ; ID : [x-z]+ ;
+WS : ' ' -> skip ;
+";
+    for let atn of [AtnMode::Never, AtnMode::Auto, AtnMode::Always] {
+        assert parses(printing, "s", ["x . a"], &GenerateOptions { atn }) == "x . a => (s (e (e x) . (a a))) [p\n]\n";
+        assert parses(gated, "s", ["x . a"], &GenerateOptions { atn }) == "x . a => error\n";
+    }
+    assert parses(gated, "s", ["x . a b"], &GenerateOptions { atn: AtnMode::Always }) == "x . a b => error\n";
+}
+
 test "prediction answers a predicate only on the paths that reach it without running an action" {
     let g4 = "grammar T;
 s : 'A' a EOF | 'B' b EOF | 'C' c EOF | 'D' d EOF | 'F' f EOF | 'G' h EOF
@@ -4628,6 +4656,24 @@ WS : ' ' -> skip ;
     for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
         assert parses(g4, "s", ["a b"], &GenerateOptions { atn }) == "a b => (s (r a b))\n";
     }
+}
+
+// A loop deciding its group's alternative as it enters leaves a group the
+// simulator decides to the simulator, and `verify` checks it. The longest match
+// takes `a B`; the jar takes `a`, then `b` on the next iteration.
+#[timeout_ms(120000)]
+test "a repeated group the simulator decides takes the simulator's pick" {
+    let g4 = "grammar N4;
+s : (a | a B | b)* C EOF ;
+a : A ;
+b : B ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+WS : ' ' -> skip ;
+";
+    assert parses(g4, "s", ["a b c"], &GenerateOptions { atn: AtnMode::Always }) == "a b c => (s (a a) (b b) c)\n";
+    let verify = gen_with(g4, &GenerateOptions { atn: AtnMode::Verify }).source;
+    let out = eval_beside(verify, wado`show("a b c", parse_s("a b c"));\n`, SHOW_FN);
+    assert out.stderr.contains(": the tournament picks 1, the simulator 0"), out.stderr;
 }
 
 // A group inside a left-recursive suffix parses as the simulator picks where

@@ -4213,7 +4213,7 @@ fn gen_group_body(
         return;
     }
     if g.alts.len() == 1 {
-        gen_ops(w, &g.alts[0].ops, ctx, nc, proven);
+        gen_group_alt_body(w, &g.alts[0], ctx, nc, proven);
         return;
     }
     if decided matches { Some(_) } {
@@ -4290,7 +4290,7 @@ fn gen_alt_dispatch(
         let mut body = CodeWriter::with_capacity(256);
         let picked = &branches[i].alts;
         if picked.len() == 1 {
-            gen_ops(&mut body, &alt_by_index(alts, picked[0]).ops, ctx, nc, &branch_proven_first(&branches, i));
+            gen_group_alt_body(&mut body, alt_by_index(alts, picked[0]), ctx, nc, &branch_proven_first(&branches, i));
         } else {
             let winner = gen_scan_winner_tournament(&mut body, picked, scan_alts, ctx, nc);
             check_group_tournament(&mut body, atn, &winner, picked, ctx);
@@ -4367,9 +4367,29 @@ fn gen_alt_commit<S: AsStrSlice>(
 {
     for let mut k = 0; k < order.len(); k += 1 {
         open_winner_arm(w, &winner, order, k);
-        gen_ops(w, &alt_by_index(alts, order[k]).ops, ctx, nc);
+        gen_group_alt_body(w, alt_by_index(alts, order[k]), ctx, nc);
     }
     w.end();
+}
+
+/// A group alternative's ops under the op-only walker, with the actions
+/// written between them, as `gen_general_alt_parse_and_store` runs them under
+/// the surface walker.
+fn gen_group_alt_body(
+    w: &mut CodeWriter,
+    alt: &AltBody,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+    proven: &List<i32> = &NO_KINDS,
+) {
+    let outer = ctx.cursor.enter_group_body(true);
+    let first_proven = element_proven_first(&alt.actions, proven);
+    for let mut i = 0; i < alt.ops.len(); i += 1 {
+        gen_alt_actions_at(w, &alt.actions, i, ctx);
+        gen_op(w, &alt.ops[i], ctx, nc, if i == 0 { &first_proven } else { &NO_KINDS });
+    }
+    gen_alt_actions_at(w, &alt.actions, alt.ops.len(), ctx);
+    ctx.cursor.leave_group_body(outer);
 }
 
 /// Open arm `k` of the chain committing to the alternative `winner` names, the
@@ -4890,7 +4910,7 @@ fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
         || sets_overlap(&body_first, &r.caller_follow_first)
         || ctx.loop_exit_admits_any(r.atn_decision, &body_first);
     let body_scans_to_decide = match &r.body {
-        Group(g) => op_group_alt_decision(g) matches { Some(branches) && branches.iter_ref().any(
+        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches.iter_ref().any(
             |b| b.alts.len() > 1,
         ) },
         _ => false,
@@ -4935,7 +4955,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         if let Group(g) = &r.body {
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
-            if let Some(branches) = op_group_alt_decision(g) {
+            if let Some(branches) = op_group_alt_decision(g, ctx) {
                 let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                 w.line(`if ${best} <= p.pos { break; }`);
                 gen_iteration_duties(w, &r.duties, &r.body_admits, &best, &Refusable::Always, false, ctx, nc);
@@ -5019,7 +5039,7 @@ fn gen_op_optional(
     }
     if r.strategy matches { OptionalScanGuard } {
         if let Group(g) = &r.body {
-            if let Some(branches) = op_group_alt_decision(g) {
+            if let Some(branches) = op_group_alt_decision(g, ctx) {
                 // One answer, one set of scans: the scan deciding entry is the
                 // scan the dispatch decides on, wrapped by the yield gate.
                 let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, follow_gate);
@@ -5175,7 +5195,7 @@ fn gen_op_inner_for_storable_repeat(
             let Group(g_elem) = peel_labels(elem) else {
                 unreachable();
             };
-            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, GroupAtn::Unasked);
+            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, group_atn(g_op, ctx));
         },
         TransparentGroup => unreachable(),
     }
@@ -7713,9 +7733,11 @@ fn group_decision(
 }
 
 /// The decision of a group that decides between alternatives, or `null` for
-/// one that does not: a lone alternative, or a token-only group.
+/// one that does not: a lone alternative, or a token-only group. A group the
+/// simulator decides or checks has none either, so its caller enters it as a
+/// body and its own dispatch asks the simulator.
 fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut EmitContext) -> Option<GroupDecision> {
-    if !group_dispatches(g_op) {
+    if !group_dispatches(g_op) || !group_atn(g_op, ctx) matches { Unasked } {
         return null;
     }
     return Option::Some(group_decision(&g_elem.alternatives, &g_op.empty_alt_admits, ctx));
@@ -7731,8 +7753,8 @@ fn group_dispatches(g_op: &GroupOp) -> bool {
 /// `group_alt_decision` for the op-only walker, off the dispatch lower baked
 /// rather than the surface alternatives (invariant 9). Its callers commit and
 /// never report, so no expected set comes with it.
-fn op_group_alt_decision(g: &GroupOp) -> Option<List<DecisionBranch>> {
-    if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
+fn op_group_alt_decision(g: &GroupOp, ctx: &EmitContext) -> Option<List<DecisionBranch>> {
+    if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } || !group_atn(g, ctx) matches { Unasked } {
         return null;
     }
     return Option::Some(dispatch_branches(&g.dispatch));

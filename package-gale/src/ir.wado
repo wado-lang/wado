@@ -463,7 +463,7 @@ fn check_epsilon_closure(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), P
             if elements_hold_epsilon_closure(&alt.elements, ctx) {
                 return Result::Err(epsilon_closure_error(&rule.name));
             }
-            if elements_hold_eof_closure(&alt.elements, &grammar.parser_rules, ctx) {
+            if alt_holds_eof_closure(&alt.elements, &rule.name, &grammar.parser_rules, ctx) {
                 return Result::Err(
                     ParseError::new(
                         `rule "${rule.name}" contains a closure with at least one alternative that can match EOF`,
@@ -513,9 +513,21 @@ fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
     };
 }
 
-/// Whether a `*` or `+` in `elements` has a body that can start with EOF: it
-/// matches EOF without advancing, so the loop never leaves it. ANTLR4 rejects
-/// it too (error 186).
+/// Whether a `*` or `+` in `elements`, or the left-recursion loop a rule
+/// `rule_name` whose alternative they are takes over its suffix, has a body that
+/// can start with EOF: it matches EOF without advancing, so the loop never
+/// leaves it. ANTLR4 rejects it too (error 186).
+fn alt_holds_eof_closure<S: AsStrSlice>(
+    elements: &List<Element>,
+    rule_name: S,
+    rules: &List<ParserRule>,
+    ctx: &LeftCornerCtx,
+) -> bool {
+    return alt_leads_with_self_ref(elements, rule_name)
+        && sequence_starts_with_eof(elements, 1, rules, ctx, &mut List::filled(rules.len(), false))
+        || elements_hold_eof_closure(elements, rules, ctx);
+}
+
 fn elements_hold_eof_closure(elements: &List<Element>, rules: &List<ParserRule>, ctx: &LeftCornerCtx) -> bool {
     return elements.iter_ref().any(|e| element_holds_eof_closure(e, rules, ctx));
 }
@@ -545,7 +557,7 @@ fn element_starts_with_eof(
         Literal(_) | Wildcard(_) | Not(_) => false,
         Label(l) => element_starts_with_eof(&l.element, rules, ctx, entered),
         Repeat(rep) => element_starts_with_eof(&rep.element, rules, ctx, entered),
-        Group(g) => g.alternatives.iter_ref().any(|a| sequence_starts_with_eof(&a.elements, rules, ctx, entered)),
+        Group(g) => g.alternatives.iter_ref().any(|a| sequence_starts_with_eof(&a.elements, 0, rules, ctx, entered)),
         RuleRef(r) => match ctx.index.get(r.name) {
             Some(i) => rule_starts_with_eof(i, rules, ctx, entered),
             None => false,
@@ -558,16 +570,18 @@ fn rule_starts_with_eof(i: i32, rules: &List<ParserRule>, ctx: &LeftCornerCtx, e
         return false;
     }
     entered[i] = true;
-    return rules[i].alternatives.iter_ref().any(|a| sequence_starts_with_eof(&a.elements, rules, ctx, entered));
+    return rules[i].alternatives.iter_ref().any(|a| sequence_starts_with_eof(&a.elements, 0, rules, ctx, entered));
 }
 
 fn sequence_starts_with_eof(
     elements: &List<Element>,
+    from: i32,
     rules: &List<ParserRule>,
     ctx: &LeftCornerCtx,
     entered: &mut List<bool>,
 ) -> bool {
-    for let e of elements {
+    for let mut i = from; i < elements.len(); i += 1 {
+        let e = &elements[i];
         if element_starts_with_eof(e, rules, ctx, entered) {
             return true;
         }

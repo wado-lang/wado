@@ -101,10 +101,10 @@ checks no diagnostic carries a span.
 - **An epsilon closure** — a `*` or `+` over a body that can match nothing
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
-- **A closure over EOF** — a parser rule's `*` or `+` whose body can match EOF
-  before a token (`( A? EOF )+`, `x*` with `x : EOF ;`) —
-  `check_epsilon_closure`, ANTLR4 error 186. EOF later in the body, or under a
-  `?`, is accepted.
+- **A closure over EOF** — a parser rule's `*` or `+`, or a left-recursive
+  suffix, whose body can match EOF before a token (`( A? EOF )+`, `x*` with
+  `x : EOF ;`, `e : e A? EOF | A ;`) — `check_epsilon_closure`, ANTLR4 error
+  186. EOF later in the body, or under a `?`, is accepted.
 
 Four more are decided as the text is read, so each carries a span:
 

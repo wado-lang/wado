@@ -2972,16 +2972,19 @@ fn lower_op<S: AsStrSlice>(
             follow_is_exact,
             outer_suffix,
         ),
-        Group(g) => lower_group_op(
+        Group(g) => with_alt_actions(
+            lower_group_op(
+                &g,
+                name_counts,
+                rule_name,
+                ctx,
+                group_counter,
+                outer_follow,
+                follow_is_exact,
+                gate_caller_follow,
+                outer_suffix,
+            ),
             &g,
-            name_counts,
-            rule_name,
-            ctx,
-            group_counter,
-            outer_follow,
-            follow_is_exact,
-            gate_caller_follow,
-            outer_suffix,
         ),
         Label(lab) => lower_label_op(
             &lab,
@@ -3001,6 +3004,19 @@ fn lower_op<S: AsStrSlice>(
 /// Lower a `Group` element into the `GroupShape` `classify_group` names.
 /// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
 /// whose wrapping is purely syntactic; every storable shape gets its own scope.
+/// `op`, lowered from `g`, with each alternative carrying the actions written
+/// in it, for the op-only walker, which has no surface alternative to read
+/// them from.
+fn with_alt_actions(op: Op, g: &GroupElement) -> Op {
+    let Group(mut go) = op else {
+        unreachable();
+    };
+    for let alt of &mut go.alts {
+        alt.actions = g.alternatives[alt.alt_index].actions;
+    }
+    return Op::Group(go);
+}
+
 fn lower_group_op<S: AsStrSlice>(
     g: &GroupElement,
     name_counts: &mut List<[String, i32]>,

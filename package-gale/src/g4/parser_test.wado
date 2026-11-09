@@ -2172,8 +2172,8 @@ test "an optional over an empty alternative is accepted" {
 }
 
 // A `*` / `+` whose body can start with EOF never advances past it either, so
-// it is rejected as ANTLR4 does (error 186). EOF later in the body, or under a
-// `?`, is accepted.
+// it is rejected as ANTLR4 does (error 186), and so is a left-recursive suffix,
+// which loops the same way. EOF later in the body, or under a `?`, is accepted.
 
 test "a closure whose body can start with EOF is rejected" {
     let direct = "grammar EE;\nr : A ({true}? EOF)* ;\nA : 'a' ;";
@@ -2182,9 +2182,13 @@ test "a closure whose body can start with EOF is rejected" {
     assert parse_checked(behind_nullable) matches { Err(_) };
     let through_rule = "grammar EC;\nr : x* B ;\nx : EOF ;\nB : 'b' ;";
     assert parse_checked(through_rule) matches { Err(_) };
+    let lr_suffix = "grammar EL;\ns : e ;\ne : e A? EOF | A ;\nA : 'a' ;";
+    assert parse_checked(lr_suffix) matches { Err(_) };
 }
 
 test "EOF past a closure body's start or under an optional is accepted" {
+    let lr_later = "grammar EL2;\ns : e ;\ne : e A EOF | A ;\nA : 'a' ;";
+    assert parse_checked(lr_later) matches { Ok(_) };
     let later = "grammar EA;\nr : (A EOF)* B ;\nA : 'a' ; B : 'b' ;";
     assert parse_checked(later) matches { Ok(_) };
     let optional = "grammar EO2;\nr : (A | EOF)? B ;\nA : 'a' ; B : 'b' ;";
