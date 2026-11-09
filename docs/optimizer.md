@@ -327,6 +327,8 @@ Architectural work is tracked in
 - [ ] Global value numbering across effectful nodes.
 - [ ] Instruction combining over identical operands (`x - x`, `x & x`, `~(~x)`).
 - [ ] Dead store elimination at NIR, and of field and array stores.
+- [ ] Removing a struct field that no code in the program reads. Committed in
+  [WEP: Library-Defined Derivation](./wep-2026-06-13-reflect-derivation.md#roadmap).
 - [ ] Strength reduction, reassociation, jump threading, and CFG simplification.
 - [ ] Cross-block copy propagation.
 - [ ] Sinking a pure definition into the branch that uses it.

@@ -442,11 +442,25 @@ newtype documents what it adds, and a reader who wants the base's asks
 
 A `//!` module comment is not carried. No consumer asks for it.
 
+A member's comment is a field of its handle, as its name and its wire override
+are. A handle's metadata is a compile-time constant held in a runtime field, so
+a walk that reads none of it still builds every field. Adding `doc` made that
+cost visible: a derived `Inspect` over a documented type builds the comments it
+never prints, and grows enough to lose a specialization. The cost belongs to
+the optimizer, since it is the cost of any struct field nothing reads, not to
+the handle's layout. A handle that held only its index and answered each method
+from a synthesized constant would be a second mechanism for the handles alone.
+
 ## Roadmap
 
 1. [x] `Reflect::doc()` and `Member::doc()`. Done when every kind and every
    member handle answers as [Doc Comments](./spec-reflection.md#doc-comments)
    states, and Jade's B writes `description` and `title` from them.
+2. [ ] The optimizer removes a struct field that no code in the program reads,
+   from the type and from every place that builds it. Done when the WIR
+   goldens of `future_started_read` and the `serde_*` fixtures are no larger
+   than before handles carried `doc`, and a user struct's unread field is gone
+   from its golden too.
 
 ## Known gaps
 
