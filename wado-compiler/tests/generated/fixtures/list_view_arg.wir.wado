@@ -6671,20 +6671,50 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
     self_9 = self.used;
     count = 0;
     $licm_repr_20 = self.repr;
-    b723: block {
-        l724: loop {
-            break_if b723 start_pos >= self_9;
-            if @unlikely(0 > start_pos) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, self_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
-                unreachable;
-            }
-            b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
-            count = count + ((b & 192) != 128);
-            start_pos = start_pos + 1;
-            continue l724;
+    if start_pos >= 0 {
+        b724: block {
+            l725: loop {
+                break_if b724 (((start_pos >= self_9) | ((start_pos + 1) >= self_9)) | (((start_pos + 1) + 1) >= self_9)) | ((((start_pos + 1) + 1) + 1) >= self_9);
+                b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
+                count = count + ((b & 192) != 128);
+                start_pos = start_pos + 1;
+                b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
+                count = count + ((b & 192) != 128);
+                start_pos = start_pos + 1;
+                b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
+                count = count + ((b & 192) != 128);
+                start_pos = start_pos + 1;
+                b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
+                count = count + ((b & 192) != 128);
+                start_pos = start_pos + 1;
+                continue l725;
+            };
         };
-    };
+        b726: block {
+            l727: loop {
+                break_if b726 start_pos >= self_9;
+                b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
+                count = count + ((b & 192) != 128);
+                start_pos = start_pos + 1;
+                continue l727;
+            };
+        };
+    } else {
+        b728: block {
+            l729: loop {
+                break_if b728 start_pos >= self_9;
+                if @unlikely(0 > start_pos) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, self_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
+                    unreachable;
+                }
+                b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
+                count = count + ((b & 192) != 128);
+                start_pos = start_pos + 1;
+                continue l729;
+            };
+        };
+    }
     return count;
 }
 
@@ -6697,16 +6727,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right$sro
     $licm_used_19 = self.used;
     $licm_repr_20 = self.repr;
     gap = start_pos + gap;
-    b726: block {
-        l727: loop {
-            break_if b726 content_bytes < 0;
+    b731: block {
+        l732: loop {
+            break_if b731 content_bytes < 0;
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_used_19)) == 0) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, $licm_used_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
                 unreachable;
             }; builtin::array_get_value<u8>($licm_repr_20, $contract_arg_0));
             content_bytes = content_bytes - 1;
-            continue l727;
+            continue l732;
         };
     };
 }
@@ -6721,12 +6751,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     if local.tee fill_len("core:prelude/primitive.wado/char::len_utf8$sroa[self.value]"(c)) == 1 {
         c = c & 255;
         fill_len = 0;
-        b730: block {
-            l731: loop {
-                break_if b730 fill_len >= n;
+        b735: block {
+            l736: loop {
+                break_if b735 fill_len >= n;
                 "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, at + fill_len, c);
                 fill_len = fill_len + 1;
-                continue l731;
+                continue l736;
             };
         };
         return;
@@ -6735,36 +6765,36 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     c = 0;
     $licm_used_24 = encoded.used;
     $licm_repr_25 = encoded.repr;
-    b732: block {
-        l733: loop {
-            break_if b732 c >= n;
+    b737: block {
+        l738: loop {
+            break_if b737 c >= n;
             k = 0;
             $licm_arith_26 = at + (c * fill_len);
             if fill_len <= $licm_used_24 {
-                b735: block {
-                    l736: loop {
-                        break_if b735 k >= fill_len;
+                b740: block {
+                    l741: loop {
+                        break_if b740 k >= fill_len;
                         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, builtin::array_get_value<u8>($licm_repr_25, k));
                         k = k + 1;
-                        continue l736;
+                        continue l741;
                     };
                 };
             } else {
-                b737: block {
-                    l738: loop {
-                        break_if b737 k >= fill_len;
+                b742: block {
+                    l743: loop {
+                        break_if b742 k >= fill_len;
                         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, if @unlikely(k >= $licm_used_24) {
                             cold_path;
                             "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(k, $licm_used_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
                             unreachable;
                         }; builtin::array_get_value<u8>($licm_repr_25, k));
                         k = k + 1;
-                        continue l738;
+                        continue l743;
                     };
                 };
             }
             c = c + 1;
-            continue l733;
+            continue l738;
         };
     };
 }
@@ -7194,12 +7224,12 @@ fn "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec0$dae[len]"(va
     block_34 = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, $v3_15), bytes: $v3_15 };
     $v3_15 = 0;
     $licm_ptr_63 = block_34.ptr;
-    b790: block {
-        l791: loop {
-            break_if b790 $v3_15 >= 4;
+    b795: block {
+        l796: loop {
+            break_if b795 $v3_15 >= 4;
             $v3_15 = local.tee current($v3_15) + 1;
             builtin::store_u8($licm_ptr_63 + (current * 1), value);
-            continue l791;
+            continue l796;
         };
     };
     return block_34, 4;
@@ -7277,12 +7307,12 @@ fn "core:linear/core:prelude/list.wado/List<f32>^core:linear/ListArg<T>::lowered
     $v3 = 3 * 4;
     ptr_7 = "mem/realloc"(0, 0, 4, $v3);
     $sroa_$iter_2_start_42 = 0;
-    b793: block {
-        l794: loop {
-            break_if b793 $sroa_$iter_2_start_42 >= 3;
+    b798: block {
+        l799: loop {
+            break_if b798 $sroa_$iter_2_start_42 >= 3;
             $sroa_$iter_2_start_42 = local.tee current($sroa_$iter_2_start_42) + 1;
             builtin::store_i32(ptr_7 + (current * 4), builtin::i32_reinterpret_f32(builtin::array_get_value<f32>(self, current)));
-            continue l794;
+            continue l799;
         };
     };
     released = struct.new "core:prelude//$Cell<bool>" { value: 0 };
@@ -7304,12 +7334,12 @@ fn "core:linear/core:prelude/list.wado/List<f32>^core:linear/ListArg<T>::lowered
     $v3 = 2 * 4;
     ptr_7 = "mem/realloc"(0, 0, 4, $v3);
     $sroa_$iter_2_start_42 = 0;
-    b796: block {
-        l797: loop {
-            break_if b796 $sroa_$iter_2_start_42 >= 2;
+    b801: block {
+        l802: loop {
+            break_if b801 $sroa_$iter_2_start_42 >= 2;
             $sroa_$iter_2_start_42 = local.tee current($sroa_$iter_2_start_42) + 1;
             builtin::store_i32(ptr_7 + (current * 4), builtin::i32_reinterpret_f32(builtin::array_get_value<f32>(self, current)));
-            continue l797;
+            continue l802;
         };
     };
     released = struct.new "core:prelude//$Cell<bool>" { value: 0 };
@@ -7336,12 +7366,12 @@ fn "core:linear/core:prelude/list.wado/List<list_view_arg.wado/Meters>^core:line
     $v3 = 2 * 4;
     ptr_7 = "mem/realloc"(0, 0, 4, $v3);
     $sroa_$iter_2_start_42 = 0;
-    b799: block {
-        l800: loop {
-            break_if b799 $sroa_$iter_2_start_42 >= 2;
+    b804: block {
+        l805: loop {
+            break_if b804 $sroa_$iter_2_start_42 >= 2;
             $sroa_$iter_2_start_42 = local.tee current($sroa_$iter_2_start_42) + 1;
             builtin::store_i32(ptr_7 + (current * 4), builtin::i32_reinterpret_f32(builtin::array_get_value<f32>(self, current)));
-            continue l800;
+            continue l805;
         };
     };
     released = struct.new "core:prelude//$Cell<bool>" { value: 0 };
@@ -7363,12 +7393,12 @@ fn "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec1$dae[len]$spe
     block_33 = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, $v3_14), bytes: $v3_14 };
     $v3_14 = 0;
     $licm_ptr_63 = block_33.ptr;
-    b802: block {
-        l803: loop {
-            break_if b802 $v3_14 >= 3;
+    b807: block {
+        l808: loop {
+            break_if b807 $v3_14 >= 3;
             $v3_14 = local.tee current($v3_14) + 1;
             builtin::store_u8($licm_ptr_63 + (current * 1), 7);
-            continue l803;
+            continue l808;
         };
     };
     return block_33, 3;
@@ -7389,12 +7419,12 @@ fn "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec2$dae[len]$spe
     block_33 = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, $v3_14), bytes: $v3_14 };
     $v3_14 = 0;
     $licm_ptr_63 = block_33.ptr;
-    b805: block {
-        l806: loop {
-            break_if b805 $v3_14 >= 2;
+    b810: block {
+        l811: loop {
+            break_if b810 $v3_14 >= 2;
             $v3_14 = local.tee current($v3_14) + 1;
             builtin::store_u8($licm_ptr_63 + (current * 1), 1);
-            continue l806;
+            continue l811;
         };
     };
     return block_33, 2;
@@ -7415,12 +7445,12 @@ fn "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec1$dae[len]$spe
     block_33 = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, $v3_14), bytes: $v3_14 };
     $v3_14 = 0;
     $licm_ptr_63 = block_33.ptr;
-    b808: block {
-        l809: loop {
-            break_if b808 $v3_14 >= 3;
+    b813: block {
+        l814: loop {
+            break_if b813 $v3_14 >= 3;
             $v3_14 = local.tee current($v3_14) + 1;
             builtin::store_u8($licm_ptr_63 + (current * 1), 0);
-            continue l809;
+            continue l814;
         };
     };
     return block_33, 3;
@@ -7441,12 +7471,12 @@ fn "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec2$dae[len]$spe
     block_33 = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, $v3_14), bytes: $v3_14 };
     $v3_14 = 0;
     $licm_ptr_63 = block_33.ptr;
-    b811: block {
-        l812: loop {
-            break_if b811 $v3_14 >= 2;
+    b816: block {
+        l817: loop {
+            break_if b816 $v3_14 >= 2;
             $v3_14 = local.tee current($v3_14) + 1;
             builtin::store_u8($licm_ptr_63 + (current * 1), 4);
-            continue l812;
+            continue l817;
         };
     };
     return block_33, 2;
@@ -7467,12 +7497,12 @@ fn "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec1$dae[len]$spe
     block_33 = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, $v3_14), bytes: $v3_14 };
     $v3_14 = 0;
     $licm_ptr_63 = block_33.ptr;
-    b814: block {
-        l815: loop {
-            break_if b814 $v3_14 >= 3;
+    b819: block {
+        l820: loop {
+            break_if b819 $v3_14 >= 3;
             $v3_14 = local.tee current($v3_14) + 1;
             builtin::store_u8($licm_ptr_63 + (current * 1), 1);
-            continue l815;
+            continue l820;
         };
     };
     return block_33, 3;
