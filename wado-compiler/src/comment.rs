@@ -390,6 +390,7 @@ fn populate_trailing_from_nodes(trivia: &mut TriviaMap, nodes: &[(AstId, Span)])
 mod tests {
     use super::*;
     use crate::ast::AstIdSpace;
+    use crate::lexer::lex;
 
     fn line_comment(text: &str, start: usize, end: usize, line: usize, column: usize) -> Comment {
         Comment {
@@ -420,7 +421,7 @@ mod tests {
     /// is the text.
     #[test]
     fn doc_text_keeps_everything_after_the_marker_and_one_space() {
-        let texts: Vec<String> = crate::lexer::lex("//!! loud\n/// /path\n///tight\n")
+        let texts: Vec<String> = lex("//!! loud\n/// /path\n///tight\n")
             .comments
             .iter()
             .map(|c| c.doc_text().to_string())
