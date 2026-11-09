@@ -66,6 +66,7 @@ pub trait Reflect {
     fn type_info() -> TypeInfo;
     fn decl_name() -> String;
     fn wire_name_policy() -> CaseStyle;
+    fn doc() -> Option<String>;
 }
 
 /// Sealed: cases and fields minted only by `type_info()`, constructible
