@@ -5157,15 +5157,27 @@ test "a greedy loop leaves its last token to a caller that ends the input with i
     assert got == "x; => (s (list x) ;)\nx; => (t (list x) ;)\nx; => (list x)\nx;x; => (s (list x ; x) ;)\n";
 }
 
-// Where a parse enters `list` directly, the jar reads what follows it as what
-// follows each call of `list`, and the simulator as the end of the input.
-#[TODO]
+// Where a parse enters a rule directly, the jar reads what follows it as what
+// follows each call of it, through callers that are themselves called.
 test "exact reads a directly entered rule's end as the jar does" {
     let got = parses_each(CALLER_ENDS_INPUT_G4, [
         ["list", "x;"],
         ["list", "x;;"],
     ]);
     assert got == "x; => (list x)\nx;; => (list x ;)\n";
+    let chained = parses_each("grammar U;
+s : a 'q' EOF ;
+t : b ';' EOF ;
+b : a ;
+a : X (';' X?)* ;
+X : 'x' ;
+WS : ' ' -> skip ;
+", [
+        ["a", "x;"],
+        ["a", "x;;"],
+        ["a", "x;q"],
+    ]);
+    assert chained == "x; => (a x)\nx;; => (a x ;)\nx;q => (a x ;)\n";
 }
 
 test "a simulator walk that dies picks the alternative that finished the rule, or none" {
