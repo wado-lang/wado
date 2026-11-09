@@ -2041,8 +2041,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   `List<T>` converts to by copying and a `&LinearArray<T>` by lending its block;
   `LinearBuffer` reads a `Stream<u8>` into linear memory as far as a parser asks
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
-- [`core:uri`](./stdlib-core-uri.md) — RFC 3986 URI references as
-  identifiers, any scheme: parse, resolve against a base, write back
+- [`core:uri`](./stdlib-core-uri.md) — RFC 3986 URIs and URI references as
+  identifiers, any scheme: parse, resolve a reference against a URI, write back
 - [`core:prng`](./stdlib-core-prng.md) — seedable, reproducible pseudo-randomness
   for simulation: `Rng`, `VectorRng`, and the keyed `Squares64`
 - [`core:secure_random`](./stdlib-core-secure_random.md) — unpredictable

@@ -1639,6 +1639,7 @@ pub struct GlobalDecl {
     pub mutable: bool,
     pub visibility: Visibility,
     pub attributes: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -2246,6 +2247,7 @@ pub struct ResourceDecl {
     /// a resource operation is backed by a CM import, so it has no body to
     /// declare.
     pub methods: Vec<Function>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -2731,6 +2733,7 @@ pub struct Function {
     /// like `pub fn foo();`). Its leading [`AssertStmt::contract`] statements
     /// are the `contract` clauses written ahead of it.
     pub body: Option<Block>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4623,6 +4626,7 @@ pub struct InterfaceDecl {
     pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
     pub methods: Vec<Function>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4820,6 +4824,7 @@ pub struct StructDecl {
     pub fields: Vec<StructField>,
     /// Attributes like `#[cm("...")]`
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4844,6 +4849,7 @@ pub struct StructField {
     /// Optional default value expression: `struct S { x: i32 = 0 }`.
     /// Must be a pure expression (no effects).
     pub default: Option<Expr>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4861,6 +4867,7 @@ pub struct EnumDecl {
     pub cases: Vec<EnumCase>,
     /// Attributes like #[cm("...")]
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4874,6 +4881,7 @@ pub struct EnumCase {
     pub name_span: Span,
     /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4896,6 +4904,7 @@ pub struct FlagsDecl {
     pub is_export: bool,
     pub attributes: Option<Vec<Attribute>>,
     pub flags: Vec<FlagsVariant>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4907,6 +4916,7 @@ pub struct FlagsVariant {
     pub name_span: Span,
     /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4933,6 +4943,7 @@ pub struct VariantDecl {
     pub cases: Vec<VariantCase>,
     /// Attributes like `#[cm("...")]`
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4953,6 +4964,7 @@ pub struct VariantCase {
     pub payload: Option<Type>,
     /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -4968,6 +4980,7 @@ pub struct Newtype {
     pub type_params: Vec<GenericParam>,
     pub ty: Type,
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -5045,6 +5058,7 @@ pub struct AssociatedConst {
     pub visibility: Visibility,
     pub ty: Type,
     pub value: Expr,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
@@ -5129,6 +5143,7 @@ pub struct TraitDecl {
     /// them (see [`Function::is_contract_holder`]).
     pub methods: Vec<Function>,
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 

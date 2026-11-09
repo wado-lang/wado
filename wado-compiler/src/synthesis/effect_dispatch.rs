@@ -444,6 +444,7 @@ fn synthesize_dispatch_struct(
         fields,
         span: synth_span(),
         wire_name_policy: None,
+        doc: None,
     });
 
     DispatchPlan {

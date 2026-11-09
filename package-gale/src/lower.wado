@@ -756,11 +756,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx, &mut cont_rests);
     }
     stamp_lr_self_ref_min_prec(&mut lr_alts, rule, ctx, atn_class, &mut cont_rests);
-    let mut loop_meets_predicate = !ctx.decisions.at_lr_loop(ctx.current_rule_index()).is_empty();
-    for let a of &lr_alts {
-        loop_meets_predicate = loop_meets_predicate || ctx.meets_predicate_at(&rule.alternatives[a.alt_index], 0);
-    }
-    let loop_checked = !atn_class && ctx.settings.atn.verifies() && !loop_meets_predicate;
+    let loop_checked = !atn_class && ctx.settings.atn.verifies();
     if loop_checked {
         ctx.mark_checks_with_simulator();
     }
@@ -2007,14 +2003,15 @@ fn with_scan_group_atn_site(
 
 /// `g`'s decision site where only the simulator can tell which alternative the
 /// rest of the input takes: its empty alternative shares a branch with another,
-/// or, under `atn: "always"`, any two share one. Else -1.
+/// or any two share one where the simulator takes a contested decision
+/// (`simulator_takes_contested`). Else -1.
 fn group_atn_site(
     g: &GroupElement,
     classes: &List<AltClass>,
     admits: &Option<EmptyAltAdmits>,
     ctx: &mut LowerContext,
 ) -> i32 {
-    let always = ctx.settings.atn matches { Always };
+    let takes_contested = ctx.simulator_takes_contested(g.atn_decision);
     for let branch of &decision_partition(classes) {
         if branch.alts.len() < 2 {
             continue;
@@ -2023,7 +2020,7 @@ fn group_atn_site(
             ctx.mark_asks_simulator("a group's choice between its empty alternative and another");
             return g.atn_decision;
         }
-        if always {
+        if takes_contested {
             ctx.mark_asks_simulator("a group's choice among alternatives sharing a first token");
             return g.atn_decision;
         }
@@ -2387,6 +2384,8 @@ fn rebind_scan_repeat_caller_follow(
             index,
             ctx,
             reaches_rule_tail,
+            re.gate_caller_follow,
+            re.atn_decision,
             rule_name,
             outer_suffix,
         );
@@ -2973,16 +2972,19 @@ fn lower_op<S: AsStrSlice>(
             follow_is_exact,
             outer_suffix,
         ),
-        Group(g) => lower_group_op(
+        Group(g) => with_alt_actions(
+            lower_group_op(
+                &g,
+                name_counts,
+                rule_name,
+                ctx,
+                group_counter,
+                outer_follow,
+                follow_is_exact,
+                gate_caller_follow,
+                outer_suffix,
+            ),
             &g,
-            name_counts,
-            rule_name,
-            ctx,
-            group_counter,
-            outer_follow,
-            follow_is_exact,
-            gate_caller_follow,
-            outer_suffix,
         ),
         Label(lab) => lower_label_op(
             &lab,
@@ -3002,6 +3004,19 @@ fn lower_op<S: AsStrSlice>(
 /// Lower a `Group` element into the `GroupShape` `classify_group` names.
 /// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
 /// whose wrapping is purely syntactic; every storable shape gets its own scope.
+/// `op`, lowered from `g`, with each alternative carrying the actions written
+/// in it, for the op-only walker, which has no surface alternative to read
+/// them from.
+fn with_alt_actions(op: Op, g: &GroupElement) -> Op {
+    let Group(mut go) = op else {
+        unreachable();
+    };
+    for let alt of &mut go.alts {
+        alt.actions = g.alternatives[alt.alt_index].actions;
+    }
+    return Op::Group(go);
+}
+
 fn lower_group_op<S: AsStrSlice>(
     g: &GroupElement,
     name_counts: &mut List<[String, i32]>,
@@ -3078,9 +3093,7 @@ fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut LowerContext) -> Op {
 /// tournament among alternatives sharing a first token, which `always` hands
 /// the simulator. Else -1.
 fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut LowerContext) -> i32 {
-    if !ctx.settings.atn.verifies()
-        || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1)
-        || ctx.site_meets_predicate(g.atn_decision) {
+    if !ctx.settings.atn.verifies() || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1) {
         return -1;
     }
     ctx.mark_checks_with_simulator();
@@ -4274,7 +4287,9 @@ fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> 
 /// Whether a Repeat's body and what follows it in its alternative can start on
 /// one token, so its first token does not say whether it enters. Past the
 /// alternative's end the caller continues, which is unknown here, so a Repeat
-/// whose rest can match empty counts as contested.
+/// whose rest can match empty counts as contested. So does one ending an
+/// alternative that ends at a left-recursion loop rather than at the rule's
+/// tail, which `gate_caller_follow` marks as well.
 fn repeat_contested(
     body_admits: &Admits,
     caller_follow_first: &List<i32>,
@@ -4282,9 +4297,11 @@ fn repeat_contested(
     index: i32,
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
+    gate_caller_follow: bool,
 ) -> bool {
     return admits_is_everything(body_admits)
         || admits_overlap(body_admits, caller_follow_first)
+        || gate_caller_follow
         || reaches_rule_tail && ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1);
 }
 
@@ -4315,6 +4332,8 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         index,
         ctx,
         reaches_rule_tail,
+        rep_op.gate_caller_follow,
+        rep_op.atn_decision,
         rule_name,
         outer_suffix,
     );
@@ -4378,13 +4397,6 @@ fn atn_asked_kinds(
     return asked;
 }
 
-fn repeat_decision_site(repeat: &Element) -> i32 {
-    let Repeat(rep) = repeat else {
-        panic("a loop's exit stamps are read at the loop");
-    };
-    return rep.atn_decision;
-}
-
 fn lower_repeat_exit_stamps<S: AsStrSlice>(
     non_greedy: bool,
     kind: RepeatKind,
@@ -4396,18 +4408,26 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     index: i32,
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
+    gate_caller_follow: bool,
+    atn_decision: i32,
     rule_name: S,
     outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
-    let contested_somewhere = ctx.settings.atn matches { Always | Verify }
+    let takes_contested = ctx.simulator_takes_contested(atn_decision);
+    let contested_somewhere = (takes_contested || ctx.settings.atn.verifies())
         && !by_atn
-        && repeat_contested(body_admits, caller_follow_first, alt_elements, index, ctx, reaches_rule_tail);
-    let contested = contested_somewhere && ctx.settings.atn matches { Always };
-    let checked = contested_somewhere
-        && !non_greedy
-        && ctx.settings.atn.verifies()
-        && !ctx.site_meets_predicate(repeat_decision_site(&alt_elements[index]));
+        && repeat_contested(
+            body_admits,
+            caller_follow_first,
+            alt_elements,
+            index,
+            ctx,
+            reaches_rule_tail,
+            gate_caller_follow,
+        );
+    let contested = contested_somewhere && takes_contested;
+    let checked = contested_somewhere && !non_greedy && ctx.settings.atn.verifies();
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {

@@ -40,7 +40,7 @@ use super::coercion::{
     unary_passes_expected_type,
 };
 use super::expr::UnionSource;
-use super::operators::takes_shape_from_expected_type;
+use super::operators::expected_type_use;
 use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::transposition::Transposition;
 use super::typecheck::{admits_condition, widens};
@@ -327,6 +327,10 @@ pub(super) struct ReifyAssertSlot {
     pub(super) place_expr: Option<TirExpr>,
     /// The `bool` recording whether the capture site ran.
     pub(super) seen_local_index: Option<u32>,
+    /// What the slot declares ahead of the condition. Slots are numbered in
+    /// evaluation order, and reify may walk two operands the other way round
+    /// (to type one from the other), so these are bound in slot order.
+    pub(super) bindings: Vec<TirStmt>,
 }
 
 /// The callee a literal coercion names, as annotate resolved and mangled it
@@ -446,7 +450,6 @@ pub(super) struct ReifyAssertCaptureContext {
     /// Guard so the `reify_expr` hook doesn't re-fire on the same
     /// `AstId` during its own recursive reify call.
     pub(super) in_progress: IndexSet<AstId>,
-    pub(super) emitted_lets: Vec<TirStmt>,
 }
 
 /// Per-module reify pass: emits a [`TirModule`] from the AST plus the
@@ -1114,10 +1117,12 @@ impl<'a> Reify<'a> {
                     index: i as u32,
                     span: case.span,
                     wire_name_override: wire_name_override(&case.attrs),
+                    doc: case.doc.clone(),
                 })
                 .collect(),
             span: enum_decl.span,
             wire_name_policy: wire_name_policy(&enum_decl.attrs),
+            doc: enum_decl.doc.clone(),
         }
     }
 
@@ -1140,12 +1145,14 @@ impl<'a> Reify<'a> {
                     name: member.name.clone(),
                     bitmask: member.bitmask,
                     span: m.span,
+                    doc: m.doc.clone(),
                 })
                 .collect(),
             span: flags_decl.span,
             wire_name_policy: wire_name_policy(
                 flags_decl.attributes.as_deref().unwrap_or_default(),
             ),
+            doc: flags_decl.doc.clone(),
         })
     }
 
@@ -1186,6 +1193,7 @@ impl<'a> Reify<'a> {
             type_params: Self::declared_type_params(def, &newtype_decl.type_params),
             type_id: type_id.filter(|_| !generic),
             span: newtype_decl.span,
+            doc: newtype_decl.doc.clone(),
         })
     }
 
@@ -1226,6 +1234,7 @@ impl<'a> Reify<'a> {
             fields,
             span: struct_decl.span,
             wire_name_policy,
+            doc: struct_decl.doc.clone(),
         }
     }
 
@@ -1296,6 +1305,7 @@ impl<'a> Reify<'a> {
                 fields,
                 span: struct_decl.span,
                 wire_name_policy: wire_name_policy(&struct_decl.attrs),
+                doc: struct_decl.doc.clone(),
             },
         );
     }
@@ -1318,6 +1328,7 @@ impl<'a> Reify<'a> {
                 type_params: Self::declared_type_params(def, &newtype_decl.type_params),
                 type_id: type_id.filter(|_| !generic),
                 span: newtype_decl.span,
+                doc: newtype_decl.doc.clone(),
             },
         );
     }
@@ -1338,6 +1349,7 @@ impl<'a> Reify<'a> {
                 payload: data.payload,
                 span: case.span,
                 wire_name_override: wire_name_override(&case.attrs),
+                doc: case.doc.clone(),
             })
             .collect();
 
@@ -1365,6 +1377,7 @@ impl<'a> Reify<'a> {
             span: variant_decl.span,
             wire_name_policy: wire_name_policy(&variant_decl.attrs),
             wire_tag: wire_value(&variant_decl.attrs, "tag"),
+            doc: variant_decl.doc.clone(),
         }
     }
 
@@ -1971,6 +1984,7 @@ impl<'a> Reify<'a> {
                 .iter()
                 .any(|a| a.name == WIRE && a.has_arg("positional")),
             default_expr,
+            doc: field.doc.clone(),
         }
     }
 
@@ -3148,7 +3162,7 @@ impl<'a> Reify<'a> {
         cap_ctx.slots[slot_idx].local_index = local_index;
         cap_ctx.slots[slot_idx].type_id = Some(type_id);
         cap_ctx.slots[slot_idx].seen_local_index = seen_local_index;
-        cap_ctx.emitted_lets.extend(decls);
+        cap_ctx.slots[slot_idx].bindings.extend(decls);
 
         spliced
     }
@@ -3304,24 +3318,27 @@ impl<'a> Reify<'a> {
                             hoisted: *hoisted,
                             place_expr: None,
                             seen_local_index: None,
+                            bindings: Vec::new(),
                         },
                     )
                     .collect(),
                 ast_id_to_slot,
                 in_progress: IndexSet::default(),
-                emitted_lets: Vec::new(),
             }),
         );
 
         let cond_tir = self.reify_condition_expr(&assert_stmt.condition, ctx);
 
-        let actx = ctx
+        let mut actx = ctx
             .reify_assert_capture_ctx
             .take()
             .expect("reify_assert_capture_ctx survives condition reify");
 
-        let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(actx.emitted_lets.len() + 2);
-        inner_stmts.extend(actx.emitted_lets);
+        let mut inner_stmts: Vec<TirStmt> = actx
+            .slots
+            .iter_mut()
+            .flat_map(|slot| std::mem::take(&mut slot.bindings))
+            .collect();
 
         let cond_type = cond_tir.type_id;
         let cond_name = "$cond".to_string();
@@ -4512,8 +4529,8 @@ impl<'a> Reify<'a> {
                 |expr| expr.type_id,
             )
         } else if binary.op.is_comparison()
-            && takes_shape_from_expected_type(&binary.left)
-            && !takes_shape_from_expected_type(&binary.right)
+            && expected_type_use(&binary.left, &self.tysys)
+                > expected_type_use(&binary.right, &self.tysys)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
             let left = self.reify_expr(&binary.left, ctx, None);

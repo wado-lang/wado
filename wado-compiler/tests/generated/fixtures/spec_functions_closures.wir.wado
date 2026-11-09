@@ -2565,31 +2565,35 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<spec_functions_closures.wado/$tmpl$b23472823dfedafb,[core:prelude/intparse.wado/ParseIntError]>$spec0$spec0$sroa[t.h0]"(t) {
     let out_3: ref "core:prelude/string.wado//String";
     let self_59: "core:prelude/intparse.wado//enum:IntErrorKind";
-    let message: ref "core:prelude/string.wado//String";
     let new_used_76: i32;
     let start_77: i32;
+    let $sroa_slot_105: ref null Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    message = (if local.tee self_59(t.kind) == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cannot parse integer from empty string"), used: 38 };
-    } else if self_59 == 1 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid digit found in string"), used: 29 };
-    } else if self_59 == 2 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("number too large to fit in target type"), used: 38 };
+    if local.tee self_59(t.kind) == 0 {
+        $sroa_slot_105 = array.new_data<u8>("cannot parse integer from empty string");
+        self_59 = 38;
+    } else if self_59 == 1 {
+        $sroa_slot_105 = array.new_data<u8>("invalid digit found in string");
+        self_59 = 29;
+    } else if self_59 == 2 {
+        $sroa_slot_105 = array.new_data<u8>("number too large to fit in target type");
+        self_59 = 38;
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("number too small to fit in target type"), used: 38 };
-    });
+        $sroa_slot_105 = array.new_data<u8>("number too small to fit in target type");
+        self_59 = 38;
+    }
     $inline_core_prelude_string_wado_String__internal_push_string_32: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_32 local.tee self_59(message.used) == 0;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_32 self_59 == 0;
         if @unlikely(local.tee new_used_76(0 + self_59) > builtin::array_len(out_3.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_76);
         }
         start_77 = out_3.used;
         out_3.used = new_used_76;
-        builtin::array_copy<u8>(out_3.repr, start_77, message.repr, 0, self_59);
+        builtin::array_copy<u8>(out_3.repr, start_77, $sroa_slot_105, 0, self_59);
     };
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;

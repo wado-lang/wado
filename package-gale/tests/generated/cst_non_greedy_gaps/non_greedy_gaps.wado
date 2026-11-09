@@ -1285,7 +1285,7 @@ impl AtnPredictor {
         let mut asked: List<i32> = [];
         let mut floor = self.floor;
         loop {
-            let alt = atn_predict_above(
+            let [alt, _] = atn_predict_above(
                 &mut ATN_DFA,
                 sim,
                 decision,
@@ -2175,7 +2175,7 @@ internal fn atn_predict_with_stack(
         &mut preds,
         &mut [],
         ask,
-    );
+    ).0;
 }
 
 fn atn_predict_above<effect E>(
@@ -2191,10 +2191,10 @@ fn atn_predict_above<effect E>(
     preds: &mut AtnPreds,
     asked: &mut List<i32>,
     ask: fn(i32) -> bool with E,
-) -> i32 with E {
+) -> [i32, bool] with E {
     loop {
         let mut held: List<i32> = [];
-        let [alt, _] = atn_walk(
+        let verdict = atn_walk(
             dfa,
             sim,
             decision,
@@ -2219,25 +2219,39 @@ fn atn_predict_above<effect E>(
             }
         }
         if preds.failed.len() == known_failed {
-            return alt;
+            return verdict;
         }
         preds.failed.sort();
     }
 }
 
-fn atn_predict_walk(
-    dfa: &mut AtnDfa,
+fn atn_predict_walk<effect E>(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
-    floor: i32,
     tokens: &Array<i32>,
     start_pos: i32,
     eof: i32,
     min_prec: i32,
-) -> [i32, bool] {
-    let mut held: List<i32> = [];
-    return atn_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, &ATN_NO_PREDS, &mut held);
+    met: &List<i32>,
+    own: &List<i32>,
+    ask: fn(i32) -> bool with E,
+) -> [i32, bool] with E {
+    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
+    return atn_predict_above(
+        &mut ATN_DFA,
+        sim,
+        decision,
+        rule_stack,
+        0,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        &mut preds,
+        &mut [],
+        ask,
+    );
 }
 
 fn atn_walk(
@@ -2270,7 +2284,9 @@ fn atn_walk(
             }
             return [verdict, true];
         }
-        fallback = dfa.state_first[s];
+        if pos > start_pos {
+            fallback = dfa.state_first[s];
+        }
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let ended = atn_move(sim, &dfa.state_configs[s], eof, eof);
@@ -3161,48 +3177,18 @@ global SYNC_7: List<i32> = [1];
 global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x03\x00\x24\x00\x0b\x00\x00\x00\x02\x00\x06\x00\x0f\x00\x14\x00\x02\x03\x02\x03\x04\x05\x06\x09\x01\x01\x07\x04\x05\x01\x01\x06\x09\x01\x01\x07\x08\x09\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x04\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x05\x00\x19\x00\x07\x00\x02\x00\x08\x00\x09\x00\x0c\x00\x0a\x00\x0b\x00\x07\x00\x0e\x00\x15\x00\x03\x00\x10\x00\x11\x00\x12\x00\x0d\x00\x13\x00\x14\x00\x10\x00\x0c\x00\x16\x00\x17\x00\x18\x00\x06\x00\x1b\x00\x04\x00\x1c\x00\x1d\x00\x1e\x00\x1f\x00\x20\x00\x21\x00\x22\x00\x23\x00\x24\x00\x1a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 
 fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos] < 11 {
-        match tokens[pos] {
-            TK_LIT_public => {
-                if pos + 1 < tokens.len() && tokens[pos + 1] < 11 {
-                    match tokens[pos + 1] {
-                        TK_LIT_static => {
-                            if pos + 2 < tokens.len() && tokens[pos + 2] < 11 {
-                                match tokens[pos + 2] {
-                                    TK_LIT_final => {
-                                        if pos + 3 < tokens.len() && tokens[pos + 3] < 11 {
-                                            match tokens[pos + 3] {
-                                                TK_EOF | TK_LIT_int => {},
-                                                _ => {
-                                                    return 1;
-                                                },
-                                            };
-                                        }
-                                    },
-                                    TK_EOF => {},
-                                    _ => {
-                                        return 1;
-                                    },
-                                };
-                            }
-                        },
-                        TK_EOF => {},
-                        _ => {
-                            return 1;
-                        },
-                    };
-                }
-            },
-            TK_EOF => {},
-            _ => {
-                return 1;
-            },
-        };
-    }
+    let alt = atn_dfa_4(tokens, pos);
+    if alt >= 0 { return alt; }
     return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
 }
 
 fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    let alt = atn_dfa_4(tokens, pos);
+    if alt >= 0 { return alt; }
+    return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_dfa_4(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && tokens[pos] < 11 {
         match tokens[pos] {
             TK_LIT_public => {
@@ -3241,6 +3227,6 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
             },
         };
     }
-    return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);
+    return -1;
 }
 

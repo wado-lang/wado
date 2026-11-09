@@ -5968,3 +5968,85 @@ r : ( {p}? 'a' | 'c' ( 'b' | ) )* 'x' ;
     let decisions = decision_predicates(&GenSettings { emit_actions: true }, &mut analysis);
     assert decisions.at_site(nested.atn_decision).len() == 1;
 }
+
+use { SllDfa, SllNode, SllEdge, SllForest } from "./atn_sll.wado";
+
+fn edge(tokens: List<i32>, to: i32) -> SllEdge {
+    return SllEdge { tokens, to };
+}
+
+fn dfa_of(nodes: List<SllNode>) -> SllDfa {
+    return SllDfa { nodes, kinds: 8 };
+}
+
+test "a lookahead DFA's branches that decide alike merge" {
+    let mut forest = SllForest::new(8);
+    let start = forest.add(&dfa_of([
+        SllNode::Branch([
+            edge([1], 1),
+            edge([2], 2),
+        ]),
+        SllNode::Branch([edge([3], 3)]),
+        SllNode::Branch([edge([3], 4)]),
+        SllNode::Alt(0),
+        SllNode::Alt(0),
+    ]));
+    let merged: List<SllNode> = [
+        SllNode::Alt(0),
+        SllNode::Branch([edge([3], 0)]),
+        SllNode::Branch([edge([1, 2], 1)]),
+    ];
+    assert forest.nodes == merged;
+    assert start == 2;
+    assert !forest.shared(1), "one edge reads the merged branch";
+}
+
+test "two lookahead DFAs share the branches that decide alike" {
+    let mut forest = SllForest::new(8);
+    let first = forest.add(&dfa_of([
+        SllNode::Branch([edge([1], 1)]),
+        SllNode::Branch([edge([3], 2)]),
+        SllNode::Alt(0),
+    ]));
+    let second = forest.add(&dfa_of([
+        SllNode::Branch([edge([7], 1)]),
+        SllNode::Branch([edge([3], 2)]),
+        SllNode::Alt(0),
+    ]));
+    assert forest.nodes.len() == 4;
+    assert first != second;
+    assert forest.shared(1);
+}
+
+test "a lookahead DFA's branches at different depths that decide alike merge" {
+    let mut forest = SllForest::new(8);
+    forest.add(&dfa_of([
+        SllNode::Branch([
+            edge([1], 1),
+            edge([2], 2),
+        ]),
+        SllNode::Branch([edge([5], 3)]),
+        SllNode::Branch([edge([6], 4)]),
+        SllNode::Alt(0),
+        SllNode::Branch([edge([5], 3)]),
+    ]));
+    assert forest.nodes.len() == 4;
+    assert forest.shared(1), "a branch at depth 1 and one at depth 2 read it";
+}
+
+test "lookahead DFA branches apart only in a long edge's last token stay apart" {
+    let kinds = 400;
+    let branch_to_alt = |last: i32| {
+        let mut tokens: List<i32> = (0..<300).collect();
+        tokens.push(last);
+        return SllDfa {
+            nodes: [
+                SllNode::Branch([edge(tokens, 1)]),
+                SllNode::Alt(0),
+            ],
+            kinds,
+        };
+    };
+    let mut forest = SllForest::new(kinds);
+    assert forest.add(&branch_to_alt(300)) != forest.add(&branch_to_alt(301));
+}

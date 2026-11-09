@@ -2763,6 +2763,19 @@ fn test_format_doc_comment_before_attribute_no_extra_blank() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A blank line detaches a `///` block from the declaration below it, so the
+/// formatter keeping it is what keeps `Reflect::doc()` answering `null`.
+#[test]
+fn test_format_keeps_the_blank_line_that_detaches_a_doc_comment() {
+    for source in [
+        "/// Detached.\n\ntype A = i32;\n",
+        "/// Detached.\n\n#[wire(name_policy = \"camelCase\")]\ntype A = i32;\n",
+    ] {
+        let formatted = wado_compiler::format(source).expect("format failed");
+        assert_eq!(formatted, source);
+    }
+}
+
 #[test]
 fn test_format_impl_explicit_type_params() {
     // Formatter must always emit explicit `impl<T>`, never compact `impl Foo<T>`

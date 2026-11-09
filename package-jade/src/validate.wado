@@ -2,10 +2,11 @@
 //! every reference resolved, then held against any number of instances.
 
 use { HashMap, HashSet } from "core:collections";
-use { Uri } from "core:uri";
+use { Uri, UriReference } from "core:uri";
 use { percent_decode } from "core:url";
 use { Regex } from "lib:re";
 use { Document, Node } from "./document.wado";
+use { Format } from "./format.wado";
 use { Divisor, Number } from "./number.wado";
 use { JsonTypes, Schema, SchemaError, pointer_token, type_names, write_location, write_place } from "./schema.wado";
 
@@ -78,7 +79,7 @@ impl SchemaSet {
     ) -> Result<(), LoadError<E>> with X
         contract self.holds(uri), "`uri` must name a document the set holds"
     {
-        let [mut c, _] = Compiler::rooted(self, uri)?;
+        let [mut c, _] = Compiler::rooted(self, uri, CompileOptions {})?;
         return self.load_into(&mut c, fetch);
     }
 
@@ -218,23 +219,34 @@ impl<E: Display> Display for FailedLoad<E> {
     }
 }
 
+/// How a schema is compiled.
+pub struct CompileOptions {
+    /// Whether `format` asserts as well as annotates. Draft 2020-12 makes it an
+    /// annotation unless asked.
+    pub assert_format: bool = false,
+}
+
 impl Validator {
     /// `schema` compiled, its references resolved. A reference to a schema
     /// that neither `schema` nor Draft 2020-12's meta-schemas hold is an
     /// error; a `SchemaSet` supplies more documents.
-    pub fn compile(schema: &Schema) -> Result<Validator, CompileError> {
+    pub fn compile(schema: &Schema, options: CompileOptions = CompileOptions {}) -> Result<Validator, CompileError> {
         let base = Uri::from_str(&DEFAULT_BASE).unwrap();
         let mut set = SchemaSet::new();
         set.insert(base, *schema);
-        return Validator::compile_in(&set, &base);
+        return Validator::compile_in(&set, &base, options);
     }
 
     /// The document `set` holds under `uri` compiled, its references resolved
     /// among the documents of `set`.
-    pub fn compile_in(set: &SchemaSet, uri: &Uri) -> Result<Validator, CompileError>
+    pub fn compile_in(
+        set: &SchemaSet,
+        uri: &Uri,
+        options: CompileOptions = CompileOptions {},
+    ) -> Result<Validator, CompileError>
         contract set.holds(uri), "`uri` must name a document the set holds"
     {
-        let [mut c, root] = Compiler::rooted(set, uri)?;
+        let [mut c, root] = Compiler::rooted(set, uri, options)?;
         c.resolve_reached()?;
         return Result::Ok(Compiler::into_validator(c, root));
     }
@@ -246,10 +258,11 @@ impl Validator {
         set: &mut SchemaSet,
         uri: &Uri,
         fetch: fn mut(&Uri) -> Result<Schema, E> with X,
+        options: CompileOptions = CompileOptions {},
     ) -> Result<Validator, LoadError<E>> with X
         contract set.holds(uri), "`uri` must name a document the set holds"
     {
-        let [mut c, root] = Compiler::rooted(set, uri)?;
+        let [mut c, root] = Compiler::rooted(set, uri, options)?;
         set.load_into(&mut c, fetch)?;
         return Result::Ok(Compiler::into_validator(c, root));
     }
@@ -440,6 +453,9 @@ impl Validator {
             }
             if let Some(re) = &n.pattern && !re.is_match(s) {
                 run.fail(ip, n, "pattern", `must match ${re}`);
+            }
+            if let Some(f) = n.format && !f.admits(s) {
+                run.fail(ip, n, "format", `must be a valid ${f.name()}`);
             }
         }
     }
@@ -653,6 +669,7 @@ struct Compiled {
     min_length: Option<i32> = null,
     max_length: Option<i32> = null,
     pattern: Option<Regex> = null,
+    format: Option<Format> = null,
     items: Option<i32> = null,
     prefix_items: List<i32> = [],
     contains: Option<i32> = null,
@@ -826,6 +843,7 @@ struct Compiler {
     reached: List<i32> = [],
     /// How many of `reached` have every reference resolved.
     resolved: i32 = 0,
+    options: CompileOptions,
 }
 
 struct AddedDocument {
@@ -847,8 +865,8 @@ struct PendingRef {
 impl Compiler {
     /// A compiler that starts from `set`'s document under `uri`, and that
     /// document's root subschema.
-    fn rooted(set: &SchemaSet, uri: &Uri) -> Result<[Compiler, i32], SchemaError> {
-        let mut c = Compiler { unloaded: *set };
+    fn rooted(set: &SchemaSet, uri: &Uri, options: CompileOptions) -> Result<[Compiler, i32], SchemaError> {
+        let mut c = Compiler { unloaded: *set, options };
         c.load(uri)?;
         let root = c.documents.get_str(&`${*uri}`).unwrap();
         c.reach(c.node_document[root]);
@@ -974,6 +992,9 @@ impl Compiler {
         node.exclusive_maximum = o.exclusive_maximum;
         node.min_length = o.min_length;
         node.max_length = o.max_length;
+        if self.options.assert_format && let Some(name) = &o.format {
+            node.format = Format::named(name);
+        }
         if let Some(p) = &o.pattern {
             node.pattern = Option::Some(regex(p, `${at}/pattern`)?);
         }
@@ -1165,8 +1186,8 @@ impl Compiler {
     }
 }
 
-fn parse_uri(text: &String, at: String) -> Result<Uri, SchemaError> {
-    return match Uri::from_str(text) {
+fn parse_uri(text: &String, at: String) -> Result<UriReference, SchemaError> {
+    return match UriReference::from_str(text) {
         Ok(uri) => Result::Ok(uri),
         Err(e) => Result::Err(SchemaError { pointer: at, message: `${e}` }),
     };

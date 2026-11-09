@@ -4,15 +4,16 @@
 
 # core:uri
 
-URI references (RFC 3986) as identifiers: read one, resolve one against a
-base, and write one back. Every scheme is read by the generic syntax, and
-only ASCII is admitted. A URI to fetch over HTTP is `core:url`'s.
+URIs and URI references (RFC 3986) as identifiers: read one, resolve a
+reference against a URI, and write one back. Every scheme is read by the
+generic syntax, and only ASCII is admitted. A URI to fetch over HTTP is
+`core:url`'s.
 
 ## Synopsis
 
 ```wado
 let base = Uri::from_str("https://example.com/schemas/root.json").unwrap();
-let r = base.resolve(&Uri::from_str("item.json#/$defs/id").unwrap());
+let r = base.resolve(&UriReference::from_str("item.json#/$defs/id").unwrap());
 assert r.to_string() == "https://example.com/schemas/item.json#/$defs/id";
 assert r.fragment() matches { Some("/$defs/id") };
 ```
@@ -21,21 +22,19 @@ assert r.fragment() matches { Some("/$defs/id") };
 
 ### `pub struct Uri`
 
-A URI reference (RFC 3986 §4.1): a URI, or a relative reference to resolve
-against one. Every component is valid by construction. Two references are
-equal when their components are equal as written, the scheme's case aside.
+A URI (RFC 3986 §3): a URI reference with a scheme, so one that names a
+resource without a base, and one a reference resolves against. Two URIs are
+equal when their references are.
 
 _Fields are private._
 
-#### `pub fn resolve(&self, reference: &Uri) -> Uri`
-
-- `contract self.scheme matches { Some(_) }, "the base must have a scheme"`
+#### `pub fn resolve(&self, reference: &UriReference) -> Uri`
 
 `reference` resolved against this URI as its base (§5.2.2).
 
 #### `pub fn to_string(&self) -> String`
 
-The reference as `Display` writes it.
+The URI as `Display` writes it.
 
 #### `pub fn fragment(&self) -> Option<StrSlice>`
 
@@ -43,7 +42,7 @@ The fragment, without its `#`.
 
 #### `pub fn without_fragment(&self) -> Uri`
 
-This reference with no fragment: the resource it names.
+This URI with no fragment: the resource it names.
 
 #### `impl FromStr for Uri`
 
@@ -58,6 +57,42 @@ This reference with no fragment: the resource it names.
 ##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uri, DeserializeError>`
 
 #### `impl Display for Uri`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct UriReference`
+
+A URI reference (RFC 3986 §4.1): a URI, or a relative reference to resolve
+against one. Every component is valid by construction. Two references are
+equal when their components are equal as written, the scheme's case aside.
+
+_Fields are private._
+
+#### `pub fn to_string(&self) -> String`
+
+The reference as `Display` writes it.
+
+#### `pub fn fragment(&self) -> Option<StrSlice>`
+
+The fragment, without its `#`.
+
+#### `pub fn without_fragment(&self) -> UriReference`
+
+This reference with no fragment.
+
+#### `impl FromStr for UriReference`
+
+##### `fn from_str<S: AsStrSlice>(input: S) -> Result<UriReference, UriError>`
+
+#### `impl Serialize for UriReference`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for UriReference`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<UriReference, DeserializeError>`
+
+#### `impl Display for UriReference`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
 

@@ -19,6 +19,7 @@ use super::coercion::{
     DeferredOperator, is_literal_arithmetic, is_primitive_literal_target,
     numeric_literal_pair_order, unary_passes_expected_type,
 };
+use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
@@ -239,28 +240,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let right = self.resolve_expr(right_ast, ctx, expected_type);
             let left = self.resolve_expr(left_ast, ctx, Some(right));
             (left, right)
-        } else {
-            let left_lit = op.is_comparison() && takes_shape_from_expected_type(left_ast);
-            let right_lit = op.is_comparison() && takes_shape_from_expected_type(right_ast);
-            if left_lit && !right_lit {
-                let right = self.resolve_expr(right_ast, ctx, expected_type);
-                let left_expected = if right == TypeTable::ERROR {
-                    expected_type
-                } else {
-                    Some(right)
-                };
-                let left = self.resolve_expr(left_ast, ctx, left_expected);
-                (left, right)
+        } else if op.is_comparison()
+            && expected_type_use(left_ast, &self.tysys) > expected_type_use(right_ast, &self.tysys)
+        {
+            let right = self.resolve_expr(right_ast, ctx, expected_type);
+            let left_expected = if right == TypeTable::ERROR {
+                expected_type
             } else {
-                let left = self.resolve_expr(left_ast, ctx, expected_type);
-                let right_expected = if op.is_comparison() && left != TypeTable::ERROR {
-                    Some(left)
-                } else {
-                    expected_type
-                };
-                let right = self.resolve_expr(right_ast, ctx, right_expected);
-                (left, right)
-            }
+                Some(right)
+            };
+            let left = self.resolve_expr(left_ast, ctx, left_expected);
+            (left, right)
+        } else {
+            let left = self.resolve_expr(left_ast, ctx, expected_type);
+            let right_expected = if op.is_comparison() && left != TypeTable::ERROR {
+                Some(left)
+            } else {
+                expected_type
+            };
+            let right = self.resolve_expr(right_ast, ctx, right_expected);
+            (left, right)
         }
     }
 
@@ -273,20 +272,111 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Whether an operand's own elaboration would consult the expected type, so a
-/// comparison resolves the *other* side first and hands this one its type.
-/// Syntactic on purpose: reify decides the same order with no synthesis to
-/// ask, and a type-dependent order would desync the two walks inside a tuple
-/// `for-of`. A form left out just resolves on its own, so a subset is safe.
-pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
-    match expr {
-        ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
-        // A namespaced call (`Color::from_str(s)`) reads as a static path
-        // too; a plain call's return type is its own.
-        ast::Expr::Call(call) => {
-            matches!(&call.callee, ast::Expr::Ident(id) if id.segments.len() >= 2)
+/// How far an operand's own elaboration leans on the expected type. A
+/// comparison resolves the operand that leans further after the other, and
+/// hands it the other's type.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum ExpectedTypeUse {
+    Ignores,
+    Consults,
+    /// A bare case (`Some(x)`, `Red`) names no type without it.
+    Requires,
+}
+
+/// Read off the syntax and the resolve walk, never a type: reify decides the
+/// same order with no synthesis to ask, and a type-dependent order would
+/// desync the two walks inside a tuple `for-of`. A form read as `Ignores` that
+/// hands the expected type on rejects a bare case beneath it; it never
+/// miscompiles.
+pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> ExpectedTypeUse {
+    let bare_case = |ident: &ast::IdentExpr| {
+        if tysys.bare_case_at(ident.id).is_some() {
+            ExpectedTypeUse::Requires
+        } else {
+            ExpectedTypeUse::Ignores
         }
-        _ => false,
+    };
+    match expr {
+        ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => ExpectedTypeUse::Consults,
+        ast::Expr::Ident(ident) => bare_case(ident),
+        ast::Expr::Call(call) => match &call.callee {
+            // A namespaced call (`Color::from_str(s)`) reads as a static path
+            // too; a plain call's return type is its own.
+            ast::Expr::Ident(ident) if ident.segments.len() >= 2 => ExpectedTypeUse::Consults,
+            ast::Expr::Ident(ident) => bare_case(ident),
+            _ => ExpectedTypeUse::Ignores,
+        },
+        // Each form `resolve_expr` hands the expected type on through, to what
+        // yields its value.
+        ast::Expr::If(if_expr) => {
+            if_tails_use(&if_expr.then_block, if_expr.else_block.as_ref(), tysys)
+        }
+        ast::Expr::Match(match_expr) => match_tails_use(match_expr, tysys),
+        ast::Expr::Block(block) => block_tail_use(block, tysys),
+        ast::Expr::LabeledBlock(lb) => break_values(&lb.block, &lb.label)
+            .into_iter()
+            .map(|value| expected_type_use(value, tysys))
+            .fold(block_tail_use(&lb.block, tysys), ExpectedTypeUse::max),
+        ast::Expr::WithHandler(with_expr) => block_tail_use(&with_expr.body, tysys),
+        ast::Expr::Unary(unary)
+            if matches!(
+                unary.op,
+                UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Unchecked
+            ) =>
+        {
+            expected_type_use(&unary.expr, tysys)
+        }
+        ast::Expr::Unary(_)
+        | ast::Expr::Literal(_)
+        | ast::Expr::Binary(_)
+        | ast::Expr::Assign(_)
+        | ast::Expr::CompoundAssign(_)
+        | ast::Expr::ComparisonChain(_)
+        | ast::Expr::MethodCall(_)
+        | ast::Expr::FieldAccess(_)
+        | ast::Expr::Index(_)
+        | ast::Expr::Matches(_)
+        | ast::Expr::Closure(_)
+        | ast::Expr::TemplateString(_)
+        | ast::Expr::TaggedTemplate(_)
+        | ast::Expr::Cast(_)
+        | ast::Expr::StructLiteral(_)
+        | ast::Expr::TupleComprehension(_)
+        | ast::Expr::TryOp(_)
+        | ast::Expr::Spread(..)
+        | ast::Expr::Range(_)
+        | ast::Expr::Error(_) => ExpectedTypeUse::Ignores,
+    }
+}
+
+fn if_tails_use(
+    then_block: &ast::Block,
+    else_block: Option<&ast::Block>,
+    tysys: &TypeSystem,
+) -> ExpectedTypeUse {
+    let then_use = block_tail_use(then_block, tysys);
+    else_block.map_or(then_use, |block| then_use.max(block_tail_use(block, tysys)))
+}
+
+fn match_tails_use(match_expr: &ast::MatchExpr, tysys: &TypeSystem) -> ExpectedTypeUse {
+    match_expr
+        .arms
+        .iter()
+        .map(|arm| expected_type_use(&arm.body, tysys))
+        .max()
+        .unwrap_or(ExpectedTypeUse::Ignores)
+}
+
+/// A trailing `if` or `match` statement is the block's value, as
+/// `block_result_type` reads it.
+fn block_tail_use(block: &ast::Block, tysys: &TypeSystem) -> ExpectedTypeUse {
+    match block.stmts.last() {
+        Some(ast::Stmt::Expr(e)) => expected_type_use(&e.expr, tysys),
+        Some(ast::Stmt::If(if_stmt)) => {
+            if_tails_use(&if_stmt.then_block, if_stmt.else_block.as_ref(), tysys)
+        }
+        Some(ast::Stmt::Match(match_expr)) => match_tails_use(match_expr, tysys),
+        _ => ExpectedTypeUse::Ignores,
     }
 }
 

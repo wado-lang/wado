@@ -124,6 +124,7 @@ pub trait TirMutVisitor {
             fields,
             span: _,
             wire_name_policy: _,
+            doc: _,
         } = decl;
         self.visit_type_ids(type_args);
         self.walk_type_params(type_params);
@@ -149,6 +150,7 @@ pub trait TirMutVisitor {
             span: _,
             wire_name_policy: _,
             wire_tag: _,
+            doc: _,
         } = decl;
         self.walk_type_params(type_params);
         for case in cases {

@@ -11,7 +11,13 @@ use std::rc::Rc;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
+<<<<<<< HEAD
 use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeArgMap, TypeId};
+||||||| a6150904fc0
+use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeId};
+=======
+use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TirVariantCase, TypeId};
+>>>>>>> origin/main
 
 use super::affine_drop;
 use super::traits::{
@@ -161,17 +167,13 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
             continue;
         }
         let span = decl.span;
-        let cases: Vec<(String, u32, TypeId, Option<String>)> = {
+        let cases: Vec<TirVariantCase> = {
             let mut tt = flat.type_table.borrow_mut();
             decl.cases
                 .iter()
-                .map(|c| {
-                    (
-                        c.name.clone(),
-                        c.index,
-                        tt.substitute_type_params(c.payload, &substitution),
-                        c.wire_name_override.clone(),
-                    )
+                .map(|c| TirVariantCase {
+                    payload: tt.substitute_type_params(c.payload, &substitution),
+                    ..c.clone()
                 })
                 .collect()
         };

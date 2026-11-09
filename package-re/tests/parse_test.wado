@@ -1,5 +1,5 @@
 use { ClassItem, Flag, Group, Modified, Node } from "../src/ast.wado";
-use { Hole, PatternError, Syntax, parse } from "../src/parse.wado";
+use { Hole, PatternError, Syntax, parse, validate_ecma262_syntax } from "../src/parse.wado";
 
 fn code(c: u32) -> String {
     if c > 0x20 && c < 0x7F {
@@ -252,6 +252,45 @@ test "lookaround and backreferences name why they are refused" {
     assert error(#"(?<n>a)\k<n>"#) == #"a backreference `\k<name>` cannot be matched in linear time (at byte 7)"#;
 }
 
+test "a syntax error comes before what Re refuses" {
+    assert error(#"(?=a"#) == "unclosed group (at byte 0)";
+    assert error(#"(a)\2"#) == "the pattern has no group 2 (at byte 3)";
+}
+
+test "what ECMA-262 admits and Re does not support says so" {
+    assert error(#"(?<a>x)|(?<a>y)"#) == "two groups in different alternatives are named `a`, which Re does not support (at byte 8)";
+    assert error(#"a{4294967296}"#) == "a count may be at most 4294967295 (at byte 2)";
+    assert error(#"a{5000000000,6000000000}"#) == "a count may be at most 4294967295 (at byte 2)";
+}
+
+fn syntax_error(pattern: String) -> String {
+    return `${validate_ecma262_syntax(pattern).unwrap_err()}`;
+}
+
+test "validate_ecma262_syntax admits what Re cannot match" {
+    let patterns: List<String> = [
+        #"a(?=b)"#, #"(?!b)"#, #"(?<=a+)b"#, #"(?<!(?<n>b))"#, #"(a)\1"#, #"\1(a)"#, #"((((((((((a))))))))))\10"#,
+        #"(?<n>a)\k<n>"#, #"\k<n>(?<n>a)"#, #"(?i:a)"#, #"(?<a>x)|(?<a>y)"#, #"(?:(?<a>x)|(?<a>y))|(?<a>z)"#,
+        #"a{4294967296}"#, #"a{1,99999999999999999999}"#,
+    ];
+    for let p of patterns {
+        assert validate_ecma262_syntax(p) matches { Ok(_) };
+    }
+}
+
+test "validate_ecma262_syntax holds the early errors" {
+    assert syntax_error(#"(?=a)*"#) == "an assertion cannot be repeated (at byte 0)";
+    assert syntax_error(#"(?<!a"#) == "unclosed group (at byte 0)";
+    assert syntax_error(#"(a)\2"#) == "the pattern has no group 2 (at byte 3)";
+    assert syntax_error(#"(a)\99999999999"#) == "the pattern has no group 99999999999 (at byte 3)";
+    assert syntax_error(#"\k<n>"#) == "the pattern has no group named `n` (at byte 0)";
+    assert syntax_error(#"(?<n>a)\k"#) == #"`\k` must be followed by `<name>` (at byte 7)"#;
+    assert syntax_error(#"[\1]"#) == "a backreference cannot stand in a class (at byte 1)";
+    assert syntax_error(#"(?<a>x)(?<a>y)"#) == "two groups are named `a` (at byte 7)";
+    assert syntax_error(#"(?:(?<a>x)|y)(?<a>z)"#) == "two groups are named `a` (at byte 13)";
+    assert syntax_error(#"a{5000000000,4999999999}"#) == "the count's maximum is below its minimum (at byte 1)";
+}
+
 test "syntax errors point at the offending character" {
     assert error(#"a**"#) == "nothing to repeat (at byte 2)";
     assert error(#"^*"#) == "an assertion cannot be repeated (at byte 0)";
@@ -261,7 +300,6 @@ test "syntax errors point at the offending character" {
     assert error(#"{"#) == #"nothing to repeat; write `\{` for a literal `{` (at byte 0)"#;
     assert error(#"a{2,1}"#) == "the count's maximum is below its minimum (at byte 1)";
     assert error(#"a{x}"#) == "a count needs a number, as in `{2}` (at byte 1)";
-    assert error(#"a{4294967296}"#) == "a count may be at most 4294967295 (at byte 2)";
     assert error(#"[a"#) == "unclosed class (at byte 0)";
     assert error(#"x[a-"#) == "unclosed class (at byte 1)";
     assert error(#"[z-a]"#) == "a class range runs from a higher code point to a lower one (at byte 1)";
