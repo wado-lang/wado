@@ -1079,7 +1079,7 @@ fn "serde_generic_deserialize.wado/$test_1_two_instantiations_of_the_same_generi
             $sroa_input_repr_69 = $mv_message_2.repr;
             b9: block {
                 l10: loop {
-                    break_if b9 ((($mv_kind_5 >= $mv$$vr_6_16$0) | (($mv_kind_5 + 1) >= $mv$$vr_6_16$0)) | ((($mv_kind_5 + 1) + 1) >= $mv$$vr_6_16$0)) | (((($mv_kind_5 + 1) + 1) + 1) >= $mv$$vr_6_16$0);
+                    break_if b9 (builtin::i64_extend_i32_s($mv_kind_5) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_6_16$0);
                     if builtin::array_get_value<u8>($sroa_input_repr_69, $mv_kind_5) != builtin::array_get_value<u8>(global:serde_generic_deserialize.wado::$const_obj_2, $mv_kind_5) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__25: 0;
                     }
@@ -1189,7 +1189,7 @@ fn "serde_generic_deserialize.wado/$test_3_multi_param_generic_struct"() {
             $sroa_input_repr_42 = $mv_message_2.repr;
             b27: block {
                 l28: loop {
-                    break_if b27 ((($mv_kind_1 >= $mv$$vr_6$0) | (($mv_kind_1 + 1) >= $mv$$vr_6$0)) | ((($mv_kind_1 + 1) + 1) >= $mv$$vr_6$0)) | (((($mv_kind_1 + 1) + 1) + 1) >= $mv$$vr_6$0);
+                    break_if b27 (builtin::i64_extend_i32_s($mv_kind_1) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_6$0);
                     if builtin::array_get_value<u8>($sroa_input_repr_42, $mv_kind_1) != builtin::array_get_value<u8>(global:serde_generic_deserialize.wado::$const_obj_3, $mv_kind_1) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
                     }
@@ -1882,7 +1882,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix
     if len <= $mv$s$end {
         b139: block {
             l140: loop {
-                break_if b139 (i >= len) | ((i + 1) >= len);
+                break_if b139 (builtin::i64_extend_i32_s(i) + 1_i64) >= builtin::i64_extend_i32_s(len);
                 c = $inline_digit_value_1: block -> i32 {
                     if (local.tee c(builtin::array_get_value<u8>($mv$s$repr, $mv$s$start + i)) >= 48) & (c <= 57) {
                         break $inline_digit_value_1: c - 48;
@@ -2227,7 +2227,7 @@ fn "core:prelude/string.wado/bytes_match_at"(haystack, pos, needle, needle_at, n
     j = 0;
     b226: block {
         l227: loop {
-            break_if b226 (((j >= needle_len) | ((j + 1) >= needle_len)) | (((j + 1) + 1) >= needle_len)) | ((((j + 1) + 1) + 1) >= needle_len);
+            break_if b226 (builtin::i64_extend_i32_s(j) + 3_i64) >= builtin::i64_extend_i32_s(needle_len);
             if builtin::array_get_value<u8>(haystack, pos + j) != builtin::array_get_value<u8>(needle, needle_at + j) {
                 return 0;
             }
@@ -2447,7 +2447,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b284: block {
         l285: loop {
-            break_if b284 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b284 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -2471,7 +2471,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b288: block {
         l289: loop {
-            break_if b288 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b288 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -5982,7 +5982,7 @@ fn "core:serde/serde_generic_deserialize.wado/Maybe<i32>^core:serde/Deserialize:
         $array_clone_dst_2 = name_84.repr;
         b897: block {
             l898: loop {
-                break_if b897 (((lead_80 >= 4) | ((lead_80 + 1) >= 4)) | (((lead_80 + 1) + 1) >= 4)) | ((((lead_80 + 1) + 1) + 1) >= 4);
+                break_if b897 (builtin::i64_extend_i32_s(lead_80) + 3_i64) >= builtin::i64_extend_i32_s(4);
                 if builtin::array_get_value<u8>($array_clone_src_1, lead_80) != builtin::array_get_value<u8>($array_clone_dst_2, lead_80) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
                 }
@@ -6070,7 +6070,7 @@ fn "core:serde/serde_generic_deserialize.wado/Maybe<i32>^core:serde/Deserialize:
         $array_clone_dst_2 = name_84.repr;
         b914: block {
             l915: loop {
-                break_if b914 (((lead_80 >= 7) | ((lead_80 + 1) >= 7)) | (((lead_80 + 1) + 1) >= 7)) | ((((lead_80 + 1) + 1) + 1) >= 7);
+                break_if b914 (builtin::i64_extend_i32_s(lead_80) + 3_i64) >= builtin::i64_extend_i32_s(7);
                 if builtin::array_get_value<u8>($array_clone_src_1, lead_80) != builtin::array_get_value<u8>($array_clone_dst_2, lead_80) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__33: 0;
                 }

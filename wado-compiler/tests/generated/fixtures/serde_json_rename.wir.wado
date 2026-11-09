@@ -1038,7 +1038,7 @@ fn "serde_json_rename.wado/$test_0_serialize_with_rename"() {
             $licm_repr_16 = global:serde_json_rename.wado::$const_obj_1.repr;
             b3: block {
                 l4: loop {
-                    break_if b3 (((i >= $mv$r$0) | ((i + 1) >= $mv$r$0)) | (((i + 1) + 1) >= $mv$r$0)) | ((((i + 1) + 1) + 1) >= $mv$r$0);
+                    break_if b3 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$r$0);
                     if builtin::array_get_value<u8>($licm_repr_15, i) != builtin::array_get_value<u8>($licm_repr_16, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
@@ -1139,7 +1139,7 @@ fn "serde_json_rename.wado/$test_1_deserialize_with_rename"() {
             $sroa_input_repr_42 = $mv_message_2.repr;
             b19: block {
                 l20: loop {
-                    break_if b19 ((($mv_kind_1 >= $mv$$vr_6$0) | (($mv_kind_1 + 1) >= $mv$$vr_6$0)) | ((($mv_kind_1 + 1) + 1) >= $mv$$vr_6$0)) | (((($mv_kind_1 + 1) + 1) + 1) >= $mv$$vr_6$0);
+                    break_if b19 (builtin::i64_extend_i32_s($mv_kind_1) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_6$0);
                     if builtin::array_get_value<u8>($sroa_input_repr_42, $mv_kind_1) != builtin::array_get_value<u8>(global:serde_json_rename.wado::$const_obj_2, $mv_kind_1) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
                     }
@@ -1243,7 +1243,7 @@ fn "serde_json_rename.wado/$test_2_roundtrip_with_rename"() {
                 $licm_repr_44 = json.repr;
                 b36: block {
                     l37: loop {
-                        break_if b36 ((($mv_kind_3 >= $mv$json_r$0) | (($mv_kind_3 + 1) >= $mv$json_r$0)) | ((($mv_kind_3 + 1) + 1) >= $mv$json_r$0)) | (((($mv_kind_3 + 1) + 1) + 1) >= $mv$json_r$0);
+                        break_if b36 (builtin::i64_extend_i32_s($mv_kind_3) + 3_i64) >= builtin::i64_extend_i32_s($mv$json_r$0);
                         if builtin::array_get_value<u8>($licm_repr_44, $mv_kind_3) != builtin::array_get_value<u8>(global:serde_json_rename.wado::$const_obj_3, $mv_kind_3) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
                         }
@@ -1671,7 +1671,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix
     if len <= $mv$s$end {
         b123: block {
             l124: loop {
-                break_if b123 (i >= len) | ((i + 1) >= len);
+                break_if b123 (builtin::i64_extend_i32_s(i) + 1_i64) >= builtin::i64_extend_i32_s(len);
                 c = $inline_digit_value_1: block -> i32 {
                     if (local.tee c(builtin::array_get_value<u8>($mv$s$repr, $mv$s$start + i)) >= 48) & (c <= 57) {
                         break $inline_digit_value_1: c - 48;
@@ -2113,7 +2113,7 @@ fn "core:prelude/string.wado/bytes_match_at"(haystack, pos, needle, needle_at, n
     j = 0;
     b228: block {
         l229: loop {
-            break_if b228 (((j >= needle_len) | ((j + 1) >= needle_len)) | (((j + 1) + 1) >= needle_len)) | ((((j + 1) + 1) + 1) >= needle_len);
+            break_if b228 (builtin::i64_extend_i32_s(j) + 3_i64) >= builtin::i64_extend_i32_s(needle_len);
             if builtin::array_get_value<u8>(haystack, pos + j) != builtin::array_get_value<u8>(needle, needle_at + j) {
                 return 0;
             }
@@ -2333,7 +2333,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b286: block {
         l287: loop {
-            break_if b286 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b286 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -2357,7 +2357,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b290: block {
         l291: loop {
-            break_if b290 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b290 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

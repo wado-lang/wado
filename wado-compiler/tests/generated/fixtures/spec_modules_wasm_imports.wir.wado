@@ -617,7 +617,7 @@ fn "spec_modules_wasm_imports.wado/$test_0"() {
         $licm_repr_23 = $v1_9.repr;
         b4: block {
             l5: loop {
-                break_if b4 ((($v1_1 >= $v0_0) | (($v1_1 + 1) >= $v0_0)) | ((($v1_1 + 1) + 1) >= $v0_0)) | (((($v1_1 + 1) + 1) + 1) >= $v0_0);
+                break_if b4 (builtin::i64_extend_i32_s($v1_1) + 3_i64) >= builtin::i64_extend_i32_s($v0_0);
                 if builtin::array_get_value<u8>($licm_repr_22, $v1_1) != builtin::array_get_value<u8>($licm_repr_23, $v1_1) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
@@ -1684,7 +1684,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b195: block {
         l196: loop {
-            break_if b195 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b195 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1708,7 +1708,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b199: block {
         l200: loop {
-            break_if b199 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b199 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -2146,7 +2146,7 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]"(arr, ptr, len) {
     $licm_arith_7 = len - 8;
     b244: block {
         l245: loop {
-            break_if b244 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b244 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
@@ -2167,7 +2167,7 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]"(arr, ptr, len) {
     };
     b248: block {
         l249: loop {
-            break_if b248 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b248 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -3291,7 +3291,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
     if start_pos >= 0 {
         b399: block {
             l400: loop {
-                break_if b399 (((start_pos >= self_9) | ((start_pos + 1) >= self_9)) | (((start_pos + 1) + 1) >= self_9)) | ((((start_pos + 1) + 1) + 1) >= self_9);
+                break_if b399 (builtin::i64_extend_i32_s(start_pos) + 3_i64) >= builtin::i64_extend_i32_s(self_9);
                 b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
                 count = count + ((b & 192) != 128);
                 start_pos = start_pos + 1;

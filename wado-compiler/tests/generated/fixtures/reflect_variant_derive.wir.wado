@@ -639,7 +639,7 @@ fn "reflect_variant_derive.wado/$test_0_blanket_derivation_dispatches_on_the_liv
         $sroa_view_repr_164 = $mv_field_1.repr;
         b10: block {
             l11: loop {
-                break_if b10 ((($sroa_slot_53 >= $sroa_slot_52) | (($sroa_slot_53 + 1) >= $sroa_slot_52)) | ((($sroa_slot_53 + 1) + 1) >= $sroa_slot_52)) | (((($sroa_slot_53 + 1) + 1) + 1) >= $sroa_slot_52);
+                break_if b10 (builtin::i64_extend_i32_s($sroa_slot_53) + 3_i64) >= builtin::i64_extend_i32_s($sroa_slot_52);
                 if builtin::array_get_value<u8>($sroa_view_repr_164, $sroa_slot_53) != builtin::array_get_value<u8>(global:reflect_variant_derive.wado::$const_obj_9, $sroa_slot_53) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
@@ -685,7 +685,7 @@ Shape::Circle(2.5).tag(): "), used: 193 }, s1: struct.new "core:prelude/string.w
         $sroa_view_repr_164 = $mv_field_1.repr;
         b20: block {
             l21: loop {
-                break_if b20 ((($sroa_slot_52 >= 12) | (($sroa_slot_52 + 1) >= 12)) | ((($sroa_slot_52 + 1) + 1) >= 12)) | (((($sroa_slot_52 + 1) + 1) + 1) >= 12);
+                break_if b20 (builtin::i64_extend_i32_s($sroa_slot_52) + 3_i64) >= builtin::i64_extend_i32_s(12);
                 if builtin::array_get_value<u8>($sroa_view_repr_164, $sroa_slot_52) != builtin::array_get_value<u8>(global:reflect_variant_derive.wado::$const_obj_8, $sroa_slot_52) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
@@ -738,7 +738,7 @@ Shape::Count(7).tag(): "), used: 184 }, s1: struct.new "core:prelude/string.wado
         $sroa_view_repr_164 = $mv_field_1.repr;
         b32: block {
             l33: loop {
-                break_if b32 ((($sroa_slot_53 >= $sroa_slot_52) | (($sroa_slot_53 + 1) >= $sroa_slot_52)) | ((($sroa_slot_53 + 1) + 1) >= $sroa_slot_52)) | (((($sroa_slot_53 + 1) + 1) + 1) >= $sroa_slot_52);
+                break_if b32 (builtin::i64_extend_i32_s($sroa_slot_53) + 3_i64) >= builtin::i64_extend_i32_s($sroa_slot_52);
                 if builtin::array_get_value<u8>($sroa_view_repr_164, $sroa_slot_53) != builtin::array_get_value<u8>(global:reflect_variant_derive.wado::$const_obj_6, $sroa_slot_53) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
@@ -885,7 +885,7 @@ fn "reflect_variant_derive.wado/$cm_export__$test_1_value_free_cases_pack_map_bu
         $licm_repr_12 = $v0.repr;
         b59: block {
             l60: loop {
-                break_if b59 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+                break_if b59 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                 if builtin::array_get_value<u8>($licm_repr_12, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
@@ -2018,7 +2018,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b257: block {
         l258: loop {
-            break_if b257 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b257 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -2042,7 +2042,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b261: block {
         l262: loop {
-            break_if b261 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b261 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -4048,7 +4048,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
     if start_pos >= 0 {
         b539: block {
             l540: loop {
-                break_if b539 (((start_pos >= self_9) | ((start_pos + 1) >= self_9)) | (((start_pos + 1) + 1) >= self_9)) | ((((start_pos + 1) + 1) + 1) >= self_9);
+                break_if b539 (builtin::i64_extend_i32_s(start_pos) + 3_i64) >= builtin::i64_extend_i32_s(self_9);
                 b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
                 count = count + ((b & 192) != 128);
                 start_pos = start_pos + 1;
@@ -4213,7 +4213,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
             }) {
                 b567: block {
                     l568: loop {
-                        break_if b567 (((k >= fill_len) | ((k + 1) >= fill_len)) | (((k + 1) + 1) >= fill_len)) | ((((k + 1) + 1) + 1) >= fill_len);
+                        break_if b567 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(fill_len);
                         index_37 = $licm_arith_70 + k;
                         value_38 = builtin::array_get_value<u8>($licm_repr_65, k);
                         builtin::array_set_u8($licm_repr_69, index_37, value_38);
@@ -5190,7 +5190,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
         i = 0;
         b720: block {
             l721: loop {
-                break_if b720 (((i >= $mv$self$used) | ((i + 1) >= $mv$self$used)) | (((i + 1) + 1) >= $mv$self$used)) | ((((i + 1) + 1) + 1) >= $mv$self$used);
+                break_if b720 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$self$used);
                 if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(other, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
                 }

@@ -576,7 +576,7 @@ fn "key_value_literal.wado/$test_1_a_type_accepting_both_literal_forms_picks_by_
                     $licm_repr_43 = self_62.repr;
                     b17: block {
                         l18: loop {
-                            break_if b17 (((i_78 >= a_end) | ((i_78 + 1) >= a_end)) | (((i_78 + 1) + 1) >= a_end)) | ((((i_78 + 1) + 1) + 1) >= a_end);
+                            break_if b17 (builtin::i64_extend_i32_s(i_78) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                             if builtin::array_get_value<u8>($licm_repr_43, i_78) != builtin::array_get_value<u8>(global:key_value_literal.wado::$const_obj_2, i_78) {
                                 break $inline_key_value_literal_wado_EitherBag_i32___get_by_key_sroa_return__spec0_sroa_key_repr__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
@@ -1259,7 +1259,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b142: block {
         l143: loop {
-            break_if b142 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b142 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1283,7 +1283,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b146: block {
         l147: loop {
-            break_if b146 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b146 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -2692,7 +2692,7 @@ fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[retur
                 $licm_repr_43 = self_12.repr;
                 b323: block {
                     l324: loop {
-                        break_if b323 (((i_28 >= a_end) | ((i_28 + 1) >= a_end)) | (((i_28 + 1) + 1) >= a_end)) | ((((i_28 + 1) + 1) + 1) >= a_end);
+                        break_if b323 (builtin::i64_extend_i32_s(i_28) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                         if builtin::array_get_value<u8>($licm_repr_43, i_28) != builtin::array_get_value<u8>(key, i_28) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }

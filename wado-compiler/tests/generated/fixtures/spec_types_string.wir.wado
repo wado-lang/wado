@@ -514,7 +514,7 @@ fn "spec_types_string.wado/$test_1_iteration"() {
         $licm_repr_29 = out.repr;
         b11: block {
             l12: loop {
-                break_if b11 ((($mv$$match_8$1 >= $mv$$match_8$0) | (($mv$$match_8$1 + 1) >= $mv$$match_8$0)) | ((($mv$$match_8$1 + 1) + 1) >= $mv$$match_8$0)) | (((($mv$$match_8$1 + 1) + 1) + 1) >= $mv$$match_8$0);
+                break_if b11 (builtin::i64_extend_i32_s($mv$$match_8$1) + 3_i64) >= builtin::i64_extend_i32_s($mv$$match_8$0);
                 if builtin::array_get_value<u8>($licm_repr_29, $mv$$match_8$1) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_0, $mv$$match_8$1) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
@@ -558,7 +558,7 @@ out: "), used: 98 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
     $mv$$match_8$1 = 0;
     b20: block {
         l21: loop {
-            break_if b20 ((($mv$$match_8$1 >= 5) | (($mv$$match_8$1 + 1) >= 5)) | ((($mv$$match_8$1 + 1) + 1) >= 5)) | (((($mv$$match_8$1 + 1) + 1) + 1) >= 5);
+            break_if b20 (builtin::i64_extend_i32_s($mv$$match_8$1) + 3_i64) >= builtin::i64_extend_i32_s(5);
             byte = builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_0, $mv$$match_8$1);
             $mv$$match_8$1 = $mv$$match_8$1 + 1;
             $mv$$match_8$0 = $mv$$match_8$0 + byte;
@@ -604,7 +604,7 @@ fn "spec_types_string.wado/$test_2_building"() {
         offset_17 = 0;
         b26: block {
             l27: loop {
-                break_if b26 (((offset_17 >= 13) | ((offset_17 + 1) >= 13)) | (((offset_17 + 1) + 1) >= 13)) | ((((offset_17 + 1) + 1) + 1) >= 13);
+                break_if b26 (builtin::i64_extend_i32_s(offset_17) + 3_i64) >= builtin::i64_extend_i32_s(13);
                 if builtin::array_get_value<u8>($load_0, offset_17) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, offset_17) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
@@ -667,7 +667,7 @@ fn "spec_types_string.wado/$test_4_reassignment"() {
         $load_0 = s.repr;
         b36: block {
             l37: loop {
-                break_if b36 (((i >= 12) | ((i + 1) >= 12)) | (((i + 1) + 1) >= 12)) | ((((i + 1) + 1) + 1) >= 12);
+                break_if b36 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(12);
                 if builtin::array_get_value<u8>($load_0, i) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_7, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__33: 0;
                 }
@@ -1138,7 +1138,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b145: block {
         l146: loop {
-            break_if b145 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b145 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1162,7 +1162,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b149: block {
         l150: loop {
-            break_if b149 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b149 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

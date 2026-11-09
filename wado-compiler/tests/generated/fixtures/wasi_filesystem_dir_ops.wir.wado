@@ -1036,7 +1036,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 i_90 = 0;
                 b41: block {
                     l42: loop {
-                        break_if b41 (((i_90 >= $load_54) | ((i_90 + 1) >= $load_54)) | (((i_90 + 1) + 1) >= $load_54)) | ((((i_90 + 1) + 1) + 1) >= $load_54);
+                        break_if b41 (builtin::i64_extend_i32_s(i_90) + 3_i64) >= builtin::i64_extend_i32_s($load_54);
                         if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(global:wasi_filesystem_dir_ops.wado::$const_obj_20, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                         }
@@ -1087,7 +1087,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 i_90 = 0;
                 b53: block {
                     l54: loop {
-                        break_if b53 (((i_90 >= $load_54) | ((i_90 + 1) >= $load_54)) | (((i_90 + 1) + 1) >= $load_54)) | ((((i_90 + 1) + 1) + 1) >= $load_54);
+                        break_if b53 (builtin::i64_extend_i32_s(i_90) + 3_i64) >= builtin::i64_extend_i32_s($load_54);
                         if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(global:wasi_filesystem_dir_ops.wado::$const_obj_18, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__28: 0;
                         }
@@ -1138,7 +1138,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 i_90 = 0;
                 b65: block {
                     l66: loop {
-                        break_if b65 (((i_90 >= $load_54) | ((i_90 + 1) >= $load_54)) | (((i_90 + 1) + 1) >= $load_54)) | ((((i_90 + 1) + 1) + 1) >= $load_54);
+                        break_if b65 (builtin::i64_extend_i32_s(i_90) + 3_i64) >= builtin::i64_extend_i32_s($load_54);
                         if builtin::array_get_value<u8>($array_clone_dst_14, i_90) != builtin::array_get_value<u8>(global:wasi_filesystem_dir_ops.wado::$const_obj_16, i_90) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__30: 0;
                         }
@@ -2404,7 +2404,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b347: block {
         l348: loop {
-            break_if b347 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b347 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -2426,7 +2426,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b351: block {
         l352: loop {
-            break_if b351 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b351 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -2667,7 +2667,7 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(arr, ptr) {
     };
     b378: block {
         l379: loop {
-            break_if b378 (((i >= 9) | ((i + 1) >= 9)) | (((i + 1) + 1) >= 9)) | ((((i + 1) + 1) + 1) >= 9);
+            break_if b378 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(9);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -2704,7 +2704,7 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(arr, ptr) {
     };
     b384: block {
         l385: loop {
-            break_if b384 (((i >= 6) | ((i + 1) >= 6)) | (((i + 1) + 1) >= 6)) | ((((i + 1) + 1) + 1) >= 6);
+            break_if b384 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(6);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -2741,7 +2741,7 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec2$dae[len]"(arr, ptr) {
     };
     b390: block {
         l391: loop {
-            break_if b390 (((i >= 11) | ((i + 1) >= 11)) | (((i + 1) + 1) >= 11)) | ((((i + 1) + 1) + 1) >= 11);
+            break_if b390 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(11);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -2772,7 +2772,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec14$sroa[data.repr]$dae[return]"(handl
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 25); i = 0; b394: block {
         l395: loop {
-            break_if b394 (i > 17) | ((i + 8) > 17);
+            break_if b394 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(17);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -2791,7 +2791,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec14$sroa[data.repr]$dae[return]"(handl
         };
     }; b398: block {
         l399: loop {
-            break_if b398 (((i >= 25) | ((i + 1) >= 25)) | (((i + 1) + 1) >= 25)) | ((((i + 1) + 1) + 1) >= 25);
+            break_if b398 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(25);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -2858,7 +2858,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 40); i = 0; b409: block {
         l410: loop {
-            break_if b409 (i > 32) | ((i + 8) > 32);
+            break_if b409 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(32);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -2877,7 +2877,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec13$sroa[data.repr]"(handle, data) {
         };
     }; b413: block {
         l414: loop {
-            break_if b413 (((i >= 40) | ((i + 1) >= 40)) | (((i + 1) + 1) >= 40)) | ((((i + 1) + 1) + 1) >= 40);
+            break_if b413 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(40);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -2944,7 +2944,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 47); i = 0; b424: block {
         l425: loop {
-            break_if b424 (i > 39) | ((i + 8) > 39);
+            break_if b424 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(39);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -2963,7 +2963,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec12$sroa[data.repr]"(handle, data) {
         };
     }; b428: block {
         l429: loop {
-            break_if b428 (((i >= 47) | ((i + 1) >= 47)) | (((i + 1) + 1) >= 47)) | ((((i + 1) + 1) + 1) >= 47);
+            break_if b428 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(47);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3030,7 +3030,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"(handl
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 36); i = 0; b439: block {
         l440: loop {
-            break_if b439 (i > 28) | ((i + 8) > 28);
+            break_if b439 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(28);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3049,7 +3049,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec11$sroa[data.repr]$dae[return]"(handl
         };
     }; b443: block {
         l444: loop {
-            break_if b443 (((i >= 36) | ((i + 1) >= 36)) | (((i + 1) + 1) >= 36)) | ((((i + 1) + 1) + 1) >= 36);
+            break_if b443 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(36);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3116,7 +3116,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec10$sroa[data.repr]$dae[return]"(handl
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 29); i = 0; b454: block {
         l455: loop {
-            break_if b454 (i > 21) | ((i + 8) > 21);
+            break_if b454 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(21);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3135,7 +3135,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec10$sroa[data.repr]$dae[return]"(handl
         };
     }; b458: block {
         l459: loop {
-            break_if b458 (((i >= 29) | ((i + 1) >= 29)) | (((i + 1) + 1) >= 29)) | ((((i + 1) + 1) + 1) >= 29);
+            break_if b458 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(29);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3202,7 +3202,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec9$sroa[data.repr]$dae[return]"(handle
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 32); i = 0; b469: block {
         l470: loop {
-            break_if b469 (i > 24) | ((i + 8) > 24);
+            break_if b469 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(24);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3221,7 +3221,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec9$sroa[data.repr]$dae[return]"(handle
         };
     }; b473: block {
         l474: loop {
-            break_if b473 (((i >= 32) | ((i + 1) >= 32)) | (((i + 1) + 1) >= 32)) | ((((i + 1) + 1) + 1) >= 32);
+            break_if b473 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(32);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3288,7 +3288,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 34); i = 0; b484: block {
         l485: loop {
-            break_if b484 (i > 26) | ((i + 8) > 26);
+            break_if b484 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(26);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3307,7 +3307,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]"(handle, data) {
         };
     }; b488: block {
         l489: loop {
-            break_if b488 (((i >= 34) | ((i + 1) >= 34)) | (((i + 1) + 1) >= 34)) | ((((i + 1) + 1) + 1) >= 34);
+            break_if b488 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(34);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3374,7 +3374,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 35); i = 0; b499: block {
         l500: loop {
-            break_if b499 (i > 27) | ((i + 8) > 27);
+            break_if b499 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(27);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3393,7 +3393,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b503: block {
         l504: loop {
-            break_if b503 (((i >= 35) | ((i + 1) >= 35)) | (((i + 1) + 1) >= 35)) | ((((i + 1) + 1) + 1) >= 35);
+            break_if b503 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(35);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3460,7 +3460,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 31); i = 0; b514: block {
         l515: loop {
-            break_if b514 (i > 23) | ((i + 8) > 23);
+            break_if b514 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(23);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3479,7 +3479,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]"(handle, data) {
         };
     }; b518: block {
         l519: loop {
-            break_if b518 (((i >= 31) | ((i + 1) >= 31)) | (((i + 1) + 1) >= 31)) | ((((i + 1) + 1) + 1) >= 31);
+            break_if b518 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(31);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3546,7 +3546,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec8$sroa[data.repr]$dae[return]"(handle
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 46); i = 0; b529: block {
         l530: loop {
-            break_if b529 (i > 38) | ((i + 8) > 38);
+            break_if b529 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(38);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3565,7 +3565,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec8$sroa[data.repr]$dae[return]"(handle
         };
     }; b533: block {
         l534: loop {
-            break_if b533 (((i >= 46) | ((i + 1) >= 46)) | (((i + 1) + 1) >= 46)) | ((((i + 1) + 1) + 1) >= 46);
+            break_if b533 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(46);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3632,7 +3632,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec7$sroa[data.repr]$dae[return]"(handle
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 51); i = 0; b544: block {
         l545: loop {
-            break_if b544 (i > 43) | ((i + 8) > 43);
+            break_if b544 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(43);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3651,7 +3651,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec7$sroa[data.repr]$dae[return]"(handle
         };
     }; b548: block {
         l549: loop {
-            break_if b548 (((i >= 51) | ((i + 1) >= 51)) | (((i + 1) + 1) >= 51)) | ((((i + 1) + 1) + 1) >= 51);
+            break_if b548 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(51);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3718,7 +3718,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec6$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 43); i = 0; b559: block {
         l560: loop {
-            break_if b559 (i > 35) | ((i + 8) > 35);
+            break_if b559 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(35);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3737,7 +3737,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec6$sroa[data.repr]"(handle, data) {
         };
     }; b563: block {
         l564: loop {
-            break_if b563 (((i >= 43) | ((i + 1) >= 43)) | (((i + 1) + 1) >= 43)) | ((((i + 1) + 1) + 1) >= 43);
+            break_if b563 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(43);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3804,7 +3804,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec5$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 52); i = 0; b574: block {
         l575: loop {
-            break_if b574 (i > 44) | ((i + 8) > 44);
+            break_if b574 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(44);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3823,7 +3823,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec5$sroa[data.repr]"(handle, data) {
         };
     }; b578: block {
         l579: loop {
-            break_if b578 (((i >= 52) | ((i + 1) >= 52)) | (((i + 1) + 1) >= 52)) | ((((i + 1) + 1) + 1) >= 52);
+            break_if b578 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(52);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3890,7 +3890,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec4$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 55); i = 0; b589: block {
         l590: loop {
-            break_if b589 (i > 47) | ((i + 8) > 47);
+            break_if b589 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(47);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3909,7 +3909,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec4$sroa[data.repr]"(handle, data) {
         };
     }; b593: block {
         l594: loop {
-            break_if b593 (((i >= 55) | ((i + 1) >= 55)) | (((i + 1) + 1) >= 55)) | ((((i + 1) + 1) + 1) >= 55);
+            break_if b593 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(55);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -3976,7 +3976,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 28); i = 0; b604: block {
         l605: loop {
-            break_if b604 (i > 20) | ((i + 8) > 20);
+            break_if b604 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(20);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -3995,7 +3995,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]"(handle, data) {
         };
     }; b608: block {
         l609: loop {
-            break_if b608 (((i >= 28) | ((i + 1) >= 28)) | (((i + 1) + 1) >= 28)) | ((((i + 1) + 1) + 1) >= 28);
+            break_if b608 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(28);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -5068,7 +5068,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     $index_3_6 = 0;
     b762: block {
         l763: loop {
-            break_if b762 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
+            break_if b762 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
@@ -5093,7 +5093,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     $index_3_6 = 0;
     b766: block {
         l767: loop {
-            break_if b766 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
+            break_if b766 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));

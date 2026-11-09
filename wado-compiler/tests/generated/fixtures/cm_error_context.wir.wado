@@ -359,7 +359,7 @@ fn "cm_error_context.wado/$cm_task_entry__handle"(request) with ErrorContext {
     let w: i64;
     "wasi/error-context-drop"(ptr_194 = builtin::i32_wrap_i64(local.tee w(ptr_194 = "mem/realloc"(0, 0, 1, 18); arr = global:cm_error_context.wado::$const_obj_0; i = 0; b1: block {
         l2: loop {
-            break_if b1 (i > 10) | ((i + 8) > 10);
+            break_if b1 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(10);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr_194 + i, w);
             i = i + 8;
@@ -378,7 +378,7 @@ fn "cm_error_context.wado/$cm_task_entry__handle"(request) with ErrorContext {
         };
     }; b5: block {
         l6: loop {
-            break_if b5 (((i >= 18) | ((i + 1) >= 18)) | (((i + 1) + 1) >= 18)) | ((((i + 1) + 1) + 1) >= 18);
+            break_if b5 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(18);
             builtin::store_u8(ptr_194 + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr_194 + i, builtin::array_get_value_u8(arr, i));
@@ -719,7 +719,7 @@ fn "core:rt/gc_array_to_memory$dae[src_start]"(arr, ptr, len) {
     $licm_arith_7 = len - 8;
     b82: block {
         l83: loop {
-            break_if b82 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b82 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
@@ -740,7 +740,7 @@ fn "core:rt/gc_array_to_memory$dae[src_start]"(arr, ptr, len) {
     };
     b86: block {
         l87: loop {
-            break_if b86 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b86 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));

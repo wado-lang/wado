@@ -1137,7 +1137,7 @@ fn "serde_internal_tag_newtype_payload.wado/$test_0_a_newtype_payload_round_trip
         $array_clone_dst_2 = global:serde_internal_tag_newtype_payload.wado::$const_obj_2.repr;
         b7: block {
             l8: loop {
-                break_if b7 (((start_843 >= $mv$$vr_19$0) | ((start_843 + 1) >= $mv$$vr_19$0)) | (((start_843 + 1) + 1) >= $mv$$vr_19$0)) | ((((start_843 + 1) + 1) + 1) >= $mv$$vr_19$0);
+                break_if b7 (builtin::i64_extend_i32_s(start_843) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_19$0);
                 if builtin::array_get_value<u8>($sroa_other_repr_721, start_843) != builtin::array_get_value<u8>($array_clone_dst_2, start_843) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
@@ -1551,7 +1551,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix
     if len <= $mv$s$end {
         b93: block {
             l94: loop {
-                break_if b93 (i >= len) | ((i + 1) >= len);
+                break_if b93 (builtin::i64_extend_i32_s(i) + 1_i64) >= builtin::i64_extend_i32_s(len);
                 c = $inline_digit_value_1: block -> i32 {
                     if (local.tee c(builtin::array_get_value<u8>($mv$s$repr, $mv$s$start + i)) >= 48) & (c <= 57) {
                         break $inline_digit_value_1: c - 48;
@@ -2153,7 +2153,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b244: block {
         l245: loop {
-            break_if b244 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b244 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -2177,7 +2177,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b248: block {
         l249: loop {
-            break_if b248 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b248 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -6402,7 +6402,7 @@ fn "core:serde/serde_internal_tag_newtype_payload.wado/Mark^core:serde/Deseriali
         $licm_repr_297 = name_10.repr;
         b967: block {
             l968: loop {
-                break_if b967 (((depth >= 2) | ((depth + 1) >= 2)) | (((depth + 1) + 1) >= 2)) | ((((depth + 1) + 1) + 1) >= 2);
+                break_if b967 (builtin::i64_extend_i32_s(depth) + 3_i64) >= builtin::i64_extend_i32_s(2);
                 if builtin::array_get_value<u8>(global:core:serde::$const_obj_12, depth) != builtin::array_get_value<u8>($licm_repr_297, depth) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                 }
@@ -6456,7 +6456,7 @@ fn "core:serde/serde_internal_tag_newtype_payload.wado/Mark^core:serde/Deseriali
         $licm_repr_297 = name_10.repr;
         b980: block {
             l981: loop {
-                break_if b980 (((depth >= 7) | ((depth + 1) >= 7)) | (((depth + 1) + 1) >= 7)) | ((((depth + 1) + 1) + 1) >= 7);
+                break_if b980 (builtin::i64_extend_i32_s(depth) + 3_i64) >= builtin::i64_extend_i32_s(7);
                 if builtin::array_get_value<u8>(global:core:serde::$const_obj_11, depth) != builtin::array_get_value<u8>($licm_repr_297, depth) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
                 }
@@ -7142,7 +7142,7 @@ fn "core:serde/core:serde/TaggedCaseSerializer<core:json/JsonSerializer>^core:se
         if new_used_21 <= new_used_21 {
             b1083: block {
                 l1084: loop {
-                    break_if b1083 (((start_22 >= new_used_21) | ((start_22 + 1) >= new_used_21)) | (((start_22 + 1) + 1) >= new_used_21)) | ((((start_22 + 1) + 1) + 1) >= new_used_21);
+                    break_if b1083 (builtin::i64_extend_i32_s(start_22) + 3_i64) >= builtin::i64_extend_i32_s(new_used_21);
                     $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body: block {
                         break_if $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body ((local.tee b(builtin::array_get_value<u8>($licm_repr_39, start_22)) >=u 32) & (b != 34)) & (b != 92);
                         break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 0;
@@ -8233,7 +8233,7 @@ fn "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::tag<&core
                 i_58 = 0;
                 b1194: block {
                     l1195: loop {
-                        break_if b1194 (((i_58 >= $mv$$vr_24$1) | ((i_58 + 1) >= $mv$$vr_24$1)) | (((i_58 + 1) + 1) >= $mv$$vr_24$1)) | ((((i_58 + 1) + 1) + 1) >= $mv$$vr_24$1);
+                        break_if b1194 (builtin::i64_extend_i32_s(i_58) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_24$1);
                         if builtin::array_get_value<u8>(a, $mv$$vr_24$0 + i_58) != builtin::array_get_value<u8>($licm_repr_46, $licm_start_47 + i_58) {
                             break $inline_core_prelude_slice_wado_Slice_u8__core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: 0;
                         }

@@ -1090,7 +1090,7 @@ fn "reflect_wire_name_folds.wado/$test_0_a_struct_s_wire_names_reach_the_wire_as
         $array_clone_dst_2 = $eq_other_Ok_3.repr;
         b3: block {
             l4: loop {
-                break_if b3 (((start_284 >= offset) | ((start_284 + 1) >= offset)) | (((start_284 + 1) + 1) >= offset)) | ((((start_284 + 1) + 1) + 1) >= offset);
+                break_if b3 (builtin::i64_extend_i32_s(start_284) + 3_i64) >= builtin::i64_extend_i32_s(offset);
                 if builtin::array_get_value<u8>($load_6, start_284) != builtin::array_get_value<u8>($array_clone_dst_2, start_284) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
@@ -1177,7 +1177,7 @@ fn "reflect_wire_name_folds.wado/$test_1_a_naming_policy_is_applied_at_compile_t
         $array_clone_dst_2 = $eq_other_Ok_3_23.repr;
         b15: block {
             l16: loop {
-                break_if b15 (((start_381 >= offset) | ((start_381 + 1) >= offset)) | (((start_381 + 1) + 1) >= offset)) | ((((start_381 + 1) + 1) + 1) >= offset);
+                break_if b15 (builtin::i64_extend_i32_s(start_381) + 3_i64) >= builtin::i64_extend_i32_s(offset);
                 if builtin::array_get_value<u8>($load_6, start_381) != builtin::array_get_value<u8>($array_clone_dst_2, start_381) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
@@ -1239,7 +1239,7 @@ Result::Ok(`\\{\"recordId\":7,\"X-Trace\":\"t\"\\}`): "), used: 47 }, s4: struct
         $array_clone_dst_2 = $eq_other_Ok_3_23.repr;
         b26: block {
             l27: loop {
-                break_if b26 (((start_381 >= offset) | ((start_381 + 1) >= offset)) | (((start_381 + 1) + 1) >= offset)) | ((((start_381 + 1) + 1) + 1) >= offset);
+                break_if b26 (builtin::i64_extend_i32_s(start_381) + 3_i64) >= builtin::i64_extend_i32_s(offset);
                 if builtin::array_get_value<u8>($load_6, start_381) != builtin::array_get_value<u8>($array_clone_dst_2, start_381) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
@@ -1323,7 +1323,7 @@ fn "reflect_wire_name_folds.wado/$test_2_a_single_field_struct_s_name_folds_like
         $array_clone_dst_2 = $eq_other_Ok_3.repr;
         b38: block {
             l39: loop {
-                break_if b38 (((start_199 >= offset) | ((start_199 + 1) >= offset)) | (((start_199 + 1) + 1) >= offset)) | ((((start_199 + 1) + 1) + 1) >= offset);
+                break_if b38 (builtin::i64_extend_i32_s(start_199) + 3_i64) >= builtin::i64_extend_i32_s(offset);
                 if builtin::array_get_value<u8>($load_1, start_199) != builtin::array_get_value<u8>($array_clone_dst_2, start_199) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
@@ -2100,7 +2100,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b233: block {
         l234: loop {
-            break_if b233 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b233 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -2124,7 +2124,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b237: block {
         l238: loop {
-            break_if b237 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b237 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -5052,7 +5052,7 @@ fn "core:serde/reflect_wire_name_folds.wado/Rank^core:serde/Deserialize::deseria
         $array_clone_dst_2 = name_34.repr;
         b662: block {
             l663: loop {
-                break_if b662 (((lead >= 11) | ((lead + 1) >= 11)) | (((lead + 1) + 1) >= 11)) | ((((lead + 1) + 1) + 1) >= 11);
+                break_if b662 (builtin::i64_extend_i32_s(lead) + 3_i64) >= builtin::i64_extend_i32_s(11);
                 if builtin::array_get_value<u8>($array_clone_src_1, lead) != builtin::array_get_value<u8>($array_clone_dst_2, lead) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
                 }
@@ -5123,7 +5123,7 @@ fn "core:serde/reflect_wire_name_folds.wado/Rank^core:serde/Deserialize::deseria
         $array_clone_dst_2 = name_34.repr;
         b676: block {
             l677: loop {
-                break_if b676 (((lead >= 12) | ((lead + 1) >= 12)) | (((lead + 1) + 1) >= 12)) | ((((lead + 1) + 1) + 1) >= 12);
+                break_if b676 (builtin::i64_extend_i32_s(lead) + 3_i64) >= builtin::i64_extend_i32_s(12);
                 if builtin::array_get_value<u8>($array_clone_src_1, lead) != builtin::array_get_value<u8>($array_clone_dst_2, lead) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
                 }

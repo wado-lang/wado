@@ -549,7 +549,7 @@ fn "reflect_enum_members.wado/$test_2_wire_name_resolves_a_case_tag_via_the_shar
         $array_clone_src_2 = self_18.repr;
         b4: block {
             l5: loop {
-                break_if b4 (((i_28 >= $av_67) | ((i_28 + 1) >= $av_67)) | (((i_28 + 1) + 1) >= $av_67)) | ((((i_28 + 1) + 1) + 1) >= $av_67);
+                break_if b4 (builtin::i64_extend_i32_s(i_28) + 3_i64) >= builtin::i64_extend_i32_s($av_67);
                 if builtin::array_get_value<u8>($array_clone_src_2, i_28) != builtin::array_get_value<u8>(global:reflect_enum_members.wado::$const_obj_9, i_28) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
@@ -609,7 +609,7 @@ wire_name(&ts.0, CaseStyle::Kebab): "), used: 37 }, s3: struct.new "core:prelude
         $array_clone_src_2 = self_18.repr;
         b17: block {
             l18: loop {
-                break_if b17 (((i_28 >= $av_67) | ((i_28 + 1) >= $av_67)) | (((i_28 + 1) + 1) >= $av_67)) | ((((i_28 + 1) + 1) + 1) >= $av_67);
+                break_if b17 (builtin::i64_extend_i32_s(i_28) + 3_i64) >= builtin::i64_extend_i32_s($av_67);
                 if builtin::array_get_value<u8>($array_clone_src_2, i_28) != builtin::array_get_value<u8>(global:reflect_enum_members.wado::$const_obj_8, i_28) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
@@ -669,7 +669,7 @@ wire_name(&ts.1, CaseStyle::Kebab): "), used: 37 }, s3: struct.new "core:prelude
         $array_clone_src_2 = self_18.repr;
         b30: block {
             l31: loop {
-                break_if b30 (((i_28 >= $av_67) | ((i_28 + 1) >= $av_67)) | (((i_28 + 1) + 1) >= $av_67)) | ((((i_28 + 1) + 1) + 1) >= $av_67);
+                break_if b30 (builtin::i64_extend_i32_s(i_28) + 3_i64) >= builtin::i64_extend_i32_s($av_67);
                 if builtin::array_get_value<u8>($array_clone_src_2, i_28) != builtin::array_get_value<u8>(global:reflect_enum_members.wado::$const_obj_7, i_28) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                 }
@@ -1203,7 +1203,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b150: block {
         l151: loop {
-            break_if b150 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b150 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1227,7 +1227,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b154: block {
         l155: loop {
-            break_if b154 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b154 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

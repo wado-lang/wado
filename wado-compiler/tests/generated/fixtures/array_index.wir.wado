@@ -644,7 +644,7 @@ fn "array_index.wado/$test_0_read_and_write_through_the_index_operators"() {
         $licm_repr_65 = $v0.repr;
         b3: block {
             l4: loop {
-                break_if b3 (((second >= first) | ((second + 1) >= first)) | (((second + 1) + 1) >= first)) | ((((second + 1) + 1) + 1) >= first);
+                break_if b3 (builtin::i64_extend_i32_s(second) + 3_i64) >= builtin::i64_extend_i32_s(first);
                 if builtin::array_get_value<u8>($licm_repr_65, second) != builtin::array_get_value<u8>(global:array_index.wado::$const_obj_0, second) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
                 }
@@ -695,7 +695,7 @@ fn "array_index.wado/$test_1_index_in_a_loop__reading_and_writing"() {
     i_2 = 0;
     b12: block {
         l13: loop {
-            break_if b12 (((i_2 >= 5) | ((i_2 + 1) >= 5)) | (((i_2 + 1) + 1) >= 5)) | ((((i_2 + 1) + 1) + 1) >= 5);
+            break_if b12 (builtin::i64_extend_i32_s(i_2) + 3_i64) >= builtin::i64_extend_i32_s(5);
             sum = sum + builtin::array_get_value<i32>(global:array_index.wado::$const_obj_2, i_2);
             i_2 = i_2 + 1;
             sum = sum + builtin::array_get_value<i32>(global:array_index.wado::$const_obj_2, i_2);
@@ -789,7 +789,7 @@ fn "array_index.wado/$test_3_index_by_comparison_against_a_string_key"() {
                     $licm_repr_34 = $v1_1.repr;
                     b27: block {
                         l28: loop {
-                            break_if b27 (((i_34 >= min_len) | ((i_34 + 1) >= min_len)) | (((i_34 + 1) + 1) >= min_len)) | ((((i_34 + 1) + 1) + 1) >= min_len);
+                            break_if b27 (builtin::i64_extend_i32_s(i_34) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
                             x = builtin::array_get_value<u8>($licm_repr_33, i_34);
                             y = builtin::array_get_value<u8>($licm_repr_34, i_34);
                             if x <u y {
@@ -921,7 +921,7 @@ fn "array_index.wado/$test_5_index_several_lists_held_in_one_struct"() {
                     $licm_repr_35 = $v0_6.repr;
                     b52: block {
                         l53: loop {
-                            break_if b52 (((i_100 >= min_len) | ((i_100 + 1) >= min_len)) | (((i_100 + 1) + 1) >= min_len)) | ((((i_100 + 1) + 1) + 1) >= min_len);
+                            break_if b52 (builtin::i64_extend_i32_s(i_100) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
                             x = builtin::array_get_value<u8>($licm_repr_34, i_100);
                             y = builtin::array_get_value<u8>($licm_repr_35, i_100);
                             if x <u y {
@@ -1034,7 +1034,7 @@ fn "array_index.wado/$test_6_index_through_a_chain_of_inlined_generic_methods"()
                     $licm_repr_35 = $v0.repr;
                     b73: block {
                         l74: loop {
-                            break_if b73 (((i_46 >= min_len) | ((i_46 + 1) >= min_len)) | (((i_46 + 1) + 1) >= min_len)) | ((((i_46 + 1) + 1) + 1) >= min_len);
+                            break_if b73 (builtin::i64_extend_i32_s(i_46) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
                             x = builtin::array_get_value<u8>($licm_repr_34, i_46);
                             y = builtin::array_get_value<u8>($licm_repr_35, i_46);
                             if x <u y {
@@ -1140,7 +1140,7 @@ fn "array_index.wado/$test_7_index_into_recursive__mut_children"() {
         $licm_repr_33 = seen.repr;
         b92: block {
             l93: loop {
-                break_if b92 (((i >= used_16) | ((i + 1) >= used_16)) | (((i + 1) + 1) >= used_16)) | ((((i + 1) + 1) + 1) >= used_16);
+                break_if b92 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(used_16);
                 if builtin::array_get_value<i32>($licm_repr_33, i) != builtin::array_get_value<i32>(global:array_index.wado::$const_obj_10, i) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__9: 0;
                 }
@@ -1842,7 +1842,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b234: block {
         l235: loop {
-            break_if b234 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b234 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1866,7 +1866,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b238: block {
         l239: loop {
-            break_if b238 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b238 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

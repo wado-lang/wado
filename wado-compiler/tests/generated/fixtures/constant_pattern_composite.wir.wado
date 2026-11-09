@@ -409,7 +409,7 @@ option(Option::Some(4)): "), used: 26 }, s2: struct.new "core:prelude/string.wad
             $licm_repr_266 = other_200.repr;
             b14: block {
                 l15: loop {
-                    break_if b14 ((($eq_other_Some_3_105 >= $eq_self_Some_2_104) | (($eq_other_Some_3_105 + 1) >= $eq_self_Some_2_104)) | ((($eq_other_Some_3_105 + 1) + 1) >= $eq_self_Some_2_104)) | (((($eq_other_Some_3_105 + 1) + 1) + 1) >= $eq_self_Some_2_104);
+                    break_if b14 (builtin::i64_extend_i32_s($eq_other_Some_3_105) + 3_i64) >= builtin::i64_extend_i32_s($eq_self_Some_2_104);
                     if builtin::array_get_value<u8>($licm_repr_265, 0 + $eq_other_Some_3_105) != builtin::array_get_value<u8>($licm_repr_266, 0 + $eq_other_Some_3_105) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__42: 0;
                     }
@@ -476,7 +476,7 @@ nested_variant(Option::Some(\"hi\")): "), used: 37 }, s2: struct.new "core:prelu
             $licm_repr_266 = other_200.repr;
             b29: block {
                 l30: loop {
-                    break_if b29 ((($eq_other_Some_3_105 >= $eq_self_Some_2_104) | (($eq_other_Some_3_105 + 1) >= $eq_self_Some_2_104)) | ((($eq_other_Some_3_105 + 1) + 1) >= $eq_self_Some_2_104)) | (((($eq_other_Some_3_105 + 1) + 1) + 1) >= $eq_self_Some_2_104);
+                    break_if b29 (builtin::i64_extend_i32_s($eq_other_Some_3_105) + 3_i64) >= builtin::i64_extend_i32_s($eq_self_Some_2_104);
                     if builtin::array_get_value<u8>($licm_repr_265, 0 + $eq_other_Some_3_105) != builtin::array_get_value<u8>($licm_repr_266, 0 + $eq_other_Some_3_105) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__45: 0;
                     }
@@ -540,7 +540,7 @@ nested_variant(Option::Some(\"x\")): "), used: 36 }, s2: struct.new "core:prelud
         $licm_repr_266 = other_200.repr;
         b42: block {
             l43: loop {
-                break_if b42 ((($eq_self_Some_2_104 >= $eq_other_Some_3_105) | (($eq_self_Some_2_104 + 1) >= $eq_other_Some_3_105)) | ((($eq_self_Some_2_104 + 1) + 1) >= $eq_other_Some_3_105)) | (((($eq_self_Some_2_104 + 1) + 1) + 1) >= $eq_other_Some_3_105);
+                break_if b42 (builtin::i64_extend_i32_s($eq_self_Some_2_104) + 3_i64) >= builtin::i64_extend_i32_s($eq_other_Some_3_105);
                 if builtin::array_get_value<u8>($licm_repr_265, 0 + $eq_self_Some_2_104) != builtin::array_get_value<u8>($licm_repr_266, 0 + $eq_self_Some_2_104) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__48: 0;
                 }
@@ -883,7 +883,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b113: block {
         l114: loop {
-            break_if b113 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b113 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -907,7 +907,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b117: block {
         l118: loop {
-            break_if b117 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b117 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

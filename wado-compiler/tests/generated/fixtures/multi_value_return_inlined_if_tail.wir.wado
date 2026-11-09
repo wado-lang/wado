@@ -1105,7 +1105,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b114: block {
         l115: loop {
-            break_if b114 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b114 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1129,7 +1129,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b118: block {
         l119: loop {
-            break_if b118 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b118 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1313,7 +1313,7 @@ fn "core:args/core:args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                 $licm_repr_69 = $load_11.repr;
                 b146: block {
                     l147: loop {
-                        break_if b146 (((i_36 >= used_21) | ((i_36 + 1) >= used_21)) | (((i_36 + 1) + 1) >= used_21)) | ((((i_36 + 1) + 1) + 1) >= used_21);
+                        break_if b146 (builtin::i64_extend_i32_s(i_36) + 3_i64) >= builtin::i64_extend_i32_s(used_21);
                         if builtin::array_get_value<u8>($licm_repr_68, i_36) != builtin::array_get_value<u8>($licm_repr_69, i_36) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                         }
@@ -2361,7 +2361,7 @@ fn "core:args/core:args/ArgvDeserializer::pull_option_value$sroa[return]"(self) 
                 $licm_repr_86 = self_11.repr;
                 b322: block {
                     l323: loop {
-                        break_if b322 ((($hfs_pos_87 >= 2) | (($hfs_pos_87 + 1) >= 2)) | ((($hfs_pos_87 + 1) + 1) >= 2)) | (((($hfs_pos_87 + 1) + 1) + 1) >= 2);
+                        break_if b322 (builtin::i64_extend_i32_s($hfs_pos_87) + 3_i64) >= builtin::i64_extend_i32_s(2);
                         if builtin::array_get_value<u8>($licm_repr_86, $hfs_pos_87) != builtin::array_get_value<u8>($sroa_p_repr_21, $hfs_pos_87) {
                             break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_0__$inline_bytes_match_at_5: 0;
                         }
@@ -3123,7 +3123,7 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
                         $array_clone_src_1 = v_29.repr;
                         b438: block {
                             l439: loop {
-                                break_if b438 (((j_154 >= $hfs_pos_263) | ((j_154 + 1) >= $hfs_pos_263)) | (((j_154 + 1) + 1) >= $hfs_pos_263)) | ((((j_154 + 1) + 1) + 1) >= $hfs_pos_263);
+                                break_if b438 (builtin::i64_extend_i32_s(j_154) + 3_i64) >= builtin::i64_extend_i32_s($hfs_pos_263);
                                 if builtin::array_get_value<u8>($array_clone_src_1, j_154) != builtin::array_get_value<u8>(global:core:args::$const_obj_0, j_154) {
                                     break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                                 }
@@ -3171,7 +3171,7 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
                             $array_clone_dst_2 = v_29.repr;
                             b448: block {
                                 l449: loop {
-                                    break_if b448 ((($licm_used_114 >= 2) | (($licm_used_114 + 1) >= 2)) | ((($licm_used_114 + 1) + 1) >= 2)) | (((($licm_used_114 + 1) + 1) + 1) >= 2);
+                                    break_if b448 (builtin::i64_extend_i32_s($licm_used_114) + 3_i64) >= builtin::i64_extend_i32_s(2);
                                     if builtin::array_get_value<u8>($array_clone_dst_2, $licm_used_114) != builtin::array_get_value<u8>($array_clone_src_1, $licm_used_114) {
                                         break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_1__$inline_bytes_match_at_5: 0;
                                     }
@@ -3224,7 +3224,7 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
                         $array_clone_src_1 = $mv$lo$raw.repr;
                         b460: block {
                             l461: loop {
-                                break_if b460 ((($licm_used_260 >= $licm_used_114) | (($licm_used_260 + 1) >= $licm_used_114)) | ((($licm_used_260 + 1) + 1) >= $licm_used_114)) | (((($licm_used_260 + 1) + 1) + 1) >= $licm_used_114);
+                                break_if b460 (builtin::i64_extend_i32_s($licm_used_260) + 3_i64) >= builtin::i64_extend_i32_s($licm_used_114);
                                 if builtin::array_get_value<u8>($array_clone_src_1, $licm_used_260) != builtin::array_get_value<u8>(global:core:args::$const_obj_2, $licm_used_260) {
                                     break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                                 }

@@ -864,7 +864,7 @@ fn "variant_ord_derived.wado/$test_2_a_bound_and_sort_reach_it"() {
                                 $array_clone_dst_2 = $eq_other_Label_5.repr;
                                 b23: block {
                                     l24: loop {
-                                        break_if b23 ((($eq_other_Line_3 >= $eq_self_Line_2) | (($eq_other_Line_3 + 1) >= $eq_self_Line_2)) | ((($eq_other_Line_3 + 1) + 1) >= $eq_self_Line_2)) | (((($eq_other_Line_3 + 1) + 1) + 1) >= $eq_self_Line_2);
+                                        break_if b23 (builtin::i64_extend_i32_s($eq_other_Line_3) + 3_i64) >= builtin::i64_extend_i32_s($eq_self_Line_2);
                                         if builtin::array_get_value<u8>($array_clone_src_1, $eq_other_Line_3) != builtin::array_get_value<u8>($array_clone_dst_2, $eq_other_Line_3) {
                                             break $inline_variant_ord_derived_wado_Shape_core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__0__$inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                                         }
@@ -1019,7 +1019,7 @@ Ok(6): "), used: 8 }, s2: struct.new "core:prelude/string.wado//String" { repr: 
         $licm_repr_76 = opts.repr;
         b43: block {
             l44: loop {
-                break_if b43 ($eq_other_Some_5_28 >= $eq_self_Some_4_27) | (($eq_other_Some_5_28 + 1) >= $eq_self_Some_4_27);
+                break_if b43 (builtin::i64_extend_i32_s($eq_other_Some_5_28) + 1_i64) >= builtin::i64_extend_i32_s($eq_self_Some_4_27);
                 if $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__15: block -> bool {
                     self_70 = builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">($licm_repr_76, $eq_other_Some_5_28);
                     other_71 = builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(elements_60, $eq_other_Some_5_28);
@@ -1961,7 +1961,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b243: block {
         l244: loop {
-            break_if b243 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b243 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1985,7 +1985,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b247: block {
         l248: loop {
-            break_if b247 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b247 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -3995,7 +3995,7 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
                 $licm_repr_60 = $eq_other_Label_7.repr;
                 b514: block {
                     l515: loop {
-                        break_if b514 (((i >= min_len) | ((i + 1) >= min_len)) | (((i + 1) + 1) >= min_len)) | ((((i + 1) + 1) + 1) >= min_len);
+                        break_if b514 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
                         x = builtin::array_get_value<u8>($licm_repr_59, i);
                         y = builtin::array_get_value<u8>($licm_repr_60, i);
                         if x <u y {

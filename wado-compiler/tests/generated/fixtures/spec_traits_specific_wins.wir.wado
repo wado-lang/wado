@@ -432,7 +432,7 @@ fn "spec_traits_specific_wins.wado/$test_0"() {
         $licm_repr_62 = $v2_2.repr;
         b1: block {
             l2: loop {
-                break_if b1 (((i_39 >= 7) | ((i_39 + 1) >= 7)) | (((i_39 + 1) + 1) >= 7)) | ((((i_39 + 1) + 1) + 1) >= 7);
+                break_if b1 (builtin::i64_extend_i32_s(i_39) + 3_i64) >= builtin::i64_extend_i32_s(7);
                 if builtin::array_get_value<u8>($licm_repr_62, i_39) != builtin::array_get_value<u8>(global:spec_traits_specific_wins.wado::$const_obj_0, i_39) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
@@ -485,7 +485,7 @@ Box_ { v: \"s\" }.tag() == \"general\": "), used: 37 }, s4: struct.new "core:pre
         $licm_repr_62 = $v2_2.repr;
         b11: block {
             l12: loop {
-                break_if b11 (((i_39 >= 7) | ((i_39 + 1) >= 7)) | (((i_39 + 1) + 1) >= 7)) | ((((i_39 + 1) + 1) + 1) >= 7);
+                break_if b11 (builtin::i64_extend_i32_s(i_39) + 3_i64) >= builtin::i64_extend_i32_s(7);
                 if builtin::array_get_value<u8>($licm_repr_62, i_39) != builtin::array_get_value<u8>(global:spec_traits_specific_wins.wado::$const_obj_0, i_39) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
@@ -1002,7 +1002,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b132: block {
         l133: loop {
-            break_if b132 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b132 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1026,7 +1026,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b136: block {
         l137: loop {
-            break_if b136 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b136 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

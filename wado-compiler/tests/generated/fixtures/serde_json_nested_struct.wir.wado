@@ -1174,7 +1174,7 @@ fn "serde_json_nested_struct.wado/$test_0_nested_struct_serialize"() {
             $licm_repr_16 = global:serde_json_nested_struct.wado::$const_obj_8.repr;
             b3: block {
                 l4: loop {
-                    break_if b3 (((i >= $mv$r$0) | ((i + 1) >= $mv$r$0)) | (((i + 1) + 1) >= $mv$r$0)) | ((((i + 1) + 1) + 1) >= $mv$r$0);
+                    break_if b3 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$r$0);
                     if builtin::array_get_value<u8>($licm_repr_15, i) != builtin::array_get_value<u8>($licm_repr_16, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
@@ -2482,7 +2482,7 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
                     $load_1 = decimal.repr;
                     b205: block {
                         l206: loop {
-                            break_if b205 (((c >= $load_0) | ((c + 1) >= $load_0)) | (((c + 1) + 1) >= $load_0)) | ((((c + 1) + 1) + 1) >= $load_0);
+                            break_if b205 (builtin::i64_extend_i32_s(c) + 3_i64) >= builtin::i64_extend_i32_s($load_0);
                             carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($load_1, c)) * 10_i64) + carry;
                             builtin::array_set<u32>($load_1, c, builtin::i32_wrap_i64(carry));
                             carry = carry >>u 32_i64;
@@ -2572,7 +2572,7 @@ fn "core:prelude/fpfmt.wado/big_mul_pow5"(n, e) {
             $load_1 = n.used;
             b216: block {
                 l217: loop {
-                    break_if b216 (((k_9 >= $load_1) | ((k_9 + 1) >= $load_1)) | (((k_9 + 1) + 1) >= $load_1)) | ((((k_9 + 1) + 1) + 1) >= $load_1);
+                    break_if b216 (builtin::i64_extend_i32_s(k_9) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
                     carry_8 = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_43, k_9)) * 1220703125_i64) + carry_8;
                     builtin::array_set<u32>($licm_repr_43, k_9, builtin::i32_wrap_i64(carry_8));
                     carry_8 = carry_8 >>u 32_i64;
@@ -2633,7 +2633,7 @@ fn "core:prelude/fpfmt.wado/big_mul_pow5"(n, e) {
     $licm_arith_37_81 = builtin::i64_extend_i32_u(k_9);
     b224: block {
         l225: loop {
-            break_if b224 (((e >= $load_1) | ((e + 1) >= $load_1)) | (((e + 1) + 1) >= $load_1)) | ((((e + 1) + 1) + 1) >= $load_1);
+            break_if b224 (builtin::i64_extend_i32_s(e) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
             carry_8 = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_43, e)) * $licm_arith_37_81) + carry_8;
             builtin::array_set<u32>($licm_repr_43, e, builtin::i32_wrap_i64(carry_8));
             carry_8 = carry_8 >>u 32_i64;
@@ -2692,7 +2692,7 @@ fn "core:prelude/fpfmt.wado/big_shl"(n, bits) {
         $licm_arith_37 = builtin::i64_extend_i32_u(bits);
         b231: block {
             l232: loop {
-                break_if b231 (((k_40 >= $load_0) | ((k_40 + 1) >= $load_0)) | (((k_40 + 1) + 1) >= $load_0)) | ((((k_40 + 1) + 1) + 1) >= $load_0);
+                break_if b231 (builtin::i64_extend_i32_s(k_40) + 3_i64) >= builtin::i64_extend_i32_s($load_0);
                 carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($load_1, k_40)) * $licm_arith_37) + carry;
                 builtin::array_set<u32>($load_1, k_40, builtin::i32_wrap_i64(carry));
                 carry = carry >>u 32_i64;
@@ -3103,7 +3103,7 @@ fn "core:prelude/string.wado/bytes_match_at"(haystack, pos, needle, needle_at, n
     j = 0;
     b328: block {
         l329: loop {
-            break_if b328 (((j >= needle_len) | ((j + 1) >= needle_len)) | (((j + 1) + 1) >= needle_len)) | ((((j + 1) + 1) + 1) >= needle_len);
+            break_if b328 (builtin::i64_extend_i32_s(j) + 3_i64) >= builtin::i64_extend_i32_s(needle_len);
             if builtin::array_get_value<u8>(haystack, pos + j) != builtin::array_get_value<u8>(needle, needle_at + j) {
                 return 0;
             }
@@ -3323,7 +3323,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b386: block {
         l387: loop {
-            break_if b386 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b386 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -3347,7 +3347,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b390: block {
         l391: loop {
-            break_if b390 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b390 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -6431,7 +6431,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
     if i_54 >= 0 {
         b911: block {
             l912: loop {
-                break_if b911 (((i_54 >= self_59) | ((i_54 + 1) >= self_59)) | (((i_54 + 1) + 1) >= self_59)) | ((((i_54 + 1) + 1) + 1) >= self_59);
+                break_if b911 (builtin::i64_extend_i32_s(i_54) + 3_i64) >= builtin::i64_extend_i32_s(self_59);
                 b = builtin::array_get_value<u8>($licm_repr_20, i_54);
                 count = count + ((b & 192) != 128);
                 i_54 = i_54 + 1;
@@ -8875,7 +8875,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
             }) {
                 b1261: block {
                     l1262: loop {
-                        break_if b1261 (((k >= fill_len) | ((k + 1) >= fill_len)) | (((k + 1) + 1) >= fill_len)) | ((((k + 1) + 1) + 1) >= fill_len);
+                        break_if b1261 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(fill_len);
                         index_37 = $licm_arith_70 + k;
                         value_38 = builtin::array_get_value<u8>($licm_repr_65, k);
                         builtin::array_set_u8($licm_repr_69, index_37, value_38);

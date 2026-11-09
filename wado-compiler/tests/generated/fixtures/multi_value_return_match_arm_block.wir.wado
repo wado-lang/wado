@@ -1005,7 +1005,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b116: block {
         l117: loop {
-            break_if b116 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b116 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1029,7 +1029,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b120: block {
         l121: loop {
-            break_if b120 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b120 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1602,7 +1602,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_be$sroa[return]"(self, n) {
     }) {
         b200: block {
             l201: loop {
-                break_if b200 (((i >= n) | ((i + 1) >= n)) | (((i + 1) + 1) >= n)) | ((((i + 1) + 1) + 1) >= n);
+                break_if b200 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(n);
                 v = (v << 8_i64) | builtin::i64_extend_i32_u($contract_arg_0 = $load_0 + i; builtin::array_get_value<u8>($licm_repr_21, $licm_start_20 + $contract_arg_0));
                 i = i + 1;
                 v = (v << 8_i64) | builtin::i64_extend_i32_u($contract_arg_0 = $load_0 + i; builtin::array_get_value<u8>($licm_repr_21, $licm_start_20 + $contract_arg_0));
@@ -1913,7 +1913,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag$sroa[return]"(self) {
     if $mv$$vr_21$0 <= $mv$$vr_21$0 {
         b246: block {
             l247: loop {
-                break_if b246 (((indef >= $mv$$vr_21$0) | ((indef + 1) >= $mv$$vr_21$0)) | (((indef + 1) + 1) >= $mv$$vr_21$0)) | ((((indef + 1) + 1) + 1) >= $mv$$vr_21$0);
+                break_if b246 (builtin::i64_extend_i32_s(indef) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_21$0);
                 b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
                 if local.tee pr($licm_arith_35 - indef) < 8 {
                     lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));

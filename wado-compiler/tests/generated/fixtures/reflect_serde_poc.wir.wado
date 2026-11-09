@@ -1055,7 +1055,7 @@ fn "reflect_serde_poc.wado/key_of"(n, key) {
                     $licm_repr_27 = $load_3.repr;
                     b5: block {
                         l6: loop {
-                            break_if b5 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+                            break_if b5 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                             if builtin::array_get_value<u8>($licm_repr_27, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
@@ -1189,7 +1189,7 @@ fn "reflect_serde_poc.wado/$test_1_the_derivations_nest_through_the_trait__one_l
                         $licm_repr_27 = $mv_field_2.repr;
                         b23: block {
                             l24: loop {
-                                break_if b23 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+                                break_if b23 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                                 if builtin::array_get_value<u8>($licm_repr_27, i) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_5, i) {
                                     break $inline_key_of_sroa_n_value__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                                 }
@@ -3037,7 +3037,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b407: block {
         l408: loop {
-            break_if b407 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b407 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -3061,7 +3061,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b411: block {
         l412: loop {
-            break_if b411 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b411 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -3182,7 +3182,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/seq_eq<reflect_serde_poc.wad
                 $licm_repr_23 = $load_2.repr;
                 b427: block {
                     l428: loop {
-                        break_if b427 (((i_17 >= a_end_12) | ((i_17 + 1) >= a_end_12)) | (((i_17 + 1) + 1) >= a_end_12)) | ((((i_17 + 1) + 1) + 1) >= a_end_12);
+                        break_if b427 (builtin::i64_extend_i32_s(i_17) + 3_i64) >= builtin::i64_extend_i32_s(a_end_12);
                         if builtin::array_get_value<u8>($licm_repr_22, i_17) != builtin::array_get_value<u8>($licm_repr_23, i_17) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                         }
@@ -4514,7 +4514,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^core:prelude/traits.wado
             $licm_repr_27 = $mv$other$display_name.repr;
             b600: block {
                 l601: loop {
-                    break_if b600 ((($mv$self$perms >= $mv$self$record_id) | (($mv$self$perms + 1) >= $mv$self$record_id)) | ((($mv$self$perms + 1) + 1) >= $mv$self$record_id)) | (((($mv$self$perms + 1) + 1) + 1) >= $mv$self$record_id);
+                    break_if b600 (builtin::i64_extend_i32_s($mv$self$perms) + 3_i64) >= builtin::i64_extend_i32_s($mv$self$record_id);
                     if builtin::array_get_value<u8>($licm_repr_26, $mv$self$perms) != builtin::array_get_value<u8>($licm_repr_27, $mv$self$perms) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                     }
@@ -5993,7 +5993,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Node^core:prelude/traits.wado/
                 $licm_repr_43 = $eq_other_Text_5.repr;
                 b802: block {
                     l803: loop {
-                        break_if b802 ((($eq_other_Int_3 >= $eq_self_Int_2) | (($eq_other_Int_3 + 1) >= $eq_self_Int_2)) | ((($eq_other_Int_3 + 1) + 1) >= $eq_self_Int_2)) | (((($eq_other_Int_3 + 1) + 1) + 1) >= $eq_self_Int_2);
+                        break_if b802 (builtin::i64_extend_i32_s($eq_other_Int_3) + 3_i64) >= builtin::i64_extend_i32_s($eq_self_Int_2);
                         if builtin::array_get_value<u8>($licm_repr_42, $eq_other_Int_3) != builtin::array_get_value<u8>($licm_repr_43, $eq_other_Int_3) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                         }
@@ -6101,7 +6101,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^core:prelude/traits.wa
                 $licm_repr_21 = $eq_other_Label_5.repr;
                 b825: block {
                     l826: loop {
-                        break_if b825 ((($eq_other_Count_3 >= $eq_self_Count_2) | (($eq_other_Count_3 + 1) >= $eq_self_Count_2)) | ((($eq_other_Count_3 + 1) + 1) >= $eq_self_Count_2)) | (((($eq_other_Count_3 + 1) + 1) + 1) >= $eq_self_Count_2);
+                        break_if b825 (builtin::i64_extend_i32_s($eq_other_Count_3) + 3_i64) >= builtin::i64_extend_i32_s($eq_self_Count_2);
                         if builtin::array_get_value<u8>($licm_repr_20, $eq_other_Count_3) != builtin::array_get_value<u8>($licm_repr_21, $eq_other_Count_3) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                         }
@@ -6212,7 +6212,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Perms^reflect_serde_poc.wado/F
                     $array_clone_src_1 = v_27.repr;
                     b846: block {
                         l847: loop {
-                            break_if b846 (((i_44 >= 8) | ((i_44 + 1) >= 8)) | (((i_44 + 1) + 1) >= 8)) | ((((i_44 + 1) + 1) + 1) >= 8);
+                            break_if b846 (builtin::i64_extend_i32_s(i_44) + 3_i64) >= builtin::i64_extend_i32_s(8);
                             if builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_201, i_44) != builtin::array_get_value<u8>($array_clone_src_1, i_44) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                             }
@@ -6255,7 +6255,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Perms^reflect_serde_poc.wado/F
                     $array_clone_src_1 = v_27.repr;
                     b857: block {
                         l858: loop {
-                            break_if b857 (((i_44 >= 9) | ((i_44 + 1) >= 9)) | (((i_44 + 1) + 1) >= 9)) | ((((i_44 + 1) + 1) + 1) >= 9);
+                            break_if b857 (builtin::i64_extend_i32_s(i_44) + 3_i64) >= builtin::i64_extend_i32_s(9);
                             if builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_200, i_44) != builtin::array_get_value<u8>($array_clone_src_1, i_44) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
                             }
@@ -6323,7 +6323,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Rank^reflect_serde_poc.wado/Fr
             $licm_repr_44 = text.repr;
             b872: block {
                 l873: loop {
-                    break_if b872 (((i_22 >= 12) | ((i_22 + 1) >= 12)) | (((i_22 + 1) + 1) >= 12)) | ((((i_22 + 1) + 1) + 1) >= 12);
+                    break_if b872 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s(12);
                     if builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_204, i_22) != builtin::array_get_value<u8>($licm_repr_44, i_22) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                     }
@@ -6365,7 +6365,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Rank^reflect_serde_poc.wado/Fr
             $licm_repr_44 = text.repr;
             b883: block {
                 l884: loop {
-                    break_if b883 (((i_22 >= 13) | ((i_22 + 1) >= 13)) | (((i_22 + 1) + 1) >= 13)) | ((((i_22 + 1) + 1) + 1) >= 13);
+                    break_if b883 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s(13);
                     if builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_203, i_22) != builtin::array_get_value<u8>($licm_repr_44, i_22) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                     }
@@ -6444,7 +6444,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado
             $licm_repr_175 = other_57.repr;
             b899: block {
                 l900: loop {
-                    break_if b899 (((i_77 >= 5) | ((i_77 + 1) >= 5)) | (((i_77 + 1) + 1) >= 5)) | ((((i_77 + 1) + 1) + 1) >= 5);
+                    break_if b899 (builtin::i64_extend_i32_s(i_77) + 3_i64) >= builtin::i64_extend_i32_s(5);
                     if builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_208, i_77) != builtin::array_get_value<u8>($licm_repr_175, i_77) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                     }
@@ -6509,7 +6509,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado
             $licm_repr_175 = other_57.repr;
             b914: block {
                 l915: loop {
-                    break_if b914 (((i_77 >= 5) | ((i_77 + 1) >= 5)) | (((i_77 + 1) + 1) >= 5)) | ((((i_77 + 1) + 1) + 1) >= 5);
+                    break_if b914 (builtin::i64_extend_i32_s(i_77) + 3_i64) >= builtin::i64_extend_i32_s(5);
                     if builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_207, i_77) != builtin::array_get_value<u8>($licm_repr_175, i_77) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__22: 0;
                     }
@@ -6575,7 +6575,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado
             $licm_repr_175 = other_57.repr;
             b929: block {
                 l930: loop {
-                    break_if b929 ((($load_0 >= 7) | (($load_0 + 1) >= 7)) | ((($load_0 + 1) + 1) >= 7)) | (((($load_0 + 1) + 1) + 1) >= 7);
+                    break_if b929 (builtin::i64_extend_i32_s($load_0) + 3_i64) >= builtin::i64_extend_i32_s(7);
                     if builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_206, $load_0) != builtin::array_get_value<u8>($licm_repr_175, $load_0) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__36: 0;
                     }
@@ -6694,7 +6694,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Inner^reflect_serde_poc.wado/F
                     $licm_repr_145 = $load_2.repr;
                     b951: block {
                         l952: loop {
-                            break_if b951 (((i_49 >= a_end_44) | ((i_49 + 1) >= a_end_44)) | (((i_49 + 1) + 1) >= a_end_44)) | ((((i_49 + 1) + 1) + 1) >= a_end_44);
+                            break_if b951 (builtin::i64_extend_i32_s(i_49) + 3_i64) >= builtin::i64_extend_i32_s(a_end_44);
                             if builtin::array_get_value<u8>($licm_repr_145, i_49) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_210, i_49) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
                             }
@@ -6797,7 +6797,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Inner^reflect_serde_poc.wado/F
                     $licm_repr_145 = $load_2.repr;
                     b974: block {
                         l975: loop {
-                            break_if b974 (((i_49 >= a_end_44) | ((i_49 + 1) >= a_end_44)) | (((i_49 + 1) + 1) >= a_end_44)) | ((((i_49 + 1) + 1) + 1) >= a_end_44);
+                            break_if b974 (builtin::i64_extend_i32_s(i_49) + 3_i64) >= builtin::i64_extend_i32_s(a_end_44);
                             if builtin::array_get_value<u8>($licm_repr_145, i_49) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_209, i_49) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__26: 0;
                             }
@@ -7041,7 +7041,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     $licm_repr_389 = $load_2.repr;
                     b1020: block {
                         l1021: loop {
-                            break_if b1020 (((i_85 >= a_end_80) | ((i_85 + 1) >= a_end_80)) | (((i_85 + 1) + 1) >= a_end_80)) | ((((i_85 + 1) + 1) + 1) >= a_end_80);
+                            break_if b1020 (builtin::i64_extend_i32_s(i_85) + 3_i64) >= builtin::i64_extend_i32_s(a_end_80);
                             if builtin::array_get_value<u8>($licm_repr_389, i_85) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_216, i_85) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                             }
@@ -7144,7 +7144,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     $licm_repr_389 = $load_2.repr;
                     b1043: block {
                         l1044: loop {
-                            break_if b1043 (((i_85 >= a_end_80) | ((i_85 + 1) >= a_end_80)) | (((i_85 + 1) + 1) >= a_end_80)) | ((((i_85 + 1) + 1) + 1) >= a_end_80);
+                            break_if b1043 (builtin::i64_extend_i32_s(i_85) + 3_i64) >= builtin::i64_extend_i32_s(a_end_80);
                             if builtin::array_get_value<u8>($licm_repr_389, i_85) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_215, i_85) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__25: 0;
                             }
@@ -7247,7 +7247,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     $licm_repr_389 = $load_2.repr;
                     b1066: block {
                         l1067: loop {
-                            break_if b1066 (((i_85 >= a_end_80) | ((i_85 + 1) >= a_end_80)) | (((i_85 + 1) + 1) >= a_end_80)) | ((((i_85 + 1) + 1) + 1) >= a_end_80);
+                            break_if b1066 (builtin::i64_extend_i32_s(i_85) + 3_i64) >= builtin::i64_extend_i32_s(a_end_80);
                             if builtin::array_get_value<u8>($licm_repr_389, i_85) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_5, i_85) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__41: 0;
                             }
@@ -7350,7 +7350,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     $licm_repr_389 = $load_2.repr;
                     b1089: block {
                         l1090: loop {
-                            break_if b1089 (((i_85 >= a_end_80) | ((i_85 + 1) >= a_end_80)) | (((i_85 + 1) + 1) >= a_end_80)) | ((((i_85 + 1) + 1) + 1) >= a_end_80);
+                            break_if b1089 (builtin::i64_extend_i32_s(i_85) + 3_i64) >= builtin::i64_extend_i32_s(a_end_80);
                             if builtin::array_get_value<u8>($licm_repr_389, i_85) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_213, i_85) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__57: 0;
                             }
@@ -7453,7 +7453,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     $licm_repr_389 = $load_2.repr;
                     b1112: block {
                         l1113: loop {
-                            break_if b1112 (((i_85 >= a_end_80) | ((i_85 + 1) >= a_end_80)) | (((i_85 + 1) + 1) >= a_end_80)) | ((((i_85 + 1) + 1) + 1) >= a_end_80);
+                            break_if b1112 (builtin::i64_extend_i32_s(i_85) + 3_i64) >= builtin::i64_extend_i32_s(a_end_80);
                             if builtin::array_get_value<u8>($licm_repr_389, i_85) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_212, i_85) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__73: 0;
                             }
@@ -7556,7 +7556,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     $licm_repr_389 = $load_2.repr;
                     b1135: block {
                         l1136: loop {
-                            break_if b1135 (((i_85 >= a_end_80) | ((i_85 + 1) >= a_end_80)) | (((i_85 + 1) + 1) >= a_end_80)) | ((((i_85 + 1) + 1) + 1) >= a_end_80);
+                            break_if b1135 (builtin::i64_extend_i32_s(i_85) + 3_i64) >= builtin::i64_extend_i32_s(a_end_80);
                             if builtin::array_get_value<u8>($licm_repr_389, i_85) != builtin::array_get_value<u8>(global:reflect_serde_poc.wado::$const_obj_211, i_85) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__89: 0;
                             }

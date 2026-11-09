@@ -897,7 +897,7 @@ fn "contract_checks_test_world.wado/$test_0_calls_inside_their_contracts_run_as_
         $mv_repr_1 = $contract_arg_0_19.repr;
         b12: block {
             l13: loop {
-                break_if b12 ((($v2_31 >= $mv_end_3) | (($v2_31 + 1) >= $mv_end_3)) | ((($v2_31 + 1) + 1) >= $mv_end_3)) | (((($v2_31 + 1) + 1) + 1) >= $mv_end_3);
+                break_if b12 (builtin::i64_extend_i32_s($v2_31) + 3_i64) >= builtin::i64_extend_i32_s($mv_end_3);
                 if builtin::array_get_value<u8>($mv_repr_1, $mv_start_2 + $v2_31) != builtin::array_get_value<u8>(global:contract_checks_test_world.wado::$const_obj_2, $v2_31) {
                     break $inline_core_prelude_string_wado_StrSlice__eq_str__core_prelude_string_wado_String__spec0_0: 0;
                 }
@@ -1009,7 +1009,7 @@ s: "), used: 134 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
         out = $v1_16.repr;
         b34: block {
             l35: loop {
-                break_if b34 ((($mv_start_2 >= 2) | (($mv_start_2 + 1) >= 2)) | ((($mv_start_2 + 1) + 1) >= 2)) | (((($mv_start_2 + 1) + 1) + 1) >= 2);
+                break_if b34 (builtin::i64_extend_i32_s($mv_start_2) + 3_i64) >= builtin::i64_extend_i32_s(2);
                 if builtin::array_get_value<u8>(out, $mv_start_2) != builtin::array_get_value<u8>(global:contract_checks_test_world.wado::$const_obj_2, $mv_start_2) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__59: 0;
                 }
@@ -1066,7 +1066,7 @@ unchecked String::from_utf8(bytes): "), used: 37 }, s2: struct.new "core:prelude
         $mv_end_3 = 0;
         b46: block {
             l47: loop {
-                break_if b46 ((($mv_end_3 >= $mv_start_2) | (($mv_end_3 + 1) >= $mv_start_2)) | ((($mv_end_3 + 1) + 1) >= $mv_start_2)) | (((($mv_end_3 + 1) + 1) + 1) >= $mv_start_2);
+                break_if b46 (builtin::i64_extend_i32_s($mv_end_3) + 3_i64) >= builtin::i64_extend_i32_s($mv_start_2);
                 if builtin::array_get_value<u8>($mv_repr_1, $mv_end_3) != builtin::array_get_value<u8>(global:contract_checks_test_world.wado::$const_obj_1, $mv_end_3) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__75: 0;
                 }
@@ -2469,7 +2469,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b296: block {
         l297: loop {
-            break_if b296 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b296 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -2493,7 +2493,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b300: block {
         l301: loop {
-            break_if b300 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b300 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

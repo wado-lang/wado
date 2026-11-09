@@ -1286,7 +1286,7 @@ fn "float_min_max.wado/$test_1_of_two_equal_arguments_min_returns_the_first_and_
                 $v6_seen_7 = 1;
                 b16: block {
                     l17: loop {
-                        break_if b16 ((($v6_seen_7 >= $v5_5) | (($v6_seen_7 + 1) >= $v5_5)) | ((($v6_seen_7 + 1) + 1) >= $v5_5)) | (((($v6_seen_7 + 1) + 1) + 1) >= $v5_5);
+                        break_if b16 (builtin::i64_extend_i32_s($v6_seen_7) + 3_i64) >= builtin::i64_extend_i32_s($v5_5);
                         $v6_6 = builtin::array_get_value<f64>(elements, $v6_seen_7);
                         $v6_seen_7 = $v6_seen_7 + 1;
                         if $inline_core_prelude_slice_wado_SliceValueIter_f64__core_prelude_traits_wado_Iterator__min_by__Closure_0_dae_cmp__0__$inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
@@ -1391,7 +1391,7 @@ fn "float_min_max.wado/$test_1_of_two_equal_arguments_min_returns_the_first_and_
                 $v6_seen_7 = 1;
                 b37: block {
                     l38: loop {
-                        break_if b37 ((($v6_seen_7 >= $v5_5) | (($v6_seen_7 + 1) >= $v5_5)) | ((($v6_seen_7 + 1) + 1) >= $v5_5)) | (((($v6_seen_7 + 1) + 1) + 1) >= $v5_5);
+                        break_if b37 (builtin::i64_extend_i32_s($v6_seen_7) + 3_i64) >= builtin::i64_extend_i32_s($v5_5);
                         $v6_6 = builtin::array_get_value<f64>(elements, $v6_seen_7);
                         $v6_seen_7 = $v6_seen_7 + 1;
                         if $inline_core_prelude_slice_wado_SliceValueIter_f64__core_prelude_traits_wado_Iterator__max_by__Closure_1_dae_cmp__1__$inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
@@ -6904,7 +6904,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b1191: block {
         l1192: loop {
-            break_if b1191 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b1191 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -6928,7 +6928,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b1195: block {
         l1196: loop {
-            break_if b1195 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b1195 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -10350,7 +10350,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
     if start_pos >= 0 {
         b1776: block {
             l1777: loop {
-                break_if b1776 (((start_pos >= self_9) | ((start_pos + 1) >= self_9)) | (((start_pos + 1) + 1) >= self_9)) | ((((start_pos + 1) + 1) + 1) >= self_9);
+                break_if b1776 (builtin::i64_extend_i32_s(start_pos) + 3_i64) >= builtin::i64_extend_i32_s(self_9);
                 b = builtin::array_get_value<u8>($licm_repr_20, start_pos);
                 count = count + ((b & 192) != 128);
                 start_pos = start_pos + 1;

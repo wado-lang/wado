@@ -542,7 +542,7 @@ fn "serde_json_ser_error.wado/$test_6_normal_f64_succeeds"() {
             $array_clone_src_3 = buf.repr;
             b3: block {
                 l4: loop {
-                    break_if b3 (((i >= $load_1) | ((i + 1) >= $load_1)) | (((i + 1) + 1) >= $load_1)) | ((((i + 1) + 1) + 1) >= $load_1);
+                    break_if b3 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
                     if builtin::array_get_value<u8>($array_clone_src_3, i) != builtin::array_get_value<u8>(global:serde_json_ser_error.wado::$const_obj_5, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
@@ -654,7 +654,7 @@ fn "serde_json_ser_error.wado/$test_7_normal_f32_succeeds"() {
             $array_clone_src_5 = buf_17.repr;
             b22: block {
                 l23: loop {
-                    break_if b22 ((($sroa_slot_56 >= $sroa_slot_55) | (($sroa_slot_56 + 1) >= $sroa_slot_55)) | ((($sroa_slot_56 + 1) + 1) >= $sroa_slot_55)) | (((($sroa_slot_56 + 1) + 1) + 1) >= $sroa_slot_55);
+                    break_if b22 (builtin::i64_extend_i32_s($sroa_slot_56) + 3_i64) >= builtin::i64_extend_i32_s($sroa_slot_55);
                     if builtin::array_get_value<u8>($array_clone_src_5, $sroa_slot_56) != builtin::array_get_value<u8>(global:serde_json_ser_error.wado::$const_obj_6, $sroa_slot_56) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
@@ -1743,7 +1743,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b212: block {
         l213: loop {
-            break_if b212 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b212 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1767,7 +1767,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b216: block {
         l217: loop {
-            break_if b216 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b216 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
