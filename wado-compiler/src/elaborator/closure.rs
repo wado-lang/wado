@@ -273,8 +273,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             closure_ctx.return_type = rt;
         }
         // A block body is a function body: its last statement is a
-        // statement, its type comes from its `return`s, and it owes one on
-        // every path that does not diverge. A single-expression body (`|c|
+        // statement, its type comes from its `return`s or else from the type
+        // its context expects, and it owes one on every path that does not
+        // diverge. A single-expression body (`|c|
         // c.to_ascii_uppercase()`) is its value.
         let return_type = match &closure.body {
             ast::Expr::Block(block) => {
@@ -292,6 +293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.settle_branch_holes(&mut return_types, None);
                 let return_type = declared_return
                     .or(return_types.first().copied())
+                    .or(self.settled_result_expectation(body_expected))
                     .unwrap_or(body_type);
                 self.check_missing_return(return_type, block, closure.span);
                 return_type
