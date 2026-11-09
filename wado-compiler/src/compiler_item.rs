@@ -517,6 +517,8 @@ pub enum CompilerItem {
     /// Every kind carries the attribute and it says the same thing on each, so
     /// the root states it once.
     ReflectWireNamePolicy,
+    /// `Reflect::doc` — the declaration's `///` comment.
+    ReflectDoc,
     /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
     /// insert behind `map[k] = v`, which the `map<K, V>` lift builds pairs with.
     TreeMapIndexAssign,
@@ -545,10 +547,6 @@ pub enum CompilerItem {
     ReflectTemplateRawTail,
     /// `ReflectTemplate::hashes` — how many `#`s delimit the template.
     ReflectTemplateHashes,
-    /// `Member::name` — the member's source field name.
-    MemberName,
-    /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
-    MemberWireNameOverride,
     /// `ReflectVariant::discriminant` — the live case's tag as `i32`.
     ReflectVariantDiscriminant,
     /// `ReflectVariant::members` — the per-case member tuple.
@@ -953,6 +951,7 @@ impl CompilerItem {
         Self::ListLoaded,
         Self::ReflectDeclName,
         Self::ReflectWireNamePolicy,
+        Self::ReflectDoc,
         Self::TreeMapIndexAssign,
         Self::MapEntriesIterNext,
         Self::TreeMapLen,
@@ -966,8 +965,6 @@ impl CompilerItem {
         Self::ReflectTemplateTail,
         Self::ReflectTemplateRawTail,
         Self::ReflectTemplateHashes,
-        Self::MemberName,
-        Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
         Self::ReflectVariantMembers,
         Self::ReflectVariantWireTag,
@@ -1232,6 +1229,7 @@ impl CompilerItem {
             Self::ListLoaded => "list_loaded",
             Self::ReflectDeclName => "reflect_decl_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
+            Self::ReflectDoc => "reflect_doc",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
             Self::MapEntriesIterNext => "map_entries_iter_next",
             Self::TreeMapLen => "tree_map_len",
@@ -1245,8 +1243,6 @@ impl CompilerItem {
             Self::ReflectTemplateTail => "reflect_template_tail",
             Self::ReflectTemplateRawTail => "reflect_template_raw_tail",
             Self::ReflectTemplateHashes => "reflect_template_hashes",
-            Self::MemberName => "member_name",
-            Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
             Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::FormatterWriteStr => "formatter_write_str",
@@ -1491,6 +1487,7 @@ impl CompilerItem {
             | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
+            | Self::ReflectDoc
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaultSlot
@@ -1499,8 +1496,6 @@ impl CompilerItem {
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
             | Self::ReflectTemplateHashes
-            | Self::MemberName
-            | Self::MemberWireNameOverride
             | Self::FormatterNew
             | Self::FormatterWriteLiteral
             | Self::FormatterWriteStr
@@ -1875,6 +1870,7 @@ impl CompilerItem {
             | Self::ListLoaded
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
+            | Self::ReflectDoc
             | Self::TreeMapIndexAssign
             | Self::MapEntriesIterNext
             | Self::TreeMapLen
@@ -1888,8 +1884,6 @@ impl CompilerItem {
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
             | Self::ReflectTemplateHashes
-            | Self::MemberName
-            | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
             | Self::ReflectVariantWireTag

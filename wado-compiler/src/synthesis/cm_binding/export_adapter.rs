@@ -1034,6 +1034,7 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         payload,
         span: synth_span(),
         wire_name_override: None,
+        doc: None,
     };
     let def = type_table
         .compiler_item_def(CompilerItem::Result)
@@ -1051,6 +1052,7 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         span: synth_span(),
         wire_name_policy: None,
         wire_tag: None,
+        doc: None,
     }
 }
 

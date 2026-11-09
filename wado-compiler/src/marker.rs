@@ -241,6 +241,7 @@ fn method(
         effects_source: EffectsSource::Written,
         holds_contracts_of: None,
         body: Some(body),
+        doc: None,
         span,
     }
 }

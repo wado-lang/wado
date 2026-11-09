@@ -12,7 +12,7 @@ type's identity. Each kind trait carries the structure of that kind.
 
 | Trait             | Implemented for                | Carries                                                                                       |
 | ----------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `Reflect`         | every type below               | `decl_name()`, `wire_name_policy()`                                                           |
+| `Reflect`         | every type below               | `decl_name()`, `wire_name_policy()`, `doc()`                                                  |
 | `ReflectStruct`   | every struct                   | `FieldTypes`, `FieldInputs`, `FieldSlots`, `Members`, `members()`, `from_fields()`, the slots |
 | `ReflectVariant`  | every variant                  | `CasePayloads`, `Members`, `members()`, `discriminant()`, `wire_tag()`                        |
 | `ReflectEnum`     | every enum                     | `Members`, `members()`, `discriminant()`, `from_discriminant()`                               |
@@ -101,6 +101,7 @@ let f: EnumCase<Point> = EnumCase {  // ERROR: field `discriminant` of struct
     value: Point { x: 0 },
     case_name: "x",
     wire_override: null,
+    doc: null,
 };
 ```
 
@@ -208,6 +209,48 @@ test "the tag is reported as written" {
 }
 ```
 
+### Doc Comments
+
+`Reflect::<T>::doc()` returns the
+[doc comment](./spec-lexical.md#comments) on the type's declaration, and `None`
+where the declaration has none or the type has no declaration, such as an
+anonymous struct or a tagged template's type. Every instantiation of a generic
+type answers with its declaration's comment. A newtype answers with its own
+comment, not its base's. A member's `doc()` returns the comment on the member
+the same way.
+
+The text is the doc string: the comment's lines joined by newlines, each without
+its `///` and one space after it, so it is the Markdown `wado doc` renders. A
+`//!` module comment belongs to no type or member, so neither reads it.
+
+<!-- {"fixture":"spec_reflection_doc.wado"} -->
+
+```wado
+/// A point on the plane.
+///
+/// Both coordinates are in pixels.
+struct Point {
+    /// Distance from the left edge.
+    x: i32,
+    y: i32,
+}
+
+/// Distance in meters.
+type Meters = f64;
+
+type Location = Point;
+
+test {
+    assert Reflect::<Point>::doc() == Some("A point on the plane.\n\nBoth coordinates are in pixels.");
+    assert Reflect::<Meters>::doc() == Some("Distance in meters.");
+    assert Reflect::<Location>::doc() == null;
+
+    let [x, y] = ReflectStruct::<Point>::members();
+    assert x.doc() == Some("Distance from the left edge.");
+    assert y.doc() == null;
+}
+```
+
 ## Members
 
 A kind with members declares `type Members` and `fn members()`. `members()`
@@ -224,8 +267,9 @@ the body runs once per member and sees each handle at that member's own type.
 ### The `Member` Trait
 
 Every handle implements the sealed `Member` trait. `name()` returns the source
-name, and `wire_name_override()` the `#[wire(name)]` override. A helper written
-over `Member` reads a member of any kind:
+name, `wire_name_override()` the `#[wire(name)]` override, and `doc()` the doc
+comment ([Doc Comments](#doc-comments)). A helper written over `Member` reads a
+member of any kind:
 
 <!-- {"fixture":"spec_reflection_member.wado"} -->
 

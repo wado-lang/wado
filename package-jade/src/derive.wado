@@ -103,8 +103,41 @@ fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Seriali
         } else {
             s.required.push(name);
         }
-        s.properties[name] = Schema::Object(field);
+        // Beside a `$ref` too, where it wins over the definition's.
+        s.properties[name] = described(Schema::Object(field), f.doc());
     }
+    return described(Schema::Object(s), Reflect::<T>::doc());
+}
+
+/// `schema` annotated with a doc comment, its blank lines at either end left
+/// out. A first paragraph of one line, followed by more, is the `title` and the
+/// rest the `description`; any other comment is the `description` whole.
+fn described(schema: Schema, doc: Option<String>) -> Schema {
+    let Some(doc) = doc else {
+        return schema;
+    };
+    let lines: List<String> = doc.lines().collect();
+    let is_blank = |line: &String| line.trim().is_empty();
+    let mut start = 0;
+    let mut end = lines.len();
+    while start < end && is_blank(&lines[start]) {
+        start += 1;
+    }
+    while end > start && is_blank(&lines[end - 1]) {
+        end -= 1;
+    }
+    if start == end {
+        return schema;
+    }
+    let mut s = schema.into_object();
+    if start + 1 < end && is_blank(&lines[start + 1]) {
+        s.title = Option::Some(lines[start]);
+        start += 1;
+        while is_blank(&lines[start]) {
+            start += 1;
+        }
+    }
+    s.description = Option::Some(lines.slice(start, end).to_list().join("\n"));
     return Schema::Object(s);
 }
 
@@ -123,12 +156,10 @@ fn variant_schema<V: ReflectVariant<CasePayloads = [..P]>, ..P: JsonSchema>(gen:
     let tag = ReflectVariant::<V>::wire_tag();
     let mut s = SchemaObject {};
     for let case of ReflectVariant::<V>::members() {
-        s.one_of.push(case_schema(&case, wire_name(&case, policy), &tag, gen));
+        s.one_of.push(described(case_schema(&case, wire_name(&case, policy), &tag, gen), case.doc()));
     }
-    if s.one_of.is_empty() {
-        return Schema::Bool(false);
-    }
-    return Schema::Object(s);
+    let s = if s.one_of.is_empty() { Schema::Bool(false) } else { Schema::Object(s) };
+    return described(s, Reflect::<V>::doc());
 }
 
 /// A case as the derived `Serialize` writes it: untagged, a unit case is its
@@ -179,10 +210,11 @@ fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
     for let case of ReflectEnum::<E>::members() {
         names.push(Document::string(wire_name(&case, policy)));
     }
-    return Schema::Object(SchemaObject {
+    let s = SchemaObject {
         type: JsonTypes::String,
         enum: Option::Some(names),
-    });
+    };
+    return described(Schema::Object(s), Reflect::<E>::doc());
 }
 
 impl<L: ReflectFlags<Members = [..M]>, ..M> JsonSchema for L {
@@ -201,7 +233,7 @@ fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
         type: JsonTypes::String,
         enum: Option::Some(names),
     };
-    return set_of(Schema::Object(member));
+    return described(set_of(Schema::Object(member)), Reflect::<L>::doc());
 }
 
 fn array_of(items: Schema) -> SchemaObject {

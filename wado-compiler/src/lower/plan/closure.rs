@@ -613,6 +613,7 @@ impl ClosureLowerer {
                 fields,
                 span: collected.span,
                 wire_name_policy: None,
+                doc: None,
             });
 
             // Use a qualified name to avoid collisions in the inliner's
