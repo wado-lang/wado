@@ -1663,10 +1663,13 @@ fn try_fill_idiom(
 ) -> bool {
     let (var, h, guard_le) = (fill.var, fill.bound, fill.guard_le);
     let loop_stmt = fill.loop_stmt;
-    assert!(
-        matches!(engine.body.stmts[loop_stmt].kind, StmtKind::Loop { body } if body == fill.loop_body),
-        "a fill loop is the loop over its body"
-    );
+    // The cleanup session since `fill` was taken may have moved or rewritten
+    // the loop.
+    let in_place = engine.body.blocks[fill.block].stmts.contains(&loop_stmt)
+        && matches!(engine.body.stmts[loop_stmt].kind, StmtKind::Loop { body } if body == fill.loop_body);
+    if !in_place {
+        return false;
+    }
     let stmts = engine.body.blocks[fill.loop_body].stmts.clone();
     // Shape: guard first, then pure lets, one array_set, and `i += 1` last.
     let n = stmts.len();
@@ -1863,11 +1866,12 @@ fn try_fill_idiom(
         },
         span,
     );
-    let stmts: Vec<StmtId> = engine.body.blocks[fill.block]
-        .stmts
+    let mut stmts = engine.body.blocks[fill.block].stmts.clone();
+    let at = stmts
         .iter()
-        .map(|&s| if s == loop_stmt { fill_if } else { s })
-        .collect();
+        .position(|&s| s == loop_stmt)
+        .expect("checked in place above");
+    stmts[at] = fill_if;
     engine.set_block_stmts(fill.block, stmts);
     true
 }

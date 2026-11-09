@@ -5,6 +5,7 @@
 //! `wir_optimize/elide_local.rs`; running here exposes the freshly dead
 //! expressions to the rest of the fixed-point loop, which the WIR pass cannot.
 
+use crate::hashmap::IndexSet;
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
@@ -179,69 +180,78 @@ fn is_dead_store(engine: &mut Engine, store: StmtId, local: u32) -> bool {
         return false;
     }
     let def = engine.local_def(local);
-    let root = NodeRef::Block(engine.body.root());
-    let store_chain = ancestors(engine, NodeRef::Stmt(store));
-    assert_eq!(store_chain.last(), Some(&root), "the store is reachable");
+    let store_chain: IndexSet<NodeRef> = ancestors(engine, NodeRef::Stmt(store)).collect();
+    assert_eq!(
+        store_chain.last(),
+        Some(&NodeRef::Block(engine.body.root())),
+        "the store is reachable"
+    );
     !engine.local_reads(local).iter().any(|&mention| {
-        if engine.is_assign_target(mention) {
-            return false;
-        }
-        // The use index keeps a detached node too, and one never runs.
-        let read_chain = ancestors(engine, NodeRef::Expr(mention));
-        read_chain.last() == Some(&root) && read_follows(engine, &store_chain, &read_chain, def)
+        !engine.is_assign_target(mention) && read_follows(engine, &store_chain, mention, def)
     })
 }
 
 /// `node` and every ancestor up to the body root, innermost first.
-fn ancestors(engine: &Engine, node: NodeRef) -> Vec<NodeRef> {
-    std::iter::successors(Some(node), |&n| engine.parent_of(n)).collect()
+fn ancestors<'e>(engine: &'e Engine, node: NodeRef) -> impl Iterator<Item = NodeRef> + 'e {
+    std::iter::successors(Some(node), |&n| engine.parent_of(n))
 }
 
-/// Whether the read at the head of `read_chain` may run after the statement at
-/// the head of `store_chain`.
+/// Whether `read` may run after the statement heading `store_chain`, the
+/// store's ancestors innermost first. The read climbs only until it meets that
+/// chain, and one that never does is detached: the use index keeps such a node,
+/// and it never runs.
 fn read_follows(
     engine: &Engine,
-    store_chain: &[NodeRef],
-    read_chain: &[NodeRef],
+    store_chain: &IndexSet<NodeRef>,
+    read: ExprId,
     def: Option<StmtId>,
 ) -> bool {
+    let mut read_stmt = None;
+    let mut read_branch = NodeRef::Expr(read);
+    let mut node = read_branch;
+    let common = loop {
+        if let Some(at) = store_chain.get_index_of(&node) {
+            break at;
+        }
+        if read_stmt.is_none()
+            && let NodeRef::Stmt(s) = node
+        {
+            read_stmt = Some(s);
+        }
+        read_branch = node;
+        let Some(parent) = engine.parent_of(node) else {
+            return false;
+        };
+        node = parent;
+    };
     // The store's own value runs before it writes.
-    if read_chain.contains(&store_chain[0]) {
+    if common == 0 {
         return false;
     }
-    let shared = store_chain
-        .iter()
-        .rev()
-        .zip(read_chain.iter().rev())
-        .take_while(|(s, r)| s == r)
-        .count();
-    let common = &read_chain[read_chain.len() - shared..];
-    let store_branch = store_chain[store_chain.len() - shared - 1];
-    let read_branch = read_chain[read_chain.len() - shared - 1];
-    let mut order = Vec::new();
-    engine.body.for_each_child(common[0], |c| order.push(c));
-    let at = |n| {
-        order
-            .iter()
-            .position(|&c| c == n)
-            .expect("a child of its parent")
-    };
-    if at(read_branch) > at(store_branch) {
+    let mut store_seen = false;
+    let mut read_after = false;
+    engine.body.for_each_child(store_chain[common], |c| {
+        store_seen |= c == store_chain[common - 1];
+        read_after |= c == read_branch && store_seen;
+    });
+    if read_after {
         return true;
     }
-    let Some(&innermost_loop) = common.iter().find(|&&n| is_loop(engine.body, n)) else {
+    let shared = || store_chain.iter().skip(common).copied();
+    let Some(innermost_loop) = shared().find(|&n| is_loop(engine.body, n)) else {
         return false;
     };
-    let read_stmt = read_chain
-        .iter()
-        .find_map(|&n| match n {
-            NodeRef::Stmt(s) => Some(s),
-            _ => None,
+    let read_stmt = read_stmt
+        .or_else(|| {
+            shared().find_map(|n| match n {
+                NodeRef::Stmt(s) => Some(s),
+                _ => None,
+            })
         })
         .expect("a read sits in a statement");
     // Re-bound on every path from the top of that loop to the read.
     !def.is_some_and(|def| {
-        ancestors(engine, NodeRef::Stmt(def)).contains(&innermost_loop)
+        ancestors(engine, NodeRef::Stmt(def)).any(|n| n == innermost_loop)
             && def_dominates(engine, def, read_stmt)
     })
 }

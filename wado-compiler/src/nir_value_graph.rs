@@ -41,6 +41,18 @@ pub(crate) fn constant_kind(value: &Value, ty: TypeId) -> ValueKind {
     }
 }
 
+/// The kind `null` takes at `ty`: `Option`'s `None` there, the bare reference
+/// placeholder anywhere else.
+pub(crate) fn null_kind(ty: TypeId, types: &TypeTable) -> ValueKind {
+    match types.null_case(ty) {
+        Some(case_index) => ValueKind::UnitCase {
+            variant_type: ty,
+            case_index,
+        },
+        None => ValueKind::Null,
+    }
+}
+
 /// The constant a [`ValueKind`] denotes, as niri's
 /// [`crate::const_eval::Value`] — the one projection between the two, which
 /// everything else delegates to.

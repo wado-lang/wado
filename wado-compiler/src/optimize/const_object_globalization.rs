@@ -32,7 +32,7 @@ use crate::nir::aggregate_field_info;
 use crate::nir::{FuncId, StructDecls};
 use crate::nir_arena::ArenaCallArg;
 use crate::nir_value_graph::builder::is_const_value;
-use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind, null_kind};
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::arena_query::{
     collect_pattern_bindings, holds_reference, projected_const_field,
@@ -256,6 +256,7 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
             hoist_candidate(body, name, cand, is_uninitialized);
         }
     });
+    let types = project.type_table.borrow();
     for (name, cand) in per_function.into_iter().flatten() {
         let Candidate {
             ty, module_source, ..
@@ -266,7 +267,7 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
             // The hoisted value is written by the `GlobalVarSet` this pass
             // emits at the use site, so the storage starts at a placeholder.
             init: GlobalInit::Deferred(ExprBody::wrapping_value(
-                ValueKind::Null,
+                null_kind(ty, &types),
                 ty,
                 Span::new(0, 0, 1, 1),
             )),

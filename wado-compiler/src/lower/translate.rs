@@ -43,7 +43,7 @@ use crate::nir_arena::{
     StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::nir_value_graph::{ValueId, ValueKind, ValuePool, null_kind};
 use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::reflect_marker::{BridgeCallee, bridge_callee};
@@ -1801,13 +1801,7 @@ impl FunctionTranslator<'_, '_> {
                     "[lower] `null` typed as a primitive: a synthesized placeholder \
                      at a primitive slot needs a zero of that type, not a reference null"
                 );
-                Some(match types.null_case(expr.type_id) {
-                    Some(case_index) => ValueKind::UnitCase {
-                        variant_type: expr.type_id,
-                        case_index,
-                    },
-                    None => ValueKind::Null,
-                })
+                Some(null_kind(expr.type_id, &types))
             }
             TirExprKind::VariantConstruct {
                 variant_type,
