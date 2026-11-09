@@ -528,7 +528,7 @@ impl AstVisitor<'_> for SpanCollector {
                 self.spans.insert(t.span.start, token_type::TYPE);
                 self.spans.insert(t.name_span.start, token_type::TYPE);
             }
-            Type::TypePackSpread(_, span) => self.spans.insert(span.start, token_type::TYPE),
+            Type::TypePackSpread(spread) => self.spans.insert(spread.span.start, token_type::TYPE),
             Type::Function(_)
             | Type::Tuple(_)
             | Type::Reference(_)

@@ -51,7 +51,7 @@ use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, 
 use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
-use crate::resolve::{Resolution, Resolutions};
+use crate::resolve::Resolutions;
 use crate::{Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.
@@ -78,24 +78,15 @@ enum WrappedCase {
 /// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
 /// which is what the pack stands for everywhere else.
 fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<ParamRef> {
-    match ty {
-        Type::Named(named) => match resolutions.get(named.id) {
-            Resolution::Binder(binder) => Some(ParamRef {
-                owner: resolutions.binder_owner(binder),
-                name: named.name.clone(),
-            }),
-            Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
-        },
-        // A spread names its pack by spelling alone.
+    let named = match ty {
+        Type::Named(named) => named,
         Type::Tuple(elems) => match elems.as_slice() {
-            [Type::TypePackSpread(name, _)] => Some(ParamRef {
-                owner: None,
-                name: name.clone(),
-            }),
-            _ => None,
+            [Type::TypePackSpread(spread)] => spread,
+            _ => return None,
         },
-        _ => None,
-    }
+        _ => return None,
+    };
+    ParamRef::at_site(named.id, &named.name, resolutions)
 }
 
 /// A callee's signature in its declaration's own frame, as a call site reads it.
@@ -398,8 +389,9 @@ enum CalleeIdentKind<'a> {
     AsIs(&'a ast::IdentExpr),
     /// `Self::suffix(...)` or `T::suffix(...)` where `T` is a type
     /// parameter currently bound to a concrete type. Holds the fully
-    /// resolved `Concrete::suffix` name.
-    Rewritten(String),
+    /// resolved `Concrete::suffix` name, and the type the prefix stood for:
+    /// the spelling may be a binder's, which no frame reached later means.
+    Rewritten { spelled: String, receiver: TypeId },
     /// A bare case call (`Some(x)`), the expected type having supplied the
     /// case. `owner` is the variant declaring it and `spelled` its
     /// `Variant::Case` form, so the qualified constructor path serves it.
@@ -448,7 +440,7 @@ impl CalleeIdentKind<'_> {
     fn effective_name(&self) -> &str {
         match self {
             Self::AsIs(ident) => &ident.name,
-            Self::Rewritten(name) | Self::Case { spelled: name, .. } => name,
+            Self::Rewritten { spelled: name, .. } | Self::Case { spelled: name, .. } => name,
             Self::AbstractTypeParam { .. } => {
                 unreachable!("AbstractTypeParam takes the type-param dispatch path")
             }
@@ -460,7 +452,15 @@ impl CalleeIdentKind<'_> {
     fn case_owner(&self) -> Option<DefId> {
         match self {
             Self::Case { owner, .. } => Some(*owner),
-            Self::AsIs(_) | Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
+            Self::AsIs(_) | Self::Rewritten { .. } | Self::AbstractTypeParam { .. } => None,
+        }
+    }
+
+    /// The type a rewritten `Self::` / `T::` prefix stood for.
+    fn rewritten_receiver(&self) -> Option<TypeId> {
+        match self {
+            Self::Rewritten { receiver, .. } => Some(*receiver),
+            Self::AsIs(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -468,7 +468,7 @@ impl CalleeIdentKind<'_> {
     fn as_is(&self) -> Option<&ast::IdentExpr> {
         match self {
             Self::AsIs(ident) => Some(ident),
-            Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
+            Self::Rewritten { .. } | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -975,7 +975,10 @@ impl TypeSystem {
             let self_name = self.type_table.borrow().name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
             // *provides* the trait whose default body this is.
-            return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
+            return CalleeIdentKind::Rewritten {
+                spelled: format!("{self_name}::{suffix}"),
+                receiver: self_type_id,
+            };
         }
 
         if let Some(&BinderInScope { type_id, .. }) = ctx.trait_ctx.type_params.get(prefix) {
@@ -1011,7 +1014,10 @@ impl TypeSystem {
         // Consumed as a declaration name: the static resolution keys on what an
         // `impl` header writes, which carries no module.
         let concrete_name = self.type_table.borrow().fq_type_name(type_id).to_display();
-        CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"))
+        CalleeIdentKind::Rewritten {
+            spelled: format!("{concrete_name}::{suffix}"),
+            receiver: type_id,
+        }
     }
 }
 
@@ -1057,7 +1063,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match callee_kind {
             CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
             CalleeIdentKind::AbstractTypeParam { .. } => None,
-            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten { .. } => {
                 self.lookup_variant_cases_at(receiver_site, prefix)
             }
         }
@@ -1238,7 +1244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(CaseOwner, VariantInfo, VariantCaseData)> {
         let owner = match callee_kind {
             CalleeIdentKind::Case { owner, .. } => self.case_owner_of_decl(*owner)?,
-            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten { .. } => {
                 self.case_owner_of_path(ident)?
             }
             CalleeIdentKind::AbstractTypeParam { .. } => return None,
@@ -1662,6 +1668,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
+        let rewritten_receiver = callee_kind.rewritten_receiver();
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()
@@ -1780,6 +1787,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let preselected = self.preselect_static_args(
                 StaticReceiver {
                     key: Some(&self.impl_target_at(receiver_site, &recv_name)),
+                    ty: rewritten_receiver,
                     ..StaticReceiver::of(&recv_name)
                 },
                 &method_name,
@@ -1915,7 +1923,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&static_args.method_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
+                let receiver_type =
+                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span);
                 self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
                 let StaticTypeArgs {
                     impl_args: impl_type_args_inferred,
@@ -2065,6 +2074,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // typed placeholder.
                 return self.resolve_static_method_call_from_qualified(
                     prefix,
+                    receiver_type,
                     suffix,
                     &args,
                     &impl_type_args_inferred,
@@ -2091,7 +2101,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else if suffix == "from"
                 && let [arg_type] = args[..]
                 && self.names_type_at(receiver_site, prefix)
-                && let receiver_type = self.resolve_unsited_type_name(prefix, call.span)
+                && let receiver_type =
+                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span)
                 && let Some(converted) =
                     self.convert_without_impl(call.id, receiver_type, arg_type, true)
             {
@@ -2103,7 +2114,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .variant_of_callee(&callee_kind, receiver_site, prefix)
                 .is_some()
             {
-                return self.blanket_static_or_unknown(prefix, suffix, ident, call, &args, ctx);
+                let receiver =
+                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span);
+                return self.blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
@@ -2117,7 +2130,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // A type, resource included, with no such static method.
             else if self.names_type_at(receiver_site, prefix) {
-                return self.blanket_static_or_unknown(prefix, suffix, ident, call, &args, ctx);
+                let receiver =
+                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span);
+                return self.blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
@@ -3231,6 +3246,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bounds: ScopedBound::pin_declared(&param, None),
                 param: ParamRef {
                     owner,
+                    family_decl: None,
                     name: param.name,
                 },
             })
@@ -3296,7 +3312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             scope.bind_param(
                 &binding.param.name,
-                BinderInScope::standing_for(i as u32, in_scope[i], binding.param.owner),
+                BinderInScope::standing_for(i as u32, in_scope[i], &binding.param),
                 bounds.clone(),
             );
         }
@@ -3976,6 +3992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|param| ParamRef {
                 owner,
+                family_decl: None,
                 name: param.name.clone(),
             })
             .collect();
@@ -4011,7 +4028,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .filter_map(|assoc| {
                             let target =
                                 assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)?;
-                            let target_idx = names.iter().position(|n| n.is_written_as(&target))?;
+                            let target_idx = names.iter().position(|n| *n == target)?;
                             self.tysys
                                 .is_unbound_type_param(args[target_idx])
                                 .then_some((target_idx, assoc))
@@ -4605,6 +4622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|(name, slot)| ParamRef {
                     owner: table.type_param_id(*slot).map(|id| id.owner),
+                    family_decl: None,
                     name: name.clone(),
                 })
                 .collect()
@@ -5216,10 +5234,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_type
     }
 
+    /// The type a static call's receiver `prefix` names: the type a rewritten
+    /// `Self::` / `T::` prefix stood for, else what its segment resolves to.
+    fn static_receiver_written(
+        &mut self,
+        rewritten: Option<TypeId>,
+        site: Option<AstId>,
+        prefix: &str,
+        span: Span,
+    ) -> TypeId {
+        match (rewritten, site) {
+            (Some(receiver), _) => receiver,
+            (None, Some(site)) => self.resolve_named_type(site, prefix, span, false),
+            (None, None) => self.resolve_unsited_type_name(prefix, span),
+        }
+    }
+
     /// `prefix::suffix` answered by a value blanket's static, indexed under the
     /// blanket's receiver param, or the diagnostic for a name reaching no function.
     fn blanket_static_or_unknown(
         &mut self,
+        receiver: TypeId,
         prefix: &str,
         suffix: &str,
         ident: &ast::IdentExpr,
@@ -5229,7 +5264,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let method_id = ident.segments.last().map(|seg| seg.id);
         if let Some(return_type) = self.resolve_named_type_blanket_static(
-            prefix, suffix, call.id, method_id, args, &call.args, call.span, ctx,
+            receiver, prefix, suffix, call.id, method_id, args, &call.args, call.span, ctx,
         ) {
             return return_type;
         }
@@ -5242,6 +5277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     pub(super) fn resolve_named_type_blanket_static(
         &mut self,
+        receiver_ty: TypeId,
         type_name: &str,
         method: &str,
         call_id: AstId,
@@ -5251,9 +5287,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        // `type_name` is the receiver spelling after `Self::` / `T::`
-        // rewriting, which no source segment names.
-        let receiver_ty = self.resolve_unsited_type_name(type_name, span);
         // The rules first, since a blanket is a candidate among the rest: two
         // traits blanketing one receiver supply the name and separate nothing,
         // which is the ambiguity every other spelling of that shape reports.

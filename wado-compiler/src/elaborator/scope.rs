@@ -26,15 +26,17 @@ use super::util;
 use super::{AbstractSelections, Elaborator};
 use crate::defs::{DefId, DefTable};
 use crate::name::{FqTraitName, FqTypeName};
-use crate::resolve::Resolutions;
+use crate::resolve::{Resolution, Resolutions};
 use crate::token::Span;
 
 /// A type parameter as the declaration `owner` writes it: a method's `U` and
-/// its impl's `U` are two parameters, whatever a frame calls them. `None` for a
-/// name no declaration owns.
+/// its impl's `U` are two parameters, whatever a frame calls them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ParamRef {
     pub(super) owner: Option<DefId>,
+    /// Where a parameter no item owns is written: a generic associated type's
+    /// own, which only its family declares.
+    pub(super) family_decl: Option<ast::AstId>,
     pub(super) name: String,
 }
 
@@ -42,15 +44,35 @@ impl ParamRef {
     pub(super) fn of(owner: DefId, name: &str) -> Self {
         Self {
             owner: Some(owner),
+            family_decl: None,
             name: name.to_string(),
         }
     }
 
     /// The parameter `param` declares.
     pub(super) fn declared(param: &ast::GenericParam, resolutions: &Resolutions) -> Self {
+        Self::of_binder(param.id, &param.name, resolutions)
+    }
+
+    /// The parameter a reference site written `name` resolves to, if it
+    /// resolves to one.
+    pub(super) fn at_site(
+        site: ast::AstId,
+        name: &str,
+        resolutions: &Resolutions,
+    ) -> Option<Self> {
+        match resolutions.get(site) {
+            Resolution::Binder(binder) => Some(Self::of_binder(binder, name, resolutions)),
+            Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
+        }
+    }
+
+    fn of_binder(binder: ast::AstId, name: &str, resolutions: &Resolutions) -> Self {
+        let owner = resolutions.binder_owner(binder);
         Self {
-            owner: resolutions.binder_owner(param.id),
-            name: param.name.clone(),
+            owner,
+            family_decl: owner.is_none().then_some(binder),
+            name: name.to_string(),
         }
     }
 
@@ -65,12 +87,6 @@ impl ParamRef {
             .map(|param| Self::declared(param, resolutions))
             .zip(args.iter().copied())
             .collect()
-    }
-
-    /// Whether a site writing `written` names this parameter. A pack spread
-    /// carries no site, so it names one by spelling alone.
-    pub(super) fn is_written_as(&self, written: &ParamRef) -> bool {
-        self.name == written.name && written.owner.is_none_or(|owner| self.owner == Some(owner))
     }
 
     /// The parameter as a type name spells it.
@@ -112,10 +128,11 @@ impl BinderInScope {
         }
     }
 
-    /// The parameter of `owner` bound to a site's argument.
-    pub(super) fn standing_for(index: u32, type_id: TypeId, owner: Option<DefId>) -> Self {
+    /// The parameter `param` bound to a site's argument.
+    pub(super) fn standing_for(index: u32, type_id: TypeId, param: &ParamRef) -> Self {
         Self {
-            owner,
+            owner: param.owner,
+            decl: param.family_decl,
             ..Self::undeclared(index, type_id)
         }
     }
@@ -126,6 +143,11 @@ impl BinderInScope {
             Some(param) => Self::declared(index, type_id, param),
             None => Self::undeclared(index, type_id),
         }
+    }
+
+    /// Whether `other` is this same parameter bound again.
+    fn stands_for_same(&self, other: &Self) -> bool {
+        self.type_id == other.type_id && self.decl == other.decl && self.owner == other.owner
     }
 
     /// A name in scope that no parameter declares — see [`Self::decl`].
@@ -478,22 +500,26 @@ impl TraitContext {
     }
 
     /// Bind `name` to `binder`, keeping the binder it shadows with its bounds.
+    ///
+    /// A binder of the type the name already reaches is a second parameter
+    /// standing for that type: a callee's `K` bound to the caller's `K`, or
+    /// two `fn`-bound parameters of one signature. Both stay reachable by
+    /// identity, and the bounds stay with the type the name still reaches.
     pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
-        // The name already reaching this binder shadows nothing.
-        if self
-            .type_params
-            .get(name)
-            .is_some_and(|held| held.type_id == binder.type_id)
-        {
+        let Some(held) = self.type_params.insert(name.to_string(), binder) else {
+            return;
+        };
+        if held.stands_for_same(&binder) {
             return;
         }
-        if let Some(shadowed) = self.type_params.insert(name.to_string(), binder) {
-            let bounds = self
-                .type_param_bounds
+        let bounds = if held.type_id == binder.type_id {
+            Vec::new()
+        } else {
+            self.type_param_bounds
                 .shift_remove(name)
-                .unwrap_or_default();
-            self.shadowed.push((name.to_string(), shadowed, bounds));
-        }
+                .unwrap_or_default()
+        };
+        self.shadowed.push((name.to_string(), held, bounds));
     }
 
     /// Unbind every type parameter, for a frame naming its own.
@@ -693,7 +719,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map(|(slot, (param, type_id))| {
                 (
                     param.name.clone(),
-                    BinderInScope::standing_for(slot as u32, *type_id, param.owner),
+                    BinderInScope::standing_for(slot as u32, *type_id, param),
                 )
             })
             .collect();
@@ -715,7 +741,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
         for (slot, (param, type_id)) in space.iter().enumerate() {
-            let binder = BinderInScope::standing_for(base + slot as u32, *type_id, param.owner);
+            let binder = BinderInScope::standing_for(base + slot as u32, *type_id, param);
             scope.annotate_ctx.trait_ctx.bind(&param.name, binder);
         }
         body(&mut scope)

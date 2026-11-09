@@ -146,7 +146,7 @@ fn collect_type_heads(ty: &ast::Type, out: &mut Vec<(AstId, String)>) {
                 collect_type_heads(element, out);
             }
         }
-        ast::Type::TypePackSpread(_, _) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
+        ast::Type::TypePackSpread(_) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
     }
 }
 

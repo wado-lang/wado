@@ -294,7 +294,7 @@ impl ImplParamSlots {
 fn target_arg_names(arg: &Type, name: &str) -> bool {
     match arg {
         Type::Named(n) => n.name == name,
-        Type::TypePackSpread(spread, _) => spread == name,
+        Type::TypePackSpread(spread) => spread.name == name,
         _ => false,
     }
 }
@@ -2162,7 +2162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut entries = Vec::new();
             for (i, elem) in elems.iter().enumerate() {
                 match elem {
-                    Type::TypePackSpread(name, _) => {
+                    Type::TypePackSpread(ast::NamedType { name, .. }) => {
                         // Find the pack's index from the impl block's type_params
                         let pack_idx = header
                             .type_params

@@ -251,14 +251,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let declaring = self.declaring_space(*owning_trait, assoc_name, trait_args.as_deref());
         let mut space = declaring.space.clone();
-        // A family's own parameter is owned by no item a site resolves to.
+        let resolutions = &self.tysys.resolutions;
         space.extend(
             decl.type_params
                 .iter()
-                .map(|param| ParamRef {
-                    owner: None,
-                    name: param.name.clone(),
-                })
+                .map(|param| ParamRef::declared(param, resolutions))
                 .zip(args.iter().copied()),
         );
         let sig = tt
@@ -3418,6 +3415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_static_method_call_from_qualified(
         &mut self,
         struct_name: &str,
+        receiver_type: TypeId,
         method_name: &str,
         args: &[TypeId],
         impl_type_args: &[TypeId],
@@ -3646,7 +3644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let declaring_trait = self.tysys.signatures.declaring_trait(sig);
                 let receiver = match &newtype_dispatch {
                     Some((_, base, _)) => *base,
-                    None => self.resolve_unsited_type_name(struct_name, span),
+                    None => receiver_type,
                 };
                 self.value_default_slot_bindings(
                     &own_params,

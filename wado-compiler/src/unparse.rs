@@ -3689,9 +3689,9 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
             output.push_str("&mut ");
             unparse_type_into(inner, output);
         }
-        Type::TypePackSpread(name, _) => {
+        Type::TypePackSpread(spread) => {
             output.push_str("..");
-            output.push_str(name);
+            output.push_str(&spread.name);
         }
         Type::NamespacedGeneric(ng) => {
             output.push_str(&ng.namespace);

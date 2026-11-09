@@ -5762,7 +5762,8 @@ impl Parser {
                 });
                 return Ok(Type::Error(span));
             }
-            return Ok(Type::TypePackSpread(name, span));
+            let id = self.alloc_ast_id();
+            return Ok(Type::TypePackSpread(NamedType { id, name, span }));
         }
         self.parse_type()
     }

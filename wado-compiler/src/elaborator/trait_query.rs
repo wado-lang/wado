@@ -2591,7 +2591,7 @@ impl TypeSystem {
         // checked against its bounds.
         if let ast::Type::Tuple(elements) = impl_ty {
             return elements.iter().find_map(|elem| {
-                let ast::Type::TypePackSpread(name, _) = elem else {
+                let ast::Type::TypePackSpread(ast::NamedType { name, .. }) = elem else {
                     return None;
                 };
                 type_args
@@ -3339,8 +3339,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let bounds = ScopedBound::pin_declared(param, Some(implementing));
                 let bound_to = slot.and_then(|slot| {
                     let &arg = concrete_type_args.get(slot as usize)?;
-                    let owner = scope.tysys.resolutions.binder_owner(param.id);
-                    Some(BinderInScope::standing_for(slot, arg, owner))
+                    let param = ParamRef::declared(param, &scope.tysys.resolutions);
+                    Some(BinderInScope::standing_for(slot, arg, &param))
                 });
                 match bound_to {
                     Some(binder) => scope.bind_param(&param.name, binder, bounds),
@@ -3413,7 +3413,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             scope.set_self_binding(implementing);
             scope.bind_param(
                 &info.blanket_param.name,
-                BinderInScope::standing_for(0, concrete_type_id, info.blanket_param.owner),
+                BinderInScope::standing_for(0, concrete_type_id, &info.blanket_param),
                 ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
 

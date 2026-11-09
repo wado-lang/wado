@@ -1502,7 +1502,7 @@ impl AstVisitor<'_> for Resolver<'_> {
 
     fn visit_type(&mut self, ty: &Type) {
         match ty {
-            Type::Named(named) => {
+            Type::Named(named) | Type::TypePackSpread(named) => {
                 self.record_name(named.id, &named.name);
             }
             Type::Generic(generic) => {
@@ -1521,7 +1521,6 @@ impl AstVisitor<'_> for Resolver<'_> {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::Function(_)
-            | Type::TypePackSpread(..)
             | Type::Infer(_)
             | Type::Error(_) => ast::walk_type(self, ty),
         }
@@ -1677,7 +1676,7 @@ mod tests {
     /// visible here rather than as a consumer falling back to a spelling.
     fn reference_sites(ty: &Type, out: &mut Vec<AstId>) {
         match ty {
-            Type::Named(n) => out.push(n.id),
+            Type::Named(n) | Type::TypePackSpread(n) => out.push(n.id),
             Type::Generic(g) => {
                 out.push(g.id);
                 for a in &g.args {
@@ -1702,7 +1701,7 @@ mod tests {
                 }
                 reference_sites(&f.return_type, out);
             }
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
+            Type::Infer(_) | Type::Error(_) => {}
         }
     }
 

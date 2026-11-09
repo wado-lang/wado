@@ -644,7 +644,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     ) -> Vec<TirTypeParam> {
         let mut params = Vec::new();
         for element in elements {
-            let ast::Type::TypePackSpread(name, _) = element else {
+            let ast::Type::TypePackSpread(ast::NamedType { name, .. }) = element else {
                 continue;
             };
             let Some(index) = slots.of_name(name) else {

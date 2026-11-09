@@ -1114,7 +1114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _)
+            | Type::TypePackSpread(_)
             | Type::Infer(_)
             | Type::Error(_) => false,
         }

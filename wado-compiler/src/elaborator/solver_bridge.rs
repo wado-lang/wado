@@ -543,7 +543,7 @@ impl Lowering {
                 Ok(SolverType::Decl(declared(generic.id)?, args))
             }
             Type::Tuple(elems) => all(elems).map(SolverType::Tuple),
-            Type::TypePackSpread(name, _) => match (written.param)(name).ok_or(Unsaid::Open)? {
+            Type::TypePackSpread(crate::ast::NamedType { name, .. }) => match (written.param)(name).ok_or(Unsaid::Open)? {
                 ParamKind::Pack(index) | ParamKind::Type(index) => Ok(SolverType::Pack(index)),
                 ParamKind::Signature(_) => Err(Unsaid::Unsayable),
             },

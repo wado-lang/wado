@@ -2754,7 +2754,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
-        ast::Type::TypePackSpread(name, _) => name::FqTypeName::pack_spread(name),
+        ast::Type::TypePackSpread(spread) => name::FqTypeName::pack_spread(&spread.name),
         ast::Type::Function(ft) => {
             let mut with_clause = Vec::new();
             for effect in &ft.effects {
@@ -2880,7 +2880,7 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
         ast::Type::MutReference(inner) => {
             name::ref_type_name(name::RefKind::Mut, &written_type_source(inner))
         }
-        ast::Type::TypePackSpread(pack, _) => name::type_pack_name(pack),
+        ast::Type::TypePackSpread(pack) => name::type_pack_name(&pack.name),
         ast::Type::Infer(_) => "_".to_string(),
         ast::Type::Error(_) => "<error>".to_string(),
     }

@@ -111,7 +111,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
-            Type::TypePackSpread(name, span) => {
+            Type::TypePackSpread(spread) => {
+                let (name, span) = (&spread.name, &spread.span);
                 let repeat = repeat_pack_name(name);
                 if let Some(&BinderInScope { type_id, .. }) =
                     self.annotate_ctx.trait_ctx.type_params.get(&repeat)
@@ -119,24 +120,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if self.tysys.type_table.borrow().is_tuple(type_id) {
                         return type_id;
                     }
-                    let element = self.resolve_unsited_type_name(name, *span);
+                    let element = self.resolve_named_type(spread.id, name, *span, false);
                     return self
                         .tysys
                         .type_table
                         .borrow_mut()
                         .map_pack(type_id, element);
                 }
-                // Look up the type pack parameter
-                if let Some(&BinderInScope { type_id, .. }) =
-                    self.annotate_ctx.trait_ctx.type_params.get(name)
-                {
+                if let Some(type_id) = self.binder_at(spread.id, name) {
                     if self.tysys.type_table.borrow().is_tuple(type_id) {
                         return type_id;
                     }
                     self.tysys.type_table.borrow_mut().plain_pack(type_id)
                 } else {
                     // An unknown element is the name check's to report.
-                    let element = self.resolve_unsited_type_name(name, *span);
+                    let element = self.resolve_named_type(spread.id, name, *span, false);
                     if element != TypeTable::UNKNOWN {
                         let _ = self.emit(TypeError::RepeatOutsideSignature {
                             element: name.clone(),
@@ -681,7 +679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.walk_type_heads(element, head);
                 }
             }
-            Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
+            Type::TypePackSpread(_) | Type::Infer(_) | Type::Error(_) => {}
         }
     }
 
@@ -842,6 +840,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(resolved)
     }
 
+    /// The type the parameter the resolver bound `site` to stands for here,
+    /// wherever the frame has moved it: a method's parameter shadowing an
+    /// impl's letter is not the parameter the impl's bounds name.
+    fn binder_at(&self, site: AstId, name: &str) -> Option<TypeId> {
+        let Resolution::Binder(binder) = self.tysys.resolutions.get(site) else {
+            return None;
+        };
+        let owner = self.tysys.resolutions.binder_owner(binder);
+        let held = self.annotate_ctx.trait_ctx.binder_for(binder, owner, name)?;
+        Some(held.type_id)
+    }
+
     fn resolve_named_type_at(
         &mut self,
         site: Option<AstId>,
@@ -858,22 +868,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        // A parameter is the one the resolver bound the name to, wherever the
-        // frame has moved it: a method's parameter shadowing an impl's letter
-        // is not the parameter the impl's bounds name.
-        if let Some(site) = site
-            && let Resolution::Binder(binder) = self.tysys.resolutions.get(site)
-        {
-            let owner = self.tysys.resolutions.binder_owner(binder);
-            if let Some(&BinderInScope { type_id, .. }) =
-                self.annotate_ctx.trait_ctx.binder_for(binder, owner, name)
-            {
-                return type_id;
-            }
-        }
-        if let Some(&BinderInScope { type_id, .. }) =
-            self.annotate_ctx.trait_ctx.type_params.get(name)
-        {
+        if let Some(type_id) = site.and_then(|site| self.binder_at(site, name)) {
             return type_id;
         }
 
@@ -2030,7 +2025,7 @@ impl TypeLookup<'_> {
             // `UNKNOWN`, so a generic tuple method (`Tuple<..T>^Eq::eq`)
             // monomorphizes against `Tuple<unknown>` and never registers at
             // WIR build.
-            Type::TypePackSpread(name, _span) => {
+            Type::TypePackSpread(ast::NamedType { name, .. }) => {
                 if let Some(index) = type_params.iter().position(|p| &p.name == name) {
                     param(type_table, index, name, true)
                 } else {

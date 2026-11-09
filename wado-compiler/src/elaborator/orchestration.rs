@@ -2706,7 +2706,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
         match ty {
             Type::Named(named) => self.check_type_name(&named.name, named.span),
             // A spread names a pack, or the element type it repeats.
-            Type::TypePackSpread(name, span) => self.check_type_name(name, *span),
+            Type::TypePackSpread(spread) => self.check_type_name(&spread.name, spread.span),
             Type::Infer(span) if !self.allow_infer => {
                 self.report(TypeError::InferPlaceholderNotAllowed { span: *span });
             }
