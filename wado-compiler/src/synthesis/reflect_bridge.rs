@@ -11,13 +11,9 @@ use std::rc::Rc;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeArgMap, TypeId};
-||||||| a6150904fc0
-use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeId};
-=======
-use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TirVariantCase, TypeId};
->>>>>>> origin/main
+use crate::tir::{
+    ResolvedType, StructDef, TemplateShape, TirFunction, TirVariantCase, TypeArgMap, TypeId,
+};
 
 use super::affine_drop;
 use super::traits::{
