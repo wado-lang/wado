@@ -1317,6 +1317,10 @@ pub struct LocalMethodName {
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
+    /// The parameter a type-parameter receiver is, where it is one rather than
+    /// a projection. Its spelling cannot say which: a method's own `T` may
+    /// shadow its impl's.
+    pub receiver_param: Option<tir::TypeParamId>,
     /// Whether this method came from an `impl Trait for &T` / `&mut T` block —
     /// a semantic flag (self-adjustment, codegen), distinct from the receiver's
     /// head being `&` (which `receiver` records).
@@ -1454,6 +1458,7 @@ impl Receiver {
                 | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
                 | TypeHead::Unresolved(_)
+                | TypeHead::Infer { .. }
                 | TypeHead::Projection { .. }
                 | TypeHead::Tuple
                 | TypeHead::Function { .. } => None,
@@ -1676,6 +1681,7 @@ impl LocalMethodName {
             method_name,
             method_type_args: vec![],
             is_type_param_receiver: false,
+            receiver_param: None,
             is_ref_impl: false,
             cm_name: None,
         }
@@ -1746,6 +1752,7 @@ impl LocalMethodName {
             method_name,
             method_type_args,
             is_type_param_receiver: false,
+            receiver_param: None,
             is_ref_impl: false,
             cm_name: None,
         }
@@ -1772,6 +1779,7 @@ impl LocalMethodName {
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
             is_type_param_receiver: self.is_type_param_receiver,
+            receiver_param: self.receiver_param,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
@@ -1823,6 +1831,7 @@ impl LocalMethodName {
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
             is_type_param_receiver: false,
+            receiver_param: None,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
@@ -1837,6 +1846,7 @@ impl LocalMethodName {
                 receiver: Receiver::RefTo(kind, pointee.head_only()),
                 struct_type_args: pointee.args().to_vec(),
                 is_type_param_receiver: false,
+                receiver_param: None,
                 ..self.clone()
             },
             None => self.with_substituted_struct_name(owner),
@@ -2972,23 +2982,18 @@ mod tests {
     }
 
     #[test]
-    fn a_function_type_name_spells_as_its_mangle_and_substitutes_inside() {
-        let i32_ = FqTypeName::builtin("i32");
-        let t = FqTypeName::binder("T");
+    fn a_function_type_name_spells_as_its_mangle() {
         let inner = FqTypeName::function(false, vec![], FqTypeName::builtin("()"), vec![]);
         let f = FqTypeName::function(
             true,
-            vec![t.clone(), i32_.clone()],
+            vec![FqTypeName::binder("T"), FqTypeName::builtin("i32")],
             inner,
             vec![tir::EffectRef::Param { name: "E".into() }],
         );
         assert_eq!(f.to_mangled(), "fn mut(T,i32)->(fn()->())with(E)");
         assert_eq!(f.to_display(), "fn mut(T, i32) -> (fn() -> ()) with E");
         assert!(f.mentions_binder());
-        let at = f.substitute(&t, &i32_);
-        assert_eq!(at.to_mangled(), "fn mut(i32,i32)->(fn()->())with(E)");
-        assert!(!at.mentions_binder());
-        assert_eq!(at.head_only(), at);
+        assert_eq!(f.head_only(), f);
     }
 
     #[test]
@@ -3538,6 +3543,9 @@ pub enum TypeHead {
     /// A written name that reaches no declaration, by its spelling. Resolving
     /// it reported the error, so nothing asks about it again.
     Unresolved(String),
+    /// A type inference has yet to answer, with its spelling. No impl answers
+    /// it until then.
+    Infer { var: tir::InferVarId, name: String },
     /// A function type, its signature held as names so a binder inside one
     /// stays a binder and the solver can match it. The signature is the head:
     /// it is the shape itself, not an instantiation of one, so no name carries
@@ -3606,6 +3614,7 @@ impl TypeHead {
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
             | Self::Unresolved(name)
+            | Self::Infer { name, .. }
             | Self::Binder { name, .. } => name,
             Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
@@ -3624,6 +3633,7 @@ impl TypeHead {
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
             | Self::Unresolved(name)
+            | Self::Infer { name, .. }
             | Self::Binder { name, .. } => name,
             Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
@@ -3641,6 +3651,7 @@ impl TypeHead {
             | Self::ParamBucket { .. }
             | Self::Builtin(_)
             | Self::Unresolved(_)
+            | Self::Infer { .. }
             | Self::Binder { .. }
             | Self::Projection { .. }
             | Self::Tuple
@@ -3656,6 +3667,7 @@ impl TypeHead {
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
             Self::Builtin(_)
             | Self::Unresolved(_)
+            | Self::Infer { .. }
             | Self::Binder { .. }
             | Self::Projection { .. }
             | Self::Tuple
@@ -3699,10 +3711,9 @@ impl FqTypeName {
         })
     }
 
-    /// A template's own type-parameter binder (a generic function's `T`, a pack
-    /// member `F`). A binder is not a declaration and has no module. Use
-    /// [`Self::binder_of_impl`] for one an `impl` block binds — that one has an
-    /// identity beyond its spelling.
+    /// A binder known only by its spelling (a pack member `F`, a name a
+    /// synthesized template writes). Use [`Self::binder_of`] for a parameter an
+    /// item declares — that one has an identity beyond its spelling.
     #[must_use]
     pub fn binder(name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {
@@ -3725,14 +3736,15 @@ impl FqTypeName {
             .is_some_and(|name| name.starts_with(".."))
     }
 
-    /// The receiver parameter `name` of the `impl` block `def` declares (`T` in
-    /// `impl<T: Bound> Trait for T`). The one way to build this name, so no two
-    /// callers can build two.
+    /// The type parameter `name` the item `def` declares (`T` in
+    /// `impl<T: Bound> Trait for T`, `U` in `fn m<U>`). The one way to build
+    /// this name, so no two callers can build two: a method's `U` shadowing its
+    /// impl's is another binder however both are spelled.
     #[must_use]
-    pub fn binder_of_impl(defs: &DefTable, def: DefId, name: &str) -> Self {
+    pub fn binder_of(defs: &DefTable, def: DefId, name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {
             name: name.to_string(),
-            owner: Some(BinderOwner::of_impl(defs.module(def), defs.ast_id(def))),
+            owner: Some(BinderOwner::of_item(defs.module(def), defs.ast_id(def))),
         })
     }
 
@@ -3820,6 +3832,14 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Unresolved(name.to_string()))
     }
 
+    #[must_use]
+    pub fn infer(var: tir::InferVarId) -> Self {
+        Self::of_head_kind(TypeHead::Infer {
+            var,
+            name: var.to_string(),
+        })
+    }
+
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,
     /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
@@ -3889,22 +3909,27 @@ impl FqTypeName {
     /// name in some template's own parameter space rather than a type.
     #[must_use]
     pub fn mentions_binder(&self) -> bool {
-        let head_mentions = match &self.head {
-            TypeHead::Binder { .. } => true,
-            TypeHead::Projection(head) => {
-                head.base.mentions_binder()
-                    || head
-                        .trait_args
-                        .iter()
-                        .flatten()
-                        .any(FqTypeName::mentions_binder)
-            }
-            TypeHead::Function { signature, .. } => {
-                signature.iter().any(FqTypeName::mentions_binder)
-            }
-            _ => false,
-        };
-        head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
+        self.mentions(&|head| matches!(head, TypeHead::Binder { .. }))
+    }
+
+    /// Whether `pred` holds of this name's head or of a head inside it.
+    pub fn mentions(&self, pred: &impl Fn(&TypeHead) -> bool) -> bool {
+        let head_mentions = pred(&self.head)
+            || match &self.head {
+                TypeHead::Projection(head) => {
+                    head.base.mentions(pred)
+                        || head
+                            .trait_args
+                            .iter()
+                            .flatten()
+                            .any(|arg| arg.mentions(pred))
+                }
+                TypeHead::Function { signature, .. } => {
+                    signature.iter().any(|ty| ty.mentions(pred))
+                }
+                _ => false,
+            };
+        head_mentions || self.args.iter().any(|arg| arg.mentions(pred))
     }
 
     /// Whether some substitution for either side's binders and projections
@@ -3922,6 +3947,7 @@ impl FqTypeName {
             | TypeHead::ParamBucket { .. }
             | TypeHead::Builtin(_)
             | TypeHead::Unresolved(_)
+            | TypeHead::Infer { .. }
             | TypeHead::Tuple
             | TypeHead::Function { .. } => false,
         };
@@ -4012,7 +4038,9 @@ impl FqTypeName {
             TypeHead::ParamBucket { module, name } => {
                 out.push_str(&format!("{module}/{name}#param"));
             }
-            TypeHead::Builtin(name) | TypeHead::Unresolved(name) => out.push_str(name),
+            TypeHead::Builtin(name) | TypeHead::Unresolved(name) | TypeHead::Infer { name, .. } => {
+                out.push_str(name);
+            }
             TypeHead::Binder { name, owner } => match owner {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.mangled())),
                 None => out.push_str(name),
@@ -4039,28 +4067,6 @@ impl FqTypeName {
             out.push('>');
         }
         out
-    }
-
-    /// This name with every occurrence of the type `old` replaced by `new` —
-    /// the whole name when it *is* `old`, and otherwise each argument,
-    /// recursively.
-    ///
-    /// A substitution over the structure. Rewriting the mangled spelling
-    /// instead means finding `old`'s mangling inside `self`'s and splicing,
-    /// which cannot tell a type from a type whose name contains it and leaves
-    /// the identity that produced the spelling unchanged.
-    #[must_use]
-    pub fn substitute(&self, old: &FqTypeName, new: &FqTypeName) -> FqTypeName {
-        if self == old {
-            return new.clone();
-        }
-        // A reference's pointee substitutes on its own: `&T` is `T` under a
-        // prefix, and `old` naming the pointee must reach it however many
-        // prefixes stand in front.
-        if let Some((outer, pointee)) = self.split_reference() {
-            return pointee.substitute(old, new).with_reference(outer);
-        }
-        self.descend(&|inner| inner.substitute(old, new))
     }
 
     /// This name with `at` applied at every position a type stands in, a
@@ -4254,8 +4260,8 @@ impl std::hash::Hash for BinderOwner {
 }
 
 impl BinderOwner {
-    /// The receiver binder of the `impl` block declared at `id` in `module`.
-    fn of_impl(module: &ModuleSource, id: AstId) -> Self {
+    /// A parameter of the item declared at `id` in `module`.
+    fn of_item(module: &ModuleSource, id: AstId) -> Self {
         Self {
             id,
             assoc: None,

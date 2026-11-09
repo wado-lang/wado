@@ -59,7 +59,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new" = fn() -> [i64, ref "core:prelude/list.wado//List<i64>"];  // TypeId(22)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -357,10 +357,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"() {
-    return global:global_init_order_through_generic_method.wado::SEED.k, "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i64>());
+    return global:global_init_order_through_generic_method.wado::SEED.k, "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(array.new_fixed<i64>());
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
     let used: i32;
     used = builtin::array_len(elements);
     return struct.new "core:prelude/list.wado//List<i64>" { repr: elements, used: used };

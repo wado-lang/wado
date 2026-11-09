@@ -1,0 +1,42 @@
+// A method's own `U` shadows its impl's, yet the impl's bound `T: Pick<U>`
+// still means the impl's `U`: the call dispatches to `Pick<i32>` whatever the
+// method's `U` is.
+use { println, Stdout } from "core:cli";
+
+trait Pick<U> with () {
+    fn pick(&self) -> String;
+}
+
+impl Pick<i32> for String {
+    fn pick(&self) -> String {
+        return "i32";
+    }
+}
+
+impl Pick<bool> for String {
+    fn pick(&self) -> String {
+        return "bool";
+    }
+}
+
+struct H<T, U> {
+    t: T,
+    u: U,
+}
+
+impl<T: Pick<U>, U> H<T, U> {
+    #[allow(shadowed_name)]
+    fn m<U>(&self, _o: U) -> String {
+        return self.t.pick();
+    }
+}
+
+export fn run() with Stdout {
+    let h: H<String, i32> = H { t: "s", u: 1 };
+    println(h.m(true));
+}
+
+__DATA__
+{
+    "stdout": "i32\n"
+}

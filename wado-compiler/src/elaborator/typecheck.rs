@@ -7,7 +7,9 @@
 use crate::ast::{AstId, Expr};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId};
+use crate::tir::{
+    EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId, TypeParamId, is_open_row,
+};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -245,8 +247,7 @@ fn check_at(
         // value can also be written back through the slot, a narrower row would
         // admit a wider one, so there the rows match. An effect parameter or
         // variable is the effect check's to resolve.
-        let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
-        if !open(expected_effects) && !actual_effects.iter().any(EffectRef::is_var) {
+        if !is_open_row(expected_effects) && !actual_effects.iter().any(EffectRef::is_var) {
             let covers = |wide: &[EffectRef], narrow: &[EffectRef]| {
                 narrow.iter().all(|effect| wide.contains(effect))
             };
@@ -461,17 +462,17 @@ fn pack_shape_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable)
 
 /// The packs a layout names, sorted and deduplicated, so two tuples naming the
 /// same packs in different orders still compare as one type.
-fn packs_named(layout: &[TupleSlot]) -> Vec<&str> {
-    let mut names: Vec<&str> = layout
+fn packs_named(layout: &[TupleSlot]) -> Vec<TypeParamId> {
+    let mut packs: Vec<TypeParamId> = layout
         .iter()
         .filter_map(|slot| match slot {
-            TupleSlot::Pack(name) => Some(name.as_str()),
+            TupleSlot::Pack(pack) => Some(*pack),
             TupleSlot::Fixed => None,
         })
         .collect();
-    names.sort_unstable();
-    names.dedup();
-    names
+    packs.sort_unstable();
+    packs.dedup();
+    packs
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
@@ -685,11 +686,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        if !table
-            .pack_names(expected)
-            .iter()
-            .all(|name| self.binds_type_pack(name))
-        {
+        let binders = self.annotate_ctx.trait_ctx.binders();
+        if !table.packs(expected).into_iter().all(|pack| {
+            binders
+                .iter()
+                .any(|binder| table.type_param_id(binder.type_id) == Some(pack))
+        }) {
             return;
         }
         let (expected_name, found_name) = (table.name(expected), table.name(actual));

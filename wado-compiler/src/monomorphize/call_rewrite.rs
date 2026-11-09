@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::tir::{
     FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirLocal, TirModule, TirStmt, TirStmtKind,
+    TirFunction, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeParamId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
@@ -118,16 +118,27 @@ impl Monomorphizer {
             }
             _ => unreachable!("only a call or a function reference reaches an instance"),
         }
-        if let ResolvedType::TypeParam { index, .. } = type_table.get(expr.type_id)
-            && let Some(&concrete) = key
-                .impl_type_args
-                .iter()
-                .chain(&key.method_type_args)
-                .nth(*index as usize)
+        if let ResolvedType::TypeParam { id, .. } = *type_table.get(expr.type_id)
+            && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
+            && let Some(concrete) = instance_arg(&template.borrow(), &key, id)
         {
             expr.type_id = concrete;
         }
     }
+}
+
+/// What `key` gives `template`'s parameter `param`: an impl parameter the
+/// argument at its slot, a method's own the one at its position.
+fn instance_arg(
+    template: &TirFunction,
+    key: &InstantiationKey,
+    param: TypeParamId,
+) -> Option<TypeId> {
+    if template.impl_type_params.iter().any(|p| p.id == param) {
+        return key.impl_type_args.get(param.index as usize).copied();
+    }
+    let at = template.type_params.iter().position(|p| p.id == param)?;
+    key.method_type_args.get(at).copied()
 }
 
 /// Point `func` at the instance `key` names, recording in `monomorph_info` the

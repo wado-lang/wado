@@ -10,7 +10,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, TypeId, range_item};
+use crate::tir::{ResolvedType, TypeArgMap, TypeId, range_item};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -1098,11 +1098,11 @@ impl TypeSystem {
         unify(&self.type_table, param, arg, &mut bindings);
         // A binding dropped here leaves that slot spelled as it was written, so
         // the parameter can never equal the argument.
-        let substitution: IndexMap<u32, TypeId> = {
+        let substitution: TypeArgMap = {
             let tt = self.type_table.borrow();
             bindings
                 .iter()
-                .filter_map(|(&slot, &filled)| Some((tt.param_slot(slot)?, filled)))
+                .filter_map(|(&slot, &filled)| Some((tt.type_param_id(slot)?, filled)))
                 .collect()
         };
         let filled = self

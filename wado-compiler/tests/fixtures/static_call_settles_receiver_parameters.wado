@@ -1,0 +1,71 @@
+// A static call settles every parameter of its receiver, as a method call
+// does: one the block reaches only through a bound's associated type, and the
+// declaration's own where the method is a trait default the block inherits.
+
+trait Tr with () {
+    type Out;
+    fn out(&self) -> Self::Out;
+}
+
+struct A {}
+
+impl Tr for A {
+    type Out = i32;
+    fn out(&self) -> i32 {
+        return 5;
+    }
+}
+
+struct Foo<T> {
+    t: T,
+}
+
+impl<T: Tr<Out = U>, U> Foo<T> {
+    fn first(t: T) -> U {
+        return t.out();
+    }
+
+    fn wrap(t: T) -> Foo<T> {
+        return Foo { t };
+    }
+}
+
+trait Make with () {
+    fn make(n: i32) -> Self;
+
+    fn twice(n: i32) -> Self {
+        return Self::make(n * 2);
+    }
+
+    fn again(from: Self, n: i32) -> Self {
+        return Self::make(n);
+    }
+}
+
+struct W<T> {
+    n: i32,
+    t: Option<T>,
+}
+
+impl<T> Make for W<T> {
+    fn make(n: i32) -> W<T> {
+        return W { n, t: null };
+    }
+}
+
+test "a block parameter reached through a bound" {
+    assert Foo::first(A {}) == 5;
+    assert Foo::wrap(A {}).t.out() == 5;
+}
+
+test "an inherited default settles the receiver" {
+    let a: W<String> = W::twice(4);
+    assert a.n == 8;
+    let b = W::again(a, 5);
+    assert b.n == 5;
+    let c: W<String> = W::again(b, 6);
+    assert c.n == 6;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,41 @@
+// `Reg::<i32>::count` spells the block's arguments, which takes the call down
+// a path of its own. That path never projected `..V` off `Holes`, so the pack
+// closed empty and the method counted no holes.
+use { println, Stdout } from "core:cli";
+
+fn count<T: ReflectTemplate<Holes = [..V]>, ..V>(_t: T) -> i32 {
+    let mut n = 0;
+    for let _h of ReflectTemplate::<T>::members() {
+        n += 1;
+    }
+    return n;
+}
+
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> T {
+    return t;
+}
+
+struct Reg<K> {
+    k: K,
+}
+
+impl<K> Reg<K> {
+    fn count<T: ReflectTemplate<Holes = [..V]>, ..V>(_t: T) -> i32 {
+        let mut n = 0;
+        for let _h of ReflectTemplate::<T>::members() {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+export fn run() with Stdout {
+    let a = 1;
+    let b = "x";
+    println(`${count(tag`p${a}q${b}`)} ${Reg::<i32>::count(tag`p${a}q${b}`)}`);
+}
+
+__DATA__
+{
+    "stdout": "2 2\n"
+}

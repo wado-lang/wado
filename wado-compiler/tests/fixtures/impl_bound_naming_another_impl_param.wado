@@ -1,0 +1,39 @@
+// An impl's bound may name another of its parameters: `U: Uses<T>` on
+// `Holder<i32, I>` asks `I: Uses<i32>`. The bound was asked as written, so the
+// call was refused for `I` not implementing `Uses<T>`.
+use { println, Stdout } from "core:cli";
+
+trait Uses<X> with () {
+    fn use_it(&self, x: X) -> i32;
+}
+
+struct I {
+    n: i32,
+}
+
+impl Uses<i32> for I {
+    fn use_it(&self, x: i32) -> i32 {
+        return self.n + x;
+    }
+}
+
+struct Holder<T, U> {
+    u: U,
+    t: T,
+}
+
+impl<T, U: Uses<T>> Holder<T, U> {
+    fn run(&self) -> i32 {
+        return self.u.use_it(self.t);
+    }
+}
+
+export fn run() with Stdout {
+    let h = Holder { u: I { n: 1 }, t: 41 };
+    println(`${h.run()}`);
+}
+
+__DATA__
+{
+    "stdout": "42\n"
+}

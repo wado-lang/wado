@@ -1,0 +1,30 @@
+// `g`'s bound `T: Pick<U>` at `g(s, v)` asks `S: Pick<V>`, both `h`'s own
+// parameters, which `h`'s bound on `S` answers.
+use { println, Stdout } from "core:cli";
+
+trait Pick<U> with () {
+    fn pick(&self) -> String;
+}
+
+impl Pick<i32> for String {
+    fn pick(&self) -> String {
+        return "i32";
+    }
+}
+
+fn g<T: Pick<U>, U>(t: T, _u: U) -> String {
+    return t.pick();
+}
+
+fn h<V, S: Pick<V>>(s: S, v: V) -> String {
+    return g(s, v);
+}
+
+export fn run() with Stdout {
+    println(h("s", 1));
+}
+
+__DATA__
+{
+    "stdout": "i32\n"
+}

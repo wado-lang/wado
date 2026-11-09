@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use cranelift_entity::EntityRef;
 
 use crate::builtin_facts::{SideEffect, Storage};
+use crate::defs::DefId;
 use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::RefKind;
@@ -725,7 +726,7 @@ impl HeapEffects<'_> {
                 match tt.variant_template_cases(*def) {
                     Some(cases) => {
                         for &(_, _, payload) in cases {
-                            self.reach_template(payload, type_args, seen, out);
+                            self.reach_template(payload, *def, type_args, seen, out);
                         }
                     }
                     None => {
@@ -765,10 +766,11 @@ impl HeapEffects<'_> {
         }
     }
 
-    /// A variant case's payload, written over the declaration's parameters.
+    /// A variant case's payload, written over `variant`'s parameters.
     fn reach_template(
         &self,
         payload: TypeId,
+        variant: DefId,
         args: &[TypeId],
         seen: &mut IndexSet<TypeId>,
         out: &mut ObjectTypes,
@@ -778,19 +780,28 @@ impl HeapEffects<'_> {
             self.reach_into(payload, seen, out);
             return;
         }
+        let arg_of = |param: TypeId| {
+            let id = tt.type_param_id(param)?;
+            assert_eq!(
+                id.owner, variant,
+                "a payload names its variant's parameters"
+            );
+            args.get(id.index as usize).copied()
+        };
         match tt.get(payload) {
-            ResolvedType::TypeParam { index, .. } => match args.get(*index as usize) {
-                Some(&arg) => self.reach_into(arg, seen, out),
+            ResolvedType::TypeParam { .. } => match arg_of(payload) {
+                Some(arg) => self.reach_into(arg, seen, out),
                 None => {
                     out.set_any();
                 }
             },
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                let ResolvedType::TypeParam { index, .. } = tt.get(tt.peel_refs(payload)) else {
+                let pointee = tt.peel_refs(payload);
+                if !matches!(tt.get(pointee), ResolvedType::TypeParam { .. }) {
                     out.set_any();
                     return;
-                };
-                let Some(&arg) = args.get(*index as usize) else {
+                }
+                let Some(arg) = arg_of(pointee) else {
                     out.set_any();
                     return;
                 };

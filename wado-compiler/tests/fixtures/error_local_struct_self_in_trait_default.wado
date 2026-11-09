@@ -1,0 +1,35 @@
+// In a trait default method a local struct's `Self` field is the trait's own
+// `Self`, which each implementor fills differently. The struct is emitted once,
+// so it cannot vary with it: refused at the field rather than left for codegen,
+// which emitted an invalid module at `-O0` once two implementors used it.
+use { println, Stdout } from "core:cli";
+
+trait Tag {
+    fn n(&self) -> i32;
+
+    fn tag(&self) -> i32 {
+        struct Held { me: Self, k: i32 }
+        let held = Held { me: *self, k: 2 };
+        return held.k + held.me.n();
+    }
+}
+
+struct A { x: i32 }
+struct B { s: String, y: i32 }
+
+impl Tag for A {
+    fn n(&self) -> i32 { return self.x; }
+}
+
+impl Tag for B {
+    fn n(&self) -> i32 { return self.y + self.s.len(); }
+}
+
+export fn run() with Stdout {
+    println(`${A { x: 1 }.tag()} ${B { s: "ab", y: 10 }.tag()}`);
+}
+
+__DATA__
+{
+    "compile_error": ":11:23: analysis error: field 'me' of local struct `Held` is `Self`, which names a type parameter of the enclosing item; declare the parameter on the struct instead"
+}

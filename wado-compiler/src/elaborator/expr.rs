@@ -1,7 +1,6 @@
 //! Expression resolution (literals, identifiers, field access, index,
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
-use super::scope::BinderInScope;
 use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -49,7 +48,6 @@ use crate::elaborator::types::{
     ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
 };
 use crate::escape::{self, unescape_byte, unescape_char};
-use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::primitive::PrimitiveType;
 use crate::tir::StructDef;
@@ -760,11 +758,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::LabeledBlock(lb) => self.resolve_branching(expected_type, |this, expected| {
                 let overlays_before = this.tuple_overlay_counts();
                 let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected);
-                // A labeled block yields via `break label: value`, not a tail
-                // expression, so its trailing statement stays in statement
-                // position (a discarded tail `match` may have arms of
-                // differing types).
-                this.resolve_block(&lb.block, &mut frame, expected);
+                // The trailing statement is a branch beside the `break`s.
+                this.resolve_block_value(&lb.block, &mut frame, expected);
                 let target = frame.finish();
 
                 // Reify rebuilds the `LabeledBlock` from the AST, re-running
@@ -792,7 +787,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The expectation a branching expression takes as its result type: one
     /// still holding an inference variable, or still unknown (an unannotated
     /// closure's return), is for its branches to answer.
-    fn settled_result_expectation(&self, expected_type: Option<TypeId>) -> Option<TypeId> {
+    pub(super) fn settled_result_expectation(
+        &self,
+        expected_type: Option<TypeId>,
+    ) -> Option<TypeId> {
         expected_type.filter(|&t| {
             !self.type_has_infer_hole(t) && !self.tysys.type_table.borrow().is_indefinite(t)
         })
@@ -825,16 +823,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .chain(std::iter::once(tail_type))
             .collect();
         self.settle_branch_holes(&mut branch_types, expected_type);
-        let result_type =
-            expected_type.unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
+        let result_type = expected_type
+            .or_else(|| self.agreed_branch_type(&branch_types))
+            .unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
 
         self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
 
-        for &branch_type in &branch_types {
-            if branch_type != TypeTable::NEVER {
-                self.check_branch_type(branch_type, result_type, lb.span);
-            }
-        }
+        let branches: Vec<(TypeId, Span)> = branch_types
+            .into_iter()
+            .filter(|&branch_type| branch_type != TypeTable::NEVER)
+            .map(|branch_type| (branch_type, lb.span))
+            .collect();
+        self.check_branch_types(expected_type, result_type, &branches);
         result_type
     }
 
@@ -1935,7 +1935,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Generic instance - look up field from generic struct definition
             // and substitute type parameters with concrete type args.
             ResolvedType::Struct {
-                def: StructDef::Decl(_),
+                def: StructDef::Decl(decl),
                 type_args,
             } if !type_args.is_empty() => {
                 let name = self
@@ -1954,7 +1954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type = self.substitute_in_frame(*ftype, &type_args);
+                            let concrete_type = self.substitute_in_frame(*ftype, decl, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }
@@ -2489,11 +2489,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let overlays_before = self.tuple_overlay_counts();
         let (agreed, branches) = resolve(self, expected_type);
-        let retyped = self.settled_result_expectation(expected_type).is_none() && {
-            let table = self.tysys.type_table.borrow();
-            !table.is_indefinite(agreed) && branches.iter().any(|&b| table.is_indefinite(b))
-        };
-        if retyped {
+        let settled = self.settled_result_expectation(expected_type);
+        if branches
+            .iter()
+            .any(|&branch| self.retyped_branch(settled, agreed, branch))
+        {
             // The retry records each tuple for-of inside again; reify pairs an
             // instantiation with each walk it makes, so the first pass's go.
             for (key, instantiations) in &mut self.sem.types.tuple_overlays {
@@ -2502,6 +2502,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return resolve(self, Some(agreed)).0;
         }
         agreed
+    }
+
+    /// Whether [`Self::resolve_branching`] resolves `branch` again under
+    /// `agreed`, which the branches agreed on with no `settled` expectation.
+    /// Its check waits for that pass.
+    fn retyped_branch(&self, settled: Option<TypeId>, agreed: TypeId, branch: TypeId) -> bool {
+        let table = self.tysys.type_table.borrow();
+        settled.is_none() && !table.is_indefinite(agreed) && table.is_indefinite(branch)
+    }
+
+    /// [`Self::check_branch_type`] for each branch the agreed `result` does
+    /// not resolve again.
+    fn check_branch_types(
+        &mut self,
+        settled: Option<TypeId>,
+        result: TypeId,
+        branches: &[(TypeId, Span)],
+    ) {
+        for &(branch, span) in branches {
+            if !self.retyped_branch(settled, result, branch) {
+                self.check_branch_type(branch, result, span);
+            }
+        }
     }
 
     fn resolve_if_once(
@@ -2550,8 +2573,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         then_checked: bool,
     ) -> TypeId {
         let expected_type = self.settled_result_expectation(expected_type);
-        let type_id = if let Some(ty) = expected_type {
-            ty
+        // `None` once a mismatch is reported: the branches are not checked again.
+        let (type_id, check_then) = if let Some(ty) = expected_type {
+            (ty, Some(!then_checked))
         } else {
             let (then_type, else_type) = self.if_branch_types(if_expr);
             // `never` is the bottom type and an indefinite branch defers to its
@@ -2560,7 +2584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.agreed_branch_type(&[then_type, else_type]),
                 &if_expr.else_block,
             ) {
-                (Some(agreed), _) => agreed,
+                (Some(agreed), _) => (agreed, Some(true)),
                 (None, None) => {
                     if then_type != TypeTable::UNIT {
                         let type_name = self.tysys.type_table.borrow().name(then_type);
@@ -2570,7 +2594,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: if_expr.then_block.span,
                         });
                     }
-                    TypeTable::UNIT
+                    (TypeTable::UNIT, None)
                 }
                 (None, Some(else_block)) => {
                     let (then_name, else_name) = self
@@ -2583,7 +2607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found: else_name,
                         span: else_block.span,
                     });
-                    then_type
+                    (then_type, None)
                 }
             }
         };
@@ -2595,20 +2619,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
 
         // A settled expectation skipped agreement, so each branch is checked here
-        // lest one push the wrong type; `Unit` is statement position, where none is kept.
-        if expected_type.is_some() && type_id != TypeTable::UNIT {
-            if !then_checked {
+        // lest one push the wrong type. An agreed type may be a join neither
+        // branch was, whose row the check makes each branch's flow into. `Unit`
+        // is statement position, where none is kept.
+        if let Some(check_then) = check_then
+            && type_id != TypeTable::UNIT
+        {
+            let mut branches = Vec::new();
+            if check_then {
                 let then_type = self.ast_block_result_type(&if_expr.then_block);
-                self.check_branch_type(then_type, type_id, if_expr.then_block.span);
+                branches.push((then_type, if_expr.then_block.span));
             }
-            match &if_expr.else_block {
-                Some(eb) => {
-                    let else_type = self.ast_block_result_type(eb);
-                    self.check_branch_type(else_type, type_id, eb.span);
-                }
+            branches.push(match &if_expr.else_block {
+                Some(eb) => (self.ast_block_result_type(eb), eb.span),
                 // The implicit `else { () }` cannot produce a non-Unit type.
-                None => self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span),
-            }
+                None => (TypeTable::UNIT, if_expr.span),
+            });
+            self.check_branch_types(expected_type, type_id, &branches);
         }
         type_id
     }
@@ -2806,15 +2833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         match expr {
             ast::Expr::Block(block) => self.collect_block_numeric_literal_tails(block, target, out),
-            ast::Expr::If(if_expr) => {
-                out.branches.push(if_expr.id);
-                self.collect_if_numeric_literal_tails(
-                    &if_expr.then_block,
-                    if_expr.else_block.as_ref(),
-                    target,
-                    out,
-                )
-            }
+            ast::Expr::If(if_expr) => self.collect_if_numeric_literal_tails(if_expr, target, out),
             ast::Expr::Match(match_expr) => {
                 self.collect_match_numeric_literal_tails(match_expr, target, out)
             }
@@ -2838,14 +2857,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(ast::Stmt::Expr(e)) => self.collect_numeric_literal_tails(&e.expr, target, out),
             // `block_result_type` reads a trailing `if` / `match` statement as
             // the block's value, so `else { if … }` retargets like `else if …`.
-            // A trailing `if` records no type: reify recomputes one from the
-            // branches it has just built.
-            Some(ast::Stmt::If(if_stmt)) => self.collect_if_numeric_literal_tails(
-                &if_stmt.then_block,
-                if_stmt.else_block.as_ref(),
-                target,
-                out,
-            ),
+            Some(ast::Stmt::If(if_expr)) => {
+                self.collect_if_numeric_literal_tails(if_expr, target, out)
+            }
             Some(ast::Stmt::Match(match_expr)) => {
                 self.collect_match_numeric_literal_tails(match_expr, target, out)
             }
@@ -2862,19 +2876,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !tails.literals.is_empty()
     }
 
-    /// The two halves of an `if`, in either its expression or its statement
-    /// spelling. A missing `else` is `()`, which no numeric target accepts.
+    /// The two halves of an `if`. A missing `else` is `()`, which no numeric
+    /// target accepts.
     fn collect_if_numeric_literal_tails<'a>(
         &self,
-        then_block: &'a ast::Block,
-        else_block: Option<&'a ast::Block>,
+        if_expr: &'a IfExpr,
         target: TypeId,
         out: &mut NumericLiteralTails<'a>,
     ) -> bool {
-        let Some(else_block) = else_block else {
+        let Some(else_block) = &if_expr.else_block else {
             return false;
         };
-        self.collect_block_numeric_literal_tails(then_block, target, out)
+        out.branches.push(if_expr.id);
+        self.collect_block_numeric_literal_tails(&if_expr.then_block, target, out)
             && self.collect_block_numeric_literal_tails(else_block, target, out)
     }
 
@@ -2927,6 +2941,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for &branch in &*branches {
                 self.solve_infer_holes_against(branch, target);
             }
+        } else {
+            // No branch is decided alone, yet each may decide what another
+            // leaves open: `Ok(v)` settles `Result`'s `T`, `Err("x")` its `E`.
+            // One branch gathers what every other decides, then hands it back.
+            let at = branches
+                .iter()
+                .position(|&t| t != TypeTable::NEVER)
+                .expect("a branch carrying a hole is not `!`");
+            let others = || (0..branches.len()).filter(move |&i| i != at);
+            for i in others() {
+                let sibling = self.apply_infer_holes(branches[i]);
+                self.solve_infer_holes_against(branches[at], sibling);
+            }
+            let hub = self.apply_infer_holes(branches[at]);
+            for i in others() {
+                self.solve_infer_holes_against(branches[i], hub);
+            }
         }
         for branch in branches {
             *branch = self.apply_infer_holes(*branch);
@@ -2949,7 +2980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match self.branch_decidedness(a).cmp(&self.branch_decidedness(b)) {
             Ordering::Less => Some(b),
             Ordering::Greater => Some(a),
-            Ordering::Equal => self.tysys.type_table.borrow().resource_join(a, b),
+            Ordering::Equal => self.tysys.type_table.borrow_mut().branch_join(a, b),
         }
     }
 
@@ -3083,21 +3114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // something else. Skipped at `Unit`, which is statement position —
         // `translate_match` drops each arm's value there.
         if type_id != TypeTable::UNIT {
-            for &(arm_type, arm_span) in &arm_bodies {
-                let result = self.assignable(arm_type, type_id, arm_span);
-                if matches!(result, TypeCheckResult::Incompatible) {
-                    let (expected_name, found_name) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .names_for_mismatch(type_id, arm_type);
-                    let _ = self.emit(TypeError::TypeMismatch {
-                        expected: expected_name,
-                        found: found_name,
-                        span: arm_span,
-                    });
-                }
-            }
+            self.check_branch_types(expected_type, type_id, &arm_bodies);
         }
 
         // No analysis reads a resolved match structure — missing-return walks
@@ -3294,22 +3311,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A struct's fields in declaration order, typed at this instance.
     pub(super) fn struct_field_types(&self, struct_type: TypeId) -> Option<Vec<(String, TypeId)>> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
-        let (info, type_args) = match resolved {
+        let (info, frame) = match resolved {
             ResolvedType::Struct {
-                def: StructDef::Decl(_),
+                def: StructDef::Decl(decl),
                 type_args,
-            } if !type_args.is_empty() => (self.struct_fields_of_type(struct_type)?, type_args),
-            ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, Vec::new()),
+            } if !type_args.is_empty() => (
+                self.struct_fields_of_type(struct_type)?,
+                Some((decl, type_args)),
+            ),
+            ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, None),
             _ => return None,
         };
         Some(
             info.fields
                 .iter()
                 .map(|(name, ty, _)| {
-                    (
-                        name.clone(),
-                        self.tysys.substitute_type_params(*ty, &type_args),
-                    )
+                    let ty = match &frame {
+                        Some((decl, args)) => self.tysys.substitute_type_params(*ty, *decl, args),
+                        None => *ty,
+                    };
+                    (name.clone(), ty)
                 })
                 .collect(),
         )
@@ -3705,9 +3726,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The `Base` a `ReflectNewtype<Base = …>` bound on the type parameter
     /// `ty` names, or `None` where `ty` carries no such bound.
     fn newtype_base_bound(&mut self, ty: TypeId) -> Option<TypeId> {
-        let name = self.tysys.binder_name(ty)?;
         let base = self
-            .bound_assoc_bindings(&name, CompilerItem::ReflectNewtype, REFLECT_NEWTYPE_BASE)
+            .bound_assoc_bindings(ty, CompilerItem::ReflectNewtype, REFLECT_NEWTYPE_BASE)
             .into_iter()
             .next()?;
         Some(self.resolve_type(&base))
@@ -3903,12 +3923,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let every_slot_written = {
             let tt = self.tysys.type_table.borrow();
             slots.iter().all(|&slot| {
-                let index = tt
-                    .param_slot(slot)
-                    .expect("a struct slot is a type parameter");
+                let param = tt.declared_param(slot);
                 info.fields.iter().any(|(name, declared, _)| {
                     struct_lit.fields.iter().any(|f| &f.name == name)
-                        && tt.contains_type_param_index(*declared, index)
+                        && tt.mentions_param(*declared, param)
                 })
             })
         };
@@ -4056,11 +4074,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return fields;
                 };
                 let mut tt = self.tysys.type_table.borrow_mut();
-                let substitution: hashmap::IndexMap<u32, TypeId> = params
-                    .iter()
-                    .zip(args.iter())
-                    .filter_map(|(param, arg)| Some((tt.param_slot(*param)?, *arg)))
-                    .collect();
+                let substitution = tt.bind_params(&params, &args);
                 fields
                     .into_iter()
                     .map(|(name, type_id)| {
@@ -4073,6 +4087,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // quiet. A struct that resolved to zero fields accepts none.
         let struct_fields_known = resolved_struct_fields.is_some();
         let struct_field_types: Vec<(String, TypeId)> = resolved_struct_fields.unwrap_or_default();
+        // A value is typed at this site's variables, never at the declaration's
+        // own parameters, which mean nothing here (#2574).
+        let inst = self
+            .struct_fields_of_written_decl(struct_decl)
+            .filter(|info| !info.type_param_type_ids.is_empty())
+            .cloned()
+            .map(|info| self.instantiate_struct_slots(&info, struct_lit.span));
+        let site_field_types: Vec<TypeId> = {
+            let declared: Vec<TypeId> = struct_field_types.iter().map(|&(_, t)| t).collect();
+            match &inst {
+                Some(inst) => self.instantiate_types(&declared, inst),
+                None => declared,
+            }
+        };
 
         // A named struct base is a complete `S`, so any field before the spread
         // (or a second spread) is fully overwritten and unused.
@@ -4137,10 +4165,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(provided_idx, field)| {
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
-                let expected_field_type = struct_field_types
+                let declared_at = struct_field_types
                     .iter()
-                    .find(|(name, _)| name == &field.name)
-                    .map(|(_, type_id)| *type_id);
+                    .position(|(name, _)| name == &field.name);
+                let expected_field_type = declared_at.map(|i| struct_field_types[i].1);
 
                 // A tuple literal under a field type naming a slot (`List<T>`)
                 // resolves as a plain tuple: the coercion needs the argument
@@ -4151,7 +4179,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let effective_expected = if needs_deferred_coercion {
                     None
                 } else {
-                    expected_field_type
+                    declared_at.map(|i| site_field_types[i])
                 };
 
                 let type_id = self.resolve_expr(&field.value, ctx, effective_expected);
@@ -4190,10 +4218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.typecheck_value(&field.value, type_id, expected_type_id);
                 }
 
-                let decl_idx = struct_field_types
-                    .iter()
-                    .position(|(n, _)| n == &field.name)
-                    .unwrap_or(provided_idx);
+                let decl_idx = declared_at.unwrap_or(provided_idx);
 
                 ResolvedField {
                     name: field.name.clone(),
@@ -4212,10 +4237,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A non-pub field may be neither set nor spread-read from another module;
         // omitting one with a default is fine, the default running in its own module.
         let vantage = self.visibility_vantage(Some(struct_lit.id));
-        let (struct_field_defaults, hidden_fields, is_generic_struct): (
+        let (struct_field_defaults, hidden_fields): (
             Vec<Option<ast::Expr>>,
             IndexMap<String, Visibility>,
-            bool,
         ) = match self.struct_fields_of_written_decl(struct_decl) {
             Some(info) => {
                 let hidden = if struct_module_source == vantage {
@@ -4228,13 +4252,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|(name, _, vis)| (name.clone(), *vis))
                         .collect()
                 };
-                (
-                    info.field_defaults.clone(),
-                    hidden,
-                    !info.type_params.is_empty(),
-                )
+                (info.field_defaults.clone(), hidden)
             }
-            None => (Vec::new(), IndexMap::default(), false),
+            None => (Vec::new(), IndexMap::default()),
         };
         let mut omitted_hidden: Vec<String> = Vec::new();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
@@ -4317,14 +4337,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
-            // This is a generic struct - infer type arguments from field values.
+        let (struct_type, _mangled_struct_name, _fields) = if let Some(inst) = inst {
             // `expected_type` lets the caller's annotation (e.g.
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
             // parameters that never appear in a field, matching the
             // behaviour of plain function calls.
             let type_args = self.infer_struct_type_args(
                 struct_decl,
+                inst,
                 &fields,
                 expected_type.or(spread_base_type),
                 struct_lit.span,
@@ -4334,11 +4354,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // This is necessary for empty array literals in self-referential fields
             // (e.g., `children: []` in `Node<K> { children: List<&Node<K>> }`)
             // which get typed with TypeParams before inference.
-            //
-            // Use map-based substitution (TypeId → TypeId) instead of index-based, so
-            // that only the struct's own TypeParam TypeIds are replaced. Index-based
-            // substitution incorrectly replaces TypeParams from outer scopes (e.g., impl
-            // type params) that happen to share the same index as the struct's TypeParams.
             let slots = self
                 .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.type_param_type_ids.clone())
@@ -4470,9 +4485,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(ModuleSource, Vec<(String, TypeId, u32, Visibility)>)> {
         let (head, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
         let info = self.lookup_struct_fields_of(head)?.clone();
-        let subst: IndexMap<u32, TypeId> = (0..type_args.len() as u32)
-            .zip(type_args.iter().copied())
-            .collect();
+        let subst = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(&info.type_param_type_ids, &type_args);
         let fields = info
             .fields
             .iter()
@@ -4832,42 +4849,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Infer a generic struct's type arguments by running [`InferCtx`] over its
-    /// declared field types against the literal's values. An `expected_type`
-    /// that is an instance of the same struct is unified in too, so a
-    /// phantom parameter still lands concrete. Returns the *partial* result: an
-    /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
-    pub(super) fn infer_struct_type_args(
-        &mut self,
-        struct_decl: Option<DefId>,
-        fields: &[ResolvedField],
-        expected_type: Option<TypeId>,
-        span: Span,
-    ) -> Vec<TypeId> {
-        let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl).cloned() else {
-            return vec![];
-        };
-        if struct_info.type_param_type_ids.is_empty() {
-            return vec![];
-        }
-
-        // Instantiate the declaration's slots. Inside a generic body the
-        // literal's fields carry the *enclosing* item's parameters, which can
-        // share `(name, index)` with the struct's own — `IterMap { inner:
-        // *self, f }` inside `Iterator::map<U>` renders both as `IterMap<I,
-        // U>` while meaning different things.
-        let inst = self.instantiate(
-            &struct_info.type_param_type_ids,
+    /// A struct literal's own variables for the declaration's slots.
+    fn instantiate_struct_slots(&mut self, info: &StructFieldInfo, span: Span) -> Instantiated {
+        self.instantiate(
+            &info.type_param_type_ids,
             &Instantiation {
                 kind: InstanceKind::Struct,
-                name: &struct_info.name,
+                name: &info.name,
                 span,
                 // A struct literal has no turbofish; its fields name the slots.
                 type_args: &[],
                 self_binding: None,
                 impl_args: &[],
             },
-        );
+        )
+    }
+
+    /// Solve a generic struct literal's variables `inst` from its field values.
+    /// An `expected_type` that is an instance of the same struct is unified in
+    /// too, so a phantom parameter still lands concrete.
+    pub(super) fn infer_struct_type_args(
+        &mut self,
+        struct_decl: Option<DefId>,
+        inst: Instantiated,
+        fields: &[ResolvedField],
+        expected_type: Option<TypeId>,
+        span: Span,
+    ) -> Vec<TypeId> {
+        let struct_info = self
+            .struct_fields_of_written_decl(struct_decl)
+            .cloned()
+            .expect("an instantiated struct literal names its declaration");
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
         let field_types = self.instantiate_types(&decl_field_types, &inst);
         let decl_field_names: Vec<&str> = struct_info
@@ -4959,12 +4971,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
                 let table = self.tysys.type_table.borrow();
-                let Some(index) = table.param_slot(decl_param) else {
+                let Some(param) = table.type_param_id(decl_param) else {
                     continue;
                 };
                 !decl_field_types
                     .iter()
-                    .any(|&f| table.contains_type_param_index(f, index))
+                    .any(|&f| table.mentions_param(f, param))
             };
             if inst.vars.get(slot) != inferred.get(slot) || !is_phantom {
                 continue;
@@ -5035,8 +5047,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let (source, is_enumerate) = util::split_enumerate(&comp.iterable);
         let iterable_type = self.resolve_expr(source, ctx, None);
-        let Some((pack_name, pack_index, elem_type)) =
-            self.tysys.comprehension_pack(iterable_type, ctx.pack_walks)
+        let Some((pack, elem_type)) = self.tysys.comprehension_pack(iterable_type, ctx.pack_walks)
         else {
             let type_name = self.tysys.type_table.borrow().name(iterable_type);
             let _ = self.emit(TypeError::InvalidPattern {
@@ -5073,7 +5084,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return iterable_type;
         }
         let mut type_table = self.tysys.type_table.borrow_mut();
-        let mapped = type_table.make_mapped_type_pack(pack_name, pack_index, body_type);
+        let mapped = type_table.map_pack(pack, body_type);
         type_table.make_tuple(vec![mapped])
     }
 
@@ -5196,10 +5207,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         SpreadElems::Fixed(inner_elems)
     }
 
-    /// The `(name, index)` of the type pack a spread operand's static call is
-    /// made on: `F::method()` parses as a `Call` whose callee is a two-segment
-    /// path `F::method`; returns `Some` when `F` is a type pack in scope.
-    pub(super) fn call_pack_subject(&self, inner: &Expr) -> Option<(String, u32)> {
+    /// The type pack a spread operand's static call is made on: `F::method()`
+    /// parses as a `Call` whose callee is a two-segment path `F::method`;
+    /// returns `Some` when `F` is a type pack in scope.
+    pub(super) fn call_pack_subject(&self, inner: &Expr) -> Option<TypeId> {
         let Expr::Call(call) = inner else {
             return None;
         };
@@ -5209,35 +5220,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if id.segments.len() != 2 {
             return None;
         }
-        let subject_name = &id.segments[0].name;
-        let &BinderInScope {
-            index,
-            type_id: tid,
-            ..
-        } = self.annotate_ctx.trait_ctx.type_params.get(subject_name)?;
-        matches!(
-            self.tysys.type_table.borrow().get(tid),
-            ResolvedType::TypePack { .. }
-        )
-        .then(|| (subject_name.clone(), index))
+        let receiver = &id.segments[0];
+        let subject = self.binder_at(receiver.id, &receiver.name)?;
+        self.tysys
+            .type_table
+            .borrow()
+            .is_type_pack(subject)
+            .then_some(subject)
     }
 
     /// If `inner` is a static call on a type-pack subject (`F::method()`) whose
     /// return type `result_type` is pack-independent, build the mapped pack
     /// `..F::method()` — `result_type` repeated `|F|` times.
     fn spread_pack_map_type(&mut self, inner: &Expr, result_type: TypeId) -> Option<TypeId> {
-        let (name, index) = self.call_pack_subject(inner)?;
+        let pack = self.call_pack_subject(inner)?;
         // Only this scope knows `F` is a pack rather than a plain type param,
         // so record the answer for reify instead of leaving it to re-derive one.
-        self.sem
-            .types
-            .pack_spread_subjects
-            .insert(inner.id(), (name.clone(), index));
+        self.sem.types.pack_spread_subjects.insert(inner.id(), pack);
         Some(
             self.tysys
                 .type_table
                 .borrow_mut()
-                .make_mapped_type_pack(name, index, result_type),
+                .map_pack(pack, result_type),
         )
     }
 
@@ -5614,14 +5618,11 @@ impl TypeSystem {
         &self,
         iterable_type: TypeId,
         walk: u32,
-    ) -> Option<(String, u32, TypeId)> {
+    ) -> Option<(TypeId, TypeId)> {
         let mut table = self.type_table.borrow_mut();
         let (elems, _) = table.as_tuple_through_ref(iterable_type)?;
         let pack = table.pack_in(&elems)?;
-        let ResolvedType::TypePack { name, index, .. } = table.get(pack).clone() else {
-            unreachable!("`pack_in` answers a pack");
-        };
-        Some((name, index, table.pack_step_type(pack, walk)))
+        Some((pack, table.pack_step_type(pack, walk)))
     }
 
     /// The type one step of `walk` over the pack in `elements` binds.
@@ -5664,7 +5665,7 @@ impl TypeSystem {
         walk: u32,
     ) -> Option<TypeId> {
         self.comprehension_pack(iterable_type, walk)
-            .map(|(_, _, elem)| elem)
+            .map(|(_, elem)| elem)
     }
 }
 

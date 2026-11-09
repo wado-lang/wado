@@ -257,14 +257,11 @@ pub enum NirLiteralPattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NirTypeParam {
     pub name: String,
-    /// Whether this is an effect parameter (`effect E`)
-    pub is_effect: bool,
     /// Whether this is a type pack parameter (`..T`)
     pub is_pack: bool,
     pub bounds: Vec<String>,
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
-    pub index: u32,
 }
 
 /// Information about monomorphization origin for instantiated items
@@ -885,11 +882,10 @@ impl NirFunction {
             .is_some_and(LocalMethodName::is_closure_call)
     }
 
-    /// Returns true if this function has type params that need monomorphization
-    /// (excludes effect params, which are erased at compile time).
+    /// Whether this function has type params that need monomorphization.
     #[inline]
     pub fn has_real_type_params(&self) -> bool {
-        self.type_params.iter().any(|p| !p.is_effect)
+        !self.type_params.is_empty()
     }
 
     /// Whether every caller reaches this function through a direct call that
@@ -1245,11 +1241,10 @@ pub struct NirVariantDecl {
 }
 
 impl NirVariantDecl {
-    /// How many type arguments an instance gives it: its type parameters,
-    /// less the effect ones.
+    /// How many type arguments an instance gives it.
     #[must_use]
     pub fn type_arity(&self) -> usize {
-        self.type_params.iter().filter(|p| !p.is_effect).count()
+        self.type_params.len()
     }
 }
 

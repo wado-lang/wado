@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::ast::{
     self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt,
+    ForOfStmt, ForStmt, IfExpr, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt,
     TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
@@ -36,7 +36,7 @@ use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, St
 use crate::elaborator::util::reserve_float_pattern_locals;
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
-    namespace_member_alias, range_local_name, repeat_pack_name,
+    namespace_member_alias, range_local_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -124,16 +124,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
                     continue;
                 }
+                // Neither goes through the `resolve_expr` wrapper, so each
+                // records its type for `ast_block_result_type` to read.
                 if let Stmt::If(if_stmt) = s {
-                    self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type, tail_value);
+                    let ty = self.resolve_if_expr(if_stmt, ctx, expected_type);
+                    self.record_expression_type(if_stmt.id, ty);
                     continue;
                 }
                 if let Stmt::Match(match_expr) = s {
                     let ty = self.resolve_match_expr(match_expr, ctx, expected_type);
-                    // `resolve_match_expr` does not go through the
-                    // `resolve_expr` wrapper; record the type explicitly (as
-                    // the stmt-position arm does) so `ast_block_result_type`
-                    // can read a trailing match's value type.
                     self.record_expression_type(match_expr.id, ty);
                     continue;
                 }
@@ -197,7 +196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|(_, type_id, _)| *type_id)
             .collect();
-        self.enter_decl_params_scope(&struct_decl.type_params)
+        self.enter_decl_params_scope(def, &struct_decl.type_params)
             .resolve_field_defaults(struct_decl, &field_types);
     }
 
@@ -329,6 +328,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The type parameters are final already — read off the AST, not
         // resolved — so only the fields are left for `resolve_local_struct`.
         let type_param_type_ids = slot_type_ids(
+            def,
             &ParamSlot::list(&struct_decl.type_params),
             &mut self.tysys.type_table.borrow_mut(),
         );
@@ -349,17 +349,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
+        let def = self.tysys.def_at(struct_decl.id);
+        let mut scope = self.enter_decl_params_scope(def, &struct_decl.type_params);
         let fields: Vec<_> = struct_decl
             .fields
             .iter()
             .map(|field| {
-                let type_id = scope.resolve_struct_field(field);
+                let mut type_id = scope.resolve_struct_field(field);
+                let outer = scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .reaches_foreign_param(type_id, def);
+                if outer {
+                    let field_type = scope.tysys.type_table.borrow().name(type_id);
+                    let _ = scope.emit(TypeError::LocalStructOuterParam {
+                        struct_name: struct_decl.name.clone(),
+                        field: field.name.clone(),
+                        field_type,
+                        span: field.span,
+                    });
+                    type_id = TypeTable::ERROR;
+                }
                 (field.name.clone(), type_id, field.visibility)
             })
             .collect();
 
-        let type_params = scope.data_type_params(&struct_decl.type_params);
+        let type_params = scope.project_type_params(&struct_decl.type_params);
         drop(scope);
 
         self.sem
@@ -367,7 +383,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(struct_decl.id, type_params);
 
-        let def = self.tysys.def_at(struct_decl.id);
         self.sem
             .decls
             .local
@@ -404,23 +419,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bad: Vec<(String, Span)> = ty
             .pack_spreads()
             .into_iter()
-            .filter(|(name, _)| {
-                !self.binds_type_pack(name) && !self.binds_type_pack(&repeat_pack_name(name))
+            .filter(|spread| {
+                let spreads_pack = self
+                    .binder_at(spread.id, &spread.name)
+                    .is_some_and(|binder| self.tysys.type_table.borrow().is_type_pack(binder));
+                !spreads_pack
+                    && self
+                        .annotate_ctx
+                        .trait_ctx
+                        .repeat_pack(&spread.name)
+                        .is_none()
             })
-            .map(|(name, span)| (name.to_string(), span))
+            .map(|spread| (spread.name.clone(), spread.span))
             .collect();
         for (name, span) in bad {
             let _ = self.emit(TypeError::SpreadOfNonPack { name, span });
         }
-    }
-
-    /// Whether `name` is a type pack the enclosing declaration declares. A
-    /// scalar parameter spread in a tuple stands for one position, not a run.
-    pub(super) fn binds_type_pack(&self, name: &str) -> bool {
-        let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(name) else {
-            return false;
-        };
-        self.tysys.type_table.borrow().is_type_pack(binder.type_id)
     }
 
     /// Report a written type position naming a type no declaration answers
@@ -444,7 +458,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reject_unresolved_heads(&mut self, ty: &ast::Type) -> bool {
         let mut reported = false;
         self.walk_type_heads(ty, &mut |scope, id, name, span, has_args| {
-            if name == "Self" || scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+            if name == "Self" || scope.binder_at(id, name).is_some() {
                 return false;
             }
             if scope.reject_non_type_decl(id, name, span) {
@@ -1099,7 +1113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _)
+            | Type::TypePackSpread(_)
             | Type::Infer(_)
             | Type::Error(_) => false,
         }
@@ -1393,35 +1407,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.typecheck_returned(&tr_stmt.value, value_type, expected, tr_stmt.span);
     }
 
-    /// Reify rebuilds the `If` / if-let-chain TIR from the AST + the
+    /// A statement-position `if`, whose value nothing reads. Reify rebuilds
+    /// the `If` / if-let-chain TIR from the AST + the
     /// `DesugarKind::IfLetChain` tag; this walk only resolves the condition
     /// and blocks for their facts.
-    pub(super) fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) {
-        self.resolve_if_stmt_with_expected(if_stmt, ctx, None, false);
-    }
-
-    /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for
-    /// coercion. Used when an if statement is the last statement in a block
-    /// that needs type coercion (e.g., a match arm returning `List<T>` from an
-    /// if-else with tuple literals).
-    fn resolve_if_stmt_with_expected(
-        &mut self,
-        if_stmt: &IfStmt,
-        ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-        tail_value: bool,
-    ) {
+    pub(super) fn resolve_if_stmt(&mut self, if_stmt: &IfExpr, ctx: &mut FunctionContext) {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
                 self.resolve_condition_expr(expr, ctx);
-                self.resolve_block_with_position(
-                    &if_stmt.then_block,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                );
+                self.resolve_block(&if_stmt.then_block, ctx, None);
                 if let Some(b) = &if_stmt.else_block {
-                    self.resolve_block_with_position(b, ctx, expected_type, tail_value);
+                    self.resolve_block(b, ctx, None);
                 }
             }
             ast::Condition::LetChain { elements, .. } => {
@@ -1429,17 +1425,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve else_block in the outer scope (chain bindings are not
                 // visible there) for its facts.
                 if let Some(b) = &if_stmt.else_block {
-                    self.resolve_block_with_position(b, ctx, expected_type, tail_value);
+                    self.resolve_block(b, ctx, None);
                 }
 
                 let ctx = &mut ctx.enter_scope();
                 self.resolve_let_chain_operands(elements, ctx);
-                self.resolve_block_with_position(
-                    &if_stmt.then_block,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                );
+                self.resolve_block(&if_stmt.then_block, ctx, None);
             }
         }
     }
@@ -2579,7 +2570,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
-            return self.substitute_in_frame(payload, type_args);
+            return self.substitute_in_frame(payload, variant, type_args);
         }
 
         // The declaration is a variant — it answered `variant_cases_of` or it

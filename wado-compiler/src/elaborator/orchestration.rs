@@ -33,7 +33,7 @@ use crate::world_registry::WorldRegistry;
 use super::declaration_attrs::internal_tag_faults;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
-use super::type_resolution::slot_type_ids;
+use super::type_resolution::{DeclParams, slot_type_ids};
 use super::types::{
     DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, RealTypeParams,
     ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
@@ -815,7 +815,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
                 match item {
                     Item::Struct(struct_decl) => {
+                        let def = resolutions.defs().def_at(struct_decl.id);
                         let struct_slots = ParamSlot::list(&struct_decl.type_params);
+                        let frame = DeclParams {
+                            owner: def,
+                            slots: &struct_slots,
+                        };
                         let fields = struct_decl
                             .fields
                             .iter()
@@ -823,7 +828,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 let type_id = lookup.resolve_in(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &struct_slots,
+                                    Some(frame),
                                 );
                                 (field.name.clone(), type_id, field.visibility)
                             })
@@ -831,10 +836,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // In declaration order, so `infer_struct_type_args` can fill a
                         // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
                         let type_param_type_ids =
-                            slot_type_ids(&struct_slots, &mut type_table.borrow_mut());
+                            slot_type_ids(def, &struct_slots, &mut type_table.borrow_mut());
                         let info = data
                             .struct_fields
-                            .get_mut(&resolutions.defs().def_at(struct_decl.id))
+                            .get_mut(&def)
                             .expect("the first sub-pass declared every struct");
                         info.fields = fields;
                         info.type_param_type_ids = type_param_type_ids;
@@ -847,18 +852,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
                     }
                     Item::Variant(variant_decl) => {
+                        let def = resolutions.defs().def_at(variant_decl.id);
                         let variant_slots = ParamSlot::list(&variant_decl.type_params);
+                        let frame = DeclParams {
+                            owner: def,
+                            slots: &variant_slots,
+                        };
                         let cases = VariantCaseData::collect(variant_decl, |payload_ty| {
-                            lookup.resolve_in(
-                                payload_ty,
-                                &mut type_table.borrow_mut(),
-                                &variant_slots,
-                            )
+                            lookup.resolve_in(payload_ty, &mut type_table.borrow_mut(), Some(frame))
                         });
                         let type_param_type_ids =
-                            slot_type_ids(&variant_slots, &mut type_table.borrow_mut());
+                            slot_type_ids(def, &variant_slots, &mut type_table.borrow_mut());
                         data.variant_cases.insert(
-                            resolutions.defs().def_at(variant_decl.id),
+                            def,
                             VariantInfo::of_decl(
                                 module_source.clone(),
                                 variant_decl,
@@ -918,7 +924,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // above — so the registered `TypeId`s remain valid.
                 (*snap_state.tysys.builtin_registry).clone()
             } else {
-                BuiltinRegistry::build_from_stdlib(&type_table)
+                BuiltinRegistry::build(&modules[&ModuleSource::builtin()], &type_table)
             };
             // Stdlib wasm assets (e.g. `core:libm.wat`) are already in
             // `snapshot.state.tysys.builtin_registry`.
@@ -2167,6 +2173,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     continue;
                 }
                 let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+                let impl_def = resolutions.defs().def_at(impl_block.id);
                 let param_at = |name: &str| {
                     let param = param_slots.iter().find(|p| p.name == name)?;
                     Some((slots.of_name(name)?, param))
@@ -2185,9 +2192,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             let Some((idx, _)) = param_at(&named.name) else {
                                 continue;
                             };
-                            type_table
-                                .borrow_mut()
-                                .make_type_param(named.name.clone(), idx)
+                            type_table.borrow_mut().make_type_param(
+                                impl_def,
+                                named.name.clone(),
+                                idx,
+                            )
                         }
                         // Chained case: `type Item = I::InnerName` — I is a type param
                         Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
@@ -2201,9 +2210,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             ) else {
                                 continue;
                             };
-                            let inner_param_id = type_table
-                                .borrow_mut()
-                                .make_type_param(ns.namespace.clone(), idx);
+                            let inner_param_id = type_table.borrow_mut().make_type_param(
+                                impl_def,
+                                ns.namespace.clone(),
+                                idx,
+                            );
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,
@@ -2695,7 +2706,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
         match ty {
             Type::Named(named) => self.check_type_name(&named.name, named.span),
             // A spread names a pack, or the element type it repeats.
-            Type::TypePackSpread(name, span) => self.check_type_name(name, *span),
+            Type::TypePackSpread(spread) => self.check_type_name(&spread.name, spread.span),
             Type::Infer(span) if !self.allow_infer => {
                 self.report(TypeError::InferPlaceholderNotAllowed { span: *span });
             }

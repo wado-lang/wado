@@ -1268,16 +1268,16 @@ fn "core:args/core:args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
     let $local_11: ref null "tuple//[core:args/ArgsErrorKind, core:serde/DeserializeError]";
     let $local_12: ref null "core:args//ArgsError";
     let used_21: i32;
-    let i_36: i32;
-    let $licm_used_65: i32;
-    let $licm_repr_68: ref Array<u8>;
-    let $licm_repr_69: ref Array<u8>;
+    let i_35: i32;
+    let $licm_used_63: i32;
+    let $licm_repr_66: ref Array<u8>;
+    let $licm_repr_67: ref Array<u8>;
     consumed = struct.new "core:prelude/list.wado//List<bool>" { repr: array.new_fixed<bool>(), used: 0 };
     i_2 = 0;
-    $licm_used_65 = argv.used;
+    $licm_used_63 = argv.used;
     b137: block {
         l138: loop {
-            break_if b137 i_2 >= $licm_used_65;
+            break_if b137 i_2 >= $licm_used_63;
             if @unlikely(local.tee used_21(consumed.used) >= builtin::array_len(consumed.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"(consumed);
@@ -1300,127 +1300,113 @@ fn "core:args/core:args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
     } else {
         unreachable;
     });
-    bad = struct.new "core:args//ArgsError" { kind: local.tee bad((if ref.is_null(local.tee $local_11(de.err)) == 0 -> ref "core:args//ArgsError" {
+    bad = (if ref.is_null(local.tee $local_11(de.err)) == 0 -> ref "core:args//ArgsError" {
         let $variant_payload_7: ref "tuple//[core:args/ArgsErrorKind, core:serde/DeserializeError]";
         i_2 = local.tee $variant_payload_7(ref.as_non_null($local_11)).0;
-        if local.tee raised($variant_payload_7.1).kind == local.tee $licm_used_65(e_6.kind) -> ref "core:args//ArgsError" {
-            if $inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
+        if local.tee raised($variant_payload_7.1).kind == local.tee $licm_used_63(e_6.kind) -> ref "core:args//ArgsError" {
+            if $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
                 if local.tee used_21(local.tee $load_9(raised.message).used) != local.tee $load_11(e_6.message).used {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
-                i_36 = 0;
-                $licm_repr_68 = $load_9.repr;
-                $licm_repr_69 = $load_11.repr;
+                i_35 = 0;
+                $licm_repr_66 = $load_9.repr;
+                $licm_repr_67 = $load_11.repr;
                 b146: block {
                     l147: loop {
-                        break_if b146 (((i_36 >= used_21) | ((i_36 + 1) >= used_21)) | (((i_36 + 1) + 1) >= used_21)) | ((((i_36 + 1) + 1) + 1) >= used_21);
-                        if builtin::array_get_value<u8>($licm_repr_68, i_36) != builtin::array_get_value<u8>($licm_repr_69, i_36) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                        break_if b146 (((i_35 >= used_21) | ((i_35 + 1) >= used_21)) | (((i_35 + 1) + 1) >= used_21)) | ((((i_35 + 1) + 1) + 1) >= used_21);
+                        if builtin::array_get_value<u8>($licm_repr_66, i_35) != builtin::array_get_value<u8>($licm_repr_67, i_35) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                         }
-                        i_36 = i_36 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_68, i_36) != builtin::array_get_value<u8>($licm_repr_69, i_36) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                        i_35 = i_35 + 1;
+                        if builtin::array_get_value<u8>($licm_repr_66, i_35) != builtin::array_get_value<u8>($licm_repr_67, i_35) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                         }
-                        i_36 = i_36 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_68, i_36) != builtin::array_get_value<u8>($licm_repr_69, i_36) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                        i_35 = i_35 + 1;
+                        if builtin::array_get_value<u8>($licm_repr_66, i_35) != builtin::array_get_value<u8>($licm_repr_67, i_35) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                         }
-                        i_36 = i_36 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_68, i_36) != builtin::array_get_value<u8>($licm_repr_69, i_36) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                        i_35 = i_35 + 1;
+                        if builtin::array_get_value<u8>($licm_repr_66, i_35) != builtin::array_get_value<u8>($licm_repr_67, i_35) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                         }
-                        i_36 = i_36 + 1;
+                        i_35 = i_35 + 1;
                         continue l147;
                     };
                 };
                 b152: block {
                     l153: loop {
-                        break_if b152 i_36 >= used_21;
-                        if builtin::array_get_value<u8>($licm_repr_68, i_36) != builtin::array_get_value<u8>($licm_repr_69, i_36) {
-                            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                        break_if b152 i_35 >= used_21;
+                        if builtin::array_get_value<u8>($licm_repr_66, i_35) != builtin::array_get_value<u8>($licm_repr_67, i_35) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                         }
-                        i_36 = i_36 + 1;
+                        i_35 = i_35 + 1;
                         continue l153;
                     };
                 };
-                break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
+                break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
             } -> ref "core:args//ArgsError" {
-                struct.new "core:args//ArgsError" { kind: i_2, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(raised.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
-            } else if $licm_used_65 == 2 -> ref "core:args//ArgsError" {
+                struct.new "core:args//ArgsError" { kind: i_2, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(raised.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
+            } else if $licm_used_63 == 2 -> ref "core:args//ArgsError" {
                 if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
                     ref.as_non_null($local_12);
                 } else {
-                    return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_65 == 1 -> "core:args//enum:ArgsErrorKind" {
+                    return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_63 == 1 -> "core:args//enum:ArgsErrorKind" {
                         2;
-                    } else if $licm_used_65 == 4 -> "core:args//enum:ArgsErrorKind" {
+                    } else if $licm_used_63 == 4 -> "core:args//enum:ArgsErrorKind" {
                         4;
-                    } else if $licm_used_65 == 5 -> "core:args//enum:ArgsErrorKind" {
+                    } else if $licm_used_63 == 5 -> "core:args//enum:ArgsErrorKind" {
                         4;
-                    } else if $licm_used_65 == 2 -> "core:args//enum:ArgsErrorKind" {
+                    } else if $licm_used_63 == 2 -> "core:args//enum:ArgsErrorKind" {
                         3;
                     } else {
                         4;
-                    }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
+                    }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
                 }
             } else {
-                return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_65 == 1 -> "core:args//enum:ArgsErrorKind" {
+                return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_63 == 1 -> "core:args//enum:ArgsErrorKind" {
                     2;
-                } else if $licm_used_65 == 4 -> "core:args//enum:ArgsErrorKind" {
+                } else if $licm_used_63 == 4 -> "core:args//enum:ArgsErrorKind" {
                     4;
-                } else if $licm_used_65 == 5 -> "core:args//enum:ArgsErrorKind" {
+                } else if $licm_used_63 == 5 -> "core:args//enum:ArgsErrorKind" {
                     4;
-                } else if $licm_used_65 == 2 -> "core:args//enum:ArgsErrorKind" {
+                } else if $licm_used_63 == 2 -> "core:args//enum:ArgsErrorKind" {
                     3;
                 } else {
                     4;
-                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
             }
-        } else if $licm_used_65 == 2 -> ref "core:args//ArgsError" {
+        } else if $licm_used_63 == 2 -> ref "core:args//ArgsError" {
             if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
                 ref.as_non_null($local_12);
             } else {
-                return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_65 == 1 -> "core:args//enum:ArgsErrorKind" {
+                return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_63 == 1 -> "core:args//enum:ArgsErrorKind" {
                     2;
-                } else if $licm_used_65 == 4 -> "core:args//enum:ArgsErrorKind" {
+                } else if $licm_used_63 == 4 -> "core:args//enum:ArgsErrorKind" {
                     4;
-                } else if $licm_used_65 == 5 -> "core:args//enum:ArgsErrorKind" {
+                } else if $licm_used_63 == 5 -> "core:args//enum:ArgsErrorKind" {
                     4;
-                } else if $licm_used_65 == 2 -> "core:args//enum:ArgsErrorKind" {
+                } else if $licm_used_63 == 2 -> "core:args//enum:ArgsErrorKind" {
                     3;
                 } else {
                     4;
-                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
             }
         } else {
-            return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_65 == 1 -> "core:args//enum:ArgsErrorKind" {
+            return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if $licm_used_63 == 1 -> "core:args//enum:ArgsErrorKind" {
                 2;
-            } else if $licm_used_65 == 4 -> "core:args//enum:ArgsErrorKind" {
+            } else if $licm_used_63 == 4 -> "core:args//enum:ArgsErrorKind" {
                 4;
-            } else if $licm_used_65 == 5 -> "core:args//enum:ArgsErrorKind" {
+            } else if $licm_used_63 == 5 -> "core:args//enum:ArgsErrorKind" {
                 4;
-            } else if $licm_used_65 == 2 -> "core:args//enum:ArgsErrorKind" {
+            } else if $licm_used_63 == 2 -> "core:args//enum:ArgsErrorKind" {
                 3;
             } else {
                 4;
-            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
+            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
         }
-    } else {
-        if local.tee i_2(e_6.kind) == 2 -> ref "core:args//ArgsError" {
-            if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
-                ref.as_non_null($local_12);
-            } else {
-                return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
-                    2;
-                } else if i_2 == 4 -> "core:args//enum:ArgsErrorKind" {
-                    4;
-                } else if i_2 == 5 -> "core:args//enum:ArgsErrorKind" {
-                    4;
-                } else if i_2 == 2 -> "core:args//enum:ArgsErrorKind" {
-                    3;
-                } else {
-                    4;
-                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
-            }
+    } else if local.tee i_2(e_6.kind) == 2 -> ref "core:args//ArgsError" {
+        if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
+            ref.as_non_null($local_12);
         } else {
             return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
                 2;
@@ -1432,10 +1418,22 @@ fn "core:args/core:args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                 3;
             } else {
                 4;
-            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
+            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
         }
-    })).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
-    return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(bad, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_68 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_69(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_68, 0, i_2); $licm_repr_69, used: i_2 } };
+    } else {
+        return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
+            2;
+        } else if i_2 == 4 -> "core:args//enum:ArgsErrorKind" {
+            4;
+        } else if i_2 == 5 -> "core:args//enum:ArgsErrorKind" {
+            4;
+        } else if i_2 == 2 -> "core:args//enum:ArgsErrorKind" {
+            3;
+        } else {
+            4;
+        }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
+    });
+    return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(bad, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: $licm_repr_66 = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, $licm_repr_66, 0, i_2); $licm_repr_67, used: i_2 } };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/string.wado/String>"(f, $mv$text$repr, $mv$text$used) {

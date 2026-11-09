@@ -1076,11 +1076,12 @@ See [the spec](./spec-functions.md#closures).
 // Expression body
 let add_one = |x: i32| x + 1;
 
-// Block body
+// Block body: a function body, so only `return` gives it a value
 let compute = |x: i32| {
     let doubled = x * 2;
     return doubled + x * 3;
 };
+let unit = || { 1 };                        // fn() -> (): the `1` is a statement
 
 // Struct literal return
 let make_point = |x: i32, y: i32| Point { x, y };

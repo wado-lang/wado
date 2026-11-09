@@ -110,6 +110,9 @@ pub struct Resolutions {
     effect_binders: hashmap::IndexSet<AstId>,
     /// The binders written `<F: fn(...)>`, each the signature it names.
     fn_bound_binders: IndexMap<AstId, ast::FunctionType>,
+    /// Each item-level binder's declaring item: a method's `U` and its impl's
+    /// `U` are two parameters, told apart by who declares them.
+    binder_owners: IndexMap<AstId, DefId>,
     /// Each `impl` block's reference site for the head of the type it is for,
     /// keyed by the block, where that type has a head.
     impl_heads: IndexMap<AstId, AstId>,
@@ -292,6 +295,7 @@ impl Resolutions {
         let mut redeclarations = Vec::new();
         let mut effect_binders = hashmap::IndexSet::default();
         let mut fn_bound_binders = IndexMap::default();
+        let mut binder_owners = IndexMap::default();
         let mut impl_heads = IndexMap::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
@@ -309,6 +313,7 @@ impl Resolutions {
                 redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
                 fn_bound_binders: &mut fn_bound_binders,
+                binder_owners: &mut binder_owners,
                 impl_heads: &mut impl_heads,
                 derived_names: Vec::new(),
                 pattern_site: PatternSite::Test,
@@ -333,6 +338,7 @@ impl Resolutions {
             redeclarations,
             effect_binders,
             fn_bound_binders,
+            binder_owners,
             impl_heads,
         }
     }
@@ -352,6 +358,13 @@ impl Resolutions {
     #[must_use]
     pub fn fn_bound_signature(&self, binder: AstId) -> Option<&ast::FunctionType> {
         self.fn_bound_binders.get(&binder)
+    }
+
+    /// The item declaring the binder `binder`; `None` for a generic associated
+    /// type's own parameter, which its family owns.
+    #[must_use]
+    pub fn binder_owner(&self, binder: AstId) -> Option<DefId> {
+        self.binder_owners.get(&binder).copied()
     }
 
     /// The local names of `module`'s imports that answered one of its
@@ -719,6 +732,7 @@ struct Resolver<'a> {
     binders: Vec<IndexMap<String, AstId>>,
     effect_binders: &'a mut hashmap::IndexSet<AstId>,
     fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
+    binder_owners: &'a mut IndexMap<AstId, DefId>,
     impl_heads: &'a mut IndexMap<AstId, AstId>,
     /// Items declared inside the function body being walked, innermost block
     /// last. Filled as the walk passes each declaration, because a local item
@@ -874,10 +888,20 @@ impl Resolver<'_> {
         }
     }
 
-    fn push_binders(&mut self, params: &[GenericParam], self_binder: Option<AstId>) {
+    fn push_binders(
+        &mut self,
+        params: &[GenericParam],
+        self_binder: Option<AstId>,
+        owner: Option<DefId>,
+    ) {
         let mut scope: IndexMap<String, AstId> = IndexMap::default();
         if let Some(id) = self_binder {
             scope.insert(SELF_TYPE.to_string(), id);
+        }
+        if let Some(owner) = owner {
+            let declared = params.iter().map(|p| p.id).chain(self_binder);
+            self.binder_owners
+                .extend(declared.map(|binder| (binder, owner)));
         }
         for p in params {
             scope.insert(p.name.clone(), p.id);
@@ -897,6 +921,7 @@ impl Resolver<'_> {
         &mut self,
         params: &[GenericParam],
         self_binder: Option<AstId>,
+        owner: Option<DefId>,
         walk: impl FnOnce(&mut Self),
     ) {
         // A param the compiler minted, `with _`'s among them, is fresh per
@@ -904,7 +929,7 @@ impl Resolver<'_> {
         for p in params.iter().filter(|p| p.is_written()) {
             self.visit_attributed(&p.attrs, |s| s.check_shadowing(&p.name, p.name_span));
         }
-        self.push_binders(params, self_binder);
+        self.push_binders(params, self_binder, owner);
         walk(self);
         self.binders.pop();
     }
@@ -1155,49 +1180,53 @@ impl AstVisitor<'_> for Resolver<'_> {
         // Every item that introduces type parameters opens a binder scope for
         // the whole of its body, so a name inside it is checked against them
         // before any module scope.
-        let (params, self_binder): (&[GenericParam], Option<AstId>) = match item {
-            Item::Struct(s) => (&s.type_params, None),
-            Item::Enum(e) => (&e.type_params, None),
-            Item::Variant(v) => (&v.type_params, None),
-            Item::Newtype(n) => (&n.type_params, None),
-            Item::BuiltinTypeDecl(d) => (&d.type_params, None),
-            Item::Resource(r) => (&r.type_params, Some(r.id)),
-            Item::Impl(i) => {
-                if let Some(head) = head_site(&i.ty) {
-                    self.impl_heads.insert(i.id, head);
+        let (params, self_binder, owner): (&[GenericParam], Option<AstId>, Option<AstId>) =
+            match item {
+                Item::Struct(s) => (&s.type_params, None, Some(s.id)),
+                Item::Enum(e) => (&e.type_params, None, Some(e.id)),
+                Item::Variant(v) => (&v.type_params, None, Some(v.id)),
+                Item::Newtype(n) => (&n.type_params, None, Some(n.id)),
+                Item::BuiltinTypeDecl(d) => (&d.type_params, None, Some(d.id)),
+                Item::Resource(r) => (&r.type_params, Some(r.id), Some(r.id)),
+                Item::Impl(i) => {
+                    if let Some(head) = head_site(&i.ty) {
+                        self.impl_heads.insert(i.id, head);
+                    }
+                    (&i.type_params, Some(i.id), Some(i.id))
                 }
-                (&i.type_params, Some(i.id))
-            }
-            Item::Trait(t) => {
-                // Inside a trait, `Self` is bounded by that trait. The
-                // elaborator mints that bound rather than the programmer, and a
-                // minted spelling would be a reference the walk never saw — so
-                // the declaration node answers for itself and the bound names
-                // it instead of respelling its name.
-                self.record(t.id, &t.name, Resolution::Def(self.defs.def_at(t.id)));
-                (&t.type_params, Some(t.id))
-            }
-            Item::Function(_)
-            | Item::Interface(_)
-            | Item::Flags(_)
-            | Item::TupleTypeDecl(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Global(_)
-            | Item::Use(_)
-            | Item::Error(_) => (&[], None),
-        };
+                Item::Trait(t) => {
+                    // Inside a trait, `Self` is bounded by that trait. The
+                    // elaborator mints that bound rather than the programmer, and a
+                    // minted spelling would be a reference the walk never saw — so
+                    // the declaration node answers for itself and the bound names
+                    // it instead of respelling its name.
+                    self.record(t.id, &t.name, Resolution::Def(self.defs.def_at(t.id)));
+                    (&t.type_params, Some(t.id), Some(t.id))
+                }
+                Item::Function(_)
+                | Item::Interface(_)
+                | Item::Flags(_)
+                | Item::TupleTypeDecl(_)
+                | Item::World(_)
+                | Item::Test(_)
+                | Item::Global(_)
+                | Item::Use(_)
+                | Item::Error(_) => (&[], None, None),
+            };
+        let owner = owner.map(|id| self.defs.def_at(id));
         // The item's attributes reach its type parameters too, so this walk
         // scopes them rather than `walk_item`.
         self.visit_attributed(item.attrs(), |s| {
-            s.in_scope(params, self_binder, |s| ast::walk_item_contents(s, item));
+            s.in_scope(params, self_binder, owner, |s| {
+                ast::walk_item_contents(s, item);
+            });
         });
     }
 
     /// A parameter's bounds read the names around the associated type, and
     /// what the parameters scope over reads them too.
     fn visit_assoc_type_params(&mut self, params: &[GenericParam], body: impl FnOnce(&mut Self)) {
-        self.in_scope(params, None, |s| {
+        self.in_scope(params, None, None, |s| {
             s.visit_generic_params(params);
             body(s);
         });
@@ -1216,7 +1245,8 @@ impl AstVisitor<'_> for Resolver<'_> {
             };
             self.record(target.id, &key, answer);
         }
-        self.in_scope(&func.type_params, None, |s| {
+        let owner = self.defs.of_ast_id(func.id);
+        self.in_scope(&func.type_params, None, owner, |s| {
             s.in_frame(|s| {
                 for param in &func.params {
                     if param.self_kind == ast::SelfKind::None {
@@ -1472,7 +1502,7 @@ impl AstVisitor<'_> for Resolver<'_> {
 
     fn visit_type(&mut self, ty: &Type) {
         match ty {
-            Type::Named(named) => {
+            Type::Named(named) | Type::TypePackSpread(named) => {
                 self.record_name(named.id, &named.name);
             }
             Type::Generic(generic) => {
@@ -1491,7 +1521,6 @@ impl AstVisitor<'_> for Resolver<'_> {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::Function(_)
-            | Type::TypePackSpread(..)
             | Type::Infer(_)
             | Type::Error(_) => ast::walk_type(self, ty),
         }
@@ -1647,7 +1676,7 @@ mod tests {
     /// visible here rather than as a consumer falling back to a spelling.
     fn reference_sites(ty: &Type, out: &mut Vec<AstId>) {
         match ty {
-            Type::Named(n) => out.push(n.id),
+            Type::Named(n) | Type::TypePackSpread(n) => out.push(n.id),
             Type::Generic(g) => {
                 out.push(g.id);
                 for a in &g.args {
@@ -1672,7 +1701,7 @@ mod tests {
                 }
                 reference_sites(&f.return_type, out);
             }
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
+            Type::Infer(_) | Type::Error(_) => {}
         }
     }
 

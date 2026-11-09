@@ -40,7 +40,7 @@ use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
 use crate::hashmap;
 use crate::name::{FqTraitName, test_function_name};
-use crate::tir::{ResolvedType, StructDef, TirTypeParam};
+use crate::tir::{ResolvedType, StructDef, TirTypeParam, TypeArgMap, TypeParamId};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -417,6 +417,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// scope, and describe it for the TIR.
     fn bind_target_param(
         &mut self,
+        impl_def: DefId,
         name: &str,
         index: u32,
         is_pack: bool,
@@ -424,55 +425,53 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         projected: bool,
         decl: Option<&ast::GenericParam>,
     ) -> TirTypeParam {
-        let type_id = {
-            let mut table = self.tysys.type_table.borrow_mut();
-            if is_pack {
-                table.make_type_pack(name.to_string(), index)
-            } else {
-                table.make_type_param(name.to_string(), index)
-            }
-        };
+        let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+            impl_def,
+            name.to_string(),
+            index,
+            is_pack,
+        );
         self.annotate_ctx
             .trait_ctx
             .bind(name, BinderInScope::of(index, type_id, decl));
         TirTypeParam {
             name: name.to_string(),
-            is_effect: false,
             is_pack,
             bounds,
             default: None,
-            index,
+            id: TypeParamId {
+                owner: impl_def,
+                index,
+            },
             projected,
         }
     }
 
-    /// A data declaration's parameters for the TIR.
-    pub(super) fn data_type_params(&mut self, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
-        self.project_type_params(params.iter())
-    }
-
-    /// A function's parameters for the TIR. An effect or `fn`-bound one takes
-    /// no slot, so the rest are numbered densely, as `register_generic_params` does.
-    fn fn_type_params(&mut self, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
-        self.project_type_params(params.iter().filter(|p| p.is_real_type_param()))
-    }
-
+    /// A declaration's parameters for the TIR: those taking a slot, which an
+    /// instance and an impl over it take one argument for. An effect or
+    /// `fn`-bound one takes none.
+    ///
     /// Resolved in this frame, where a default naming a sibling (`<A, B = A>`)
-    /// reaches it; once the frame is torn down it cannot.
-    fn project_type_params<'p>(
+    /// reaches it and the frame binds each parameter; once the frame is torn
+    /// down it cannot.
+    pub(super) fn project_type_params(
         &mut self,
-        params: impl Iterator<Item = &'p ast::GenericParam>,
+        params: &[ast::GenericParam],
     ) -> Vec<TirTypeParam> {
         params
-            .enumerate()
-            .map(|(i, p)| TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                index: i as u32,
-                projected: false,
+            .iter()
+            .filter(|p| p.is_real_type_param())
+            .map(|p| {
+                let binder = self.annotate_ctx.trait_ctx.type_params[&p.name].type_id;
+                let id = self.tysys.type_table.borrow().declared_param(binder);
+                TirTypeParam {
+                    name: p.name.clone(),
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                    id,
+                    projected: false,
+                }
             })
             .collect()
     }
@@ -491,6 +490,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// unused rather than shifting the rest.
     fn bind_declared_target_params(
         &mut self,
+        impl_def: DefId,
         target_args: &[Type],
         impl_declared_params: &[ast::GenericParam],
         slots: &ImplParamSlots,
@@ -525,6 +525,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 continue;
             }
             params.push(self.bind_target_param(
+                impl_def,
                 name,
                 slot,
                 false,
@@ -540,6 +541,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// registered by the caller and now living in the saved frame.
     fn bind_blanket_target_param(
         &mut self,
+        impl_def: DefId,
         named: &ast::NamedType,
         impl_declared_params: &[ast::GenericParam],
         slots: &ImplParamSlots,
@@ -562,6 +564,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             let bounds = self.saved_param_bounds(&declared.name);
             if declared.name == named.name {
                 params.push(self.bind_target_param(
+                    impl_def,
                     &declared.name,
                     index,
                     false,
@@ -576,6 +579,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             // left here is projectable.
             if projected.contains(&declared.name) {
                 params.push(self.bind_target_param(
+                    impl_def,
                     &declared.name,
                     index,
                     declared.is_pack,
@@ -613,6 +617,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// parameter the caller registered.
     fn bind_ref_target_param(
         &mut self,
+        impl_def: DefId,
         inner: &ast::Type,
         impl_declared_params: &[ast::GenericParam],
         slots: &ImplParamSlots,
@@ -625,20 +630,21 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         };
         let bounds = self.saved_param_bounds(&named.name);
         let decl = param_decl(impl_declared_params, &named.name);
-        vec![self.bind_target_param(&named.name, index, false, bounds, false, decl)]
+        vec![self.bind_target_param(impl_def, &named.name, index, false, bounds, false, decl)]
     }
 
     /// `impl<..T: Trait> Trait for [..T]` — the target's spread elements are
     /// the packs.
     fn bind_tuple_pack_params(
         &mut self,
+        impl_def: DefId,
         elements: &[ast::Type],
         impl_declared_params: &[ast::GenericParam],
         slots: &ImplParamSlots,
     ) -> Vec<TirTypeParam> {
         let mut params = Vec::new();
         for element in elements {
-            let ast::Type::TypePackSpread(name, _) = element else {
+            let ast::Type::TypePackSpread(ast::NamedType { name, .. }) = element else {
                 continue;
             };
             let Some(index) = slots.of_name(name) else {
@@ -646,7 +652,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             };
             let bounds = self.saved_param_bounds(name);
             let decl = param_decl(impl_declared_params, name);
-            params.push(self.bind_target_param(name, index, true, bounds, false, decl));
+            params.push(self.bind_target_param(impl_def, name, index, true, bounds, false, decl));
         }
         params
     }
@@ -660,6 +666,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// plus the method's own parameters, numbered past these slots.
     pub(super) fn enter_impl_frame(
         &mut self,
+        impl_def: DefId,
         impl_type: &Type,
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
@@ -672,17 +679,16 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let impl_type_params = if let Some(args) = head_args
             && !impl_is_concrete
         {
-            self.bind_declared_target_params(args, impl_declared_params, &slots)
+            self.bind_declared_target_params(impl_def, args, impl_declared_params, &slots)
         } else {
             match impl_type {
                 ast::Type::Named(named) => {
-                    self.bind_blanket_target_param(named, impl_declared_params, &slots)
+                    self.bind_blanket_target_param(impl_def, named, impl_declared_params, &slots)
                 }
-                ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) => {
-                    self.bind_ref_target_param(boxed.as_ref(), impl_declared_params, &slots)
-                }
+                ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) => self
+                    .bind_ref_target_param(impl_def, boxed.as_ref(), impl_declared_params, &slots),
                 ast::Type::Tuple(elements) => {
-                    self.bind_tuple_pack_params(elements, impl_declared_params, &slots)
+                    self.bind_tuple_pack_params(impl_def, elements, impl_declared_params, &slots)
                 }
                 _ => Vec::new(),
             }
@@ -713,6 +719,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 .expect("a real type parameter fills an impl slot");
             let bounds = self.saved_param_bounds(&param.name);
             impl_type_params.push(self.bind_target_param(
+                impl_def,
                 &param.name,
                 slot,
                 param.is_pack,
@@ -741,9 +748,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// a use site substitutes both through one alignment
     /// ([`super::sig::ImplSig::slots`]).
     fn record_impl_sig(&mut self, impl_block: &ast::ImplBlock, impl_is_concrete: bool) {
+        let impl_def = self.tysys.def_at(impl_block.id);
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.clear_binders();
         scope.enter_impl_frame(
+            impl_def,
             &impl_block.ty,
             impl_block.trait_type.as_ref(),
             impl_is_concrete,
@@ -800,7 +809,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // The block's name-level facts. Answered here because this is the only
         // phase standing in the block's own frame.
         let target_fq = scope.impl_receiver_name(impl_block);
-        let impl_def = scope.tysys.def_at(impl_block.id);
         let projections = scope.impl_projections(impl_block);
         scope.tysys.type_table.borrow_mut().record_impl_target(
             impl_def,
@@ -852,11 +860,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// another of them, which a use site then reads off `P`'s argument.
     fn impl_projections(&mut self, impl_block: &ast::ImplBlock) -> Vec<ImplProjection> {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+        let owner = self.tysys.def_at(impl_block.id);
         let mut projections = Vec::new();
         for param in &impl_block.type_params {
-            let Some(source) = slots.of_name(&param.name) else {
+            let Some(index) = slots.of_name(&param.name) else {
                 continue;
             };
+            let source = TypeParamId { owner, index };
             for bound in &param.bounds {
                 let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
                     continue;
@@ -959,6 +969,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     pub(super) fn enter_impl_method_frame(
         &mut self,
+        impl_def: DefId,
         func: &Function,
         impl_type: &Type,
         trait_type: Option<&Type>,
@@ -966,7 +977,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         impl_declared_params: &[ast::GenericParam],
     ) -> MethodFrame {
         let mut type_param_list = Vec::new();
+        let method_def = self.tysys.def_at(func.id);
         let impl_type_params = self.enter_impl_frame(
+            impl_def,
             impl_type,
             trait_type,
             impl_is_concrete,
@@ -1001,6 +1014,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 Some(sig) => (self.resolve_type(&ast::Type::Function(sig.clone())), false),
                 None => (
                     self.tysys.type_table.borrow_mut().make_declared_param(
+                        method_def,
                         param.name.clone(),
                         idx,
                         param.is_pack,
@@ -1152,7 +1166,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let params = type_params
                     .iter()
                     .map(|param| {
-                        let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
+                        let trait_ctx = &scope.annotate_ctx.trait_ctx;
+                        let binder = trait_ctx.binder_of(&scope.tysys.resolutions, param)?;
                         Some(binder.type_id)
                     })
                     .collect();
@@ -1242,26 +1257,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[ast::GenericParam],
         ty: TypeId,
     ) -> TypeId {
-        let defaulted: Vec<(String, ast::Type)> = type_params
+        let defaulted: Vec<(&ast::GenericParam, ast::Type)> = type_params
             .iter()
             .filter(|p| p.is_real_type_param())
-            .filter_map(|p| p.default.as_ref().map(|d| (p.name.clone(), d.clone())))
+            .filter_map(|p| p.default.as_ref().map(|d| (p, d.clone())))
             .collect();
         if defaulted.is_empty() {
             return ty;
         }
-        let mut subst = hashmap::IndexMap::default();
-        for (name, default_ty) in defaulted {
-            // The index the declaration gave the parameter, not its position
-            // among the signature's own: a method's slots follow the impl's.
-            let &BinderInScope { index, .. } = self
+        let mut subst = TypeArgMap::default();
+        for (declared, default_ty) in defaulted {
+            let &BinderInScope { type_id, .. } = self
                 .annotate_ctx
                 .trait_ctx
-                .type_params
-                .get(&name)
+                .binder_of(&self.tysys.resolutions, declared)
                 .expect("a signature's own type parameters are in scope for its defaults");
+            let param = self.tysys.type_table.borrow().declared_param(type_id);
             let resolved = self.resolve_type(&default_ty);
-            subst.insert(index, resolved);
+            subst.insert(param, resolved);
         }
         self.tysys
             .type_table
@@ -1412,6 +1425,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut frame_scope = block.enter_inherited_type_param_scope();
             frame_scope.annotate_ctx.trait_ctx.clear_binders();
             let frame = frame_scope.enter_impl_method_frame(
+                impl_def,
                 method,
                 &impl_block.ty,
                 impl_block.trait_type.as_ref(),
@@ -1756,7 +1770,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
+        let owner = self.tysys.def_at(struct_decl.id);
+        let mut scope = self.enter_decl_params_scope(owner, &struct_decl.type_params);
         let struct_field_types: Vec<TypeId> = struct_decl
             .fields
             .iter()
@@ -1764,7 +1779,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         scope.resolve_field_defaults(struct_decl, &struct_field_types);
 
-        let type_params = scope.data_type_params(&struct_decl.type_params);
+        let type_params = scope.project_type_params(&struct_decl.type_params);
         drop(scope);
 
         self.sem
@@ -1804,14 +1819,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.clear_binders();
 
-        let self_slot = scope
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_type_param("Self".to_string(), 0);
+        let trait_def = scope.tysys.def_at(id);
+        let self_slot =
+            scope
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_type_param(trait_def, "Self".to_string(), 0);
         // Before the parameters, since each one's bounds pin the `Self` they
         // mean, and inside the declaration that is this trait.
-        let trait_def = scope.tysys.def_at(id);
         let declaring = SelfBinding {
             type_id: self_slot,
             declaring_trait: Some(trait_def),
@@ -1846,7 +1862,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(declaring),
             )],
         );
-        let next_slot = scope.register_generic_params(type_params, 1);
+        let next_slot = scope.register_generic_params(trait_def, type_params, 1);
         (scope, self_slot, next_slot)
     }
 
@@ -1972,7 +1988,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         {
             let (mut scope, _, next_slot) =
                 self.enter_trait_frame(trait_id, &name, span, &type_params);
-            scope.register_generic_params(&func.type_params, next_slot);
+            let method = scope.tysys.def_at(func.id);
+            scope.register_generic_params(method, &func.type_params, next_slot);
             scope.sem.decls.clear_fn_local_items();
             let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
             let mut ctx = FunctionContext::new(return_type, func.name.clone());
@@ -1998,7 +2015,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.sem.decls.clear_fn_local_items();
         for method in &trait_decl.methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
-            method_scope.register_generic_params(&method.type_params, next_slot);
+            let method_def = method_scope.tysys.def_at(method.id);
+            method_scope.register_generic_params(method_def, &method.type_params, next_slot);
             // Both frames are in scope for a default, so both supply the type
             // argument a caller gets by default, in declaration-slot order.
             let type_params: Vec<ast::GenericParam> = trait_decl
@@ -2030,8 +2048,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 scope
                     .annotate_ctx
                     .trait_ctx
-                    .type_params
-                    .get(&tp.name)
+                    .binder_of(&scope.tysys.resolutions, tp)
                     .map(|b| (tp.name.clone(), b.type_id))
             }))
             .collect();
@@ -2049,7 +2066,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if method.effects_source == ast::EffectsSource::Written {
                 method_scope.resolve_effects(&method.effects);
             }
-            method_scope.register_generic_params(&method.type_params, next_slot);
+            let method_def = method_scope.tysys.def_at(method.id);
+            method_scope.register_generic_params(method_def, &method.type_params, next_slot);
             // Only slot-consuming parameters. A `fn`-bound one registers as
             // its bound's function type, so admitting it here put a
             // `Function` where a slot belongs — and made a trait's signature
@@ -2063,8 +2081,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     method_scope
                         .annotate_ctx
                         .trait_ctx
-                        .type_params
-                        .get(&tp.name)
+                        .binder_of(&method_scope.tysys.resolutions, tp)
                         .map(|b| (tp.name.clone(), b.type_id))
                 })
                 .collect();
@@ -2147,10 +2164,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// gap-2 substitution then specialises per impl-block instantiation).
     fn enter_operation_scope(
         &mut self,
+        owner: DefId,
         type_params: &[ast::GenericParam],
         resource_self: Option<DefId>,
     ) -> (TypeParamScope<'_, 'a, H>, Option<TypeId>) {
-        let mut scope = self.enter_decl_params_scope(type_params);
+        let mut scope = self.enter_decl_params_scope(owner, type_params);
         let self_type: Option<TypeId> = resource_self.map(|def| {
             if type_params.iter().any(|p| !p.is_effect) {
                 let type_arg_ids: Vec<TypeId> = type_params
@@ -2160,8 +2178,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         scope
                             .annotate_ctx
                             .trait_ctx
-                            .type_params
-                            .get(&p.name)
+                            .binder_of(&scope.tysys.resolutions, p)
                             .map(|b| b.type_id)
                             .expect("type param registered by register_generic_params")
                     })
@@ -2192,11 +2209,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// an effect decl takes no receiver.
     pub(super) fn resolve_effect_ops(
         &mut self,
+        owner: DefId,
         type_params: &[ast::GenericParam],
         methods: &[ast::Function],
         resource_self: Option<DefId>,
     ) -> Vec<TirEffectOp> {
-        let (mut scope, self_type) = self.enter_operation_scope(type_params, resource_self);
+        let (mut scope, self_type) = self.enter_operation_scope(owner, type_params, resource_self);
 
         let decl_slots: Vec<(String, TypeId)> = scope
             .annotate_ctx
@@ -2478,6 +2496,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// alive.
     pub(super) fn resolve_operation_param_defaults(
         &mut self,
+        owner: DefId,
         type_params: &[ast::GenericParam],
         methods: &[ast::Function],
         resource_self: Option<DefId>,
@@ -2485,7 +2504,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if !declares_a_default(methods) {
             return;
         }
-        let (mut scope, _) = self.enter_operation_scope(type_params, resource_self);
+        let (mut scope, _) = self.enter_operation_scope(owner, type_params, resource_self);
         // A default names no function-local item, and the table holds whatever
         // the last body walked left behind.
         scope.sem.decls.clear_fn_local_items();
@@ -2541,9 +2560,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         decl_id: ast::AstId,
         params: &[ast::GenericParam],
     ) {
+        let owner = self.tysys.def_at(decl_id);
         let type_params = self
-            .enter_decl_params_scope(params)
-            .data_type_params(params);
+            .enter_decl_params_scope(owner, params)
+            .project_type_params(params);
         self.sem.types.decl_type_params.insert(decl_id, type_params);
     }
 
@@ -2553,18 +2573,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// function in the decl pass — the body walk re-resolves only to
     /// record per-node facts.
     pub(super) fn record_function_sig(&mut self, func: &Function) -> FunctionSig {
-        let mut scope = self.enter_decl_params_scope(&func.type_params);
+        let owner = self.tysys.def_at(func.id);
+        let mut scope = self.enter_decl_params_scope(owner, &func.type_params);
         let real_type_params: Vec<(String, TypeId)> = func
             .type_params
             .iter()
             .filter(|p| p.is_real_type_param())
-            .filter_map(|p| {
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .get(&p.name)
-                    .map(|b| (p.name.clone(), b.type_id))
+            .map(|p| {
+                let binder = &scope.annotate_ctx.trait_ctx.type_params[&p.name];
+                (p.name.clone(), binder.type_id)
             })
             .collect();
         let param_types: Vec<TypeId> = func
@@ -2621,7 +2638,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         scope.reject_second_effect_param(&func.type_params);
 
-        scope.register_generic_params(&func.type_params, 0);
+        let owner = scope.tysys.def_at(func.id);
+        scope.register_generic_params(owner, &func.type_params, 0);
 
         // An interface operation's default body is walked as a function but
         // records no signature of its own; it declares no type parameters, so
@@ -2746,7 +2764,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         scope.walk_fn_body(func, return_type, &mut ctx);
 
-        let type_params = scope.fn_type_params(&func.type_params);
+        let type_params = scope.project_type_params(&func.type_params);
 
         let effects = scope.resolve_effects(&func.effects);
 
@@ -2804,7 +2822,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
         recorded_sig: Option<&MethodSig>,
-        impl_def: Option<DefId>,
+        impl_def: DefId,
     ) {
         // `recorded_sig` is `None` for a trait's own default-bodied method,
         // which was written against the trait's `Self`, not this impl's.
@@ -2820,6 +2838,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.sem.decls.clear_fn_local_items();
 
         let frame = scope.enter_impl_method_frame(
+            impl_def,
             func,
             impl_type,
             trait_type,
@@ -3014,7 +3033,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         self.walk_fn_body(func, return_type, &mut ctx);
 
-        let type_params = self.fn_type_params(&func.type_params);
+        let type_params = self.project_type_params(&func.type_params);
 
         // Store resolved param types for generic methods (before restoring type params scope)
         // so TypeParams have the correct ids for later inference at call sites.

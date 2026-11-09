@@ -668,11 +668,12 @@ impl ClosureLowerer {
             // — the inliner rewrites `Return` into `Break` only at statement
             // level. A single-expression body that reified into a Block leaves
             // its value in the trailing `Expr` statement; promote it to a
-            // `Return` or wir_build drops it as a bare statement.
+            // `Return` or wir_build drops it as a bare statement. A written
+            // block body is typed `()` or `!`: it returns only through `return`.
             let body_stmts = match &transformed_body.kind {
                 TirExprKind::Block(block) => {
                     let mut stmts = block.stmts.clone();
-                    if return_type != TypeTable::UNIT
+                    if !matches!(transformed_body.type_id, TypeTable::UNIT | TypeTable::NEVER)
                         && let Some(last) = stmts.last_mut()
                         && let TirStmtKind::Expr(value) = &last.kind
                     {

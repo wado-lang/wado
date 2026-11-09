@@ -4,15 +4,15 @@ use std::sync::Arc;
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
 use crate::tir::{
-    ProjectionAnswer, ResolvedType, SlotProjections, StructDef, TypeId, positional_substitution,
+    ProjectionAnswer, ResolvedType, SlotProjections, StructDef, TypeArgMap, TypeId, TypeParamId,
+    positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, FamilySite, ScopedBound};
+use super::scope::{BinderInScope, FamilySite, ParamRef, ScopedBound};
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -21,13 +21,13 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, repeat_pack_name};
+use crate::name::{FqTypeName, namespace_member_alias, namespaced_name};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
 
-/// What a trait's declared parameters stand for at a frame, by name.
-pub(super) type ParamSpace = Vec<(String, TypeId)>;
+/// What a declaration's parameters stand for at a frame.
+pub(super) type ParamSpace = Vec<(ParamRef, TypeId)>;
 
 /// A bound reachable from a frame, paired with the space its written types are
 /// read in — empty for one the frame wrote itself.
@@ -110,35 +110,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
-            Type::TypePackSpread(name, span) => {
-                let repeat = repeat_pack_name(name);
-                if let Some(&BinderInScope { index, type_id, .. }) =
-                    self.annotate_ctx.trait_ctx.type_params.get(&repeat)
+            Type::TypePackSpread(spread) => {
+                let (name, span) = (&spread.name, &spread.span);
+                if let Some(&BinderInScope { type_id, .. }) =
+                    self.annotate_ctx.trait_ctx.repeat_pack(name)
                 {
                     if self.tysys.type_table.borrow().is_tuple(type_id) {
                         return type_id;
                     }
-                    let element = self.resolve_unsited_type_name(name, *span);
+                    let element = self.resolve_named_type(spread.id, name, *span, false);
                     return self
                         .tysys
                         .type_table
                         .borrow_mut()
-                        .make_mapped_type_pack(repeat, index, element);
+                        .map_pack(type_id, element);
                 }
-                // Look up the type pack parameter
-                if let Some(&BinderInScope { index, type_id, .. }) =
-                    self.annotate_ctx.trait_ctx.type_params.get(name)
-                {
+                if let Some(type_id) = self.binder_at(spread.id, name) {
                     if self.tysys.type_table.borrow().is_tuple(type_id) {
                         return type_id;
                     }
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(name.clone(), index)
+                    self.tysys.type_table.borrow_mut().plain_pack(type_id)
                 } else {
                     // An unknown element is the name check's to report.
-                    let element = self.resolve_unsited_type_name(name, *span);
+                    let element = self.resolve_named_type(spread.id, name, *span, false);
                     if element != TypeTable::UNKNOWN {
                         let _ = self.emit(TypeError::RepeatOutsideSignature {
                             element: name.clone(),
@@ -293,13 +287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
-        let names_assoc_type = namespaced.namespace == "Self"
-            || self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(&namespaced.namespace);
-        if !names_assoc_type {
+        if !self.projects(namespaced) {
             return self.resolve_namespace_member(namespaced);
         }
         let Some(target) = self.assoc_target(namespaced) else {
@@ -585,7 +573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// What a type position's name denotes where it denotes no type: `an
     /// interface` or `a trait`, both of which share the type namespace.
     fn non_type_decl_kind(&self, site: AstId, name: &str) -> Option<&'static str> {
-        if name == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+        if name == "Self" || self.binder_at(site, name).is_some() {
             return None;
         }
         if let Some(def) = self.decl_key_at(Some(site), name) {
@@ -651,10 +639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `Self::Assoc` and `T::Assoc` project through a type rather
                 // than naming a declaration, and the projection is what
                 // answers for them.
-                let ns = &namespaced.namespace;
-                let projects =
-                    ns == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(ns);
-                if !projects
+                if !self.projects(namespaced)
                     && head(
                         self,
                         namespaced.id,
@@ -683,7 +668,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.walk_type_heads(element, head);
                 }
             }
-            Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
+            Type::TypePackSpread(_) | Type::Infer(_) | Type::Error(_) => {}
         }
     }
 
@@ -830,8 +815,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let params = self.type_lookup().declared_generic_params(def)?;
         let default = params.get(slot)?.default.clone()?;
-        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-        let resolved = self.with_type_param_args(&names, settled, |e| e.resolve_type(&default));
+        let space = ParamRef::space(params, settled, &self.tysys.resolutions);
+        let resolved = self.with_type_param_args(&space, |e| e.resolve_type(&default));
         if resolved == TypeTable::ERROR || resolved == TypeTable::UNKNOWN {
             // Nothing else reports a default: no application writes it, so the
             // name that reached nothing is named at the declaration instead.
@@ -842,6 +827,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         Some(resolved)
+    }
+
+    /// The type the parameter the resolver bound `site` to stands for here,
+    /// wherever the frame has moved it: a method's parameter shadowing an
+    /// impl's letter is not the parameter the impl's bounds name.
+    pub(super) fn binder_at(&self, site: AstId, name: &str) -> Option<TypeId> {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        let held = trait_ctx.binder_at(&self.tysys.resolutions, site, name)?;
+        Some(held.type_id)
+    }
+
+    /// Whether `namespaced` projects through `Self` or a parameter rather
+    /// than naming a namespace's member.
+    fn projects(&self, namespaced: &NamespacedGenericType) -> bool {
+        let ns = &namespaced.namespace;
+        ns == "Self"
+            || self
+                .annotate_ctx
+                .trait_ctx
+                .projection_base_at(&self.tysys.resolutions, namespaced.id, ns)
+                .is_some()
     }
 
     fn resolve_named_type_at(
@@ -860,10 +866,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        // First check if it's a type parameter in scope
-        if let Some(&BinderInScope { type_id, .. }) =
-            self.annotate_ctx.trait_ctx.type_params.get(name)
-        {
+        if let Some(type_id) = site.and_then(|site| self.binder_at(site, name)) {
             return type_id;
         }
 
@@ -926,10 +929,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .lookup_generic_newtype_of_decl(def)
             .cloned()
             .expect("`def` declares a generic newtype");
-        let names: Vec<String> = gn_info.type_params.iter().map(|p| p.name.clone()).collect();
-        let base_type_id = self.with_type_param_args(&names, &type_args, |e| {
-            e.resolve_type(&gn_info.base_type_ast)
-        });
+        let space = ParamRef::space(&gn_info.type_params, &type_args, &self.tysys.resolutions);
+        let base_type_id =
+            self.with_type_param_args(&space, |e| e.resolve_type(&gn_info.base_type_ast));
         self.tysys
             .type_table
             .borrow_mut()
@@ -1203,20 +1205,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 (None, None) => TypeTable::UNKNOWN,
             };
-            space.push((param.name.clone(), arg));
+            space.push((ParamRef::of(decl, &param.name), arg));
         }
         space
-    }
-
-    /// Run `body` with `space` answering for the names its types were written
-    /// in, layered on this frame.
-    pub(super) fn in_space<R>(
-        &mut self,
-        space: &ParamSpace,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        let (names, args): (Vec<String>, Vec<TypeId>) = space.iter().cloned().unzip();
-        self.with_type_params_bound(&names, &args, body)
     }
 
     /// Run `body` in the frame `scoped` was written in: its parameter space and
@@ -1228,13 +1219,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let binding = scoped.self_binding;
-        self.in_space(space, |e| e.under_self_binding(binding, body))
+        self.with_type_params_bound(space, |e| e.under_self_binding(binding, body))
     }
 
     /// `types` resolved with `space` answering for the names it was written in.
     fn resolve_in_space(&mut self, space: &ParamSpace, types: &[ast::Type]) -> Vec<TypeId> {
         let types = types.to_vec();
-        self.in_space(space, |e| {
+        self.with_type_params_bound(space, |e| {
             types.iter().map(|ty| e.resolve_type(ty)).collect()
         })
     }
@@ -1537,7 +1528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.annotate_ctx.trait_ctx.type_param_bounds.is_empty() {
             return ty;
         }
-        let asked: Vec<(u32, TypeId, String, ProjectionAnswer)> = {
+        let asked: Vec<(TypeParamId, TypeId, String, ProjectionAnswer)> = {
             let table = self.tysys.type_table.borrow();
             let binders = &self.annotate_ctx.trait_ctx.type_params;
             table
@@ -1554,11 +1545,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     else {
                         unreachable!("assoc_type_projections answers projections");
                     };
-                    let ResolvedType::TypeParam { index, name } = table.get(*param_id) else {
+                    let ResolvedType::TypeParam { id, name } = table.get(*param_id) else {
                         return None;
                     };
-                    // A callee's parameter the substitution left behind may
-                    // share a name with one of this frame's binders.
                     let asked = ProjectionAnswer {
                         owning_trait: *owning_trait,
                         trait_args: trait_args.clone(),
@@ -1566,7 +1555,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         answer: TypeTable::UNKNOWN,
                     };
                     (binders.get(name)?.type_id == *param_id)
-                        .then(|| (*index, *param_id, name.clone(), asked))
+                        .then(|| (*id, *param_id, name.clone(), asked))
                 })
                 .collect()
         };
@@ -1589,7 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .substitute_type_params_with(ty, &IndexMap::default(), &answers)
+            .substitute_type_params_with(ty, &TypeArgMap::default(), &answers)
     }
 
     /// What `bounds`, declared on `owning_trait`'s associated type `assoc`, say
@@ -1695,7 +1684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id: site.base,
             declaring_trait: Some(owning_trait),
         };
-        let resolved = self.in_space(&declaring.space, |e| {
+        let resolved = self.with_type_params_bound(&declaring.space, |e| {
             e.under_self_binding(Some(self_binding), |e| e.resolve_type(ty))
         });
         (resolved != TypeTable::UNKNOWN).then_some(resolved)
@@ -1726,7 +1715,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             match trait_args {
-                Some(args) => out.space.push((param.name.clone(), args[index])),
+                Some(args) => out
+                    .space
+                    .push((ParamRef::of(owning_trait, &param.name), args[index])),
                 None => out.unknown.push(param.name.clone()),
             }
         }
@@ -1767,13 +1758,25 @@ impl DeclaringSpace {
     }
 }
 
+/// A declaration's own type-parameter list, which [`TypeLookup::resolve_in`]
+/// resolves a type inside.
+#[derive(Clone, Copy)]
+pub(super) struct DeclParams<'a> {
+    pub(super) owner: DefId,
+    pub(super) slots: &'a [ParamSlot],
+}
+
 /// A `TypeId` per slot, in declaration order, so a slot's position is the
 /// index [`TypeLookup::resolve_in`] gave it.
-pub(super) fn slot_type_ids(slots: &[ParamSlot], type_table: &mut TypeTable) -> Vec<TypeId> {
+pub(super) fn slot_type_ids(
+    owner: DefId,
+    slots: &[ParamSlot],
+    type_table: &mut TypeTable,
+) -> Vec<TypeId> {
     slots
         .iter()
-        .enumerate()
-        .map(|(i, slot)| type_table.make_declared_param(slot.name.clone(), i as u32, slot.is_pack))
+        .zip(0..)
+        .map(|(slot, i)| type_table.make_declared_param(owner, slot.name.clone(), i, slot.is_pack))
         .collect()
 }
 
@@ -1784,25 +1787,31 @@ pub(super) fn slot_type_ids(slots: &[ParamSlot], type_table: &mut TypeTable) -> 
 impl TypeLookup<'_> {
     /// `ty`, outside any type-parameter list.
     pub(super) fn resolve(&self, ty: &Type, type_table: &mut TypeTable) -> TypeId {
-        self.resolve_in(ty, type_table, &[])
+        self.resolve_in(ty, type_table, None)
     }
 
     /// Append each declared default to `settled`, resolved against the
-    /// declaring parameters and then substituted with the arguments settled
-    /// before it: `Both<A, B = A>` binds `B` to `A`'s argument, not to whatever
-    /// the use site calls `A`.
+    /// parameters `owner` declares and then substituted with the arguments
+    /// settled before it: `Both<A, B = A>` binds `B` to `A`'s argument, not to
+    /// whatever the use site calls `A`.
     fn fill_declared_defaults(
         &self,
         settled: &mut Vec<TypeId>,
+        owner: DefId,
         slots: &[ParamSlot],
         defaults: &[Type],
         type_table: &mut TypeTable,
     ) {
-        let mut substitution = positional_substitution(settled);
+        let mut substitution = positional_substitution(owner, settled);
+        let frame = Some(DeclParams { owner, slots });
         for default in defaults {
-            let resolved = self.resolve_in(default, type_table, slots);
+            let resolved = self.resolve_in(default, type_table, frame);
             let filled = type_table.substitute_type_params(resolved, &substitution);
-            substitution.insert(settled.len() as u32, filled);
+            let slot = TypeParamId {
+                owner,
+                index: settled.len() as u32,
+            };
+            substitution.insert(slot, filled);
             settled.push(filled);
         }
     }
@@ -1831,8 +1840,13 @@ impl TypeLookup<'_> {
         &self,
         ty: &Type,
         type_table: &mut TypeTable,
-        type_params: &[ParamSlot],
+        frame: Option<DeclParams<'_>>,
     ) -> TypeId {
+        let type_params = frame.map_or(&[][..], |f| f.slots);
+        let param = |type_table: &mut TypeTable, index: usize, name: &str, is_pack: bool| {
+            let owner = frame.expect("a slot is found in a frame").owner;
+            type_table.make_declared_param(owner, name.to_string(), index as u32, is_pack)
+        };
         match ty {
             Type::Named(named) => {
                 // Which declaration the name means is the site's answer, taken
@@ -1844,7 +1858,7 @@ impl TypeLookup<'_> {
                 }
 
                 if let Some(index) = type_params.iter().position(|p| p.name == named.name) {
-                    return type_table.make_type_param(named.name.clone(), index as u32);
+                    return param(type_table, index, &named.name, false);
                 }
 
                 if let Some(primitive) =
@@ -1872,24 +1886,30 @@ impl TypeLookup<'_> {
                 if let Some(make) = head.and_then(|def| type_table.compiler_generic_builder(def))
                     && let [arg] = generic.args.as_slice()
                 {
-                    let elem = self.resolve_in(arg, type_table, type_params);
+                    let elem = self.resolve_in(arg, type_table, frame);
                     return make(type_table, elem);
                 }
                 let mut type_args: Vec<TypeId> = generic
                     .args
                     .iter()
-                    .map(|arg| self.resolve_in(arg, type_table, type_params))
+                    .map(|arg| self.resolve_in(arg, type_table, frame))
                     .collect();
-                // As in the elaborator's resolver, or a field type carries a
-                // half-applied instantiation.
-                if let Some((slots, defaults)) =
-                    head.and_then(|def| self.type_args_with_defaults(def, generic.args.len()))
-                {
-                    self.fill_declared_defaults(&mut type_args, &slots, &defaults, type_table);
-                }
                 let Some(head) = head else {
                     return TypeTable::UNKNOWN;
                 };
+                // As in the elaborator's resolver, or a field type carries a
+                // half-applied instantiation.
+                if let Some((slots, defaults)) =
+                    self.type_args_with_defaults(head, generic.args.len())
+                {
+                    self.fill_declared_defaults(
+                        &mut type_args,
+                        head,
+                        &slots,
+                        &defaults,
+                        type_table,
+                    );
+                }
                 // A `Newtype` over the instantiated base, as in the elaborator's
                 // resolver: `UNKNOWN` here would hide the inherited base methods
                 // from monomorphization.
@@ -1898,9 +1918,15 @@ impl TypeLookup<'_> {
                     // names no type until `T` is one.
                     let slots: Vec<ParamSlot> =
                         gn_info.type_params.iter().map(ParamSlot::from).collect();
-                    let base = self.resolve_in(&gn_info.base_type_ast, type_table, &slots);
-                    let substitution = positional_substitution(&type_args);
-                    let base_type_id = type_table.substitute_type_params(base, &substitution);
+                    let base = self.resolve_in(
+                        &gn_info.base_type_ast,
+                        type_table,
+                        Some(DeclParams {
+                            owner: head,
+                            slots: &slots,
+                        }),
+                    );
+                    let base_type_id = type_table.substitute_positional(base, head, &type_args);
                     return type_table.make_newtype_instance(head, type_args, base_type_id);
                 }
                 if self.struct_fields_of(head).is_some()
@@ -1914,11 +1940,11 @@ impl TypeLookup<'_> {
                 }
             }
             Type::Reference(inner) => {
-                let inner_type = self.resolve_in(inner, type_table, type_params);
+                let inner_type = self.resolve_in(inner, type_table, frame);
                 type_table.make_ref(inner_type)
             }
             Type::MutReference(inner) => {
-                let inner_type = self.resolve_in(inner, type_table, type_params);
+                let inner_type = self.resolve_in(inner, type_table, frame);
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
@@ -1934,12 +1960,11 @@ impl TypeLookup<'_> {
                     else {
                         return TypeTable::UNKNOWN;
                     };
-                    let param_id =
-                        type_table.make_type_param(namespaced.namespace.clone(), index as u32);
+                    let param_id = param(type_table, index, &namespaced.namespace, false);
                     let args = namespaced
                         .args
                         .iter()
-                        .map(|arg| self.resolve_in(arg, type_table, type_params))
+                        .map(|arg| self.resolve_in(arg, type_table, frame))
                         .collect();
                     return type_table.make_assoc_type_projection(
                         param_id,
@@ -1966,14 +1991,14 @@ impl TypeLookup<'_> {
                             span: namespaced.span,
                         })
                     };
-                    return self.resolve_in(&aliased, type_table, type_params);
+                    return self.resolve_in(&aliased, type_table, frame);
                 }
                 TypeTable::UNKNOWN
             }
             Type::Tuple(elements) => {
                 let elem_types: Vec<TypeId> = elements
                     .iter()
-                    .map(|e| self.resolve_in(e, type_table, type_params))
+                    .map(|e| self.resolve_in(e, type_table, frame))
                     .collect();
                 type_table.make_tuple(elem_types)
             }
@@ -1981,9 +2006,9 @@ impl TypeLookup<'_> {
                 let params: Vec<TypeId> = func_type
                     .params
                     .iter()
-                    .map(|p| self.resolve_in(p, type_table, type_params))
+                    .map(|p| self.resolve_in(p, type_table, frame))
                     .collect();
-                let return_type = self.resolve_in(&func_type.return_type, type_table, type_params);
+                let return_type = self.resolve_in(&func_type.return_type, type_table, frame);
                 type_table.intern(ResolvedType::Function {
                     is_mut: func_type.is_mut,
                     params,
@@ -1998,9 +2023,9 @@ impl TypeLookup<'_> {
             // `UNKNOWN`, so a generic tuple method (`Tuple<..T>^Eq::eq`)
             // monomorphizes against `Tuple<unknown>` and never registers at
             // WIR build.
-            Type::TypePackSpread(name, _span) => {
+            Type::TypePackSpread(ast::NamedType { name, .. }) => {
                 if let Some(index) = type_params.iter().position(|p| &p.name == name) {
-                    type_table.make_type_pack(name.clone(), index as u32)
+                    param(type_table, index, name, true)
                 } else {
                     TypeTable::UNKNOWN
                 }

@@ -59,6 +59,11 @@ fn list(c: bool) -> i32 {
     return count(&p[0]);
 }
 
+fn list_by_match(k: i32) -> i32 {
+    let p = match k { 0 => [null], _ => [Option::Some(T { n: 1 })] as List<Option<T>> };
+    return count(&p[0]);
+}
+
 fn generic_call(c: bool) -> i32 {
     let p = if c { wrap(null) } else { wrap(Option::Some(T { n: 1 })) };
     return count(&p.0);
@@ -77,6 +82,8 @@ test "a null inside a branch takes the type its sibling branch settles" {
     assert payload(builtin::black_box(false)) == 1;
     assert list(builtin::black_box(true)) == 0;
     assert list(builtin::black_box(false)) == 1;
+    assert list_by_match(builtin::black_box(0)) == 0;
+    assert list_by_match(builtin::black_box(1)) == 1;
     assert generic_call(builtin::black_box(true)) == 0;
     assert generic_call(builtin::black_box(false)) == 1;
 }

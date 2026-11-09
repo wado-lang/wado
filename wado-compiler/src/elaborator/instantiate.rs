@@ -5,13 +5,14 @@
 //! anything is checked. They then join the lifecycle [`super::infer_hole`] owns.
 
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, SubstitutionContext, TypeId};
+use crate::defs::DefId;
+use crate::tir::{ResolvedType, SubstitutionContext, TypeArgMap, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::coercion::ExpectedReturn;
+use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
 use crate::ast::{self, GenericParam};
@@ -62,7 +63,7 @@ pub(super) struct Instantiation<'a> {
     pub(super) self_binding: Option<SelfBinding>,
     /// What the receiver settles the enclosing impl's parameters to, which a
     /// method's bound may name. Empty off a method.
-    pub(super) impl_args: &'a [(String, TypeId)],
+    pub(super) impl_args: &'a [(ParamRef, TypeId)],
 }
 
 /// A declaration's slots rewritten into one use site's variables.
@@ -73,7 +74,7 @@ pub(super) struct Instantiated {
     pub(super) vars: Vec<TypeId>,
     /// Rewrites a type written in the declaration's frame into this use site's
     /// variables. Apply with `TypeTable::substitute_type_params`.
-    subst: IndexMap<u32, TypeId>,
+    subst: TypeArgMap,
     /// Per-slot "cannot infer" diagnostic, attached by
     /// [`Elaborator::record_instantiation`] to the slots still unsolved when the
     /// use site commits. `None` marks a slot that cannot go unanswered: one left
@@ -89,7 +90,7 @@ impl Instantiated {
         let diags = vec![None; vars.len()];
         Instantiated {
             vars,
-            subst: IndexMap::default(),
+            subst: TypeArgMap::default(),
             diags,
         }
     }
@@ -113,16 +114,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
-        let mut subst = IndexMap::default();
+        let mut subst = TypeArgMap::default();
         let named_args = self.turbofish_per_slot(slots, of.type_args);
         for (i, &slot) in slots.iter().enumerate() {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
-                    ResolvedType::TypeParam { index, name } => Some((*index, name.clone(), false)),
-                    ResolvedType::TypePack { index, name, .. } => {
-                        Some((*index, name.clone(), true))
-                    }
+                    ResolvedType::TypeParam { id, name } => Some((*id, name.clone(), false)),
+                    ResolvedType::TypePack { id, name, .. } => Some((*id, name.clone(), true)),
                     _ => None,
                 }
             };
@@ -130,21 +129,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get(i)
                 .copied()
                 .filter(|&t| t != TypeTable::UNKNOWN);
-            let Some((index, name, is_pack)) = named_slot else {
+            let Some((param, name, is_pack)) = named_slot else {
                 vars.push(slot);
                 diags.push(None);
                 continue;
             };
             if is_pack {
                 if let Some(pack) = named {
-                    subst.insert(index, pack);
+                    subst.insert(param, pack);
                 }
                 vars.push(slot);
                 diags.push(None);
                 continue;
             }
             let var = self.mint_infer_var_named(&name);
-            subst.insert(index, var);
+            subst.insert(param, var);
             vars.push(var);
             // Answered here, so an argument meets what the source wrote.
             if let Some(named) = named {
@@ -181,19 +180,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_type_params(ty, &inst.subst)
     }
 
-    /// `type_id` with each `TypeParam { index: i }` replaced by `type_args[i]`,
-    /// read at this frame: a projection the substitution reaches is answered.
-    pub(super) fn substitute_in_frame(&mut self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
-        let substituted = self.tysys.substitute_type_params(type_id, type_args);
+    /// `type_id` with `owner`'s parameter `i` replaced by `type_args[i]`, read
+    /// at this frame: a projection the substitution reaches is answered.
+    pub(super) fn substitute_in_frame(
+        &mut self,
+        type_id: TypeId,
+        owner: DefId,
+        type_args: &[TypeId],
+    ) -> TypeId {
+        let substituted = self.tysys.substitute_type_params(type_id, owner, type_args);
         self.answer_frame_projections(substituted)
     }
 
-    /// A static method's parameter types at a call: the impl's type parameters
-    /// number first and the method's own after them, so the method's arguments
-    /// alone would fill the impl's slots.
+    /// A static method's parameter types at a call. The declarations in
+    /// `owners`, its impl block's and its own, number one sequence: the impl's
+    /// parameters first and the method's after them.
     pub(super) fn static_param_types_at(
         &mut self,
         param_types: Vec<TypeId>,
+        owners: &[DefId],
         impl_args: &[TypeId],
         method_args: &[TypeId],
     ) -> Vec<TypeId> {
@@ -201,9 +206,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return param_types;
         }
         let combined: Vec<TypeId> = impl_args.iter().chain(method_args).copied().collect();
+        let subst: TypeArgMap = {
+            let table = self.tysys.type_table.borrow();
+            param_types
+                .iter()
+                .flat_map(|&t| table.type_params_in(t))
+                .filter(|param| owners.contains(&param.owner))
+                .filter_map(|param| Some((param, *combined.get(param.index as usize)?)))
+                .collect()
+        };
         param_types
             .iter()
-            .map(|&t| self.substitute_in_frame(t, &combined))
+            .map(|&t| {
+                let substituted = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .substitute_type_params(t, &subst);
+                self.answer_frame_projections(substituted)
+            })
             .collect()
     }
 
@@ -246,7 +267,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots`, carry their bounds, resolve the arguments against
     /// them, and settle the answers back. One call, so no path can take part of
     /// the sequence and hand a closure a rigid slot nothing can construct.
-    /// `ret` declares its return type in the slots' frame.
+    /// `ret` declares its return type in the slots' frame. The instantiation
+    /// comes back for the call's inference to solve: a second one would leave
+    /// the variables the arguments were typed by unanswered.
     pub(super) fn resolve_args_through_slots(
         &mut self,
         ctx: &mut FunctionContext,
@@ -256,9 +279,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         own_params: &[GenericParam],
         of: &Instantiation<'_>,
         ret: Option<ExpectedReturn>,
-    ) -> Vec<TypeId> {
+    ) -> (Vec<TypeId>, Option<Instantiated>) {
         if slots.is_empty() {
-            return self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
+            let args = self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
+            return (args, None);
         }
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.impl_args, of.span);
@@ -269,19 +293,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let mut args =
             self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst), ret);
-        self.settle_onto_slots(&inst, slots, &mut args, ret);
-        args
+        self.settle_onto_slots(&inst, &mut args, ret);
+        (args, Some(inst))
     }
 
-    /// Settle the walk's variables back onto their slots, substituting through
-    /// `args`. A slot no argument answered is answered by `ret`, the type the
-    /// call's site expects. [`Self::solve_infer_var`] keeps the first answer,
-    /// so a slot pinned so far stays pinned and one left open goes back rigid,
-    /// unless an enclosing collection took it over to answer later.
+    /// Settle the walk's variables, substituting through `args`. A slot no
+    /// argument answered is answered by `ret`, the type the call's site
+    /// expects. One still open stays a variable of this site: the
+    /// declaration's own parameter means nothing here (#2574).
     pub(super) fn settle_onto_slots(
         &mut self,
         inst: &Instantiated,
-        slots: &[TypeId],
         args: &mut [TypeId],
         ret: Option<ExpectedReturn>,
     ) {
@@ -289,11 +311,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let declared = self.apply_infer_holes(ret.declared);
             let expected = self.apply_infer_holes(ret.expected);
             self.solve_own_infer_holes_against(declared, expected, &inst.vars);
-        }
-        for (&var, &slot) in inst.vars.iter().zip(slots.iter()) {
-            if !self.awaits_pending_call(var) {
-                self.solve_infer_var(var, slot);
-            }
         }
         for arg in args {
             *arg = self.apply_infer_holes(*arg);
@@ -312,7 +329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inst: &Instantiated,
         params: &[GenericParam],
         self_binding: Option<SelfBinding>,
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
         span: Span,
     ) {
         for ((&var, param), diag) in inst.vars.iter().zip(params.iter()).zip(inst.diags.iter()) {

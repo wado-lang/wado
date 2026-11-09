@@ -10,7 +10,7 @@ use sha2::Digest;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, MAX_GENERIC_PARAMS, RangeKind};
+use crate::ast::{AstId, HandleClasses, RangeKind};
 use crate::compiler_item::CompilerItems;
 use crate::cut_memo::CutMemo;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -31,8 +31,8 @@ use crate::token::{Delimiter, Quote, Span};
 use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
     RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr,
-    TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeId, positional_substitution,
-    projection_arguments, range_item, solve_row,
+    TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId,
+    is_open_row, positional_substitution, projection_arguments, range_item, solve_row,
 };
 
 #[derive(Debug, Clone)]
@@ -733,6 +733,56 @@ impl TypeTable {
         self.is_resource_subtype(b_def, a_def).then_some(a)
     }
 
+    /// The type two branches agree on: [`Self::resource_join`]'s, or for two
+    /// function types taking the same parameters and returning the same type,
+    /// one each converts to. A return is invariant, so a join there names a
+    /// type neither branch converts to. The join is `fn mut` where either is,
+    /// and has a row covering both: their union where both are closed, else a
+    /// fresh variable, which the effect check solves from the rows the caller
+    /// records flowing into it.
+    pub fn branch_join(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if a == b {
+            return Some(a);
+        }
+        if let Some(joined) = self.resource_join(a, b) {
+            return Some(joined);
+        }
+        let (
+            ResolvedType::Function {
+                is_mut: a_mut,
+                params: a_params,
+                return_type: a_return,
+                effects: a_row,
+            },
+            ResolvedType::Function {
+                is_mut: b_mut,
+                params: b_params,
+                return_type: b_return,
+                effects: b_row,
+            },
+        ) = (self.get(a).clone(), self.get(b).clone())
+        else {
+            return None;
+        };
+        if a_params != b_params || a_return != b_return {
+            return None;
+        }
+        let row = if a_row == b_row {
+            a_row
+        } else if is_open_row(&a_row) || is_open_row(&b_row) {
+            vec![self.mint_effect_var()]
+        } else {
+            let mut union = a_row;
+            for effect in b_row {
+                if !union.contains(&effect) {
+                    union.push(effect);
+                }
+            }
+            union
+        };
+        Some(self.make_function_with_mut(a_mut || b_mut, a_params, a_return, row))
+    }
+
     /// The resource `ty` is a handle to, where it takes no type arguments:
     /// only such a resource extends another.
     #[must_use]
@@ -1092,26 +1142,18 @@ impl TypeTable {
         }
     }
 
-    /// The type parameters shape `id` mentions, by name: the frame its
-    /// synthesized methods are instantiated in at a substituted shape.
+    /// The type parameters shape `id` mentions, by the binder each spells: the
+    /// frame its synthesized methods are instantiated in at a substituted shape.
     #[must_use]
-    pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<String, u32> {
+    pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<FqTypeName, TypeParamId> {
         self.anon_shape_params(id)
             .into_iter()
-            .map(|(index, ty)| match self.get(ty) {
-                ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
-                    (name.clone(), index)
-                }
-                ResolvedType::PackElement { pack, walk } => {
-                    (pack_element_name(self.pack_name(*pack), *walk), index)
-                }
-                other => unreachable!("collected a parameter that is not one: {other:?}"),
-            })
+            .map(|(param, ty)| (self.fq_type_name(ty), param))
             .collect()
     }
 
-    /// The type parameters and packs shape `id` mentions, by index.
-    fn anon_shape_params(&self, id: AnonStructId) -> IndexMap<u32, TypeId> {
+    /// The type parameters and packs shape `id` mentions.
+    fn anon_shape_params(&self, id: AnonStructId) -> TypeArgMap {
         let mut found = IndexMap::default();
         self.any_anon_shape_type(id, &mut |ty| {
             self.collect_type_params(ty, &mut found);
@@ -1120,17 +1162,15 @@ impl TypeTable {
         found
     }
 
-    fn collect_type_params(&self, id: TypeId, found: &mut IndexMap<u32, TypeId>) {
+    fn collect_type_params(&self, id: TypeId, found: &mut TypeArgMap) {
         match self.get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                found.insert(*index, id);
+            ResolvedType::TypeParam { id: param, .. }
+            | ResolvedType::TypePack { id: param, .. } => {
+                found.insert(*param, id);
             }
             // Its walk's unroll answers it, at the walk's slot.
             ResolvedType::PackElement { pack, walk } => {
-                let ResolvedType::TypePack { index, .. } = self.get(*pack) else {
-                    unreachable!("a pack element names a type pack");
-                };
-                found.insert(Self::pack_walk_slot(*index, *walk), id);
+                found.insert(self.pack_id(*pack).walk_slot(*walk), id);
             }
             _ => {
                 self.any_constituent(id, &mut |t| {
@@ -2241,6 +2281,21 @@ impl TypeTable {
         matches!(self.get(id), ResolvedType::Tuple(_))
     }
 
+    /// Which parameter `id` is, where it is a type parameter or pack: a pack's
+    /// element placeholder is its pack's.
+    #[must_use]
+    pub fn type_param_id(&self, id: TypeId) -> Option<TypeParamId> {
+        match self.get(id) {
+            ResolvedType::TypeParam { id, .. } | ResolvedType::TypePack { id, .. } => Some(*id),
+            _ => None,
+        }
+    }
+
+    /// Which pack `pack` is.
+    fn pack_id(&self, pack: TypeId) -> TypeParamId {
+        self.pack_parts(pack).0
+    }
+
     /// Whether a type is a declared type pack, as opposed to one of the
     /// tuples a pack stands for.
     pub fn is_type_pack(&self, id: TypeId) -> bool {
@@ -2254,7 +2309,7 @@ impl TypeTable {
             self.as_tuple(id)?
                 .into_iter()
                 .map(|e| match self.get(e) {
-                    ResolvedType::TypePack { name, .. } => TupleSlot::Pack(name.clone()),
+                    ResolvedType::TypePack { id, .. } => TupleSlot::Pack(*id),
                     _ => TupleSlot::Fixed,
                 })
                 .collect(),
@@ -2282,16 +2337,10 @@ impl TypeTable {
                     TupleSlot::Fixed => self.make_tuple(cells),
                     // A pack slot stands for a run, so its column is a pack too:
                     // element `k` is the cells with the pack bound to its `k`-th.
-                    TupleSlot::Pack(name) => {
-                        let parts: Vec<(u32, TypeId)> =
-                            cells.iter().map(|&c| self.pack_element(c)).collect();
-                        let (index, _) = parts[0];
-                        assert!(
-                            parts.iter().all(|&(i, _)| i == index),
-                            "one scope gives a pack name one index"
-                        );
-                        let elem = self.make_tuple(parts.iter().map(|&(_, e)| e).collect());
-                        self.make_mapped_type_pack(name.clone(), index, elem)
+                    TupleSlot::Pack(_) => {
+                        let elem = cells.iter().map(|&c| self.pack_element(c)).collect();
+                        let elem = self.make_tuple(elem);
+                        self.map_pack(cells[0], elem)
                     }
                 }
             })
@@ -2299,21 +2348,13 @@ impl TypeTable {
         Some(self.make_tuple(columns))
     }
 
-    /// What one row contributes at a pack slot: the pack's index, and its
-    /// mapped element or the scalar placeholder an identity pack stands for.
-    fn pack_element(&mut self, cell: TypeId) -> (u32, TypeId) {
-        let ResolvedType::TypePack {
-            name,
-            index,
-            mapped_elem,
-        } = self.get(cell).clone()
-        else {
+    /// What one row contributes at a pack slot: its mapped element, or the
+    /// scalar placeholder an identity pack stands for.
+    fn pack_element(&mut self, cell: TypeId) -> TypeId {
+        let ResolvedType::TypePack { mapped_elem, .. } = self.get(cell).clone() else {
             unreachable!("`tuple_layout` marks a slot a pack only for a `TypePack`")
         };
-        (
-            index,
-            mapped_elem.unwrap_or_else(|| self.make_type_param(name, index)),
-        )
+        mapped_elem.unwrap_or_else(|| self.pack_placeholder(cell))
     }
 
     /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
@@ -2504,8 +2545,9 @@ impl TypeTable {
             cases
                 .iter()
                 .map(|&(_, _, payload)| match self.get(payload) {
-                    ResolvedType::TypeParam { index, .. } if !type_args.is_empty() => {
-                        type_args[*index as usize]
+                    ResolvedType::TypeParam { id, .. } if !type_args.is_empty() => {
+                        assert_eq!(id.owner, def, "a payload mentions its variant's parameters");
+                        type_args[id.index as usize]
                     }
                     _ => payload,
                 })
@@ -2563,8 +2605,17 @@ impl TypeTable {
             return self.holds_affine_in(elem, params, open, memo);
         }
         let (def, args, members): (Option<DefId>, &[TypeId], Vec<TypeId>) = match self.get(ty) {
-            ResolvedType::TypeParam { index, .. } => {
-                return params.get(*index as usize).copied().unwrap_or(false);
+            // `params` are the answers for the template `open` is inside. The
+            // declaration's own type (no arguments) binds none of its
+            // parameters, which are free there as they are outside any template.
+            ResolvedType::TypeParam { id, .. } => {
+                return open.last().is_some_and(|(template, _)| {
+                    assert_eq!(
+                        id.owner, *template,
+                        "a member names its template's parameters"
+                    );
+                    !params.is_empty() && params[id.index as usize]
+                });
             }
             ResolvedType::Resource { .. } => return self.is_resource_object(ty),
             ResolvedType::BuiltinArray(elem) => {
@@ -2655,7 +2706,7 @@ impl TypeTable {
     /// A type whose members are not registered may hold anything, so it does.
     #[must_use]
     pub fn reaches_mut_ref(&self, ty: TypeId) -> bool {
-        self.reaches_in(ty, Reach::MutRef, &[], &mut IndexSet::default())
+        self.reaches_in(ty, Reach::MutRef, None, &mut IndexSet::default())
     }
 
     /// The kind of GC object a place of `ty` reads its fields or elements
@@ -2671,21 +2722,24 @@ impl TypeTable {
     /// A type whose members are not registered may hold anything, so it does.
     #[must_use]
     pub fn reaches_object(&self, ty: TypeId, kind: TypeId) -> bool {
-        self.reaches_in(ty, Reach::Object(kind), &[], &mut IndexSet::default())
+        self.reaches_in(ty, Reach::Object(kind), None, &mut IndexSet::default())
     }
 
-    /// Whether `ty`, as written inside a template instantiated with `args`,
+    /// Whether `ty`, as written inside the template `frame` instantiates,
     /// reaches `target`. `walked` holds what the walk is already inside, which
     /// adds nothing.
     fn reaches_in(
         &self,
         ty: TypeId,
         target: Reach,
-        args: &[TypeId],
-        walked: &mut IndexSet<(TypeId, Vec<TypeId>)>,
+        frame: Option<(DefId, &[TypeId])>,
+        walked: &mut IndexSet<(TypeId, Option<DefId>, Vec<TypeId>)>,
     ) -> bool {
         let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
-            ResolvedType::TypeParam { index, .. } => args.get(*index as usize).copied(),
+            // A parameter `frame` does not bind is free here.
+            ResolvedType::TypeParam { id, .. } => frame
+                .filter(|&(template, _)| template == id.owner)
+                .and_then(|(_, args)| args.get(id.index as usize).copied()),
             _ => Some(ty),
         };
         let Some(ty) = bind(ty) else {
@@ -2697,7 +2751,8 @@ impl TypeTable {
         {
             return true;
         }
-        if !walked.insert((ty, args.to_vec())) {
+        let (template, args) = frame.unzip();
+        if !walked.insert((ty, template, args.unwrap_or_default().to_vec())) {
             return false;
         }
         // `List` is the compiler's, so no struct registers its fields: it is
@@ -2708,9 +2763,9 @@ impl TypeTable {
                     if *array_elem == elem)
             };
             return matches!(target, Reach::Object(kind) if backs(kind))
-                || self.reaches_in(elem, target, args, walked);
+                || self.reaches_in(elem, target, frame, walked);
         }
-        let (template_args, members): (Vec<TypeId>, Vec<TypeId>) = match self.get(ty) {
+        let (template, members): (Option<(DefId, Vec<TypeId>)>, Vec<TypeId>) = match self.get(ty) {
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -2720,17 +2775,17 @@ impl TypeTable {
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::BuiltinArray(inner) => {
-                return self.reaches_in(*inner, target, args, walked);
+                return self.reaches_in(*inner, target, frame, walked);
             }
             ResolvedType::Tuple(elems) => match elems.iter().map(|&e| bind(e)).collect() {
-                Some(bound) => (Vec::new(), bound),
+                Some(bound) => (None, bound),
                 None => return true,
             },
             ResolvedType::Struct {
                 def: StructDef::Anon(shape),
                 ..
             } => (
-                args.to_vec(),
+                frame.map(|(template, args)| (template, args.to_vec())),
                 self.anon_struct_fields(*shape)
                     .iter()
                     .map(|(_, ty)| *ty)
@@ -2751,15 +2806,10 @@ impl TypeTable {
                 let Some(members) = self.declared_members(*def, &bound) else {
                     return true;
                 };
-                let template_args = if members.of_template {
-                    bound
-                } else {
-                    Vec::new()
-                };
-                (template_args, members.types)
+                (members.of_template.then_some((*def, bound)), members.types)
             }
             ResolvedType::Newtype { base_type, .. } => {
-                return self.reaches_in(*base_type, target, args, walked);
+                return self.reaches_in(*base_type, target, frame, walked);
             }
             ResolvedType::Function { .. }
             | ResolvedType::Resource { .. }
@@ -2772,9 +2822,10 @@ impl TypeTable {
             | ResolvedType::Unknown
             | ResolvedType::Error => return true,
         };
-        members
-            .into_iter()
-            .any(|member| self.reaches_in(member, target, &template_args, walked))
+        members.into_iter().any(|member| {
+            let frame = template.as_ref().map(|(def, args)| (*def, args.as_slice()));
+            self.reaches_in(member, target, frame, walked)
+        })
     }
 
     /// The interned type of variant `def` itself, applied to no arguments.
@@ -3142,9 +3193,13 @@ impl TypeTable {
         }
     }
 
-    /// Create a type parameter (e.g., `T` in `struct Box<T>`)
-    pub fn make_type_param(&mut self, name: String, index: u32) -> TypeId {
-        self.intern(ResolvedType::TypeParam { name, index })
+    /// Create the type parameter `owner` declares at `index` (`T` in
+    /// `struct Box<T>`).
+    pub fn make_type_param(&mut self, owner: DefId, name: String, index: u32) -> TypeId {
+        self.intern(ResolvedType::TypeParam {
+            id: TypeParamId { owner, index },
+            name,
+        })
     }
 
     /// The parameters of `owning_trait`'s generic associated type
@@ -3172,11 +3227,17 @@ impl TypeTable {
 
     /// The id a declaration's parameter at `index` interns to. A pack holds a
     /// tuple in its one slot, so it is a `TypePack` and not a `TypeParam`.
-    pub fn make_declared_param(&mut self, name: String, index: u32, is_pack: bool) -> TypeId {
+    pub fn make_declared_param(
+        &mut self,
+        owner: DefId,
+        name: String,
+        index: u32,
+        is_pack: bool,
+    ) -> TypeId {
         if is_pack {
-            self.make_type_pack(name, index)
+            self.make_type_pack(owner, name, index)
         } else {
-            self.make_type_param(name, index)
+            self.make_type_param(owner, name, index)
         }
     }
 
@@ -3223,10 +3284,10 @@ impl TypeTable {
     }
 
     /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
-    pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
+    pub fn make_type_pack(&mut self, owner: DefId, name: String, index: u32) -> TypeId {
         self.intern(ResolvedType::TypePack {
+            id: TypeParamId { owner, index },
             name,
-            index,
             mapped_elem: None,
         })
     }
@@ -3290,61 +3351,75 @@ impl TypeTable {
         self.intern(ResolvedType::PackElement { pack, walk })
     }
 
-    /// The substitution key under which unrolling walk `walk` fills the
-    /// elements of the pack declared at `pack_index`. Above every declared
-    /// parameter's index, so it never shadows one.
-    pub fn pack_walk_slot(pack_index: u32, walk: u32) -> u32 {
-        const BASE: u32 = 1 << 30;
-        const PACKS_PER_WALK: u32 = 1 << 10;
-        // An impl's list and its method's index one sequence.
-        const _: () = assert!(2 * MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
-        assert!(
-            pack_index < PACKS_PER_WALK && walk < BASE / PACKS_PER_WALK - 1,
-            "a declaration's parameters and a body's walk nesting are bounded"
-        );
-        BASE + walk * PACKS_PER_WALK + pack_index
-    }
-
     /// Where `pack` is a mapped pack whose element does not mention it, the
     /// identity pack driving its length and the one type every element is.
     pub fn repeated_element(&mut self, pack: TypeId) -> Option<(TypeId, TypeId)> {
         let ResolvedType::TypePack {
-            name,
-            index,
+            id,
             mapped_elem: Some(element),
-        } = self.get(pack).clone()
+            ..
+        } = *self.get(pack)
         else {
             return None;
         };
-        if self.mentions_param_slot(element, index) {
+        if self.mentions_param(element, id) {
             return None;
         }
-        Some((self.make_type_pack(name, index), element))
+        Some((self.plain_pack(pack), element))
     }
 
-    /// Whether `id` mentions the type parameter or pack at slot `index`.
-    fn mentions_param_slot(&self, id: TypeId, index: u32) -> bool {
-        match self.get(id) {
-            ResolvedType::TypeParam { index: at, .. }
-            | ResolvedType::TypePack { index: at, .. }
-                if *at == index =>
-            {
-                true
-            }
-            _ => self.any_constituent(id, &mut |t| self.mentions_param_slot(t, index)),
-        }
+    /// Whether `ty` (recursively) mentions parameter `param`, projections
+    /// included.
+    pub fn mentions_param(&self, ty: TypeId, param: TypeParamId) -> bool {
+        self.type_param_id(ty) == Some(param)
+            || self.any_constituent(ty, &mut |t| self.mentions_param(t, param))
     }
 
     /// Create a mapped type pack: element `i` is `elem[F := F_i]`, where the
     /// pack param may recur in `elem` as a scalar `TypeParam` placeholder.
     /// Drives its arity from pack `(name, index)`. See
     /// [`ResolvedType::TypePack`].
-    pub fn make_mapped_type_pack(&mut self, name: String, index: u32, elem: TypeId) -> TypeId {
+    pub fn make_mapped_type_pack(
+        &mut self,
+        owner: DefId,
+        name: String,
+        index: u32,
+        elem: TypeId,
+    ) -> TypeId {
         self.intern(ResolvedType::TypePack {
+            id: TypeParamId { owner, index },
             name,
-            index,
             mapped_elem: Some(elem),
         })
+    }
+
+    /// `pack`'s identity and name.
+    fn pack_parts(&self, pack: TypeId) -> (TypeParamId, String) {
+        let ResolvedType::TypePack { id, name, .. } = self.get(pack) else {
+            unreachable!("expected a type pack, found {:?}", self.get(pack))
+        };
+        (*id, name.clone())
+    }
+
+    /// `pack` mapped through `elem`: the mapped pack of `pack`'s declaration and
+    /// slot.
+    pub fn map_pack(&mut self, pack: TypeId, elem: TypeId) -> TypeId {
+        let (id, name) = self.pack_parts(pack);
+        self.make_mapped_type_pack(id.owner, name, id.index, elem)
+    }
+
+    /// The scalar placeholder an identity pack's element stands as: a type
+    /// parameter at the pack's declaration and slot, which per-element
+    /// substitution binds to `P_k`.
+    pub fn pack_placeholder(&mut self, pack: TypeId) -> TypeId {
+        let (id, name) = self.pack_parts(pack);
+        self.make_type_param(id.owner, name, id.index)
+    }
+
+    /// The identity pack `pack`'s declaration binds at `pack`'s slot.
+    pub fn plain_pack(&mut self, pack: TypeId) -> TypeId {
+        let (id, name) = self.pack_parts(pack);
+        self.make_type_pack(id.owner, name, id.index)
     }
 
     /// Create the projection `<param_id as owning_trait<trait_args>>::assoc_name<args>`,
@@ -3444,27 +3519,35 @@ impl TypeTable {
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
     /// parameter as its argument in `args`, which name a prefix of them.
-    fn frame_slots(
-        &self,
-        frame: &TraitFrame,
-        base: TypeId,
-        args: &[TypeId],
-    ) -> IndexMap<u32, TypeId> {
+    fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
         assert!(
             args.len() <= frame.params.len(),
             "a trait is reached at no more arguments than it has parameters"
         );
-        let slot_of = |param: TypeId| {
-            self.param_slot(param)
-                .expect("a trait frame's parameters are slots")
-        };
-        let mut slots = IndexMap::from_iter([(slot_of(frame.self_param), base)]);
+        let mut slots = IndexMap::from_iter([(self.declared_param(frame.self_param), base)]);
         for (param, &arg) in frame.params.iter().zip(args) {
             if let Some(param) = param {
-                slots.insert(slot_of(*param), arg);
+                slots.insert(self.declared_param(*param), arg);
             }
         }
         slots
+    }
+
+    /// Which parameter `param`, a declaration's own parameter, is.
+    pub fn declared_param(&self, param: TypeId) -> TypeParamId {
+        self.type_param_id(param).unwrap_or_else(|| {
+            unreachable!("expected a type parameter, found {:?}", self.get(param))
+        })
+    }
+
+    /// `args` filling `params`, a declaration's own parameters, pairwise.
+    /// Parameters past the end of `args` stay unfilled.
+    pub fn bind_params(&self, params: &[TypeId], args: &[TypeId]) -> TypeArgMap {
+        params
+            .iter()
+            .zip(args)
+            .map(|(&param, &arg)| (self.declared_param(param), arg))
+            .collect()
     }
 
     /// `written`, a reference's arguments to the trait of `frame` reached on
@@ -3694,7 +3777,7 @@ impl TypeTable {
         &mut self,
         origin: &ReceiverAssocTypes,
         instance: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
     ) {
         let to = self.instance_key(instance);
         for (key, answers) in &origin.0 {
@@ -3891,13 +3974,13 @@ impl TypeTable {
     /// [`Self::resolve_assoc_type`] applies to resolved types. With
     /// `type_args`, only an impl whose target binds at them takes part.
     fn generic_assoc_type_def(
-        &self,
+        &mut self,
         base_decl: AstId,
         target_ref: Option<RefKind>,
         assoc_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> Option<(DefId, AssocAnswer)> {
-        let mut candidates: Vec<(DefId, &AssocAnswer)> = self
+        let mut candidates: Vec<(DefId, AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| {
@@ -3907,51 +3990,69 @@ impl TypeTable {
             })
             .flat_map(|(key, answers)| answers.0.iter().map(move |entry| (key.trait_decl, entry)))
             .filter(|(_, entry)| type_args.is_none_or(|args| self.entry_reaches(entry, args)))
+            .map(|(trait_decl, entry)| (trait_decl, entry.clone()))
             .collect();
         if candidates.iter().any(|(_, entry)| entry.written.is_empty()) {
             candidates.retain(|(_, entry)| entry.written.is_empty());
         }
         // Several traits may declare one name over a single definition —
         // `IterFilter` answers `Item` as both `Iterator` and `IntoIterator` —
-        // so the definitions decide agreement. One answer means one type only
-        // where both are written over the same parameters.
-        let &(trait_decl, last) = candidates.last()?;
-        candidates
-            .iter()
-            .all(|(_, entry)| entry.answer == last.answer && self.same_frame(entry, last))
-            .then(|| (trait_decl, last.clone()))
+        // so the definitions decide agreement. Each impl writes its answer over
+        // its own parameters, so the answers are compared at one instance: the
+        // call's, else the target one of the impls writes.
+        let (trait_decl, last) = candidates.last()?.clone();
+        let frame = type_args.map(<[TypeId]>::to_vec).or_else(|| {
+            candidates
+                .iter()
+                .find_map(|(_, entry)| entry.impl_def)
+                .map(|def| self.impl_target_args(def).to_vec())
+        });
+        let Some(frame) = frame else {
+            // Every answer is written over the declaration's own parameters.
+            return candidates
+                .iter()
+                .all(|(_, entry)| entry.answer == last.answer)
+                .then_some((trait_decl, last));
+        };
+        let mut answers = candidates.iter().map(|(_, entry)| {
+            let slots = self.entry_slots(entry, base_decl, &frame)?;
+            Some(self.substitute_type_params(entry.answer, &slots))
+        });
+        let first = answers.next()??;
+        answers
+            .all(|answer| answer == Some(first))
+            .then_some((trait_decl, last))
     }
 
-    /// Whether two entries are written over the same parameters: the
-    /// declaration's own, or impl targets that place them alike.
-    fn same_frame(&self, a: &AssocAnswer, b: &AssocAnswer) -> bool {
-        match (a.impl_def, b.impl_def) {
-            (None, None) => true,
-            (Some(a), Some(b)) => a == b || self.impl_target_args(a) == self.impl_target_args(b),
-            (Some(_), None) | (None, Some(_)) => false,
-        }
-    }
-
-    /// The parameters a generic `entry` is written over, at an instance whose
-    /// declaration takes `type_args`: what its impl's target binds there. An
-    /// impl's parameters need not stand at the declaration's positions: one is
-    /// nested in an argument (`impl<T> Tr for W<List<T>>`), or written only in
-    /// an `<F: fn(...)>` signature.
+    /// The parameters a generic `entry` is written over, at an instance of
+    /// declaration `decl` taking `type_args`: what its impl's target binds
+    /// there, then what its bounds project from those. An impl's parameters
+    /// need not stand at the declaration's positions: one is nested in an
+    /// argument (`impl<T> Tr for W<List<T>>`), written only in an
+    /// `<F: fn(...)>` signature, or projected (`impl<T: Tr<Out = U>, U>`).
     fn entry_slots(
-        &self,
+        &mut self,
         entry: &AssocAnswer,
+        decl: AstId,
         type_args: &[TypeId],
-    ) -> Option<IndexMap<u32, TypeId>> {
+    ) -> Option<TypeArgMap> {
         match entry.impl_def {
-            Some(def) => self.impl_target_binding(self.impl_target_args(def), type_args),
-            None => Some(positional_substitution(type_args)),
+            Some(def) => {
+                let mut slots = self.impl_target_binding(self.impl_target_args(def), type_args)?;
+                self.project_impl_slots(def, &mut slots);
+                Some(slots)
+            }
+            None => Some(positional_substitution(self.defs().def_at(decl), type_args)),
         }
     }
 
     /// Whether `entry`'s impl's target binds at `type_args`:
     /// `impl<T> Tr for W<List<T>>` answers nothing at `W<i32>`.
     fn entry_reaches(&self, entry: &AssocAnswer, type_args: &[TypeId]) -> bool {
-        self.entry_slots(entry, type_args).is_some()
+        entry.impl_def.is_none_or(|def| {
+            self.impl_target_binding(self.impl_target_args(def), type_args)
+                .is_some()
+        })
     }
 
     fn answers_reaching(&self, answers: &AssocAnswers, type_args: &[TypeId]) -> AssocAnswers {
@@ -3970,41 +4071,38 @@ impl TypeTable {
     fn entry_slots_mut(
         &mut self,
         entry: &AssocAnswer,
+        decl: AstId,
         type_args: &[TypeId],
-    ) -> IndexMap<u32, TypeId> {
+    ) -> TypeArgMap {
         match entry.impl_def {
             Some(def) => self.impl_slots(def, type_args),
-            None => positional_substitution(type_args),
+            None => positional_substitution(self.defs().def_at(decl), type_args),
         }
     }
 
     /// Register associated-type resolutions for a freshly monomorphized struct:
-    /// each definition on `base_decl` is resolved eagerly against
-    /// `substitution` and recorded under `concrete_id` for later
-    /// [`Self::resolve_assoc_type`] hits.
+    /// each definition on `base_decl` is resolved eagerly at `type_args` and
+    /// recorded under `concrete_id` for later [`Self::resolve_assoc_type`]
+    /// hits.
     pub fn register_monomorphized_assoc_types(
         &mut self,
         concrete_id: TypeId,
         base_decl: AstId,
-        substitution: &IndexMap<u32, TypeId>,
+        type_args: &[TypeId],
     ) {
-        let mut type_args: Vec<(u32, TypeId)> =
-            substitution.iter().map(|(&i, &t)| (i, t)).collect();
-        type_args.sort_by_key(|&(index, _)| index);
-        let type_args: Vec<TypeId> = type_args.into_iter().map(|(_, t)| t).collect();
         let defs: Vec<(DefId, String, AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl && key.target_ref.is_none())
             .flat_map(|(key, answers)| {
-                self.answers_reaching(answers, &type_args)
+                self.answers_reaching(answers, type_args)
                     .0
                     .into_iter()
                     .map(move |entry| (key.trait_decl, key.assoc_name.clone(), entry))
             })
             .collect();
         for (trait_decl, assoc_name, entry) in defs {
-            let slots = self.entry_slots_mut(&entry, &type_args);
+            let slots = self.entry_slots_mut(&entry, base_decl, type_args);
             // The header's arguments are written over the impl's parameters too.
             let args = entry
                 .written
@@ -4047,66 +4145,10 @@ impl TypeTable {
         }
     }
 
-    /// Resolve an associated type of a generic instance from its impl's definition.
-    /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
-    /// then substitutes using the instance's `type_args` to get `i32`.
-    pub fn resolve_generic_assoc_type(
-        &self,
-        concrete_id: TypeId,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        let type_args = self.nominal_type_args(concrete_id)?;
-        let (_, entry) = self.generic_assoc_type_def(
-            self.decl_of_type(concrete_id)?,
-            self.ref_kind(concrete_id),
-            assoc_name,
-            Some(&type_args),
-        )?;
-        let slots = self.entry_slots(&entry, &type_args)?;
-        let def_type_id = entry.answer;
-        match self.get(def_type_id).clone() {
-            ResolvedType::TypeParam { index, .. } => slots.get(&index).copied(),
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name: inner_assoc_name,
-                ..
-            } => {
-                // The def is `I::InnerName`. Substitute I with the concrete type arg.
-                let inner_concrete_id =
-                    if let ResolvedType::TypeParam { index, .. } = self.get(param_id).clone() {
-                        slots.get(&index).copied()?
-                    } else {
-                        param_id
-                    };
-                // Recursively resolve `inner_concrete_id::inner_assoc_name`.
-                if let Some(resolved) =
-                    self.resolve_assoc_type(inner_concrete_id, &inner_assoc_name)
-                {
-                    return Some(resolved);
-                }
-                self.resolve_generic_assoc_type(inner_concrete_id, &inner_assoc_name)
-            }
-            // A composite def (`&T`, `List<T>`, …) still carrying the base
-            // struct's type params cannot be substituted here without interning
-            // (this is a `&self` fast path). Return `None` so the caller keeps
-            // the projection unresolved; the `&mut`
-            // `resolve_generic_assoc_type_mono` resolves it with the instance's
-            // type args. A param-free composite def is returned as-is.
-            _ => {
-                if self.contains_type_param(def_type_id) {
-                    None
-                } else {
-                    Some(def_type_id)
-                }
-            }
-        }
-    }
-
-    /// Monomorphization-time associated-type resolution for a generic instance.
-    /// Where [`Self::resolve_generic_assoc_type`] is a `&self` fast path limited
-    /// to a bare-`TypeParam` def, this substitutes positionally through
-    /// [`Self::substitute_type_params`], so a composite or nested definition
-    /// (`&T`, `I::Item`) becomes fully concrete one level per recursion.
+    /// Monomorphization-time associated-type resolution for a generic instance:
+    /// the impl's definition substituted through [`Self::substitute_type_params`],
+    /// so a composite or nested definition (`&T`, `I::Item`) becomes fully
+    /// concrete one level per recursion.
     pub fn resolve_generic_assoc_type_mono(
         &mut self,
         concrete_id: TypeId,
@@ -4131,16 +4173,17 @@ impl TypeTable {
     /// Whether a generic definition of `assoc_name` is registered for the
     /// declaration behind `type_id` — i.e. the generic type carries a
     /// synthesized impl binding that associated type.
-    pub fn has_generic_assoc_type_def(&self, type_id: TypeId, assoc_name: &str) -> bool {
+    pub fn has_generic_assoc_type_def(&mut self, type_id: TypeId, assoc_name: &str) -> bool {
+        let ref_kind = self.ref_kind(type_id);
         self.decl_of_type(type_id).is_some_and(|decl| {
-            self.generic_assoc_type_def(decl, self.ref_kind(type_id), assoc_name, None)
+            self.generic_assoc_type_def(decl, ref_kind, assoc_name, None)
                 .is_some()
         })
     }
 
     /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
     /// declaring [`AstId`](crate::ast::AstId) of a type it names bare.
-    pub fn has_generic_assoc_type_def_for_decl(&self, decl: AstId, assoc_name: &str) -> bool {
+    pub fn has_generic_assoc_type_def_for_decl(&mut self, decl: AstId, assoc_name: &str) -> bool {
         self.generic_assoc_type_def(decl, None, assoc_name, None)
             .is_some()
     }
@@ -4194,13 +4237,14 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<(DefId, TypeId)> {
         let type_args = self.nominal_type_args(concrete_id)?;
+        let decl = self.decl_of_type(concrete_id)?;
         let (owner, entry) = self.generic_assoc_type_def(
-            self.decl_of_type(concrete_id)?,
+            decl,
             self.ref_kind(concrete_id),
             assoc_name,
             Some(&type_args),
         )?;
-        let slots = self.entry_slots_mut(&entry, &type_args);
+        let slots = self.entry_slots_mut(&entry, decl, &type_args);
         Some((owner, self.substitute_type_params(entry.answer, &slots)))
     }
 
@@ -4239,7 +4283,7 @@ impl TypeTable {
         // the instance's arguments, defaults filled as `wanted`'s are.
         let reached = trait_args.and_then(|wanted| {
             answers.0.iter().find(|entry| {
-                let slots = self.entry_slots_mut(entry, &type_args);
+                let slots = self.entry_slots_mut(entry, decl, &type_args);
                 let at = TraitRef::new(
                     *trait_key,
                     entry
@@ -4257,26 +4301,27 @@ impl TypeTable {
             None => answers.bare_entry()?,
         }
         .clone();
-        let slots = self.entry_slots_mut(&entry, &type_args);
+        let slots = self.entry_slots_mut(&entry, decl, &type_args);
         Some(self.substitute_type_params(entry.answer, &slots))
     }
 
-    /// [`Self::substitute_type_params`] with `args` read positionally, which a
-    /// declaration's own parameters are, since it numbers them densely from zero.
-    pub fn substitute_positional(&mut self, type_id: TypeId, args: &[TypeId]) -> TypeId {
-        self.substitute_type_params(type_id, &positional_substitution(args))
-    }
-
-    /// Substitute `TypeParam` and `TypePack` indices in `type_id`, descending
-    /// through every container form, expanding a `TypePack` inside a tuple, and
-    /// resolving an `AssocTypeProjection` once its parameter turns concrete.
-    /// Missing indices are permissive — an unmatched `TypeParam` stays put, so
-    /// callers can substitute partially during inference.
-    pub fn substitute_type_params(
+    /// [`Self::substitute_type_params`] with `args` filling `owner`'s
+    /// parameters in declaration order.
+    pub fn substitute_positional(
         &mut self,
         type_id: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
+        owner: DefId,
+        args: &[TypeId],
     ) -> TypeId {
+        self.substitute_type_params(type_id, &positional_substitution(owner, args))
+    }
+
+    /// Substitute `TypeParam`s and `TypePack`s in `type_id`, descending
+    /// through every container form, expanding a `TypePack` inside a tuple, and
+    /// resolving an `AssocTypeProjection` once its parameter turns concrete.
+    /// A parameter `substitution` misses stays put, so callers can substitute
+    /// partially during inference.
+    pub fn substitute_type_params(&mut self, type_id: TypeId, substitution: &TypeArgMap) -> TypeId {
         self.substitute_type_params_with(type_id, substitution, &SlotProjections::default())
     }
 
@@ -4289,20 +4334,21 @@ impl TypeTable {
     pub fn substitute_type_params_with(
         &mut self,
         type_id: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         projections: &SlotProjections,
     ) -> TypeId {
         self.substitute_type_params_moving(type_id, substitution, projections, &NO_RENAMES)
     }
 
-    /// [`Self::substitute_type_params_with`], moving each slot `renames` names
-    /// and `substitution` does not fill to its new index in the same pass.
+    /// [`Self::substitute_type_params_with`], moving each parameter `renames`
+    /// names and `substitution` does not fill to its new place in the same
+    /// pass.
     pub fn substitute_type_params_moving(
         &mut self,
         type_id: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         projections: &SlotProjections,
-        renames: &IndexMap<u32, u32>,
+        renames: &IndexMap<TypeParamId, TypeParamId>,
     ) -> TypeId {
         self.subst_rec(
             type_id,
@@ -4666,25 +4712,25 @@ impl TypeTable {
             return replaced;
         }
         match self.get(type_id).clone() {
-            ResolvedType::TypeParam { name, index } => match leaves.params.get(&index) {
+            ResolvedType::TypeParam { id, name } => match leaves.params.get(&id) {
                 Some(&filled) => filled,
-                None => match leaves.renames.get(&index) {
-                    Some(&moved) => self.make_type_param(name, moved),
+                None => match leaves.renames.get(&id) {
+                    Some(&moved) => self.make_type_param(moved.owner, name, moved.index),
                     None => type_id,
                 },
             },
             ResolvedType::TypePack {
+                id,
                 name,
-                index,
                 mapped_elem,
-            } => match leaves.params.get(&index) {
+            } => match leaves.params.get(&id) {
                 Some(&filled) => filled,
-                None => match (leaves.renames.get(&index), mapped_elem) {
+                None => match (leaves.renames.get(&id), mapped_elem) {
                     (Some(&moved), Some(elem)) => {
                         let elem = self.subst_rec(elem, leaves);
-                        self.make_mapped_type_pack(name, moved, elem)
+                        self.make_mapped_type_pack(moved.owner, name, moved.index, elem)
                     }
-                    (Some(&moved), None) => self.make_type_pack(name, moved),
+                    (Some(&moved), None) => self.make_type_pack(moved.owner, name, moved.index),
                     // A mapped pack the substitution leaves keeps its length,
                     // its element substituted.
                     (None, Some(elem)) => {
@@ -4692,7 +4738,7 @@ impl TypeTable {
                         if substituted == elem {
                             type_id
                         } else {
-                            self.make_mapped_type_pack(name, index, substituted)
+                            self.make_mapped_type_pack(id.owner, name, id.index, substituted)
                         }
                     }
                     (None, None) => type_id,
@@ -4703,10 +4749,7 @@ impl TypeTable {
             // pack becomes leaves it to its own walk's unroll: an enclosing
             // walk binds the pack to that walk's element.
             ResolvedType::PackElement { pack, walk } => {
-                let ResolvedType::TypePack { index, .. } = self.get(pack) else {
-                    unreachable!("a pack element names a type pack");
-                };
-                if let Some(&element) = leaves.params.get(&Self::pack_walk_slot(*index, walk)) {
+                if let Some(&element) = leaves.params.get(&self.pack_id(pack).walk_slot(walk)) {
                     return element;
                 }
                 let substituted = self.subst_rec(pack, leaves);
@@ -4775,14 +4818,14 @@ impl TypeTable {
                 for &e in &elems {
                     let bound_pack = match self.get(e) {
                         ResolvedType::TypePack {
-                            index, mapped_elem, ..
+                            id, mapped_elem, ..
                         } => leaves
                             .params
-                            .get(index)
-                            .map(|&pack_type| (*index, *mapped_elem, pack_type)),
+                            .get(id)
+                            .map(|&pack_type| (*id, *mapped_elem, pack_type)),
                         _ => None,
                     };
-                    let Some((index, mapped_elem, pack_type)) = bound_pack else {
+                    let Some((pack, mapped_elem, pack_type)) = bound_pack else {
                         new_elems.push(self.subst_rec(e, leaves));
                         continue;
                     };
@@ -4800,7 +4843,7 @@ impl TypeTable {
                         Some(elem) => {
                             for pe in self.elem_types_or_self(pack_type) {
                                 let mut elem_substitution = leaves.params.clone();
-                                elem_substitution.insert(index, pe);
+                                elem_substitution.insert(pack, pe);
                                 new_elems.push(self.subst_rec(
                                     elem,
                                     &Leaves {
@@ -4850,7 +4893,7 @@ impl TypeTable {
                     .map(|given| given.iter().map(|&a| self.subst_rec(a, leaves)).collect());
                 // The use site's answer wins: a rebuilt projection cannot
                 // re-derive what `Self::X` means there.
-                if let Some(slot) = self.param_slot(param_id)
+                if let Some(slot) = self.type_param_id(param_id)
                     && let Some(answer) = leaves.projections.get(&slot).and_then(|answers| {
                         answers
                             .iter()
@@ -5407,24 +5450,38 @@ impl TypeTable {
     /// The name of every type pack `id` mentions, so a caller can ask whose
     /// declaration they belong to.
     pub fn pack_names(&self, id: TypeId) -> Vec<String> {
+        self.pack_types(id)
+            .into_iter()
+            .map(|pack| self.pack_parts(pack).1)
+            .collect()
+    }
+
+    /// Which pack each type pack `id` mentions is, a mapped pack's element's
+    /// included.
+    pub fn packs(&self, id: TypeId) -> Vec<TypeParamId> {
+        self.pack_types(id)
+            .into_iter()
+            .map(|pack| self.pack_id(pack))
+            .collect()
+    }
+
+    fn pack_types(&self, id: TypeId) -> Vec<TypeId> {
         let mut out = Vec::new();
-        self.collect_pack_names(id, &mut out);
+        self.collect_packs(id, &mut out);
         out
     }
 
-    fn collect_pack_names(&self, id: TypeId, out: &mut Vec<String>) {
+    fn collect_packs(&self, id: TypeId, out: &mut Vec<TypeId>) {
         match self.get(id) {
-            ResolvedType::TypePack {
-                name, mapped_elem, ..
-            } => {
-                out.push(name.clone());
+            ResolvedType::TypePack { mapped_elem, .. } => {
+                out.push(id);
                 if let Some(elem) = mapped_elem {
-                    self.collect_pack_names(*elem, out);
+                    self.collect_packs(*elem, out);
                 }
             }
             _ => {
                 self.any_constituent(id, &mut |t| {
-                    self.collect_pack_names(t, out);
+                    self.collect_packs(t, out);
                     false
                 });
             }
@@ -5631,6 +5688,13 @@ impl TypeTable {
         }
     }
 
+    /// Mark `info` as received by a value of type `receiver`: whether its head
+    /// awaits substitution, and the parameter it is.
+    pub fn mark_receiver(&self, info: &mut name::LocalMethodName, receiver: TypeId) {
+        info.is_type_param_receiver = self.receiver_head_awaits_substitution(receiver);
+        info.receiver_param = self.type_param_id(receiver);
+    }
+
     /// Whether a receiver of type `id` names no dispatch head until
     /// substitution, which is what
     /// [`crate::name::LocalMethodName::is_type_param_receiver`] marks.
@@ -5694,52 +5758,49 @@ impl TypeTable {
         });
     }
 
-    /// The frame slot `id` names where it is a type parameter or a pack.
-    pub fn param_slot(&self, id: TypeId) -> Option<u32> {
-        match self.get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                Some(*index)
-            }
-            _ => None,
-        }
-    }
-
-    /// Whether `id` (recursively) mentions the frame slot `index`, projections
-    /// included; slot 0 of a trait's frame is `Self`. Tells whether a method
-    /// type parameter is inferable from an argument or only from the return.
-    pub fn contains_type_param_index(&self, id: TypeId, index: u32) -> bool {
-        match self.get(id) {
-            ResolvedType::TypeParam { index: i, .. } | ResolvedType::TypePack { index: i, .. } => {
-                *i == index
-            }
-            _ => self.any_constituent(id, &mut |t| self.contains_type_param_index(t, index)),
-        }
-    }
-
     /// Whether `id` is one of `slots` or is built over one.
     pub fn mentions_any(&self, id: TypeId, slots: &[TypeId]) -> bool {
         slots.contains(&id) || self.any_constituent(id, &mut |t| self.mentions_any(t, slots))
     }
 
-    /// The frame slots `id` (recursively) mentions, projections included.
-    pub fn type_param_indices(&self, id: TypeId) -> IndexSet<u32> {
-        let mut indices = IndexSet::default();
-        self.collect_type_param_indices(id, &mut indices);
-        indices
+    /// The parameters `id` (recursively) mentions, projections included.
+    pub fn type_params_in(&self, id: TypeId) -> IndexSet<TypeParamId> {
+        let mut params = IndexSet::default();
+        self.collect_type_params_in(id, &mut params);
+        params
     }
 
-    fn collect_type_param_indices(&self, id: TypeId, indices: &mut IndexSet<u32>) {
-        match self.get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                indices.insert(*index);
-            }
-            _ => {
-                self.any_constituent(id, &mut |t| {
-                    self.collect_type_param_indices(t, indices);
-                    false
-                });
-            }
+    fn collect_type_params_in(&self, id: TypeId, params: &mut IndexSet<TypeParamId>) {
+        if let Some(param) = self.type_param_id(id) {
+            params.insert(param);
         }
+        // A mapped pack's element is a constituent too: `[..T]` over a scalar
+        // `T` mentions `T` as well as the pack repeating it.
+        self.any_constituent(id, &mut |t| {
+            self.collect_type_params_in(t, params);
+            false
+        });
+    }
+
+    /// Whether `id` names a parameter `owner` does not declare, looking also
+    /// into a newtype's base, which no argument of the newtype shows: a local
+    /// newtype reaches the enclosing function's parameter there. An instance's
+    /// base is resolved against its arguments, so it names none of the
+    /// newtype's own.
+    #[must_use]
+    pub fn reaches_foreign_param(&self, id: TypeId, owner: DefId) -> bool {
+        if self
+            .type_param_id(id)
+            .is_some_and(|param| param.owner != owner)
+        {
+            return true;
+        }
+        if let ResolvedType::Newtype { base_type, .. } = *self.get(id)
+            && self.reaches_foreign_param(base_type, owner)
+        {
+            return true;
+        }
+        self.any_constituent(id, &mut |t| self.reaches_foreign_param(t, owner))
     }
 
     /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in
@@ -6106,7 +6167,9 @@ impl TypeTable {
             | ResolvedType::Resource { def, .. }
             | ResolvedType::Newtype { def, .. } => declared(*def),
             ResolvedType::Tuple(_) => declared(self.tuple_def()),
-            ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
+            ResolvedType::TypeParam { id, name } => {
+                Receiver::Type(FqTypeName::binder_of(&self.defs, id.owner, name))
+            }
             ResolvedType::BuiltinArray(_) => builtin(ARRAY_TYPE_NAME),
             ResolvedType::Unit => builtin(UNIT_TYPE_NAME),
             ResolvedType::Primitive(prim) => builtin(prim.as_str()),
@@ -6247,7 +6310,9 @@ impl TypeTable {
             | ResolvedType::Variant { def, type_args } => {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
-            ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
+            ResolvedType::TypeParam { id, name } => {
+                FqTypeName::binder_of(&self.defs, id.owner, name)
+            }
             ResolvedType::AssocParam {
                 owning_trait,
                 assoc_name,
@@ -6294,6 +6359,11 @@ impl TypeTable {
                 self.fq_type_name_spelled_in(*return_type, rows),
                 if rowless { Vec::new() } else { effects.clone() },
             ),
+            ResolvedType::InferVar(var) => FqTypeName::infer(*var),
+            // What the solver reads as failed where a type id carries it.
+            ResolvedType::Unknown | ResolvedType::Error => {
+                FqTypeName::unresolved(&self.mangle_type_name(id))
+            }
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the mangled spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
@@ -6410,8 +6480,8 @@ struct ImplTarget {
 /// filling `N`.
 #[derive(Debug, Clone)]
 pub struct ImplProjection {
-    /// The slot whose bound carries the constraint.
-    pub source: u32,
+    /// The parameter whose bound carries the constraint.
+    pub source: TypeParamId,
     pub trait_: DefId,
     pub assoc: String,
     /// The constraint as written, its slots as `TypeParam`s.
@@ -6421,8 +6491,8 @@ pub struct ImplProjection {
 /// What an impl target binds at a receiver's arguments.
 #[derive(Debug, Default)]
 pub struct TargetBinding {
-    /// The type each of the target's parameter slots takes.
-    pub slots: IndexMap<u32, TypeId>,
+    /// The type each of the target's parameters takes.
+    pub slots: TypeArgMap,
     /// The type each open receiver variable must take for the target to match.
     pub answers: IndexMap<TypeId, TypeId>,
 }
@@ -6499,7 +6569,7 @@ impl TypeTable {
     /// from `Pair<List<String>, i32>`, then the slots its bounds project from
     /// those. The target is recorded as its module's decl pass reaches the
     /// block, so an earlier module's bound check can ask.
-    pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
+    pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> TypeArgMap {
         let mut slots = IndexMap::default();
         for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
             if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
@@ -6539,7 +6609,7 @@ impl TypeTable {
     /// already holds: `X` in `impl<T: Tr<Assoc = List<X>>, X>` once `T` is
     /// settled, read through `Tr` itself, so another trait's `Assoc` on the
     /// same type cannot answer.
-    pub fn project_impl_slots(&mut self, def: DefId, slots: &mut IndexMap<u32, TypeId>) {
+    pub fn project_impl_slots(&mut self, def: DefId, slots: &mut TypeArgMap) {
         for projection in self.impl_target(def).projections.clone() {
             let Some(&source) = slots.get(&projection.source) else {
                 continue;
@@ -6569,11 +6639,7 @@ impl TypeTable {
     /// [`Self::bind_type_params`] for one pattern, where a tuple pattern may
     /// spread a pack (`[A, ..F]`): the pack takes the elements its neighbours
     /// leave, as one tuple.
-    fn bind_projection_pattern(
-        &mut self,
-        pattern: TypeId,
-        concrete: TypeId,
-    ) -> Option<IndexMap<u32, TypeId>> {
+    fn bind_projection_pattern(&mut self, pattern: TypeId, concrete: TypeId) -> Option<TypeArgMap> {
         let (Some(written), Some(elements)) = (self.as_tuple(pattern), self.as_tuple(concrete))
         else {
             return self.bind_type_params(&[pattern], &[concrete]);
@@ -6595,7 +6661,7 @@ impl TypeTable {
             .copied()
             .collect();
         let mut bound = self.bind_type_params(&rest_written, &rest_concrete)?;
-        bound.insert(self.param_slot(written[at])?, pack);
+        bound.insert(self.declared_param(written[at]), pack);
         Some(bound)
     }
 
@@ -6611,7 +6677,7 @@ impl TypeTable {
         let target = self.impl_target(def);
         if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) = self.get(target.whole)
             && let ResolvedType::Ref(asked) | ResolvedType::MutRef(asked) = self.get(instance)
-            && self.param_slot(*written).is_none()
+            && self.type_param_id(*written).is_none()
         {
             let head = self.impl_receiver_key(*written);
             let mut link = self.peel_refs(*asked);
@@ -6661,10 +6727,10 @@ impl TypeTable {
         };
         let mut seen = IndexSet::default();
         names_a_head
-            && target
-                .args
-                .iter()
-                .all(|&arg| self.param_slot(arg).is_some_and(|slot| seen.insert(slot)))
+            && target.args.iter().all(|&arg| {
+                self.type_param_id(arg)
+                    .is_some_and(|param| seen.insert(param))
+            })
     }
 
     /// Every recorded impl block reaching only some instances of its head.
@@ -6682,7 +6748,7 @@ impl TypeTable {
         &self,
         written: &[TypeId],
         receiver_args: &[TypeId],
-    ) -> Option<IndexMap<u32, TypeId>> {
+    ) -> Option<TypeArgMap> {
         self.open_impl_target_binding(written, receiver_args, &|_| false)
             .map(|binding| binding.slots)
     }
@@ -6718,13 +6784,9 @@ impl TypeTable {
         .then_some(binding)
     }
 
-    /// The type-parameter slots `concrete` fills in `written`, at any depth;
-    /// `None` where they differ outside a slot or a slot would take two types.
-    pub fn bind_type_params(
-        &self,
-        written: &[TypeId],
-        concrete: &[TypeId],
-    ) -> Option<IndexMap<u32, TypeId>> {
+    /// The type parameters `concrete` fills in `written`, at any depth; `None`
+    /// where they differ outside a parameter or one would take two types.
+    pub fn bind_type_params(&self, written: &[TypeId], concrete: &[TypeId]) -> Option<TypeArgMap> {
         let mut binding = TargetBinding::default();
         self.bind_all(written, concrete, &|_| false, &mut binding)
             .then_some(binding.slots)
@@ -6751,7 +6813,7 @@ impl TypeTable {
         open: &dyn Fn(TypeId) -> bool,
         binding: &mut TargetBinding,
     ) -> bool {
-        if let Some(slot) = self.param_slot(written) {
+        if let Some(slot) = self.type_param_id(written) {
             if let Some(&prior) = binding.slots.get(&slot) {
                 return self.agree(prior, concrete, open, binding);
             }
@@ -6868,9 +6930,14 @@ impl TypeTable {
         self.unify_apart((Side::Left, a), (Side::Right, b), &mut subst)
     }
 
-    fn unify_apart(&self, a: Term, b: Term, subst: &mut IndexMap<(Side, u32), Term>) -> bool {
+    fn unify_apart(
+        &self,
+        a: Term,
+        b: Term,
+        subst: &mut IndexMap<(Side, TypeParamId), Term>,
+    ) -> bool {
         let (a, b) = (self.walk_term(a, subst), self.walk_term(b, subst));
-        let var = |(side, id): Term| self.param_slot(id).map(|slot| (side, slot));
+        let var = |(side, id): Term| self.type_param_id(id).map(|param| (side, param));
         match (var(a), var(b)) {
             (Some(x), Some(y)) if x == y => return true,
             (Some(x), _) => return !self.occurs(x, b, subst) && subst.insert(x, b).is_none(),
@@ -6887,8 +6954,8 @@ impl TypeTable {
     }
 
     /// `term` past every parameter the substitution has bound.
-    fn walk_term(&self, mut term: Term, subst: &IndexMap<(Side, u32), Term>) -> Term {
-        while let Some(slot) = self.param_slot(term.1)
+    fn walk_term(&self, mut term: Term, subst: &IndexMap<(Side, TypeParamId), Term>) -> Term {
+        while let Some(slot) = self.type_param_id(term.1)
             && let Some(&next) = subst.get(&(term.0, slot))
         {
             term = next;
@@ -6898,9 +6965,14 @@ impl TypeTable {
 
     /// Whether the parameter `var` appears in `term`, bindings followed: binding
     /// it there would make a type contain itself.
-    fn occurs(&self, var: (Side, u32), term: Term, subst: &IndexMap<(Side, u32), Term>) -> bool {
+    fn occurs(
+        &self,
+        var: (Side, TypeParamId),
+        term: Term,
+        subst: &IndexMap<(Side, TypeParamId), Term>,
+    ) -> bool {
         let (side, id) = self.walk_term(term, subst);
-        if let Some(slot) = self.param_slot(id) {
+        if let Some(slot) = self.type_param_id(id) {
             return (side, slot) == var;
         }
         let inside = |ids: &[TypeId]| ids.iter().any(|&i| self.occurs(var, (side, i), subst));
@@ -7218,12 +7290,12 @@ enum Through {
     ProjectionStops,
 }
 
-static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
+static NO_PARAMS: TypeArgMap = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
 static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
 static NO_SUBTERMS: IndexMap<TypeId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
-static NO_RENAMES: IndexMap<u32, u32> = IndexMap::with_hasher(FxBuildHasher);
+static NO_RENAMES: IndexMap<TypeParamId, TypeParamId> = IndexMap::with_hasher(FxBuildHasher);
 
 /// Where a type's spelling writes its function types' rows. A function value
 /// is one whatever its row, so an instance whose arguments differ only in
@@ -7243,8 +7315,7 @@ enum RowSpelling {
 /// effect parameter stands for whatever row meets it, and a variable for the
 /// row the effect check solves it to.
 fn rows_agree(a: &[EffectRef], b: &[EffectRef]) -> bool {
-    let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
-    a == b || open(a) || open(b)
+    a == b || is_open_row(a) || is_open_row(b)
 }
 
 /// What one substitution replaces, leaf by leaf: a declaration's slots, solved
@@ -7253,7 +7324,7 @@ fn rows_agree(a: &[EffectRef], b: &[EffectRef]) -> bool {
 /// a function type's row.
 #[derive(Clone, Copy)]
 struct Leaves<'s> {
-    params: &'s IndexMap<u32, TypeId>,
+    params: &'s TypeArgMap,
     vars: &'s IndexMap<InferVarId, TypeId>,
     family: Option<FamilyAt<'s>>,
     projections: &'s SlotProjections,
@@ -7265,9 +7336,9 @@ struct Leaves<'s> {
     reintern_instances: bool,
     /// Whole types replaced wherever they stand, before any leaf inside them.
     subterms: &'s IndexMap<TypeId, TypeId>,
-    /// Slots moved to another index, name and pack shape kept, where `params`
-    /// fills none.
-    renames: &'s IndexMap<u32, u32>,
+    /// Parameters moved to another place, name and pack shape kept, where
+    /// `params` fills none.
+    renames: &'s IndexMap<TypeParamId, TypeParamId>,
 }
 
 /// One generic associated type's parameters, and the arguments a projection
@@ -7461,8 +7532,8 @@ mod tests {
     #[test]
     fn a_family_answer_is_instantiated_at_the_projection_arguments() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
-        let method_param = table.make_type_param("E".to_string(), 1);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
+        let method_param = table.make_type_param(DefId::for_test(0), "E".to_string(), 1);
         let projection = table.make_assoc_type_projection(
             self_param,
             DefId::for_test(0),
@@ -7476,7 +7547,7 @@ mod tests {
 
         let substituted = table.substitute_type_params_with(
             projection,
-            &IndexMap::from_iter([(1, TypeTable::U8)]),
+            &TypeArgMap::from_iter([(test_param(1), TypeTable::U8)]),
             &answer_item(DefId::for_test(0), family),
         );
 
@@ -7511,11 +7582,11 @@ mod tests {
     #[test]
     fn substitute_rewrites_projection_base_to_another_param() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
-        let substitution = IndexMap::from_iter([(0, receiver)]);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
+        let substitution = TypeArgMap::from_iter([(test_param(0), receiver)]);
         let substituted = table.substitute_type_params(projection, &substitution);
 
         let ResolvedType::AssocTypeProjection {
@@ -7536,22 +7607,30 @@ mod tests {
     #[test]
     fn a_projection_answer_replaces_the_projection() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
             projection,
-            &IndexMap::from_iter([(0, receiver)]),
+            &TypeArgMap::from_iter([(test_param(0), receiver)]),
             &answer_item(DefId::for_test(0), TypeTable::U8),
         );
 
         assert_eq!(substituted, TypeTable::U8);
     }
 
+    /// Parameter `index` of the declaration these tests write in.
+    fn test_param(index: u32) -> TypeParamId {
+        TypeParamId {
+            owner: DefId::for_test(0),
+            index,
+        }
+    }
+
     fn answer_item(trait_: DefId, answer: TypeId) -> SlotProjections {
         SlotProjections::from_iter([(
-            0,
+            test_param(0),
             vec![ProjectionAnswer::at_any(trait_, "Item".to_string(), answer)],
         )])
     }
@@ -7561,13 +7640,13 @@ mod tests {
     #[test]
     fn an_answer_for_another_trait_leaves_the_projection() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
             projection,
-            &IndexMap::from_iter([(0, receiver)]),
+            &TypeArgMap::from_iter([(test_param(0), receiver)]),
             &answer_item(DefId::for_test(1), TypeTable::U8),
         );
 
@@ -7584,13 +7663,13 @@ mod tests {
     #[test]
     fn an_unanswered_projection_stays_abstract() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Iter");
 
-        let receiver = table.make_type_param("I".to_string(), 1);
+        let receiver = table.make_type_param(DefId::for_test(2), "I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
             projection,
-            &IndexMap::from_iter([(0, receiver)]),
+            &TypeArgMap::from_iter([(test_param(0), receiver)]),
             &answer_item(DefId::for_test(0), TypeTable::U8),
         );
 
@@ -7606,10 +7685,10 @@ mod tests {
     #[test]
     fn substitute_leaves_unrelated_projection_untouched() {
         let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
+        let self_param = table.make_type_param(DefId::for_test(0), "Self".to_string(), 0);
         let projection = make_projection(&mut table, self_param, "Item");
 
-        let substitution = IndexMap::from_iter([(7, TypeTable::I32)]);
+        let substitution = TypeArgMap::from_iter([(test_param(7), TypeTable::I32)]);
         assert_eq!(
             table.substitute_type_params(projection, &substitution),
             projection
@@ -7627,8 +7706,8 @@ mod tests {
     #[test]
     fn a_target_of_distinct_binders_covers_every_instance() {
         let mut table = TypeTable::new();
-        let k = table.make_type_param("K".to_string(), 0);
-        let v = table.make_type_param("V".to_string(), 1);
+        let k = table.make_type_param(DefId::for_test(1), "K".to_string(), 0);
+        let v = table.make_type_param(DefId::for_test(1), "V".to_string(), 1);
         let head = table.make_builtin_array(k);
         assert!(covers(&mut table, head, vec![k, v]));
     }
@@ -7642,8 +7721,8 @@ mod tests {
     #[test]
     fn a_pack_binder_covers_every_arity() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
-        let rest = table.make_type_pack("Rest".to_string(), 1);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
+        let rest = table.make_type_pack(DefId::for_test(1), "Rest".to_string(), 1);
         let head = table.make_builtin_array(t);
         assert!(covers(&mut table, head, vec![t, rest]));
     }
@@ -7653,7 +7732,7 @@ mod tests {
     #[test]
     fn a_binder_written_twice_reaches_some_instances() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
         let head = table.make_builtin_array(t);
         assert!(!covers(&mut table, head, vec![t, t]));
     }
@@ -7661,7 +7740,7 @@ mod tests {
     #[test]
     fn a_concrete_argument_reaches_some_instances() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
         let head = table.make_builtin_array(t);
         assert!(!covers(&mut table, head, vec![t, TypeTable::I32]));
     }
@@ -7671,7 +7750,7 @@ mod tests {
     #[test]
     fn a_reference_target_reaches_some_instances() {
         let mut table = TypeTable::new();
-        let t = table.make_type_param("T".to_string(), 0);
+        let t = table.make_type_param(DefId::for_test(1), "T".to_string(), 0);
         let wrapper = table.make_builtin_array(t);
         let whole = table.make_ref(wrapper);
         assert!(!covers(&mut table, whole, vec![t]));

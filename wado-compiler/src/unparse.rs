@@ -9,7 +9,7 @@ use crate::ast::{
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, EffectsSource, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
     FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    IfExpr, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
     LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm,
     MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl,
     RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField,
@@ -1695,7 +1695,7 @@ impl<'a> Unparser<'a> {
 
     /// An if statement from its `if` on: the indent is the caller's, so an
     /// `else if` continues the line its `else` is on.
-    fn unparse_if_stmt(&mut self, i: &IfStmt) {
+    fn unparse_if_stmt(&mut self, i: &IfExpr) {
         self.output.push_str("if ");
         self.with_reserved_width(" {".len(), |s| s.unparse_condition(&i.condition));
         self.braced_block(i.span.start, &i.then_block);
@@ -3671,9 +3671,9 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
             output.push_str("&mut ");
             unparse_type_into(inner, output);
         }
-        Type::TypePackSpread(name, _) => {
+        Type::TypePackSpread(spread) => {
             output.push_str("..");
-            output.push_str(name);
+            output.push_str(&spread.name);
         }
         Type::NamespacedGeneric(ng) => {
             output.push_str(&ng.namespace);

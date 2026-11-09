@@ -13,7 +13,8 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId,
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeArgMap, TypeId,
+    TypeParamId,
 };
 use crate::type_table::TypeTable;
 
@@ -24,7 +25,7 @@ use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
+use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound, TraitContext};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
@@ -33,6 +34,8 @@ use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::{DerivedAt, SelfBinding};
+use super::type_resolution::ParamSpace;
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
@@ -48,6 +51,7 @@ use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, 
 use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
+use crate::resolve::Resolutions;
 use crate::{Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.
@@ -73,15 +77,16 @@ enum WrappedCase {
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
 /// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
 /// which is what the pack stands for everywhere else.
-fn assoc_bound_target_param(ty: &Type) -> Option<&str> {
-    match ty {
-        Type::Named(named) => Some(&named.name),
+fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<ParamRef> {
+    let named = match ty {
+        Type::Named(named) => named,
         Type::Tuple(elems) => match elems.as_slice() {
-            [Type::TypePackSpread(name, _)] => Some(name),
-            _ => None,
+            [Type::TypePackSpread(spread)] => spread,
+            _ => return None,
         },
-        _ => None,
-    }
+        _ => return None,
+    };
+    ParamRef::at_site(named.id, &named.name, resolutions)
 }
 
 /// A callee's signature in its declaration's own frame, as a call site reads it.
@@ -236,7 +241,7 @@ pub(super) enum SigChoice {
 /// type argument the site taking the default settled on.
 #[derive(Debug, Clone)]
 pub(super) struct DefaultTypeBinding {
-    pub(super) name: String,
+    pub(super) param: ParamRef,
     /// What a default dispatching on the parameter has to go on where the
     /// argument is itself a parameter.
     pub(super) bounds: Vec<ScopedBound>,
@@ -265,11 +270,11 @@ pub(super) struct WalkedDefault {
     pub(super) check_at: Option<Span>,
 }
 
-/// Add each of `nearer` to `bindings`, replacing a same-named entry: several
-/// declarations reach one default's scope, and they may share a spelling.
+/// Add each of `nearer` to `bindings`, replacing the entry for the same
+/// parameter.
 pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<DefaultTypeBinding>) {
     for binding in nearer {
-        match bindings.iter_mut().find(|held| held.name == binding.name) {
+        match bindings.iter_mut().find(|held| held.param == binding.param) {
             Some(held) => *held = binding,
             None => bindings.push(binding),
         }
@@ -285,14 +290,14 @@ enum BoundArgsAtCall {
     Read(Option<Vec<TypeId>>),
 }
 
-/// What a site settled one type parameter to. A pack carries no type here:
+/// What a site settled one type parameter to. A pack stands for itself here:
 /// `[..T::default()]` means the elements, and no callee spells `[i32]::default`.
 #[derive(Debug, Clone)]
 pub(super) enum SettledAs {
     /// The type argument that filled a scalar slot.
     Type(TypeId),
-    /// A variadic pack (`..T`).
-    Pack,
+    /// A variadic pack (`..T`), as its declaration binds it.
+    Pack(TypeId),
 }
 
 impl SettledAs {
@@ -300,12 +305,12 @@ impl SettledAs {
     pub(super) fn type_id(&self) -> Option<TypeId> {
         match self {
             Self::Type(type_id) => Some(*type_id),
-            Self::Pack => None,
+            Self::Pack(_) => None,
         }
     }
 
     pub(super) fn is_pack(&self) -> bool {
-        matches!(self, Self::Pack)
+        matches!(self, Self::Pack(_))
     }
 }
 
@@ -349,13 +354,13 @@ pub(super) fn slot_type_bindings(
         .iter()
         .zip(concrete)
         .filter_map(|(&slot, &type_id)| {
-            let (name, settled) = match table.get(slot) {
-                ResolvedType::TypeParam { name, .. } => (name, SettledAs::Type(type_id)),
-                ResolvedType::TypePack { name, .. } => (name, SettledAs::Pack),
+            let (id, name, settled) = match table.get(slot) {
+                ResolvedType::TypeParam { id, name } => (id, name, SettledAs::Type(type_id)),
+                ResolvedType::TypePack { id, name, .. } => (id, name, SettledAs::Pack(slot)),
                 _ => return None,
             };
             Some(DefaultTypeBinding {
-                name: name.clone(),
+                param: ParamRef::of(id.owner, name),
                 bounds: Vec::new(),
                 settled,
             })
@@ -384,8 +389,9 @@ enum CalleeIdentKind<'a> {
     AsIs(&'a ast::IdentExpr),
     /// `Self::suffix(...)` or `T::suffix(...)` where `T` is a type
     /// parameter currently bound to a concrete type. Holds the fully
-    /// resolved `Concrete::suffix` name.
-    Rewritten(String),
+    /// resolved `Concrete::suffix` name, and the type the prefix stood for:
+    /// the spelling may be a binder's, which no frame reached later means.
+    Rewritten { spelled: String, receiver: TypeId },
     /// A bare case call (`Some(x)`), the expected type having supplied the
     /// case. `owner` is the variant declaring it and `spelled` its
     /// `Variant::Case` form, so the qualified constructor path serves it.
@@ -434,7 +440,7 @@ impl CalleeIdentKind<'_> {
     fn effective_name(&self) -> &str {
         match self {
             Self::AsIs(ident) => &ident.name,
-            Self::Rewritten(name) | Self::Case { spelled: name, .. } => name,
+            Self::Rewritten { spelled: name, .. } | Self::Case { spelled: name, .. } => name,
             Self::AbstractTypeParam { .. } => {
                 unreachable!("AbstractTypeParam takes the type-param dispatch path")
             }
@@ -446,7 +452,15 @@ impl CalleeIdentKind<'_> {
     fn case_owner(&self) -> Option<DefId> {
         match self {
             Self::Case { owner, .. } => Some(*owner),
-            Self::AsIs(_) | Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
+            Self::AsIs(_) | Self::Rewritten { .. } | Self::AbstractTypeParam { .. } => None,
+        }
+    }
+
+    /// The type a rewritten `Self::` / `T::` prefix stood for.
+    fn rewritten_receiver(&self) -> Option<TypeId> {
+        match self {
+            Self::Rewritten { receiver, .. } => Some(*receiver),
+            Self::AsIs(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -454,7 +468,7 @@ impl CalleeIdentKind<'_> {
     fn as_is(&self) -> Option<&ast::IdentExpr> {
         match self {
             Self::AsIs(ident) => Some(ident),
-            Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
+            Self::Rewritten { .. } | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -627,18 +641,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved
     }
 
-    /// The callee's own packs among `own_vars`, each slot with its index. An
+    /// The callee's own packs among `own_vars`, each slot with its identity. An
     /// instantiation leaves a pack rigid (see [`Self::instantiate`]).
-    fn own_packs(&self, own_vars: &[TypeId]) -> Vec<(TypeId, u32)> {
+    fn own_packs(&self, own_vars: &[TypeId]) -> Vec<(TypeId, TypeParamId)> {
         let table = self.tysys.type_table.borrow();
         own_vars
             .iter()
             .filter_map(|&slot| match table.get(slot) {
                 ResolvedType::TypePack {
-                    index,
+                    id,
                     mapped_elem: None,
                     ..
-                } => Some((slot, *index)),
+                } => Some((slot, *id)),
                 _ => None,
             })
             .collect()
@@ -648,7 +662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// answer replaced by its answer.
     fn packs_answered(
         &mut self,
-        packs: &[(TypeId, u32)],
+        packs: &[(TypeId, TypeParamId)],
         param_types: &[TypeId],
         resolved: &[Option<TypeId>],
         i: usize,
@@ -658,7 +672,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let table = self.tysys.type_table.borrow();
             packs
                 .iter()
-                .any(|&(_, index)| table.contains_type_param_index(param, index))
+                .any(|&(_, pack)| table.mentions_param(param, pack))
         };
         if !mentions_pack {
             return Some(PacksAnswered {
@@ -674,7 +688,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_type_params(param, &answers);
         let open = packs
             .iter()
-            .filter(|&&(_, index)| !answers.contains_key(&index))
+            .filter(|(_, pack)| !answers.contains_key(pack))
             .map(|&(slot, _)| slot)
             .collect();
         Some(PacksAnswered { declared, open })
@@ -716,13 +730,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ArgParam { checked, declared }
     }
 
-    /// What the arguments `resolved` so far answer of `packs`, by slot index.
+    /// What the arguments `resolved` so far answer of `packs`.
     fn pack_answers(
         &self,
-        packs: &[(TypeId, u32)],
+        packs: &[(TypeId, TypeParamId)],
         param_types: &[TypeId],
         resolved: &[Option<TypeId>],
-    ) -> IndexMap<u32, TypeId> {
+    ) -> TypeArgMap {
         let mut bindings = IndexMap::default();
         for (&declared, actual) in param_types.iter().zip(resolved) {
             if let Some(actual) = *actual {
@@ -731,7 +745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         packs
             .iter()
-            .filter_map(|&(slot, index)| bindings.get(&slot).map(|&tuple| (index, tuple)))
+            .filter_map(|&(slot, pack)| bindings.get(&slot).map(|&tuple| (pack, tuple)))
             .collect()
     }
 
@@ -741,7 +755,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// pack stays open: the call reports that pack unanswered.
     fn answer_stand_ins(
         &mut self,
-        packs: &[(TypeId, u32)],
+        packs: &[(TypeId, TypeParamId)],
         param_types: &[TypeId],
         resolved: &[TypeId],
         stand_ins: &[(TypeId, TypeId)],
@@ -958,13 +972,15 @@ impl TypeSystem {
             {
                 return self.callee_ident_for_type_param("Self", suffix, self_type_id);
             }
-            let self_name = self.type_table.borrow().name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
             // *provides* the trait whose default body this is.
-            return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
+            return self.rewritten_callee(self_type_id, suffix);
         }
 
-        if let Some(&BinderInScope { type_id, .. }) = ctx.trait_ctx.type_params.get(prefix) {
+        if let Some(&BinderInScope { type_id, .. }) =
+            ctx.trait_ctx
+                .binder_at(&self.resolutions, ident.segments[0].id, prefix)
+        {
             return self.callee_ident_for_type_param(prefix, suffix, type_id);
         }
 
@@ -994,10 +1010,23 @@ impl TypeSystem {
                 type_param_type_id: type_id,
             };
         }
-        // Consumed as a declaration name: the static resolution keys on what an
-        // `impl` header writes, which carries no module.
-        let concrete_name = self.type_table.borrow().fq_type_name(type_id).to_display();
-        CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"))
+        self.rewritten_callee(type_id, suffix)
+    }
+
+    /// `receiver::suffix()`, spelled as a declaration name: the static
+    /// resolution keys on what an `impl` header writes, which carries no module
+    /// and no arguments. The arguments travel in `receiver`, which a
+    /// `W<T>::b` spelling would leave no index answering.
+    fn rewritten_callee<'a>(&self, receiver: TypeId, suffix: &str) -> CalleeIdentKind<'a> {
+        let table = self.type_table.borrow();
+        let head = match table.nominal_def(table.peel_refs(receiver)) {
+            Some(def) => self.resolutions.defs().name(def).to_string(),
+            None => table.fq_type_name(receiver).to_display(),
+        };
+        CalleeIdentKind::Rewritten {
+            spelled: format!("{head}::{suffix}"),
+            receiver,
+        }
     }
 }
 
@@ -1043,7 +1072,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match callee_kind {
             CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
             CalleeIdentKind::AbstractTypeParam { .. } => None,
-            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten { .. } => {
                 self.lookup_variant_cases_at(receiver_site, prefix)
             }
         }
@@ -1224,7 +1253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(CaseOwner, VariantInfo, VariantCaseData)> {
         let owner = match callee_kind {
             CalleeIdentKind::Case { owner, .. } => self.case_owner_of_decl(*owner)?,
-            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten { .. } => {
                 self.case_owner_of_path(ident)?
             }
             CalleeIdentKind::AbstractTypeParam { .. } => return None,
@@ -1390,20 +1419,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// type arguments, is `source`.
     fn wrapped_case(&self, target: TypeId, source: TypeId) -> Result<u32, WrappedCase> {
         let lookup = self.type_lookup();
-        let (args, info) = {
+        let (def, args, info) = {
             let tt = self.tysys.type_table.borrow();
-            let info = tt
-                .nominal_def(target)
-                .and_then(|def| lookup.variant_cases_of(def))
+            let def = tt.nominal_def(target).ok_or(WrappedCase::NotAVariant)?;
+            let info = lookup
+                .variant_cases_of(def)
                 .ok_or(WrappedCase::NotAVariant)?;
-            (tt.nominal_type_args(target).unwrap_or_default(), info)
+            (def, tt.nominal_type_args(target).unwrap_or_default(), info)
         };
         let carrying: Vec<(usize, &str)> = info
             .cases
             .iter()
             .enumerate()
             .filter(|(_, case)| case.payload != TypeTable::UNIT)
-            .filter(|(_, case)| self.tysys.substitute_type_params(case.payload, &args) == source)
+            .filter(|(_, case)| {
+                self.tysys.substitute_type_params(case.payload, def, &args) == source
+            })
             .map(|(index, case)| (index, case.name.as_str()))
             .collect();
         match carrying.as_slice() {
@@ -1646,6 +1677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
+        let rewritten_receiver = callee_kind.rewritten_receiver();
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()
@@ -1764,6 +1796,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let preselected = self.preselect_static_args(
                 StaticReceiver {
                     key: Some(&self.impl_target_at(receiver_site, &recv_name)),
+                    ty: rewritten_receiver,
                     ..StaticReceiver::of(&recv_name)
                 },
                 &method_name,
@@ -1792,7 +1825,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &callee_slots, &mut args, ret);
+            self.settle_onto_slots(inst, &mut args, ret);
         }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
@@ -1899,7 +1932,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&static_args.method_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
+                let receiver_type = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
                 self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
                 let StaticTypeArgs {
                     impl_args: impl_type_args_inferred,
@@ -1986,14 +2024,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let mut substituted = self.static_param_types_at(
-                    raw_param_types,
-                    &impl_type_args_inferred,
-                    &method_type_args,
-                );
                 let block = resolved
                     .found()
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
+                let owners: Vec<DefId> = block
+                    .into_iter()
+                    .chain(resolved.found().and_then(|c| c.method_ref.method_id))
+                    .chain(receiver_key.decl())
+                    .collect();
+                let mut substituted = self.static_param_types_at(
+                    raw_param_types,
+                    &owners,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                );
                 self.retype_static_to_newtype(
                     &receiver_key,
                     block,
@@ -2043,6 +2087,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // typed placeholder.
                 return self.resolve_static_method_call_from_qualified(
                     prefix,
+                    receiver_type,
                     suffix,
                     &args,
                     &impl_type_args_inferred,
@@ -2069,7 +2114,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else if suffix == "from"
                 && let [arg_type] = args[..]
                 && self.names_type_at(receiver_site, prefix)
-                && let receiver_type = self.resolve_unsited_type_name(prefix, call.span)
+                && let receiver_type = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                )
                 && let Some(converted) =
                     self.convert_without_impl(call.id, receiver_type, arg_type, true)
             {
@@ -2081,7 +2131,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .variant_of_callee(&callee_kind, receiver_site, prefix)
                 .is_some()
             {
-                return self.blanket_static_or_unknown(prefix, suffix, ident, call, &args, ctx);
+                let receiver = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
+                return self
+                    .blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
@@ -2095,7 +2152,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // A type, resource included, with no such static method.
             else if self.names_type_at(receiver_site, prefix) {
-                return self.blanket_static_or_unknown(prefix, suffix, ident, call, &args, ctx);
+                let receiver = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
+                return self
+                    .blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
@@ -2554,7 +2618,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
-            return_type = self.substitute_in_frame(return_type, &type_args);
+            return_type =
+                self.substitute_in_frame(return_type, callee.type_param_owner(), &type_args);
         }
 
         // WEP 2026-05-26: record the inferred /
@@ -2582,7 +2647,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             declared_param_types
                 .iter()
-                .map(|&param| self.substitute_in_frame(param, &type_args))
+                .map(|&param| {
+                    self.substitute_in_frame(param, callee.type_param_owner(), &type_args)
+                })
                 .collect()
         };
         // Looked up before padding and recorded below, so reify pads from the
@@ -3188,19 +3255,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if space.len() != type_args.len() {
             return Vec::new();
         }
+        let owner = callee.def();
         space
             .into_iter()
             .zip(type_args.iter().copied())
             .map(|(param, type_id)| DefaultTypeBinding {
                 settled: if param.is_pack {
-                    SettledAs::Pack
+                    SettledAs::Pack(self.declared_own_slot(
+                        owner.expect("a declaration with a pack parameter has a def"),
+                        &param.name,
+                    ))
                 } else {
                     SettledAs::Type(type_id)
                 },
                 // A free function's declaration binds no `Self`, so a bound of
                 // its own writes none.
                 bounds: ScopedBound::pin_declared(&param, None),
-                name: param.name,
+                param: ParamRef::declared(&param, &self.tysys.resolutions),
             })
             .collect()
     }
@@ -3248,20 +3319,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         };
-        // The one place a pack's own type is minted, from the name and the
-        // position it enters at — so the spread in `[..T::default()]` has a
-        // pack to expand, and no producer of a binding can spell it wrong.
+        // A pack stands for itself, so the spread in `[..T::default()]` has a
+        // pack to expand.
         let in_scope: Vec<TypeId> = bindings
             .iter()
-            .enumerate()
-            .map(|(i, b)| {
-                b.settled.type_id().unwrap_or_else(|| {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(b.name.clone(), i as u32)
-                })
+            .map(|b| match b.settled {
+                SettledAs::Type(type_id) | SettledAs::Pack(type_id) => type_id,
             })
             .collect();
         scope.annotate_ctx.trait_ctx.clear_binders();
@@ -3271,8 +3334,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             scope.bind_param(
-                &binding.name,
-                BinderInScope::undeclared(i as u32, in_scope[i]),
+                &binding.param.name,
+                BinderInScope::standing_for(i as u32, in_scope[i], &binding.param),
                 bounds.clone(),
             );
         }
@@ -3360,22 +3423,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Copy what the signature needs before instantiating: `info`
             // borrows the registry, and minting variables takes `self`.
-            let param_names: Vec<String> = info.type_params.clone();
+            let param_ids: Vec<TypeId> = info.type_params.clone();
             let decl_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
             let decl_return = info.return_type;
-            let param_ids: Vec<TypeId> = param_names
-                .iter()
-                .enumerate()
-                .map(|(i, name)| {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::TypeParam {
-                            index: i as u32,
-                            name: name.clone(),
-                        })
-                })
-                .collect();
 
             let inst = self.instantiate(
                 &param_ids,
@@ -3481,14 +3531,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(GenericParam::is_real_type_param)
             .collect();
-        self.project_assoc_bound_args(&params, type_args);
+        self.project_assoc_bound_args(callee.def(), &params, type_args);
     }
 
-    /// [`Self::infer_type_args_from_assoc_bounds`] over a declared parameter
-    /// list, for a static method (`String::format<T: ReflectTemplate<Holes =
-    /// [..V]>, ..V>`), whose params come from its impl rather than a callee.
+    /// [`Self::infer_type_args_from_assoc_bounds`] over the parameter list
+    /// `owner` declares, for a static method (`String::format<T:
+    /// ReflectTemplate<Holes = [..V]>, ..V>`), whose params come from its impl
+    /// rather than a callee.
     pub(super) fn project_assoc_bound_args(
         &mut self,
+        owner: Option<DefId>,
         params: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
@@ -3496,26 +3548,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // where the subject appears solely in the return type) leaves the
         // trailing slots absent. Seed them open so the projection below can
         // pin them from the owner's bound.
-        for (i, param) in params.iter().enumerate().skip(type_args.len()) {
-            let open = self.open_slot(param, i);
+        for param in params.iter().skip(type_args.len()) {
+            let open = self.open_slot(owner, param);
             type_args.push(open);
         }
-        self.resolve_assoc_bound_args(params, type_args);
+        self.resolve_assoc_bound_args(owner, params, type_args);
     }
 
-    /// A call's slot for `param` at `index` that nothing has answered yet: a
-    /// fresh variable, as `instantiate` mints. The callee's own binder would
-    /// read as the caller's of one name and index, a slot the caller forwards.
-    /// A pack keeps its declared form, as `instantiate` keeps it.
-    fn open_slot(&mut self, param: &ast::GenericParam, index: usize) -> TypeId {
+    /// A call's slot for `param`, which `owner` declares, that nothing has
+    /// answered yet: a fresh variable, as `instantiate` mints. A pack keeps its
+    /// declared form, as `instantiate` keeps it.
+    fn open_slot(&mut self, owner: Option<DefId>, param: &ast::GenericParam) -> TypeId {
         if param.is_pack {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_type_pack(param.name.clone(), index as u32)
+            let owner = owner.expect("a declaration with a pack parameter has a def");
+            self.declared_own_slot(owner, &param.name)
         } else {
             self.mint_infer_var_named(&param.name)
         }
+    }
+
+    /// The slot `owner`'s signature declares for its own parameter `name`. A
+    /// method's own slots are numbered past its block's, so a position in the
+    /// method's list is not its identity.
+    fn declared_own_slot(&self, owner: DefId, name: &str) -> TypeId {
+        let signatures = &self.tysys.signatures;
+        let own = match signatures.function_sig(owner) {
+            Some(sig) => sig.decl.type_params.as_slice(),
+            None => signatures
+                .method_sig(owner)
+                .expect("a declaration with parameters has a signature")
+                .own_type_params(),
+        };
+        own.iter()
+            .find(|(own_name, _)| own_name == name)
+            .expect("a declaration declares its own parameter")
+            .1
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
@@ -3652,7 +3719,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, name)| name.clone())
             .collect();
         let owner = format!("`{prefix}::{suffix}`");
-        let defers = self.defers_uninferred(args, expected_type);
+        let own: Vec<TypeId> = impl_type_args
+            .iter()
+            .chain(method_type_args.iter())
+            .copied()
+            .collect();
+        let defers = self.defers_uninferred(args, &own, expected_type);
         let message = TypeError::cannot_infer_message(&names, &owner, &turbofish);
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let impl_params: &[ast::GenericParam] = sig
@@ -3688,9 +3760,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a slot nothing at the call site answers waits for a sink the
     /// call's value reaches, a sibling branch's type among them. It does where
-    /// no type is expected of the call and its arguments hold no variable.
-    fn defers_uninferred(&self, args: &[TypeId], expected_type: Option<TypeId>) -> bool {
-        expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a))
+    /// no type is expected of the call and its arguments hold no variable but
+    /// the call's own `type_args`, as a closure argument typed by them does.
+    fn defers_uninferred(
+        &self,
+        args: &[TypeId],
+        type_args: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        expected_type.is_none()
+            && args.iter().all(|&a| {
+                tt.infer_vars_in(a)
+                    .iter()
+                    .all(|var| type_args.contains(var))
+            })
     }
 
     /// Each of `sig`'s declaring block's parameters whose argument in
@@ -3762,10 +3846,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let n = space.len();
+        let owner = callee
+            .def()
+            .expect("a callee declaring a type default has a def");
 
         let defaults: Vec<Option<TypeId>> =
             self.with_resolving_home(Some(callee.module().clone()), |s| {
-                let mut scope = s.enter_decl_params_scope(&params);
+                let mut scope = s.enter_decl_params_scope(owner, &params);
                 space
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
@@ -3775,8 +3862,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             *type_args = space
                 .iter()
-                .enumerate()
-                .map(|(i, p)| self.open_slot(p, i))
+                .map(|p| self.open_slot(Some(owner), p))
                 .collect();
         }
         if type_args.len() != n {
@@ -3798,7 +3884,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
-                type_args[i] = self.substitute_in_frame(default_ty, &snapshot);
+                type_args[i] = self.substitute_in_frame(default_ty, owner, &snapshot);
             }
         }
     }
@@ -3879,7 +3965,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        if !self.defers_uninferred(args, expected_type) {
+        if !self.defers_uninferred(args, type_args, expected_type) {
             self.report_uninferred_fn_type_args(callee, type_args, span);
             return;
         }
@@ -3918,13 +4004,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// an index space; iterates to a fixpoint for chained bounds.
     pub(super) fn resolve_assoc_bound_args(
         &mut self,
+        owner: Option<DefId>,
         params: &[ast::GenericParam],
         args: &mut [TypeId],
     ) {
         if params.len() != args.len() {
             return;
         }
-        let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
+        let names: Vec<ParamRef> = params
+            .iter()
+            .map(|param| ParamRef {
+                owner,
+                family_decl: None,
+                name: param.name.clone(),
+            })
+            .collect();
         self.resolve_assoc_bounds_in(params, 0, &names, args);
     }
 
@@ -3935,7 +4029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         params: &[ast::GenericParam],
         offset: usize,
-        names: &[String],
+        names: &[ParamRef],
         args: &mut [TypeId],
     ) {
         assert_eq!(names.len(), args.len(), "every slot is named");
@@ -3951,15 +4045,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 for bound in &param.bounds {
-                    // A slot left as its own parameter shares its id with the
-                    // caller's of one name and index, so only the slot's shape
-                    // says it is open.
                     let targets: Vec<(usize, &ast::AssocTypeBound)> = bound
                         .assoc_types
                         .iter()
                         .filter_map(|assoc| {
-                            let target_name = assoc_bound_target_param(&assoc.ty)?;
-                            let target_idx = names.iter().position(|n| *n == target_name)?;
+                            let target =
+                                assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)?;
+                            let target_idx = names.iter().position(|n| *n == target)?;
                             self.tysys
                                 .is_unbound_type_param(args[target_idx])
                                 .then_some((target_idx, assoc))
@@ -3976,17 +4068,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     for (target_idx, assoc) in targets {
                         let resolved = if forwarded {
-                            // A block's slot carries no declaration here; its
-                            // open value is a pack where the slot is one.
-                            let is_pack = match target_idx.checked_sub(offset) {
-                                Some(own) if own < params.len() => params[own].is_pack,
-                                _ => self
-                                    .tysys
-                                    .type_table
-                                    .borrow()
-                                    .contains_type_pack(args[target_idx]),
-                            };
-                            trait_.filter(|_| !is_pack).map(|trait_| {
+                            trait_.map(|trait_| {
                                 self.forwarded_projection(
                                     owner_ty,
                                     trait_,
@@ -4076,13 +4158,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bound: &ast::TraitBound,
         trait_: Option<DefId>,
         owner: TypeId,
-        names: &[String],
+        names: &[ParamRef],
         args: &[TypeId],
     ) -> BoundArgsAtCall {
         let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
             return BoundArgsAtCall::Read(None);
         };
-        let written = self.with_type_params_bound(names, args, |e| e.written_bound_args(bound));
+        let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
+        let written = self.with_type_params_bound(&space, |e| e.written_bound_args(bound));
         if written
             .iter()
             .any(|&ty| self.tysys.type_table.borrow().contains_undecided(ty))
@@ -4294,7 +4377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the method's own slot count says nothing about.
         let expected_args =
             self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
-        let [declaring_slots, own_slots] = self
+        let (method_def, [declaring_slots, own_slots]) = self
             .static_call_sig(
                 callee.type_name,
                 callee.method_name,
@@ -4302,11 +4385,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 SigChoice::Any,
                 &expected_args,
             )
-            .map_or([0, 0], |sig| {
-                [
-                    sig.declaring_type_params().len(),
-                    sig.own_type_params().len(),
-                ]
+            .map_or((None, [0, 0]), |sig| {
+                (
+                    Some(sig.def),
+                    [
+                        sig.declaring_type_params().len(),
+                        sig.own_type_params().len(),
+                    ],
+                )
             });
         let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
         // A turbofish names only the method's own slots, so the receiver's are
@@ -4332,7 +4418,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // type (`..V` off `Holes`) is projected once the owner is inferred, as
         // the free-function path does; the bound check then sees it concrete.
         if !method_args.is_empty() {
-            self.project_assoc_bound_args(&params, &mut method_args);
+            self.project_assoc_bound_args(method_def, &params, &mut method_args);
         }
         Some(StaticTypeArgs {
             params,
@@ -4495,7 +4581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             .or_else(|| {
                 let key = self.static_receiver_key(struct_name, receiver_key);
-                self.tysys.inherited_default_method_sig(&key, method_name)
+                self.inherited_default_method_sig(&key, method_name)
             })
         else {
             let key = self.static_receiver_key(struct_name, receiver_key);
@@ -4550,19 +4636,115 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (vec![], vec![]);
         }
         // A slot the arguments reach only through a bound's associated type
-        // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`) is projected
-        // off the owner the arguments did settle.
-        let names: Vec<String> = sig
-            .decl
-            .type_params
-            .iter()
-            .map(|(n, _)| n.clone())
-            .collect();
-        self.resolve_assoc_bounds_in(&sig.own_params, split, &names, &mut inferred);
+        // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`, or the
+        // block's own `impl<T: Tr<Out = U>, U>`) is projected off the owner
+        // the arguments did settle.
+        let names: Vec<ParamRef> = {
+            let table = self.tysys.type_table.borrow();
+            sig.decl
+                .type_params
+                .iter()
+                .map(|(name, slot)| ParamRef {
+                    owner: table.type_param_id(*slot).map(|id| id.owner),
+                    family_decl: None,
+                    name: name.clone(),
+                })
+                .collect()
+        };
+        let mut owners = self.declaring_params(&names[..split]);
+        owners.extend(sig.own_params.iter().cloned());
+        self.resolve_assoc_bounds_in(&owners, 0, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),
         )
+    }
+
+    /// The signature of a trait default `key` inherits without overriding it,
+    /// which no impl block lists and so every impl-keyed index misses. Read in
+    /// the receiver declaration's frame: `Self` is the declaration at its own
+    /// parameters, which the call infers as it does a block's, and the block's
+    /// trait arguments are written in them.
+    fn inherited_default_method_sig(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let trait_env = &self.tysys.trait_env;
+        let (impl_def, mut sig) = trait_env
+            .impl_index
+            .get(key)?
+            .iter()
+            .find_map(|&impl_def| {
+                let trait_decl = trait_env.impl_headers[&impl_def].trait_def()?;
+                let method = self.tysys.trait_sig_of(&trait_decl)?.method(method_name)?;
+                method
+                    .is_inherited()
+                    .then(|| (impl_def, method.sig.clone()))
+            })?;
+        let (receiver, receiver_params) = if let Some(decl) = key.decl() {
+            (
+                self.declared_self_type(decl)?,
+                self.type_lookup()
+                    .declared_type_param_ids(decl)
+                    .map(<[TypeId]>::to_vec)
+                    .unwrap_or_default(),
+            )
+        } else {
+            // A receiver no declaration names is written only as a primitive's
+            // path, whose impl binds nothing.
+            assert!(
+                trait_env.impl_headers[&impl_def].type_params.is_empty(),
+                "a static call names a declaration-less receiver only by a primitive"
+            );
+            (
+                self.tysys.type_table.borrow().impl_target_whole(impl_def),
+                Vec::new(),
+            )
+        };
+        let frame = self.tysys.trait_frame_at(impl_def, receiver);
+        let in_frame = sig.decl.instantiate(&self.tysys.type_table, &frame);
+        sig.decl.param_types = in_frame.param_types;
+        if sig.decl.return_type.is_some() {
+            sig.decl.return_type = Some(in_frame.return_type);
+        }
+        let own = sig.decl.type_params.split_off(sig.declaring_split());
+        sig.decl.type_params = {
+            let table = self.tysys.type_table.borrow();
+            receiver_params
+                .iter()
+                .map(|&id| (table.name(id), id))
+                .chain(own)
+                .collect()
+        };
+        sig.declaring_slot_count = receiver_params.len() as u32;
+        sig.method_slot_base = sig.declaring_slot_count;
+        sig.declaring_impl = None;
+        Some(sig)
+    }
+
+    /// The declaring slots' parameters as their declaration wrote them, in the
+    /// signature's order: a block's head orders them as written, the signature
+    /// by target position (`impl<A, B> Pair<B, A>`).
+    fn declaring_params(&self, declaring: &[ParamRef]) -> Vec<ast::GenericParam> {
+        declaring
+            .iter()
+            .map(|slot| {
+                let owner = slot.owner.expect("a declaring slot has a declaration");
+                let written = match self.tysys.trait_env.impl_headers.get(&owner) {
+                    Some(header) => &header.type_params[..],
+                    None => self
+                        .type_lookup()
+                        .declared_generic_params(owner)
+                        .expect("a declaring slot's declaration takes parameters"),
+                };
+                written
+                    .iter()
+                    .find(|p| ParamRef::declared(p, &self.tysys.resolutions) == *slot)
+                    .expect("every declaring slot is a parameter its declaration wrote")
+                    .clone()
+            })
+            .collect()
     }
 
     /// [`Self::infer_static_method_type_args`] on a newtype declaring nothing of
@@ -4732,31 +4914,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The slot a declared type parameter's `TypeId` holds.
+    /// The slot a declared type parameter's `TypeId` holds in its own frame's
+    /// argument list.
     pub(super) fn declared_slot(&self, id: TypeId) -> u32 {
-        let table = self.tysys.type_table.borrow();
-        table.param_slot(id).unwrap_or_else(|| {
-            panic!(
-                "a declared slot is a type parameter, found {:?}",
-                table.get(id)
-            )
-        })
+        self.tysys.type_table.borrow().declared_param(id).index
     }
 
     /// The declaring block's slots filled with `values` (one per declared
     /// parameter), in the method frame's order: the target's positions, then past them.
     fn declaring_slot_values(&self, sig: &MethodSig, values: &[TypeId]) -> Vec<TypeId> {
-        let declared: IndexMap<u32, TypeId> = sig
-            .declaring_type_params()
-            .iter()
-            .map(|&(_, id)| (self.declared_slot(id), id))
-            .collect();
-        let slots: IndexMap<u32, TypeId> = declared
-            .keys()
-            .zip(values)
-            .map(|(&slot, &value)| (slot, value))
-            .collect();
+        let declared = sig.declaring_type_params();
         let mut table = self.tysys.type_table.borrow_mut();
+        let ids: Vec<TypeId> = declared.iter().map(|&(_, id)| id).collect();
+        assert_eq!(ids.len(), values.len(), "one value per declared parameter");
+        let slots = table.bind_params(&ids, values);
         let target = match sig.declaring_impl {
             Some(def) => table.impl_target_args(def).to_vec(),
             None => Vec::new(),
@@ -4765,12 +4936,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&arg| table.substitute_type_params(arg, &slots))
             .collect();
-        for slot in out.len() as u32..sig.method_slot_base {
-            let own = declared.get(&slot).copied();
-            let Some(value) = slots.get(&slot).copied().or(own) else {
+        for index in out.len() as u32..sig.method_slot_base {
+            let Some(&id) = ids
+                .iter()
+                .find(|&&id| table.declared_param(id).index == index)
+            else {
                 break;
             };
-            out.push(value);
+            out.push(slots[&table.declared_param(id)]);
         }
         out
     }
@@ -5006,13 +5179,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(args) => args,
             None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret),
         };
-        self.settle_onto_slots(&inst, slots, &mut args, ret);
+        self.settle_onto_slots(&inst, &mut args, ret);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
         for (arg, &expected) in args.iter_mut().zip(&payload) {
             let expected = self.apply_infer_holes(expected);
             self.pin_arg_hole_against(arg, expected);
         }
+        if !slots.is_empty() {
+            let solved = self.case_type_args(case, &inst, args.first().copied());
+            self.blame_unsolved(&inst, &solved);
+            return self.construct_variant_case_at(case, &args, raw_args, solved);
+        }
         self.construct_variant_case(case, &args, raw_args, expected_type)
+    }
+
+    /// The type arguments a case construction builds: the site's variables,
+    /// except where the payload's own type cannot be what the expected type
+    /// pinned one to. `x = Some(1)` into an `Option<!>` is an `Option<i32>`, and
+    /// the mismatch is the whole value's; `Some(panic())` and `Some(&mut v)`
+    /// into an `Option<&i32>` fit, so the expected type decides them.
+    ///
+    /// A pack slot instantiation left rigid takes the tuple the payload splices
+    /// into it. One nothing settles is deferred as unsolved: the declaration's
+    /// own pack means nothing at this site.
+    fn case_type_args(
+        &mut self,
+        case: &CaseSite<'_>,
+        inst: &Instantiated,
+        payload: Option<TypeId>,
+    ) -> Vec<TypeId> {
+        let mut from_payload = IndexMap::default();
+        if let Some(payload) = payload {
+            unify(
+                &self.tysys.type_table,
+                case.case.payload,
+                payload,
+                &mut from_payload,
+            );
+        }
+        let slots = &case.variant.type_param_type_ids;
+        slots
+            .iter()
+            .enumerate()
+            .map(|(i, &slot)| {
+                let written = case
+                    .written
+                    .get(i)
+                    .is_some_and(|&t| t != TypeTable::UNKNOWN);
+                let at_site = self.instantiate_type(slot, inst);
+                let at_site = self.apply_infer_holes(at_site);
+                let answer = match from_payload.get(&slot).copied().filter(|_| !written) {
+                    None => at_site,
+                    Some(own) if at_site == slot => own,
+                    Some(own) => {
+                        let table = self.tysys.type_table.borrow();
+                        let fits = !table.is_infer_var(at_site)
+                            && !matches!(
+                                check_assignable(own, at_site, &table),
+                                TypeCheckResult::Incompatible
+                            );
+                        if fits { at_site } else { own }
+                    }
+                };
+                if answer != slot || !self.tysys.type_table.borrow().is_type_pack(slot) {
+                    return answer;
+                }
+                let name = case.variant.type_params[i].name.clone();
+                self.mint_infer_hole(
+                    case.span,
+                    uninferable_type_param("variant", case.owner),
+                    name,
+                    Vec::new(),
+                )
+            })
+            .collect()
+    }
+
+    /// [`Self::construct_variant_case`] at the type arguments the site settled.
+    fn construct_variant_case_at(
+        &mut self,
+        case: &CaseSite<'_>,
+        args: &[TypeId],
+        raw_args: &[Expr],
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        if !self.check_case_site(case, args.len()) {
+            return TypeTable::ERROR;
+        }
+        let variant_def = self.tysys.def_at(case.variant.defined_at);
+        let variant_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_generic_instance(variant_def, type_args.clone());
+        self.finish_case_construction(case, args, raw_args, type_args, variant_type)
     }
 
     /// The variant instance a case construction builds from its resolved
@@ -5024,25 +5284,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let CaseSite {
-            variant,
-            case: case_data,
-            written,
-            owner,
-            site,
-            span,
-        } = *case;
-        if !self.check_case_arity(case_data, args.len(), span)
-            || !self.check_case_turbofish_arity(
-                written.len(),
-                owner,
-                variant.type_params.len(),
-                span,
-            )
-        {
+        if !self.check_case_site(case, args.len()) {
             return TypeTable::ERROR;
         }
-        let payload = args.first().copied();
+        let variant = case.variant;
         let variant_type = if variant.type_params.is_empty() {
             self.tysys
                 .type_table
@@ -5052,12 +5297,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inferred = self.tysys.infer_variant_type_args(
                 &self.annotate_ctx,
                 variant,
-                case_data,
-                payload,
+                case.case,
+                args.first().copied(),
                 expected_type,
-                written,
+                case.written,
             );
-            self.defer_uninferable_variant(inferred, owner, variant, span)
+            self.defer_uninferable_variant(inferred, case.owner, variant, case.span)
         };
         let type_args = self
             .tysys
@@ -5065,21 +5310,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .nominal_type_args(variant_type)
             .unwrap_or_default();
-        if let Some(payload) = payload {
-            let declared = self.substitute_in_frame(case_data.payload, &type_args);
+        self.finish_case_construction(case, args, raw_args, type_args, variant_type)
+    }
+
+    /// Whether the case takes `arg_count` arguments and the turbofish the
+    /// variant's parameters.
+    fn check_case_site(&mut self, case: &CaseSite<'_>, arg_count: usize) -> bool {
+        self.check_case_arity(case.case, arg_count, case.span)
+            && self.check_case_turbofish_arity(
+                case.written.len(),
+                case.owner,
+                case.variant.type_params.len(),
+                case.span,
+            )
+    }
+
+    /// Checks the payload against the case at `type_args` and records the
+    /// instance the construction builds.
+    fn finish_case_construction(
+        &mut self,
+        case: &CaseSite<'_>,
+        args: &[TypeId],
+        raw_args: &[Expr],
+        type_args: Vec<TypeId>,
+        variant_type: TypeId,
+    ) -> TypeId {
+        if let Some(&payload) = args.first() {
+            let variant_def = self.tysys.def_at(case.variant.defined_at);
+            let declared = self.substitute_in_frame(case.case.payload, variant_def, &type_args);
             match raw_args.first() {
                 Some(value) => self.typecheck_value(value, payload, declared),
-                None => self.typecheck(payload, declared, span),
+                None => self.typecheck(payload, declared, case.span),
             }
         }
-        self.record_generic_instantiation(site, type_args, variant_type);
+        self.record_generic_instantiation(case.site, type_args, variant_type);
         variant_type
+    }
+
+    /// The type a static call's receiver `prefix` names: the type a rewritten
+    /// `Self::` / `T::` prefix stood for, else what its segment resolves to.
+    fn static_receiver_written(
+        &mut self,
+        rewritten: Option<TypeId>,
+        site: Option<AstId>,
+        prefix: &str,
+        span: Span,
+    ) -> TypeId {
+        match (rewritten, site) {
+            (Some(receiver), _) => receiver,
+            (None, Some(site)) => self.resolve_named_type(site, prefix, span, false),
+            (None, None) => self.resolve_unsited_type_name(prefix, span),
+        }
     }
 
     /// `prefix::suffix` answered by a value blanket's static, indexed under the
     /// blanket's receiver param, or the diagnostic for a name reaching no function.
     fn blanket_static_or_unknown(
         &mut self,
+        receiver: TypeId,
         prefix: &str,
         suffix: &str,
         ident: &ast::IdentExpr,
@@ -5089,7 +5377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let method_id = ident.segments.last().map(|seg| seg.id);
         if let Some(return_type) = self.resolve_named_type_blanket_static(
-            prefix, suffix, call.id, method_id, args, &call.args, call.span, ctx,
+            receiver, prefix, suffix, call.id, method_id, args, &call.args, call.span, ctx,
         ) {
             return return_type;
         }
@@ -5102,6 +5390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     pub(super) fn resolve_named_type_blanket_static(
         &mut self,
+        receiver_ty: TypeId,
         type_name: &str,
         method: &str,
         call_id: AstId,
@@ -5111,9 +5400,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        // `type_name` is the receiver spelling after `Self::` / `T::`
-        // rewriting, which no source segment names.
-        let receiver_ty = self.resolve_unsited_type_name(type_name, span);
         // The rules first, since a blanket is a candidate among the rest: two
         // traits blanketing one receiver supply the name and separate nothing,
         // which is the ambiguity every other spelling of that shape reports.
@@ -5167,30 +5453,6 @@ impl TypeSystem {
             return vec![];
         };
         self.packs_args_reach(&decl.param_types, arg_count)
-    }
-
-    /// The signature of a trait default `key` inherits without overriding it,
-    /// which no impl block lists and so every impl-keyed index misses.
-    fn inherited_default_method_sig(
-        &self,
-        key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        let trait_env = &self.trait_env;
-        let mut sig = trait_env
-            .impl_index
-            .get(key)?
-            .iter()
-            .filter_map(|impl_def| trait_env.impl_headers[impl_def].trait_def())
-            .find_map(|trait_decl| {
-                let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
-                method.is_inherited().then(|| method.sig.clone())
-            })?;
-        let split = sig.declaring_split();
-        sig.decl.type_params.drain(..split);
-        sig.declaring_slot_count = 0;
-        sig.method_slot_base = 0;
-        Some(sig)
     }
 
     /// A builtin's return type, `TypeParam`-based for a generic one.
@@ -5545,7 +5807,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &method_type_args,
             )[0];
 
-            // Build method_info with is_type_param_receiver = true
             let method_type_arg_names: Vec<FqTypeName> = method_type_args
                 .iter()
                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
@@ -5555,11 +5816,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // callee is minted per instantiation.
             let trait_module = found_trait.module().cloned();
             let mut method_info = LocalMethodName::new(
-                self.binder_in_scope(type_param_name),
+                self.binder_of(type_param_type_id),
                 Some(found_trait),
                 method_name.to_string(),
             );
             method_info.is_type_param_receiver = true;
+            method_info.receiver_param = self
+                .tysys
+                .type_table
+                .borrow()
+                .type_param_id(type_param_type_id);
             if !method_type_arg_names.is_empty() {
                 method_info.method_type_args = method_type_arg_names;
             }

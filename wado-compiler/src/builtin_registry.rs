@@ -9,11 +9,8 @@ use std::cell::RefCell;
 use crate::ast;
 use crate::ast::{Attribute, CmBoundary, Function, Item, Module, Type};
 use crate::compiler_item::CompilerItem;
-use crate::lexer::lex;
 use crate::module_source::ModuleSource;
 use crate::name::ARRAY_TYPE_NAME;
-use crate::parser::Parser;
-use crate::stdlib;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
@@ -28,8 +25,8 @@ pub struct BuiltinFunctionInfo {
     /// Import namespace from #[namespace("...")] attribute (default: "wasi")
     /// Only relevant for functions with `canonical_name`
     pub namespace: String,
-    /// Generic type parameter names (e.g., ["T"] for `fn array_new<T>`)
-    pub type_params: Vec<String>,
+    /// Generic type parameters (e.g., `T` for `fn array_new<T>`), in order
+    pub type_params: Vec<TypeId>,
     /// Parameter types (resolved to `TypeIds`)
     pub params: Vec<(String, TypeId)>,
     /// Return type (resolved to `TypeId`, UNIT for void functions)
@@ -56,32 +53,14 @@ impl BuiltinRegistry {
         Self::default()
     }
 
-    /// Build the registry from the embedded stdlib
-    ///
-    /// Parses lib/core/builtin.wado and registers all function signatures.
-    /// Types are resolved to `TypeId`s using the provided `TypeTable`.
-    pub fn build_from_stdlib(type_table: &RefCell<TypeTable>) -> Self {
-        use std::sync::OnceLock;
-
-        static PARSED_MODULE: OnceLock<Module> = OnceLock::new();
-
-        let module = PARSED_MODULE.get_or_init(|| {
-            let source =
-                stdlib::get_stdlib_module("core:builtin").expect("core:builtin is bundled");
-            let r = lex(source);
-            assert!(
-                r.errors.is_empty(),
-                "lexer error in core:builtin: {:?}",
-                r.errors
-            );
-            let mut parser = Parser::new(r.tokens);
-            parser.parse_strict().expect("parser error in core:builtin")
-        });
-
+    /// Register every function signature `core:builtin` declares, its types
+    /// resolved to `TypeId`s in `type_table`.
+    pub fn build(builtin: &Module, type_table: &RefCell<TypeTable>) -> Self {
         let mut registry = Self::new();
-        for item in &module.items {
+        let source = ModuleSource::builtin();
+        for item in &builtin.items {
             if let Item::Function(func) = item {
-                registry.register(&ModuleSource::builtin(), func, type_table);
+                registry.register(&source, func, type_table);
             }
         }
         registry
@@ -113,7 +92,19 @@ impl BuiltinRegistry {
         func: &Function,
         type_table: &RefCell<TypeTable>,
     ) {
-        let type_params: Vec<String> = func.type_params.iter().map(|p| p.name.clone()).collect();
+        let type_params: Vec<(String, TypeId)> = {
+            let mut table = type_table.borrow_mut();
+            let owner = table.defs().def_at(func.id);
+            func.type_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .zip(0..)
+                .map(|(p, index)| {
+                    let id = table.make_type_param(owner, p.name.clone(), index);
+                    (p.name.clone(), id)
+                })
+                .collect()
+        };
 
         let params: Vec<(String, TypeId)> = func
             .params
@@ -156,7 +147,7 @@ impl BuiltinRegistry {
             name: func.name.clone(),
             canonical_name,
             namespace,
-            type_params,
+            type_params: type_params.into_iter().map(|(_, id)| id).collect(),
             params,
             return_type,
             diverges,
@@ -169,15 +160,15 @@ impl BuiltinRegistry {
     }
 
     /// The `TypeId` a `core:builtin` signature type names.
-    fn resolve_type(ty: &Type, type_params: &[String], type_table: &RefCell<TypeTable>) -> TypeId {
+    fn resolve_type(
+        ty: &Type,
+        type_params: &[(String, TypeId)],
+        type_table: &RefCell<TypeTable>,
+    ) -> TypeId {
         match ty {
             Type::Named(named) => {
-                // Check if it's a type parameter
-                if let Some(index) = type_params.iter().position(|p| p == &named.name) {
-                    return type_table.borrow_mut().intern(ResolvedType::TypeParam {
-                        index: index as u32,
-                        name: named.name.clone(),
-                    });
+                if let Some(&(_, param)) = type_params.iter().find(|(p, _)| p == &named.name) {
+                    return param;
                 }
                 if let Some(id) = TypeTable::primitive_by_name(&named.name) {
                     return id;

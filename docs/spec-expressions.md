@@ -272,7 +272,8 @@ does above.
 
 > Not yet implemented: only a local newtype without parameters of its own sees
 > an outer type parameter. A local `struct` naming one is rejected as
-> `unknown type`, and a generic local newtype does not resolve it either.
+> `unknown type`, and a field reaching one through a local newtype is rejected
+> too. A generic local newtype does not resolve it either.
 
 A function body may also declare `enum`, `variant` and `flags` items, and
 `impl`/`trait` blocks that give a local type methods.

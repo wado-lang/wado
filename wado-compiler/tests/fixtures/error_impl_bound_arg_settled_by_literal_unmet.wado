@@ -1,0 +1,34 @@
+// A bound naming another impl parameter (`T: Pick<U>`) whose argument waits on
+// a literal is asked once the literal settles. Here `1.5` settles `U` to `f64`,
+// which no `Pick` impl for `String` answers, and the call compiled anyway.
+use { println, Stdout } from "core:cli";
+
+trait Pick<U> with () {
+    fn pick(&self) -> i32;
+}
+
+impl Pick<i64> for String {
+    fn pick(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct H<T, U> {
+    t: T,
+    u: U,
+}
+
+impl<T: Pick<U>, U> H<T, U> {
+    fn m<V>(&self, _o: V) -> i32 {
+        return 7;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${H { t: "s", u: 1.5 }.m(true)}`);
+}
+
+__DATA__
+{
+    "compile_error": ":28:16: analysis error: type 'String' does not implement trait 'Pick<f64>' required by bound on 'T'"
+}
