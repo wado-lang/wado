@@ -86,7 +86,12 @@ impl BuiltinRegistry {
     }
 
     /// Register a builtin function from a parsed function declaration
-    fn register(&mut self, source: &ModuleSource, func: &Function, type_table: &RefCell<TypeTable>) {
+    fn register(
+        &mut self,
+        source: &ModuleSource,
+        func: &Function,
+        type_table: &RefCell<TypeTable>,
+    ) {
         let type_params: Vec<(String, TypeId)> = {
             let mut table = type_table.borrow_mut();
             let owner = table.defs().def_at(func.id);
