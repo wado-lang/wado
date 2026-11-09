@@ -534,7 +534,12 @@ fn element_holds_eof_closure(elem: &Element, rules: &List<ParserRule>, ctx: &Lef
 
 /// Whether `elem` can match EOF before consuming a token. `entered` marks the
 /// rules already walked, so a cycle through a nullable prefix ends.
-fn element_starts_with_eof(elem: &Element, rules: &List<ParserRule>, ctx: &LeftCornerCtx, entered: &mut List<bool>) -> bool {
+fn element_starts_with_eof(
+    elem: &Element,
+    rules: &List<ParserRule>,
+    ctx: &LeftCornerCtx,
+    entered: &mut List<bool>,
+) -> bool {
     return match elem {
         TokenRef(t) => t.name == "EOF",
         Literal(_) | Wildcard(_) | Not(_) => false,

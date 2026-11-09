@@ -4222,15 +4222,18 @@ fn gen_group_body(
     }
     let atn = group_atn(g, ctx);
     if let Decides([dec, site]) = atn {
-        let var = dedup_name("gd_atn", nc);
-        let met = *ctx.decisions.at_site(site);
-        w.line(`let ${var} = ${atn_predict_call(dec, &met, PickSide::Parse, ctx)};`);
-        w.begin(`if ${var} < 0`);
-        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
-        w.else_begin("else");
+        let var = gen_group_atn_pick(w, dec, site, ctx, nc);
+        let refusable = !ctx.decisions.at_site(site).is_empty();
+        if refusable {
+            w.begin(`if ${var} < 0`);
+            w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+            w.else_begin("else");
+        }
         let order: List<i32> = g.alts.iter_ref().map(|a| a.alt_index).collect();
         gen_alt_commit(w, &g.alts, &order, &var, ctx, nc);
-        w.end();
+        if refusable {
+            w.end();
+        }
         return;
     }
     gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, null, &atn);
@@ -4305,9 +4308,30 @@ fn gen_alt_dispatch(
     close_decision_chain(w, &emitted);
 }
 
+/// Ask the simulator for group decision `dec` at surface site `site`, into a
+/// local whose name this returns.
+fn gen_group_atn_pick(
+    w: &mut CodeWriter,
+    dec: i32,
+    site: i32,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+) -> String {
+    let var = dedup_name("gd_atn", nc);
+    let met = *ctx.decisions.at_site(site);
+    w.line(`let ${var} = ${atn_predict_call(dec, &met, PickSide::Parse, ctx)};`);
+    return var;
+}
+
 /// Under `atn: "verify"`, check the tournament's pick `winner` among
 /// `candidates` where `atn` says the simulator checks the group.
-fn check_group_tournament(w: &mut CodeWriter, atn: &GroupAtn, winner: &String, candidates: &List<i32>, ctx: &mut EmitContext) {
+fn check_group_tournament(
+    w: &mut CodeWriter,
+    atn: &GroupAtn,
+    winner: &String,
+    candidates: &List<i32>,
+    ctx: &mut EmitContext,
+) {
     let Checks([dec, site]) = *atn else {
         return;
     };
@@ -6643,7 +6667,12 @@ fn gen_exit_check_or_entered(
         return;
     };
     let rows = optional_rows_name(rep_op, ctx);
-    let call = iteration_verified_call(rep_op, ctx, c, `if p.pos > ${c.at} || p.b.checkpoint() > ${rows} { 0 } else { 1 }`);
+    let call = iteration_verified_call(
+        rep_op,
+        ctx,
+        c,
+        `if p.pos > ${c.at} || p.b.checkpoint() > ${rows} { 0 } else { 1 }`,
+    );
     gen_verified_check(w, "", [call]);
 }
 
@@ -8129,9 +8158,7 @@ fn gen_group_branch_body(
     // tournament, mandatory-heavy first.
     let sorted_group = branch_emit_order(group, alts, ctx);
     if let Decides([dec, site]) = atn {
-        let var = dedup_name("gd_atn", name_counts);
-        let met = *ctx.decisions.at_site(site);
-        w.line(`let ${var} = ${atn_predict_call(dec, &met, PickSide::Parse, ctx)};`);
+        let var = gen_group_atn_pick(w, dec, site, ctx, name_counts);
         gen_group_scan_dispatch(
             w,
             alts,
@@ -8142,16 +8169,13 @@ fn gen_group_branch_body(
             ctx,
             name_counts,
             Option::Some(var),
-            !met.is_empty(),
+            !ctx.decisions.at_site(site).is_empty(),
         );
         return;
     }
     assert group_all_scannable(&sorted_group, alts, ctx);
     let winner = gen_scan_winner_tournament(w, &sorted_group, g_op_scan_alts, ctx, name_counts);
-    if let Checks([dec, site]) = atn {
-        let check = AtnCheck { decision: dec, numbers: sorted_group, met: *ctx.decisions.at_site(site) };
-        emit_atn_check(w, &check, &winner, &sorted_group, ctx);
-    }
+    check_group_tournament(w, &atn, &winner, &sorted_group, ctx);
     let refusable = sorted_group.iter_ref().any(|i| scan_body_is_gated(&g_op_scan_alts[*i]));
     gen_group_scan_dispatch(
         w,
