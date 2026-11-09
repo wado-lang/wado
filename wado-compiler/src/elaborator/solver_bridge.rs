@@ -1,7 +1,7 @@
 //! The lowering from the compiler's tables into the solver's [`Program`], and
 //! the solver's answers read back as the compiler keys them.
 
-use crate::ast::{FunctionType, GenericParam, Type};
+use crate::ast::{FunctionType, GenericParam, NamedType, Type};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -543,7 +543,7 @@ impl Lowering {
                 Ok(SolverType::Decl(declared(generic.id)?, args))
             }
             Type::Tuple(elems) => all(elems).map(SolverType::Tuple),
-            Type::TypePackSpread(crate::ast::NamedType { name, .. }) => {
+            Type::TypePackSpread(NamedType { name, .. }) => {
                 match (written.param)(name).ok_or(Unsaid::Open)? {
                     ParamKind::Pack(index) | ParamKind::Type(index) => Ok(SolverType::Pack(index)),
                     ParamKind::Signature(_) => Err(Unsaid::Unsayable),
