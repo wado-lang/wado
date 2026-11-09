@@ -1361,9 +1361,9 @@ impl HeapFrame {
                     self.unify_op(effects, body, node, el);
                 }
             }
-            ExprKind::VariantConstruct {
-                payload: Some(p), ..
-            } => self.unify_op(effects, body, node, *p),
+            ExprKind::VariantConstruct { payload, .. } => {
+                self.unify_op(effects, body, node, *payload);
+            }
             ExprKind::If {
                 then_branch,
                 else_branch,
@@ -1414,7 +1414,6 @@ impl HeapFrame {
                 self.call_nodes.push((result, start..self.call_args.len()));
             }
             ExprKind::CmRawCall { .. }
-            | ExprKind::VariantConstruct { payload: None, .. }
             | ExprKind::EnumConstruct { .. }
             | ExprKind::PackedArray(_)
             | ExprKind::Dead => {}

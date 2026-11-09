@@ -1914,9 +1914,7 @@ fn collect_modified_vars_in_expr(
             collect_modified_vars_in_operand(body, *functor, modified, type_table);
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                collect_modified_vars_in_operand(body, *p, modified, type_table);
-            }
+            collect_modified_vars_in_operand(body, *payload, modified, type_table);
         }
         ExprKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(body, *block, modified, type_table);

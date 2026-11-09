@@ -1465,9 +1465,7 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    self.walk_operand(p);
-                }
+                self.walk_operand(payload);
                 None
             }
             // An enum case is a compile-time scalar constant: its discriminant.

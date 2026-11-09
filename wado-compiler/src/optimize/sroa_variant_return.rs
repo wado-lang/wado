@@ -69,7 +69,7 @@ impl OptionCases {
             variant_type: option_type,
             case_index: self.some.index,
             case_name: self.some.name.clone(),
-            payload: Some(payload),
+            payload,
         }
     }
 
@@ -83,12 +83,10 @@ impl OptionCases {
     }
 
     /// `None` of `option_type`.
-    pub(super) fn none_of(&self, option_type: TypeId) -> ExprKind {
-        ExprKind::VariantConstruct {
+    pub(super) fn none_of(&self, option_type: TypeId) -> ValueKind {
+        ValueKind::UnitCase {
             variant_type: option_type,
             case_index: self.none.index,
-            case_name: self.none.name.clone(),
-            payload: None,
         }
     }
 }
@@ -103,6 +101,19 @@ pub(super) enum Pad {
     Char,
     /// `None` of the slot's own `Option` type.
     NoneOf(TypeId),
+}
+
+impl Pad {
+    /// The constant that fills the slot, with the type it fills it at.
+    pub(super) fn constant(self, option: &OptionCases) -> (ValueKind, TypeId) {
+        match self {
+            Pad::Int(ty) => (ValueKind::Int(0, ty), ty),
+            Pad::Float(ty) => (ValueKind::Float(0.0f64.to_bits(), ty), ty),
+            Pad::Bool => (ValueKind::Bool(false), TypeTable::BOOL),
+            Pad::Char => (ValueKind::Char('\0'), TypeTable::CHAR),
+            Pad::NoneOf(option_type) => (option.none_of(option_type), option_type),
+        }
+    }
 }
 
 /// How a variant case's payload reaches the result tuple.
@@ -650,16 +661,26 @@ fn rebuild_variant(
                 read
             }
         });
-        let construct = body.exprs.push(ExprNode {
-            kind: ExprKind::VariantConstruct {
+        let construct = match payload {
+            Some(payload) => Operand::Expr(body.exprs.push(ExprNode {
+                kind: ExprKind::VariantConstruct {
+                    variant_type,
+                    case_index,
+                    case_name: layout.case_names[case_index as usize].clone(),
+                    payload,
+                },
+                type_id: variant_type,
+                span,
+            })),
+            None => constant(
+                body,
+                ValueKind::UnitCase {
+                    variant_type,
+                    case_index,
+                },
                 variant_type,
-                case_index,
-                case_name: layout.case_names[case_index as usize].clone(),
-                payload,
-            },
-            type_id: variant_type,
-            span,
-        });
+            ),
+        };
         // The last case is the catch-all, so the match stays exhaustive
         // whatever the tag holds.
         let is_last = case_index as usize + 1 == layout.case_names.len();
@@ -674,7 +695,7 @@ fn rebuild_variant(
         arms.push(ArmData {
             pattern,
             guard: None,
-            body: Operand::Expr(construct),
+            body: construct,
             span,
         });
     }
@@ -1856,7 +1877,7 @@ fn rewrite_construct(body: &mut Body, construct: ExprId, cand: &Candidate, span:
     else {
         unreachable!("not a case construction")
     };
-    let tuple = build_result_tuple(body, cand, case_index, payload, span);
+    let tuple = build_result_tuple(body, cand, case_index, Some(payload), span);
     body.exprs[construct].kind = tuple;
     body.exprs[construct].type_id = cand.layout.tuple_type;
 }
@@ -1911,9 +1932,7 @@ fn build_result_tuple(
                 }
             })
         });
-        elements.push(
-            live.unwrap_or_else(|| pad_value(body, layout.slot_pads[i], &layout.option, span)),
-        );
+        elements.push(live.unwrap_or_else(|| pad_value(body, layout.slot_pads[i], &layout.option)));
     }
     ExprKind::TupleLiteral { elements }
 }
@@ -1954,18 +1973,9 @@ pub(super) fn zero_pad(type_id: TypeId, type_table: &TypeTable) -> Option<Pad> {
 
 /// The value that fills a slot the live case does not use. Never read — every
 /// reader tests the tag first.
-fn pad_value(body: &mut Body, pad: Pad, option: &OptionCases, span: Span) -> Operand {
-    match pad {
-        Pad::Int(ty) => constant(body, ValueKind::Int(0, ty), ty),
-        Pad::Float(ty) => constant(body, ValueKind::Float(0.0f64.to_bits(), ty), ty),
-        Pad::Bool => constant(body, ValueKind::Bool(false), TypeTable::BOOL),
-        Pad::Char => constant(body, ValueKind::Char('\0'), TypeTable::CHAR),
-        Pad::NoneOf(option_type) => Operand::Expr(body.exprs.push(ExprNode {
-            kind: option.none_of(option_type),
-            type_id: option_type,
-            span,
-        })),
-    }
+fn pad_value(body: &mut Body, pad: Pad, option: &OptionCases) -> Operand {
+    let (kind, type_id) = pad.constant(option);
+    constant(body, kind, type_id)
 }
 
 // -----------------------------------------------------------------------

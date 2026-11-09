@@ -423,11 +423,8 @@ fn "http_method_routing.wado/$cm_binding__wasi:http/types@0.3.0#[static]response
 }
 
 fn "http_method_routing.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code"(self, status_code) with Response {
-    return (if "wasi/$wasi:http/types@0.3.0#[method]response.set-status-code"(self.value, status_code) == 0 -> ref "core:prelude/types.wado//Result<(),()>" {
-        global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0;
-    } else {
-        global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$1;
-    });
+    status_code = "wasi/$wasi:http/types@0.3.0#[method]response.set-status-code"(self.value, status_code);
+    return select ref "core:prelude/types.wado//Result<(),()>"(status_code == 0, global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0, global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$1);
 }
 
 fn "http_method_routing.wado/$cm_export__handle"($p0) {
@@ -776,9 +773,9 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-    b90: block {
-        l91: loop {
-            break_if b90 i > $licm_arith_7;
+    b89: block {
+        l90: loop {
+            break_if b89 i > $licm_arith_7;
             w = builtin::load_i64(ptr + i);
             builtin::array_set_u8(arr, i, builtin::i32_wrap_i64(w));
             builtin::array_set_u8(arr, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
@@ -789,15 +786,15 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
             builtin::array_set_u8(arr, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
             builtin::array_set_u8(arr, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
             i = i + 8;
-            continue l91;
+            continue l90;
         };
     };
-    b92: block {
-        l93: loop {
-            break_if b92 i >= len;
+    b91: block {
+        l92: loop {
+            break_if b91 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l93;
+            continue l92;
         };
     };
 }
@@ -808,30 +805,30 @@ fn "core:rt/gc_array_to_memory$dae[src_start]"(arr, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-    b94: block {
-        l95: loop {
-            break_if b94 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+    b93: block {
+        l94: loop {
+            break_if b93 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l95;
+            continue l94;
         };
     };
-    b96: block {
-        l97: loop {
-            break_if b96 i > $licm_arith_7;
+    b95: block {
+        l96: loop {
+            break_if b95 i > $licm_arith_7;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l97;
+            continue l96;
         };
     };
-    b98: block {
-        l99: loop {
-            break_if b98 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+    b97: block {
+        l98: loop {
+            break_if b97 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -840,15 +837,15 @@ fn "core:rt/gc_array_to_memory$dae[src_start]"(arr, ptr, len) {
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l99;
+            continue l98;
         };
     };
-    b100: block {
-        l101: loop {
-            break_if b100 i >= len;
+    b99: block {
+        l100: loop {
+            break_if b99 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l101;
+            continue l100;
         };
     };
 }

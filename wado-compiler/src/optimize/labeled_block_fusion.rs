@@ -1941,7 +1941,7 @@ fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &TempReads) {
             Walk::Exprs(elements.iter().filter_map(|o| o.as_expr()).collect())
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            Walk::Exprs(payload.iter().filter_map(|o| o.as_expr()).collect())
+            Walk::Exprs(payload.as_expr().into_iter().collect())
         }
         ExprKind::LabeledBlock { block, .. } => Walk::Block(*block),
         ExprKind::If {
@@ -2442,10 +2442,10 @@ fn plan_slot_temp_sroa(
     let option = OptionCases::of(type_table);
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
-        let init = match pad {
-            Some(pad) => materialize_pad(engine, pad, &option, span),
-            None => engine.const_operand(ValueKind::Unit, TypeTable::UNIT),
-        };
+        let (kind, init_type) = pad.map_or((ValueKind::Unit, TypeTable::UNIT), |pad| {
+            pad.constant(&option)
+        });
+        let init = engine.const_operand(kind, init_type);
         let local_index = engine.alloc_minted_local(SROA_SLOT, type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
@@ -2866,20 +2866,6 @@ fn scalarize_materialized_exit(
         );
         let kind = slot_assign(engine, slot, Operand::Expr(read), span);
         out.push(engine.alloc_stmt(kind, span));
-    }
-}
-
-/// The zero operand for a slot's declaring `let`, built through the engine so
-/// its per-node buffers grow with the arena.
-fn materialize_pad(engine: &mut Engine, pad: Pad, option: &OptionCases, span: Span) -> Operand {
-    match pad {
-        Pad::Int(ty) => engine.const_operand(ValueKind::Int(0, ty), ty),
-        Pad::Float(ty) => engine.const_operand(ValueKind::Float(0.0f64.to_bits(), ty), ty),
-        Pad::Bool => engine.const_operand(ValueKind::Bool(false), TypeTable::BOOL),
-        Pad::Char => engine.const_operand(ValueKind::Char('\0'), TypeTable::CHAR),
-        Pad::NoneOf(option_type) => {
-            Operand::Expr(engine.alloc_expr(option.none_of(option_type), option_type, span))
-        }
     }
 }
 

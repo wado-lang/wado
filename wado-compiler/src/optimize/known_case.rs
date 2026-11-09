@@ -269,14 +269,12 @@ mod tests {
             span: Span::default(),
         });
         assert_eq!(root, body.root());
-        let construct = expr(
-            &mut body,
-            ExprKind::VariantConstruct {
+        let case_b = body.values.alloc_unshared(
+            ValueKind::UnitCase {
                 variant_type: TypeTable::I32,
                 case_index: 1,
-                case_name: "B".into(),
-                payload: None,
             },
+            TypeTable::I32,
         );
         let read = expr(
             &mut body,
@@ -292,7 +290,7 @@ mod tests {
                 local_index: 0,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value: Operand::Expr(construct),
+                value: Operand::Value(case_b),
                 skip_value_copy: false,
             },
             span: Span::default(),

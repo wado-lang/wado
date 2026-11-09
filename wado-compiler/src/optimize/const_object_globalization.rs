@@ -1400,7 +1400,7 @@ fn is_globalizable_const(
                 .all(|&e| is_globalizable_const_operand(body, e, gate, bound))
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| is_globalizable_const_operand(body, p, gate, bound))
+            is_globalizable_const_operand(body, *payload, gate, bound)
         }
         // The global then holds the projected field, not the aggregate it came
         // out of.
@@ -2233,7 +2233,7 @@ fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>
             .iter()
             .any(|&e| delivers_projection_operand(body, e, roots, gate)),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_some_and(|p| delivers_projection_operand(body, p, roots, gate))
+            delivers_projection_operand(body, *payload, roots, gate)
         }
         _ => false,
     }
@@ -2496,7 +2496,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             .iter()
             .all(|&e| expr_readonly_operand(body, e, idx, gate)),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| expr_readonly_operand(body, p, idx, gate))
+            expr_readonly_operand(body, *payload, idx, gate)
         }
 
         // Any other expression kind: a non-whitelisted use. Reject if it

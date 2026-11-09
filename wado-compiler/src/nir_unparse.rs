@@ -602,16 +602,13 @@ impl<'a> NirUnparser<'a> {
                 case_name, payload, ..
             } => {
                 let payload = *payload;
-                // Get the variant type name from the type_id
                 let type_name = self.type_table.mangle_type_arg_for_generic(ty);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
-                if let Some(payload_expr) = payload {
-                    self.output.push('(');
-                    self.unparse_operand(body, payload_expr);
-                    self.output.push(')');
-                }
+                self.output.push('(');
+                self.unparse_operand(body, payload);
+                self.output.push(')');
             }
             ExprKind::EnumConstruct { case_name, .. } => {
                 // Get the enum type name from the type_id

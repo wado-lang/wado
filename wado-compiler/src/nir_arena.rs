@@ -374,11 +374,13 @@ pub enum ExprKind {
         target_fn_type: TypeId,
         closure_module: ModuleSource,
     },
+    /// A case built with its payload. A case without one is a promoted
+    /// [`ValueKind::UnitCase`].
     VariantConstruct {
         variant_type: TypeId,
         case_index: u32,
         case_name: String,
-        payload: Option<Operand>,
+        payload: Operand,
     },
     EnumConstruct {
         enum_type: TypeId,
@@ -861,7 +863,7 @@ impl Body {
                     case_index,
                     payload,
                     ..
-                } => Some((*case_index, *payload)),
+                } => Some((*case_index, Some(*payload))),
                 _ => None,
             },
         }
@@ -1370,7 +1372,7 @@ pub trait SubtreeCopy {
                 variant_type,
                 case_index,
                 case_name,
-                payload: payload.map(|p| self.clone_operand(p)),
+                payload: self.clone_operand(payload),
             },
             ExprKind::LabeledBlock {
                 label,
@@ -1853,11 +1855,7 @@ impl Body {
                     }
                 }
                 ExprKind::ClosureToCanonical { functor, .. } => f(functor),
-                ExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(p) = payload {
-                        f(p);
-                    }
-                }
+                ExprKind::VariantConstruct { payload, .. } => f(payload),
                 ExprKind::Switch { scrutinee, .. } => f(scrutinee),
                 ExprKind::PackedArray(_)
                 | ExprKind::Dead
@@ -2312,11 +2310,7 @@ impl Body {
                     }
                 }
                 ExprKind::ClosureToCanonical { functor, .. } => f(Slot::Operand(*functor)),
-                ExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(p) = payload {
-                        f(Slot::Operand(*p));
-                    }
-                }
+                ExprKind::VariantConstruct { payload, .. } => f(Slot::Operand(*payload)),
                 ExprKind::LabeledBlock { block, .. } => f(Slot::Node(NodeRef::Block(*block))),
                 ExprKind::Switch {
                     scrutinee,

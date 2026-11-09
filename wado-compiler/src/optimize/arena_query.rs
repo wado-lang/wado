@@ -1041,9 +1041,7 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             elements.iter().all(|&e| is_pure_operand(body, e))
         }
-        ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| is_pure_operand(body, p))
-        }
+        ExprKind::VariantConstruct { payload, .. } => is_pure_operand(body, *payload),
         ExprKind::LabeledBlock { block, .. } => is_pure_block(body, *block),
         ExprKind::If {
             condition,

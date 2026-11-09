@@ -1423,12 +1423,15 @@ impl FunctionTranslator<'_, '_> {
         variant_type: TypeId,
         case_index: u32,
     ) -> WirInstr {
-        let case_name = self
-            .variant_case_at(variant_type, case_index)
-            .1
-            .name
-            .clone();
-        self.translate_variant_construct(variant_type, case_index, &case_name, None, variant_type)
+        assert!(
+            self.variant_case_at(variant_type, case_index)
+                .1
+                .payload
+                .is_empty(),
+            "[WIR] a unit case carries no payload"
+        );
+        let struct_type_id = self.ref_type_id(variant_type);
+        self.struct_new(struct_type_id, vec![WirInstr::I32Const(case_index as i32)])
     }
 
     /// Translate variant construction: `Shape::Circle(5.0)`
@@ -1437,7 +1440,7 @@ impl FunctionTranslator<'_, '_> {
         variant_type: TypeId,
         case_index: u32,
         case_name: &str,
-        payload: Option<Operand>,
+        payload_expr: Operand,
         result_type: TypeId,
     ) -> WirInstr {
         let (variant, case) = self.variant_case(variant_type, case_index, case_name);
@@ -1449,9 +1452,6 @@ impl FunctionTranslator<'_, '_> {
         };
 
         let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-        let Some(payload_expr) = payload else {
-            return self.struct_new(struct_type_id, fields);
-        };
         if !carries_payload {
             let (prelude, values) = self.translate_args_erasing_unit(&[payload_expr], true);
             fields.extend(values);

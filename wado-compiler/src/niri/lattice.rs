@@ -242,21 +242,16 @@ impl Interpreter<'_> {
         body: &Body,
         type_id: TypeId,
         case_index: u32,
-        payload: Option<Operand>,
+        payload: Operand,
     ) -> Lattice {
-        let payload = match payload {
-            None => None,
-            Some(op) => match self.operand_to_lattice(body, op) {
-                Lattice::Const(v) => Some(Arc::new(v)),
-                Lattice::NonConst => return Lattice::NonConst,
-                Lattice::Unevaluated => return Lattice::Unevaluated,
-            },
-        };
-        Lattice::Const(Value::Variant {
-            type_id,
-            case_index,
-            payload,
-        })
+        match self.operand_to_lattice(body, payload) {
+            Lattice::Const(v) => Lattice::Const(Value::Variant {
+                type_id,
+                case_index,
+                payload: Some(Arc::new(v)),
+            }),
+            other => other,
+        }
     }
 
     /// An array literal denotes the whole container, not just its elements:

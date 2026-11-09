@@ -1809,6 +1809,15 @@ impl FunctionTranslator<'_, '_> {
                     None => ValueKind::Null,
                 })
             }
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                payload: None,
+                ..
+            } => Some(ValueKind::UnitCase {
+                variant_type: *variant_type,
+                case_index: *case_index,
+            }),
             // String / bytes literals are no longer atomic pool values; they
             // lower to a `StructLiteral` over a packed `Array<u8>` repr in
             // `convert_expr` (`seq_literal`), so they fall through to the
@@ -2360,7 +2369,11 @@ impl FunctionTranslator<'_, '_> {
                 variant_type: *variant_type,
                 case_index: *case_index,
                 case_name: case_name.clone(),
-                payload: payload.as_ref().map(|p| self.convert_stored_operand(p)),
+                payload: self.convert_stored_operand(
+                    payload
+                        .as_ref()
+                        .expect("[lower] a payload-less case is a `UnitCase` operand"),
+                ),
             },
             TirExprKind::EnumConstruct {
                 enum_type,
@@ -2679,7 +2692,7 @@ impl FunctionTranslator<'_, '_> {
             variant_type: *variant_type,
             case_index: *case_index,
             case_name: case_name.clone(),
-            payload: Some(self.convert_returned_operand(payload)),
+            payload: self.convert_returned_operand(payload),
         };
         self.alloc_expr(kind, value.type_id, value.span).into()
     }

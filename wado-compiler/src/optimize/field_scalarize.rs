@@ -878,9 +878,7 @@ impl NirRefVisitor for AliasScan<'_> {
                     }
                 }
                 ExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(op) = *payload {
-                        self.mark_published(body, op);
-                    }
+                    self.mark_published(body, *payload);
                 }
                 _ => {}
             },
@@ -2693,9 +2691,7 @@ fn walk_other_expr_kinds(
             walk_operand(body, functor, states, true, out, ctx);
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = *payload {
-                walk_operand(body, p, states, true, out, ctx);
-            }
+            walk_operand(body, *payload, states, true, out, ctx);
         }
         ExprKind::LabeledBlock { label, block, .. } => {
             let (label, block) = (label.clone(), *block);

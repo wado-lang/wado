@@ -469,13 +469,13 @@ impl Interpreter<'_> {
                     case_index: held,
                     payload,
                     ..
-                } if *variant_type == type_id && *held == case_index => *payload,
+                } if *variant_type == type_id && *held == case_index => Some(*payload),
                 _ => None,
             },
             None => None,
         };
-        let written = Some(self.write_value(sink, previous, payload, case.payload, span)?);
-        if previous == written {
+        let written = self.write_value(sink, previous, payload, case.payload, span)?;
+        if previous == Some(written) {
             return existing;
         }
         Some(Operand::Expr(sink.alloc_expr(

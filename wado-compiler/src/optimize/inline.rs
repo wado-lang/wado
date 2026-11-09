@@ -311,7 +311,7 @@ impl<'a> CostWalk<'a> {
                 elements.iter().all(|&e| self.folds(e))
             }
             ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| self.folds(f.value)),
-            ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(|p| self.folds(p)),
+            ExprKind::VariantConstruct { payload, .. } => self.folds(*payload),
             // A call the compile-time engine runs on constant arguments leaves
             // a literal behind, so it costs the caller nothing.
             ExprKind::Call { func_id, args, .. } => {
@@ -551,9 +551,7 @@ impl<'a> CostWalk<'a> {
                         .map(|f| self.operand(f.value, seen))
                         .sum::<usize>()
             }
-            ExprKind::VariantConstruct { payload, .. } => {
-                weight::OP + payload.map_or(0, |p| self.operand(p, seen))
-            }
+            ExprKind::VariantConstruct { payload, .. } => weight::OP + self.operand(*payload, seen),
 
             // A call is an ABI edge, not an operation — unless the compile-time
             // engine runs it on constant arguments, leaving a literal.
@@ -933,10 +931,7 @@ fn has_safepoint(
                 | ExprKind::ArrayLiteral { .. }
                 | ExprKind::PackedArray(_)
                 | ExprKind::ClosureToCanonical { .. }
-                | ExprKind::VariantConstruct {
-                    payload: Some(_),
-                    ..
-                }
+                | ExprKind::VariantConstruct { .. }
         )
     }
     Walk {
@@ -1229,7 +1224,7 @@ fn folds_to_constant(
                 elements.iter().all(|&e| recurse(e))
             }
             ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| recurse(f.value)),
-            ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(recurse),
+            ExprKind::VariantConstruct { payload, .. } => recurse(*payload),
             ExprKind::Local { index, .. } => const_locals.contains(index),
             ExprKind::Call { func_id, args, .. } => {
                 ctfe_eligible.is_some_and(|eligible| eligible[func_id.index()])
@@ -1466,7 +1461,7 @@ impl Caller<'_> {
                 elements.iter().all(|&el| next(el))
             }
             ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| next(f.value)),
-            ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(next),
+            ExprKind::VariantConstruct { payload, .. } => next(*payload),
             ExprKind::Call { args, .. } => args.iter().all(|a| !a.is_mut && next(a.expr)),
             ExprKind::Dead
             | ExprKind::Assign { .. }
@@ -4415,7 +4410,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 variant_type: vt,
                 case_index: ci,
                 case_name: cn,
-                payload: p.map(|x| splice_operand(caller, callee, x, ctx)),
+                payload: splice_operand(caller, callee, p, ctx),
             }
         }
         ExprKind::EnumConstruct {
