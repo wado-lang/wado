@@ -555,7 +555,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[return]" = fn(i32, i32) -> [i32, ref null "core:prelude/types.wado//ResourceId", ref null "core:prelude/types.wado//ReadyEvent"];  // TypeId(143)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//StartedWrite<u8>");  // TypeId(144)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//CopyBuffer", ref "core:prelude/list.wado//List<u8>");  // TypeId(144)
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//ReadCopy<u8>");  // TypeId(145)
 
@@ -701,8 +701,8 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
     let v_218: ref "core:prelude/list.wado//List<u8>";
     let $sroa_$pattern_temp_0_0_230: i32;
     let $sroa_$pattern_temp_0_1_231: i32;
+    let copy: ref null "core:prelude/types.wado//ReadCopy<u8>";
     let chunk_245: ref "core:prelude/types.wado//StreamChunk<u8>";
-    let $moved_5: ref null "core:prelude/types.wado//ReadCopy<u8>";
     let $local_9: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]";
     let self_251: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>";
     let $replaced_3: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>";
@@ -721,9 +721,9 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
             $sroa_$pattern_temp_0_0_230 = "mem/realloc"(0, 0, 1, 4096);
             packed = "wasi/stream-read"(request, $sroa_$pattern_temp_0_0_230, 4096);
             started_260 = struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: request, packed: packed, ptr: $sroa_$pattern_temp_0_0_230, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
-            $moved_5 = struct.new "core:prelude/types.wado//ReadCopy<u8>" { copy: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]" { 0: body_stream_3, 1: started_260 } } } };
+            copy = struct.new "core:prelude/types.wado//ReadCopy<u8>" { copy: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]" { 0: body_stream_3, 1: started_260 } } } };
             body_stream_3 = local.tee $local_9($inline_core_prelude_types_wado_Option__core_prelude_types_wado_Stream_u8__core_prelude_types_wado_StartedRead_u8_____unwrap_2: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]" {
-                $replaced_3 = local.tee self_251($moved_5.copy).value;
+                $replaced_3 = local.tee self_251(copy.copy).value;
                 self_251.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>$0;
                 if ref.test "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>::Some"($replaced_3) {
                     break $inline_core_prelude_types_wado_Option__core_prelude_types_wado_Stream_u8__core_prelude_types_wado_StartedRead_u8_____unwrap_2: ref.cast "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>::Some"($replaced_3).payload_0;
@@ -734,8 +734,8 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
                 unreachable;
             }).0;
             chunk_245 = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"($local_9.1);
-            if ref.is_null($moved_5) == 0 {
-                "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"($moved_5);
+            if ref.is_null(copy) == 0 {
+                "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"(copy);
             }
             v_218 = chunk_245.items;
             v_218 = struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = v_218.repr; request = v_218.used; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(request)), 0, $array_clone_src_3, 0, request); $array_clone_dst_4, used: request };
@@ -2091,7 +2091,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let i: i32;
     let w: i64;
     let $licm_arith_39: i32;
-    let $moved_2: ref null "core:prelude/types.wado//StartedWrite<u8>";
+    let started: ref null "core:prelude/types.wado//StartedWrite<u8>";
     let $drop_spill_3: ref "core:prelude/types.wado//StreamWrite<u8>";
     if $mv$data$used == 0 {
         return 0;
@@ -2141,9 +2141,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 };
             }; builtin::i64_extend_i32_u(ptr_18) | (builtin::i64_extend_i32_s($mv$data$used) << 32_i64));
             i = "wasi/stream-write"(self, ptr_18, select i32($mv$data$used < 268435455, $mv$data$used, 268435455));
-            $drop_spill_3 = "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(local.tee $moved_2(struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: i, ptr: ptr_18, size: $mv$data$used, align: 1 }, data: struct.new "core:prelude/list.wado//List<u8>" { repr: $mv$data$repr = pending.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee ptr_18(pending.used))), 0, $mv$data$repr, 0, ptr_18); $array_clone_dst_2, used: ptr_18 } }).buffer, $moved_2.data);
-            if ref.is_null($moved_2) == 0 {
-                "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop"($moved_2);
+            $drop_spill_3 = "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(local.tee started(struct.new "core:prelude/types.wado//StartedWrite<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: i, ptr: ptr_18, size: $mv$data$used, align: 1 }, data: struct.new "core:prelude/list.wado//List<u8>" { repr: $mv$data$repr = pending.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee ptr_18(pending.used))), 0, $mv$data$repr, 0, ptr_18); $array_clone_dst_2, used: ptr_18 } }).buffer, started.data);
+            if ref.is_null(started) == 0 {
+                "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop"(started.buffer, started.data);
             }
             ptr_18 = $mv$data$used - local.tee $mv$data$used(local.tee pending($drop_spill_3.rest).used);
             if (local.tee i($drop_spill_3.result) != 0) | (ptr_18 <= 0) | ($mv$data$used == 0) {
@@ -2435,17 +2435,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[ret
     }) };
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop"(self) {
-    let $load_4: i32;
-    let buffer: ref null "core:prelude/types.wado//CopyBuffer";
-    let data: ref "core:prelude/list.wado//List<u8>";
-    buffer = self.buffer;
-    data = self.data;
-    drop("core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(buffer, data));
-    if ref.is_null(buffer) == 0 {
-        drop("core:prelude/types.wado/settled_copy"(buffer.handle, buffer.packed));
-        if local.tee $load_4(buffer.size) > 0 {
-            drop("mem/realloc"(buffer.ptr, $load_4, buffer.align, 0));
+fn "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop"($mv$self$buffer, $mv$self$data) {
+    let $load_2: i32;
+    drop("core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"($mv$self$buffer, $mv$self$data));
+    if ref.is_null($mv$self$buffer) == 0 {
+        drop("core:prelude/types.wado/settled_copy"($mv$self$buffer.handle, $mv$self$buffer.packed));
+        if local.tee $load_2($mv$self$buffer.size) > 0 {
+            drop("mem/realloc"($mv$self$buffer.ptr, $load_2, $mv$self$buffer.align, 0));
         }
     }
 }

@@ -252,7 +252,8 @@ fn "affine_for_of_consumes_list.wado/run"() with Stdout {
     used_35 = builtin::array_len(local.tee elements_34(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 1 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 2 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 3 })));
     tokens = struct.new "core:prelude/list.wado//List<affine_for_of_consumes_list.wado/Token>" { repr: elements_34, used: used_35 };
     used_35 = 0;
-    $licm_used_114 = local.tee tokens(local.tee $iter_0(struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: tokens, at: 0 }).list).used;
+    $iter_0 = struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: tokens, at: 0 };
+    $licm_used_114 = tokens.used;
     elements_34 = tokens.repr;
     $hfs_at_119 = 0;
     b0: block {
@@ -306,7 +307,8 @@ fn "affine_for_of_consumes_list.wado/run"() with Stdout {
         unreachable;
     }
     used_35 = builtin::array_len(local.tee elements_34(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 4 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 5 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 6 })));
-    used_35 = local.tee tokens(local.tee $iter_0(struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: struct.new "core:prelude/list.wado//List<affine_for_of_consumes_list.wado/Token>" { repr: elements_34, used: used_35 }, at: 0 }).list).used;
+    $iter_0 = struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: local.tee tokens(struct.new "core:prelude/list.wado//List<affine_for_of_consumes_list.wado/Token>" { repr: elements_34, used: used_35 }), at: 0 };
+    used_35 = tokens.used;
     elements_34 = tokens.repr;
     $licm_used_114 = 0;
     b12: block {
@@ -361,13 +363,16 @@ fn "affine_for_of_consumes_list.wado/run"() with Stdout {
         "affine_for_of_consumes_list.wado/run$cold1"();
         unreachable;
     }
-    if @unlikely(local.tee used_35("affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affine_for_of_consumes_list.wado/Token>"(used_35 = builtin::array_len(local.tee elements_34(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 7 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 8 }))); tokens = struct.new "core:prelude/list.wado//List<affine_for_of_consumes_list.wado/Token>" { repr: elements_34, used: used_35 }; if ref.is_null($v0) {
+    used_35 = builtin::array_len(local.tee elements_34(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 7 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 8 })));
+    tokens = struct.new "core:prelude/list.wado//List<affine_for_of_consumes_list.wado/Token>" { repr: elements_34, used: used_35 };
+    if ref.is_null($v0) {
         $v0 = tokens;
     } else {
         "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($v0.repr, $v0.used);
         $v0.repr = tokens.repr;
         $v0.used = used_35;
-    }; $v0)) != 2) {
+    }
+    if @unlikely(local.tee used_35("affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affine_for_of_consumes_list.wado/Token>"($v0)) != 2) {
         cold_path;
         let $mv_arg_3: ref "core:prelude/string.wado//String";
         "core:rt/panic"(local.tee $mv_arg_3("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_for_of_consumes_list.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_for_of_consumes_list.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: used_35, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at affine_for_of_consumes_list.wado:49
@@ -481,7 +486,8 @@ fn "affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affi
     let $licm_repr_32: ref null "Array<affine_for_of_consumes_list.wado/Token>";
     let $hfs_at_33: i32;
     n = 0;
-    $licm_used_31 = local.tee items(local.tee $iter_0(struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: items, at: 0 }).list).used;
+    $iter_0 = struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: items, at: 0 };
+    $licm_used_31 = items.used;
     $licm_repr_32 = items.repr;
     $hfs_at_33 = 0;
     b47: block {

@@ -458,11 +458,11 @@ fn "elide_box_local_read_added_by_ref_elim.wado/moved_into_a_literal$sroa[s.buf]
     $array_clone_len_3 = builtin::array_len($mv$s$repr);
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($array_clone_len_3)), 0, $mv$s$repr, 0, $array_clone_len_3);
-    if local.tee $array_clone_len_3($mv$s$used) >= builtin::array_len($array_clone_dst_2) {
+    if $mv$s$used >= builtin::array_len($array_clone_dst_2) {
         builtin::array_copy<i32>(local.tee $mv$s$repr(builtin::array_new<i32>((builtin::array_len($array_clone_dst_2) * 2) + 4)), 0, $array_clone_dst_2, 0, $mv$s$used);
         $array_clone_dst_2 = $mv$s$repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, $array_clone_len_3, 4);
+    builtin::array_set<i32>($array_clone_dst_2, $mv$s$used, 4);
     return $mv$s$used;
 }
 

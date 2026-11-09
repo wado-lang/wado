@@ -609,7 +609,7 @@ fn "waitable_set_delivered_call.wado/delivered"() with MonotonicClock {
 }
 
 fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
-    let $load_8: ref Array<u8>;
+    let $load_11: ref Array<u8>;
     let again: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/AsyncCall<()>>";
     let ready: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>";
     let timers: ref null "core:prelude/types.wado//WaitableSet<waitable_set_delivered_call.wado/Timer>";
@@ -678,7 +678,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     out_29 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 };
     new_repr_322 = global:waitable_set_delivered_call.wado::$const_obj_2;
     out_29.used = 16;
-    builtin::array_copy<u8>(local.tee $load_8(out_29.repr), 0, new_repr_322, 0, 16);
+    builtin::array_copy<u8>(local.tee $load_11(out_29.repr), 0, new_repr_322, 0, 16);
     $sroa_$pattern_temp_0_1_14_190 = $sroa_$pattern_temp_0_0_13_189 < 0;
     $cm_pair_7_183 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_13_189);
     $cm_pair_7_183 = select i64($cm_pair_7_183 < 0_i64, 0_i64 - $cm_pair_7_183, $cm_pair_7_183);
@@ -743,7 +743,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
         break $inline_count_digits_u64_4: 20;
     };
     if $sroa_$pattern_temp_0_1_14_190 {
-        if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_190(out_29.used + 1) > builtin::array_len($load_8)) {
+        if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_190(out_29.used + 1) > builtin::array_len($load_11)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_29, $sroa_$pattern_temp_0_1_14_190);
         }
@@ -775,14 +775,14 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     if $sroa_$pattern_temp_0_0_13_189 > start_389 {
         builtin::array_set_u8(new_repr_322, start_389, 48 + builtin::i32_wrap_i64($cm_pair_7_183 %u 10_i64));
     }
-    $load_8 = global:waitable_set_delivered_call.wado::$const_obj_1;
+    $load_11 = global:waitable_set_delivered_call.wado::$const_obj_1;
     if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_189(out_29.used + 5) > builtin::array_len(new_repr_322)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_29, $sroa_$pattern_temp_0_0_13_189);
     }
     $sroa_$pattern_temp_0_1_14_190 = out_29.used;
     out_29.used = $sroa_$pattern_temp_0_0_13_189;
-    builtin::array_copy<u8>(out_29.repr, $sroa_$pattern_temp_0_1_14_190, $load_8, 0, 5);
+    builtin::array_copy<u8>(out_29.repr, $sroa_$pattern_temp_0_1_14_190, $load_11, 0, 5);
     $sroa_$pattern_temp_0_0_13_189 = builtin::i32_wrap_i64(local.tee $cm_pair_7_183("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_190 = builtin::i32_wrap_i64($cm_pair_7_183 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_189 = "waitable_set_delivered_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_189);

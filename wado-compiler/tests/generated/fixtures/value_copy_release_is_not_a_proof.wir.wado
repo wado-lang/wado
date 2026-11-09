@@ -441,18 +441,19 @@ fn "value_copy_release_is_not_a_proof.wado/$template_segment$value_copy_release_
 
 fn "value_copy_release_is_not_a_proof.wado/$cm_export__$test_0_a_repoint_does_not_license_two_readers_of_one_place"() {
     let a0: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_h_xs_24: ref "core:prelude/list.wado//List<i32>";
-    $sroa_h_xs_24 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    a0 = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_h_xs_24.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2); $array_clone_dst_2, used: 2 };
-    $sroa_h_xs_24 = struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_1 = $sroa_h_xs_24.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2); $array_clone_dst_2, used: 2 };
+    let b_10: ref "core:prelude/list.wado//List<i32>";
+    let $sroa_$sroa_h_xs_24_repr_27: ref Array<i32>;
+    $sroa_$sroa_h_xs_24_repr_27 = array.new_fixed<i32>(1, 2);
+    a0 = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_h_xs_24_repr_27, 0, 2); $array_clone_dst_2, used: 2 };
+    b_10 = struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_h_xs_24_repr_27, 0, 2); $array_clone_dst_2, used: 2 };
     if @unlikely(2 >= builtin::array_len(a0.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(a0);
     }
     builtin::array_set<i32>(a0.repr, 2, 9);
     a0.used = 3;
-    $array_clone_src_1 = $sroa_h_xs_24.repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(2), 0, $array_clone_src_1, 0, 2);
+    $sroa_$sroa_h_xs_24_repr_27 = b_10.repr;
+    builtin::array_copy<i32>(builtin::array_new<i32>(2), 0, $sroa_$sroa_h_xs_24_repr_27, 0, 2);
     block {
     };
     "wasi/task-return"(0);

@@ -105,8 +105,8 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
     let result: ref "core:prelude/types.wado//Option<i32>";
     let $cm_pair_6: i64;
     let out_11: ref "core:prelude/string.wado//String";
+    let is_negative_73: bool;
     let $sroa_$pattern_temp_0_0_102: i32;
-    let $sroa_$pattern_temp_0_1_103: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
@@ -119,7 +119,7 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
         $inline_core_prelude_string_wado_String__internal_push_view_22: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_22;
         };
-        $sroa_$pattern_temp_0_1_103 = $sroa_$pattern_temp_0_0_102 < 0;
+        is_negative_73 = $sroa_$pattern_temp_0_0_102 < 0;
         $cm_pair_6 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_102);
         $cm_pair_6 = select i64($cm_pair_6 < 0_i64, 0_i64 - $cm_pair_6, $cm_pair_6);
         $sroa_$pattern_temp_0_0_102 = $inline_count_digits_u64_2: block -> i32 {
@@ -182,30 +182,30 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
             }
             break $inline_count_digits_u64_2: 20;
         };
-        if $sroa_$pattern_temp_0_1_103 {
-            if @unlikely(local.tee $sroa_$pattern_temp_0_1_103(0 + 1) > builtin::array_len(out_11.repr)) {
+        if is_negative_73 {
+            if @unlikely(local.tee is_negative_73(0 + 1) > builtin::array_len(out_11.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_11, $sroa_$pattern_temp_0_1_103);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_11, is_negative_73);
             }
             start_185 = out_11.used;
-            out_11.used = $sroa_$pattern_temp_0_1_103;
+            out_11.used = is_negative_73;
             builtin::array_set_u8(out_11.repr, start_185, 45);
         } else {
         }
-        if @unlikely(local.tee $sroa_$pattern_temp_0_1_103(out_11.used + $sroa_$pattern_temp_0_0_102) > builtin::array_len(out_11.repr)) {
+        if @unlikely(local.tee is_negative_73(out_11.used + $sroa_$pattern_temp_0_0_102) > builtin::array_len(out_11.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_11, $sroa_$pattern_temp_0_1_103);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_11, is_negative_73);
         }
         start_185 = out_11.used;
-        out_11.used = $sroa_$pattern_temp_0_1_103;
+        out_11.used = is_negative_73;
         arr = out_11.repr;
         $sroa_$pattern_temp_0_0_102 = start_185 + $sroa_$pattern_temp_0_0_102;
         b23: block {
             l24: loop {
                 break_if b23 ($sroa_$pattern_temp_0_0_102 - start_185) < 2;
                 q = $cm_pair_6 /u 100_i64;
-                tens = local.tee $sroa_$pattern_temp_0_1_103(builtin::i32_wrap_i64($cm_pair_6 - (q * 100_i64))) / 10;
-                builtin::array_set_u8(arr, $sroa_$pattern_temp_0_0_102 - 1, (48 + $sroa_$pattern_temp_0_1_103) - (tens * 10));
+                tens = local.tee is_negative_73(builtin::i32_wrap_i64($cm_pair_6 - (q * 100_i64))) / 10;
+                builtin::array_set_u8(arr, $sroa_$pattern_temp_0_0_102 - 1, (48 + is_negative_73) - (tens * 10));
                 builtin::array_set_u8(arr, $sroa_$pattern_temp_0_0_102 - 2, 48 + tens);
                 $sroa_$pattern_temp_0_0_102 = $sroa_$pattern_temp_0_0_102 - 2;
                 $cm_pair_6 = q;
@@ -219,24 +219,24 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
             break $inline_core_prelude_string_wado_String__internal_push_view_41;
         };
         $sroa_$pattern_temp_0_0_102 = builtin::i32_wrap_i64(local.tee $cm_pair_6("wasi/stream-new"()));
-        $sroa_$pattern_temp_0_1_103 = builtin::i32_wrap_i64($cm_pair_6 >> 32_i64);
+        is_negative_73 = builtin::i32_wrap_i64($cm_pair_6 >> 32_i64);
         $sroa_$pattern_temp_0_0_102 = "cm_future_read_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_102);
         builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_185(out_11.used) + 1)), 0, out_11.repr, 0, start_185);
         builtin::array_set_u8(arr, start_185, 10);
         drop(block -> "core:prelude/types.wado//enum:CopyResult" {
             start_185 = start_185 + 1;
-            "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_103, arr, 0, start_185);
+            "core:rt/cm_stream_write_raw_all_u8"(is_negative_73, arr, 0, start_185);
         });
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_103);
+        "wasi/stream-drop-writable"(is_negative_73);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_102);
     } else {
         $sroa_$pattern_temp_0_0_102 = builtin::i32_wrap_i64(local.tee $cm_pair_6("wasi/stream-new"()));
-        $sroa_$pattern_temp_0_1_103 = builtin::i32_wrap_i64($cm_pair_6 >> 32_i64);
+        is_negative_73 = builtin::i32_wrap_i64($cm_pair_6 >> 32_i64);
         $sroa_$pattern_temp_0_0_102 = "cm_future_read_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_102);
         builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(5)), 0, global:cm_future_read_cli.wado::$const_obj_0, 0, 4);
         builtin::array_set_u8(arr, 4, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($sroa_$pattern_temp_0_1_103, arr));
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_103);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(is_negative_73, arr));
+        "wasi/stream-drop-writable"(is_negative_73);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_102);
     }
 }

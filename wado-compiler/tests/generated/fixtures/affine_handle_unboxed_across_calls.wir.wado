@@ -476,7 +476,8 @@ fn "affine_handle_unboxed_across_calls.wado/$test_0"() {
     $sroa_$pattern_temp_1_0_29 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_19("wasi/stream-new"())) };
     $sroa_$pattern_temp_1_1_30 = builtin::i32_wrap_i64($cm_pair_19 >> 32_i64);
     "wasi/stream-drop-writable"("affine_handle_unboxed_across_calls.wado/pick"(black_box(1), $sroa_$pattern_temp_0_1_28, $sroa_$pattern_temp_1_1_30));
-    if @unlikely(("core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"(local.tee held(struct.new "affine_handle_unboxed_across_calls.wado//Holder" { rx: $sroa_$pattern_temp_0_0_27 }).rx).used == 0) == 0) {
+    held = struct.new "affine_handle_unboxed_across_calls.wado//Holder" { rx: $sroa_$pattern_temp_0_0_27 };
+    if @unlikely(("core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"($sroa_$pattern_temp_0_0_27).used == 0) == 0) {
         cold_path;
         "affine_handle_unboxed_across_calls.wado/$test_0$cold0"();
         unreachable;

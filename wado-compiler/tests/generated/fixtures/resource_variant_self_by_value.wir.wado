@@ -408,7 +408,7 @@ fn "resource_variant_self_by_value.wado/$cm_export__handle"($p0) {
 fn "resource_variant_self_by_value.wado/$cm_task_entry__handle"(request) {
     let _sent: ref null "core:prelude//$Resource";
     let $cm_pair_180: i64;
-    let $local_182: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let $pattern_temp_1: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let self: ref null "resource_variant_self_by_value.wado//Held";
     self = struct.new "resource_variant_self_by_value.wado//Held::One" { discriminant: 0, payload_0: "resource_variant_self_by_value.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() };
     $cm_handle_2 = (if ref.test "resource_variant_self_by_value.wado//Held::One"(self) -> bool {
@@ -445,8 +445,8 @@ condition: hold()
     }
     $cm_handle_2 = builtin::i32_wrap_i64(local.tee $cm_pair_180("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
     $cm_handle_4 = builtin::i32_wrap_i64($cm_pair_180 >> 32_i64);
-    $cm_arg_1 = local.tee $local_182("resource_variant_self_by_value.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("resource_variant_self_by_value.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, $cm_handle_2)).0;
-    _sent = $local_182.1;
+    $cm_arg_1 = local.tee $pattern_temp_1("resource_variant_self_by_value.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("resource_variant_self_by_value.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, $cm_handle_2)).0;
+    _sent = $pattern_temp_1.1;
     $cm_handle_2 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $cm_arg_1 }).payload_0.value;
     "wasi/task-return:handle"(0, $cm_handle_2, 0, 0_i64, 0, 0, 0, 0);
     drop("resource_variant_self_by_value.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($cm_handle_4, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));

@@ -192,7 +192,7 @@ type "functype//linear_array_drop_frees.wado/linear_array_drop_frees.wado/$tmpl$
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<linear_array_drop_frees.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>" = fn(ref "linear_array_drop_frees.wado//$tmpl$4432d2d1cbeba55c") -> ref "core:prelude/string.wado//String";  // TypeId(61)
 
-type "functype//core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]" = fn(u64) -> ref null "core:linear//LinearArray<u64>";  // TypeId(62)
+type "functype//core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]" = fn(u64) -> [ref null "core:linear//Block", i32];  // TypeId(62)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>" = fn(ref "core:linear//$tmpl$b06047956fb36b6f") -> ref "core:prelude/string.wado//String";  // TypeId(63)
 
@@ -218,7 +218,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slic
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(74)
 
-type "functype//core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]" = fn() -> ref null "core:linear//LinearArray<u64>";  // TypeId(75)
+type "functype//core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]" = fn() -> [ref null "core:linear//Block", i32];  // TypeId(75)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(76)
 
@@ -247,7 +247,6 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "linear_array_drop_frees.wado/round_trip"(round) {
-    let $load_1: ref null "core:linear//Block";
     let array_1: ref null "core:linear//LinearArray<u64>";
     let $drop_spill_2: u64;
     let $v3: i32;
@@ -257,16 +256,18 @@ fn "linear_array_drop_frees.wado/round_trip"(round) {
         "core:linear/core:linear/LinearArray<u64>::filled$contract_report0"(32768, $v3, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:8"), used: 30 });
         unreachable;
     }
-    $v3 = local.tee array_1("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]"(builtin::i64_extend_i32_s(round))).len;
+    let $mv_block_1: ref null "core:linear//Block";
+    multivalue_bind [$mv_block_1, $v3] = "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]"(builtin::i64_extend_i32_s(round));
+    array_1 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v3 };
     if @unlikely(((0 <= round) & (round < $v3)) == 0) {
         cold_path;
         "core:linear/core:linear/LinearArray<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(round, $v3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:9"), used: 30 });
         unreachable;
     }
-    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_1.block).ptr + (round * 8));
+    $drop_spill_2 = builtin::load_i64($mv_block_1.ptr + (round * 8));
     if ref.is_null(array_1) == 0 {
-        if ref.is_null($load_1) == 0 {
-            drop("mem/realloc"($load_1.ptr, $load_1.bytes, 16, 0));
+        if ref.is_null($mv_block_1) == 0 {
+            drop("mem/realloc"($mv_block_1.ptr, $mv_block_1.bytes, 16, 0));
         }
         array_1.block = ref.null none;
     }
@@ -274,7 +275,6 @@ fn "linear_array_drop_frees.wado/round_trip"(round) {
 }
 
 fn "linear_array_drop_frees.wado/run"() with Stdout {
-    let $load_1: ref null "core:linear//Block";
     let current: i32;
     let out_26: ref "core:prelude/string.wado//String";
     let $sroa_$iter_0_start_122: i32;
@@ -287,16 +287,18 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
         "core:linear/core:linear/LinearArray<u64>::filled$contract_report0"(32768, $v3, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:8"), used: 30 });
         unreachable;
     }
-    $v3 = local.tee array_547("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
+    let $mv_block_1: ref null "core:linear//Block";
+    multivalue_bind [$mv_block_1, $v3] = "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"();
+    array_547 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v3 };
     if @unlikely(0 >= $v3) {
         cold_path;
         "core:linear/core:linear/LinearArray<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:9"), used: 30 });
         unreachable;
     }
-    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_547.block).ptr + (0 * 8));
+    $drop_spill_2 = builtin::load_i64($mv_block_1.ptr + (0 * 8));
     if ref.is_null(array_547) == 0 {
-        if ref.is_null($load_1) == 0 {
-            drop("mem/realloc"($load_1.ptr, $load_1.bytes, 16, 0));
+        if ref.is_null($mv_block_1) == 0 {
+            drop("mem/realloc"($mv_block_1.ptr, $mv_block_1.bytes, 16, 0));
         }
         array_547.block = ref.null none;
     }
@@ -1175,14 +1177,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<linear_arra
 }
 
 fn "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]"(value) {
-    let array: ref null "core:linear//LinearArray<u64>";
     let bytes: i32;
+    let block: ref null "core:linear//Block";
     let current: i32;
     let $licm_ptr_47: i32;
     bytes = 32768 * 8;
-    array = struct.new "core:linear//LinearArray<u64>" { block: struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes), bytes: bytes }, len: 32768 };
+    block = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes), bytes: bytes };
     bytes = 0;
-    $licm_ptr_47 = array.block.ptr;
+    $licm_ptr_47 = block.ptr;
     b163: block {
         l164: loop {
             break_if b163 bytes >= 32768;
@@ -1191,7 +1193,7 @@ fn "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]"(value) 
             continue l164;
         };
     };
-    return array;
+    return block, 32768;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(t) {
@@ -1650,14 +1652,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecke
 }
 
 fn "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"() {
-    let array: ref null "core:linear//LinearArray<u64>";
     let bytes: i32;
+    let block: ref null "core:linear//Block";
     let current: i32;
     let $licm_ptr_47: i32;
     bytes = 32768 * 8;
-    array = struct.new "core:linear//LinearArray<u64>" { block: struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes), bytes: bytes }, len: 32768 };
+    block = struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes), bytes: bytes };
     bytes = 0;
-    $licm_ptr_47 = array.block.ptr;
+    $licm_ptr_47 = block.ptr;
     b237: block {
         l238: loop {
             break_if b237 bytes >= 32768;
@@ -1666,7 +1668,7 @@ fn "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$da
             continue l238;
         };
     };
-    return array;
+    return block, 32768;
 }
 
 export fn "linear_array_drop_frees.wado/$cm_export__run" as "run"
