@@ -911,15 +911,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             return;
         }
-        if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
-            return;
-        }
-        if self.ast_block_always_exits(body) {
+        self.check_missing_return(return_type, body, func.span);
+    }
+
+    /// Emit when `body`, a function's or a closure's, can fall off its end
+    /// while it owes a `return_type` value.
+    pub(super) fn check_missing_return(&self, return_type: TypeId, body: &Block, span: Span) {
+        if return_type == TypeTable::UNIT
+            || return_type == TypeTable::NEVER
+            || self.ast_block_always_exits(body)
+        {
             return;
         }
         let _ = self.emit(types::TypeError::MissingReturn {
             return_type: self.tysys.type_table.borrow().name(return_type),
-            span: func.span,
+            span,
         });
     }
 

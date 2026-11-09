@@ -1,0 +1,17 @@
+// A block-bodied closure returns a value only through `return`, as a function
+// does: falling off its end after a value-returning `return` is a missing
+// return, whatever its last statement evaluates to.
+
+export fn run() {
+    let c = builtin::black_box(true);
+    let f = || {
+        if c {
+            return 1;
+        }
+        2
+    };
+    let _x = f();
+}
+
+__DATA__
+{"compile_error": ":7:13: error: function with return type 'i32' must use explicit `return`"}

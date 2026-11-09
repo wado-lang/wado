@@ -6229,7 +6229,15 @@ impl<'a> Reify<'a> {
             closure_ctx.return_type = rt;
         }
 
-        let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
+        // A block body is a function body, its last statement a statement.
+        let body = match &closure.body {
+            Expr::Block(block) => {
+                let body_type = self.value_type(closure.body.id(), Some(TypeTable::UNIT), false);
+                let block = self.reify_block(block, &mut closure_ctx, None);
+                TirExpr::new(TirExprKind::Block(block), body_type, closure.body.span())
+            }
+            body => self.reify_expr(body, &mut closure_ctx, body_expected),
+        };
 
         // Step 5: assemble the capture list, making this frame capture whatever
         // the closure only reached through it, as `resolve_closure` also did.

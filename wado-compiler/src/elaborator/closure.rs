@@ -272,7 +272,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(rt) = body_expected {
             closure_ctx.return_type = rt;
         }
-        let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
+        // A block body is a function body: only `return` gives it a value, so
+        // its last statement is walked as a statement.
+        let body_type = match &closure.body {
+            ast::Expr::Block(block) => {
+                self.resolve_block(block, &mut closure_ctx, None);
+                let body_type = if self.ast_block_always_exits(block) {
+                    TypeTable::NEVER
+                } else {
+                    TypeTable::UNIT
+                };
+                self.record_expression_type(closure.body.id(), body_type);
+                body_type
+            }
+            body => self.resolve_expr(body, &mut closure_ctx, body_expected),
+        };
 
         // Only the walk knows which `&mut`s reach a capture's own storage.
         for var_name in std::mem::take(&mut closure_ctx.mut_ref_captures) {
@@ -318,39 +332,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.validate_loop_jumps_ast(Some(block));
         }
 
-        // Diagnose missing returns / type mismatches on block-bodied
-        // closures via the AST-walker, gating on the AST block shape so an
-        // explicit `return` inside a partial branch reports the error with no
-        // `TirExpr` to inspect. Single-expression closure bodies (e.g.
-        // `|c: char| c.to_ascii_uppercase()`) take the body's type as
-        // the return type directly — no missing-return check applies.
-        let body_diverges = self.tysys.type_table.borrow().is_never(body_type);
-        let return_type = if let Some(dt) = declared_return {
-            dt
-        } else if let ast::Expr::Block(ref block) = closure.body {
-            let mut return_types = self.ast_return_types_in_block(block);
-            self.settle_branch_holes(&mut return_types, None);
-            match return_types.first().copied() {
-                Some(t) => {
-                    if !self.ast_block_always_exits(block) && body_type != t && !body_diverges {
-                        let _ = self.emit(TypeError::MissingReturn {
-                            return_type: self.tysys.type_table.borrow().name(t),
-                            span: closure.span,
-                        });
-                    }
-                    t
-                }
-                None if body_type == TypeTable::UNIT || body_diverges => body_type,
-                None => {
-                    let _ = self.emit(TypeError::MissingReturn {
-                        return_type: self.tysys.type_table.borrow().name(body_type),
-                        span: closure.span,
-                    });
-                    TypeTable::UNIT
-                }
+        // A block body takes its type from its `return`s, and owes one on
+        // every path that does not diverge, as a function body does. A
+        // single-expression body (`|c| c.to_ascii_uppercase()`) is its value.
+        let return_type = match &closure.body {
+            ast::Expr::Block(block) => {
+                let mut return_types = self.ast_return_types_in_block(block);
+                self.settle_branch_holes(&mut return_types, None);
+                let return_type = declared_return
+                    .or(return_types.first().copied())
+                    .unwrap_or(body_type);
+                self.check_missing_return(return_type, block, closure.span);
+                return_type
             }
-        } else {
-            body_type
+            _ => declared_return.unwrap_or(body_type),
         };
 
         // Project the closure's `fn(...)` / `fn mut(...)` type so the
