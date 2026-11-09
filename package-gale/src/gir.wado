@@ -235,7 +235,7 @@ pub variant DiagnosticKind {
     /// A `fragment_entries` option names a parser rule that does not exist. The
     /// name is skipped; other entries still apply.
     FragmentEntry,
-    /// Under `atn: "never"`, a decision only the runtime ATN simulator makes.
+    /// Under `prediction: "longest"`, a decision only the runtime ATN simulator makes.
     /// No parser is built from such a grammar.
     SimulatorRequired,
 }
@@ -366,10 +366,10 @@ pub struct LeftRecursiveRule {
     /// also flips `ParserPlan.needs_atn`. False for the common LR rule,
     /// whose static `scan_X_lr_*` fast path stays byte-identical.
     pub atn_class: bool = false,
-    /// Under `atn: "verify"`, the simulator checks each pick of the static
-    /// loop. A mid operand's continuation gate stands in for the full context
-    /// the simulator reads, so every static loop no predicate gates is
-    /// checked, not only one whose atom choice `auto` hands it.
+    /// Under `prediction: "verify"`, the simulator checks each pick of the
+    /// static loop. A mid operand's continuation gate stands in for the full
+    /// context the simulator reads, so every static loop no predicate gates is
+    /// checked.
     pub loop_checked: bool = false,
     /// What each gated mid operand leaves behind, indexed by `LrCont::Rest`.
     pub cont_rests: List<LrContRest> = [],
@@ -979,6 +979,15 @@ impl IterationDuties {
     }
 }
 
+/// The continuation probe a contested repeat's static exit reads, kept where
+/// the simulator decides the repeat so the static pick can be checked against it.
+pub struct RepeatShadow {
+    pub continuation_scan: List<ScanElement>,
+    pub continuation_scannable: bool,
+    pub probe_asks_caller: bool,
+    pub probe_viable: List<i32>,
+}
+
 pub struct RepeatOp {
     pub kind: RepeatKind,
     /// Surface `RepeatElement.non_greedy`. A `??` lowers to
@@ -1076,12 +1085,12 @@ pub struct RepeatOp {
     /// it differently.
     pub static_exit_undecided: bool = false,
     /// The simulator decides whether each iteration enters: a non-greedy
-    /// loop's exit no lookahead locates, or, under `atn: "always"`, any
+    /// loop's exit no lookahead locates, or, under `prediction: "exact"`, any
     /// Repeat whose body and continuation can start on one token.
     pub atn_decides: bool = false,
-    /// Under `atn: "verify"`, the simulator checks whether each iteration
-    /// entered, where `always` would have it decide.
-    pub atn_checks: bool = false,
+    /// Under `prediction: "verify"`, where the simulator decides a contested
+    /// greedy repeat, what the static path would read to decide it instead.
+    pub shadow: Option<RepeatShadow> = null,
     /// For a loop the simulator decides, the only tokens it needs asking
     /// about; any other enters. Empty where every token asks.
     pub atn_asked_kinds: List<i32> = [],
@@ -1133,9 +1142,10 @@ pub struct GroupOp {
     /// The group's ATN decision site where its empty alternative contends with
     /// another on a token that can follow the group; -1 where lookahead decides.
     pub atn_site: i32 = -1,
-    /// Under `atn: "verify"`, the decision site whose simulator checks the
-    /// group's tournament; -1 where nothing is checked.
-    pub atn_check_site: i32 = -1,
+    /// Under `prediction: "verify"`, where the simulator decides at `atn_site`
+    /// among alternatives sharing a first token, the tournament picks beside it
+    /// and the two picks are compared.
+    pub tournament_shadowed: bool = false,
 }
 
 /// Lower-side classification of a Repeat's body op shape. Drives

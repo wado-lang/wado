@@ -182,9 +182,9 @@ export struct Options {
     /// e.g. `["statement"]`. Empty is byte-identical. See "Parsing a fragment"
     /// in the README.
     pub fragment_entries: List<String>,
-    /// Which decisions the parser asks the runtime ATN simulator. "Choosing the
-    /// simulator" in the README lists the modes.
-    pub atn: AtnMode = AtnMode::Auto,
+    /// How the parser predicts an alternative. "Choosing a prediction mode" in
+    /// the README lists the modes.
+    pub prediction: PredictionMode = PredictionMode::Exact,
 }
 ```
 
@@ -198,7 +198,7 @@ runs, so a typo or a type mismatch is reported on the offending key.
 - A default is a literal, and a list or map field takes a `[…]` or
   `{ k: v, … }` one.
 - An `enum` option is written as its case's Component Model name in a string,
-  so `AtnMode::Never` is `"never"` and a case `HighContrast` is
+  so `PredictionMode::Longest` is `"longest"` and a case `HighContrast` is
   `"high-contrast"`. That is the name the generator's WIT gives the case, so a
   generator takes the same values whether it is named by its source or by its
   component.

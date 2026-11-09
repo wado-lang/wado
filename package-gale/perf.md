@@ -281,7 +281,7 @@ within 1%: what they lose is an ATN decision or two between keywords that an
 ### The lookahead DFAs share their nodes (landed, 2026-11)
 
 The lookahead DFAs the explorer builds made up nearly all of a parser that
-asks the simulator often: 93% of SQLite's source under `atn: "always"`. The
+asks the simulator often: 93% of SQLite's source under `prediction: "exact"`. The
 simulator itself, its runtime and the `ATN_SIM` table, is a fixed 0.1 to
 0.2 MB. A DFA was emitted as a tree, sharing only a node more than one edge
 reached, so the nodes that decide alike were emitted once per place. Most of
@@ -290,19 +290,21 @@ makes one node of the nodes that decide alike, within a DFA, across the
 decisions and across depths, and emits a node more than one place reads once,
 as a function taking the position it reads at.
 
-| SQLite parser           |  before |   after |
-| ----------------------- | ------: | ------: |
-| `always`, source        |  9.5 MB |  2.9 MB |
-| `always`, Wasm at `-O2` |  2.4 MB |  1.1 MB |
-| `auto`, source          |  1.8 MB |  1.5 MB |
-| `auto`, Wasm at `-O2`   | 0.83 MB | 0.78 MB |
+| SQLite parser          |  before |   after |
+| ---------------------- | ------: | ------: |
+| `exact`, source        |  9.5 MB |  2.9 MB |
+| `exact`, Wasm at `-O2` |  2.4 MB |  1.1 MB |
+| `auto`, source         |  1.8 MB |  1.5 MB |
+| `auto`, Wasm at `-O2`  | 0.83 MB | 0.78 MB |
 
-The source is `gale gen --atn <mode>`. The Wasm is a `wado compile -O2` of a
-module that calls `parse`. TypeScript's `auto` parser went from 2.4 MB to
-1.8 MB of source. The `gale-parse` benchmarks for SQLite, Rust and TypeScript
-stay within their noise; a shared node costs a call where the tree inlined it.
+The source is `gale gen --atn <mode>`, as the option was named then, when
+`exact` was `always`. `auto`, since removed, handed the simulator less. The
+Wasm is a `wado compile -O2` of a module that calls `parse`. TypeScript's
+`auto` parser went from 2.4 MB to 1.8 MB of source. The `gale-parse`
+benchmarks for SQLite, Rust and TypeScript stay within their noise; a shared
+node costs a call where the tree inlined it.
 
-At `-O1` the `always` parser is 0.98 MB. `-O2` inlines each node function
+At `-O1` the `exact` parser is 0.98 MB. `-O2` inlines each node function
 under the inliner's threshold at every call site.
 
 ### Standing rules (measured)
@@ -467,18 +469,19 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
 - [ ] **A loop-reserve probe can scan to EOF.** After Rust's last `#![..]`, the
   `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
   tokens (`# !` against `# [`) already decide it.
-- [ ] **`auto` parses Rust and TypeScript slower than `always` (2026-10).**
-  `auto` lets the lookahead DFA, the LR table and the tournament settle what
-  they can and gives the simulator the rest, yet it loses to giving the
-  simulator everything. One run each of `package-gale/benchmark/{rust,typescript}`
-  under each mode, in ms/iter:
+- [ ] **`exact` parses Rust and TypeScript about twice as slowly as
+  `longest` (2026-10).** One run each of
+  `package-gale/benchmark/{rust,typescript}` in ms/iter, under the modes then
+  named `never` and `always`:
 
-  | Grammar    | never | auto | always |
-  | ---------- | ----- | ---- | ------ |
-  | Rust       | 1.83  | 5.50 | 3.86   |
-  | TypeScript | 1.95  | 9.32 | 4.95   |
+  | Grammar    | longest | exact |
+  | ---------- | ------- | ----- |
+  | Rust       | 1.83    | 3.86  |
+  | TypeScript | 1.95    | 4.95  |
 
-  SQLite and css3 keep `auto` within a few percent of `always`.
+  A third mode, since removed, let the lookahead DFA, the LR table and the
+  tournament settle what they could, and ran 5.50 and 9.32: slower than
+  giving the simulator everything.
 - [ ] **The lexer ATN re-walks its closure per character.** Rules without
   recursion are regular, so a DFA built lazily per (state set, char class)
   would make an ATN-routed string rule as cheap as a static one.

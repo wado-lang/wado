@@ -5,9 +5,9 @@
 
 use { Alternative, ParserRule } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, Diagnostics, Rule } from "./gir.wado";
-use { RuleOverlap, overlap_groups_of, overlap_routes, rule_overlap_groups } from "./rule_overlap.wado";
+use { RuleOverlap, overlap_ambiguous, overlap_groups_of, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
-use { AtnMode, GenSettings } from "./gen_settings.wado";
+use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry } from "./table_registry.wado";
 use {
@@ -17,7 +17,6 @@ use {
     alt_has_gate,
     MetGates,
     alt_met_gates,
-    met_renders,
     alt_scan_checks,
     alt_scan_escapes,
     alt_scan_gate_conditions,
@@ -47,7 +46,7 @@ pub struct LowerMarks {
     pub follow_forward_edges: List<List<String>>,
     /// The rule makes a decision the simulator decides.
     pub rule_asks_simulator: List<bool>,
-    /// Under `atn: "verify"`, the simulator checks a pick the rule's static
+    /// Under `prediction: "verify"`, the simulator checks a pick the rule's static
     /// path made.
     pub rule_checks_simulator: List<bool>,
     /// The rules whose functions carry the FOLLOW slots, by snake name: the
@@ -150,15 +149,15 @@ impl LowerContext {
     }
 
     /// Record a decision the simulator makes in the rule being lowered, `what`
-    /// naming it. Under `atn: "never"` it is the refusal.
+    /// naming it. Under `prediction: "longest"` it is the refusal.
     pub fn mark_asks_simulator<S: AsStrSlice>(&mut self, what: S) {
         let idx = self.current_rule_index();
         self.marks.mark_asks_simulator(idx);
-        if self.settings.atn matches { Never } {
+        if self.settings.prediction matches { Longest } {
             self.diagnostics.warn(
                 &DiagnosticOwner::rule_dispatch(self.current_rule_name()),
                 DiagnosticKind::SimulatorRequired,
-                `${what} only the ATN simulator decides, and \`atn: "never"\` refuses it`,
+                `${what} only the ATN simulator decides, and \`prediction: "longest"\` refuses it`,
             );
         }
     }
@@ -167,7 +166,7 @@ impl LowerContext {
     /// routes nothing and so leaves the rule's other decisions as `never` makes
     /// them.
     pub fn mark_checks_with_simulator(&mut self) {
-        assert self.settings.atn.verifies(), "only `atn: \"verify\"` checks the static path's picks";
+        assert self.settings.prediction.verifies(), "only `prediction: \"verify\"` checks the static path's picks";
         let idx = self.current_rule_index();
         self.marks.rule_checks_simulator[idx] = true;
     }
@@ -221,18 +220,9 @@ impl LowerContext {
         return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
-    /// Whether the simulator decides a group's or a repeat's contested decision
-    /// at site `site`: under `always` each one, and under `auto` one meeting a
-    /// predicate it is handed the verdict of (`met_renders`), since the static
-    /// path cannot weigh a verdict against the continuation. Only a decision
-    /// where predicates run has a site to read.
-    pub fn simulator_takes_contested(&self, site: i32) -> bool {
-        return match self.settings.atn {
-            Always => true,
-            Auto => self.settings.emit_actions
-                && self.decisions.at_site(site).iter_ref().any(|m| met_renders(m, &self.settings, &self.analysis)),
-            Never | Verify => false,
-        };
+    /// Whether the simulator decides a group's or a repeat's contested decision.
+    pub fn simulator_takes_contested(&self) -> bool {
+        return !self.settings.prediction matches { Longest };
     }
 
     /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
@@ -267,29 +257,16 @@ impl LowerContext {
         return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, met_gates);
     }
 
-    /// Who makes the choice among the alternatives `alt_indices` of the rule
-    /// being lowered. `multi_alt` is as for `rule_overlap::overlap_groups_of`.
-    /// Under `atn: "verify"` the simulator never does: the tournament makes
-    /// it, and the simulator checks what `auto` would hand it.
-    pub fn choice_route(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> ChoiceRoute {
+    /// Whether the simulator makes the choice among the alternatives
+    /// `alt_indices` of the rule being lowered: wherever static prediction
+    /// meets an ambiguity, unless `prediction: "longest"` gives every one to
+    /// the tournament. `multi_alt` is as for `rule_overlap::overlap_groups_of`.
+    pub fn simulator_makes_choice(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> bool {
+        if !self.simulator_takes_contested() {
+            return false;
+        }
         let met_gates = |alt: &Alternative| self.alt_met_gates(alt);
         let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, met_gates);
-        let mode = if self.settings.atn.verifies() { AtnMode::Auto } else { self.settings.atn };
-        if !overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, mode) {
-            return ChoiceRoute::Static;
-        }
-        if !self.settings.atn.verifies() {
-            return ChoiceRoute::Simulator;
-        }
-        self.mark_checks_with_simulator();
-        return ChoiceRoute::Checked;
+        return overlap_ambiguous(rule, &overlap, &mut self.analysis);
     }
-}
-
-/// Who makes a choice among alternatives.
-pub enum ChoiceRoute {
-    Static,
-    /// The static path, with the simulator checking it.
-    Checked,
-    Simulator,
 }

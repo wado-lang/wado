@@ -276,7 +276,7 @@ Parse 81 SQL statements (13321 bytes). Two parsers are generated from the same
 | Rust (sqlparser-rs)     | 12.61 MB/s |   1.057 ms | 1.82x   |
 | Java (ANTLR4)           |  0.10 MB/s | 127.067 ms | 218.33x |
 
-The Gale parser is generated with `atn: "never"`: every decision is settled by
+The Gale parser is generated with `prediction: "longest"`: every decision is settled by
 generated code, with no ATN simulator at run time.
 
 Java (ANTLR4) is the head-to-head for Gale's generated parser, on the JVM and
@@ -311,7 +311,7 @@ about what a browser would run.
 | tree-sitter (Rust native)     |  4.73 MB/s | 2.817 ms | 3.29x   |
 | tree-sitter (web-tree-sitter) |  2.78 MB/s | 4.793 ms | 5.59x   |
 
-The Gale highlighter's parser is generated with `atn: "never"`, as in SQL Parse.
+The Gale highlighter's parser is generated with `prediction: "longest"`, as in SQL Parse.
 
 Every highlighter parses the corpus without errors: a highlighter that gives up
 on a region skips the work of colouring it, so the constructs two of them
@@ -334,7 +334,7 @@ per second (higher is better).
 
 Every row runs in-process and warm, emitting a parser and no listeners: Gale a
 Wado recursive-descent one from memory, ANTLR4 Java onto disk. Gale generates
-with `atn: "never"`, so the parser it emits carries no ATN simulator.
+with `prediction: "longest"`, so the parser it emits carries no ATN simulator.
 
 ANTLR4 also re-reads the grammars each iteration; both terms are small next to
 generation. That row needs `java`/`javac` and is skipped without them.

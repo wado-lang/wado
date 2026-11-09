@@ -5,7 +5,7 @@
 
 use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
 use { Admits, Diagnostics, Rule, admits_or_everything } from "./gir.wado";
-use { RuleOverlap, ambiguity_routes, rule_overlap_groups } from "./rule_overlap.wado";
+use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
@@ -389,27 +389,11 @@ impl EmitContext {
     }
 
     /// Whether an `Ambiguous` node's decision is a runtime-ATN prediction.
-    pub fn ambiguous_routes_via_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
-        return !self.settings.atn.verifies() && self.ambiguous_reaches_atn(a, rule_name);
-    }
-
-    /// Whether the tournament's pick at an `Ambiguous` node is checked against
-    /// the simulator, which `auto` would hand the decision to.
-    pub fn ambiguous_checked_by_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
-        return self.settings.atn.verifies() && self.ambiguous_reaches_atn(a, rule_name);
-    }
-
-    fn ambiguous_reaches_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
-        if !self.plan.needs_atn
-            || self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) < 0
-            || self.atn_body_alt_numbers(&a.alts) matches { None } {
-            return false;
-        }
-        let alts = &self.current_rule().alternatives;
-        let simulator_weighs: List<i32> = a.alts.into_iter().filter(
-            |i| self.alt_met_gates(&alts[i]) matches { Simulator },
-        ).collect();
-        return ambiguity_routes(a, rule_name, &self.follow, self.settings.atn, &simulator_weighs);
+    pub fn ambiguous_routes_via_atn(&self, a: &AmbiguousNode) -> bool {
+        return !self.settings.prediction matches { Longest }
+            && self.plan.needs_atn
+            && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0
+            && self.atn_body_alt_numbers(&a.alts) matches { Some(_) };
     }
 
     /// The number the simulator answers each of the current rule's `alts` by

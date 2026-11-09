@@ -975,7 +975,7 @@ pub fn sll_decide_fn_name(decision: i32) -> String {
     return `atn_decide_${decision}`;
 }
 
-/// Under `atn: "verify"`, what a shortcut's answer goes through: the answer,
+/// Under `prediction: "verify"`, what a shortcut's answer goes through: the answer,
 /// checked against the simulator's.
 pub global ATN_VERIFIED: String = "atn_verified";
 
@@ -1083,12 +1083,49 @@ pub fn atn_verified_against_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     return `${ATN_VERIFIED_AGAINST}(${decision}, ${atn_picker_code(&picker)}, ${pos}, ${verdict}, ${answer})`;
 }
 
-/// Emit `ATN_VERIFIED`, which asks the simulator under no predicate, and
-/// `ATN_VERIFIED_AGAINST`, which takes its verdict. Where no alternative
-/// survives under the parse's stack, as in a scan of an alternative that is
-/// about to fail, the decision is moot and nothing is checked. A verdict of -1,
-/// no alternative whose predicates hold, differs from every pick.
+/// The call recording that `picker` would pick `alt` where the simulator picked
+/// `simulated`, on `decision` at `pos`.
+pub fn atn_shadow_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    decision: i32,
+    picker: AtnPicker,
+    pos: S,
+    alt: S1,
+    simulated: S2,
+) -> String {
+    return `${ATN_SHADOW}(${decision}, ${atn_picker_code(&picker)}, ${pos}, ${alt}, ${simulated})`;
+}
+
+/// What records a static pick that differs from the simulator's.
+pub global ATN_SHADOW: String = "atn_shadow";
+
+/// What a parse calls before it starts and once it has ended.
+pub global ATN_VERIFY_BEGIN: String = "atn_verify_begin";
+pub global ATN_VERIFY_END: String = "atn_verify_end";
+
+/// Emit what `prediction: "verify"` checks through. `ATN_VERIFIED` asks the
+/// simulator under no predicate, and `ATN_VERIFIED_AGAINST` takes its verdict;
+/// both answer the simulator's pick, so the parse goes on as `exact` would.
+/// Where no alternative survives under the parse's stack, as in a scan of an
+/// alternative that is about to fail, the decision is moot: the pick stands
+/// and nothing is recorded. A verdict of -1, no alternative whose predicates
+/// hold, differs from every pick.
+///
+/// The first difference is kept, and fails the parse only where it ends with
+/// no syntax error: on input the jar rejects, the simulator's pick is a guess
+/// at how to fail, and the static path's differs from it without being wrong.
 pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
+    w.line("global mut ATN_MISMATCH: String = \"\";");
+    w.blank();
+    w.begin(`fn ${ATN_VERIFY_BEGIN}()`);
+    w.line("ATN_MISMATCH = \"\";");
+    w.end();
+    w.blank();
+    w.begin(`fn ${ATN_VERIFY_END}(diagnostics: &List<Diagnostic>)`);
+    w.begin("if diagnostics.is_empty() && !ATN_MISMATCH.is_empty()");
+    w.line("panic(`prediction verify: ${ATN_MISMATCH}`);");
+    w.end();
+    w.end();
+    w.blank();
     w.begin(
         `fn ${ATN_VERIFIED}(decision: i32, picker: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
     );
@@ -1100,18 +1137,24 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         `fn ${ATN_VERIFIED_AGAINST}(decision: i32, picker: i32, pos: i32, verdict: [i32, bool], alt: i32) -> i32`,
     );
     w.line("let [simulated, viable] = verdict;");
-    w.begin("if viable && simulated != alt");
+    w.begin("if !viable");
+    w.line("return alt;");
+    w.end();
+    w.line(`${ATN_SHADOW}(decision, picker, pos, alt, simulated);`);
+    w.line("return simulated;");
+    w.end();
+    w.blank();
+    w.begin(`fn ${ATN_SHADOW}(decision: i32, picker: i32, pos: i32, alt: i32, simulated: i32)`);
+    w.begin("if alt == simulated || !ATN_MISMATCH.is_empty()");
+    w.line("return;");
+    w.end();
     w.begin("let by = match picker");
     for let picker of ATN_PICKERS {
         w.line(`${atn_picker_code(&picker)} => "${atn_picker_name(picker)}",`);
     }
     w.line("_ => unreachable(),");
     w.end_with(";");
-    w.line(
-        "panic(`atn verify: decision ${decision} at token ${pos}: ${by} picks ${alt}, the simulator ${simulated}`);",
-    );
-    w.end();
-    w.line("return alt;");
+    w.line("ATN_MISMATCH = `decision ${decision} at token ${pos}: ${by} picks ${alt}, the simulator ${simulated}`;");
     w.end();
     w.blank();
 }

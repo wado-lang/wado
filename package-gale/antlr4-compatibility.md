@@ -1167,28 +1167,27 @@ the compiled fast path:**
    the operand's `identifierName singleExpression?`, which the stack says the
    `new` still owes as its arguments. Same test as 3.
 
-Two more sites _would_ belong here on correctness grounds and are left out on
-cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
-in a rule 6 does not reach (fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
-narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
-SQLite's `name+?`). Before the simulator cached its predictions, a prediction
+Under the default, `prediction: "exact"`, the simulator also takes every
+contested decision the static path settles by length: every group decision and
+every `?` `*` `+` whose body and continuation can start on one token
+(`repeat_contested`). That includes an ambiguous greedy `rule?` (fixture
+`ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a narrower
+body that no lookahead separates (`ll_non_greedy_plus_loop.g4`, SQLite's
+`name+?`). Those two are coupled: entering `type_name?` is only right if
+`name+?` can then take the second name, so landing one alone turns an accepted
+input into an error. Before the simulator cached its predictions, a prediction
 per occurrence cost a full closure over the grammar, which took SQLite's
-DDL-heavy benchmark corpus to 155 times as long per parse; neither gating it behind the ambiguous
-lookahead nor bounding the lookahead recovers that. The two are also coupled —
-entering `type_name?` is only right if `name+?` can then take the second name,
-so landing one alone turns an accepted input into an error. The measurements and
-the levers that would make them affordable are in [`perf.md`](./perf.md).
+DDL-heavy benchmark corpus to 155 times as long per parse. The measurements
+are in [`perf.md`](./perf.md).
 
 The simulator's state machine is embedded in the generated parser only
 when a grammar needs it (inspect it with `gale dump --atn`); a grammar
 that needs none carries none and is byte-for-byte unaffected.
 
-These sites are the default, `atn: "auto"`. The `atn` generator option moves
-the line, as "Choosing the simulator" in the [README](./README.md) states.
-`"always"` adds every group decision and every `?` `*` `+` whose body and
-continuation can start on one token (`repeat_contested`), the two sites above
-included. `"never"` leaves 3 and 6 to the tournament and the continuation scan,
-and refuses a grammar that holds 1, 2, 4 or 5.
+`prediction: "longest"` leaves every contested decision, 3 and 6 included, to
+the tournament and the continuation scan, and refuses a grammar that holds 1,
+2, 4 or 5. "Choosing a prediction mode" in the [README](./README.md) lists the
+modes.
 
 ### Known approximation gaps
 

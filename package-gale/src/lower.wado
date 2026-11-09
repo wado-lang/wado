@@ -123,6 +123,7 @@ use {
     WildcardOp,
     ExcludedOp,
     RepeatOp,
+    RepeatShadow,
     RepeatBodyShape,
     RepeatStrategy,
     NonGreedyStrategy,
@@ -656,7 +657,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
     let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &classes, ctx);
     // The scan of a rule whose choice the simulator makes consults it as the
     // parse does.
-    if ctx.choice_route(rule, all_indices, true) matches { Simulator } {
+    if ctx.simulator_makes_choice(rule, all_indices, true) {
         ctx.mark_asks_simulator("the choice among the alternatives");
     }
     return MultiAltRule {
@@ -736,8 +737,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     // suffix the full context gives the caller (`new Map<T>()` in a TypeScript
     // initializer: `()` is the `new`'s, not a call suffix).
     let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
-    let atom_route = ctx.choice_route(rule, non_lr_indices, false);
-    let atom_routes = atom_route matches { Simulator };
+    let atom_routes = ctx.simulator_makes_choice(rule, non_lr_indices, false);
     let atn_class = atom_routes
         || lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes, &mut ctx.analysis);
     if atn_class {
@@ -756,7 +756,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx, &mut cont_rests);
     }
     stamp_lr_self_ref_min_prec(&mut lr_alts, rule, ctx, atn_class, &mut cont_rests);
-    let loop_checked = !atn_class && ctx.settings.atn.verifies();
+    let loop_checked = !atn_class && ctx.settings.prediction.verifies();
     if loop_checked {
         ctx.mark_checks_with_simulator();
     }
@@ -2011,19 +2011,13 @@ fn group_atn_site(
     admits: &Option<EmptyAltAdmits>,
     ctx: &mut LowerContext,
 ) -> i32 {
-    let takes_contested = ctx.simulator_takes_contested(g.atn_decision);
-    for let branch of &decision_partition(classes) {
-        if branch.alts.len() < 2 {
-            continue;
-        }
-        if let Some(e) = admits && branch.alts.contains(&e.alt_index) {
-            ctx.mark_asks_simulator("a group's choice between its empty alternative and another");
-            return g.atn_decision;
-        }
-        if takes_contested {
-            ctx.mark_asks_simulator("a group's choice among alternatives sharing a first token");
-            return g.atn_decision;
-        }
+    if shares_empty_alt(classes, admits) {
+        ctx.mark_asks_simulator("a group's choice between its empty alternative and another");
+        return g.atn_decision;
+    }
+    if ctx.simulator_takes_contested() && decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1) {
+        ctx.mark_asks_simulator("a group's choice among alternatives sharing a first token");
+        return g.atn_decision;
     }
     return -1;
 }
@@ -2385,7 +2379,6 @@ fn rebind_scan_repeat_caller_follow(
             ctx,
             reaches_rule_tail,
             re.gate_caller_follow,
-            re.atn_decision,
             rule_name,
             outer_suffix,
         );
@@ -3083,21 +3076,19 @@ fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut LowerContext) -> Op {
     };
     go.atn_site = group_atn_site(g, &go.scan_group.alt_classes, &go.empty_alt_admits, ctx);
     go.scan_group.atn_site = go.atn_site;
-    if go.atn_site < 0 {
-        go.atn_check_site = group_atn_check_site(g, &go.scan_group.alt_classes, ctx);
-    }
+    go.tournament_shadowed = go.atn_site >= 0
+        && ctx.settings.prediction.verifies()
+        && !shares_empty_alt(&go.scan_group.alt_classes, &go.empty_alt_admits);
     return Op::Group(go);
 }
 
-/// Under `atn: "verify"`, `g`'s decision site whose simulator checks the
-/// tournament among alternatives sharing a first token, which `always` hands
-/// the simulator. Else -1.
-fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut LowerContext) -> i32 {
-    if !ctx.settings.atn.verifies() || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1) {
-        return -1;
-    }
-    ctx.mark_checks_with_simulator();
-    return g.atn_decision;
+/// Whether a branch of the group's decision holds its empty alternative beside
+/// another, a choice only the simulator makes.
+fn shares_empty_alt(classes: &List<AltClass>, admits: &Option<EmptyAltAdmits>) -> bool {
+    let Some(e) = admits else {
+        return false;
+    };
+    return decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1 && b.alts.contains(&e.alt_index));
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
@@ -4333,7 +4324,6 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         ctx,
         reaches_rule_tail,
         rep_op.gate_caller_follow,
-        rep_op.atn_decision,
         rule_name,
         outer_suffix,
     );
@@ -4347,7 +4337,12 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         probe_contested: stamps.probe_contested,
         static_exit_undecided: stamps.static_exit_undecided,
         atn_decides: stamps.atn_decides,
-        atn_checks: stamps.atn_checks,
+        shadow: stamps.shadow.map(|probe: ContinuationProbe| RepeatShadow {
+            continuation_scan: probe.scan,
+            continuation_scannable: probe.scannable,
+            probe_asks_caller: probe.asks_caller,
+            probe_viable: probe.viable,
+        }),
         atn_asked_kinds: stamps.atn_asked_kinds,
         probe_viable: stamps.probe.viable,
         duties: stamps.duties,
@@ -4355,13 +4350,15 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
 }
 
 /// What a loop's exit reads from its place in the alternative, stamped alike on
-/// the parse's `RepeatOp` and the scan's `ScanRepeatElement`.
+/// the parse's `RepeatOp` and the scan's `ScanRepeatElement`. `shadow` is the
+/// probe the static path would read where the simulator decides, which only
+/// the parse's check of it reads.
 struct RepeatExitStamps {
     probe: ContinuationProbe,
+    shadow: Option<ContinuationProbe>,
     probe_contested: bool,
     static_exit_undecided: bool,
     atn_decides: bool,
-    atn_checks: bool,
     atn_asked_kinds: List<i32>,
     duties: IterationDuties,
 }
@@ -4409,13 +4406,11 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     gate_caller_follow: bool,
-    atn_decision: i32,
     rule_name: S,
     outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
-    let takes_contested = ctx.simulator_takes_contested(atn_decision);
-    let contested_somewhere = (takes_contested || ctx.settings.atn.verifies())
+    let contested = ctx.simulator_takes_contested()
         && !by_atn
         && repeat_contested(
             body_admits,
@@ -4426,21 +4421,24 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             reaches_rule_tail,
             gate_caller_follow,
         );
-    let contested = contested_somewhere && takes_contested;
-    let checked = contested_somewhere && !non_greedy && ctx.settings.atn.verifies();
+    let shadowed = contested && !non_greedy && ctx.settings.prediction.verifies();
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {
         ctx.mark_asks_simulator("a repeat whose body and continuation can start on one token");
-    } else if checked {
-        ctx.mark_checks_with_simulator();
     }
+    let mut static_probe = || lower_continuation_probe(
+        non_greedy,
+        kind,
+        alt_elements,
+        index,
+        ctx,
+        reaches_rule_tail,
+        rule_name,
+    );
     return RepeatExitStamps {
-        probe: if by_atn || contested {
-            ContinuationProbe {};
-        } else {
-            lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
-        },
+        probe: if by_atn || contested { ContinuationProbe {} } else { static_probe() },
+        shadow: if shadowed { Option::Some(static_probe()) } else { null },
         probe_contested: optional_probe_contested(
             non_greedy,
             kind,
@@ -4457,7 +4455,6 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             caller_follow_second,
         ),
         atn_decides: by_atn || contested,
-        atn_checks: checked,
         atn_asked_kinds: if by_atn {
             atn_asked_kinds(&alt_elements[index], caller_follow_first, alt_elements, index, ctx);
         } else {

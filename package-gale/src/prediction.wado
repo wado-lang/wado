@@ -1094,18 +1094,10 @@ pub fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     };
 }
 
-/// Whether two `Ambiguous` nodes emit the same code: the alt set, plus what
-/// `EmitContext::ambiguous_routes_via_atn` reads. Only `AtEndConflict` routes to the
-/// simulator, and only it reads `branch_tokens`.
+/// Whether two `Ambiguous` nodes emit the same code: they pick among the same
+/// alternatives.
 fn ambiguous_eq(a: &AmbiguousNode, b: &AmbiguousNode) -> bool {
-    if a.alts != b.alts {
-        return false;
-    }
-    let a_at_end = a.reason matches { AtEndConflict };
-    if a_at_end != b.reason matches { AtEndConflict } {
-        return false;
-    }
-    return !a_at_end || a.branch_tokens == b.branch_tokens;
+    return a.alts == b.alts;
 }
 
 /// Structural equality of two sub-dispatches. Branch order is compared

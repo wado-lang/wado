@@ -15,7 +15,7 @@ use {
 } from "./ir.wado";
 use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
 use { Diagnostic } from "./gir.wado";
-use { AtnMode } from "./gen_settings.wado";
+use { PredictionMode } from "./gen_settings.wado";
 use { parse_highlight_query } from "./highlight_query.wado";
 use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
@@ -36,6 +36,14 @@ fn gen<S: AsStrSlice>(src: S) -> GeneratedOutput {
 
 fn gen_source<S: AsStrSlice>(src: S) -> String {
     return gen(src).source;
+}
+
+global LONGEST: GenerateOptions = GenerateOptions { prediction: PredictionMode::Longest };
+
+/// The source a grammar generates where the static path settles every
+/// decision, for a test of what that path emits.
+fn longest_source<S: AsStrSlice>(src: S) -> String {
+    return gen_with(src, &LONGEST).source;
 }
 
 fn unsupported_count(out: &GeneratedOutput) -> i32 {
@@ -418,7 +426,7 @@ b : Y ;
 X : 'X' ;
 Y : 'Y' ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     let body = extract_fn_body(&output, "fn scan_a(");
     assert body.contains("while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA");
     assert !body.contains("tokens[pos] != TK_LIT_COMMA"), "the loop guard proved ','";
@@ -456,7 +464,7 @@ p : '{' fs (',' '..')? '}' ;
 fs : t (',' t)* ;
 Y : 'Y' ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     let e = extract_fn_body(&output, "fn _parse_e__inner(");
     assert e.contains("while !p.recovering && _kind_set_0(p.peek_kind())");
     assert e.contains("p.take();"), "the loop guard proved the operator";
@@ -496,7 +504,7 @@ ID : [a-z]+ ;
 K1 : 'K' ;
 K2 : 'J' ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     let a = extract_fn_body(&output, "fn scan_a(");
     assert !a.contains("scan_k("), "the partition proved k's token";
     let n = extract_fn_body(&output, "fn scan_n(");
@@ -510,7 +518,7 @@ a : X | m ;
 m : Y Y ;
 X : 'x' ; Y : 'y' ; Z : 'z' ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     let a = extract_fn_body(&output, "fn scan_a(");
     assert a.contains("scan_m(");
     assert !a.contains("pos = start;");
@@ -524,7 +532,7 @@ n : a ;
 a : Y Y | X Y ;
 X : 'x' ; Y : 'y' ; Z : 'z' ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     let t = extract_fn_body(&output, "fn scan_t(");
     assert t.contains("scan_a(");
     assert !output.contains("fn scan_n(");
@@ -542,7 +550,7 @@ ty : ID | '(' fs? ')' ;
 X : 'x' ;
 ID : [a-w]+ ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     assert output.contains("decline_kind");
     for let line of output.split("\n") {
         let terms: List<String> = line.split(" || ").map(|t| t.trim().to_string()).collect();
@@ -560,7 +568,7 @@ b : (c | c Z)* ;
 c : W+ ;
 X : 'x' ; Y : 'y' ; Z : 'z' ; W : 'w' ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     assert !output.contains("fn scan_a(");
     assert output.contains("fn scan_c(");
 }
@@ -672,7 +680,7 @@ e : e NOT? (L | G) e | e NOT N | ID ;
 A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; X : 'x' ; L : 'l' ; G : 'g' ; N : 'n' ; NOT : '!' ;
 ID : [e-k]+ ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     for let f of ["fn scan_l(", "fn _parse_l__inner("] {
         let body = extract_fn_body(&output, f);
         assert !body.contains("if kind == TK_A {");
@@ -743,12 +751,12 @@ X : 'X' ;
 Z : 'Z' ;
 ";
 
-test "atn never leaves an ambiguity the simulator decides by default to the tournament" {
+test "longest leaves an ambiguity the simulator decides by default to the tournament" {
     assert gen_source(OPAQUE_PREFIX_G4).contains("atn_predict_once(&ATN_SIM, ");
-    let never = gen_with(OPAQUE_PREFIX_G4, &GenerateOptions { atn: AtnMode::Never });
-    assert !never.source.contains("ATN_SIM");
-    assert never.source.contains("let _sd_p_0 = scan_a__alt_0(");
-    assert !never.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
+    let longest = gen_with(OPAQUE_PREFIX_G4, &LONGEST);
+    assert !longest.source.contains("ATN_SIM");
+    assert longest.source.contains("let _sd_p_0 = scan_a__alt_0(");
+    assert !longest.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
 }
 
 // `Z Z X` reads either way. The simulator takes the lower alternative, `b`, and
@@ -762,19 +770,21 @@ Z : 'Z' ;
 WS : ' ' -> skip ;
 ";
 
-test "atn verify parses as never does and checks each pick against the simulator" {
-    let verify = GenerateOptions { atn: AtnMode::Verify };
-    let never = GenerateOptions { atn: AtnMode::Never };
-    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &verify) == parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &never);
+test "verify builds exact's tree and reports where the tournament picks otherwise" {
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &verify) == "Z Z => (r (a (b Z Z)))\n";
     assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"]) == "Z Z X => (r (a (b Z Z)) X)\n";
-    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"], &never) == "Z Z X => (r (a (b Z Z) X))\n";
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"], &LONGEST) == "Z Z X => (r (a (b Z Z) X))\n";
     let out = eval_beside(
         gen_with(OPAQUE_CONTINUED_G4, &verify).source,
         wado`show("Z Z X", parse_r("Z Z X"));\n`,
         SHOW_FN,
     );
     assert !out.status matches { Exited(0) };
-    assert out.stderr.contains(" at token 0: the tournament picks 1, the simulator 0");
+    assert out.stderr.contains("prediction verify: decision "), out.stderr;
+    assert out.stderr.contains(" at token 0: the tournament picks 1, the simulator 0"), out.stderr;
+    // A syntax error later in the input outweighs the report.
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X Z"], &verify) == "Z Z X Z => error\n";
 }
 
 // `(a | a B)` shares `a`, which hides the deciding token. The tournament takes
@@ -787,15 +797,14 @@ B : 'b' ;
 WS : ' ' -> skip ;
 ";
 
-test "atn always lets the simulator decide a group" {
+test "exact lets the simulator decide a group" {
     let inputs: List<String> = ["a b", "a b b"];
-    assert parses(GROUP_LONGEST_G4, "s", inputs) == "a b => error\na b b => (s (a a) b b)\n";
-    let always = parses(GROUP_LONGEST_G4, "s", inputs, &GenerateOptions { atn: AtnMode::Always });
-    assert always == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
+    assert parses(GROUP_LONGEST_G4, "s", inputs) == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
+    assert parses(GROUP_LONGEST_G4, "s", inputs, &LONGEST) == "a b => error\na b b => (s (a a) b b)\n";
 }
 
-test "atn verify checks a group's tournament against the simulator" {
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+test "verify checks a group's tournament against the simulator" {
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     assert parses(GROUP_LONGEST_G4, "s", ["a b b"], &verify) == "a b b => (s (a a) b b)\n";
     let out = eval_beside(gen_with(GROUP_LONGEST_G4, &verify).source, wado`show("a b", parse_s("a b"));\n`, SHOW_FN);
     assert !out.status matches { Exited(0) };
@@ -819,15 +828,10 @@ INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ";
 
-test "atn verify checks a group inside a left-recursive rule's atom" {
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+test "verify checks a group inside a left-recursive rule's atom" {
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     let inputs: List<String> = ["x a b + 1", "1 + y ( )"];
-    assert parses(LR_GROUP_CHECK_G4, "s", inputs, &verify) == parses(
-        LR_GROUP_CHECK_G4,
-        "s",
-        inputs,
-        &GenerateOptions { atn: AtnMode::Never },
-    );
+    assert parses(LR_GROUP_CHECK_G4, "s", inputs, &verify) == parses(LR_GROUP_CHECK_G4, "s", inputs);
 }
 
 // The atom choice reads past `any`'s nesting, so the simulator owns it, and the
@@ -845,8 +849,8 @@ INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ";
 
-test "atn verify checks the atom's tournament against the simulator" {
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+test "verify checks the atom's tournament against the simulator" {
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     let source = gen_with(VERIFIED_LR_G4, &verify).source;
     assert source.contains("atn_verified(");
     assert !gen_source(VERIFIED_LR_G4).contains("atn_verified(");
@@ -923,7 +927,7 @@ D : 'd' ;
 WS : ' ' -> skip ;
 ";
 
-test "atn always lets the simulator decide a contested repeat" {
+test "exact lets the simulator decide a contested repeat" {
     let got = parses_each(CONTESTED_REPEATS_G4, [
         ["s", "a b"],
         ["s", "a a a b"],
@@ -931,7 +935,7 @@ test "atn always lets the simulator decide a contested repeat" {
         ["t", "c d d d"],
         ["u", "a a b"],
         ["u", "a b a b"],
-    ], &GenerateOptions { atn: AtnMode::Always });
+    ]);
     assert got == "a b => (s (a a) b)
 a a a b => (s (a a) (a a) (a a) b)
 c d d => (t c (c d) (c d))
@@ -941,8 +945,8 @@ a b a b => (u a b a b)
 ";
 }
 
-test "atn verify checks a contested repeat against the simulator" {
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+test "verify checks a contested repeat against the simulator" {
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     let agreed = parses_each(CONTESTED_REPEATS_G4, [
         ["s", "a b"],
         ["s", "a a a b"],
@@ -990,19 +994,19 @@ a c d c d c d => (s (e (e a) c d c d c d))
 
 // The simulator decides a `??` under every mode, so `verify` has nothing to
 // check there. The trees are the jar's.
-test "atn verify leaves a decision the simulator makes unchecked" {
+test "verify leaves a decision the simulator makes unchecked" {
     let g4 = "grammar Q;\ns : (A B)?? A C EOF ;\nA : 'a' ;\nB : 'b' ;\nC : 'c' ;\nWS : ' ' -> skip ;\n";
     let got = parses_each(g4, [
         ["s", "a c"],
         ["s", "a b a c"],
-    ], &GenerateOptions { atn: AtnMode::Verify });
+    ], &GenerateOptions { prediction: PredictionMode::Verify });
     assert got == "a c => (s a c)\na b a c => (s a b a c)\n";
 }
 
-// On `a c d d` the jar enters the loop on the first `d`, and `never` leaves it
-// to the suffix's `D`. On `a c d d d` the jar takes `D` for the group, where the
-// tournament takes `D D`. The trees are the jar's.
-test "atn verify checks a contested repeat in a left-recursion suffix" {
+// On `a c d d` and `a c d d d` the jar enters the loop on the first `d` and
+// takes `D` for the group, where the tournament takes `D D`. The trees are the
+// jar's.
+test "verify checks a contested repeat in a left-recursion suffix" {
     let g4 = "grammar R;
 s : e EOF ;
 e : e C (D | D D)* D
@@ -1013,7 +1017,7 @@ C : 'c' ;
 D : 'd' ;
 WS : ' ' -> skip ;
 ";
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     let agreed = parses_each(g4, [
         ["s", "a c d"],
         ["s", "a c d c d"],
@@ -1021,18 +1025,16 @@ WS : ' ' -> skip ;
     assert agreed == "a c d => (s (e (e a) c d))
 a c d c d => (s (e (e (e a) c d) c d))
 ";
-    for let [input, report] of [
-        ["a c d d", ": the repeat picks "],
-        ["a c d d d", ": the tournament picks 1, the simulator 0"],
-    ] as List<[String, String]> {
-        let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+    let source = gen_with(g4, &verify).source;
+    for let input of ["a c d d", "a c d d d"] {
+        let out = eval_beside(source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
         assert !out.status matches { Exited(0) };
-        assert out.stderr.contains(report), out.stderr;
+        assert out.stderr.contains(" at token 2: the tournament picks 1, the simulator 0"), out.stderr;
     }
 }
 
-// The atom choice between the two `new` alternatives is the simulator's under
-// `auto`, so the loop is too. The trees are the jar's.
+// The atom choice between the two `new` alternatives is the simulator's, and
+// the loop after it is static. The trees are the jar's.
 global CONTESTED_NEW_G4: String = "grammar L;
 s : e EOF ;
 e : e '.' ID
@@ -1048,39 +1050,34 @@ ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ";
 
-test "atn verify checks a left-recursion loop against the simulator" {
+test "verify checks a left-recursion loop against the simulator" {
     let inputs: List<[String, String]> = [
         ["s", "new a < b > ( )"],
         ["s", "new a < b > c"],
         ["s", "new a < b"],
         ["s", "new a < b > ( ) . c"],
+        ["s", "new a < b > . c"],
     ];
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
+    assert gen_with(CONTESTED_NEW_G4, &verify).source.contains("atn_verified(");
     assert parses_each(CONTESTED_NEW_G4, inputs, &verify) == "new a < b > ( ) => (s (e new (e a) (targs < b >) ( )))
 new a < b > c => (s (e new (e (e (e a) < (e b)) > (e c))))
 new a < b => (s (e new (e (e a) < (e b))))
 new a < b > ( ) . c => (s (e (e new (e a) (targs < b >) ( )) . c))
+new a < b > . c => (s (e (e new (e a) (targs < b >)) . c))
 ";
-    let input = "new a < b > . c";
-    let out = eval_beside(
-        gen_with(CONTESTED_NEW_G4, &verify).source,
-        wado`show("${input}", parse_s("${input}"));\n`,
-        SHOW_FN,
-    );
-    assert !out.status matches { Exited(0) };
-    assert out.stderr.contains(": the left-recursion loop picks "), out.stderr;
 }
 
 // The loop of a mid operand nested in another is decided statically, by the
 // continuation gate standing in for the simulator's full context. The trees
 // are the jar's.
-test "atn verify checks a mid operand's loop against the simulator" {
+test "verify checks a mid operand's loop against the simulator" {
     let inputs: List<[String, String]> = [
         ["s", "a between b between c and d and e"],
         ["s", "a between b between c and d and e and f"],
         ["s", "a between b and c and d and e"],
     ];
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     assert parses_each(#include_str("../tests/grammars/lr_mid_operand.g4"), inputs, &verify) == "a between b between c and d and e => (s (e (e a) between (e (e b) between (e c) and (e d)) and (e e)))
 a between b between c and d and e and f => (s (e (e a) between (e (e b) between (e (e c) and (e d)) and (e e)) and (e f)))
 a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and (e d)) and (e e)))
@@ -1090,7 +1087,7 @@ a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and 
 // The first loop's iteration ends with a checked `?`, emitted into the loop's
 // own scope, so each check's locals must be the loop's alone. The trees are
 // the jar's.
-test "atn verify checks a repeat nested in a checked loop's iteration" {
+test "verify checks a repeat nested in a checked loop's iteration" {
     let g4 = "grammar D;
 s : '{' l? '}' EOF ;
 l : (';' w)* d w (';' w d?)* ;
@@ -1104,7 +1101,7 @@ WS : ' ' -> skip ;
         g4,
         "s",
         ["{ a : b }", "{ ; a : b # ; c : d ; }", "{ a : b ; ; }"],
-        &GenerateOptions { atn: AtnMode::Verify },
+        &GenerateOptions { prediction: PredictionMode::Verify },
     ) == "{ a : b } => (s { (l (d a : b w) w) })
 { ; a : b # ; c : d ; } => (s { (l ; w (d a : b (w #)) w ; w (d c : d w) ; w) })
 { a : b ; ; } => (s { (l (d a : b w) w ; w ; w) })
@@ -1112,9 +1109,10 @@ WS : ' ' -> skip ;
 }
 
 // `ID e?` ends an atom, so its `?` competes with the loop's `args` and with
-// the caller's FOLLOW. On the last two inputs the jar enters it and `never`
-// does not. The trees are the jar's.
-test "atn verify checks an optional ending a left-recursive atom" {
+// the caller's FOLLOW. On the last two inputs the jar enters it, and so does
+// the static pick computed beside the simulator's, though `longest`, whose
+// loop around the atom differs, does not. The trees are the jar's.
+test "verify checks an optional ending a left-recursive atom" {
     let g4 = "grammar N;
 s : e EOF ;
 e : e '.' ID | 'new' e args | 'new' e | e args | ID e? | args ;
@@ -1122,18 +1120,16 @@ args : '(' e? ')' ;
 ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ";
-    let verify = GenerateOptions { atn: AtnMode::Verify };
-    assert parses(g4, "s", ["a", "a ( )", "new a ( )", "a . b"], &verify) == "a => (s (e a))
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
+    let inputs: List<String> = ["a", "a ( )", "new a ( )", "a . b", "new a ( ) ( )", "a new b ( ) ( )"];
+    assert gen_with(g4, &verify).source.contains("atn_shadow(");
+    assert parses(g4, "s", inputs, &verify) == "a => (s (e a))
 a ( ) => (s (e a (e (args ( )))))
 new a ( ) => (s (e new (e a) (args ( ))))
 a . b => (s (e (e a) . b))
+new a ( ) ( ) => (s (e new (e a (e (args ( )))) (args ( ))))
+a new b ( ) ( ) => (s (e a (e new (e b (e (args ( )))) (args ( )))))
 ";
-    let source = gen_with(g4, &verify).source;
-    for let input of ["new a ( ) ( )", "a new b ( ) ( )"] {
-        let out = eval_beside(source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
-        assert !out.status matches { Exited(0) }, input;
-        assert out.stderr.contains(": the repeat picks "), out.stderr;
-    }
 }
 
 // The mid operand's rest opens with a group of loop operators, so it climbs
@@ -1230,10 +1226,10 @@ new new a ( ) ( ) ( ) => (s (e new (e new (e (e a) (args ( ))) (args ( ))) (args
 
 // Each decision meets a predicate through a rule it calls: the loop's `op`, the
 // repeat's `q`, the group's `r`. A simulator handed no verdict would enter
-// each, where `never` leaves it. `_vq_out` holds the output a check that asks
+// each, where `longest` leaves it. `_vq_out` holds the output a check that asks
 // a predicate takes back. The trees are the jar's.
-test "atn verify hands the simulator the verdicts of the predicates a decision meets" {
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+test "verify hands the simulator the verdicts of the predicates a decision meets" {
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     let cases: List<[String, List<String>, String]> = [
         [
             "grammar P;\ns : e ('+' ID)? EOF ;\ne : e op e | ID ;\nop : {false}? '+' | '-' ;\nID : [a-z]+ ;\nWS : ' ' -> skip ;\n",
@@ -1259,7 +1255,7 @@ test "atn verify hands the simulator the verdicts of the predicates a decision m
 
 // The repeat's check asks `q`'s predicate again, and takes back what it
 // prints. The trees are the jar's.
-test "atn verify prints what never prints" {
+test "verify prints what exact prints" {
     let g4 = "grammar P;
 @parser::members {
 boolean pred(boolean v) {
@@ -1272,16 +1268,16 @@ q : {this.pred(true)}? 'a' | 'b' ;
 WS : ' ' -> skip ;
 ";
     let inputs: List<String> = ["a", "b a"];
-    let never = parses(g4, "s", inputs, &GenerateOptions { atn: AtnMode::Never });
-    assert never.starts_with("a => (s (q a)) [eval=true\n"), never;
-    assert never.contains("b a => (s (q b) (q a)) [eval=true\n"), never;
-    assert parses(g4, "s", inputs, &GenerateOptions { atn: AtnMode::Verify }) == never;
+    let exact = parses(g4, "s", inputs);
+    assert exact.starts_with("a => (s (q a)) [eval=true\n"), exact;
+    assert exact.contains("b a => (s (q b) (q a)) [eval=true\n"), exact;
+    assert parses(g4, "s", inputs, &GenerateOptions { prediction: PredictionMode::Verify }) == exact;
 }
 
 // A contested decision meeting a predicate needs both the continuation and the
-// verdict, so `auto` hands it the simulator: the loop's `q`, the group's and
+// verdict, so exact hands it the simulator: the loop's `q`, the group's and
 // the `+`'s alternative. The trees and output are the jar's.
-test "atn auto lets the simulator decide a contested decision meeting a predicate" {
+test "exact lets the simulator decide a contested decision meeting a predicate" {
     let p = "grammar P;
 @parser::members {
 boolean pred(boolean v) {
@@ -1295,19 +1291,16 @@ WS : ' ' -> skip ;
 ";
     let g = "grammar G;\ns : ({true}? a | a B) B EOF ;\na : A+ ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n";
     let r = "grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n";
-    for let atn of [AtnMode::Auto, AtnMode::Always] {
-        let options = GenerateOptions { atn };
-        assert parses(p, "s", ["b a", "a"], &options) == "b a => (s (q b) a) [eval=false\n]\na => (s a) [eval=false\n]\n";
-        assert parses(g, "s", ["a b", "a b b"], &options) == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
-        assert parses(r, "u", ["a a b", "a b a b"], &options) == "a a b => (u a a b)\na b a b => (u a b a b)\n";
-    }
+    assert parses(p, "s", ["b a", "a"]) == "b a => (s (q b) a) [eval=false\n]\na => (s a) [eval=false\n]\n";
+    assert parses(g, "s", ["a b", "a b b"]) == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
+    assert parses(r, "u", ["a a b", "a b a b"]) == "a a b => (u a a b)\na b a b => (u a b a b)\n";
 }
 
 // Each decision meets a predicate that holds, and on each input the jar takes
-// another pick than `never`: the jar parses `a b`, `a a b` and
-// `new a < b > . c`, and reads `Z Z X` as `(r (a (b Z Z)) X)`.
-test "atn verify checks a decision meeting a predicate" {
-    let verify = GenerateOptions { atn: AtnMode::Verify };
+// another pick than `longest`: the jar parses `a b` and `a a b`, and reads
+// `Z Z X` as `(r (a (b Z Z)) X)`.
+test "verify checks a decision meeting a predicate" {
+    let verify = GenerateOptions { prediction: PredictionMode::Verify };
     for let [g4, rule, input, picker] of [
         [
             "grammar T;\nr : a X* EOF ;\na : {true}? b | b X ;\nb : Z Z ;\nX : 'X' ;\nZ : 'Z' ;\nWS : ' ' -> skip ;\n",
@@ -1320,10 +1313,6 @@ test "atn verify checks a decision meeting a predicate" {
         [
             "grammar R;\nu : ({true}? A | B)+ A B EOF ;\nA : 'a' ;\nB : 'b' ;\nWS : ' ' -> skip ;\n", "u", "a a b",
             "the repeat",
-        ],
-        [
-            "grammar L;\ns : e EOF ;\ne : e '.' ID | 'new' e targs? '(' e? ')' | 'new' e targs? | e '(' e? ')' | e {true}? '<' e | e '>' e | ID ;\ntargs : '<' ID '>' ;\nID : [a-z]+ ;\nWS : ' ' -> skip ;\n",
-            "s", "new a < b > . c", "the left-recursion loop",
         ],
     ] {
         let out = eval_beside(
@@ -1340,8 +1329,8 @@ test "atn verify checks a decision meeting a predicate" {
 // consuming a token. Behind a nullable prefix it does; past a consumed token,
 // in a rule the decision scans into, it does not. The trees are the jar's.
 test "prediction answers a predicate behind a nullable prefix" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        let options = GenerateOptions { atn };
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let options = GenerateOptions { prediction };
         assert parses("grammar Q;
 s : r EOF ;
 r : '-'? {false}? 'a' | 'a' ;
@@ -1370,7 +1359,7 @@ WS : ' ' -> skip ;
 }
 
 test "prediction answers a predicate inside a group" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses(
             "grammar G;
 s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF | 'G' r7 EOF | 'H' r8 EOF
@@ -1394,7 +1383,7 @@ WS : ' ' -> skip ;
                 "A a x", "A b a x", "B a x z", "B b z", "C a b x", "C a b x y", "D a x", "D - a x", "E a c d", "E d",
                 "F a x", "F - a x", "G a x", "G x", "H a z c d", "H b c d", "I a x", "I a x y", "J a b", "J b",
             ],
-            &GenerateOptions { atn },
+            &GenerateOptions { prediction },
         ) == "A a x => (s A (r1 a x))
 A b a x => error
 B a x z => (s B (r2 a x z))
@@ -1420,7 +1409,7 @@ J b => (s J (r10 b))
 }
 
 test "prediction walks past a call to a rule that matches nothing" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses(
             "grammar G;
 s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF ;
@@ -1433,7 +1422,7 @@ WS : ' ' -> skip ;
 ",
             "s",
             ["A a b", "A a c", "B a", "C a", "D a b", "D b a b", "D a c"],
-            &GenerateOptions { atn },
+            &GenerateOptions { prediction },
         ) == "A a b => (s A (r1 w a b))
 A a c => (s A (r1 a c))
 B a => (s B (r2 w a))
@@ -1446,25 +1435,25 @@ D a c => (s D (r4 a c))
 }
 
 test "prediction leaves a predicate behind a called rule's action to the parse" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar G;
 s : r EOF ;
 r : u {false}? 'a' | 'a' ;
 u : {} ;
 WS : ' ' -> skip ;
-", "s", ["a"], &GenerateOptions { atn }) == "a => error
+", "s", ["a"], &GenerateOptions { prediction }) == "a => error
 ";
     }
 }
 
 test "the simulator answers a called rule's predicate behind a nullable prefix" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar Q;
 s : r EOF ;
 r : q 'x' | 'a' 'y' | 'a' 'x' ;
 q : '-'? {false}? 'a' | 'b' ;
 WS : ' ' -> skip ;
-", "s", ["a x", "b x", "- a x"], &GenerateOptions { atn }) == "a x => (s (r a x))
+", "s", ["a x", "b x", "- a x"], &GenerateOptions { prediction }) == "a x => (s (r a x))
 b x => (s (r (q b) x))
 - a x => error
 ";
@@ -1480,8 +1469,8 @@ s : 'A' ('-'? 'a')? 'a' EOF
 WS : ' ' -> skip ;
 ";
     let inputs: List<String> = ["A a", "A a a", "A - a a", "B a", "B - a a", "C a c", "C a d a c", "D a c", "D a b a c"];
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A a)
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4, "s", inputs, &GenerateOptions { prediction }) == "A a => (s A a)
 A a a => (s A a a)
 A - a a => (s A - a a)
 B a => (s B a)
@@ -1515,11 +1504,11 @@ a : A ;
 A : 'a' ; B : 'b' ; ID : [x-z]+ ;
 WS : ' ' -> skip ;
 ";
-    for let atn of [AtnMode::Never, AtnMode::Auto, AtnMode::Always] {
-        assert parses(printing, "s", ["x . a"], &GenerateOptions { atn }) == "x . a => (s (e (e x) . (a a))) [p\n]\n";
-        assert parses(gated, "s", ["x . a"], &GenerateOptions { atn }) == "x . a => error\n";
+    for let prediction of [PredictionMode::Longest, PredictionMode::Exact] {
+        assert parses(printing, "s", ["x . a"], &GenerateOptions { prediction }) == "x . a => (s (e (e x) . (a a))) [p\n]\n";
+        assert parses(gated, "s", ["x . a"], &GenerateOptions { prediction }) == "x . a => error\n";
     }
-    assert parses(gated, "s", ["x . a b"], &GenerateOptions { atn: AtnMode::Always }) == "x . a b => error\n";
+    assert parses(gated, "s", ["x . a b"], &GenerateOptions { prediction: PredictionMode::Exact }) == "x . a b => error\n";
 }
 
 test "prediction answers a predicate only on the paths that reach it without running an action" {
@@ -1545,8 +1534,8 @@ WS : ' ' -> skip ;
     let inputs: List<String> = [
         "A a", "B a", "C a", "D a", "F a", "G a", "H a", "I a", "I a b", "J a", "K a", "K a b", "M a",
     ];
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => error
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4, "s", inputs, &GenerateOptions { prediction }) == "A a => error
 B a => error
 C a => error
 D a => error
@@ -1568,8 +1557,8 @@ e : ( | u) {false}? 'a' | 'a' ;
 u : {} ;
 WS : ' ' -> skip ;
 ";
-    for let atn of [AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(lazy, "s", ["a"], &GenerateOptions { atn }) == "a => error\n";
+    for let prediction of [PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(lazy, "s", ["a"], &GenerateOptions { prediction }) == "a => error\n";
     }
 }
 
@@ -1582,8 +1571,8 @@ B : 'b' ;
 WS : ' ' -> skip ;
 ";
     let inputs: List<String> = ["x a a b", "x a b", "x a a a b", "x a a"];
-    for let atn of [AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "x a a b => (s x (q a) a b)
+    for let prediction of [PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4, "s", inputs, &GenerateOptions { prediction }) == "x a a b => (s x (q a) a b)
 x a b => (s x q a b)
 x a a a b => (s x (q a a) a b)
 x a a => error
@@ -1596,12 +1585,11 @@ A : 'a' ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ";
-    // `atn: "never"` takes `A` by length, predicate or not.
-    for let atn of [AtnMode::Auto, AtnMode::Always] {
-        assert parses(nullable_first, "s", ["x a a b", "x a b"], &GenerateOptions { atn }) == "x a a b => (s x (q a) a b)
+    // The tournament takes `A` by length, predicate or not, so `verify`
+    // reports these inputs.
+    assert parses(nullable_first, "s", ["x a a b", "x a b"]) == "x a a b => (s x (q a) a b)
 x a b => (s x q a b)
 ";
-    }
 }
 
 // A wildcard leaves FOLLOW inexact only for the rules it may follow: `q`'s is
@@ -1623,16 +1611,14 @@ B : 'b' ;
 WS : ' ' -> skip ;
 ";
     let inputs: List<String> = ["x a b", "x a a b", "x a a", "x a"];
-    // `atn: "never"` takes `A` by length, so `direct` traps under "verify".
-    for let atn of [AtnMode::Auto, AtnMode::Always] {
-        assert parses(direct, "s", inputs, &GenerateOptions { atn }) == "x a b => (s x q a b)
+    // The tournament takes `A` by length, so `verify` reports `direct`.
+    assert parses(direct, "s", inputs) == "x a b => (s x q a b)
 x a a b => (s x q a a b)
 x a a => (s x q a a)
 x a => (s x q a)
 ";
-    }
-    for let atn of [AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(nested, "s", inputs, &GenerateOptions { atn }) == "x a b => (s (r x q a) b)
+    for let prediction of [PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(nested, "s", inputs, &GenerateOptions { prediction }) == "x a b => (s (r x q a) b)
 x a a b => (s (r x (q a) a) b)
 x a a => (s (r x (q a) a))
 x a => (s (r x q a))
@@ -1640,8 +1626,6 @@ x a => (s (r x q a))
     }
 }
 
-// `verify` parses only the inputs that have a parse: on the others it may
-// panic first, where its pick differs from the simulator's.
 test "prediction leaves a predicate past a consumed token to the parse" {
     let g = "grammar G;
 s : x EOF ;
@@ -1656,11 +1640,10 @@ p : {false}? '+' ID | 'z' ;
 ID : [a-y]+ ;
 WS : ' ' -> skip ;
 ";
-    let never = GenerateOptions { atn: AtnMode::Never };
-    assert parses(g, "s", ["a b c"], &never) == "a b c => error\n";
-    assert parses(m, "s", ["a x b + c + d"], &never) == "a x b + c + d => error\n";
-    for let atn of [AtnMode::Never, AtnMode::Verify] {
-        let options = GenerateOptions { atn };
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let options = GenerateOptions { prediction };
+        assert parses(g, "s", ["a b c"], &options) == "a b c => error\n";
+        assert parses(m, "s", ["a x b + c + d"], &options) == "a x b + c + d => error\n";
         assert parses(g, "s", ["a d"], &options) == "a d => (s (x a (q d)))\n";
         assert parses(m, "s", ["a x b + c z", "a x b z", "a x b z + c"], &options) == "a x b + c z => (s (e (e a) x (e (e b) + (e c)) (p z)))
 a x b z => (s (e (e a) x (e b) (p z)))
@@ -1669,18 +1652,20 @@ a x b z + c => (s (e (e (e a) x (e b) (p z)) + (e c)))
     }
 }
 
-test "atn never refuses a decision only the simulator makes" {
-    let never = gen_with("grammar T;
+test "longest refuses a decision only the simulator makes" {
+    let longest = gen_with("grammar T;
 r : A?? A B ;
 A : 'a' ;
 B : 'b' ;
-", &GenerateOptions { atn: AtnMode::Never });
-    let refusals: List<String> = never.diagnostics.iter_ref().filter(
+", &LONGEST);
+    let refusals: List<String> = longest.diagnostics.iter_ref().filter(
         |d: &Diagnostic| d.kind matches { SimulatorRequired },
     ).map(
         |d: &Diagnostic| `${d.owner.label()}: ${d.message}`,
     ).collect();
-    assert refusals == ["rule 'r': a non-greedy `??` only the ATN simulator decides, and `atn: \"never\"` refuses it"];
+    assert refusals == [
+        "rule 'r': a non-greedy `??` only the ATN simulator decides, and `prediction: \"longest\"` refuses it",
+    ];
 }
 
 test "trace suppresses the pick line for all-single-token rules" {
@@ -2031,7 +2016,7 @@ INT : '0'..'9'+ ;
 FLOAT : [0-9]+ '.' [0-9]+ ;
 WS : (' '|'\\n') -> skip ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     let body = extract_fn_body(&output, "fn _parse_b__inner(");
     assert body.contains("while !p.recovering && _kind_set_0(p.peek_kind())");
     assert body.contains("p.take();");
@@ -2124,7 +2109,7 @@ b : B+ ;
 A : 'a' ;
 B : 'b' ;
 ";
-    let output = gen_source(input);
+    let output = longest_source(input);
     let body = extract_fn_body(&output, "fn _parse_stmt__inner(");
     let scans_a = count_occurrences(&body, "scan_a(");
     let scans_b = count_occurrences(&body, "scan_b(");
@@ -2259,7 +2244,7 @@ test "a tail optional enters only where its body can match" {
 }
 
 test "an optional probe that scans the rest of an alternative ends its scan" {
-    let output = gen_source("
+    let output = longest_source("
 grammar T;
 s : (a ';' | a 'e') ;
 a : 'b'? c ;
@@ -2432,9 +2417,9 @@ test "a loop that parses its iteration speculatively rewinds the one that fails"
 }
 
 test "a loop speculates only where the parse runs no action" {
-    assert gen_source(SPECULATIVE_LOOP_G4).contains("let sp_pending");
+    assert longest_source(SPECULATIVE_LOOP_G4).contains("let sp_pending");
     let with_predicate = SPECULATIVE_LOOP_G4.replace("st : ID (", "st : {true}? ID (");
-    assert !gen_source(&with_predicate).contains("let sp_pending"), "`speculating` skips a predicate";
+    assert !longest_source(&with_predicate).contains("let sp_pending"), "`speculating` skips a predicate";
 }
 
 // SQLite's SELECT statements: `simple` is `factored` without its loop.
@@ -2494,8 +2479,7 @@ WS : ' ' -> skip ;
 ";
 
 // The loop's FOLLOW gate yields wherever the caller's continuation matches;
-// telling a viable iteration from a stranding one needs the simulator.
-#[TODO]
+// telling a viable iteration from a stranding one takes the simulator.
 test "a greedy loop keeps an iteration its caller's continuation also reads" {
     // Rust's `impl Fn() -> a::R + Send`: the outer path reads `:: r` too, but
     // the inner one stays viable, and ANTLR4 resolves that by looping.
@@ -2859,7 +2843,7 @@ B : 'b' ;
 test "an open-ended alternative still contributes the first set it does have" {
     // The `no viable alternative` expected list and its SYNC set are unions over
     // the group's classes, so both must include an open-ended alternative's tokens.
-    let output = gen_source(OPEN_ENDED_WITH_FIRST_G4);
+    let output = longest_source(OPEN_ENDED_WITH_FIRST_G4);
     let both = ": List<i32> = [TK_A, TK_B];";
     assert output.contains(both);
 }
@@ -2905,7 +2889,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
 
 test "a scan decides by the parse's lookahead, not by scanning every candidate" {
-    let output = gen_source(REPEATED_SCAN_ALT_G4);
+    let output = longest_source(REPEATED_SCAN_ALT_G4);
     let scan_e = extract_fn_body(&output, "fn scan_e(");
     assert scan_e.contains("if la_1 == TK_LIT_LPAREN {");
     assert scan_e.contains("return scan_e__alt_0(tokens, start");
@@ -2925,7 +2909,7 @@ A : 'a' ; B : 'b' ; C : 'c' ;
 }
 
 test "an uncontested alternative is scanned in place" {
-    let output = gen_source(REPEATED_SCAN_ALT_G4);
+    let output = longest_source(REPEATED_SCAN_ALT_G4);
     assert !output.contains("fn scan_e__alt_2(");
 }
 
@@ -2940,7 +2924,7 @@ ID : [a-z]+ ;
 ";
 
 test "the reserve probe runs only after the loop's own lookahead declines" {
-    let output = gen_source(RESERVE_AFTER_LOOP_G4);
+    let output = longest_source(RESERVE_AFTER_LOOP_G4);
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
     assert_in_order(
         &body,
@@ -3983,7 +3967,7 @@ test "the same action with a translatable members block reaches the gate" {
 
 // The gate is parser state that every scan walks by reference, never a global.
 test "the scan gate lives on the parser" {
-    let out = gen_source("grammar C;
+    let out = longest_source("grammar C;
 options { language = Java; }
 @parser::members {
     int n = 0;
@@ -4065,7 +4049,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 }
 
 test "a tournament leaves a simulable gate to the candidate's scan" {
-    let out = gen_source("grammar L;
+    let out = longest_source("grammar L;
 @parser::members {
     int noStruct = 0;
 }
@@ -4214,8 +4198,8 @@ WS : ' ' -> skip ;
 // by the time it reaches `r?`; the second `r` of `s` is met through the first's
 // empty alternative, and the first's `d` is not its own.
 test "prediction ignores a context-dependent predicate outside its own invocation" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        let options = GenerateOptions { atn };
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let options = GenerateOptions { prediction };
         assert parses("grammar T;
 s : r EOF ;
 r locals [int x = 1] : {$x > 0}? 'a' {$x = 0;} r? ;
@@ -4280,14 +4264,14 @@ WS : ' ' -> skip ;
 // The `.` suffix sends the loop to the simulator, whose table holds no
 // predicate: `op`'s decides between the two suffixes `+` opens.
 test "the left-recursion loop's simulator pick answers the predicates past the operand" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar T;
 s : e EOF ;
 e : e op 'b' | e . 'b' | INT ;
 op : {false}? '+' | '-' ;
 INT : [0-9]+ ;
 WS : ' ' -> skip ;
-", "s", ["1 + b", "1 - b", "1 + b - b"], &GenerateOptions { atn }) == "1 + b => (s (e (e 1) + b))
+", "s", ["1 + b", "1 - b", "1 + b - b"], &GenerateOptions { prediction }) == "1 + b => (s (e (e 1) + b))
 1 - b => (s (e (e 1) (op -) b))
 1 + b - b => (s (e (e (e 1) + b) (op -) b))
 ";
@@ -4296,26 +4280,26 @@ WS : ' ' -> skip ;
 
 // The jar never enters the gated suffix, so `s` takes the `+ 2` itself.
 test "a predicate past the operand gates the left-recursive suffix in the simulator" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar T;
 s : e ('+' INT)? EOF ;
 e : e {false}? '+' INT | e . 'z' | INT ;
 INT : [0-9]+ ;
 WS : ' ' -> skip ;
-", "s", ["1 + 2"], &GenerateOptions { atn }) == "1 + 2 => (s (e 1) + 2)\n";
+", "s", ["1 + 2"], &GenerateOptions { prediction }) == "1 + 2 => (s (e 1) + 2)\n";
     }
 }
 
 // An action only hides the predicates behind it from the paths that run it: a
 // path still empty there reaches the predicate past the group.
 test "an action in one alternative leaves the others' predicates in view" {
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar T;
 s : 'G' r7 EOF | 'H' r8 EOF ;
 r7 : ({} 'b' | 'c' | ) {false}? 'a' | 'a' ;
 r8 : ({} ({false}? 'a')?) 'b' | 'a' 'b' ;
 WS : ' ' -> skip ;
-", "s", ["G a", "H a b"], &GenerateOptions { atn }) == "G a => (s G (r7 a))\nH a b => error\n";
+", "s", ["G a", "H a b"], &GenerateOptions { prediction }) == "G a => (s G (r7 a))\nH a b => error\n";
     }
 }
 
@@ -4602,8 +4586,8 @@ WS : [ \\t]+ -> skip ;
 // reports no viable alternative at `b`.
 test "a predicate on the one alternative deeper lookahead leaves removes it" {
     let g4 = "grammar X;\ns : x EOF ;\nx : 'a' q | 'a' 'b' 'c' ;\nq : {false}? 'b' 'c' | 'b' 'd' ;\nWS : ' ' -> skip ;\n";
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        let got = parses(g4, "s", ["a b c", "a b d"], &GenerateOptions { atn });
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let got = parses(g4, "s", ["a b c", "a b d"], &GenerateOptions { prediction });
         assert got == "a b c => error\na b d => (s (x a (q b d)))\n", got;
     }
 }
@@ -4613,16 +4597,16 @@ test "a predicate on the one alternative deeper lookahead leaves removes it" {
 // the second.
 test "a predicate inside a group decides a tie at the rule's end" {
     let g4 = "grammar Z;\ns : r EOF ;\nr : ({false}? 'a' 'b'? 'c')? 'd' | 'a' 'c' 'd' 'e'? ;\nWS : ' ' -> skip ;\n";
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        let got = parses(g4, "s", ["a c d", "d", "a c d e"], &GenerateOptions { atn });
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let got = parses(g4, "s", ["a c d", "d", "a c d e"], &GenerateOptions { prediction });
         assert got == "a c d => (s (r a c d))\nd => (s (r d))\na c d e => (s (r a c d e))\n", got;
     }
 }
 
 // As above, with a predicate a scan cannot answer, since it calls a member,
 // and the second alternative calling a rule, so the tree names the pick. The
-// tournament cannot weigh it, so `auto` hands the tie to the simulator, and
-// `verify` reports where `never` picks otherwise.
+// tournament cannot weigh it, so exact hands the tie to the simulator, and
+// `verify` reports where the tournament picks otherwise.
 test "a member predicate inside a group decides a tie at the rule's end" {
     let g4 = |verdict: String| `grammar Y;
 @parser::members {
@@ -4633,13 +4617,11 @@ r : ({this.pred(${verdict})}? 'a' 'b'? 'c')? 'd' | x 'd' 'e'? ;
 x : 'a' 'c' ;
 WS : ' ' -> skip ;
 `;
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4("true"), "s", ["a c d"], &GenerateOptions { atn }) == "a c d => (s (r a c d))\n";
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4("true"), "s", ["a c d"], &GenerateOptions { prediction }) == "a c d => (s (r a c d))\n";
     }
-    for let atn of [AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4("false"), "s", ["a c d"], &GenerateOptions { atn }) == "a c d => (s (r (x a c) d))\n";
-    }
-    let verify = gen_with(g4("false"), &GenerateOptions { atn: AtnMode::Verify }).source;
+    assert parses(g4("false"), "s", ["a c d"]) == "a c d => (s (r (x a c) d))\n";
+    let verify = gen_with(g4("false"), &GenerateOptions { prediction: PredictionMode::Verify }).source;
     let out = eval_beside(verify, wado`show("a c d", parse_s("a c d"));\n`, SHOW_FN);
     assert out.stderr.contains(": the tournament picks 0, the simulator 1"), out.stderr;
 }
@@ -4656,8 +4638,8 @@ q locals [int d=1] : {false}? {$d>0}? A ;
 A : 'a' ; B : 'b' ; C : 'c' ;
 WS : ' ' -> skip ;
 ";
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4, "s", ["a b"], &GenerateOptions { atn }) == "a b => (s (r a b))\n";
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4, "s", ["a b"], &GenerateOptions { prediction }) == "a b => (s (r a b))\n";
     }
 }
 
@@ -4673,8 +4655,8 @@ b : B ;
 A : 'a' ; B : 'b' ; C : 'c' ;
 WS : ' ' -> skip ;
 ";
-    assert parses(g4, "s", ["a b c"], &GenerateOptions { atn: AtnMode::Always }) == "a b c => (s (a a) (b b) c)\n";
-    let verify = gen_with(g4, &GenerateOptions { atn: AtnMode::Verify }).source;
+    assert parses(g4, "s", ["a b c"], &GenerateOptions { prediction: PredictionMode::Exact }) == "a b c => (s (a a) (b b) c)\n";
+    let verify = gen_with(g4, &GenerateOptions { prediction: PredictionMode::Verify }).source;
     let out = eval_beside(verify, wado`show("a b c", parse_s("a b c"));\n`, SHOW_FN);
     assert out.stderr.contains(": the tournament picks 1, the simulator 0"), out.stderr;
 }
@@ -4693,11 +4675,9 @@ A : 'a' ; B : 'b' ; ID : [x-z]+ ;
 WS : ' ' -> skip ;
 `;
     let tree = "x . a b => (s (e (e x) . (a a) b))\n";
-    for let atn of [AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4("({true}? a | a B) B"), "s", ["x . a b"], &GenerateOptions { atn }) == tree;
-    }
-    assert parses(g4("(a | a B) B"), "s", ["x . a b"], &GenerateOptions { atn: AtnMode::Always }) == tree;
-    let verify = gen_with(g4("(a | a B) B?"), &GenerateOptions { atn: AtnMode::Verify }).source;
+    assert parses(g4("({true}? a | a B) B"), "s", ["x . a b"]) == tree;
+    assert parses(g4("(a | a B) B"), "s", ["x . a b"]) == tree;
+    let verify = gen_with(g4("(a | a B) B?"), &GenerateOptions { prediction: PredictionMode::Verify }).source;
     let out = eval_beside(verify, wado`show("x . a b", parse_s("x . a b"));\n`, SHOW_FN);
     assert out.stderr.contains(": the tournament picks 1, the simulator 0"), out.stderr;
 }
@@ -4711,8 +4691,8 @@ s : x? 'z' EOF ;
 x : 'c'? ;
 WS : ' ' -> skip ;
 ";
-    for let atn of [AtnMode::Never, AtnMode::Verify] {
-        assert parses(g4, "s", ["z", "c z"], &GenerateOptions { atn }) == "z => (s x z)\nc z => (s (x c) z)\n";
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify] {
+        assert parses(g4, "s", ["z", "c z"], &GenerateOptions { prediction }) == "z => (s x z)\nc z => (s (x c) z)\n";
     }
 }
 
@@ -4727,8 +4707,8 @@ l : st+ ;
 st : {this.pred()}? 'a' 'b' | 'c' ;
 WS : ' ' -> skip ;
 ";
-    for let atn of [AtnMode::Never, AtnMode::Auto, AtnMode::Always] {
-        let got = parses(g4, "s", ["{ a", "{ c", "{ c } c", "{ a c"], &GenerateOptions { atn });
+    for let prediction of [PredictionMode::Longest, PredictionMode::Exact] {
+        let got = parses(g4, "s", ["{ a", "{ c", "{ c } c", "{ a c"], &GenerateOptions { prediction });
         assert got == "{ a => error\n{ c => error\n{ c } c => (s { (l (st c)) } (st c))\n{ a c => error\n";
     }
 }
@@ -5154,23 +5134,36 @@ WS : ' ' -> skip ;
     assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n";
 }
 
-test "a greedy loop leaves its last token to a caller that ends the input with it" {
-    // The twin of the test above: here `list ;` ends the input, so the jar
-    // exits the loop whether the parse entered `list` directly or called it
-    // with no continuation (`s`) or with one (`t`).
-    let got = parses_each("grammar T;
+global CALLER_ENDS_INPUT_G4: String = "grammar T;
 s : (list) ';' EOF ;
 t : list ';' EOF ;
 list : X (';' X?)* ;
 X : 'x' ;
 WS : ' ' -> skip ;
-", [
+";
+
+test "a greedy loop leaves its last token to a caller that ends the input with it" {
+    // The twin of the test above: here `list ;` ends the input, so the jar
+    // exits the loop whether the parse entered `list` directly or called it
+    // with no continuation (`s`) or with one (`t`).
+    let got = parses_each(CALLER_ENDS_INPUT_G4, [
         ["s", "x;"],
         ["t", "x;"],
         ["list", "x;"],
         ["s", "x;x;"],
-    ]);
+    ], &LONGEST);
     assert got == "x; => (s (list x) ;)\nx; => (t (list x) ;)\nx; => (list x)\nx;x; => (s (list x ; x) ;)\n";
+}
+
+// Where a parse enters `list` directly, the jar reads what follows it as what
+// follows each call of `list`, and the simulator as the end of the input.
+#[TODO]
+test "exact reads a directly entered rule's end as the jar does" {
+    let got = parses_each(CALLER_ENDS_INPUT_G4, [
+        ["list", "x;"],
+        ["list", "x;;"],
+    ]);
+    assert got == "x; => (list x)\nx;; => (list x ;)\n";
 }
 
 test "a greedy loop leaves a longer last iteration to a caller that ends the input with it" {
@@ -5189,7 +5182,7 @@ WS : ' ' -> skip ;
         ["s", "a x y"],
         ["t", "a x y"],
         ["list", "a x y"],
-    ]);
+    ], &LONGEST);
     assert ends == "a x y => (s (list a) x y)\na x y => (t (list a) x y)\na x y => (list a)\n";
     let goes_on = parses("grammar N;
 u : '{' (list | X Y)* '}' ;
@@ -5445,8 +5438,8 @@ e returns [int v] : a=e '+' {$a.v < 5}? a=e {$v = $a.v + 100;} | INT {$v = $INT.
 INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ";
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4, "s", ["1 + 2", "7 + 2", "1 + 2 + 3"], &GenerateOptions { atn }) == "1 + 2 => (s (e (e 1) + (e 2))) [102\n]
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4, "s", ["1 + 2", "7 + 2", "1 + 2 + 3"], &GenerateOptions { prediction }) == "1 + 2 => (s (e (e 1) + (e 2))) [102\n]
 7 + 2 => error [0\n]
 1 + 2 + 3 => error [0\n]
 ";
@@ -5457,8 +5450,8 @@ e : a=e '+' {$a.text.equals(\"1\")}? a=e {System.out.println($a.text);} | INT ;
 INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ";
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(text, "s", ["1 + 2", "7 + 2", "1 + 2 + 3"], &GenerateOptions { atn }) == "1 + 2 => (s (e (e 1) + (e 2))) [2\n]
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(text, "s", ["1 + 2", "7 + 2", "1 + 2 + 3"], &GenerateOptions { prediction }) == "1 + 2 => (s (e (e 1) + (e 2))) [2\n]
 7 + 2 => error
 1 + 2 + 3 => error [2\n]
 ";
@@ -5521,8 +5514,8 @@ WS : ' ' -> skip ;
         "G 1 2", "H 1", "I 1", "I y", "J 1 2 3", "K 1 2", "L a", "L - a", "M a", "M - a", "N - a", "N - a b", "N -",
         "O a b c d e f a b c d e g", "O a b c d e g", "P a", "Q a", "Q b a", "R 7 a", "S b a", "S z c a",
     ];
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A (r1 a))
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4, "s", inputs, &GenerateOptions { prediction }) == "A a => (s A (r1 a))
 A - a => error
 A - a b => (s A (r1 - a b))
 B a => (s B (r2 a)) [r2 null 0 0 false\n]
@@ -5579,8 +5572,8 @@ WS : ' ' -> skip ;
         "A a", "A d a", "B d a", "C d", "C d e", "D a", "D d a", "E a", "E d a", "F 1 +", "F 1 + d", "G a", "G - a",
         "H a", "H b a", "H c a", "H b c a", "I b a",
     ];
-    for let atn of [AtnMode::Never, AtnMode::Verify, AtnMode::Auto, AtnMode::Always] {
-        assert parses(g4, "s", inputs, &GenerateOptions { atn }) == "A a => (s A (r1 a)) [r1 false null\n]
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        assert parses(g4, "s", inputs, &GenerateOptions { prediction }) == "A a => (s A (r1 a)) [r1 false null\n]
 A d a => (s A (r1 d a)) [r1 true d\n]
 B d a => (s B (r2 d a)) [r2 false\nr2 false\n]
 C d => (s C (r3 d)) [r3 true\n]
@@ -6011,7 +6004,7 @@ A : 'a' ;
 B : 'b' ;
 ";
 
-global LAZY_REFUSAL: String = "a non-greedy `??` only the ATN simulator decides, and `atn: \"never\"` refuses it";
+global LAZY_REFUSAL: String = "a non-greedy `??` only the ATN simulator decides, and `prediction: \"longest\"` refuses it";
 
 /// The program's arguments after its name.
 struct CommandLine {
@@ -6230,14 +6223,14 @@ test "gen --trace builds a parser that can log its decisions" {
     assert tracing.stdout().contains("trace_to_stderr");
 }
 
-test "gen --atn never refuses a grammar only the simulator can parse" {
-    let dir = scratch(SUITE, "gen-atn-never");
+test "gen --prediction longest refuses a grammar only the simulator can parse" {
+    let dir = scratch(SUITE, "gen-prediction-longest");
     put(&dir, "Lazy.g4", LAZY);
     assert gale_in(&dir, ["gen", "Lazy.g4"]).result matches { Ok(_) };
-    let never = gale_in(&dir, ["gen", "--atn", "never", "Lazy.g4"]);
-    assert never.failure() == "gale gen: no parser written; the errors above say why";
-    assert never.stdout() == "";
-    assert never.console.events == [`Error: ${LAZY_REFUSAL}`];
+    let longest = gale_in(&dir, ["gen", "--prediction", "longest", "Lazy.g4"]);
+    assert longest.failure() == "gale gen: no parser written; the errors above say why";
+    assert longest.stdout() == "";
+    assert longest.console.events == [`Error: ${LAZY_REFUSAL}`];
 }
 
 // A query naming a token the grammar lacks is a `Warn` diagnostic: the parser
@@ -6338,9 +6331,9 @@ test "a reference to a rule no grammar defines is reported" {
 // What a failed run reports
 // ---------------------------------------------------------------------------
 
-global USAGE: String = "Usage: gale gen [--trace] [--atn <mode>] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
+global USAGE: String = "Usage: gale gen [--trace] [--prediction <mode>] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
        gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]
-       <mode> is auto, always, never or verify (default auto)
+       <mode> is exact, longest or verify (default exact)
        <level> is trace, debug, info, warn or error (default warn)";
 
 test "an argument error names the subcommand and shows the usage" {
@@ -6513,11 +6506,14 @@ test "the trace option builds a parser that can log its decisions" {
     assert built.source().contains("trace_to_stderr");
 }
 
-test "the atn option never refuses a grammar only the simulator can parse" {
-    let never = kiln(["Lazy.g4", bytes_of(LAZY)], [], Options { fragment_entries: [], atn: AtnMode::Never });
+test "the prediction option longest refuses a grammar only the simulator can parse" {
+    let longest = kiln(["Lazy.g4", bytes_of(LAZY)], [], Options {
+        fragment_entries: [],
+        prediction: PredictionMode::Longest,
+    });
     let refusal = `gale: rule 'r': ${LAZY_REFUSAL}`;
-    assert never.error() == `unsupported: ${refusal}`;
-    assert never.events == [], "the returned error alone reports a refusal";
+    assert longest.error() == `unsupported: ${refusal}`;
+    assert longest.events == [], "the returned error alone reports a refusal";
 }
 
 test "Gale's diagnostics are logged at their own level" {
