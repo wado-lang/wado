@@ -1,0 +1,18 @@
+// A record lifted from a Component Model call loses a field no code reads, and
+// the fields it keeps are still read at their offsets in the WIT layout:
+// `nanoseconds` sits after the unread `seconds`, whose low half since 2001 is
+// at least a billion, so a read at `seconds`'s offset fails the assert.
+
+use { SystemClock } from "wasi:clocks";
+
+export fn run() with SystemClock {
+    let now = builtin::black_box(SystemClock::now());
+    assert now.nanoseconds < 1_000_000_000 as u32;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["nir/dead_field"]},
+    "wir_expect:O2": ["    mut nanoseconds: u32,"],
+    "wir_not_expect:O2": ["    mut seconds: i64,"]
+}

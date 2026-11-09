@@ -22,6 +22,7 @@ mod container_sroa;
 mod copy_prop;
 mod dae;
 pub mod dce;
+mod dead_field;
 mod drop_value;
 mod drve;
 mod elide_box_local;
@@ -841,6 +842,11 @@ fn run_optimization_passes(
     descriptor_cache: &mut dce::DescriptorCache,
     exec: &Arc<Executor>,
 ) {
+    // Before anything prices a body, so a literal no longer carries what no
+    // code reads when `nir/inline` weighs the function building it.
+    run_pass("nir/dead_field", project, profiler, |p| {
+        dead_field::remove_dead_fields(p, exec)
+    });
     // Before anything prices a body, so `nir/inline`'s cold discount describes
     // the function it copies. Ahead of the gate too, so the call graph is built
     // over the split shape rather than growing into it.

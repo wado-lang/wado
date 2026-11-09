@@ -1752,10 +1752,20 @@ impl TypeTable {
                             false
                         });
                     }
-                    ResolvedType::Struct { type_args, .. }
-                    | ResolvedType::Tuple(type_args)
-                    | ResolvedType::Resource { type_args, .. }
-                    | ResolvedType::Variant { type_args, .. } => {
+                    // A declaration's members are answered from what it
+                    // registered, which an optimization that drops a field
+                    // from the NIR struct leaves as declared.
+                    ResolvedType::Struct {
+                        def: StructDef::Decl(def),
+                        type_args,
+                    }
+                    | ResolvedType::Variant { def, type_args } => {
+                        components.extend(type_args.iter().copied());
+                        if let Some(members) = self.declared_members(*def, type_args) {
+                            components.extend(members.types);
+                        }
+                    }
+                    ResolvedType::Tuple(type_args) | ResolvedType::Resource { type_args, .. } => {
                         components.extend(type_args.iter().copied());
                     }
                     ResolvedType::Newtype {

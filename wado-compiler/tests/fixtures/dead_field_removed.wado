@@ -1,0 +1,47 @@
+// A struct field no code reads is removed from the type, from every literal
+// that builds it, and from every assignment to it. A removed field's
+// initializer still runs, in its place, when it has an effect. A copy of the
+// struct reads every field only to build another, so it reads none.
+
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    first: i32,
+    unread: i32,
+    logged: i32,
+    written: i32,
+    last: i32,
+}
+
+fn note(what: String, n: i32) -> i32 with Stdout {
+    println(what);
+    return n;
+}
+
+#[inline(never)]
+fn make() -> Config with Stdout {
+    return Config {
+        first: note("first", 1),
+        unread: 2,
+        logged: note("logged", 3),
+        written: 4,
+        last: note("last", 5),
+    };
+}
+
+export fn run() with Stdout {
+    let config = builtin::black_box(make());
+    let mut copy = config;
+    copy.written = 40;
+    copy.written += 1;
+    let Config { first, unread: _, .. } = copy;
+    println(`${first} ${config.last}`);
+}
+
+__DATA__
+{
+    "stdout": "first\nlogged\nlast\n1 5\n",
+    "wir_pass": {"O2": ["nir/dead_field"]},
+    "wir_expect:O2": ["    mut first: i32,", "    mut last: i32,"],
+    "wir_not_expect:O2": ["    mut unread: i32,", "    mut logged: i32,", "    mut written: i32,"]
+}
