@@ -17,10 +17,7 @@ use crate::type_table::TypeTable;
 pub fn select_lowering(project: &mut NirPackage) -> bool {
     let select_id = intern_select(project);
     let type_table = project.type_table.borrow();
-    let rule = SelectLoweringRule {
-        type_table: &type_table,
-        select_id,
-    };
+    let rule = SelectLoweringRule { select_id };
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -51,12 +48,11 @@ pub(super) fn intern_select(project: &mut NirPackage) -> FuncId {
     })
 }
 
-struct SelectLoweringRule<'t> {
-    type_table: &'t TypeTable,
+struct SelectLoweringRule {
     select_id: FuncId,
 }
 
-impl Rule for SelectLoweringRule<'_> {
+impl Rule for SelectLoweringRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let ExprKind::If {
             condition,
@@ -78,13 +74,14 @@ impl Rule for SelectLoweringRule<'_> {
         // A `select` returns one of its operands. For a deep-copied result that
         // aliases the chosen arm's live storage, so lower only scalar results;
         // the normal `if` lowering copies the arm.
-        if needs_value_copy(result_type, self.type_table) {
+        let type_table = engine.type_table();
+        if needs_value_copy(result_type, type_table) {
             return false;
         }
-        let Some(true_val) = arm_select_value(engine.body, then_branch, self.type_table) else {
+        let Some(true_val) = arm_select_value(engine.body, then_branch, type_table) else {
             return false;
         };
-        let Some(false_val) = arm_select_value(engine.body, else_branch, self.type_table) else {
+        let Some(false_val) = arm_select_value(engine.body, else_branch, type_table) else {
             return false;
         };
         if condition_writes_an_arm_read(engine.body, condition, [true_val, false_val]) {

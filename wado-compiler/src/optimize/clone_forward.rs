@@ -372,7 +372,6 @@ fn collect_in_block(
 struct CloneForwardRule<'a> {
     descriptors: &'a [FunctionRef],
     fpt: &'a FirstParamTypes,
-    type_table: &'a TypeTable,
 }
 
 impl Rule for CloneForwardRule<'_> {
@@ -396,7 +395,7 @@ impl Rule for CloneForwardRule<'_> {
                 &usage,
                 &address_taken,
                 self.fpt,
-                self.type_table,
+                engine.type_table(),
                 &mut candidates,
             );
             let stmts = engine.body.blocks[b].stmts.clone();
@@ -477,6 +476,10 @@ pub fn forward_redundant_clones(project: &mut NirPackage, cache: &mut Descriptor
     let type_table = project.type_table.clone();
     let type_table = type_table.borrow();
     let len = project.functions.len();
+    let rule = CloneForwardRule {
+        descriptors,
+        fpt: &fpt,
+    };
     let mut buffers = EngineBuffers::default();
     let mut any = false;
     for fi in 0..len {
@@ -484,11 +487,6 @@ pub fn forward_redundant_clones(project: &mut NirPackage, cache: &mut Descriptor
         if func.body.is_none() {
             continue;
         }
-        let rule = CloneForwardRule {
-            descriptors,
-            fpt: &fpt,
-            type_table: &type_table,
-        };
         let FuncParts {
             body,
             locals,

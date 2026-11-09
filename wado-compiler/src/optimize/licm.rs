@@ -239,7 +239,6 @@ pub fn apply_licm(
         }
         let param_locals: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
         let rule = LicmRule {
-            type_table,
             effects: &effects,
             params: &param_locals,
             applied: Cell::new(false),
@@ -287,7 +286,6 @@ pub fn apply_licm(
 /// Standalone-session rule whose single `apply_block` performs the whole-
 /// function LICM walk at the body root.
 pub(super) struct LicmRule<'a> {
-    type_table: &'a TypeTable,
     effects: &'a HeapEffects<'a>,
     params: &'a [u32],
     applied: Cell<bool>,
@@ -302,7 +300,12 @@ impl Rule for LicmRule<'_> {
             return false;
         }
         let root = engine.body.root();
-        let mut ctx = LicmCtx::new(self.type_table, self.effects, self.params, engine.locals());
+        let mut ctx = LicmCtx::new(
+            engine.type_table(),
+            self.effects,
+            self.params,
+            engine.locals(),
+        );
         let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
         licm_block(engine, root, &mut ctx, &mut outer_aliases)
     }

@@ -25,7 +25,7 @@ use super::gate::{FunctionGate, GatedPass};
 use super::identity_cast::{FieldThroughRefRule, IdentityCastRule, IdentityDerefRule};
 use super::if_chain_to_match::IfChainToMatchRule;
 use super::known_case::KnownCaseRule;
-use super::labeled_block_fusion::{LabeledBlockFusionRule, build_slot_temp_sroa};
+use super::labeled_block_fusion::{LabeledBlockFusionRule, SlotTempSroaRule};
 use super::match_to_bitset::MatchToBitsetRule;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
@@ -81,9 +81,9 @@ pub(super) fn run_peephole(
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let branch_prune_rule = BranchPruneRule;
     let aggregate_forward_rule = AggregateForwardRule;
-    let bitset_rule = MatchToBitsetRule::new(&type_table, select_id);
-    let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
-    let if_chain_rule = IfChainToMatchRule::new(&type_table);
+    let bitset_rule = MatchToBitsetRule::new(select_id);
+    let match_rule = MatchToSwitchRule::new(cold_path_id, unreachable_id);
+    let if_chain_rule = IfChainToMatchRule;
     let tuple_projection_rule = TupleProjectionRule;
     let known_case_rule = KnownCaseRule;
     // Post-inline only: the closure-bearing field read it resolves through is
@@ -147,7 +147,7 @@ pub(super) fn run_peephole(
         // value-producing `let x = f()?` consumer it cannot relocate. Ordered
         // after fusion, which produces the better code where it applies and
         // whose shape this rule would otherwise consume.
-        let slot_temp_sroa_rule = (!pre_inline).then(|| build_slot_temp_sroa(type_table));
+        let slot_temp_sroa_rule = (!pre_inline).then_some(SlotTempSroaRule);
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let FuncParts {

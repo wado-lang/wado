@@ -2263,14 +2263,6 @@ fn thread_exit(
     out
 }
 
-/// The rule giving each slot of a `let temp = L: { …; break L: [tag, slots…]; }`,
-/// or of a `let temp = match …` whose arms build it, read only as `temp.k` a
-/// local of its own, so the aggregate never exists. A merge needs no labeled
-/// block: each arm's tail assigns the slots in its place.
-pub(super) fn build_slot_temp_sroa(type_table: &TypeTable) -> SlotTempSroaRuleWithTypes<'_> {
-    SlotTempSroaRuleWithTypes { type_table }
-}
-
 /// One scalarizable temp: what hands it its value, and the slots the body
 /// projects.
 struct SlotTempSroa {
@@ -2319,15 +2311,17 @@ impl SlotTempSroa {
     }
 }
 
-pub(super) struct SlotTempSroaRuleWithTypes<'t> {
-    type_table: &'t TypeTable,
-}
+/// The rule giving each slot of a `let temp = L: { …; break L: [tag, slots…]; }`,
+/// or of a `let temp = match …` whose arms build it, read only as `temp.k` a
+/// local of its own, so the aggregate never exists. A merge needs no labeled
+/// block: each arm's tail assigns the slots in its place.
+pub(super) struct SlotTempSroaRule;
 
-impl Rule for SlotTempSroaRuleWithTypes<'_> {
+impl Rule for SlotTempSroaRule {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
         let stmts = engine.body.blocks[block].stmts.clone();
         for (i, &s) in stmts.iter().enumerate() {
-            let Some(plan) = plan_slot_temp_sroa(engine, s, self.type_table) else {
+            let Some(plan) = plan_slot_temp_sroa(engine, s) else {
                 continue;
             };
             perform_slot_temp_sroa(engine, block, &stmts, i, plan);
@@ -2337,11 +2331,8 @@ impl Rule for SlotTempSroaRuleWithTypes<'_> {
     }
 }
 
-fn plan_slot_temp_sroa(
-    engine: &mut Engine,
-    let_s: StmtId,
-    type_table: &TypeTable,
-) -> Option<SlotTempSroa> {
+fn plan_slot_temp_sroa(engine: &mut Engine, let_s: StmtId) -> Option<SlotTempSroa> {
+    let type_table = engine.type_table();
     let mut inits: Vec<(u32, TypeId, Operand)> = Vec::new();
     let body = &*engine.body;
     let StmtKind::Let {

@@ -1791,8 +1791,8 @@ impl ReturnRewrite<'_> {
     }
 
     /// Rewrites in place where the value is a skeleton node, and returns a
-    /// replacement operand where it is not — a promoted `null`, which has no
-    /// `ExprId` to overwrite.
+    /// replacement operand where it is not — a promoted payload-less case, which
+    /// has no `ExprId` to overwrite.
     #[must_use]
     fn value(&mut self, body: &mut Body, op: Operand) -> Option<Operand> {
         let (cand, span) = (self.cand, self.span);

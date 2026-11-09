@@ -43,7 +43,7 @@ pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
     let (cold_path_id, unreachable_id) = intern_cold_markers(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = project.type_table.borrow();
-    let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
+    let rule = MatchToSwitchRule::new(cold_path_id, unreachable_id);
     let mut buffers = EngineBuffers::default();
     run_globals(
         &mut project.globals,
@@ -81,20 +81,14 @@ fn run_globals(
     changed
 }
 
-pub(super) struct MatchToSwitchRule<'t> {
-    type_table: &'t TypeTable,
+pub(super) struct MatchToSwitchRule {
     cold_path_id: Option<FuncId>,
     unreachable_id: FuncId,
 }
 
-impl<'t> MatchToSwitchRule<'t> {
-    pub(super) fn new(
-        type_table: &'t TypeTable,
-        cold_path_id: Option<FuncId>,
-        unreachable_id: FuncId,
-    ) -> Self {
+impl MatchToSwitchRule {
+    pub(super) fn new(cold_path_id: Option<FuncId>, unreachable_id: FuncId) -> Self {
         Self {
-            type_table,
             cold_path_id,
             unreachable_id,
         }
@@ -122,7 +116,7 @@ pub(super) fn intern_cold_markers(project: &mut NirPackage) -> (Option<FuncId>, 
     (cold_path_id, unreachable_id)
 }
 
-impl Rule for MatchToSwitchRule<'_> {
+impl Rule for MatchToSwitchRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let ExprKind::Match {
             expr: scrutinee,
@@ -135,7 +129,7 @@ impl Rule for MatchToSwitchRule<'_> {
         let arms = arms.clone();
 
         let scrut_type = engine.body.operand_type(scrutinee);
-        let scrut_resolved = self.type_table.get(scrut_type);
+        let scrut_resolved = engine.type_table().get(scrut_type);
         let Some(analysis) = analyze(scrut_resolved, &arms, &*engine.body) else {
             return false;
         };

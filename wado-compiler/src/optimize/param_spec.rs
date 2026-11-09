@@ -178,20 +178,14 @@ impl FieldConst {
     /// The operand to put at a read of type `at`, or `None` when the read's
     /// type does not match the constant's (a width or representation mismatch
     /// the substitution must not paper over).
-    fn operand_at(
-        &self,
-        engine: &mut Engine,
-        types: &TypeTable,
-        at: TypeId,
-        span: Span,
-    ) -> Option<Operand> {
+    fn operand_at(&self, engine: &mut Engine, at: TypeId, span: Span) -> Option<Operand> {
         let kind = match self {
             FieldConst::Int(n, ty) => (*ty == at).then_some(ValueKind::Int(*n, at))?,
             FieldConst::Float(bits, ty) => (*ty == at).then_some(ValueKind::Float(*bits, at))?,
             FieldConst::Bool(b) => ValueKind::Bool(*b),
             FieldConst::Char(c) => ValueKind::Char(*c),
             FieldConst::Literal(literal) => {
-                return literal.build(engine, types, at, span).map(Operand::Expr);
+                return literal.build(engine, at, span).map(Operand::Expr);
             }
             FieldConst::GlobalRef {
                 module_source,
@@ -231,13 +225,7 @@ impl ConstLiteral {
         }
     }
 
-    fn build(
-        &self,
-        engine: &mut Engine,
-        types: &TypeTable,
-        at: TypeId,
-        span: Span,
-    ) -> Option<ExprId> {
+    fn build(&self, engine: &mut Engine, at: TypeId, span: Span) -> Option<ExprId> {
         if self.ty() != at {
             return None;
         }
@@ -253,7 +241,7 @@ impl ConstLiteral {
                     .map(|(field_index, name, value, ty)| {
                         Some(ArenaStructField {
                             name: name.clone(),
-                            value: value.operand_at(engine, types, *ty, span)?,
+                            value: value.operand_at(engine, *ty, span)?,
                             field_index: *field_index,
                         })
                     })
@@ -2010,7 +1998,7 @@ fn substitute_fields(
             reads.push((id, value.clone()));
         }
     });
-    redirect_const_reads(&mut engine, types, reads)
+    redirect_const_reads(&mut engine, reads)
 }
 
 /// Replace every read of a bound local with its constant.
@@ -2032,7 +2020,7 @@ fn substitute_locals(
             reads.push((id, value.clone()));
         }
     });
-    redirect_const_reads(&mut engine, types, reads)
+    redirect_const_reads(&mut engine, reads)
 }
 
 /// Point each read at its constant, leaving a place read — a read that names
@@ -2041,11 +2029,7 @@ fn substitute_locals(
 /// A literal is built once, by a `let` opening the body, and its reads name
 /// that local: the caller handed over one object, and a copy per read would
 /// allocate where the original only loaded, a loop's every iteration included.
-fn redirect_const_reads(
-    engine: &mut Engine,
-    types: &TypeTable,
-    reads: Vec<(ExprId, FieldConst)>,
-) -> bool {
+fn redirect_const_reads(engine: &mut Engine, reads: Vec<(ExprId, FieldConst)>) -> bool {
     let mut built: IndexMap<*const ConstLiteral, u32> = IndexMap::default();
     let mut lets = Vec::new();
     let mut rewritten = false;
@@ -2064,7 +2048,7 @@ fn redirect_const_reads(
                 let local = if let Some(&local) = built.get(&key) {
                     local
                 } else {
-                    let Some(init) = literal.build(engine, types, type_id, span) else {
+                    let Some(init) = literal.build(engine, type_id, span) else {
                         continue;
                     };
                     let local = engine.alloc_minted_local("bound", type_id, false);
@@ -2093,12 +2077,10 @@ fn redirect_const_reads(
             | FieldConst::Float(..)
             | FieldConst::Bool(_)
             | FieldConst::Char(_)
-            | FieldConst::GlobalRef { .. } => {
-                match value.operand_at(engine, types, type_id, span) {
-                    Some(operand) => operand,
-                    None => continue,
-                }
-            }
+            | FieldConst::GlobalRef { .. } => match value.operand_at(engine, type_id, span) {
+                Some(operand) => operand,
+                None => continue,
+            },
         };
         engine.redirect_expr(read, operand);
         rewritten = true;

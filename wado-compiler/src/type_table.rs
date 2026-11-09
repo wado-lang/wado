@@ -2204,8 +2204,8 @@ impl TypeTable {
         self.single_arg_of(type_id, CompilerItem::Option)
     }
 
-    /// The case a promoted `null` of `type_id` builds: `Option`'s `None`. Of any
-    /// other type it is a bare `ref.null`, which builds no case.
+    /// The case a `null` of `type_id` builds: `Option`'s `None`. Of any other
+    /// type it is a bare `ref.null`, which builds no case.
     pub fn null_case(&self, type_id: TypeId) -> Option<u32> {
         self.as_option(type_id)
             .map(|_| self.compiler_variant_case(CompilerItem::OptionNone).3)
