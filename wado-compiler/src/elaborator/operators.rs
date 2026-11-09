@@ -15,6 +15,7 @@ use crate::type_table::TypeTable;
 use crate::unparse::binary_op_str;
 
 use super::Elaborator;
+use super::control_flow::break_values;
 use super::coercion::{
     DeferredOperator, is_literal_arithmetic, is_primitive_literal_target,
     numeric_literal_pair_order, unary_passes_expected_type,
@@ -304,12 +305,21 @@ pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> Expecte
             ast::Expr::Ident(ident) => bare_case(ident),
             _ => ExpectedTypeUse::Ignores,
         },
-        // A branching operand hands the expected type on to each tail.
+        // Each form `resolve_expr` hands the expected type on through, to what
+        // yields its value.
         ast::Expr::If(if_expr) => {
             if_tails_use(&if_expr.then_block, if_expr.else_block.as_ref(), tysys)
         }
         ast::Expr::Match(match_expr) => match_tails_use(match_expr, tysys),
         ast::Expr::Block(block) => block_tail_use(block, tysys),
+        ast::Expr::LabeledBlock(lb) => break_values(&lb.block, &lb.label)
+            .into_iter()
+            .map(|value| expected_type_use(value, tysys))
+            .fold(block_tail_use(&lb.block, tysys), ExpectedTypeUse::max),
+        ast::Expr::WithHandler(with_expr) => block_tail_use(&with_expr.body, tysys),
+        ast::Expr::Unary(unary) if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) => {
+            expected_type_use(&unary.expr, tysys)
+        }
         _ => ExpectedTypeUse::Ignores,
     }
 }

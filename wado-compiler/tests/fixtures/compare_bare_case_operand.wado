@@ -44,6 +44,28 @@ test "a bare case in a branch's tail" {
     assert (if warm { Red } else { if c == Red { Red } else { Green } }) == c;
 }
 
+interface Noop {
+    fn ping();
+}
+
+struct Quiet {}
+
+impl Noop for Quiet {
+    fn ping(&mut self) {
+        resume ();
+    }
+}
+
+test "a bare case in any form that hands the expected type on" {
+    let c: Color = Green;
+    let warm = builtin::black_box(false);
+    assert (pick: { if warm { break pick: Red; } Green }) == c;
+    assert (pick: { if warm { Red } else { break pick: Green; } }) == c;
+    let mut quiet = Quiet {};
+    assert (with Noop => &mut quiet do { Green }) == c;
+    assert &Green == &c;
+}
+
 test "a tuple literal still takes a variable's type" {
     let t: [i64, i64] = [1, 2];
     assert [1, 2] == t;
