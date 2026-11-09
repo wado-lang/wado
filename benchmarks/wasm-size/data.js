@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794184236202,
+  "lastUpdate": 1794186465367,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -75889,6 +75889,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 404954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a39194dfb23f769cf7e6df80268c1c6ddd82bad8",
+          "message": "Merge pull request #2591 from wado-lang/compiler/let-else-multi-binding\n\nperf(compiler): build no Option or tuple for a let-else's bindings",
+          "timestamp": "2026-11-09T09:49:01+09:00",
+          "tree_id": "2eb97dcfc69fac6f5e995a5d2bfa7f67e1a24560",
+          "url": "https://github.com/wado-lang/wado/commit/a39194dfb23f769cf7e6df80268c1c6ddd82bad8"
+        },
+        "date": 1794186464496,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404932,
             "unit": "bytes"
           }
         ]
