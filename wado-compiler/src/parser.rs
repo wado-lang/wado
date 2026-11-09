@@ -7041,10 +7041,11 @@ impl Parser {
     ) -> Vec<GenericParam> {
         let mut repeated: Vec<(String, Span)> = Vec::new();
         for ty in params.iter().map(|p| &p.ty).chain(return_type) {
-            for (name, span) in ty.pack_spreads() {
+            for spread in ty.pack_spreads() {
+                let name = &spread.name;
                 let in_scope = self.packs_in_scope(declared).any(|p| p == name);
                 if !in_scope && !repeated.iter().any(|(r, _)| r == name) {
-                    repeated.push((name.to_string(), span));
+                    repeated.push((name.clone(), spread.span));
                 }
             }
         }

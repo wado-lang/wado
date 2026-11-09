@@ -36,7 +36,7 @@ use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, St
 use crate::elaborator::util::reserve_float_pattern_locals;
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
-    namespace_member_alias, range_local_name, repeat_pack_name,
+    namespace_member_alias, range_local_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -419,23 +419,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bad: Vec<(String, Span)> = ty
             .pack_spreads()
             .into_iter()
-            .filter(|(name, _)| {
-                !self.binds_type_pack(name) && !self.binds_type_pack(&repeat_pack_name(name))
+            .filter(|spread| {
+                let spreads_pack = self
+                    .binder_at(spread.id, &spread.name)
+                    .is_some_and(|binder| self.tysys.type_table.borrow().is_type_pack(binder));
+                !spreads_pack && self.annotate_ctx.trait_ctx.repeat_pack(&spread.name).is_none()
             })
-            .map(|(name, span)| (name.to_string(), span))
+            .map(|spread| (spread.name.clone(), spread.span))
             .collect();
         for (name, span) in bad {
             let _ = self.emit(TypeError::SpreadOfNonPack { name, span });
         }
-    }
-
-    /// Whether `name` is a type pack the enclosing declaration declares. A
-    /// scalar parameter spread in a tuple stands for one position, not a run.
-    pub(super) fn binds_type_pack(&self, name: &str) -> bool {
-        let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(name) else {
-            return false;
-        };
-        self.tysys.type_table.borrow().is_type_pack(binder.type_id)
     }
 
     /// Report a written type position naming a type no declaration answers
@@ -459,7 +453,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reject_unresolved_heads(&mut self, ty: &ast::Type) -> bool {
         let mut reported = false;
         self.walk_type_heads(ty, &mut |scope, id, name, span, has_args| {
-            if name == "Self" || scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+            if name == "Self" || scope.binder_at(id, name).is_some() {
                 return false;
             }
             if scope.reject_non_type_decl(id, name, span) {

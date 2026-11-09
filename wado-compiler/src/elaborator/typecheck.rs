@@ -686,11 +686,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        if !table
-            .pack_names(expected)
-            .iter()
-            .all(|name| self.binds_type_pack(name))
-        {
+        let binders = self.annotate_ctx.trait_ctx.binders();
+        if !table.packs(expected).into_iter().all(|pack| {
+            binders
+                .iter()
+                .any(|binder| table.type_param_id(binder.type_id) == Some(pack))
+        }) {
             return;
         }
         let (expected_name, found_name) = (table.name(expected), table.name(actual));

@@ -4439,14 +4439,14 @@ impl Type {
         })
     }
 
-    /// Every `..X` this type spells, with where it is written. Exhaustive, as
+    /// Every `..X` this type spells. Exhaustive, as
     /// [`Self::mentioned_names`] is.
     #[must_use]
-    pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
+    pub fn pack_spreads(&self) -> Vec<&NamedType> {
         let mut out = Vec::new();
         self.for_each(&mut |ty| {
             if let Type::TypePackSpread(spread) = ty {
-                out.push((spread.name.as_str(), spread.span));
+                out.push(spread);
             }
         });
         out

@@ -25,7 +25,7 @@ use super::types::TypeError;
 use super::util;
 use super::{AbstractSelections, Elaborator};
 use crate::defs::{DefId, DefTable};
-use crate::name::{FqTraitName, FqTypeName};
+use crate::name::{FqTraitName, FqTypeName, repeat_pack_name};
 use crate::resolve::{Resolution, Resolutions};
 use crate::token::Span;
 
@@ -467,15 +467,59 @@ impl TraitContext {
             .find(|binder| binder.type_id == type_id)
     }
 
-    /// The binder standing for `owner`'s parameter `name`, written at `decl`:
-    /// the one declared there, or one bound to a site's argument for it.
-    /// Shadowed or not, the latest frame binding it wins.
-    pub(super) fn binder_for(
+    /// The binder standing for the parameter the reference `site`, written
+    /// `name`, resolves to: the one declared there, or one bound to a site's
+    /// argument for it. Shadowed or not, the latest frame binding it wins, and
+    /// a site resolving to no parameter has none.
+    pub(super) fn binder_at(
         &self,
-        decl: ast::AstId,
-        owner: Option<DefId>,
+        resolutions: &Resolutions,
+        site: ast::AstId,
         name: &str,
     ) -> Option<&BinderInScope> {
+        let Resolution::Binder(decl) = resolutions.get(site) else {
+            return None;
+        };
+        self.binder_declared_at(resolutions, decl, name)
+    }
+
+    /// The binder the projection at `site`, written `name::Assoc`, projects
+    /// through, as [`Self::binder_at`] finds one.
+    pub(super) fn projection_base_at(
+        &self,
+        resolutions: &Resolutions,
+        site: ast::AstId,
+        name: &str,
+    ) -> Option<&BinderInScope> {
+        let Resolution::Projection(decl) = resolutions.get(site) else {
+            return None;
+        };
+        self.binder_declared_at(resolutions, decl, name)
+    }
+
+    /// The pack a signature minted for `[..element]` where `element` names no
+    /// pack. Found by the element's spelling: the parser mints it, so no site
+    /// resolves to it.
+    pub(super) fn repeat_pack(&self, element: &str) -> Option<&BinderInScope> {
+        self.type_params.get(&repeat_pack_name(element))
+    }
+
+    /// The binder standing for `param`, as [`Self::binder_at`] finds one.
+    pub(super) fn binder_of(
+        &self,
+        resolutions: &Resolutions,
+        param: &ast::GenericParam,
+    ) -> Option<&BinderInScope> {
+        self.binder_declared_at(resolutions, param.id, &param.name)
+    }
+
+    fn binder_declared_at(
+        &self,
+        resolutions: &Resolutions,
+        decl: ast::AstId,
+        name: &str,
+    ) -> Option<&BinderInScope> {
+        let owner = resolutions.binder_owner(decl);
         let shadowed = self
             .shadowed
             .iter()

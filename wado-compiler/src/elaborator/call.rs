@@ -981,7 +981,10 @@ impl TypeSystem {
             };
         }
 
-        if let Some(&BinderInScope { type_id, .. }) = ctx.trait_ctx.type_params.get(prefix) {
+        if let Some(&BinderInScope { type_id, .. }) =
+            ctx.trait_ctx
+                .binder_at(&self.resolutions, ident.segments[0].id, prefix)
+        {
             return self.callee_ident_for_type_param(prefix, suffix, type_id);
         }
 

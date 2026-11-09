@@ -5217,12 +5217,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if id.segments.len() != 2 {
             return None;
         }
-        let subject = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(&id.segments[0].name)?
-            .type_id;
+        let receiver = &id.segments[0];
+        let subject = self.binder_at(receiver.id, &receiver.name)?;
         self.tysys
             .type_table
             .borrow()

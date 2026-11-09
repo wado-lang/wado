@@ -1166,7 +1166,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let params = type_params
                     .iter()
                     .map(|param| {
-                        let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
+                        let trait_ctx = &scope.annotate_ctx.trait_ctx;
+                        let binder = trait_ctx.binder_of(&scope.tysys.resolutions, param)?;
                         Some(binder.type_id)
                     })
                     .collect();
@@ -1256,21 +1257,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[ast::GenericParam],
         ty: TypeId,
     ) -> TypeId {
-        let defaulted: Vec<(String, ast::Type)> = type_params
+        let defaulted: Vec<(&ast::GenericParam, ast::Type)> = type_params
             .iter()
             .filter(|p| p.is_real_type_param())
-            .filter_map(|p| p.default.as_ref().map(|d| (p.name.clone(), d.clone())))
+            .filter_map(|p| p.default.as_ref().map(|d| (p, d.clone())))
             .collect();
         if defaulted.is_empty() {
             return ty;
         }
         let mut subst = TypeArgMap::default();
-        for (name, default_ty) in defaulted {
+        for (declared, default_ty) in defaulted {
             let &BinderInScope { type_id, .. } = self
                 .annotate_ctx
                 .trait_ctx
-                .type_params
-                .get(&name)
+                .binder_of(&self.tysys.resolutions, declared)
                 .expect("a signature's own type parameters are in scope for its defaults");
             let param = self.tysys.type_table.borrow().declared_param(type_id);
             let resolved = self.resolve_type(&default_ty);
@@ -2048,8 +2048,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 scope
                     .annotate_ctx
                     .trait_ctx
-                    .type_params
-                    .get(&tp.name)
+                    .binder_of(&scope.tysys.resolutions, tp)
                     .map(|b| (tp.name.clone(), b.type_id))
             }))
             .collect();
@@ -2082,8 +2081,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     method_scope
                         .annotate_ctx
                         .trait_ctx
-                        .type_params
-                        .get(&tp.name)
+                        .binder_of(&method_scope.tysys.resolutions, tp)
                         .map(|b| (tp.name.clone(), b.type_id))
                 })
                 .collect();
@@ -2180,8 +2178,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         scope
                             .annotate_ctx
                             .trait_ctx
-                            .type_params
-                            .get(&p.name)
+                            .binder_of(&scope.tysys.resolutions, p)
                             .map(|b| b.type_id)
                             .expect("type param registered by register_generic_params")
                     })

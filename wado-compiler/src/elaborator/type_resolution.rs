@@ -21,8 +21,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, repeat_pack_name};
-use crate::resolve::Resolution;
+use crate::name::{FqTypeName, namespace_member_alias, namespaced_name};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
@@ -113,9 +112,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(spread) => {
                 let (name, span) = (&spread.name, &spread.span);
-                let repeat = repeat_pack_name(name);
                 if let Some(&BinderInScope { type_id, .. }) =
-                    self.annotate_ctx.trait_ctx.type_params.get(&repeat)
+                    self.annotate_ctx.trait_ctx.repeat_pack(name)
                 {
                     if self.tysys.type_table.borrow().is_tuple(type_id) {
                         return type_id;
@@ -289,13 +287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
-        let names_assoc_type = namespaced.namespace == "Self"
-            || self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(&namespaced.namespace);
-        if !names_assoc_type {
+        if !self.projects(namespaced) {
             return self.resolve_namespace_member(namespaced);
         }
         let Some(target) = self.assoc_target(namespaced) else {
@@ -581,7 +573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// What a type position's name denotes where it denotes no type: `an
     /// interface` or `a trait`, both of which share the type namespace.
     fn non_type_decl_kind(&self, site: AstId, name: &str) -> Option<&'static str> {
-        if name == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+        if name == "Self" || self.binder_at(site, name).is_some() {
             return None;
         }
         if let Some(def) = self.decl_key_at(Some(site), name) {
@@ -647,10 +639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `Self::Assoc` and `T::Assoc` project through a type rather
                 // than naming a declaration, and the projection is what
                 // answers for them.
-                let ns = &namespaced.namespace;
-                let projects =
-                    ns == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(ns);
-                if !projects
+                if !self.projects(namespaced)
                     && head(
                         self,
                         namespaced.id,
@@ -843,13 +832,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The type the parameter the resolver bound `site` to stands for here,
     /// wherever the frame has moved it: a method's parameter shadowing an
     /// impl's letter is not the parameter the impl's bounds name.
-    fn binder_at(&self, site: AstId, name: &str) -> Option<TypeId> {
-        let Resolution::Binder(binder) = self.tysys.resolutions.get(site) else {
-            return None;
-        };
-        let owner = self.tysys.resolutions.binder_owner(binder);
-        let held = self.annotate_ctx.trait_ctx.binder_for(binder, owner, name)?;
+    pub(super) fn binder_at(&self, site: AstId, name: &str) -> Option<TypeId> {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        let held = trait_ctx.binder_at(&self.tysys.resolutions, site, name)?;
         Some(held.type_id)
+    }
+
+    /// Whether `namespaced` projects through `Self` or a parameter rather
+    /// than naming a namespace's member.
+    fn projects(&self, namespaced: &NamespacedGenericType) -> bool {
+        let ns = &namespaced.namespace;
+        ns == "Self"
+            || self
+                .annotate_ctx
+                .trait_ctx
+                .projection_base_at(&self.tysys.resolutions, namespaced.id, ns)
+                .is_some()
     }
 
     fn resolve_named_type_at(

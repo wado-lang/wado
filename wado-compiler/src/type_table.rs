@@ -5450,24 +5450,38 @@ impl TypeTable {
     /// The name of every type pack `id` mentions, so a caller can ask whose
     /// declaration they belong to.
     pub fn pack_names(&self, id: TypeId) -> Vec<String> {
+        self.pack_types(id)
+            .into_iter()
+            .map(|pack| self.pack_parts(pack).1)
+            .collect()
+    }
+
+    /// Which pack each type pack `id` mentions is, a mapped pack's element's
+    /// included.
+    pub fn packs(&self, id: TypeId) -> Vec<TypeParamId> {
+        self.pack_types(id)
+            .into_iter()
+            .map(|pack| self.pack_id(pack))
+            .collect()
+    }
+
+    fn pack_types(&self, id: TypeId) -> Vec<TypeId> {
         let mut out = Vec::new();
-        self.collect_pack_names(id, &mut out);
+        self.collect_packs(id, &mut out);
         out
     }
 
-    fn collect_pack_names(&self, id: TypeId, out: &mut Vec<String>) {
+    fn collect_packs(&self, id: TypeId, out: &mut Vec<TypeId>) {
         match self.get(id) {
-            ResolvedType::TypePack {
-                name, mapped_elem, ..
-            } => {
-                out.push(name.clone());
+            ResolvedType::TypePack { mapped_elem, .. } => {
+                out.push(id);
                 if let Some(elem) = mapped_elem {
-                    self.collect_pack_names(*elem, out);
+                    self.collect_packs(*elem, out);
                 }
             }
             _ => {
                 self.any_constituent(id, &mut |t| {
-                    self.collect_pack_names(t, out);
+                    self.collect_packs(t, out);
                     false
                 });
             }
