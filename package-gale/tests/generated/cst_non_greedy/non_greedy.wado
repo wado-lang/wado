@@ -3127,7 +3127,7 @@ fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
     if pos < tokens.len() && tokens[pos] < 9 {
         match tokens[pos] {
             TK_LIT_RPAREN => {
-                let alt = atn_dfa_1(tokens, pos);
+                let alt = atn_dfa_1(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_EOF => {},
@@ -3143,7 +3143,7 @@ fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
     if pos < tokens.len() && tokens[pos] < 9 {
         match tokens[pos] {
             TK_LIT_RBRACKET => {
-                let alt = atn_dfa_1(tokens, pos);
+                let alt = atn_dfa_1(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_EOF => {},
@@ -3156,8 +3156,8 @@ fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
 }
 
 fn atn_dfa_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 1 < tokens.len() && tokens[pos + 1] < 9 {
-        match tokens[pos + 1] {
+    if pos < tokens.len() && tokens[pos] < 9 {
+        match tokens[pos] {
             TK_EOF | TK_LIT_LPAREN | TK_LIT_LBRACKET => {},
             _ => {
                 return 1;

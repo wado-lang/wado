@@ -25374,25 +25374,19 @@ fn atn_decide_8(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                 if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
                     match tokens[pos + 1] {
                         TK_STAR => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
-                                        return atn_verified(8, 2, atn, tokens, pos, min_prec, 18);
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_30(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_PLUS | TK_MINUS | TK_TILDE => {
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_K_CASE | TK_K_NOT => {
-                                        let alt = atn_dfa_32(tokens, pos);
+                                        let alt = atn_dfa_31(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_31(tokens, pos);
+                                        let alt = atn_dfa_30(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -25405,56 +25399,56 @@ fn atn_decide_8(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                                         return atn_verified(8, 2, atn, tokens, pos, min_prec, 18);
                                     },
                                     TK_STAR | TK_K_AND | TK_K_BETWEEN | TK_K_CASE | TK_K_COLLATE | TK_K_FROM | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NOT | TK_K_OR | TK_K_REGEXP | TK_K_WHERE => {
-                                        let alt = atn_dfa_32(tokens, pos);
+                                        let alt = atn_dfa_31(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ALTER => {
-                                        let alt = atn_dfa_35(tokens, pos);
+                                        let alt = atn_dfa_34(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ANALYZE | TK_K_DETACH | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_SAVEPOINT | TK_K_UPDATE | TK_K_WITH => {
-                                        let alt = atn_dfa_36(tokens, pos);
+                                        let alt = atn_dfa_35(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ATTACH | TK_K_SELECT => {
-                                        let alt = atn_dfa_37(tokens, pos);
+                                        let alt = atn_dfa_36(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_BEGIN => {
-                                        let alt = atn_dfa_38(tokens, pos);
+                                        let alt = atn_dfa_37(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_COMMIT | TK_K_END => {
-                                        let alt = atn_dfa_39(tokens, pos);
+                                        let alt = atn_dfa_38(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_CREATE => {
-                                        let alt = atn_dfa_40(tokens, pos);
+                                        let alt = atn_dfa_39(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DROP => {
-                                        let alt = atn_dfa_41(tokens, pos);
+                                        let alt = atn_dfa_40(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_EXCEPT | TK_K_INTERSECT | TK_K_UNION => {
-                                        let alt = atn_dfa_42(tokens, pos);
+                                        let alt = atn_dfa_41(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_EXPLAIN => {
-                                        let alt = atn_dfa_43(tokens, pos);
+                                        let alt = atn_dfa_42(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_INSERT | TK_K_REPLACE => {
-                                        let alt = atn_dfa_44(tokens, pos);
+                                        let alt = atn_dfa_43(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ROLLBACK => {
-                                        let alt = atn_dfa_45(tokens, pos);
+                                        let alt = atn_dfa_44(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_31(tokens, pos);
+                                        let alt = atn_dfa_30(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -25497,11 +25491,11 @@ fn atn_decide_8(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                                         }
                                     },
                                     TK_K_BEGIN => {
-                                        let alt = atn_dfa_38(tokens, pos);
+                                        let alt = atn_dfa_37(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_COMMIT | TK_K_END => {
-                                        let alt = atn_dfa_39(tokens, pos);
+                                        let alt = atn_dfa_38(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_CREATE => {
@@ -25565,11 +25559,11 @@ fn atn_decide_8(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                                         }
                                     },
                                     TK_K_ISNULL | TK_K_NOTNULL | TK_K_VACUUM | TK_IDENTIFIER | TK_STRING_LITERAL => {
-                                        let alt = atn_dfa_31(tokens, pos);
+                                        let alt = atn_dfa_30(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ROLLBACK => {
-                                        let alt = atn_dfa_45(tokens, pos);
+                                        let alt = atn_dfa_44(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -25583,56 +25577,56 @@ fn atn_decide_8(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                                         return atn_verified(8, 2, atn, tokens, pos, min_prec, 18);
                                     },
                                     TK_K_ALTER => {
-                                        let alt = atn_dfa_35(tokens, pos);
+                                        let alt = atn_dfa_34(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ANALYZE | TK_K_DETACH | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_SAVEPOINT | TK_K_UPDATE | TK_K_WITH => {
-                                        let alt = atn_dfa_36(tokens, pos);
+                                        let alt = atn_dfa_35(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AND | TK_K_BETWEEN | TK_K_CASE | TK_K_COLLATE | TK_K_FROM | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NOT | TK_K_OR | TK_K_REGEXP | TK_K_WHERE => {
-                                        let alt = atn_dfa_32(tokens, pos);
+                                        let alt = atn_dfa_31(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ATTACH | TK_K_SELECT => {
-                                        let alt = atn_dfa_37(tokens, pos);
+                                        let alt = atn_dfa_36(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_BEGIN => {
-                                        let alt = atn_dfa_38(tokens, pos);
+                                        let alt = atn_dfa_37(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_COMMIT | TK_K_END => {
-                                        let alt = atn_dfa_39(tokens, pos);
+                                        let alt = atn_dfa_38(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_CREATE => {
-                                        let alt = atn_dfa_40(tokens, pos);
+                                        let alt = atn_dfa_39(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DROP => {
-                                        let alt = atn_dfa_41(tokens, pos);
+                                        let alt = atn_dfa_40(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_EXCEPT | TK_K_INTERSECT | TK_K_UNION => {
-                                        let alt = atn_dfa_42(tokens, pos);
+                                        let alt = atn_dfa_41(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_EXPLAIN => {
-                                        let alt = atn_dfa_43(tokens, pos);
+                                        let alt = atn_dfa_42(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_INSERT | TK_K_REPLACE => {
-                                        let alt = atn_dfa_44(tokens, pos);
+                                        let alt = atn_dfa_43(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ROLLBACK => {
-                                        let alt = atn_dfa_45(tokens, pos);
+                                        let alt = atn_dfa_44(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_31(tokens, pos);
+                                        let alt = atn_dfa_30(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -25646,7 +25640,7 @@ fn atn_decide_8(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                                         return atn_verified(8, 2, atn, tokens, pos, min_prec, 18);
                                     },
                                     TK_K_ISNULL | TK_K_NOTNULL | TK_IDENTIFIER | TK_STRING_LITERAL => {
-                                        let alt = atn_dfa_31(tokens, pos);
+                                        let alt = atn_dfa_30(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(8, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -25676,17 +25670,8 @@ fn atn_decide_13(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
-                                                    return atn_verified(13, 2, atn, tokens, pos, min_prec, 0);
-                                                },
-                                                TK_DOT => {
-                                                    return atn_verified(13, 2, atn, tokens, pos, min_prec, 2);
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_dfa_60(tokens, pos + 3);
+                                        if alt >= 0 { return atn_verified(13, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
                                 };
@@ -25697,17 +25682,8 @@ fn atn_decide_13(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
             },
             TK_SCOL | TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                if pos + 1 < tokens.len() {
-                    match tokens[pos + 1] {
-                        TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
-                            return atn_verified(13, 2, atn, tokens, pos, min_prec, 0);
-                        },
-                        TK_DOT => {
-                            return atn_verified(13, 2, atn, tokens, pos, min_prec, 2);
-                        },
-                        _ => {},
-                    };
-                }
+                let alt = atn_dfa_60(tokens, pos + 1);
+                if alt >= 0 { return atn_verified(13, 2, atn, tokens, pos, min_prec, alt); }
             },
         };
     }
@@ -25805,17 +25781,8 @@ fn atn_decide_104(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
-                                                    return atn_verified(104, 2, atn, tokens, pos, min_prec, 0);
-                                                },
-                                                TK_DOT => {
-                                                    return atn_verified(104, 2, atn, tokens, pos, min_prec, 1);
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_dfa_70(tokens, pos + 3);
+                                        if alt >= 0 { return atn_verified(104, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
                                 };
@@ -25826,17 +25793,8 @@ fn atn_decide_104(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
             },
             TK_SCOL | TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                if pos + 1 < tokens.len() {
-                    match tokens[pos + 1] {
-                        TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
-                            return atn_verified(104, 2, atn, tokens, pos, min_prec, 0);
-                        },
-                        TK_DOT => {
-                            return atn_verified(104, 2, atn, tokens, pos, min_prec, 1);
-                        },
-                        _ => {},
-                    };
-                }
+                let alt = atn_dfa_70(tokens, pos + 1);
+                if alt >= 0 { return atn_verified(104, 2, atn, tokens, pos, min_prec, alt); }
             },
         };
     }
@@ -25851,7 +25809,7 @@ fn atn_decide_130(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                     match tokens[pos + 1] {
                         TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                         _ => {
-                            let alt = atn_dfa_78(tokens, pos);
+                            let alt = atn_dfa_75(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(130, 2, atn, tokens, pos, min_prec, alt); }
                         },
                     };
@@ -25869,14 +25827,14 @@ fn atn_decide_130(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                 match tokens[pos + 2] {
                                     TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_77(tokens, pos);
+                                        let alt = atn_dfa_74(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(130, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_78(tokens, pos);
+                            let alt = atn_dfa_75(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(130, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_COMMA => {
@@ -25903,7 +25861,7 @@ fn atn_decide_130(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_IDENTIFIER | TK_STRING_LITERAL => {
-                                        let alt = atn_dfa_77(tokens, pos);
+                                        let alt = atn_dfa_74(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(130, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -25917,7 +25875,7 @@ fn atn_decide_130(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_K_INDEXED => {
-                                        let alt = atn_dfa_77(tokens, pos);
+                                        let alt = atn_dfa_74(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(130, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -25925,17 +25883,8 @@ fn atn_decide_130(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             }
                         },
                         TK_IDENTIFIER | TK_STRING_LITERAL => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_SCOL | TK_CLOSE_PAR | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_GROUP | TK_K_INSERT | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_UNEXPECTED_CHAR => {
-                                        return atn_verified(130, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL => {
-                                        return atn_verified(130, 2, atn, tokens, pos, min_prec, 1);
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_74(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(130, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         _ => {},
                     };
@@ -25947,13 +25896,13 @@ fn atn_decide_130(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
 }
 
 fn atn_decide_141(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
-    let alt = atn_dfa_89(tokens, pos);
+    let alt = atn_dfa_85(tokens, pos);
     if alt >= 0 { return atn_verified(141, 2, atn, tokens, pos, min_prec, alt); }
     return atn_predict_once(&ATN_SIM, 141, atn, tokens, pos, TK_EOF, min_prec);
 }
 
 fn atn_decide_146(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
-    let alt = atn_dfa_89(tokens, pos);
+    let alt = atn_dfa_85(tokens, pos);
     if alt >= 0 { return atn_verified(146, 2, atn, tokens, pos, min_prec, alt); }
     return atn_predict_once(&ATN_SIM, 146, atn, tokens, pos, TK_EOF, min_prec);
 }
@@ -25968,34 +25917,16 @@ fn atn_decide_158(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_NUMERIC_LITERAL => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CLOSE_PAR => {
-                                                    return atn_verified(158, 2, atn, tokens, pos, min_prec, 0);
-                                                },
-                                                TK_COMMA => {
-                                                    return atn_verified(158, 2, atn, tokens, pos, min_prec, 1);
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_dfa_86(tokens, pos + 3);
+                                        if alt >= 0 { return atn_verified(158, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
                                 };
                             }
                         },
                         TK_NUMERIC_LITERAL => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CLOSE_PAR => {
-                                        return atn_verified(158, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    TK_COMMA => {
-                                        return atn_verified(158, 2, atn, tokens, pos, min_prec, 1);
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_86(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(158, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         _ => {},
                     };
@@ -26088,7 +26019,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_101(tokens, pos);
+                                        let alt = atn_dfa_96(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_COMMA | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -26105,11 +26036,11 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 5);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_104(tokens, pos);
+                                        let alt = atn_dfa_99(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_101(tokens, pos);
+                                        let alt = atn_dfa_96(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_STAR => {
@@ -26185,11 +26116,11 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 5);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_104(tokens, pos);
+                                        let alt = atn_dfa_99(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_101(tokens, pos);
+                                        let alt = atn_dfa_96(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -26213,7 +26144,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         }
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_101(tokens, pos);
+                                        let alt = atn_dfa_96(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AND | TK_K_BETWEEN | TK_K_GLOB | TK_K_IS | TK_K_LIKE | TK_K_MATCH | TK_K_OR | TK_K_REGEXP => {
@@ -26277,7 +26208,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 5);
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_101(tokens, pos);
+                                        let alt = atn_dfa_96(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -26843,7 +26774,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
                     match tokens[pos + 1] {
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_165(tokens, pos);
+                            let alt = atn_dfa_159(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_TILDE | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLUMN | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DISTINCT | TK_K_EACH | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FULL | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INSTEAD | TK_K_INTO | TK_K_KEY | TK_K_NO | TK_K_NULL | TK_K_OF | TK_K_ON | TK_K_OUTER | TK_K_PLAN | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_RENAME | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROW | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNIQUE | TK_K_USING | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WITHOUT | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_EOF | TK_ERROR => {},
@@ -26896,7 +26827,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return atn_verified(168, 2, atn, tokens, pos, min_prec, 2);
                         },
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_165(tokens, pos);
+                            let alt = atn_dfa_159(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_ALTER => {
@@ -26962,7 +26893,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         }
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_EXCEPT | TK_K_INTERSECT | TK_K_UNION => {
@@ -27038,7 +26969,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 3);
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -27055,7 +26986,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 2);
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -27069,7 +27000,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 3);
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_TRANSACTION => {
@@ -27165,7 +27096,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 3);
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_QUERY => {
@@ -27280,7 +27211,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 3);
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_TO | TK_K_TRANSACTION => {
@@ -27323,7 +27254,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 3);
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -27337,7 +27268,7 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(168, 2, atn, tokens, pos, min_prec, 3);
                                     },
                                     TK_K_END => {
-                                        let alt = atn_dfa_175(tokens, pos);
+                                        let alt = atn_dfa_169(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -27379,17 +27310,8 @@ fn atn_decide_168(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
             },
             TK_SCOL | TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
-                    match tokens[pos + 1] {
-                        TK_OPEN_PAR => {
-                            return atn_verified(168, 2, atn, tokens, pos, min_prec, 4);
-                        },
-                        TK_TILDE | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLUMN | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DISTINCT | TK_K_EACH | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FULL | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INSTEAD | TK_K_INTO | TK_K_KEY | TK_K_NO | TK_K_NULL | TK_K_OF | TK_K_ON | TK_K_OUTER | TK_K_PLAN | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_RENAME | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROW | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNIQUE | TK_K_USING | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WITHOUT | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_EOF | TK_ERROR => {},
-                        _ => {
-                            return atn_verified(168, 2, atn, tokens, pos, min_prec, 2);
-                        },
-                    };
-                }
+                let alt = atn_dfa_96(tokens, pos + 1);
+                if alt >= 0 { return atn_verified(168, 2, atn, tokens, pos, min_prec, alt); }
             },
         };
     }
@@ -27403,7 +27325,7 @@ fn atn_decide_187(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
                     match tokens[pos + 1] {
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_214(tokens, pos);
+                            let alt = atn_dfa_208(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(187, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_CLOSE_PAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
@@ -27413,7 +27335,7 @@ fn atn_decide_187(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_215(tokens, pos);
+                                        let alt = atn_dfa_209(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(187, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -27427,7 +27349,7 @@ fn atn_decide_187(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_215(tokens, pos);
+                                        let alt = atn_dfa_209(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(187, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -27445,7 +27367,7 @@ fn atn_decide_187(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(187, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_215(tokens, pos);
+                                        let alt = atn_dfa_209(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(187, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -27536,23 +27458,23 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(189, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_EXCEPT | TK_K_INTERSECT => {
-                                        let alt = atn_dfa_226(tokens, pos);
+                                        let alt = atn_dfa_220(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_FROM => {
-                                        let alt = atn_dfa_227(tokens, pos);
+                                        let alt = atn_dfa_221(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_GROUP | TK_K_ORDER => {
-                                        let alt = atn_dfa_228(tokens, pos);
+                                        let alt = atn_dfa_222(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_LIMIT | TK_K_WHERE => {
-                                        let alt = atn_dfa_229(tokens, pos);
+                                        let alt = atn_dfa_223(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_UNION => {
-                                        let alt = atn_dfa_230(tokens, pos);
+                                        let alt = atn_dfa_224(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_DOT | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -27577,7 +27499,7 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                     },
                                     TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_232(tokens, pos);
+                                        let alt = atn_dfa_226(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -27590,39 +27512,39 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(189, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_235(tokens, pos);
+                                        let alt = atn_dfa_229(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AND | TK_K_BETWEEN | TK_K_GLOB | TK_K_IS | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_OR | TK_K_REGEXP | TK_K_WHERE => {
-                                        let alt = atn_dfa_229(tokens, pos);
+                                        let alt = atn_dfa_223(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AS => {
-                                        let alt = atn_dfa_236(tokens, pos);
+                                        let alt = atn_dfa_230(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_COLLATE | TK_K_FROM | TK_K_IN => {
-                                        let alt = atn_dfa_227(tokens, pos);
+                                        let alt = atn_dfa_221(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_EXCEPT | TK_K_INTERSECT => {
-                                        let alt = atn_dfa_226(tokens, pos);
+                                        let alt = atn_dfa_220(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_GROUP | TK_K_ORDER => {
-                                        let alt = atn_dfa_228(tokens, pos);
+                                        let alt = atn_dfa_222(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ISNULL | TK_K_NOTNULL => {
-                                        let alt = atn_dfa_237(tokens, pos);
+                                        let alt = atn_dfa_231(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_NOT => {
-                                        let alt = atn_dfa_238(tokens, pos);
+                                        let alt = atn_dfa_232(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_UNION => {
-                                        let alt = atn_dfa_230(tokens, pos);
+                                        let alt = atn_dfa_224(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_IDENTIFIER | TK_STRING_LITERAL => {
@@ -27652,7 +27574,7 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(189, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_235(tokens, pos);
+                                        let alt = atn_dfa_229(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AND | TK_K_BETWEEN | TK_K_GLOB | TK_K_IS | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_OR | TK_K_REGEXP | TK_K_WHERE => {
@@ -27783,14 +27705,8 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(189, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_OPEN_PAR => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CLOSE_PAR | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
-                                                    return atn_verified(189, 2, atn, tokens, pos, min_prec, 0);
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_dfa_245(tokens, pos + 3);
+                                        if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AND | TK_K_BETWEEN | TK_K_GLOB | TK_K_IS | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_OR | TK_K_REGEXP | TK_K_WHERE => {
                                         if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
@@ -27858,7 +27774,7 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         }
                                     },
                                     TK_K_ISNULL | TK_K_NOTNULL => {
-                                        let alt = atn_dfa_232(tokens, pos);
+                                        let alt = atn_dfa_226(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_NOT => {
@@ -27914,7 +27830,7 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(189, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_235(tokens, pos);
+                                        let alt = atn_dfa_229(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AND | TK_K_BETWEEN | TK_K_GLOB | TK_K_IS | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_OR | TK_K_REGEXP | TK_K_WHERE => {
@@ -27996,7 +27912,7 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         }
                                     },
                                     TK_K_NOT => {
-                                        let alt = atn_dfa_238(tokens, pos);
+                                        let alt = atn_dfa_232(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_UNION => {
@@ -28179,35 +28095,35 @@ fn atn_decide_189(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(189, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_235(tokens, pos);
+                                        let alt = atn_dfa_229(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AND | TK_K_BETWEEN | TK_K_GLOB | TK_K_IS | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_OR | TK_K_REGEXP => {
-                                        let alt = atn_dfa_229(tokens, pos);
+                                        let alt = atn_dfa_223(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AS => {
-                                        let alt = atn_dfa_236(tokens, pos);
+                                        let alt = atn_dfa_230(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_COLLATE | TK_K_FROM | TK_K_IN => {
-                                        let alt = atn_dfa_227(tokens, pos);
+                                        let alt = atn_dfa_221(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_EXCEPT | TK_K_INTERSECT => {
-                                        let alt = atn_dfa_226(tokens, pos);
+                                        let alt = atn_dfa_220(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_GROUP => {
-                                        let alt = atn_dfa_228(tokens, pos);
+                                        let alt = atn_dfa_222(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ISNULL | TK_K_NOTNULL => {
-                                        let alt = atn_dfa_237(tokens, pos);
+                                        let alt = atn_dfa_231(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_NOT => {
-                                        let alt = atn_dfa_238(tokens, pos);
+                                        let alt = atn_dfa_232(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(189, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_ORDER => {
@@ -28481,7 +28397,7 @@ fn atn_decide_229(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_305(tokens, pos);
+                                        let alt = atn_dfa_299(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(229, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_COMMA | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -28495,7 +28411,7 @@ fn atn_decide_229(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_305(tokens, pos);
+                                        let alt = atn_dfa_299(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(229, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_COMMA | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -28513,7 +28429,7 @@ fn atn_decide_229(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(229, 2, atn, tokens, pos, min_prec, 2);
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_305(tokens, pos);
+                                        let alt = atn_dfa_299(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(229, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -28533,7 +28449,7 @@ fn atn_decide_229(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
                     match tokens[pos + 1] {
                         TK_DOT => {
-                            let alt = atn_dfa_310(tokens, pos);
+                            let alt = atn_dfa_304(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(229, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_EOF | TK_ERROR => {},
@@ -28551,7 +28467,7 @@ fn atn_decide_229(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return atn_verified(229, 2, atn, tokens, pos, min_prec, 2);
                         },
                         TK_DOT => {
-                            let alt = atn_dfa_310(tokens, pos);
+                            let alt = atn_dfa_304(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(229, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         _ => {},
@@ -28613,11 +28529,11 @@ fn atn_decide_232(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(232, 2, atn, tokens, pos, min_prec, 2);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_320(tokens, pos);
+                                        let alt = atn_dfa_314(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(232, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_318(tokens, pos);
+                                        let alt = atn_dfa_312(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(232, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AS => {
@@ -28732,11 +28648,11 @@ fn atn_decide_232(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(232, 2, atn, tokens, pos, min_prec, 2);
                                     },
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_320(tokens, pos);
+                                        let alt = atn_dfa_314(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(232, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_318(tokens, pos);
+                                        let alt = atn_dfa_312(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(232, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -28760,7 +28676,7 @@ fn atn_decide_232(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         }
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_318(tokens, pos);
+                                        let alt = atn_dfa_312(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(232, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_AS => {
@@ -28879,7 +28795,7 @@ fn atn_decide_232(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(232, 2, atn, tokens, pos, min_prec, 2);
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_318(tokens, pos);
+                                        let alt = atn_dfa_312(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(232, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -28901,7 +28817,7 @@ fn atn_decide_232(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                 match tokens[pos + 2] {
                                     TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_318(tokens, pos);
+                                        let alt = atn_dfa_312(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(232, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -28954,7 +28870,7 @@ fn atn_decide_243(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                     match tokens[pos + 1] {
                         TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                         _ => {
-                            let alt = atn_dfa_349(tokens, pos);
+                            let alt = atn_dfa_343(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(243, 2, atn, tokens, pos, min_prec, alt); }
                         },
                     };
@@ -28969,14 +28885,14 @@ fn atn_decide_243(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                 match tokens[pos + 2] {
                                     TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_348(tokens, pos);
+                                        let alt = atn_dfa_342(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(243, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_349(tokens, pos);
+                            let alt = atn_dfa_343(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(243, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_CLOSE_PAR => {
@@ -29006,7 +28922,7 @@ fn atn_decide_243(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_IDENTIFIER | TK_STRING_LITERAL => {
-                                        let alt = atn_dfa_348(tokens, pos);
+                                        let alt = atn_dfa_342(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(243, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -29020,7 +28936,7 @@ fn atn_decide_243(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_K_INDEXED => {
-                                        let alt = atn_dfa_348(tokens, pos);
+                                        let alt = atn_dfa_342(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(243, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -29028,17 +28944,8 @@ fn atn_decide_243(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             }
                         },
                         TK_IDENTIFIER | TK_STRING_LITERAL => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CLOSE_PAR => {
-                                        return atn_verified(243, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL => {
-                                        return atn_verified(243, 2, atn, tokens, pos, min_prec, 1);
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_342(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(243, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         _ => {},
                     };
@@ -29057,7 +28964,7 @@ fn atn_decide_261(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                     match tokens[pos + 1] {
                         TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                         _ => {
-                            let alt = atn_dfa_360(tokens, pos);
+                            let alt = atn_dfa_353(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(261, 2, atn, tokens, pos, min_prec, alt); }
                         },
                     };
@@ -29075,14 +28982,14 @@ fn atn_decide_261(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                 match tokens[pos + 2] {
                                     TK_SCOL | TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_359(tokens, pos);
+                                        let alt = atn_dfa_352(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(261, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_360(tokens, pos);
+                            let alt = atn_dfa_353(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(261, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_COMMA => {
@@ -29109,7 +29016,7 @@ fn atn_decide_261(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_IDENTIFIER | TK_STRING_LITERAL => {
-                                        let alt = atn_dfa_359(tokens, pos);
+                                        let alt = atn_dfa_352(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(261, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -29123,7 +29030,7 @@ fn atn_decide_261(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_K_INDEXED => {
-                                        let alt = atn_dfa_359(tokens, pos);
+                                        let alt = atn_dfa_352(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(261, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -29131,17 +29038,8 @@ fn atn_decide_261(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             }
                         },
                         TK_IDENTIFIER | TK_STRING_LITERAL => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_GROUP | TK_K_INSERT | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_UNEXPECTED_CHAR => {
-                                        return atn_verified(261, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL => {
-                                        return atn_verified(261, 2, atn, tokens, pos, min_prec, 1);
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_352(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(261, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         _ => {},
                     };
@@ -29159,7 +29057,7 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
                     match tokens[pos + 1] {
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_214(tokens, pos);
+                            let alt = atn_dfa_208(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
@@ -29169,7 +29067,7 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_370(tokens, pos);
+                                        let alt = atn_dfa_362(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_COMMA | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -29183,7 +29081,7 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_370(tokens, pos);
+                                        let alt = atn_dfa_362(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_COMMA | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -29201,7 +29099,7 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_CLOSE_PAR => {
-                                        let alt = atn_dfa_370(tokens, pos);
+                                        let alt = atn_dfa_362(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     _ => {},
@@ -29221,7 +29119,7 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                         },
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_398(tokens, pos);
+                            let alt = atn_dfa_245(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_AND => {
@@ -29234,16 +29132,16 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 1);
                                     },
                                     TK_K_CASE => {
-                                        let alt = atn_dfa_379(tokens, pos);
+                                        let alt = atn_dfa_371(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_380(tokens, pos);
+                                        let alt = atn_dfa_372(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_K_WHEN | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_370(tokens, pos);
+                                        let alt = atn_dfa_362(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -29259,33 +29157,24 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 1);
                                     },
                                     TK_K_CASE => {
-                                        let alt = atn_dfa_383(tokens, pos);
+                                        let alt = atn_dfa_375(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_384(tokens, pos);
+                                        let alt = atn_dfa_376(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_K_WHEN | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_382(tokens, pos);
+                                        let alt = atn_dfa_374(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_K_CASE | TK_K_IS | TK_K_NOT | TK_K_OR | TK_K_WHEN => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_DOT | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
-                                        return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    TK_CLOSE_PAR | TK_COMMA => {
-                                        return atn_verified(275, 2, atn, tokens, pos, min_prec, 1);
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_375(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_COLLATE => {
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
@@ -29297,12 +29186,12 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 1);
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_388(tokens, pos);
+                                        let alt = atn_dfa_380(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_TILDE | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_K_WHEN | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_387(tokens, pos);
+                                        let alt = atn_dfa_379(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -29331,16 +29220,16 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 1);
                                     },
                                     TK_K_CASE => {
-                                        let alt = atn_dfa_379(tokens, pos);
+                                        let alt = atn_dfa_371(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_391(tokens, pos);
+                                        let alt = atn_dfa_383(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_K_WHEN | TK_IDENTIFIER | TK_STRING_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_390(tokens, pos);
+                                        let alt = atn_dfa_382(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -29396,39 +29285,39 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                         },
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_398(tokens, pos);
+                            let alt = atn_dfa_245(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_AND => {
-                            let alt = atn_dfa_381(tokens, pos);
+                            let alt = atn_dfa_373(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_BETWEEN => {
-                            let alt = atn_dfa_385(tokens, pos);
+                            let alt = atn_dfa_377(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_COLLATE => {
-                            let alt = atn_dfa_389(tokens, pos);
+                            let alt = atn_dfa_381(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP => {
-                            let alt = atn_dfa_392(tokens, pos);
+                            let alt = atn_dfa_384(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IN => {
-                            let alt = atn_dfa_393(tokens, pos);
+                            let alt = atn_dfa_385(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IS | TK_K_OR => {
-                            let alt = atn_dfa_394(tokens, pos);
+                            let alt = atn_dfa_386(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_ISNULL | TK_K_NOTNULL => {
-                            let alt = atn_dfa_395(tokens, pos);
+                            let alt = atn_dfa_379(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_NOT => {
-                            let alt = atn_dfa_396(tokens, pos);
+                            let alt = atn_dfa_387(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_SCOL | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -29448,54 +29337,54 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_210(tokens, pos);
+                                        let alt = atn_dfa_204(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_CLOSE_PAR | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_CASE | TK_K_DISTINCT | TK_K_NOT => {
-                                        let alt = atn_dfa_376(tokens, pos);
+                                        let alt = atn_dfa_368(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_DOT | TK_COMMA | TK_ASSIGN | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_SELECT | TK_K_VALUES | TK_K_WITH | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_375(tokens, pos);
+                                        let alt = atn_dfa_367(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_K_AND => {
-                            let alt = atn_dfa_381(tokens, pos);
+                            let alt = atn_dfa_373(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_BETWEEN => {
-                            let alt = atn_dfa_385(tokens, pos);
+                            let alt = atn_dfa_377(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_COLLATE => {
-                            let alt = atn_dfa_389(tokens, pos);
+                            let alt = atn_dfa_381(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP => {
-                            let alt = atn_dfa_392(tokens, pos);
+                            let alt = atn_dfa_384(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IN => {
-                            let alt = atn_dfa_393(tokens, pos);
+                            let alt = atn_dfa_385(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IS | TK_K_OR => {
-                            let alt = atn_dfa_394(tokens, pos);
+                            let alt = atn_dfa_386(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_ISNULL | TK_K_NOTNULL => {
-                            let alt = atn_dfa_395(tokens, pos);
+                            let alt = atn_dfa_379(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_NOT => {
-                            let alt = atn_dfa_396(tokens, pos);
+                            let alt = atn_dfa_387(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_SCOL | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -29512,7 +29401,7 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                         },
                         TK_OPEN_PAR => {
-                            let alt = atn_dfa_398(tokens, pos);
+                            let alt = atn_dfa_245(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_AND => {
@@ -29522,16 +29411,16 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_CASE => {
-                                        let alt = atn_dfa_379(tokens, pos);
+                                        let alt = atn_dfa_371(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_380(tokens, pos);
+                                        let alt = atn_dfa_372(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_370(tokens, pos);
+                                        let alt = atn_dfa_362(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -29544,30 +29433,24 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_CASE => {
-                                        let alt = atn_dfa_383(tokens, pos);
+                                        let alt = atn_dfa_375(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_384(tokens, pos);
+                                        let alt = atn_dfa_376(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_382(tokens, pos);
+                                        let alt = atn_dfa_374(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_K_CASE | TK_K_IS | TK_K_NOT | TK_K_OR => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
-                                        return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_dfa_371(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_COLLATE => {
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
@@ -29576,29 +29459,20 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_388(tokens, pos);
+                                        let alt = atn_dfa_380(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_TILDE | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_387(tokens, pos);
+                                        let alt = atn_dfa_379(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_K_DEFAULT => {
-                            if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-                                match tokens[pos + 2] {
-                                    TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
-                                        return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    TK_SCOL | TK_OPEN_PAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_BIND_PARAMETER | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
-                                    _ => {
-                                        return atn_verified(275, 2, atn, tokens, pos, min_prec, 1);
-                                    },
-                                };
-                            }
+                            let alt = atn_dfa_372(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP => {
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
@@ -29607,16 +29481,16 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_CASE => {
-                                        let alt = atn_dfa_379(tokens, pos);
+                                        let alt = atn_dfa_371(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_K_DEFAULT => {
-                                        let alt = atn_dfa_391(tokens, pos);
+                                        let alt = atn_dfa_383(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_OPEN_PAR | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_IDENTIFIER | TK_STRING_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_390(tokens, pos);
+                                        let alt = atn_dfa_382(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
@@ -29634,17 +29508,8 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                         },
                         TK_SCOL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                         _ => {
-                            if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-                                match tokens[pos + 2] {
-                                    TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
-                                        return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
-                                    },
-                                    TK_SCOL | TK_OPEN_PAR | TK_TILDE | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
-                                    _ => {
-                                        return atn_verified(275, 2, atn, tokens, pos, min_prec, 1);
-                                    },
-                                };
-                            }
+                            let alt = atn_dfa_362(tokens, pos + 2);
+                            if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                     };
                 }
@@ -29659,54 +29524,54 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_210(tokens, pos);
+                                        let alt = atn_dfa_204(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_CLOSE_PAR | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_CASE | TK_K_DISTINCT | TK_K_NOT => {
-                                        let alt = atn_dfa_376(tokens, pos);
+                                        let alt = atn_dfa_368(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_DOT | TK_COMMA | TK_ASSIGN | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_ABORT | TK_K_FAIL | TK_K_IGNORE | TK_K_ROLLBACK | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_375(tokens, pos);
+                                        let alt = atn_dfa_367(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_K_AND => {
-                            let alt = atn_dfa_381(tokens, pos);
+                            let alt = atn_dfa_373(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_BETWEEN => {
-                            let alt = atn_dfa_385(tokens, pos);
+                            let alt = atn_dfa_377(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_COLLATE => {
-                            let alt = atn_dfa_389(tokens, pos);
+                            let alt = atn_dfa_381(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP => {
-                            let alt = atn_dfa_392(tokens, pos);
+                            let alt = atn_dfa_384(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IN => {
-                            let alt = atn_dfa_393(tokens, pos);
+                            let alt = atn_dfa_385(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IS | TK_K_OR => {
-                            let alt = atn_dfa_394(tokens, pos);
+                            let alt = atn_dfa_386(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_ISNULL | TK_K_NOTNULL => {
-                            let alt = atn_dfa_395(tokens, pos);
+                            let alt = atn_dfa_379(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_NOT => {
-                            let alt = atn_dfa_396(tokens, pos);
+                            let alt = atn_dfa_387(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_SCOL | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -29727,54 +29592,54 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
                                 match tokens[pos + 2] {
                                     TK_OPEN_PAR => {
-                                        let alt = atn_dfa_210(tokens, pos);
+                                        let alt = atn_dfa_204(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_CLOSE_PAR | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                                         return atn_verified(275, 2, atn, tokens, pos, min_prec, 0);
                                     },
                                     TK_K_CASE | TK_K_DISTINCT | TK_K_NOT => {
-                                        let alt = atn_dfa_376(tokens, pos);
+                                        let alt = atn_dfa_368(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                     TK_SCOL | TK_DOT | TK_COMMA | TK_ASSIGN | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                                     _ => {
-                                        let alt = atn_dfa_375(tokens, pos);
+                                        let alt = atn_dfa_367(tokens, pos + 3);
                                         if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                                     },
                                 };
                             }
                         },
                         TK_K_AND => {
-                            let alt = atn_dfa_381(tokens, pos);
+                            let alt = atn_dfa_373(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_BETWEEN => {
-                            let alt = atn_dfa_385(tokens, pos);
+                            let alt = atn_dfa_377(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_COLLATE => {
-                            let alt = atn_dfa_389(tokens, pos);
+                            let alt = atn_dfa_381(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP => {
-                            let alt = atn_dfa_392(tokens, pos);
+                            let alt = atn_dfa_384(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IN => {
-                            let alt = atn_dfa_393(tokens, pos);
+                            let alt = atn_dfa_385(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_IS | TK_K_OR => {
-                            let alt = atn_dfa_394(tokens, pos);
+                            let alt = atn_dfa_386(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_ISNULL | TK_K_NOTNULL => {
-                            let alt = atn_dfa_395(tokens, pos);
+                            let alt = atn_dfa_379(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_K_NOT => {
-                            let alt = atn_dfa_396(tokens, pos);
+                            let alt = atn_dfa_387(tokens, pos + 2);
                             if alt >= 0 { return atn_verified(275, 2, atn, tokens, pos, min_prec, alt); }
                         },
                         TK_SCOL | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
@@ -29789,9 +29654,9 @@ fn atn_decide_275(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
     return atn_predict_once(&ATN_SIM, 275, atn, tokens, pos, TK_EOF, min_prec);
 }
 
-fn atn_dfa_31(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_30(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29801,9 +29666,9 @@ fn atn_dfa_31(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_32(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_31(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29813,9 +29678,9 @@ fn atn_dfa_32(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_35(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_34(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_TABLE | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29825,9 +29690,9 @@ fn atn_dfa_35(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_36(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_35(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_AS | TK_K_BETWEEN | TK_K_COLLATE | TK_K_EXCEPT | TK_K_FROM | TK_K_GLOB | TK_K_GROUP | TK_K_IN | TK_K_INTERSECT | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_ORDER | TK_K_REGEXP | TK_K_UNION | TK_K_WHERE | TK_IDENTIFIER | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_STRING_LITERAL | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_EOF | TK_ERROR => {},
             _ => {
                 return 18;
@@ -29837,9 +29702,9 @@ fn atn_dfa_36(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_37(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_36(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_AS | TK_K_BETWEEN | TK_K_COLLATE | TK_K_EXCEPT | TK_K_FROM | TK_K_GLOB | TK_K_GROUP | TK_K_IN | TK_K_INTERSECT | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_ORDER | TK_K_REGEXP | TK_K_UNION | TK_K_WHERE | TK_IDENTIFIER | TK_STRING_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_EOF | TK_ERROR => {},
             _ => {
                 return 18;
@@ -29849,9 +29714,9 @@ fn atn_dfa_37(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_38(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_37(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCLUSIVE | TK_K_EXPLAIN | TK_K_IMMEDIATE | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_TRANSACTION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29861,9 +29726,9 @@ fn atn_dfa_38(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_39(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_38(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_TRANSACTION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29873,9 +29738,9 @@ fn atn_dfa_39(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_40(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_39(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INDEX | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_TRIGGER | TK_K_UNIQUE | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29885,9 +29750,9 @@ fn atn_dfa_40(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_41(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_40(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INDEX | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_TABLE | TK_K_TRIGGER | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29897,9 +29762,9 @@ fn atn_dfa_41(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_42(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_41(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_UPDATE | TK_K_VACUUM | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29909,9 +29774,9 @@ fn atn_dfa_42(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_43(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_42(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_QUERY | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29921,9 +29786,9 @@ fn atn_dfa_43(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_44(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_43(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_INTO | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29933,9 +29798,9 @@ fn atn_dfa_44(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_45(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_44(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_TO | TK_K_TRANSACTION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 18;
             },
@@ -29945,9 +29810,39 @@ fn atn_dfa_45(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_77(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_60(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
+                return 0;
+            },
+            TK_DOT => {
+                return 2;
+            },
+            _ => {},
+        };
+    }
+    return -1;
+}
+
+fn atn_dfa_70(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_UNEXPECTED_CHAR => {
+                return 0;
+            },
+            TK_DOT => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return -1;
+}
+
+fn atn_dfa_74(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_CLOSE_PAR | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_GROUP | TK_K_INSERT | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 0;
             },
@@ -29960,11 +29855,11 @@ fn atn_dfa_77(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_78(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() {
-        match tokens[pos + 2] {
+fn atn_dfa_75(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR => {
-                let alt = atn_dfa_77(tokens, pos);
+                let alt = atn_dfa_74(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             _ => {},
@@ -29973,7 +29868,7 @@ fn atn_dfa_78(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_89(tokens: &Array<i32>, pos: i32) -> i32 {
+fn atn_dfa_85(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
             TK_K_OR => {
@@ -30004,9 +29899,24 @@ fn atn_dfa_89(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_101(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_86(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_CLOSE_PAR => {
+                return 0;
+            },
+            TK_COMMA => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return -1;
+}
+
+fn atn_dfa_96(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_OPEN_PAR => {
                 return 4;
             },
@@ -30019,9 +29929,9 @@ fn atn_dfa_101(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_104(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_99(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_STAR => {
                 return 5;
             },
@@ -30031,9 +29941,9 @@ fn atn_dfa_104(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_165(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() {
-        match tokens[pos + 2] {
+fn atn_dfa_159(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_STAR => {
                 return 4;
             },
@@ -30043,9 +29953,9 @@ fn atn_dfa_165(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_175(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_169(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_PLUS | TK_MINUS | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_BETWEEN | TK_K_COLLATE | TK_K_CROSS | TK_K_DESC | TK_K_ELSE | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_FROM | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IN | TK_K_INNER | TK_K_INTERSECT | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NOT | TK_K_NOTNULL | TK_K_OFFSET | TK_K_OR | TK_K_ORDER | TK_K_REGEXP | TK_K_THEN | TK_K_UNION | TK_K_WHEN | TK_K_WHERE | TK_IDENTIFIER | TK_STRING_LITERAL => {
                 return 3;
             },
@@ -30055,9 +29965,9 @@ fn atn_dfa_175(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_210(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_204(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                 return 0;
             },
@@ -30067,19 +29977,19 @@ fn atn_dfa_210(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_214(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
+fn atn_dfa_208(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_OPEN_PAR => {
-                let alt = atn_dfa_210(tokens, pos);
+                let alt = atn_dfa_204(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                 return 0;
             },
             TK_K_CASE | TK_K_NOT | TK_K_SELECT => {
-                if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-                    match tokens[pos + 3] {
+                if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
+                    match tokens[pos + 1] {
                         TK_SCOL | TK_CLOSE_PAR | TK_COMMA | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                         _ => {
                             return 0;
@@ -30088,8 +29998,8 @@ fn atn_dfa_214(tokens: &Array<i32>, pos: i32) -> i32 {
                 }
             },
             TK_K_WITH => {
-                if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-                    match tokens[pos + 3] {
+                if pos + 1 < tokens.len() && tokens[pos + 1] < 159 {
+                    match tokens[pos + 1] {
                         TK_SCOL | TK_CLOSE_PAR | TK_COMMA | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
                         _ => {
                             return 0;
@@ -30099,8 +30009,8 @@ fn atn_dfa_214(tokens: &Array<i32>, pos: i32) -> i32 {
             },
             TK_SCOL | TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                if pos + 3 < tokens.len() {
-                    match tokens[pos + 3] {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
                         TK_DOT | TK_OPEN_PAR | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP => {
                             return 0;
                         },
@@ -30113,9 +30023,9 @@ fn atn_dfa_214(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_215(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_209(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT => {
                 return 1;
             },
@@ -30128,9 +30038,9 @@ fn atn_dfa_215(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_226(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_220(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP => {
                 return 1;
             },
@@ -30143,9 +30053,9 @@ fn atn_dfa_226(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_227(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_221(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 1;
             },
@@ -30158,9 +30068,9 @@ fn atn_dfa_227(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_228(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_222(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP => {
                 return 1;
             },
@@ -30173,9 +30083,9 @@ fn atn_dfa_228(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_229(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_223(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 1;
             },
@@ -30188,9 +30098,9 @@ fn atn_dfa_229(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_230(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_224(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP => {
                 return 1;
             },
@@ -30203,9 +30113,9 @@ fn atn_dfa_230(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_232(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_226(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_K_AS | TK_K_EXCEPT | TK_K_FROM | TK_K_GROUP | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_UNION | TK_K_WHERE | TK_IDENTIFIER | TK_STRING_LITERAL => {
                 return 0;
             },
@@ -30215,9 +30125,9 @@ fn atn_dfa_232(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_235(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_229(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_STAR => {
                 return 0;
             },
@@ -30227,9 +30137,9 @@ fn atn_dfa_235(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_236(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_230(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP => {
                 return 1;
             },
@@ -30242,9 +30152,9 @@ fn atn_dfa_236(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_237(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_231(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR => {
                 return 1;
             },
@@ -30257,9 +30167,9 @@ fn atn_dfa_237(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_238(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_232(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_SCOL | TK_K_BETWEEN | TK_K_GLOB | TK_K_IN | TK_K_LIKE | TK_K_MATCH | TK_K_NULL | TK_K_REGEXP | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
                 return 1;
@@ -30269,9 +30179,21 @@ fn atn_dfa_238(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_305(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_245(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_CLOSE_PAR | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return -1;
+}
+
+fn atn_dfa_299(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_OPEN_PAR | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ATTACH | TK_K_BEGIN | TK_K_BETWEEN | TK_K_COLLATE | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_FROM | TK_K_GLOB | TK_K_GROUP | TK_K_IN | TK_K_INSERT | TK_K_INTERSECT | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_ORDER | TK_K_PRAGMA | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_IDENTIFIER | TK_STRING_LITERAL | TK_UNEXPECTED_CHAR => {
                 return 2;
             },
@@ -30281,9 +30203,9 @@ fn atn_dfa_305(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_310(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
+fn atn_dfa_304(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_STAR => {
                 return 1;
             },
@@ -30296,9 +30218,9 @@ fn atn_dfa_310(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_318(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_312(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_CLOSE_PAR | TK_COMMA | TK_K_ALTER | TK_K_ANALYZE | TK_K_AS | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_CROSS | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_GROUP | TK_K_INDEXED | TK_K_INNER | TK_K_INSERT | TK_K_INTERSECT | TK_K_JOIN | TK_K_LEFT | TK_K_LIMIT | TK_K_NATURAL | TK_K_NOT | TK_K_ON | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_IDENTIFIER | TK_STRING_LITERAL | TK_UNEXPECTED_CHAR => {
                 return 0;
             },
@@ -30308,9 +30230,9 @@ fn atn_dfa_318(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_320(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_314(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR => {
                 return 2;
             },
@@ -30320,9 +30242,9 @@ fn atn_dfa_320(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_348(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_342(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR => {
                 return 0;
             },
@@ -30335,11 +30257,11 @@ fn atn_dfa_348(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_349(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() {
-        match tokens[pos + 2] {
+fn atn_dfa_343(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR => {
-                let alt = atn_dfa_348(tokens, pos);
+                let alt = atn_dfa_342(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             _ => {},
@@ -30348,9 +30270,9 @@ fn atn_dfa_349(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_359(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_352(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_SCOL | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_GROUP | TK_K_INSERT | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_UNEXPECTED_CHAR => {
                 return 0;
             },
@@ -30363,11 +30285,11 @@ fn atn_dfa_359(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_360(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() {
-        match tokens[pos + 2] {
+fn atn_dfa_353(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR => {
-                let alt = atn_dfa_359(tokens, pos);
+                let alt = atn_dfa_352(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             _ => {},
@@ -30376,9 +30298,9 @@ fn atn_dfa_360(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_370(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_362(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30391,9 +30313,9 @@ fn atn_dfa_370(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_375(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_367(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_OPEN_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP => {
                 return 0;
             },
@@ -30403,9 +30325,9 @@ fn atn_dfa_375(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_376(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_368(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_SCOL | TK_CLOSE_PAR | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
                 return 0;
@@ -30415,9 +30337,9 @@ fn atn_dfa_376(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_378(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_370(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_TILDE | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                 return 0;
             },
@@ -30427,9 +30349,9 @@ fn atn_dfa_378(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_379(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_371(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                 return 0;
             },
@@ -30439,9 +30361,9 @@ fn atn_dfa_379(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_380(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_372(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30454,11 +30376,11 @@ fn atn_dfa_380(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_381(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
+fn atn_dfa_373(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_OPEN_PAR => {
-                let alt = atn_dfa_378(tokens, pos);
+                let alt = atn_dfa_370(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_CLOSE_PAR | TK_COMMA => {
@@ -30468,16 +30390,16 @@ fn atn_dfa_381(tokens: &Array<i32>, pos: i32) -> i32 {
                 return 0;
             },
             TK_K_CASE | TK_K_NOT => {
-                let alt = atn_dfa_379(tokens, pos);
+                let alt = atn_dfa_371(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_K_DEFAULT => {
-                let alt = atn_dfa_380(tokens, pos);
+                let alt = atn_dfa_372(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_SCOL | TK_DOT | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                let alt = atn_dfa_370(tokens, pos);
+                let alt = atn_dfa_362(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
         };
@@ -30485,9 +30407,9 @@ fn atn_dfa_381(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_382(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_374(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30500,9 +30422,9 @@ fn atn_dfa_382(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_383(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() {
-        match tokens[pos + 3] {
+fn atn_dfa_375(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_DOT | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
                 return 0;
             },
@@ -30515,9 +30437,9 @@ fn atn_dfa_383(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_384(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_376(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30530,11 +30452,11 @@ fn atn_dfa_384(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_385(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
+fn atn_dfa_377(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_OPEN_PAR => {
-                let alt = atn_dfa_378(tokens, pos);
+                let alt = atn_dfa_370(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_CLOSE_PAR | TK_COMMA => {
@@ -30544,16 +30466,16 @@ fn atn_dfa_385(tokens: &Array<i32>, pos: i32) -> i32 {
                 return 0;
             },
             TK_K_CASE | TK_K_NOT => {
-                let alt = atn_dfa_383(tokens, pos);
+                let alt = atn_dfa_375(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_K_DEFAULT => {
-                let alt = atn_dfa_384(tokens, pos);
+                let alt = atn_dfa_376(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_SCOL | TK_DOT | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                let alt = atn_dfa_382(tokens, pos);
+                let alt = atn_dfa_374(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
         };
@@ -30561,9 +30483,9 @@ fn atn_dfa_385(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_387(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_379(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30576,9 +30498,9 @@ fn atn_dfa_387(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_388(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_380(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30591,12 +30513,12 @@ fn atn_dfa_388(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_389(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
+fn atn_dfa_381(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_OPEN_PAR => {
-                if pos + 3 < tokens.len() {
-                    match tokens[pos + 3] {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
                         TK_PLUS | TK_MINUS | TK_NUMERIC_LITERAL => {
                             return 1;
                         },
@@ -30608,12 +30530,12 @@ fn atn_dfa_389(tokens: &Array<i32>, pos: i32) -> i32 {
                 return 1;
             },
             TK_K_DEFAULT => {
-                let alt = atn_dfa_388(tokens, pos);
+                let alt = atn_dfa_380(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_SCOL | TK_DOT | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                let alt = atn_dfa_387(tokens, pos);
+                let alt = atn_dfa_379(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
         };
@@ -30621,9 +30543,9 @@ fn atn_dfa_389(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_390(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_382(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30636,9 +30558,9 @@ fn atn_dfa_390(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_391(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 3 < tokens.len() && tokens[pos + 3] < 159 {
-        match tokens[pos + 3] {
+fn atn_dfa_383(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_DOT | TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
                 return 0;
             },
@@ -30651,11 +30573,11 @@ fn atn_dfa_391(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_392(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
+fn atn_dfa_384(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_OPEN_PAR => {
-                let alt = atn_dfa_378(tokens, pos);
+                let alt = atn_dfa_370(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_CLOSE_PAR | TK_COMMA => {
@@ -30665,16 +30587,16 @@ fn atn_dfa_392(tokens: &Array<i32>, pos: i32) -> i32 {
                 return 0;
             },
             TK_K_CASE | TK_K_NOT => {
-                let alt = atn_dfa_379(tokens, pos);
+                let alt = atn_dfa_371(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_K_DEFAULT => {
-                let alt = atn_dfa_391(tokens, pos);
+                let alt = atn_dfa_383(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
             TK_SCOL | TK_DOT | TK_ASSIGN | TK_STAR | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_IDENTIFIER | TK_STRING_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
-                let alt = atn_dfa_390(tokens, pos);
+                let alt = atn_dfa_382(tokens, pos + 1);
                 if alt >= 0 { return alt; }
             },
         };
@@ -30682,9 +30604,9 @@ fn atn_dfa_392(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_393(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() {
-        match tokens[pos + 2] {
+fn atn_dfa_385(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_COMMA => {
                 return 1;
             },
@@ -30694,9 +30616,9 @@ fn atn_dfa_393(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_394(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() {
-        match tokens[pos + 2] {
+fn atn_dfa_386(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
             TK_CLOSE_PAR | TK_COMMA => {
                 return 1;
             },
@@ -30709,40 +30631,13 @@ fn atn_dfa_394(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn atn_dfa_395(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
-            TK_CLOSE_PAR | TK_COMMA | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 => {
-                return 0;
-            },
-            TK_SCOL | TK_DOT | TK_TILDE | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
-            _ => {
-                return 1;
-            },
-        };
-    }
-    return -1;
-}
-
-fn atn_dfa_396(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() && tokens[pos + 2] < 159 {
-        match tokens[pos + 2] {
+fn atn_dfa_387(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] < 159 {
+        match tokens[pos] {
             TK_SCOL | TK_DOT | TK_ASSIGN | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_PIPE2 | TK_DIV | TK_MOD | TK_LT2 | TK_GT2 | TK_AMP | TK_PIPE | TK_LT | TK_LT_EQ | TK_GT | TK_GT_EQ | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_K_BETWEEN | TK_K_GLOB | TK_K_IN | TK_K_LIKE | TK_K_MATCH | TK_K_NULL | TK_K_REGEXP | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES | TK_UNEXPECTED_CHAR | TK_EOF | TK_ERROR => {},
             _ => {
                 return 1;
             },
-        };
-    }
-    return -1;
-}
-
-fn atn_dfa_398(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos + 2 < tokens.len() {
-        match tokens[pos + 2] {
-            TK_CLOSE_PAR | TK_STAR | TK_PLUS | TK_MINUS | TK_TILDE | TK_NUMERIC_LITERAL | TK_BIND_PARAMETER | TK_BLOB_LITERAL => {
-                return 0;
-            },
-            _ => {},
         };
     }
     return -1;

@@ -3631,17 +3631,8 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                                         return 0;
                                     },
                                     TK_ID => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_LP => {
-                                                    return 0;
-                                                },
-                                                TK_RB => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_dfa_2(tokens, pos + 3);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -3652,17 +3643,8 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                 }
             },
             TK_ID => {
-                if pos + 1 < tokens.len() {
-                    match tokens[pos + 1] {
-                        TK_LP => {
-                            return 0;
-                        },
-                        TK_RB => {
-                            return 1;
-                        },
-                        _ => {},
-                    };
-                }
+                let alt = atn_dfa_2(tokens, pos + 1);
+                if alt >= 0 { return alt; }
             },
             _ => {},
         };
@@ -3683,5 +3665,20 @@ fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_dfa_2(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LP => {
+                return 0;
+            },
+            TK_RB => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
