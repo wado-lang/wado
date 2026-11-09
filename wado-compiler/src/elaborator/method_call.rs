@@ -2167,6 +2167,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             }
             merge_turbofish_type_args(&mut method_type_args, &inferred);
+            // A slot bound only through another's associated type (`..V` off
+            // `Holes`) is projected off the owner the arguments settled, as the
+            // bare spelling projects it.
+            let real: Vec<ast::GenericParam> = sig
+                .own_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .cloned()
+                .collect();
+            self.project_assoc_bound_args(Some(sig.def), &real, &mut method_type_args);
             let reached = self.tysys.packs_args_reach(&param_types, args.len());
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
             self.instantiate_static_params(
@@ -3820,12 +3830,17 @@ impl TypeSystem {
         (name, key)
     }
 
-    /// The blanket impl `blanket`'s one type parameter, `T` in `impl<T> Trait
-    /// for T`.
-    fn blanket_param_slot(&self, blanket: DefId, blanket_param: &str) -> TypeId {
-        self.type_table
-            .borrow_mut()
-            .make_type_param(blanket, blanket_param.to_string(), 0)
+    /// The type parameter the blanket impl `blanket` targets, `T` in
+    /// `impl<A, T: Holder<Item = A>> Trait for T`: its declared slot, which
+    /// need not be the first.
+    pub(super) fn blanket_param_slot(&self, blanket: DefId, blanket_param: &str) -> TypeId {
+        let table = self.type_table.borrow();
+        let slot = table.impl_target_whole(blanket);
+        assert!(
+            matches!(table.get(slot), ResolvedType::TypeParam { name, .. } if name == blanket_param),
+            "a blanket impl targets its own parameter"
+        );
+        slot
     }
 
     /// The first row of a tuple `zip` whose layout differs from row zero's.

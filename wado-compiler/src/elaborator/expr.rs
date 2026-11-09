@@ -826,11 +826,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
 
-        for &branch_type in &branch_types {
-            if branch_type != TypeTable::NEVER {
-                self.check_branch_type(branch_type, result_type, lb.span);
-            }
-        }
+        let branches: Vec<(TypeId, Span)> = branch_types
+            .into_iter()
+            .filter(|&branch_type| branch_type != TypeTable::NEVER)
+            .map(|branch_type| (branch_type, lb.span))
+            .collect();
+        self.check_branch_types(expected_type, result_type, &branches);
         result_type
     }
 
@@ -2485,11 +2486,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let overlays_before = self.tuple_overlay_counts();
         let (agreed, branches) = resolve(self, expected_type);
-        let retyped = self.settled_result_expectation(expected_type).is_none() && {
-            let table = self.tysys.type_table.borrow();
-            !table.is_indefinite(agreed) && branches.iter().any(|&b| table.is_indefinite(b))
-        };
-        if retyped {
+        let settled = self.settled_result_expectation(expected_type);
+        if branches
+            .iter()
+            .any(|&branch| self.retyped_branch(settled, agreed, branch))
+        {
             // The retry records each tuple for-of inside again; reify pairs an
             // instantiation with each walk it makes, so the first pass's go.
             for (key, instantiations) in &mut self.sem.types.tuple_overlays {
@@ -2498,6 +2499,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return resolve(self, Some(agreed)).0;
         }
         agreed
+    }
+
+    /// Whether [`Self::resolve_branching`] resolves `branch` again under
+    /// `agreed`, which the branches agreed on with no `settled` expectation.
+    /// Its check waits for that pass.
+    fn retyped_branch(&self, settled: Option<TypeId>, agreed: TypeId, branch: TypeId) -> bool {
+        let table = self.tysys.type_table.borrow();
+        settled.is_none() && !table.is_indefinite(agreed) && table.is_indefinite(branch)
+    }
+
+    /// [`Self::check_branch_type`] for each branch the agreed `result` does
+    /// not resolve again.
+    fn check_branch_types(
+        &mut self,
+        settled: Option<TypeId>,
+        result: TypeId,
+        branches: &[(TypeId, Span)],
+    ) {
+        for &(branch, span) in branches {
+            if !self.retyped_branch(settled, result, branch) {
+                self.check_branch_type(branch, result, span);
+            }
+        }
     }
 
     fn resolve_if_once(
@@ -2598,18 +2622,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(check_then) = check_then
             && type_id != TypeTable::UNIT
         {
+            let mut branches = Vec::new();
             if check_then {
                 let then_type = self.ast_block_result_type(&if_expr.then_block);
-                self.check_branch_type(then_type, type_id, if_expr.then_block.span);
+                branches.push((then_type, if_expr.then_block.span));
             }
-            match &if_expr.else_block {
-                Some(eb) => {
-                    let else_type = self.ast_block_result_type(eb);
-                    self.check_branch_type(else_type, type_id, eb.span);
-                }
+            branches.push(match &if_expr.else_block {
+                Some(eb) => (self.ast_block_result_type(eb), eb.span),
                 // The implicit `else { () }` cannot produce a non-Unit type.
-                None => self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span),
-            }
+                None => (TypeTable::UNIT, if_expr.span),
+            });
+            self.check_branch_types(expected_type, type_id, &branches);
         }
         type_id
     }
@@ -2623,11 +2646,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// expected result type; the same rule lives inline in
     /// `resolve_match_expr` for arm bodies.
     pub(super) fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
-        // An indefinite branch (`[null]`) is resolved again against the
-        // result type, which reports it there if it still disagrees.
-        if self.tysys.type_table.borrow().is_indefinite(actual) {
-            return;
-        }
         let result = self.assignable(actual, expected, span);
         if matches!(result, TypeCheckResult::Incompatible) {
             let (expected_name, found_name) = self
@@ -3093,9 +3111,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // something else. Skipped at `Unit`, which is statement position —
         // `translate_match` drops each arm's value there.
         if type_id != TypeTable::UNIT {
-            for &(arm_type, arm_span) in &arm_bodies {
-                self.check_branch_type(arm_type, type_id, arm_span);
-            }
+            self.check_branch_types(expected_type, type_id, &arm_bodies);
         }
 
         // No analysis reads a resolved match structure — missing-return walks

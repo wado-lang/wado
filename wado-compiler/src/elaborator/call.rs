@@ -3205,14 +3205,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space
             .into_iter()
             .zip(type_args.iter().copied())
-            .zip(0..)
-            .map(|((param, type_id), index)| DefaultTypeBinding {
+            .map(|(param, type_id)| DefaultTypeBinding {
                 settled: if param.is_pack {
-                    let owner = owner.expect("a declaration with a pack parameter has a def");
-                    SettledAs::Pack(self.tysys.type_table.borrow_mut().make_type_pack(
-                        owner,
-                        param.name.clone(),
-                        index,
+                    SettledAs::Pack(self.declared_own_slot(
+                        owner.expect("a declaration with a pack parameter has a def"),
+                        &param.name,
                     ))
                 } else {
                     SettledAs::Type(type_id)
@@ -3497,32 +3494,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // where the subject appears solely in the return type) leaves the
         // trailing slots absent. Seed them open so the projection below can
         // pin them from the owner's bound.
-        for (i, param) in params.iter().enumerate().skip(type_args.len()) {
-            let open = self.open_slot(owner, param, i);
+        for param in params.iter().skip(type_args.len()) {
+            let open = self.open_slot(owner, param);
             type_args.push(open);
         }
         self.resolve_assoc_bound_args(params, type_args);
     }
 
-    /// A call's slot for `param`, which `owner` declares at `index`, that
-    /// nothing has answered yet: a fresh variable, as `instantiate` mints. A
-    /// pack keeps its declared form, as `instantiate` keeps it.
-    fn open_slot(
-        &mut self,
-        owner: Option<DefId>,
-        param: &ast::GenericParam,
-        index: usize,
-    ) -> TypeId {
+    /// A call's slot for `param`, which `owner` declares, that nothing has
+    /// answered yet: a fresh variable, as `instantiate` mints. A pack keeps its
+    /// declared form, as `instantiate` keeps it.
+    fn open_slot(&mut self, owner: Option<DefId>, param: &ast::GenericParam) -> TypeId {
         if param.is_pack {
             let owner = owner.expect("a declaration with a pack parameter has a def");
-            self.tysys.type_table.borrow_mut().make_type_pack(
-                owner,
-                param.name.clone(),
-                index as u32,
-            )
+            self.declared_own_slot(owner, &param.name)
         } else {
             self.mint_infer_var_named(&param.name)
         }
+    }
+
+    /// The slot `owner`'s signature declares for its own parameter `name`. A
+    /// method's own slots are numbered past its block's, so a position in the
+    /// method's list is not its identity.
+    fn declared_own_slot(&self, owner: DefId, name: &str) -> TypeId {
+        let signatures = &self.tysys.signatures;
+        let own = match signatures.function_sig(owner) {
+            Some(sig) => sig.decl.type_params.as_slice(),
+            None => signatures
+                .method_sig(owner)
+                .expect("a declaration with parameters has a signature")
+                .own_type_params(),
+        };
+        own.iter()
+            .find(|(own_name, _)| own_name == name)
+            .expect("a declaration declares its own parameter")
+            .1
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
@@ -3802,8 +3808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             *type_args = space
                 .iter()
-                .enumerate()
-                .map(|(i, p)| self.open_slot(Some(owner), p, i))
+                .map(|p| self.open_slot(Some(owner), p))
                 .collect();
         }
         if type_args.len() != n {
