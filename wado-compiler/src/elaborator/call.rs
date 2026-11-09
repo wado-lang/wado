@@ -4682,13 +4682,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_inherited()
                     .then(|| (impl_def, method.sig.clone()))
             })?;
-        let decl = key.decl()?;
-        let receiver = self.declared_self_type(decl)?;
-        let receiver_params = self
-            .type_lookup()
-            .declared_type_param_ids(decl)
-            .map(<[TypeId]>::to_vec)
-            .unwrap_or_default();
+        let (receiver, receiver_params) = match key.decl() {
+            Some(decl) => (
+                self.declared_self_type(decl)?,
+                self.type_lookup()
+                    .declared_type_param_ids(decl)
+                    .map(<[TypeId]>::to_vec)
+                    .unwrap_or_default(),
+            ),
+            // A receiver no declaration names is written only as a primitive's
+            // path, whose impl binds nothing.
+            None => {
+                assert!(
+                    trait_env.impl_headers[&impl_def].type_params.is_empty(),
+                    "a static call names a declaration-less receiver only by a primitive"
+                );
+                (
+                    self.tysys.type_table.borrow().impl_target_whole(impl_def),
+                    Vec::new(),
+                )
+            }
+        };
         let frame = self.tysys.trait_frame_at(impl_def, receiver);
         let in_frame = sig.decl.instantiate(&self.tysys.type_table, &frame);
         sig.decl.param_types = in_frame.param_types;
