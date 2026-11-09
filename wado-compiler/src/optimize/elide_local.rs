@@ -8,6 +8,7 @@
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
+use crate::optimize::arena_query::{def_dominates, is_loop};
 use crate::optimize::dce::deletable_value;
 use crate::optimize::mod_ref::CallFacts;
 
@@ -90,9 +91,9 @@ fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
     }
 }
 
-/// Classify a statement for write-only-local elimination. Mirrors the former
-/// tree `Elider`: an unread `let x = value` or a bare `x = value` (assign at
-/// statement position) where `x` is unread is dropped when `value` is pure,
+/// Classify a statement for write-only-local elimination: an unread
+/// `let x = value`, or a bare `x = value` (assign at statement position) where
+/// `x` is unread or the store is dead, is dropped when `value` is pure,
 /// otherwise demoted to `Expr(value)`.
 fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> Action {
     match &engine.body.stmts[stmt].kind {
@@ -111,11 +112,6 @@ fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) 
                 value.as_expr().map_or(Action::Keep, Action::Demote)
             }
         }
-        // `x = value;` (Assign at stmt position) where `x` is unread. This
-        // catches the SROA / variant-lowering shadow-temp pattern where a pass
-        // introduces a local, writes to it via Assign, then a downstream pass
-        // folds away the only read site. The matching `let x;` declaration
-        // falls out once every write to `x` is gone.
         StmtKind::Expr(operand @ Operand::Value(_)) => {
             if !is_tail && deletable(engine, *operand, rule) {
                 return Action::Drop;
@@ -131,6 +127,11 @@ fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) 
             if assign.is_none() && !is_tail && deletable(engine, Operand::Expr(*e), rule) {
                 return Action::Drop;
             }
+            // `x = value;` where `x` is unread catches the SROA /
+            // variant-lowering shadow-temp pattern: a pass introduces a local,
+            // writes to it via Assign, then a downstream pass folds away the
+            // only read site. The matching `let x;` declaration falls out once
+            // every write to `x` is gone.
             if let Some((target, value)) = assign
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
@@ -228,37 +229,21 @@ fn read_follows(
     if at(read_branch) > at(store_branch) {
         return true;
     }
-    let Some(innermost_loop) = common
+    let Some(&innermost_loop) = common.iter().find(|&&n| is_loop(engine.body, n)) else {
+        return false;
+    };
+    let read_stmt = read_chain
         .iter()
-        .position(|&n| matches!(n, NodeRef::Stmt(s) if matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. })))
-    else {
-        return false;
-    };
+        .find_map(|&n| match n {
+            NodeRef::Stmt(s) => Some(s),
+            _ => None,
+        })
+        .expect("a read sits in a statement");
+    // Re-bound on every path from the top of that loop to the read.
     !def.is_some_and(|def| {
-        rebinds_before(
-            engine,
-            def,
-            &read_chain[..read_chain.len() - shared + innermost_loop],
-        )
+        ancestors(engine, NodeRef::Stmt(def)).contains(&innermost_loop)
+            && def_dominates(engine, def, read_stmt)
     })
-}
-
-/// Whether `def` runs on every path from the top of the loop to the read at
-/// the head of `inside_loop`, its ancestors below that loop: it sits in one of
-/// their blocks, ahead of the statement leading to the read.
-fn rebinds_before(engine: &Engine, def: StmtId, inside_loop: &[NodeRef]) -> bool {
-    let Some(NodeRef::Block(block)) = engine.parent_of(NodeRef::Stmt(def)) else {
-        return false;
-    };
-    let Some(depth) = inside_loop.iter().position(|&n| n == NodeRef::Block(block)) else {
-        return false;
-    };
-    let NodeRef::Stmt(toward_read) = inside_loop[depth - 1] else {
-        unreachable!("a block's child is a statement");
-    };
-    let stmts = &engine.body.blocks[block].stmts;
-    let index = |s| stmts.iter().position(|&x| x == s);
-    index(def) < index(toward_read)
 }
 
 #[cfg(test)]

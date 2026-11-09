@@ -30,7 +30,7 @@ use crate::nir_visitor::reachable_exprs;
 use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
-use crate::optimize::arena_query::storage_root;
+use crate::optimize::arena_query::{def_dominates, storage_root};
 use crate::optimize::gate::FunctionGate;
 use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::parallel::Executor;
@@ -176,48 +176,6 @@ fn materialise_point(e: &Engine, ids: &[ExprId]) -> Option<(StmtId, BlockId)> {
     let pos = paths.iter().map(|p| p[common].1).min()?;
     let stmt = e.body.blocks[block].stmts[pos];
     Some((stmt, block))
-}
-
-/// The structured-control path from the root down to `stmt`'s enclosing chain:
-/// an outermost-first list of `(block, stmt_index)`. Like [`block_path`] but
-/// rooted at a statement, for the def-dominance check.
-fn stmt_block_path(e: &Engine, stmt: StmtId) -> Vec<(BlockId, usize)> {
-    let mut path = Vec::new();
-    let mut last = stmt;
-    let mut node = e.parent_of(NodeRef::Stmt(stmt));
-    while let Some(n) = node {
-        match n {
-            NodeRef::Block(b) => {
-                if let Some(pos) = e.body.blocks[b].stmts.iter().position(|&x| x == last) {
-                    path.push((b, pos));
-                }
-                node = e.parent_of(NodeRef::Block(b));
-            }
-            NodeRef::Stmt(s) => {
-                last = s;
-                node = e.parent_of(NodeRef::Stmt(s));
-            }
-            NodeRef::Expr(_) | NodeRef::Pat(_) => node = e.parent_of(n),
-        }
-    }
-    path.reverse();
-    path
-}
-
-/// Whether `def_stmt` **dominates** the insertion point `before_stmt` (insert
-/// *before* it): in structured control flow, `def_stmt`'s enclosing block must be
-/// the deepest block common to both paths (not nested in a sibling branch
-/// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
-/// Used to admit a non-param `FieldAccess` receiver only when its single-assignment
-/// def is live at the materialisation point (the receiver-availability gate).
-fn def_dominates(e: &Engine, def_stmt: StmtId, before_stmt: StmtId) -> bool {
-    let dp = stmt_block_path(e, def_stmt);
-    let mp = stmt_block_path(e, before_stmt);
-    let mut l = 0;
-    while l < dp.len() && l < mp.len() && dp[l].0 == mp[l].0 {
-        l += 1;
-    }
-    l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
 }
 
 /// Whether a `local.get i` placed at `before_stmt` reads the local's value: a

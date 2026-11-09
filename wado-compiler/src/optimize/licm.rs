@@ -29,7 +29,7 @@ use crate::nir::NirLocal;
 use crate::nir_arena::PatId;
 use crate::nir_value_graph::ValuePool;
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
-use crate::optimize::arena_query::{is_pure_operand, storage_root};
+use crate::optimize::arena_query::{is_loop, is_pure_operand, storage_root};
 use crate::optimize::condition_implication::{
     eliminate_at_root, resolve_panic_ids, resolve_quiet_callee_ids,
 };
@@ -1297,9 +1297,7 @@ fn collect_block_labels(body: &Body, node: NodeRef, out: &mut IndexSet<String>) 
 
 /// The number of loops `node` opens: one for a `loop` statement.
 fn loops_opened(body: &Body, node: NodeRef) -> usize {
-    usize::from(
-        matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. })),
-    )
+    usize::from(is_loop(body, node))
 }
 
 /// [`reload_skipped_by_jump`] under `node`, `depth` loops inside the loop body.

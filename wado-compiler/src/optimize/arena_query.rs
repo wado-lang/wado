@@ -486,11 +486,52 @@ pub(super) fn mentions_local_except(
 /// nesting. Shared by the inliner (cold-cost) and labeled-block fusion
 /// (unlabeled-break capture guard).
 pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    body.find_in_nodes_under(NodeRef::Block(block), |n| {
-        matches!(n, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. }))
-            .then_some(())
-    })
-    .is_some()
+    body.find_in_nodes_under(NodeRef::Block(block), |n| is_loop(body, n).then_some(()))
+        .is_some()
+}
+
+/// Whether `node` is a `loop` statement.
+pub(super) fn is_loop(body: &Body, node: NodeRef) -> bool {
+    matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. }))
+}
+
+/// The structured-control path from the root down to `stmt`'s enclosing chain:
+/// an outermost-first list of `(block, stmt_index)`.
+fn stmt_block_path(e: &Engine, stmt: StmtId) -> Vec<(BlockId, usize)> {
+    let mut path = Vec::new();
+    let mut last = stmt;
+    let mut node = e.parent_of(NodeRef::Stmt(stmt));
+    while let Some(n) = node {
+        match n {
+            NodeRef::Block(b) => {
+                if let Some(pos) = e.body.blocks[b].stmts.iter().position(|&x| x == last) {
+                    path.push((b, pos));
+                }
+                node = e.parent_of(NodeRef::Block(b));
+            }
+            NodeRef::Stmt(s) => {
+                last = s;
+                node = e.parent_of(NodeRef::Stmt(s));
+            }
+            NodeRef::Expr(_) | NodeRef::Pat(_) => node = e.parent_of(n),
+        }
+    }
+    path.reverse();
+    path
+}
+
+/// Whether `def_stmt` **dominates** the insertion point `before_stmt` (insert
+/// *before* it): in structured control flow, `def_stmt`'s enclosing block must be
+/// the deepest block common to both paths (not nested in a sibling branch
+/// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
+pub(super) fn def_dominates(e: &Engine, def_stmt: StmtId, before_stmt: StmtId) -> bool {
+    let dp = stmt_block_path(e, def_stmt);
+    let mp = stmt_block_path(e, before_stmt);
+    let mut l = 0;
+    while l < dp.len() && l < mp.len() && dp[l].0 == mp[l].0 {
+        l += 1;
+    }
+    l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
 }
 
 /// Whether `stmt` never falls through to the statement after it: a `return` /
