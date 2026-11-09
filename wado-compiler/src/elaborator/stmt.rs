@@ -423,7 +423,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let spreads_pack = self
                     .binder_at(spread.id, &spread.name)
                     .is_some_and(|binder| self.tysys.type_table.borrow().is_type_pack(binder));
-                !spreads_pack && self.annotate_ctx.trait_ctx.repeat_pack(&spread.name).is_none()
+                !spreads_pack
+                    && self
+                        .annotate_ctx
+                        .trait_ctx
+                        .repeat_pack(&spread.name)
+                        .is_none()
             })
             .map(|spread| (spread.name.clone(), spread.span))
             .collect();

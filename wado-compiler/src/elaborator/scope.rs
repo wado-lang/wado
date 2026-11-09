@@ -56,11 +56,7 @@ impl ParamRef {
 
     /// The parameter a reference site written `name` resolves to, if it
     /// resolves to one.
-    pub(super) fn at_site(
-        site: ast::AstId,
-        name: &str,
-        resolutions: &Resolutions,
-    ) -> Option<Self> {
+    pub(super) fn at_site(site: ast::AstId, name: &str, resolutions: &Resolutions) -> Option<Self> {
         match resolutions.get(site) {
             Resolution::Binder(binder) => Some(Self::of_binder(binder, name, resolutions)),
             Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
@@ -107,10 +103,11 @@ pub(super) struct BinderInScope {
     pub(super) type_id: TypeId,
     /// Where the parameter is written, which tells a method's parameter from
     /// the impl receiver's binder of the same letter. `None` for a name no
-    /// parameter declares here: `Self`, or one bound to a site's argument.
+    /// parameter declares here: `Self`, or one bound to a site's argument for
+    /// an item's parameter, which [`Self::owner`] names instead.
     pub(super) decl: Option<ast::AstId>,
     /// The declaration whose parameter a binding to a site's argument stands
-    /// in for, where [`Self::decl`] is `None`.
+    /// in for.
     pub(super) owner: Option<DefId>,
     /// Declared `affine T`: an argument for it may be move-only.
     pub(super) is_affine: bool,

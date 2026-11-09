@@ -543,10 +543,12 @@ impl Lowering {
                 Ok(SolverType::Decl(declared(generic.id)?, args))
             }
             Type::Tuple(elems) => all(elems).map(SolverType::Tuple),
-            Type::TypePackSpread(crate::ast::NamedType { name, .. }) => match (written.param)(name).ok_or(Unsaid::Open)? {
-                ParamKind::Pack(index) | ParamKind::Type(index) => Ok(SolverType::Pack(index)),
-                ParamKind::Signature(_) => Err(Unsaid::Unsayable),
-            },
+            Type::TypePackSpread(crate::ast::NamedType { name, .. }) => {
+                match (written.param)(name).ok_or(Unsaid::Open)? {
+                    ParamKind::Pack(index) | ParamKind::Type(index) => Ok(SolverType::Pack(index)),
+                    ParamKind::Signature(_) => Err(Unsaid::Unsayable),
+                }
+            }
             Type::Reference(inner) | Type::MutReference(inner) => Ok(SolverType::Ref {
                 is_mut: matches!(ty, Type::MutReference(_)),
                 inner: Box::new(self.ast_type(inner, written)?),

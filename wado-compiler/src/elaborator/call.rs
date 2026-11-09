@@ -1926,8 +1926,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&static_args.method_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                let receiver_type =
-                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span);
+                let receiver_type = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
                 self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
                 let StaticTypeArgs {
                     impl_args: impl_type_args_inferred,
@@ -2104,8 +2108,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else if suffix == "from"
                 && let [arg_type] = args[..]
                 && self.names_type_at(receiver_site, prefix)
-                && let receiver_type =
-                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span)
+                && let receiver_type = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                )
                 && let Some(converted) =
                     self.convert_without_impl(call.id, receiver_type, arg_type, true)
             {
@@ -2117,9 +2125,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .variant_of_callee(&callee_kind, receiver_site, prefix)
                 .is_some()
             {
-                let receiver =
-                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span);
-                return self.blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
+                let receiver = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
+                return self
+                    .blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
@@ -2133,9 +2146,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // A type, resource included, with no such static method.
             else if self.names_type_at(receiver_site, prefix) {
-                let receiver =
-                    self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span);
-                return self.blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
+                let receiver = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
+                return self
+                    .blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
