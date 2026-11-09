@@ -147,11 +147,7 @@ fn variant_schema<V: ReflectVariant<CasePayloads = [..P]>, ..P: JsonSchema>(gen:
     for let case of ReflectVariant::<V>::members() {
         s.one_of.push(described(case_schema(&case, wire_name(&case, policy), &tag, gen), case.doc()));
     }
-    let s = if s.one_of.is_empty() {
-        Schema::Bool(false);
-    } else {
-        Schema::Object(s);
-    };
+    let s = if s.one_of.is_empty() { Schema::Bool(false) } else { Schema::Object(s) };
     return described(s, Reflect::<V>::doc());
 }
 

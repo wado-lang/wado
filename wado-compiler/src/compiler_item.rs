@@ -547,10 +547,6 @@ pub enum CompilerItem {
     ReflectTemplateRawTail,
     /// `ReflectTemplate::hashes` — how many `#`s delimit the template.
     ReflectTemplateHashes,
-    /// `Member::name` — the member's source field name.
-    MemberName,
-    /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
-    MemberWireNameOverride,
     /// `ReflectVariant::discriminant` — the live case's tag as `i32`.
     ReflectVariantDiscriminant,
     /// `ReflectVariant::members` — the per-case member tuple.
@@ -969,8 +965,6 @@ impl CompilerItem {
         Self::ReflectTemplateTail,
         Self::ReflectTemplateRawTail,
         Self::ReflectTemplateHashes,
-        Self::MemberName,
-        Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
         Self::ReflectVariantMembers,
         Self::ReflectVariantWireTag,
@@ -1249,8 +1243,6 @@ impl CompilerItem {
             Self::ReflectTemplateTail => "reflect_template_tail",
             Self::ReflectTemplateRawTail => "reflect_template_raw_tail",
             Self::ReflectTemplateHashes => "reflect_template_hashes",
-            Self::MemberName => "member_name",
-            Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
             Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::FormatterWriteStr => "formatter_write_str",
@@ -1504,8 +1496,6 @@ impl CompilerItem {
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
             | Self::ReflectTemplateHashes
-            | Self::MemberName
-            | Self::MemberWireNameOverride
             | Self::FormatterNew
             | Self::FormatterWriteLiteral
             | Self::FormatterWriteStr
@@ -1894,8 +1884,6 @@ impl CompilerItem {
             | Self::ReflectTemplateTail
             | Self::ReflectTemplateRawTail
             | Self::ReflectTemplateHashes
-            | Self::MemberName
-            | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
             | Self::ReflectVariantWireTag

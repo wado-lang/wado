@@ -588,7 +588,7 @@ fn generate_struct_reflect_methods(
         &RootFacts {
             display_name: &type_table.borrow().struct_reflect_name(*def),
             wire_name_policy: *name_policy,
-            doc: doc.as_deref(),
+            doc,
         },
         span,
     );
@@ -959,9 +959,6 @@ fn generate_struct_members_fn(
         .iter()
         .zip(member_types)
         .map(|(f, member_type)| {
-            let optional_string = |value: &Option<String>| {
-                env.root.optional_string(type_table, value.as_deref(), span)
-            };
             let field_fields = vec![
                 reflect_meta_int_field("index", i64::from(f.index), TypeTable::I32, 0, span),
                 TirStructField {
@@ -971,7 +968,9 @@ fn generate_struct_members_fn(
                 },
                 TirStructField {
                     name: "wire_override".to_string(),
-                    value: optional_string(&f.wire_name_override),
+                    value: env
+                        .root
+                        .optional_string(type_table, &f.wire_name_override, span),
                     field_index: 2,
                 },
                 TirStructField {
@@ -986,7 +985,7 @@ fn generate_struct_members_fn(
                 },
                 TirStructField {
                     name: "doc".to_string(),
-                    value: optional_string(&f.doc),
+                    value: env.root.optional_string(type_table, &f.doc, span),
                     field_index: 5,
                 },
             ];
@@ -1505,7 +1504,7 @@ struct RootFacts<'a> {
     /// anonymous shape's head is its mangle, module paths and all.
     display_name: &'a str,
     wire_name_policy: Option<NamePolicy>,
-    doc: Option<&'a str>,
+    doc: &'a Option<String>,
 }
 
 impl ReflectRootEnv {
@@ -1559,7 +1558,7 @@ impl ReflectRootEnv {
     fn optional_string(
         &self,
         type_table: &RefCell<TypeTable>,
-        value: Option<&str>,
+        value: &Option<String>,
         span: Span,
     ) -> TirExpr {
         let tt = type_table.borrow();
@@ -1741,7 +1740,7 @@ fn generate_template_reflect_impls(
         let root_facts = RootFacts {
             display_name: &display_name,
             wire_name_policy: None,
-            doc: None,
+            doc: &None,
         };
         let mut functions =
             Vec::from(
@@ -1847,9 +1846,7 @@ fn generate_template_members_fn(
                 reflect_meta_int_field("index", k as i64, TypeTable::I32, 0, span),
                 TirStructField {
                     name: "spec".to_string(),
-                    value: env
-                        .root
-                        .optional_string(type_table, hole.spec.as_deref(), span),
+                    value: env.root.optional_string(type_table, &hole.spec, span),
                     field_index: 1,
                 },
             ]
@@ -2029,7 +2026,7 @@ fn generate_variant_reflect_methods(
         &RootFacts {
             display_name: target.receiver.head().name(),
             wire_name_policy: target.wire_name_policy,
-            doc: target.doc.as_deref(),
+            doc: &target.doc,
         },
         span,
     );
@@ -2124,8 +2121,7 @@ fn generate_variant_wire_tag_fn(
     let method_info = trait_method_info(&target.receiver, variant_trait_name, &env.wire_tag_method);
     constant_method(
         method_info,
-        env.root
-            .optional_string(type_table, target.wire_tag.as_deref(), span),
+        env.root.optional_string(type_table, &target.wire_tag, span),
     )
 }
 
@@ -2150,9 +2146,6 @@ fn generate_variant_cases_fn(
         .iter()
         .zip(member_types)
         .map(|(case, member_type)| {
-            let optional_string = |value: &Option<String>| {
-                env.root.optional_string(type_table, value.as_deref(), span)
-            };
             let case_fields = vec![
                 reflect_meta_int_field("index", i64::from(case.index), TypeTable::I32, 0, span),
                 TirStructField {
@@ -2162,7 +2155,9 @@ fn generate_variant_cases_fn(
                 },
                 TirStructField {
                     name: "wire_override".to_string(),
-                    value: optional_string(&case.wire_name_override),
+                    value: env
+                        .root
+                        .optional_string(type_table, &case.wire_name_override, span),
                     field_index: 2,
                 },
                 TirStructField {
@@ -2172,7 +2167,7 @@ fn generate_variant_cases_fn(
                 },
                 TirStructField {
                     name: "doc".to_string(),
-                    value: optional_string(&case.doc),
+                    value: env.root.optional_string(type_table, &case.doc, span),
                     field_index: 4,
                 },
             ];
@@ -2691,7 +2686,7 @@ fn generate_enum_reflect_methods(
         &RootFacts {
             display_name: target.receiver.head().name(),
             wire_name_policy: target.wire_name_policy,
-            doc: target.doc.as_deref(),
+            doc: &target.doc,
         },
         span,
     );
@@ -2771,9 +2766,6 @@ fn generate_enum_members_fn(
         .cases
         .iter()
         .map(|case| {
-            let optional_string = |value: &Option<String>| {
-                env.root.optional_string(type_table, value.as_deref(), span)
-            };
             let value = TirExpr::new(
                 TirExprKind::EnumConstruct {
                     enum_type,
@@ -2803,12 +2795,14 @@ fn generate_enum_members_fn(
                 },
                 TirStructField {
                     name: "wire_override".to_string(),
-                    value: optional_string(&case.wire_name_override),
+                    value: env
+                        .root
+                        .optional_string(type_table, &case.wire_name_override, span),
                     field_index: 3,
                 },
                 TirStructField {
                     name: "doc".to_string(),
-                    value: optional_string(&case.doc),
+                    value: env.root.optional_string(type_table, &case.doc, span),
                     field_index: 4,
                 },
             ]
@@ -2985,7 +2979,7 @@ fn generate_newtype_reflect_impls(
             // kind, dispatch answers with the base's policy
             // (`TypeTable::wire_policy_subject`).
             wire_name_policy: None,
-            doc: target.doc.as_deref(),
+            doc: &target.doc,
         };
         for mut method in root.methods(&module.type_table, &target.receiver, &facts, target.span) {
             // A generic declaration is one impl over `N<T, …>`, instantiated
@@ -3102,7 +3096,7 @@ fn generate_flags_reflect_methods(
         &RootFacts {
             display_name: target.receiver.head().name(),
             wire_name_policy: target.wire_name_policy,
-            doc: target.doc.as_deref(),
+            doc: &target.doc,
         },
         span,
     );
@@ -3200,9 +3194,7 @@ fn generate_flags_members_fn(
                 },
                 TirStructField {
                     name: "doc".to_string(),
-                    value: env
-                        .root
-                        .optional_string(type_table, member.doc.as_deref(), span),
+                    value: env.root.optional_string(type_table, &member.doc, span),
                     field_index: 3,
                 },
             ]

@@ -183,13 +183,9 @@ compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 
 #### `fn name(&self) -> String`
 
-`#[compiler_item("member_name")]`
-
 The source field name.
 
 #### `fn wire_name_override(&self) -> Option<String>`
-
-`#[compiler_item("member_wire_name_override")]`
 
 The raw `#[wire(name)]` value (casing not applied), or `None`.
 

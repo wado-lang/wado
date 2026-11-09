@@ -33,14 +33,14 @@ pub enum CommentKind {
 }
 
 impl Comment {
-    /// The text after the `///` or `//!` marker and one space after it.
+    /// The text after the `///` or `//!` marker, which the lexer has dropped,
+    /// and one space after it.
     pub fn doc_text(&self) -> &str {
-        let rest = match self.kind {
-            CommentKind::DocLine => self.text.strip_prefix('/').unwrap_or(&self.text),
-            CommentKind::ModuleDoc => self.text.strip_prefix('!').unwrap_or(&self.text),
-            CommentKind::Line | CommentKind::Block => &self.text,
-        };
-        rest.strip_prefix(' ').unwrap_or(rest)
+        assert!(matches!(
+            self.kind,
+            CommentKind::DocLine | CommentKind::ModuleDoc
+        ));
+        self.text.strip_prefix(' ').unwrap_or(&self.text)
     }
 }
 
@@ -414,6 +414,18 @@ mod tests {
         use std::sync::LazyLock;
         static SPACE: LazyLock<AstIdSpace> = LazyLock::new(AstIdSpace::next);
         AstId::new(*SPACE, local)
+    }
+
+    /// The lexer drops the marker, so what follows it, a `/` or `!` included,
+    /// is the text.
+    #[test]
+    fn doc_text_keeps_everything_after_the_marker_and_one_space() {
+        let texts: Vec<String> = crate::lexer::lex("//!! loud\n/// /path\n///tight\n")
+            .comments
+            .iter()
+            .map(|c| c.doc_text().to_string())
+            .collect();
+        assert_eq!(texts, ["! loud", "/path", "tight"]);
     }
 
     #[test]
