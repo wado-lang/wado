@@ -273,7 +273,7 @@ than the simulator before the parse fails, and can where both sides are
 recovering. It is for testing the static path against the simulator over real
 inputs, not for use. The generated
 SQLite parser is 1.0 MB under `"never"`, 1.8 MB under `"verify"`, 1.5 MB under
-`"auto"` and 3.0 MB under `"always"` (`gale gen --atn <mode>`).
+`"auto"` and 2.9 MB under `"always"` (`gale gen --atn <mode>`).
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
 stays with the tournament, and a `?` at a rule's end goes to the simulator when

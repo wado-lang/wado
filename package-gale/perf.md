@@ -286,12 +286,13 @@ simulator itself, its runtime and the `ATN_SIM` table, is a fixed 0.1 to
 0.2 MB. A DFA was emitted as a tree, sharing only a node more than one edge
 reached, so the nodes that decide alike were emitted once per place. Most of
 them recur: SQLite's 7,946 branches held 2,191 distinct ones. `SllForest` now
-makes one node of the nodes that decide alike, within a DFA and across the
-decisions, and emits a node more than one place reads once, as a function.
+makes one node of the nodes that decide alike, within a DFA, across the
+decisions and across depths, and emits a node more than one place reads once,
+as a function taking the position it reads at.
 
 | SQLite parser           |  before |   after |
 | ----------------------- | ------: | ------: |
-| `always`, source        |  9.5 MB |  3.0 MB |
+| `always`, source        |  9.5 MB |  2.9 MB |
 | `always`, Wasm at `-O2` |  2.4 MB |  1.1 MB |
 | `auto`, source          |  1.8 MB |  1.5 MB |
 | `auto`, Wasm at `-O2`   | 0.83 MB | 0.78 MB |
