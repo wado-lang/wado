@@ -54,6 +54,17 @@ flags Perm {
     Write,
 }
 
+/// Kept: only the gap above the first attribute detaches.
+#[wire(name_policy = "camelCase")]
+
+// An ordinary comment.
+struct AfterAttribute {
+    /// Kept as well.
+    #[wire(name = "f")]
+
+    field: i32,
+}
+
 /// Distance in meters.
 type Meters = f64;
 
@@ -81,6 +92,12 @@ test "every kind answers its declaration's comment" {
 test "only a `///` block directly above the declaration counts" {
     assert Reflect::<Undocumented>::doc() == null;
     assert Reflect::<Detached>::doc() == null;
+}
+
+test "a gap below an attribute keeps the comment" {
+    assert Reflect::<AfterAttribute>::doc() == Some("Kept: only the gap above the first attribute detaches.");
+    let [field] = ReflectStruct::<AfterAttribute>::members();
+    assert field.doc() == Some("Kept as well.");
 }
 
 test "a newtype answers its own comment, never its base's" {
