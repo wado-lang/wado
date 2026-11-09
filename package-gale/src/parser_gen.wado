@@ -4508,7 +4508,7 @@ fn gen_lr_fn<S: AsStrSlice>(
         let met = *ctx.decisions.at_lr_loop(ctx.cursor.current_rule_index());
         if !met.is_empty() {
             w.line("let mut _lrc_verdict: [i32, bool] = [-1, false];");
-            gen_kept_block(w, "", [`_lrc_verdict = ${atn_gated_verdict(loop_dec, &met, "_lrc_at", ctx)};`], true);
+            gen_kept_lines(w, "", [`_lrc_verdict = ${atn_gated_verdict(loop_dec, &met, "_lrc_at", ctx)};`], true);
         }
     }
     emit_lr_group_chain(
@@ -6808,21 +6808,27 @@ fn any_shape_enters(
 /// Run the `ATN_VERIFIED` checks `calls` where `guard` holds and the parse is
 /// one whose tree is kept: neither recovering nor about to be rewound.
 fn gen_verified_check<S: AsStrSlice>(w: &mut CodeWriter, guard: S, calls: List<String>) {
-    gen_kept_block(w, guard, calls.into_iter().map(|call| `let _ = ${call};`).collect(), false);
+    gen_kept_lines(w, guard, calls.into_iter().map(|call| `let _ = ${call};`).collect(), false);
 }
 
-/// Run `lines` where `guard` holds and the parse's tree is kept. A predicate
-/// the lines ask may print, and `quiet` takes it back out of the output, which
-/// stays the one `never` writes.
-fn gen_kept_block<S: AsStrSlice>(w: &mut CodeWriter, guard: S, lines: List<String>, quiet: bool) {
+fn gen_kept_lines<S: AsStrSlice>(w: &mut CodeWriter, guard: S, lines: List<String>, quiet: bool) {
+    let mut body = CodeWriter::with_capacity(256);
+    for let line of lines {
+        body.line(line);
+    }
+    gen_kept_block(w, guard, &body, quiet);
+}
+
+/// Run `body` where `guard` holds and the parse's tree is kept. A predicate
+/// the body asks may print, and `quiet` takes it back out of the output, which
+/// stays the one `exact` writes.
+fn gen_kept_block<S: AsStrSlice>(w: &mut CodeWriter, guard: S, body: &CodeWriter, quiet: bool) {
     let kept = "!p.recovering && !p.speculating";
     w.begin(if guard.is_empty() { `if ${kept}` } else { `if ${guard} && ${kept}` });
     if quiet {
         w.line("let _vq_out = p.tokens.output.len();");
     }
-    for let line of lines {
-        w.line(line);
-    }
+    w.append(body);
     if quiet {
         w.line("p.tokens.output.truncate(_vq_out);");
     }
@@ -6845,7 +6851,7 @@ fn gen_gated_check<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx.cursor.note_ref(&ATN_VERIFIED);
     let verdict = atn_gated_verdict(decision, met, &pos, ctx);
     let check = atn_verified_against_call(decision, picker, pos, verdict, answer);
-    gen_kept_block(w, guard, [`let _ = ${check};`], true);
+    gen_kept_lines(w, guard, [`let _ = ${check};`], true);
 }
 
 fn begin_plus_flag(w: &mut CodeWriter, name_counts: &mut List<[String, i32]>) -> String {
@@ -8880,21 +8886,10 @@ fn shadow_number<S: AsStrSlice>(pick: S, candidates: &List<i32>, numbers: &List<
 }
 
 /// Run what `body` writes, the static path's pick beside the simulator's,
-/// where `guard` holds and the parse's tree is kept. What a predicate the
-/// static path asks prints is taken back out, so the output stays the one
-/// `exact` writes.
+/// where `guard` holds and the parse's tree is kept.
 fn gen_shadow_block<S: AsStrSlice>(w: &mut CodeWriter, guard: S, body: CodeWriter, ctx: &mut EmitContext) {
     ctx.cursor.note_ref(&ATN_SHADOW);
-    let kept = "!p.recovering && !p.speculating";
-    w.begin(if guard.is_empty() { `if ${kept}` } else { `if ${guard} && ${kept}` });
-    if ctx.settings.emit_actions {
-        w.line("let _vq_out = p.tokens.output.len();");
-    }
-    w.append(&body);
-    if ctx.settings.emit_actions {
-        w.line("p.tokens.output.truncate(_vq_out);");
-    }
-    w.end();
+    gen_kept_block(w, guard, &body, ctx.settings.emit_actions);
 }
 
 /// True when every alt in `indices` has a scan helper covering its whole body,
