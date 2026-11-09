@@ -12,7 +12,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, FamilySite, ScopedBound};
+use super::scope::{BinderInScope, FamilySite, ParamRef, ScopedBound};
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -22,12 +22,13 @@ use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
 use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, repeat_pack_name};
+use crate::resolve::Resolution;
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
 
-/// What a trait's declared parameters stand for at a frame, by name.
-pub(super) type ParamSpace = Vec<(String, TypeId)>;
+/// What a declaration's parameters stand for at a frame.
+pub(super) type ParamSpace = Vec<(ParamRef, TypeId)>;
 
 /// A bound reachable from a frame, paired with the space its written types are
 /// read in — empty for one the frame wrote itself.
@@ -827,8 +828,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let params = self.type_lookup().declared_generic_params(def)?;
         let default = params.get(slot)?.default.clone()?;
-        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-        let resolved = self.with_type_param_args(&names, settled, |e| e.resolve_type(&default));
+        let space: ParamSpace = params
+            .iter()
+            .map(|p| ParamRef::of(def, &p.name))
+            .zip(settled.iter().copied())
+            .collect();
+        let resolved = self.with_type_param_args(&space, |e| e.resolve_type(&default));
         if resolved == TypeTable::ERROR || resolved == TypeTable::UNKNOWN {
             // Nothing else reports a default: no application writes it, so the
             // name that reached nothing is named at the declaration instead.
@@ -857,7 +862,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        // First check if it's a type parameter in scope
+        // A parameter is the one the resolver bound the name to, wherever the
+        // frame has moved it: a method's parameter shadowing an impl's letter
+        // is not the parameter the impl's bounds name.
+        if let Some(site) = site
+            && let Resolution::Binder(binder) = self.tysys.resolutions.get(site)
+        {
+            let owner = self.tysys.resolutions.binder_owner(binder);
+            if let Some(&BinderInScope { type_id, .. }) =
+                self.annotate_ctx.trait_ctx.binder_for(binder, owner, name)
+            {
+                return type_id;
+            }
+        }
         if let Some(&BinderInScope { type_id, .. }) =
             self.annotate_ctx.trait_ctx.type_params.get(name)
         {
@@ -923,8 +940,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .lookup_generic_newtype_of_decl(def)
             .cloned()
             .expect("`def` declares a generic newtype");
-        let names: Vec<String> = gn_info.type_params.iter().map(|p| p.name.clone()).collect();
-        let base_type_id = self.with_type_param_args(&names, &type_args, |e| {
+        let space: ParamSpace = gn_info
+            .type_params
+            .iter()
+            .map(|p| ParamRef::of(def, &p.name))
+            .zip(type_args.iter().copied())
+            .collect();
+        let base_type_id = self.with_type_param_args(&space, |e| {
             e.resolve_type(&gn_info.base_type_ast)
         });
         self.tysys
@@ -1200,7 +1222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 (None, None) => TypeTable::UNKNOWN,
             };
-            space.push((param.name.clone(), arg));
+            space.push((ParamRef::of(decl, &param.name), arg));
         }
         space
     }
@@ -1212,8 +1234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let (names, args): (Vec<String>, Vec<TypeId>) = space.iter().cloned().unzip();
-        self.with_type_params_bound(&names, &args, body)
+        self.with_type_params_bound(space, body)
     }
 
     /// Run `body` in the frame `scoped` was written in: its parameter space and
@@ -1721,7 +1742,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             match trait_args {
-                Some(args) => out.space.push((param.name.clone(), args[index])),
+                Some(args) => out
+                    .space
+                    .push((ParamRef::of(owning_trait, &param.name), args[index])),
                 None => out.unknown.push(param.name.clone()),
             }
         }

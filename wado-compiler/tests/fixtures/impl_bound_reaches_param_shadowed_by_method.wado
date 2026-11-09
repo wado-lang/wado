@@ -1,0 +1,41 @@
+// A method's own `T` shadows its impl's, yet the impl's bound `U: Uses<T>`
+// still means the impl's `T`. The bound was resolved by its letter in the
+// method's frame, so `self.u.use_it(self.t)` was refused with
+// "expected 'T', found 'T'".
+use { println, Stdout } from "core:cli";
+
+trait Uses<X> with () {
+    fn use_it(&self, x: X) -> i32;
+}
+
+struct I {
+    n: i32,
+}
+
+impl Uses<i32> for I {
+    fn use_it(&self, x: i32) -> i32 {
+        return self.n + x;
+    }
+}
+
+struct Holder<T, U> {
+    u: U,
+    t: T,
+}
+
+impl<T, U: Uses<T>> Holder<T, U> {
+    #[allow(shadowed_name)]
+    fn run<T>(&self, _o: T) -> i32 {
+        return self.u.use_it(self.t);
+    }
+}
+
+export fn run() with Stdout {
+    let h = Holder { u: I { n: 1 }, t: 41 };
+    println(`${h.run("s")}`);
+}
+
+__DATA__
+{
+    "stdout": "42\n"
+}

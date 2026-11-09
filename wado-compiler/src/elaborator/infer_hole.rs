@@ -12,6 +12,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::infer::unify;
+use super::scope::ParamRef;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::types::TypeError;
 use super::tysys::TypeSystem;
@@ -160,16 +161,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         param: &GenericParam,
         self_binding: Option<SelfBinding>,
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
     ) -> Vec<DeclaredBound> {
         // A variable stays named, for the re-check to read its answer; a
         // parameter is the frame's, and only that frame spells it.
         let at_impl: Vec<(FqTypeName, FqTypeName)> = {
             let tt = self.tysys.type_table.borrow();
+            let defs = self.tysys.resolutions.defs();
             impl_args
                 .iter()
                 .filter(|&&(_, arg)| !tt.contains_rigid_param(arg) && !tt.contains_unknown(arg))
-                .map(|(name, arg)| (FqTypeName::binder(name), tt.fq_type_name(*arg)))
+                .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
                 .collect()
         };
         param
@@ -244,7 +246,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param: &GenericParam,
         type_arg: TypeId,
         self_binding: Option<SelfBinding>,
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
         span: Span,
     ) {
         let bounds = self.declared_bounds(param, self_binding, impl_args);

@@ -3716,10 +3716,9 @@ impl FqTypeName {
         })
     }
 
-    /// A template's own type-parameter binder (a generic function's `T`, a pack
-    /// member `F`). A binder is not a declaration and has no module. Use
-    /// [`Self::binder_of_impl`] for one an `impl` block binds — that one has an
-    /// identity beyond its spelling.
+    /// A binder known only by its spelling (a pack member `F`, a name a
+    /// synthesized template writes). Use [`Self::binder_of`] for a parameter an
+    /// item declares — that one has an identity beyond its spelling.
     #[must_use]
     pub fn binder(name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {
@@ -3742,14 +3741,15 @@ impl FqTypeName {
             .is_some_and(|name| name.starts_with(".."))
     }
 
-    /// The receiver parameter `name` of the `impl` block `def` declares (`T` in
-    /// `impl<T: Bound> Trait for T`). The one way to build this name, so no two
-    /// callers can build two.
+    /// The type parameter `name` the item `def` declares (`T` in
+    /// `impl<T: Bound> Trait for T`, `U` in `fn m<U>`). The one way to build
+    /// this name, so no two callers can build two: a method's `U` shadowing its
+    /// impl's is another binder however both are spelled.
     #[must_use]
-    pub fn binder_of_impl(defs: &DefTable, def: DefId, name: &str) -> Self {
+    pub fn binder_of(defs: &DefTable, def: DefId, name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {
             name: name.to_string(),
-            owner: Some(BinderOwner::of_impl(defs.module(def), defs.ast_id(def))),
+            owner: Some(BinderOwner::of_item(defs.module(def), defs.ast_id(def))),
         })
     }
 
@@ -4287,8 +4287,8 @@ impl std::hash::Hash for BinderOwner {
 }
 
 impl BinderOwner {
-    /// The receiver binder of the `impl` block declared at `id` in `module`.
-    fn of_impl(module: &ModuleSource, id: AstId) -> Self {
+    /// A parameter of the item declared at `id` in `module`.
+    fn of_item(module: &ModuleSource, id: AstId) -> Self {
         Self {
             id,
             assoc: None,

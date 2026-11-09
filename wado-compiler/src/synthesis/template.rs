@@ -1097,9 +1097,8 @@ fn method_name_for_type(
     }
     let resolved = tt_ref.get(type_id).clone();
     let head = match resolved {
-        ResolvedType::TypeParam { ref name, .. } | ResolvedType::TypePack { ref name, .. } => {
-            FqTypeName::binder(name)
-        }
+        ResolvedType::TypeParam { .. } => tt_ref.fq_type_name(type_id),
+        ResolvedType::TypePack { ref name, .. } => FqTypeName::binder(name),
         // A `fn(..)` receiver is named by the type itself, the same spelling
         // its dispatch stubs are registered under.
         ResolvedType::Function { .. } => tt_ref.fn_receiver_name(&resolved),

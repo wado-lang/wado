@@ -24,12 +24,66 @@ use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::util;
 use super::{AbstractSelections, Elaborator};
-use crate::defs::DefId;
+use crate::defs::{DefId, DefTable};
+use crate::resolve::Resolutions;
 use crate::name::{FqTraitName, FqTypeName};
 use crate::token::Span;
 
+/// A type parameter as the declaration `owner` writes it: a method's `U` and
+/// its impl's `U` are two parameters, whatever a frame calls them. `None` for a
+/// name no declaration owns.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ParamRef {
+    pub(super) owner: Option<DefId>,
+    pub(super) name: String,
+}
+
+impl ParamRef {
+    pub(super) fn of(owner: DefId, name: &str) -> Self {
+        Self {
+            owner: Some(owner),
+            name: name.to_string(),
+        }
+    }
+
+    /// The parameter `param` declares.
+    pub(super) fn declared(param: &ast::GenericParam, resolutions: &Resolutions) -> Self {
+        Self {
+            owner: resolutions.binder_owner(param.id),
+            name: param.name.clone(),
+        }
+    }
+
+    /// `params` paired with `args`, one for one.
+    pub(super) fn space(
+        params: &[ast::GenericParam],
+        args: &[TypeId],
+        resolutions: &Resolutions,
+    ) -> ParamSpace {
+        params
+            .iter()
+            .map(|param| Self::declared(param, resolutions))
+            .zip(args.iter().copied())
+            .collect()
+    }
+
+    /// Whether a site writing `written` names this parameter. A pack spread
+    /// carries no site, so it names one by spelling alone.
+    pub(super) fn is_written_as(&self, written: &ParamRef) -> bool {
+        self.name == written.name && written.owner.is_none_or(|owner| self.owner == Some(owner))
+    }
+
+    /// The parameter as a type name spells it.
+    pub(super) fn binder(&self, defs: &DefTable) -> FqTypeName {
+        match self.owner {
+            Some(owner) => FqTypeName::binder_of(defs, owner, &self.name),
+            None => FqTypeName::binder(&self.name),
+        }
+    }
+}
+
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
-/// and the node that declares it.
+/// and the parameter it stands in for.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct BinderInScope {
     /// Slot in the enclosing item's parameter list.
@@ -37,9 +91,11 @@ pub(super) struct BinderInScope {
     pub(super) type_id: TypeId,
     /// Where the parameter is written, which tells a method's parameter from
     /// the impl receiver's binder of the same letter. `None` for a name no
-    /// parameter declares: `Self`, or one already bound to a concrete type.
-    /// Not what names a binder in a mangle — see [`TraitContext::impl_owner`].
+    /// parameter declares here: `Self`, or one bound to a site's argument.
     pub(super) decl: Option<ast::AstId>,
+    /// The declaration whose parameter a binding to a site's argument stands
+    /// in for, where [`Self::decl`] is `None`.
+    pub(super) owner: Option<DefId>,
     /// Declared `affine T`: an argument for it may be move-only.
     pub(super) is_affine: bool,
 }
@@ -51,7 +107,16 @@ impl BinderInScope {
             index,
             type_id,
             decl: Some(param.id),
+            owner: None,
             is_affine: param.is_affine,
+        }
+    }
+
+    /// The parameter of `owner` bound to a site's argument.
+    pub(super) fn standing_for(index: u32, type_id: TypeId, owner: Option<DefId>) -> Self {
+        Self {
+            owner,
+            ..Self::undeclared(index, type_id)
         }
     }
 
@@ -69,6 +134,7 @@ impl BinderInScope {
             index,
             type_id,
             decl: None,
+            owner: None,
             is_affine: false,
         }
     }
@@ -383,6 +449,26 @@ impl TraitContext {
             .find(|binder| binder.type_id == type_id)
     }
 
+    /// The binder standing for `owner`'s parameter `name`, written at `decl`:
+    /// the one declared there, or one bound to a site's argument for it.
+    /// Shadowed or not, the latest frame binding it wins.
+    pub(super) fn binder_for(
+        &self,
+        decl: ast::AstId,
+        owner: Option<DefId>,
+        name: &str,
+    ) -> Option<&BinderInScope> {
+        let shadowed = self
+            .shadowed
+            .iter()
+            .rev()
+            .filter(|(shadowed, ..)| shadowed == name)
+            .map(|(_, binder, _)| binder);
+        self.type_params.get(name).into_iter().chain(shadowed).find(|binder| {
+            binder.decl == Some(decl) || (binder.owner.is_some() && binder.owner == owner)
+        })
+    }
+
     /// The bounds the binder whose type is `type_id` carries, shadowed or not.
     pub(super) fn bounds_of(&self, type_id: TypeId) -> Vec<&ScopedBound> {
         self.binders()
@@ -598,18 +684,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// reaches only the parameters to its left.
     pub(super) fn with_type_param_args<R>(
         &mut self,
-        names: &[String],
-        args: &[TypeId],
+        space: &[(ParamRef, TypeId)],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let binders: IndexMap<String, BinderInScope> = names
+        let binders: IndexMap<String, BinderInScope> = space
             .iter()
-            .zip(args)
             .enumerate()
-            .map(|(slot, (name, &type_id))| {
+            .map(|(slot, (param, type_id))| {
                 (
-                    name.clone(),
-                    BinderInScope::undeclared(slot as u32, type_id),
+                    param.name.clone(),
+                    BinderInScope::standing_for(slot as u32, *type_id, param.owner),
                 )
             })
             .collect();
@@ -625,17 +709,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the enclosing parameters still answer, and a repeated name is shadowed.
     pub(super) fn with_type_params_bound<R>(
         &mut self,
-        names: &[String],
-        args: &[TypeId],
+        space: &[(ParamRef, TypeId)],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let mut scope = self.enter_inherited_type_param_scope();
         let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
-        for (slot, (name, &type_id)) in names.iter().zip(args).enumerate() {
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .bind(name, BinderInScope::undeclared(base + slot as u32, type_id));
+        for (slot, (param, type_id)) in space.iter().enumerate() {
+            let binder = BinderInScope::standing_for(base + slot as u32, *type_id, param.owner);
+            scope.annotate_ctx.trait_ctx.bind(&param.name, binder);
         }
         body(&mut scope)
     }

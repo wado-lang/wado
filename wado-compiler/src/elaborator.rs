@@ -1150,10 +1150,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The binder `written` names in the current type-param scope: owned by the
-    /// `impl` block in scope when it is that block's receiver, bare otherwise.
-    /// Matched on the binding, not the spelling — a method parameter may shadow
-    /// the receiver's letter (#1932).
+    /// The binder `written` names in the current type-param scope, owned by the
+    /// item declaring it. Matched on the binding, not the spelling — a method
+    /// parameter may shadow the receiver's letter (#1932).
     pub(super) fn binder_in_scope(&self, written: &str) -> FqTypeName {
         let binder = self.annotate_ctx.trait_ctx.type_params.get(written);
         self.binder_named(binder, written)
@@ -1170,13 +1169,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     fn binder_named(&self, binder: Option<&scope::BinderInScope>, name: &str) -> FqTypeName {
-        let ctx = &self.annotate_ctx.trait_ctx;
-        if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
-            && binder.and_then(|b| b.decl) == Some(*receiver_decl)
-        {
-            return self.tysys.impl_receiver_binder(*owner, name);
+        let table = self.tysys.type_table.borrow();
+        match binder {
+            Some(binder) if matches!(table.get(binder.type_id), ResolvedType::TypeParam { .. }) => {
+                table.fq_type_name(binder.type_id)
+            }
+            _ => FqTypeName::binder(name),
         }
-        FqTypeName::binder(name)
     }
 
     /// The name an `impl` block's receiver registers under. One block, one
@@ -2355,7 +2354,7 @@ impl TypeSystem {
     /// The binder naming the receiver parameter `written` of the `impl` block
     /// `owner` — every pass that names a blanket's receiver asks here.
     pub(super) fn impl_receiver_binder(&self, owner: DefId, written: &str) -> FqTypeName {
-        FqTypeName::binder_of_impl(self.resolutions.defs(), owner, written)
+        FqTypeName::binder_of(self.resolutions.defs(), owner, written)
     }
 
     /// The spelling `def` renders to in a mangled head — its declared name,

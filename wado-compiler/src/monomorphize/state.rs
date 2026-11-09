@@ -128,9 +128,9 @@ pub(super) struct Monomorphizer {
     /// The receiver head of the impl method being instantiated; only a call on
     /// that same head inherits its impl type args.
     pub current_impl_receiver: Option<FqTypeName>,
-    /// Each type param of the function being instantiated, by name: a
-    /// `T^Trait::method` receiver is written by name.
-    pub current_param_substitution_key: IndexMap<String, TypeParamId>,
+    /// Each type param of the function being instantiated, by the binder a
+    /// `T^Trait<U>::method` name spells it as.
+    pub current_param_substitution_key: IndexMap<FqTypeName, TypeParamId>,
     /// Each pack's whole tuple while one unrolled element is substituted, for
     /// a `[..T]` spelling that still means the whole.
     pub pack_splice_bindings: RefCell<TypeArgMap>,

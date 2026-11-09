@@ -2093,7 +2093,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let resolved = tt.get(ty);
             if let Some(param) = bound_param_name(&tt, ty) {
-                (FqTypeName::binder(param), param.clone())
+                let receiver = match resolved {
+                    ResolvedType::TypeParam { .. } => tt.fq_type_name(ty),
+                    // A pack and its element are named by spelling alone.
+                    _ => FqTypeName::binder(param),
+                };
+                (receiver, param.clone())
             } else if matches!(resolved, ResolvedType::AssocTypeProjection { .. }) {
                 (tt.fq_type_name(ty), tt.name(ty))
             } else {

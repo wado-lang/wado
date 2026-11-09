@@ -25,7 +25,9 @@ use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
+use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound, TraitContext};
+use super::type_resolution::ParamSpace;
+use crate::resolve::{Resolution, Resolutions};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
@@ -75,11 +77,21 @@ enum WrappedCase {
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
 /// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
 /// which is what the pack stands for everywhere else.
-fn assoc_bound_target_param(ty: &Type) -> Option<&str> {
+fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<ParamRef> {
     match ty {
-        Type::Named(named) => Some(&named.name),
+        Type::Named(named) => match resolutions.get(named.id) {
+            Resolution::Binder(binder) => Some(ParamRef {
+                owner: resolutions.binder_owner(binder),
+                name: named.name.clone(),
+            }),
+            Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
+        },
+        // A spread names its pack by spelling alone.
         Type::Tuple(elems) => match elems.as_slice() {
-            [Type::TypePackSpread(name, _)] => Some(name),
+            [Type::TypePackSpread(name, _)] => Some(ParamRef {
+                owner: None,
+                name: name.clone(),
+            }),
             _ => None,
         },
         _ => None,
@@ -238,7 +250,7 @@ pub(super) enum SigChoice {
 /// type argument the site taking the default settled on.
 #[derive(Debug, Clone)]
 pub(super) struct DefaultTypeBinding {
-    pub(super) name: String,
+    pub(super) param: ParamRef,
     /// What a default dispatching on the parameter has to go on where the
     /// argument is itself a parameter.
     pub(super) bounds: Vec<ScopedBound>,
@@ -267,11 +279,11 @@ pub(super) struct WalkedDefault {
     pub(super) check_at: Option<Span>,
 }
 
-/// Add each of `nearer` to `bindings`, replacing a same-named entry: several
-/// declarations reach one default's scope, and they may share a spelling.
+/// Add each of `nearer` to `bindings`, replacing the entry for the same
+/// parameter.
 pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<DefaultTypeBinding>) {
     for binding in nearer {
-        match bindings.iter_mut().find(|held| held.name == binding.name) {
+        match bindings.iter_mut().find(|held| held.param == binding.param) {
             Some(held) => *held = binding,
             None => bindings.push(binding),
         }
@@ -351,13 +363,13 @@ pub(super) fn slot_type_bindings(
         .iter()
         .zip(concrete)
         .filter_map(|(&slot, &type_id)| {
-            let (name, settled) = match table.get(slot) {
-                ResolvedType::TypeParam { name, .. } => (name, SettledAs::Type(type_id)),
-                ResolvedType::TypePack { name, .. } => (name, SettledAs::Pack(slot)),
+            let (id, name, settled) = match table.get(slot) {
+                ResolvedType::TypeParam { id, name } => (id, name, SettledAs::Type(type_id)),
+                ResolvedType::TypePack { id, name, .. } => (id, name, SettledAs::Pack(slot)),
                 _ => return None,
             };
             Some(DefaultTypeBinding {
-                name: name.clone(),
+                param: ParamRef::of(id.owner, name),
                 bounds: Vec::new(),
                 settled,
             })
@@ -3217,7 +3229,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A free function's declaration binds no `Self`, so a bound of
                 // its own writes none.
                 bounds: ScopedBound::pin_declared(&param, None),
-                name: param.name,
+                param: ParamRef {
+                    owner,
+                    name: param.name,
+                },
             })
             .collect()
     }
@@ -3280,8 +3295,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             scope.bind_param(
-                &binding.name,
-                BinderInScope::undeclared(i as u32, in_scope[i]),
+                &binding.param.name,
+                BinderInScope::standing_for(i as u32, in_scope[i], binding.param.owner),
                 bounds.clone(),
             );
         }
@@ -3498,7 +3513,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let open = self.open_slot(owner, param);
             type_args.push(open);
         }
-        self.resolve_assoc_bound_args(params, type_args);
+        self.resolve_assoc_bound_args(owner, params, type_args);
     }
 
     /// A call's slot for `param`, which `owner` declares, that nothing has
@@ -3950,13 +3965,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// an index space; iterates to a fixpoint for chained bounds.
     pub(super) fn resolve_assoc_bound_args(
         &mut self,
+        owner: Option<DefId>,
         params: &[ast::GenericParam],
         args: &mut [TypeId],
     ) {
         if params.len() != args.len() {
             return;
         }
-        let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
+        let names: Vec<ParamRef> = params
+            .iter()
+            .map(|param| ParamRef {
+                owner,
+                name: param.name.clone(),
+            })
+            .collect();
         self.resolve_assoc_bounds_in(params, 0, &names, args);
     }
 
@@ -3967,7 +3989,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         params: &[ast::GenericParam],
         offset: usize,
-        names: &[String],
+        names: &[ParamRef],
         args: &mut [TypeId],
     ) {
         assert_eq!(names.len(), args.len(), "every slot is named");
@@ -3987,8 +4009,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .assoc_types
                         .iter()
                         .filter_map(|assoc| {
-                            let target_name = assoc_bound_target_param(&assoc.ty)?;
-                            let target_idx = names.iter().position(|n| *n == target_name)?;
+                            let target =
+                                assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)?;
+                            let target_idx = names.iter().position(|n| n.is_written_as(&target))?;
                             self.tysys
                                 .is_unbound_type_param(args[target_idx])
                                 .then_some((target_idx, assoc))
@@ -4095,13 +4118,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bound: &ast::TraitBound,
         trait_: Option<DefId>,
         owner: TypeId,
-        names: &[String],
+        names: &[ParamRef],
         args: &[TypeId],
     ) -> BoundArgsAtCall {
         let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
             return BoundArgsAtCall::Read(None);
         };
-        let written = self.with_type_params_bound(names, args, |e| e.written_bound_args(bound));
+        let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
+        let written = self.with_type_params_bound(&space, |e| e.written_bound_args(bound));
         if written
             .iter()
             .any(|&ty| self.tysys.type_table.borrow().contains_undecided(ty))
@@ -4574,12 +4598,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A slot the arguments reach only through a bound's associated type
         // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`) is projected
         // off the owner the arguments did settle.
-        let names: Vec<String> = sig
-            .decl
-            .type_params
-            .iter()
-            .map(|(n, _)| n.clone())
-            .collect();
+        let names: Vec<ParamRef> = {
+            let table = self.tysys.type_table.borrow();
+            sig.decl
+                .type_params
+                .iter()
+                .map(|(name, slot)| ParamRef {
+                    owner: table.type_param_id(*slot).map(|id| id.owner),
+                    name: name.clone(),
+                })
+                .collect()
+        };
         self.resolve_assoc_bounds_in(&sig.own_params, split, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),

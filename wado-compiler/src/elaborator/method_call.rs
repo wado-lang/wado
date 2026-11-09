@@ -27,7 +27,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
-use super::scope::ScopedBound;
+use super::scope::{ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
@@ -251,10 +251,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let declaring = self.declaring_space(*owning_trait, assoc_name, trait_args.as_deref());
         let mut space = declaring.space.clone();
+        // A family's own parameter is owned by no item a site resolves to.
         space.extend(
             decl.type_params
                 .iter()
-                .map(|param| param.name.clone())
+                .map(|param| ParamRef {
+                    owner: None,
+                    name: param.name.clone(),
+                })
                 .zip(args.iter().copied()),
         );
         let sig = tt

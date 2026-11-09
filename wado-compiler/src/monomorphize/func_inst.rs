@@ -836,7 +836,7 @@ impl Monomorphizer {
         }
         let receiver = info.fq_struct_name();
         if receiver.projected().is_some() {
-            let bound = |name: &str| self.named_answer(substitution, name);
+            let bound = |binder: &FqTypeName| self.named_answer(substitution, binder);
             return Self::type_at_instance(&receiver, &bound, type_table);
         }
         answer.or_else(|| {
@@ -856,15 +856,14 @@ impl Monomorphizer {
     ) -> Option<TypeId> {
         match info.receiver_param {
             Some(param) => substitution.get(&param).copied(),
-            None => self.named_answer(substitution, &info.base_struct_name()),
+            None => self.named_answer(substitution, &info.fq_base_struct_name()),
         }
     }
 
-    /// What `substitution` fills the parameter the current frame names `name`
-    /// with.
-    fn named_answer(&self, substitution: &TypeArgMap, name: &str) -> Option<TypeId> {
+    /// What `substitution` fills the current frame's parameter `binder` with.
+    fn named_answer(&self, substitution: &TypeArgMap, binder: &FqTypeName) -> Option<TypeId> {
         substitution
-            .get(self.current_param_substitution_key.get(name)?)
+            .get(self.current_param_substitution_key.get(binder)?)
             .copied()
     }
 
@@ -1173,14 +1172,19 @@ impl Monomorphizer {
         let own = generic.type_params.iter().map(|param| param.id);
         substitution.extend(own.zip(key.method_type_args.iter().copied()));
 
-        // A `T^Trait::method` receiver is written by name (the param named
-        // `base_struct_name`). Method params are inserted last so an
-        // inner-scope name shadows an impl-level one.
-        let param_key_by_name: IndexMap<String, TypeParamId> = generic
+        let param_key_by_name: IndexMap<FqTypeName, TypeParamId> = generic
             .impl_type_params
             .iter()
             .chain(&generic.type_params)
-            .map(|param| (param.name.clone(), param.id))
+            .map(|param| {
+                let declared = type_table.make_declared_param(
+                    param.id.owner,
+                    param.name.clone(),
+                    param.id.index,
+                    param.is_pack,
+                );
+                (type_table.fq_type_name(declared), param.id)
+            })
             .collect();
 
         // Mangle through `mangle_type_arg_for_generic` so the definition-side
@@ -1232,12 +1236,12 @@ impl Monomorphizer {
 
     /// `generic` with `substitution` applied throughout, under the identity the
     /// caller gives the instance. `param_key_by_name` resolves a
-    /// `T^Trait::method` receiver to its slot by the parameter's name.
+    /// `T^Trait::method` receiver to its slot by the parameter's binder.
     fn instantiate_with(
         &mut self,
         generic: &TirFunction,
         substitution: &TypeArgMap,
-        param_key_by_name: IndexMap<String, TypeParamId>,
+        param_key_by_name: IndexMap<FqTypeName, TypeParamId>,
         identity: InstanceIdentity,
         type_table: &mut TypeTable,
     ) -> TirFunction {
@@ -2559,7 +2563,7 @@ impl Monomorphizer {
         if !trait_name.args_mention_binder() {
             return info;
         }
-        let bound = |name: &str| self.named_answer(substitution, name);
+        let bound = |binder: &FqTypeName| self.named_answer(substitution, binder);
         let args: Vec<FqTypeName> = trait_name
             .args()
             .iter()
@@ -2576,7 +2580,7 @@ impl Monomorphizer {
     /// its name.
     fn trait_arg_at_instance(
         arg: &FqTypeName,
-        bound: &impl Fn(&str) -> Option<TypeId>,
+        bound: &impl Fn(&FqTypeName) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> FqTypeName {
         arg.rewrite(&|node| {
@@ -2608,7 +2612,7 @@ impl Monomorphizer {
     /// only once its own base does.
     fn type_at_instance(
         node: &FqTypeName,
-        bound: &impl Fn(&str) -> Option<TypeId>,
+        bound: &impl Fn(&FqTypeName) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
         if !node.args().is_empty() {
@@ -2617,14 +2621,14 @@ impl Monomorphizer {
         if let Some(projected) = node.projected() {
             return Self::family_at_instance(&projected, bound, type_table);
         }
-        bound(node.binder_name()?)
+        bound(node)
     }
 
     /// What the projection `projected` binds at the instance, its own
     /// parameters still open: answered by the impl its trait is reached at.
     fn family_at_instance(
         projected: &Projected<'_>,
-        bound: &impl Fn(&str) -> Option<TypeId>,
+        bound: &impl Fn(&FqTypeName) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
         let base_id = Self::type_at_instance(projected.base, bound, type_table)?;

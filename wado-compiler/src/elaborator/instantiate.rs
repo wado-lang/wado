@@ -12,6 +12,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::coercion::ExpectedReturn;
+use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
 use crate::ast::{self, GenericParam};
@@ -62,7 +63,7 @@ pub(super) struct Instantiation<'a> {
     pub(super) self_binding: Option<SelfBinding>,
     /// What the receiver settles the enclosing impl's parameters to, which a
     /// method's bound may name. Empty off a method.
-    pub(super) impl_args: &'a [(String, TypeId)],
+    pub(super) impl_args: &'a [(ParamRef, TypeId)],
 }
 
 /// A declaration's slots rewritten into one use site's variables.
@@ -328,7 +329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inst: &Instantiated,
         params: &[GenericParam],
         self_binding: Option<SelfBinding>,
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
         span: Span,
     ) {
         for ((&var, param), diag) in inst.vars.iter().zip(params.iter()).zip(inst.diags.iter()) {

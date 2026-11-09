@@ -1145,18 +1145,10 @@ impl TypeTable {
     /// The type parameters shape `id` mentions, by name: the frame its
     /// synthesized methods are instantiated in at a substituted shape.
     #[must_use]
-    pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<String, TypeParamId> {
+    pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<FqTypeName, TypeParamId> {
         self.anon_shape_params(id)
             .into_iter()
-            .map(|(param, ty)| match self.get(ty) {
-                ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
-                    (name.clone(), param)
-                }
-                ResolvedType::PackElement { pack, walk } => {
-                    (pack_element_name(self.pack_name(*pack), *walk), param)
-                }
-                other => unreachable!("collected a parameter that is not one: {other:?}"),
-            })
+            .map(|(param, ty)| (self.fq_type_name(ty), param))
             .collect()
     }
 
@@ -6161,7 +6153,9 @@ impl TypeTable {
             | ResolvedType::Resource { def, .. }
             | ResolvedType::Newtype { def, .. } => declared(*def),
             ResolvedType::Tuple(_) => declared(self.tuple_def()),
-            ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
+            ResolvedType::TypeParam { id, name } => {
+                Receiver::Type(FqTypeName::binder_of(&self.defs, id.owner, name))
+            }
             ResolvedType::BuiltinArray(_) => builtin(ARRAY_TYPE_NAME),
             ResolvedType::Unit => builtin(UNIT_TYPE_NAME),
             ResolvedType::Primitive(prim) => builtin(prim.as_str()),
@@ -6302,7 +6296,7 @@ impl TypeTable {
             | ResolvedType::Variant { def, type_args } => {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
-            ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
+            ResolvedType::TypeParam { id, name } => FqTypeName::binder_of(&self.defs, id.owner, name),
             ResolvedType::AssocParam {
                 owning_trait,
                 assoc_name,

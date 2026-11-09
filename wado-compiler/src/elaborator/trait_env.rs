@@ -540,7 +540,7 @@ impl BlanketImpl {
     /// Where every template name for this blanket comes from — one built from
     /// the spelling alone looks up a *different* template, silently.
     pub(crate) fn receiver_binder(&self, defs: &DefTable) -> name::FqTypeName {
-        name::FqTypeName::binder_of_impl(defs, self.def, &self.param)
+        name::FqTypeName::binder_of(defs, self.def, &self.param)
     }
 }
 
@@ -2727,9 +2727,11 @@ pub(super) fn args_at_impl_target(
     resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
     let target_id = written_type_arg(target, resolutions);
+    // `Self` is a keyword no parameter can take, so its spelling identifies it.
+    let is_self = |node: &name::FqTypeName| node.binder_name() == Some("Self");
     written
         .into_iter()
-        .map(|arg| arg.substitute(&name::FqTypeName::binder("Self"), &target_id))
+        .map(|arg| arg.rewrite(&|node| is_self(node).then(|| target_id.clone())))
         .collect()
 }
 
@@ -2779,7 +2781,15 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                             resolutions,
                         );
                     }
-                    None => name::FqTypeName::binder(&get_type_name_static(ty)),
+                    None => {
+                        let written = get_type_name_static(ty);
+                        match resolutions.binder_owner(binder) {
+                            Some(owner) => {
+                                name::FqTypeName::binder_of(resolutions.defs(), owner, &written)
+                            }
+                            None => name::FqTypeName::binder(&written),
+                        }
+                    }
                 },
                 // A projection names no type until its base is one, and the
                 // trait declaring the member is part of that name

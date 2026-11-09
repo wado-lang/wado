@@ -1,6 +1,7 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
-use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
+use super::scope::{BinderInScope, ParamRef, ScopedBound, trait_params_from_impl};
+use super::type_resolution::ParamSpace;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
 use std::rc::Rc;
@@ -86,10 +87,10 @@ fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader 
 }
 
 /// Each impl parameter the receiver settles to one type, with that type.
-pub(super) fn settled_impl_args(bindings: &[DefaultTypeBinding]) -> Vec<(String, TypeId)> {
+pub(super) fn settled_impl_args(bindings: &[DefaultTypeBinding]) -> ParamSpace {
     bindings
         .iter()
-        .filter_map(|binding| Some((binding.name.clone(), binding.settled.type_id()?)))
+        .filter_map(|binding| Some((binding.param.clone(), binding.settled.type_id()?)))
         .collect()
 }
 
@@ -202,7 +203,7 @@ pub(super) struct MethodInferenceInput<'a> {
     /// The matched `impl` block's parameters at the receiver's arguments
     /// ([`settled_impl_args`]), which a method bound may name: `R` in
     /// `fn go<T: Mix<R, Out = Q>, Q>` under `impl<R> Holder<R>`.
-    pub impl_args: &'a [(String, TypeId)],
+    pub impl_args: &'a [(ParamRef, TypeId)],
     /// The slots as `args` were resolved through them
     /// ([`Elaborator::resolve_args_through_slots`]), `None` where there are
     /// none. Inference solves these same variables, which an argument such as
@@ -637,7 +638,7 @@ impl TypeSystem {
             .into_iter()
             .filter_map(|supplied| {
                 Some(DefaultTypeBinding {
-                    name: supplied.param.name.clone(),
+                    param: ParamRef::of(trait_decl, &supplied.param.name),
                     settled: SettledAs::Type(*supplied.arg?),
                     bounds: supplied.bounds,
                 })
@@ -1274,18 +1275,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
         let names = ImplParamSlots::of(&header.ty, &header.type_params);
-        let impl_args: Vec<(String, TypeId)> = slots
+        let impl_args: ParamSpace = slots
             .iter()
             .filter_map(|(slot, &arg)| {
                 assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
-                Some((
-                    names.name_of(slot.index)?.to_string(),
-                    self.apply_infer_holes(arg),
-                ))
+                let name = names.name_of(slot.index)?;
+                Some((ParamRef::of(def, name), self.apply_infer_holes(arg)))
             })
             .collect();
-        for (name, arg) in &impl_args {
-            let Some(param) = header.type_params.iter().find(|p| &p.name == name) else {
+        for (bound, arg) in &impl_args {
+            let Some(param) = header.type_params.iter().find(|p| p.name == bound.name) else {
                 continue;
             };
             let bounds = self.declared_bounds(param, None, &impl_args);
@@ -1524,7 +1523,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_self = Some(declaring);
         for binding in &mut bindings {
             if binding.settled.is_pack()
-                && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
+                && let Some(param) = own_params.iter().find(|p| p.name == binding.param.name)
             {
                 binding.bounds = ScopedBound::pin_declared(param, receiver_self);
             }
@@ -1660,8 +1659,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
-        let (names, ids): (Vec<String>, Vec<TypeId>) = input.impl_args.iter().cloned().unzip();
-        self.with_type_params_bound(&names, &ids, |e| {
+        let impl_args = input.impl_args.to_vec();
+        self.with_type_params_bound(&impl_args, |e| {
             e.bind_method_type_args_in_impl_frame(explicit, input)
         })
     }
@@ -1757,7 +1756,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve method type params that appear only inside another method
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.
-        self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
+        let owner = slots
+            .first()
+            .and_then(|&slot| self.tysys.type_table.borrow().type_param_id(slot))
+            .map(|id| id.owner);
+        self.resolve_assoc_bound_args(owner, &method_type_params, &mut inferred);
         self.fill_defaulted_method_type_args(
             &method_type_params,
             receiver_type,
@@ -2322,7 +2325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params
             .iter()
             .map(|(name, binder)| DefaultTypeBinding {
-                name: name.clone(),
+                param: ParamRef::of(impl_ref.0, name),
                 bounds: scope
                     .annotate_ctx
                     .trait_ctx

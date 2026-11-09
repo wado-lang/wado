@@ -20,8 +20,8 @@ use crate::type_table::TypeTable;
 use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
-    BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
-    trait_params_from_impl,
+    BinderInScope, BoundSelf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
+    TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
 use super::trait_env::{DefaultArg, ImplMethodHeader, InheritedBound, ViaClause};
@@ -816,8 +816,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !pick.contains(&true) {
             return trait_;
         }
-        let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
-        self.with_type_params_bound(&names, type_args, |e| {
+        let space = ParamRef::space(params, type_args, &self.tysys.resolutions);
+        self.with_type_params_bound(&space, |e| {
             e.under_self_binding(self_binding, |e| {
                 e.trait_named_with_resolved_args(trait_, bound, &pick)
             })
@@ -1683,8 +1683,9 @@ impl TypeSystem {
                 .filter(|param| !param.is_pack)
                 .filter_map(|param| {
                     let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
-                    (!table.awaits_inference(arg))
-                        .then(|| (FqTypeName::binder(&param.name), table.fq_type_name(arg)))
+                    let binder = ParamRef::declared(param, &self.resolutions)
+                        .binder(self.resolutions.defs());
+                    (!table.awaits_inference(arg)).then(|| (binder, table.fq_type_name(arg)))
                 })
                 .collect();
             // All at once: a receiver argument spelled like another impl
@@ -2564,7 +2565,8 @@ impl TypeSystem {
                     .iter()
                     .filter_map(|(slot, &arg)| {
                         let name = names.name_of(slot.index)?;
-                        Some((FqTypeName::binder(name), tt.fq_type_name(arg)))
+                        let binder = ParamRef::of(def, name).binder(self.resolutions.defs());
+                        Some((binder, tt.fq_type_name(arg)))
                     })
                     .collect()
             };
@@ -2678,12 +2680,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
         self_binding: Option<SelfBinding>,
         span: Span,
     ) {
         let at_call = self.tysys.call_site_types(params, type_args, impl_args);
-        let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+        let site = ParamRef::space(params, type_args, &self.tysys.resolutions);
         for (i, param) in params.iter().enumerate() {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
@@ -2748,7 +2750,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A constraint may name another of the declaration's
                     // parameters, `N: ReflectNewtype<Base = B>`, which means
                     // what the call binds `B` to.
-                    self.with_type_params_bound(&site, type_args, |e| {
+                    self.with_type_params_bound(&site, |e| {
                         e.enforce_assoc_type_bounds(subject, bound, self_binding, span);
                     });
                 }
@@ -2772,7 +2774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
                 let bounds = ScopedBound::pin_declared(param, self_binding);
-                let root_args = self.with_type_params_bound(&site, type_args, |e| {
+                let root_args = self.with_type_params_bound(&site, |e| {
                     e.trait_args_of_bound(&bounds, root)
                 });
                 let pick = vec![true; bound.type_args.len()];
@@ -3699,16 +3701,15 @@ impl TypeSystem {
         &self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
     ) -> Vec<(FqTypeName, FqTypeName)> {
         let tt = self.type_table.borrow();
-        params
+        let defs = self.resolutions.defs();
+        ParamRef::space(params, type_args, &self.resolutions)
             .iter()
-            .map(|param| param.name.as_str())
-            .zip(type_args.iter().copied())
-            .chain(impl_args.iter().map(|(name, arg)| (name.as_str(), *arg)))
+            .chain(impl_args)
             .filter(|(_, arg)| !tt.contains_type_param(*arg))
-            .map(|(name, arg)| (FqTypeName::binder(name), tt.fq_type_name(arg)))
+            .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
             .collect()
     }
 
