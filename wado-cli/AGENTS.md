@@ -17,9 +17,9 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   `--log-level`, `--allocator`, `-f`, `--no-cache`. `RuntimeKnobs` /
   `RuntimeKnobOpt` carry what the wasmtime engine is built with: `--collector`,
   `--gc-heap-initial`, `--function-alignment`, `--report-fuel`,
-  `--deny-process`, `--process-read`, `--process-trace`. `HostKnobs` / `HostKnobOpt` carry how the `wado` process
-  itself runs: `--retain-memory`, which `main` installs before the subcommand
-  runs.
+  `--deny-process`, `--process-read`, `--process-trace`. `HostKnobs` /
+  `HostKnobOpt` carry how the `wado` process itself runs: `--retain-memory`,
+  which `main` installs before the subcommand runs.
   A subcommand lists the subset it accepts and holds one field per family it
   uses. It declares no field, parse arm, or spec of its own for a shared knob,
   and a new one is added in `wado_host::options` only.
