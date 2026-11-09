@@ -275,7 +275,11 @@ with a syntax error does not: on input the jar rejects, the simulator's pick is
 a guess at how to fail, and a different pick is not a wrong one. The
 left-recursion loop's choice of suffix, the lookahead DFA and the LR table are
 static shortcuts `"exact"` takes too, and are checked against the simulator the
-same way. A non-greedy `??` `*?` `+?` is not checked. What the static path's
+same way. A non-greedy `??` `*?` `+?` is not checked, nor is a decision in a
+left-recursive rule the simulator decides as a whole. The pick computed beside
+the simulator's is the one `"longest"` would make within `"exact"`'s parse, so
+where `"longest"` reaches a decision by another path, around a left-recursive
+atom say, its tree can still differ unreported. What the static path's
 predicates print is taken back out of the output, but a predicate that changes
 the parser's state changes it again, so under `"verify"` it can change the
 parse. It is for finding where the tournament departs from ANTLR4 over real
