@@ -33,7 +33,7 @@ use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{DerivedAt, OnBoundTrait, SelfBinding};
-use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
+use super::types::{FunctionContext, MethodInfo, MethodOwner, RealTypeParams, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator};
 use crate::compiler_item::CompilerItem;
@@ -2170,12 +2170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A slot bound only through another's associated type (`..V` off
             // `Holes`) is projected off the owner the arguments settled, as the
             // bare spelling projects it.
-            let real: Vec<ast::GenericParam> = sig
-                .own_params
-                .iter()
-                .filter(|p| p.is_real_type_param())
-                .cloned()
-                .collect();
+            let real = RealTypeParams::of(&sig.own_params);
             self.project_assoc_bound_args(Some(sig.def), &real, &mut method_type_args);
             let reached = self.tysys.packs_args_reach(&param_types, args.len());
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
