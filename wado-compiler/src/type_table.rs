@@ -734,10 +734,12 @@ impl TypeTable {
     }
 
     /// The type two branches agree on: [`Self::resource_join`]'s, or for two
-    /// function types taking the same parameters, one each converts to. It
-    /// joins the returns, is `fn mut` where either is, and has a row covering
-    /// both: their union where both are closed, else a fresh variable, which
-    /// the effect check solves from the rows the caller records flowing into it.
+    /// function types taking the same parameters and returning the same type,
+    /// one each converts to. A return is invariant, so a join there names a
+    /// type neither branch converts to. The join is `fn mut` where either is,
+    /// and has a row covering both: their union where both are closed, else a
+    /// fresh variable, which the effect check solves from the rows the caller
+    /// records flowing into it.
     pub fn branch_join(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
         if a == b {
             return Some(a);
@@ -762,10 +764,9 @@ impl TypeTable {
         else {
             return None;
         };
-        if a_params != b_params {
+        if a_params != b_params || a_return != b_return {
             return None;
         }
-        let return_type = self.branch_join(a_return, b_return)?;
         let row = if a_row == b_row {
             a_row
         } else if is_open_row(&a_row) || is_open_row(&b_row) {
@@ -779,7 +780,7 @@ impl TypeTable {
             }
             union
         };
-        Some(self.make_function_with_mut(a_mut || b_mut, a_params, return_type, row))
+        Some(self.make_function_with_mut(a_mut || b_mut, a_params, a_return, row))
     }
 
     /// The resource `ty` is a handle to, where it takes no type arguments:
