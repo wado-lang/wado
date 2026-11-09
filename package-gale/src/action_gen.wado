@@ -693,13 +693,13 @@ pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alterna
     return ambiguous_group_has_gate(amb_alts, alts, ctx) && group_alts_interchangeable(amb_alts, alts);
 }
 
-/// Collect the alts of every predicate-gated `Ambiguous` node in the tree.
-/// Walks the whole tree, not just its root, to stay symmetric with emit (which
-/// gates a node nested under a `Dispatch` too). A node is gated when it either
+/// Collect the alts the tree's picks gate: a gated `Leaf`, and every alt of a
+/// predicate-gated `Ambiguous` node. Walks the whole tree, not just its root,
+/// to stay symmetric with emit. An `Ambiguous` node is gated when it either
 /// dispatches by the grammar-order predicate chain (interchangeable), or routes
 /// through the runtime ATN — where the simulator asks the predicates guarding
 /// the viable alternatives and closes the edges of the false ones instead.
-fn collect_gated_ambiguous_alts(
+fn collect_gated_alts(
     node: &PredictionNode,
     alts: &List<Alternative>,
     rule: &ParserRule,
@@ -707,12 +707,15 @@ fn collect_gated_ambiguous_alts(
     out: &mut List<i32>,
 ) {
     match *node {
-        Leaf(_) => {
+        Leaf(idx) => {
+            if ctx.alt_has_gate(&alts[idx]) {
+                out.push(idx);
+            }
         },
-        Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, rule, ctx, out),
+        Consume(c) => collect_gated_alts(&c.child, alts, rule, ctx, out),
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_gated_ambiguous_alts(&branch.child, alts, rule, ctx, out);
+                collect_gated_alts(&branch.child, alts, rule, ctx, out);
             }
         },
         Ambiguous(a) => {
@@ -740,8 +743,8 @@ fn ambiguous_group_atn_predicate_gated(
 
 /// Record every alt-initial predicate a dispatch site will gate, so
 /// `gen_alt_actions_at` suppresses its in-body copy. Covers the `Direct`
-/// branch, the singleton overlap group, and interchangeable `Ambiguous`
-/// groups; a deeper `Dispatch` / `Consume` group is left for the inline path.
+/// branch, the singleton overlap group, and a contested group's prediction
+/// tree (`collect_gated_alts`).
 pub fn mark_gated_predicates(
     rule: &ParserRule,
     has_overlaps: bool,
@@ -773,7 +776,7 @@ pub fn mark_gated_predicates(
                 end_follow,
             );
             let mut gated: List<i32> = [];
-            collect_gated_ambiguous_alts(&tree, &rule.alternatives, rule, ctx, &mut gated);
+            collect_gated_alts(&tree, &rule.alternatives, rule, ctx, &mut gated);
             for let idx of &gated {
                 mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
             }

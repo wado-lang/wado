@@ -4017,18 +4017,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_float.wado/Reading,i32>::find_index"($mv$self$log, $mv$self$fps, $mv$self$table, $mv$self$shift, $mv$self$seed, key) {
     let x_20: u64;
     let v_30: f64;
-    let $sroa_h_state_51: u64;
-    let $sroa_h_key_52: u64;
+    let $sroa_h_state_49: u64;
+    let $sroa_h_key_50: u64;
     if $mv$self$log.count == 0 {
         return -1;
     }
     if local.tee $mv$self$shift(block -> i32 {
         let $arg_spill_2: i32;
-        $sroa_h_state_51 = $mv$self$seed.k0;
-        $sroa_h_key_52 = ($mv$self$seed.k1 ^ -7046029254386353131_i64) | 1_i64;
+        $sroa_h_state_49 = $mv$self$seed.k0;
+        $sroa_h_key_50 = ($mv$self$seed.k1 ^ -7046029254386353131_i64) | 1_i64;
         x_20 = builtin::i64_extend_i32_s(key.id);
-        multivalue_bind [$sroa_h_state_51, x_20] = i64.mul_wide_u($sroa_h_state_51 ^ x_20, $sroa_h_key_52);
-        $sroa_h_state_51 = $sroa_h_state_51 ^ x_20;
+        multivalue_bind [$sroa_h_state_49, x_20] = i64.mul_wide_u($sroa_h_state_49 ^ x_20, $sroa_h_key_50);
+        $sroa_h_state_49 = $sroa_h_state_49 ^ x_20;
         x_20 = (if local.tee v_30(key.value) != v_30 -> u64 {
             builtin::i64_reinterpret_f64(builtin::f64_reinterpret_i64(9221120237041090560_i64));
         } else if v_30 == 0 -> u64 {
@@ -4036,8 +4036,8 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_flo
         } else {
             builtin::i64_reinterpret_f64(v_30);
         });
-        multivalue_bind [$sroa_h_state_51, $sroa_h_key_52] = i64.mul_wide_u($sroa_h_state_51 ^ x_20, $sroa_h_key_52);
-        $arg_spill_2 = builtin::i32_wrap_i64(multivalue_bind [$sroa_h_state_51, $sroa_h_key_52] = i64.mul_wide_u($sroa_h_state_51 ^ $sroa_h_key_52, -4658895280553007687_i64); $sroa_h_state_51 ^ $sroa_h_key_52 >>u 32_i64);
+        multivalue_bind [$sroa_h_state_49, $sroa_h_key_50] = i64.mul_wide_u($sroa_h_state_49 ^ x_20, $sroa_h_key_50);
+        $arg_spill_2 = builtin::i32_wrap_i64(multivalue_bind [$sroa_h_state_49, $sroa_h_key_50] = i64.mul_wide_u($sroa_h_state_49 ^ $sroa_h_key_50, -4658895280553007687_i64); $sroa_h_state_49 ^ $sroa_h_key_50 >>u 32_i64);
         "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_float.wado/Reading,i32>::find_slot"($mv$self$log, $mv$self$fps, $mv$self$table, $mv$self$shift, key, $arg_spill_2);
     }) < 0 {
         return -1;
@@ -4139,8 +4139,8 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_flo
     let self_22: ref "core:collections/hashmap.wado//HashSeed";
     let x_38: u64;
     let v_48: f64;
-    let $sroa_h_state_87: u64;
-    let $sroa_h_key_88: u64;
+    let $sroa_h_state_85: u64;
+    let $sroa_h_key_86: u64;
     if ((local.tee e_2(local.tee $load_0(self.log).count) + 1) * 2) > builtin::array_len(local.tee $load_2(self.table)) {
         "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_float.wado/Reading,i32>::rebuild_table$unchecked"(self, b_20 = builtin::array_len($load_2) * 2; $v1 = local.tee b_20(select i32(8 > b_20, 8, b_20)) - 1; if @unlikely((local.tee $v2(b_20 & $v1) == 0) == 0) {
             cold_path;
@@ -4148,11 +4148,11 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_flo
             unreachable;
         }; b_20);
     }
-    $sroa_h_state_87 = local.tee self_22(self.seed).k0;
-    $sroa_h_key_88 = (self_22.k1 ^ -7046029254386353131_i64) | 1_i64;
+    $sroa_h_state_85 = local.tee self_22(self.seed).k0;
+    $sroa_h_key_86 = (self_22.k1 ^ -7046029254386353131_i64) | 1_i64;
     x_38 = builtin::i64_extend_i32_s(key.id);
-    multivalue_bind [$sroa_h_state_87, x_38] = i64.mul_wide_u($sroa_h_state_87 ^ x_38, $sroa_h_key_88);
-    $sroa_h_state_87 = $sroa_h_state_87 ^ x_38;
+    multivalue_bind [$sroa_h_state_85, x_38] = i64.mul_wide_u($sroa_h_state_85 ^ x_38, $sroa_h_key_86);
+    $sroa_h_state_85 = $sroa_h_state_85 ^ x_38;
     x_38 = (if local.tee v_48(key.value) != v_48 -> u64 {
         builtin::i64_reinterpret_f64(builtin::f64_reinterpret_i64(9221120237041090560_i64));
     } else if v_48 == 0 -> u64 {
@@ -4160,8 +4160,8 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_flo
     } else {
         builtin::i64_reinterpret_f64(v_48);
     });
-    multivalue_bind [$sroa_h_state_87, $sroa_h_key_88] = i64.mul_wide_u($sroa_h_state_87 ^ x_38, $sroa_h_key_88);
-    b_20 = builtin::i32_wrap_i64(multivalue_bind [$sroa_h_state_87, $sroa_h_key_88] = i64.mul_wide_u($sroa_h_state_87 ^ $sroa_h_key_88, -4658895280553007687_i64); $sroa_h_state_87 ^ $sroa_h_key_88 >>u 32_i64);
+    multivalue_bind [$sroa_h_state_85, $sroa_h_key_86] = i64.mul_wide_u($sroa_h_state_85 ^ x_38, $sroa_h_key_86);
+    b_20 = builtin::i32_wrap_i64(multivalue_bind [$sroa_h_state_85, $sroa_h_key_86] = i64.mul_wide_u($sroa_h_state_85 ^ $sroa_h_key_86, -4658895280553007687_i64); $sroa_h_state_85 ^ $sroa_h_key_86 >>u 32_i64);
     if local.tee $v1("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_float.wado/Reading,i32>::find_slot"($load_0, local.tee $load_2(self.fps), local.tee $load_9(self.table), self.shift, key, b_20)) >= 0 {
         $v2 = builtin::array_get_value<i32>($load_9, $v1);
         if builtin::array_get_value<bool>($load_0.alive, $v2) {

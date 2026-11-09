@@ -1,0 +1,30 @@
+// A `mut` `fn` parameter whose address is taken, directly or through a closure,
+// still calls through its closure: the call must not read the cell the address
+// lives in. An immutable one reads the parameter itself.
+
+use { println, Stdout } from "core:cli";
+
+fn call_mut<F: fn() with Stdout>(mut f: F) with Stdout {
+    if builtin::black_box(false) { builtin::black_box(&mut f); }
+    f();
+}
+
+fn call_captured<F: fn() with Stdout>(mut f: F) with Stdout {
+    let mut g = || { builtin::black_box(&mut f); return; };
+    if builtin::black_box(false) { g(); }
+    f();
+}
+
+fn call_ref<F: fn() with Stdout>(f: F) with Stdout {
+    if builtin::black_box(false) { builtin::black_box(&f); }
+    f();
+}
+
+export fn run() with Stdout {
+    call_mut(|| { println("mut"); });
+    call_captured(|| { println("captured"); });
+    call_ref(|| { println("ref"); });
+}
+
+__DATA__
+{"stdout": "mut\ncaptured\nref\n"}

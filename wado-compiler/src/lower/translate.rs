@@ -414,7 +414,7 @@ fn guarded_locals(func: &TirFunction, boxed: impl Fn(u32, tir::TypeId) -> bool) 
             {
                 self.replaced.insert(index);
             }
-            self.walk_expr(expr);
+            self.walk_expr_in_frame(expr);
         }
     }
     let Some(body) = &func.body else {

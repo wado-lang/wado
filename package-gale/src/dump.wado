@@ -249,7 +249,7 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
     };
 
     ctx.set_current_rule_index(ctx.analysis.rule_index_of(&header.name));
-    let RuleOverlap { non_lr_indices, first_sets, groups, end_follow } = ctx.rule_overlap(surface, rule);
+    let RuleOverlap { non_lr_indices, first_sets, groups, end_follow, .. } = ctx.rule_overlap(surface, rule);
     if non_lr_indices.len() < 2 {
         return;
     }

@@ -11,6 +11,7 @@ use { AmbiguousNode, PredictionNode, build_group_prediction_tree } from "./predi
 use { dedup_append_arr } from "./list_util.wado";
 use { AtnMode } from "./gen_settings.wado";
 use { rule_is_left_recursive } from "./lr_util.wado";
+use { MetGates } from "./gate_conditions.wado";
 
 /// How a rule's non-LR alternatives group: the one answer the at-end conflict
 /// detection, the multi-alt emit and the dump all read, so none can drift.
@@ -21,6 +22,9 @@ pub struct RuleOverlap {
     /// The rule's exact FOLLOW, or empty where it is unknown, where an ended
     /// atom runs on into an LR suffix, or where a gate selects instead.
     pub end_follow: List<i32>,
+    /// The alternatives meeting a predicate only the simulator weighs
+    /// (`MetGates::Simulator`).
+    pub simulator_weighs: List<i32>,
 }
 
 /// The indices of the alternatives a rule predicts among: all of them, less an
@@ -45,19 +49,19 @@ fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
     return out;
 }
 
-/// How `rule`'s non-LR alternatives group by what they start with. `has_gate`
-/// answers for the site asking: prediction is predicate-blind, so a rule with
-/// a gate keeps deciding in the tournament that evaluates it, without its
-/// FOLLOW.
+/// How `rule`'s non-LR alternatives group by what they start with. `met_gates`
+/// answers for the site asking: prediction is predicate-blind, so a rule whose
+/// alternative meets a predicate decides without its FOLLOW, in the tournament
+/// or the simulator that weighs it.
 pub fn rule_overlap_groups(
     rule: &ParserRule,
     lowered_rule: &Rule,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    has_gate: fn(&Alternative) -> bool,
+    met_gates: fn(&Alternative) -> MetGates,
 ) -> RuleOverlap {
     let multi_alt = lowered_rule matches { MultiAlt(_) };
-    return overlap_groups_of(rule, non_lr_alt_indices(lowered_rule), multi_alt, analysis, follow, has_gate);
+    return overlap_groups_of(rule, non_lr_alt_indices(lowered_rule), multi_alt, analysis, follow, met_gates);
 }
 
 /// `rule_overlap_groups` over the alternatives `non_lr_indices`, for a rule
@@ -69,7 +73,7 @@ pub fn overlap_groups_of(
     multi_alt: bool,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    has_gate: fn(&Alternative) -> bool,
+    met_gates: fn(&Alternative) -> MetGates,
 ) -> RuleOverlap {
     let mut first_sets: List<List<i32>> = [];
     for let idx of non_lr_indices {
@@ -83,11 +87,23 @@ pub fn overlap_groups_of(
         &first_sets,
         analysis,
     );
-    let gated = non_lr_indices.iter_ref().any(|i: &i32| has_gate(&rule.alternatives[*i]));
+    let mut gated = false;
+    let mut simulator_weighs: List<i32> = [];
+    for let i of &non_lr_indices {
+        match met_gates(&rule.alternatives[*i]) {
+            None => {
+            },
+            Tournament => gated = true,
+            Simulator => {
+                gated = true;
+                simulator_weighs.push(*i);
+            },
+        }
+    }
     let end_follow: List<i32> = if multi_alt && !gated { follow.for_probe(&rule.name) } else { [] };
     admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);
     let groups = compute_overlap_groups_of(&classes);
-    return RuleOverlap { non_lr_indices, first_sets, groups, end_follow };
+    return RuleOverlap { non_lr_indices, first_sets, groups, end_follow, simulator_weighs };
 }
 
 /// What follows the rule selects its nullable alternatives too, so one whose
@@ -109,11 +125,19 @@ fn admit_rule_follow_into_nullable(classes: &mut List<AltClass>, first_sets: &mu
 /// Whether the simulator decides `a` rather than the longest-match tournament.
 /// The tournament reads the longest scan, and ANTLR4 the lowest alternative
 /// the rest of the input still admits, so under `Auto` (and `Verify`) only an
-/// at-end conflict no caller can continue on is left to the tournament.
-pub fn ambiguity_routes<S: AsStrSlice>(a: &AmbiguousNode, rule_name: S, follow: &RuleFollow, mode: AtnMode) -> bool {
+/// at-end conflict no caller can continue on is left to the tournament, and
+/// only while none of its alternatives is in `simulator_weighs`.
+pub fn ambiguity_routes<S: AsStrSlice>(
+    a: &AmbiguousNode,
+    rule_name: S,
+    follow: &RuleFollow,
+    mode: AtnMode,
+    simulator_weighs: &List<i32>,
+) -> bool {
     return match mode {
         Auto | Verify => match a.reason {
-            AtEndConflict => follow.at_end_conflict_routes(rule_name, &a.branch_tokens),
+            AtEndConflict => follow.at_end_conflict_routes(rule_name, &a.branch_tokens)
+                || a.alts.iter_ref().any(|i| simulator_weighs.contains(i)),
             _ => true,
         },
         Always => true,
@@ -121,11 +145,17 @@ pub fn ambiguity_routes<S: AsStrSlice>(a: &AmbiguousNode, rule_name: S, follow: 
     };
 }
 
-fn prediction_routes(node: &PredictionNode, rule_name: &String, follow: &RuleFollow, mode: AtnMode) -> bool {
+fn prediction_routes(
+    node: &PredictionNode,
+    rule_name: &String,
+    follow: &RuleFollow,
+    mode: AtnMode,
+    g: &RuleOverlap,
+) -> bool {
     return match node {
-        Ambiguous(a) => ambiguity_routes(a, rule_name, follow, mode),
-        Consume(c) => prediction_routes(&c.child, rule_name, follow, mode),
-        Dispatch(d) => d.branches.iter_ref().any(|b| prediction_routes(&b.child, rule_name, follow, mode)),
+        Ambiguous(a) => ambiguity_routes(a, rule_name, follow, mode, &g.simulator_weighs),
+        Consume(c) => prediction_routes(&c.child, rule_name, follow, mode, g),
+        Dispatch(d) => d.branches.iter_ref().any(|b| prediction_routes(&b.child, rule_name, follow, mode, g)),
         Leaf(_) => false,
     };
 }
@@ -149,7 +179,7 @@ pub fn overlap_routes(
                 analysis,
                 &g.end_follow,
             );
-            if prediction_routes(&tree, &rule.name, follow, mode) {
+            if prediction_routes(&tree, &rule.name, follow, mode, g) {
                 return true;
             }
         }

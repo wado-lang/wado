@@ -16,7 +16,7 @@ compiles the generated parser, cached across runs.
 
 ## The `verify` Drivers
 
-The css3 and SQLite drivers, and the tools sharing their parsers, generate with `atn: "verify"`. Their trees are then `never`'s, and each static pick `auto` or `always` would hand the simulator is checked against it. A run pins that `never` builds the simulator's tree on these grammars, except where the README's "Choosing the simulator" says what `verify` leaves unchecked. A grammar that fails it goes back to `"auto"` with the failing case recorded in `TODO.md`, as Rust and TypeScript have.
+The css3 and SQLite drivers, and the tools sharing their parsers, generate with `atn: "verify"`. Their trees are then `never`'s, and each static pick `auto` or `always` would hand the simulator is checked against it, except a non-greedy repeat's. A run pins that `never` builds the simulator's tree on these grammars. A grammar that fails it goes back to `"auto"` with the failing case recorded in `TODO.md`, as Rust and TypeScript have.
 
 ## Oracle-Pinned Grammars
 

@@ -324,7 +324,14 @@ fn quoted(name: &String) -> String {
             && chars.all(|c| c.is_ascii_alphanumeric() || c == '_'),
         None => false,
     };
-    return if identifier { *name } else { `${*name:?}` };
+    if identifier {
+        return *name;
+    }
+    let mut out = String::with_capacity(name.len() + 2);
+    let mut f = Formatter::new(&mut out);
+    f.precision = Formatter::PRECISION_INFINITE;
+    name.inspect(&mut f);
+    return out;
 }
 
 /// `text`, spelling `p`, as a factor: in parentheses where it has more than one term.

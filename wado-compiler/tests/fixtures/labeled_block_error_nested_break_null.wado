@@ -1,0 +1,12 @@
+// Test error: a `break label: null` inside another break's value is a break of
+// the same block, so it is rejected at the `null` like a direct one.
+
+export fn run() {
+    let warm = builtin::black_box(false);
+    let x: i32 = pick: {
+        break pick: if warm { 1 } else { if !warm { break pick: null; } 2 };
+    };
+}
+
+__DATA__
+{"compile_error": ":7:65: analysis error: type mismatch: expected 'i32', found 'null'"}

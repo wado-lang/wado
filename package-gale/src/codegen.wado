@@ -68,7 +68,15 @@ use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { HashMap, HashSet } from "core:collections";
-use { ATN_VERIFIED, SllExplorer, gen_atn_verified_fn, gen_sll_decide_fn, sll_decide_fn_name } from "./atn_sll.wado";
+use {
+    ATN_VERIFIED,
+    SllExplorer,
+    SllForest,
+    gen_atn_verified_fn,
+    gen_sll_decide_fn,
+    gen_sll_shared_fns,
+    sll_decide_fn_name,
+} from "./atn_sll.wado";
 use { gen_lr_decide_fn, lr_decide_fn_name, lr_sim, lr_table } from "./atn_lr_table.wado";
 use { Diagnostic, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Diagnostics, LoweredGrammar } from "./gir.wado";
 
@@ -555,13 +563,21 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
 fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &HashSet<String>) {
     let eof = ctx.analysis.eof_kind_id();
     let mut explorer = SllExplorer::new(atn, eof);
+    let verify = ctx.settings.atn.verifies();
     let mut verified = used.contains(ATN_VERIFIED);
+    let mut forest = SllForest::new(atn.num_tokens);
+    let mut starts: List<[i32, i32]> = [];
     for let d of 0..<atn.decision_state.len() {
         if used.contains(sll_decide_fn_name(d)) {
-            verified = gen_sll_decide_fn(w, d, &explorer.explore(d), &ctx.analysis, ctx.settings.atn.verifies())
-                || verified;
+            let dfa = explorer.explore(d);
+            verified = verified || verify && dfa.decides();
+            starts.push([d, forest.add(&dfa)]);
         }
     }
+    for let [d, start] of starts {
+        gen_sll_decide_fn(w, d, start, &forest, &ctx.analysis, verify);
+    }
+    gen_sll_shared_fns(w, &forest, &ctx.analysis);
     let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect();
     if !lr_decisions.is_empty() {
         let sim = lr_sim(atn);

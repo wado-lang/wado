@@ -15,11 +15,13 @@ use {
     PredicateSite,
     ScanEscapes,
     alt_has_gate,
+    MetGates,
+    alt_met_gates,
+    met_renders,
     alt_scan_checks,
     alt_scan_escapes,
     alt_scan_gate_conditions,
     decision_predicates,
-    predicates_met_entering,
 } from "./gate_conditions.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 
@@ -219,19 +221,18 @@ impl LowerContext {
         return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
-    /// Whether prediction entering `alt` of the rule being lowered at element
-    /// `index` meets a predicate (`gate_conditions::predicates_met_at`).
-    pub fn meets_predicate_at(&mut self, alt: &Alternative, index: i32) -> bool {
-        if !self.settings.emit_actions {
-            return false;
-        }
-        let site = self.predicate_site();
-        return !predicates_met_entering(&alt.elements, &alt.actions, index, &site, &mut self.analysis).is_empty();
-    }
-
-    /// Whether the decision at site `site` meets a predicate.
-    pub fn site_meets_predicate(&self, site: i32) -> bool {
-        return !self.decisions.at_site(site).is_empty();
+    /// Whether the simulator decides a group's or a repeat's contested decision
+    /// at site `site`: under `always` each one, and under `auto` one meeting a
+    /// predicate it is handed the verdict of (`met_renders`), since the static
+    /// path cannot weigh a verdict against the continuation. Only a decision
+    /// where predicates run has a site to read.
+    pub fn simulator_takes_contested(&self, site: i32) -> bool {
+        return match self.settings.atn {
+            Always => true,
+            Auto => self.settings.emit_actions
+                && self.decisions.at_site(site).iter_ref().any(|m| met_renders(m, &self.settings, &self.analysis)),
+            Never | Verify => false,
+        };
     }
 
     /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
@@ -254,10 +255,16 @@ impl LowerContext {
         return alt_scan_escapes(alt, &self.settings, &mut self.analysis, &site, from);
     }
 
+    /// `gate_conditions::alt_met_gates` for an alternative of the rule being
+    /// lowered.
+    fn alt_met_gates(&self, alt: &Alternative) -> MetGates {
+        return alt_met_gates(alt, &self.settings, &self.analysis, &self.predicate_site());
+    }
+
     /// `rule_overlap::rule_overlap_groups` for the rule being lowered.
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
-        let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
-        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, has_gate);
+        let met_gates = |alt: &Alternative| self.alt_met_gates(alt);
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, met_gates);
     }
 
     /// Who makes the choice among the alternatives `alt_indices` of the rule
@@ -265,18 +272,14 @@ impl LowerContext {
     /// Under `atn: "verify"` the simulator never does: the tournament makes
     /// it, and the simulator checks what `auto` would hand it.
     pub fn choice_route(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> ChoiceRoute {
-        let meets_predicate = !self.decisions.at_rule(self.current_rule_index()).is_empty();
-        let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
-        let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
+        let met_gates = |alt: &Alternative| self.alt_met_gates(alt);
+        let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, met_gates);
         let mode = if self.settings.atn.verifies() { AtnMode::Auto } else { self.settings.atn };
         if !overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, mode) {
             return ChoiceRoute::Static;
         }
         if !self.settings.atn.verifies() {
             return ChoiceRoute::Simulator;
-        }
-        if meets_predicate {
-            return ChoiceRoute::Static;
         }
         self.mark_checks_with_simulator();
         return ChoiceRoute::Checked;

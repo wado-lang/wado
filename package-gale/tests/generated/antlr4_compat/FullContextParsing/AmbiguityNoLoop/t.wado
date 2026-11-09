@@ -1285,7 +1285,7 @@ impl AtnPredictor {
         let mut asked: List<i32> = [];
         let mut floor = self.floor;
         loop {
-            let alt = atn_predict_above(
+            let [alt, _] = atn_predict_above(
                 &mut ATN_DFA,
                 sim,
                 decision,
@@ -2175,7 +2175,7 @@ internal fn atn_predict_with_stack(
         &mut preds,
         &mut [],
         ask,
-    );
+    ).0;
 }
 
 fn atn_predict_above<effect E>(
@@ -2191,10 +2191,10 @@ fn atn_predict_above<effect E>(
     preds: &mut AtnPreds,
     asked: &mut List<i32>,
     ask: fn(i32) -> bool with E,
-) -> i32 with E {
+) -> [i32, bool] with E {
     loop {
         let mut held: List<i32> = [];
-        let [alt, _] = atn_walk(
+        let verdict = atn_walk(
             dfa,
             sim,
             decision,
@@ -2219,25 +2219,39 @@ fn atn_predict_above<effect E>(
             }
         }
         if preds.failed.len() == known_failed {
-            return alt;
+            return verdict;
         }
         preds.failed.sort();
     }
 }
 
-fn atn_predict_walk(
-    dfa: &mut AtnDfa,
+fn atn_predict_walk<effect E>(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
-    floor: i32,
     tokens: &Array<i32>,
     start_pos: i32,
     eof: i32,
     min_prec: i32,
-) -> [i32, bool] {
-    let mut held: List<i32> = [];
-    return atn_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, &ATN_NO_PREDS, &mut held);
+    met: &List<i32>,
+    own: &List<i32>,
+    ask: fn(i32) -> bool with E,
+) -> [i32, bool] with E {
+    let mut preds = AtnPreds { met: *met, own: *own, failed: [] };
+    return atn_predict_above(
+        &mut ATN_DFA,
+        sim,
+        decision,
+        rule_stack,
+        0,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        &mut preds,
+        &mut [],
+        ask,
+    );
 }
 
 fn atn_walk(
@@ -2270,7 +2284,9 @@ fn atn_walk(
             }
             return [verdict, true];
         }
-        fallback = dfa.state_first[s];
+        if pos > start_pos {
+            fallback = dfa.state_first[s];
+        }
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let ended = atn_move(sim, &dfa.state_configs[s], eof, eof);
@@ -3153,17 +3169,7 @@ global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x02\x00\x18\x00\x05\x00\x00\x00\
 fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_ID => {
-                if pos + 1 < tokens.len() {
-                    match tokens[pos + 1] {
-                        TK_ID | TK_LIT_AT => {
-                            return 0;
-                        },
-                        _ => {},
-                    };
-                }
-            },
-            TK_LIT_AT => {
+            TK_ID | TK_LIT_AT => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_ID | TK_LIT_AT => {

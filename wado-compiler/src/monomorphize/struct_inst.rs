@@ -64,6 +64,7 @@ impl Monomorphizer {
                     serde_default: field.serde_default,
                     serde_positional: field.serde_positional,
                     default_expr: None,
+                    doc: field.doc.clone(),
                 }
             })
             .collect();
@@ -84,6 +85,7 @@ impl Monomorphizer {
             fields,
             span: generic.span,
             wire_name_policy: generic.wire_name_policy,
+            doc: generic.doc.clone(),
         };
 
         Some(concrete)
