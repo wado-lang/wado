@@ -481,6 +481,11 @@ for f in benchmark/*/*.wado; do
 done
 ```
 
+The sweep compiles with each benchmark's profile, and `benchmark-all` also times
+the build without one. Run it again with `-f no-pgo` after `-O2` in both
+compiles: identical bytes under the profile say nothing about the build without
+it.
+
 Give the four `wasm-size` programs the same pass at `-Os`: no benchmark covers
 `sqlite_highlight`, the largest generated program in the tree.
 
