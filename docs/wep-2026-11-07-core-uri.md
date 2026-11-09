@@ -47,8 +47,8 @@ JSON Schema's `uri` and `uri-reference` formats describe.
 ### What a `UriReference` holds
 
 A `UriReference` holds the five components of §3: scheme, authority, path,
-query and fragment. Scheme, authority, query and fragment may be absent, which is
-distinct from present and empty: `a?` has an empty query, and `a` has none.
+query and fragment. Scheme, authority, query and fragment may be absent, which
+is distinct from present and empty: `a?` has an empty query, and `a` has none.
 The authority is one component, not a host and a port, since an identifier
 compares it as a whole.
 
