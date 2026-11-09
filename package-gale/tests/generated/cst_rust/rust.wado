@@ -1843,6 +1843,35 @@ impl CtxArena {
         return ctx;
     }
 
+    fn callers_below(&self, caller: i32) -> List<i32> {
+        let mut below: List<i32> = [];
+        let mut n = caller;
+        while n != CTX_EMPTY && n != CTX_UNKNOWN {
+            assert self.node_len[n] == 1, "a caller stack is a chain";
+            n = self.parent[self.node_start[n]];
+            below.push(n);
+        }
+        return below;
+    }
+
+    fn returns_below(&self, node: i32, caller: i32, below: &mut List<i32>, stays: &mut List<i32>) -> bool {
+        if below.contains(&node) {
+            return true;
+        }
+        if node == caller || node == CTX_EMPTY || node == CTX_UNKNOWN || stays.contains(&node) {
+            return false;
+        }
+        let s = self.node_start[node];
+        for let mut e = s; e < s + self.node_len[node]; e += 1 {
+            if self.returns_below(self.parent[e], caller, below, stays) {
+                below.push(node);
+                return true;
+            }
+        }
+        stays.push(node);
+        return false;
+    }
+
     fn append_edge(&mut self, return_state: i32, restore_pr: i32, parent: i32) {
         self.ret.push(return_state);
         self.rpr.push(restore_pr);
@@ -2340,6 +2369,22 @@ fn atn_resolve(sorted_alts: &List<i32>) -> i32 {
     return if sorted_alts.is_empty() || sorted_alts[0] >= ATN_FAILED_ALT { -1 } else { sorted_alts[0] };
 }
 
+fn atn_finished_alt(arena: &CtxArena, configs: &List<AtnConfig>, caller: i32) -> i32 {
+    let mut below = arena.callers_below(caller);
+    let mut stays: List<i32> = [];
+    let mut alts: List<i32> = [];
+    for let c of configs {
+        if alts.contains(&c.alt) {
+            continue;
+        }
+        if c.state == ATN_ACCEPT_EOF || arena.returns_below(c.pctx, caller, &mut below, &mut stays) {
+            alts.push(c.alt);
+        }
+    }
+    alts.sort();
+    return atn_resolve(&alts);
+}
+
 fn atn_one_alt(sorted_alts: &List<i32>) -> bool {
     let a = sorted_alts[0] % ATN_FAILED_ALT;
     return sorted_alts.iter_ref().all(|b| *b % ATN_FAILED_ALT == a);
@@ -2529,12 +2574,12 @@ fn atn_walk(
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
     dfa.arena.open_budget();
     let mut s = dfa.start_state(sim, decision, caller, min_prec, &AtnPreds { ..*preds, origin: caller });
-    let mut fallback = -1;
+    let mut live = s;
     let mut pos = start_pos;
     loop {
         let verdict = dfa.state_verdict[s];
         if verdict == ATN_DFA_DEAD {
-            return [fallback, false];
+            return [atn_finished_alt(&dfa.arena, &dfa.state_configs[live], caller), false];
         }
         if verdict != ATN_DFA_UNDECIDED {
             if verdict != ATN_READS_HIDDEN {
@@ -2542,15 +2587,17 @@ fn atn_walk(
             }
             return [verdict, true];
         }
-        if pos > start_pos {
-            fallback = dfa.state_first[s];
-        }
+        live = s;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let ended = atn_move(sim, &dfa.state_configs[s], eof, eof);
             dfa.arena.push_held_guards(&ended, held);
             let survivors = atn_unique_alts(&ended);
-            return if survivors.is_empty() { [fallback, false] } else { [atn_resolve(&survivors), true] };
+            return if survivors.is_empty() {
+                [atn_finished_alt(&dfa.arena, &dfa.state_configs[s], caller), false];
+            } else {
+                [atn_resolve(&survivors), true];
+            };
         }
         s = dfa.step(sim, s, token, eof);
         pos += 1;
@@ -2562,7 +2609,6 @@ struct AtnDfa {
     scratch: ClosureScratch,
     state_configs: List<List<AtnConfig>>,
     state_verdict: List<i32>,
-    state_first: List<i32>,
     seeds: AtnKeyLists,
     edges: AtnKeyMap,
     sim_serial: i32,
@@ -2575,7 +2621,6 @@ impl AtnDfa {
             scratch: ClosureScratch::new(),
             state_configs: [],
             state_verdict: [],
-            state_first: [],
             seeds: AtnKeyLists::new(),
             edges: AtnKeyMap::new(),
             sim_serial: 0,
@@ -2662,7 +2707,6 @@ impl AtnDfa {
         let s = self.seeds.add(seeds_from);
         assert s == self.state_configs.len(), "a DFA state is the closure of the seeds it is interned by";
         let alts = atn_unique_alts(&configs);
-        self.state_first.push(atn_resolve(&alts));
         let verdict = self.verdict_of(sim, &configs, alts);
         self.state_verdict.push(verdict);
         self.state_configs.push(configs);
@@ -6632,6 +6676,9 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn
             return scan_token_tree_token__alt_1(tokens, start, gate, atn, memo);
         } else if _kind_set_7(kind) {
             let _atn_alt = atn_decide_8(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_token_tree_token__alt_0(tokens, start, gate, atn, memo);
             }
@@ -6662,6 +6709,9 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_11(kind) {
         let _atn_alt = atn_decide_9(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 0 {
             return scan_macro_invocation_semi__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -7011,6 +7061,9 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
             return scan_macro_match_token__alt_1(tokens, start, gate, atn, memo);
         } else if _kind_set_7(kind) {
             let _atn_alt = atn_decide_25(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_macro_match_token__alt_0(tokens, start, gate, atn, memo);
             }
@@ -7040,6 +7093,9 @@ fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &
             return scan_macro_rep_sep__alt_1(tokens, start, gate, atn, memo);
         } else if _kind_set_7(kind) {
             let _atn_alt = atn_decide_26(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_macro_rep_sep__alt_0(tokens, start, gate, atn, memo);
             }
@@ -7392,6 +7448,9 @@ fn scan_macro_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     if _kind_set_11(kind) {
         if kind == TK_KW_MACRORULES {
             let _atn_alt = atn_decide_32(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_macro_item__alt_0(tokens, start, gate, atn, memo, follow);
             }
@@ -7554,6 +7613,9 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut A
     if _kind_set_20(kind) {
         if _kind_set_11(kind) {
             let _atn_alt = atn_decide_40(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_use_tree__alt_0(tokens, start, gate, atn, memo, follow);
             }
@@ -7674,6 +7736,9 @@ fn scan_function_parameters(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     if _kind_set_23(kind) {
         if _kind_set_25(kind) {
             let _atn_alt = atn_decide_60(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 1 {
                 return scan_function_parameters__alt_1(tokens, start, gate, atn, memo, follow);
             }
@@ -7972,6 +8037,9 @@ fn scan_struct_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut At
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_KW_STRUCT {
         let _atn_alt = atn_decide_77(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 0 {
             return scan_struct___alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -8725,6 +8793,9 @@ fn scan_implementation(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
     if _kind_set_43(kind) {
         if kind == TK_KW_IMPL {
             let _atn_alt = atn_decide_117(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_implementation__alt_0(tokens, start, gate, atn, memo, follow);
             }
@@ -9546,6 +9617,9 @@ fn scan_where_clause_item__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGa
     if _kind_set_37(kind) {
         if _kind_set_33(kind) {
             let _atn_alt = atn_decide_149(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_where_clause_item__alt_0(tokens, start, gate, atn, memo, follow);
             }
@@ -10995,6 +11069,9 @@ fn scan_struct_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_68(kind) {
         let _atn_alt = atn_decide_208(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 0 {
             return scan_struct_expression__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -11450,6 +11527,9 @@ fn scan_enumeration_variant_expression(tokens: &Array<i32>, pos: i32, gate: &mut
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_68(kind) {
         let _atn_alt = atn_decide_222(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 0 {
             return scan_enumeration_variant_expression__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -12634,6 +12714,9 @@ fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, a
     if _kind_set_83(kind) {
         if _kind_set_84(kind) {
             let _atn_alt = atn_decide_265(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_pattern_no_top_alt__alt_0(tokens, start, gate, atn, memo, follow);
             }
@@ -12663,6 +12746,9 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             return scan_pattern_without_range__alt_1(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_12(kind) {
             let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 1 {
                 return scan_pattern_without_range__alt_1(tokens, start, gate, atn, memo, follow);
             }
@@ -12678,6 +12764,9 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             return scan_pattern_without_range__alt_11(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_89(kind) {
             let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 5 {
                 return scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
             }
@@ -12690,6 +12779,9 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             return scan_pattern_without_range__alt_11(tokens, start, gate, atn, memo, follow);
         } else if kind == TK_KW_SELFTYPE {
             let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 5 {
                 return scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
             }
@@ -12721,6 +12813,9 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     }
     if kind == TK_LPAREN {
         let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 7 {
             return scan_pattern_without_range__alt_7(tokens, start, gate, atn, memo, follow);
         }
@@ -12846,6 +12941,9 @@ fn scan_range_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_84(kind) {
         let _atn_alt = atn_decide_273(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 0 {
             return scan_range_pattern__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -12957,6 +13055,9 @@ fn scan_struct_pattern_elements(tokens: &Array<i32>, pos: i32, gate: &mut ScanGa
     if _kind_set_91(kind) {
         if kind == TK_POUND {
             let _atn_alt = atn_decide_280(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 1 {
                 return scan_struct_pattern_elements__alt_1(tokens, start, gate, atn, memo, follow);
             }
@@ -13237,6 +13338,9 @@ fn scan_tuple_pattern_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     if _kind_set_94(kind) {
         if kind == TK_DOTDOT {
             let _atn_alt = atn_decide_293(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 1 {
                 return scan_tuple_pattern_items__alt_1(tokens, start, gate, atn, memo, follow);
             }
@@ -13246,6 +13350,9 @@ fn scan_tuple_pattern_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
             return scan_tuple_pattern_items__alt_0(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_97(kind) {
             let _atn_alt = atn_decide_293(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 2 {
                 return scan_tuple_pattern_items__alt_2(tokens, start, gate, atn, memo, follow);
             }
@@ -13393,12 +13500,18 @@ fn scan_type___walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mu
     if _kind_set_37(kind) {
         if kind == TK_KW_IMPL {
             let _atn_alt = atn_decide_300(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_type___alt_0(tokens, start, gate, atn, memo, follow);
             }
             return scan_type___alt_1(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_98(kind) {
             let _atn_alt = atn_decide_300(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_type___alt_0(tokens, start, gate, atn, memo, follow);
             }
@@ -13420,6 +13533,9 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
     if _kind_set_101(kind) {
         if kind == TK_LPAREN {
             let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_type_no_bounds__alt_0(tokens, start, gate, atn, memo, follow);
             }
@@ -13429,6 +13545,9 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
             return scan_type_no_bounds__alt_4(tokens, start, gate, atn, memo, follow);
         } else if kind == TK_KW_FOR {
             let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 2 {
                 return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
             }
@@ -13437,6 +13556,9 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
             return scan_type_no_bounds__alt_12(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_11(kind) {
             let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 2 {
                 return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
             }
@@ -13446,6 +13568,9 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
             return scan_type_no_bounds__alt_13(tokens, start, gate, atn, memo, follow);
         } else if kind == TK_KW_SELFTYPE {
             let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 2 {
                 return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
             }
@@ -13490,6 +13615,9 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
     }
     if kind == TK_LSQUAREBRACKET {
         let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 8 {
             return scan_type_no_bounds__alt_8(tokens, start, gate, atn, memo, follow);
         }
@@ -13745,6 +13873,9 @@ fn scan_function_parameters_maybe_named_variadic(tokens: &Array<i32>, pos: i32, 
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_104(kind) {
         let _atn_alt = atn_decide_315(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 0 {
             return scan_function_parameters_maybe_named_variadic__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -14422,6 +14553,9 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &m
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_LT {
         let _atn_alt = atn_decide_347(atn, tokens, pos, 0);
+        if _atn_alt < 0 {
+            return -1;
+        }
         if _atn_alt == 1 {
             return scan_generic_args__alt_1(tokens, start, gate, atn, memo, follow);
         }
@@ -14459,12 +14593,18 @@ fn scan_generic_arg__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
     if _kind_set_110(kind) {
         if _kind_set_33(kind) {
             let _atn_alt = atn_decide_355(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_generic_arg__alt_0(tokens, start, gate, atn, memo, follow);
             }
             return scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_12(kind) {
             let _atn_alt = atn_decide_355(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 1 {
                 return scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
             }
@@ -14476,6 +14616,9 @@ fn scan_generic_arg__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
             return scan_generic_arg__alt_2(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_108(kind) {
             let _atn_alt = atn_decide_355(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 1 {
                 return scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
             }
@@ -15049,6 +15192,9 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32, gate: &mut Sc
             return scan_macro_identifier_like_token__alt_1(tokens, start, gate, atn, memo);
         } else if kind == TK_KW_UNION {
             let _atn_alt = atn_decide_377(atn, tokens, pos, 0);
+            if _atn_alt < 0 {
+                return -1;
+            }
             if _atn_alt == 0 {
                 return scan_macro_identifier_like_token__alt_0(tokens, start, gate, atn, memo);
             }
@@ -15281,6 +15427,10 @@ fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
             return _parse_macro_literal_token(p);
         } else if _kind_set_7(kind) {
             let _atn_alt = atn_decide_8(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 9;
                 p.atn_ret_pending = 460;
@@ -15480,6 +15630,10 @@ fn _parse_macro_invocation_semi__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     let kind = p.peek_kind();
     if _kind_set_11(kind) {
         let _atn_alt = atn_decide_9(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 0 {
             return _parse_macro_invocation_semi__inner_alt_0(p, follow);
         }
@@ -15598,7 +15752,9 @@ fn _parse_macro_rules__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         p.atn_ret_pending = 559;
         _parse_macro_rule(p, follow_open_with(follow_then_opening(FOLLOW_MASK_12, 16, follow), follow_open_set(FOLLOW_MASK_13)));
     }
-    if atn_decide_15(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_15(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_SEMI, &EMPTY_SYNC, true);
     }
     return;
@@ -15829,6 +15985,10 @@ fn _parse_macro_match_token__inner(p: &mut Parser) -> () with RustParserBase {
             return _parse_macro_literal_token(p);
         } else if _kind_set_7(kind) {
             let _atn_alt = atn_decide_25(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 38;
                 p.atn_ret_pending = 641;
@@ -15921,6 +16081,10 @@ fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
             return _parse_macro_literal_token(p);
         } else if _kind_set_7(kind) {
             let _atn_alt = atn_decide_26(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 43;
                 p.atn_ret_pending = 655;
@@ -16031,14 +16195,18 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
         _parse_vis_item(p, 0);
     } else if grp_kind == TK_KW_UNION {
         let gd_atn = atn_decide_29(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 0 {
-            p.site = 48;
-            p.atn_ret_pending = 680;
-            _parse_vis_item(p, 0);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 49;
-            p.atn_ret_pending = 682;
-            _parse_macro_item(p, 0);
+            if gd_atn == 0 {
+                p.site = 48;
+                p.atn_ret_pending = 680;
+                _parse_vis_item(p, 0);
+            } else {
+                p.site = 49;
+                p.atn_ret_pending = 682;
+                _parse_macro_item(p, 0);
+            }
         }
     } else if _kind_set_17(grp_kind) {
         p.site = 49;
@@ -16076,26 +16244,30 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     let grp_kind = p.peek_kind();
     if grp_kind == TK_KW_UNSAFE {
         let gd_atn = atn_decide_31(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 0 {
-            p.site = 51;
-            p.atn_ret_pending = 692;
-            _parse_module(p, 0);
-        } else if gd_atn == 3 {
-            p.site = 54;
-            p.atn_ret_pending = 698;
-            _parse_function_(p, 0);
-        } else if gd_atn == 10 {
-            p.site = 61;
-            p.atn_ret_pending = 712;
-            _parse_trait_(p, 0);
-        } else if gd_atn == 11 {
-            p.site = 62;
-            p.atn_ret_pending = 714;
-            _parse_implementation(p, 0);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 63;
-            p.atn_ret_pending = 716;
-            _parse_extern_block(p, 0);
+            if gd_atn == 0 {
+                p.site = 51;
+                p.atn_ret_pending = 692;
+                _parse_module(p, 0);
+            } else if gd_atn == 3 {
+                p.site = 54;
+                p.atn_ret_pending = 698;
+                _parse_function_(p, 0);
+            } else if gd_atn == 10 {
+                p.site = 61;
+                p.atn_ret_pending = 712;
+                _parse_trait_(p, 0);
+            } else if gd_atn == 11 {
+                p.site = 62;
+                p.atn_ret_pending = 714;
+                _parse_implementation(p, 0);
+            } else {
+                p.site = 63;
+                p.atn_ret_pending = 716;
+                _parse_extern_block(p, 0);
+            }
         }
     } else if grp_kind == TK_KW_MOD {
         p.site = 51;
@@ -16103,29 +16275,37 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
         _parse_module(p, 0);
     } else if grp_kind == TK_KW_EXTERN {
         let gd_atn_2 = atn_decide_31(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn_2 == 1 {
-            p.site = 52;
-            p.atn_ret_pending = 694;
-            _parse_extern_crate(p, 0);
-        } else if gd_atn_2 == 3 {
-            p.site = 54;
-            p.atn_ret_pending = 698;
-            _parse_function_(p, 0);
+        if gd_atn_2 < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 63;
-            p.atn_ret_pending = 716;
-            _parse_extern_block(p, 0);
+            if gd_atn_2 == 1 {
+                p.site = 52;
+                p.atn_ret_pending = 694;
+                _parse_extern_crate(p, 0);
+            } else if gd_atn_2 == 3 {
+                p.site = 54;
+                p.atn_ret_pending = 698;
+                _parse_function_(p, 0);
+            } else {
+                p.site = 63;
+                p.atn_ret_pending = 716;
+                _parse_extern_block(p, 0);
+            }
         }
     } else if grp_kind == TK_KW_CONST {
         let gd_atn_3 = atn_decide_31(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn_3 == 3 {
-            p.site = 54;
-            p.atn_ret_pending = 698;
-            _parse_function_(p, 0);
+        if gd_atn_3 < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 59;
-            p.atn_ret_pending = 708;
-            _parse_constant_item(p, 0);
+            if gd_atn_3 == 3 {
+                p.site = 54;
+                p.atn_ret_pending = 698;
+                _parse_function_(p, 0);
+            } else {
+                p.site = 59;
+                p.atn_ret_pending = 708;
+                _parse_constant_item(p, 0);
+            }
         }
     } else if _kind_set_18(grp_kind) {
         p.site = 54;
@@ -16208,6 +16388,10 @@ fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     if _kind_set_11(kind) {
         if kind == TK_KW_MACRORULES {
             let _atn_alt = atn_decide_32(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 64;
                 p.atn_ret_pending = 720;
@@ -16445,7 +16629,9 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
     }
     if shape_scan_pos >= 0 {
         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
-        if atn_decide_42(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_42(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 74;
             p.atn_ret_pending = 798;
             _parse_simple_path(p, FOLLOW_MASK_21);
@@ -16632,7 +16818,9 @@ fn _parse_use_tree__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with Rust
     p.site = 77;
     p.atn_ret_pending = 829;
     _parse_simple_path(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_23)));
-    if atn_decide_47(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_47(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_KW_AS, &SYNC_27, false);
         if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_27, &EXPECTED_27); }
         let grp_kind = p.peek_kind();
@@ -16681,6 +16869,10 @@ fn _parse_use_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     if _kind_set_20(kind) {
         if _kind_set_11(kind) {
             let _atn_alt = atn_decide_40(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 return _parse_use_tree__inner_alt_0(p, follow);
             }
@@ -16776,18 +16968,28 @@ fn _parse_function_(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_function_qualifiers__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if atn_decide_54(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_54(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_KW_CONST, &SYNC_36, true);
     }
-    if atn_decide_55(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_2 = atn_decide_55(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_2 == 0 {
         p.expect(TK_KW_ASYNC, &SYNC_37, true);
     }
-    if atn_decide_56(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_3 = atn_decide_56(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_3 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_3 == 0 {
         p.expect(TK_KW_UNSAFE, &SYNC_38, true);
     }
-    if atn_decide_57(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_4 = atn_decide_57(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_4 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_4 == 0 {
         p.expect(TK_KW_EXTERN, &SYNC_39, true);
-        if atn_decide_58(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_58(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 86;
             p.atn_ret_pending = 899;
             _parse_abi(p);
@@ -16845,7 +17047,9 @@ fn _parse_function_parameters__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> (
     p.site = 87;
     p.atn_ret_pending = 907;
     _parse_self_param(p);
-    if atn_decide_61(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_61(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -16865,7 +17069,9 @@ fn scan_function_parameters__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut Sca
 
 fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
-    if atn_decide_62(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_62(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 88;
         p.atn_ret_pending = 917;
         _parse_self_param(p);
@@ -16880,7 +17086,9 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
         p.atn_ret_pending = 929;
         _parse_function_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_64(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_2 = atn_decide_64(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_2 == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -16967,6 +17175,10 @@ fn _parse_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with
     if _kind_set_23(kind) {
         if _kind_set_25(kind) {
             let _atn_alt = atn_decide_60(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 1 {
                 return _parse_function_parameters__inner_alt_1(p, follow);
             }
@@ -17014,14 +17226,18 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
         _parse_shorthand_self(p, 0);
     } else if _kind_set_32(grp_kind) {
         let gd_atn = atn_decide_66(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 0 {
-            p.site = 92;
-            p.atn_ret_pending = 945;
-            _parse_shorthand_self(p, 0);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 93;
-            p.atn_ret_pending = 947;
-            _parse_typed_self(p, 0);
+            if gd_atn == 0 {
+                p.site = 92;
+                p.atn_ret_pending = 945;
+                _parse_shorthand_self(p, 0);
+            } else {
+                p.site = 93;
+                p.atn_ret_pending = 947;
+                _parse_typed_self(p, 0);
+            }
         }
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_42);
@@ -17122,14 +17338,18 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         _parse_function_param_pattern(p, follow);
     } else if _kind_set_35(grp_kind) {
         let gd_atn = atn_decide_72(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 0 {
-            p.site = 97;
-            p.atn_ret_pending = 988;
-            _parse_function_param_pattern(p, follow);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 98;
-            p.atn_ret_pending = 992;
-            _parse_type_(p, follow);
+            if gd_atn == 0 {
+                p.site = 97;
+                p.atn_ret_pending = 988;
+                _parse_function_param_pattern(p, follow);
+            } else {
+                p.site = 98;
+                p.atn_ret_pending = 992;
+                _parse_type_(p, follow);
+            }
         }
     } else if _kind_set_36(grp_kind) {
         p.site = 98;
@@ -17281,6 +17501,10 @@ fn _parse_struct___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
     let kind = p.peek_kind();
     if kind == TK_KW_STRUCT {
         let _atn_alt = atn_decide_77(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 0 {
             p.site = 106;
             p.atn_ret_pending = 1038;
@@ -17418,7 +17642,9 @@ fn _parse_struct_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         p.atn_ret_pending = 1102;
         _parse_struct_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_86(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_86(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -17488,7 +17714,9 @@ fn _parse_tuple_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         p.atn_ret_pending = 1136;
         _parse_tuple_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_34, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_90(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_90(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -17597,7 +17825,9 @@ fn _parse_enum_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         p.atn_ret_pending = 1188;
         _parse_enum_item(p, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_97(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_97(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -17635,7 +17865,9 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     p.site = 135;
     p.atn_ret_pending = 1206;
     _parse_identifier(p);
-    if atn_decide_100(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_100(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LPAREN {
             p.site = 136;
@@ -17957,6 +18189,10 @@ fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     if _kind_set_43(kind) {
         if kind == TK_KW_IMPL {
             let _atn_alt = atn_decide_117(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 158;
                 p.atn_ret_pending = 1356;
@@ -17997,7 +18233,9 @@ fn _parse_implementation(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_IMPL, &SYNC_46, false);
     if !kind_set_has(&SYNC_46, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_46, &EXPECTED_46); }
-    if atn_decide_118(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_118(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 160;
         p.atn_ret_pending = 1366;
         _parse_generic_params(p, FOLLOW_MASK_35);
@@ -18322,14 +18560,18 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_POUND {
         let gd_atn = atn_decide_140(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 0 {
-            p.site = 182;
-            p.atn_ret_pending = 1509;
-            _parse_lifetime_param(p, 0);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 183;
-            p.atn_ret_pending = 1511;
-            _parse_type_param(p, 0);
+            if gd_atn == 0 {
+                p.site = 182;
+                p.atn_ret_pending = 1509;
+                _parse_lifetime_param(p, 0);
+            } else {
+                p.site = 183;
+                p.atn_ret_pending = 1511;
+                _parse_type_param(p, 0);
+            }
         }
     } else if grp_kind == TK_LIFETIME_OR_LABEL {
         p.site = 182;
@@ -18372,7 +18614,9 @@ fn _parse_lifetime_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         _parse_outer_attribute(p, FOLLOW_MASK_42);
     }
     p.expect(TK_LIFETIME_OR_LABEL, &SYNC_45, true);
-    if atn_decide_142(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_142(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COLON, &SYNC_83, true);
         p.site = 186;
         p.atn_ret_pending = 1529;
@@ -18406,15 +18650,21 @@ fn _parse_type_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.site = 188;
     p.atn_ret_pending = 1537;
     _parse_identifier(p);
-    if atn_decide_144(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_144(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COLON, &SYNC_85, true);
-        if atn_decide_145(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_145(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 189;
             p.atn_ret_pending = 1547;
             _parse_type_param_bounds(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_44)));
         }
     }
-    if atn_decide_146(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_2 = atn_decide_146(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_2 == 0 {
         p.expect(TK_EQ, &SYNC_46, false);
         p.site = 190;
         p.atn_ret_pending = 1555;
@@ -18473,7 +18723,9 @@ fn _parse_where_clause__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         _parse_where_clause_item(p, follow_then(FOLLOW_MASK_26, 8, follow));
         p.expect(TK_COMMA, &SYNC_46, true);
     }
-    if atn_decide_148(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_148(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 194;
         p.atn_ret_pending = 1582;
         _parse_where_clause_item(p, follow);
@@ -18520,6 +18772,10 @@ fn _parse_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     if _kind_set_37(kind) {
         if _kind_set_33(kind) {
             let _atn_alt = atn_decide_149(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 195;
                 p.atn_ret_pending = 1586;
@@ -18585,7 +18841,9 @@ fn _parse_lifetime_where_clause_item(p: &mut Parser, follow: i64 = 0) -> () with
 
 fn _parse_type_bound_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if !kind_set_has(&SYNC_46, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_46, &EXPECTED_46); }
-    if atn_decide_150(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_150(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 199;
         p.atn_ret_pending = 1602;
         _parse_for_lifetimes(p, FOLLOW_MASK_35);
@@ -18594,7 +18852,9 @@ fn _parse_type_bound_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -
     p.atn_ret_pending = 1604;
     _parse_type_(p, FOLLOW_MASK_45);
     p.expect(TK_COLON, &SYNC_86, true);
-    if atn_decide_151(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_2 = atn_decide_151(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_2 == 0 {
         p.site = 201;
         p.atn_ret_pending = 1610;
         _parse_type_param_bounds(p, follow);
@@ -18669,14 +18929,18 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
             _parse_type_alias(p, 0);
         } else if grp_kind == TK_KW_CONST {
             let gd_atn = atn_decide_155(&mut p.atn, &p.kinds, p.pos, 0);
-            if gd_atn == 1 {
-                p.site = 207;
-                p.atn_ret_pending = 1637;
-                _parse_constant_item(p, 0);
+            if gd_atn < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             } else {
-                p.site = 208;
-                p.atn_ret_pending = 1639;
-                _parse_function_(p, 0);
+                if gd_atn == 1 {
+                    p.site = 207;
+                    p.atn_ret_pending = 1637;
+                    _parse_constant_item(p, 0);
+                } else {
+                    p.site = 208;
+                    p.atn_ret_pending = 1639;
+                    _parse_function_(p, 0);
+                }
             }
         } else if _kind_set_49(grp_kind) {
             p.site = 208;
@@ -18772,7 +19036,9 @@ fn _parse_attr__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
         p.site = 212;
         p.atn_ret_pending = 1673;
         _parse_simple_path(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_48)));
-        if atn_decide_157(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_157(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 213;
             p.atn_ret_pending = 1677;
             _parse_attr_input(p, follow);
@@ -19048,7 +19314,9 @@ fn _parse_expression_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> 
     p.site = 226;
     p.atn_ret_pending = 1742;
     _parse_expression_with_block(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_13)));
-    if p.atn.predict(&ATN_SIM, 165, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+    let opt_atn = p.atn.predict(&ATN_SIM, 165, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_SEMI, &EMPTY_SYNC, true);
     }
     return;
@@ -19616,7 +19884,9 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_DOTDOT {
         p.b.set_alt(25);
         p.take();
-        if p.atn.predict(&ATN_SIM, 173, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        let opt_atn = p.atn.predict(&ATN_SIM, 173, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 273;
             p.atn_ret_pending = 1796;
             _parse_expression(p, follow);
@@ -19634,10 +19904,14 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_CONTINUE {
         p.b.set_alt(30);
         p.take();
-        if p.atn.predict(&ATN_SIM, 174, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        let opt_atn = p.atn.predict(&ATN_SIM, 174, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.expect(TK_LIFETIME_OR_LABEL, &SYNC_105, true);
         }
-        if p.atn.predict(&ATN_SIM, 175, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        let opt_atn_2 = p.atn.predict(&ATN_SIM, 175, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+        if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn_2 == 0 {
             p.site = 282;
             p.atn_ret_pending = 1810;
             _parse_expression(p, follow);
@@ -19647,10 +19921,14 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_BREAK {
         p.b.set_alt(31);
         p.take();
-        if p.atn.predict(&ATN_SIM, 176, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        let opt_atn = p.atn.predict(&ATN_SIM, 176, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.expect(TK_LIFETIME_OR_LABEL, &SYNC_105, true);
         }
-        if p.atn.predict(&ATN_SIM, 177, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        let opt_atn_2 = p.atn.predict(&ATN_SIM, 177, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+        if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn_2 == 0 {
             p.site = 283;
             p.atn_ret_pending = 1820;
             _parse_expression(p, follow);
@@ -19660,7 +19938,9 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_RETURN {
         p.b.set_alt(32);
         p.take();
-        if p.atn.predict(&ATN_SIM, 178, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+        let opt_atn = p.atn.predict(&ATN_SIM, 178, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 284;
             p.atn_ret_pending = 1826;
             _parse_expression(p, follow);
@@ -19903,7 +20183,9 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
             p.b.start_node_at(_cp, RK_EXPRESSION, _start);
             p.b.set_alt(24);
             p.take();
-            if p.atn.predict(&ATN_SIM, 190, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+            let opt_atn = p.atn.predict(&ATN_SIM, 190, &p.kinds, p.pos, TK_EOF, min_prec, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+            if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if opt_atn == 0 {
                 p.site = 272;
                 p.atn_ret_pending = 1974;
                 _parse_expression(p, follow);
@@ -20267,7 +20549,9 @@ fn _parse_statements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
         p.atn_ret_pending = 2046;
         _parse_statement(p, 0);
     }
-    if p.atn.predict(&ATN_SIM, 201, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+    let opt_atn = p.atn.predict(&ATN_SIM, 201, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 310;
         p.atn_ret_pending = 2052;
         _parse_expression(p, follow);
@@ -20451,7 +20735,9 @@ fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Arr
         p.atn_ret_pending = 2082;
         _parse_expression(p, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_205(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_205(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return vals;
@@ -20605,7 +20891,9 @@ fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> TupleElement
         _parse_expression(p, follow_then(FOLLOW_MASK_26, 8, follow));
         p.expect(TK_COMMA, &SYNC_63, true);
     }
-    if p.atn.predict(&ATN_SIM, 207, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+    let opt_atn = p.atn.predict(&ATN_SIM, 207, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 319;
         p.atn_ret_pending = 2107;
         _parse_expression(p, follow);
@@ -20679,6 +20967,10 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     let kind = p.peek_kind();
     if _kind_set_68(kind) {
         let _atn_alt = atn_decide_208(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 0 {
             p.site = 320;
             p.atn_ret_pending = 2115;
@@ -20805,18 +21097,26 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     let grp_kind = p.peek_kind();
     if grp_kind == TK_COMMA {
         let gd_atn = atn_decide_213(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 0 {
-            p.expect(TK_COMMA, &SYNC_118, false);
-            p.site = 329;
-            p.atn_ret_pending = 2159;
-            _parse_struct_base(p, follow);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            if atn_decide_214(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
-                p.expect(TK_COMMA, &EMPTY_SYNC, true);
+            if gd_atn == 0 {
+                p.expect(TK_COMMA, &SYNC_118, false);
+                p.site = 329;
+                p.atn_ret_pending = 2159;
+                _parse_struct_base(p, follow);
+            } else {
+                let opt_atn = atn_decide_214(&mut p.atn, &p.kinds, p.pos, 0);
+                if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+                if opt_atn == 0 {
+                    p.expect(TK_COMMA, &EMPTY_SYNC, true);
+                }
             }
         }
     } else {
-        if atn_decide_214(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_214(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.expect(TK_COMMA, &EMPTY_SYNC, true);
         }
     }
@@ -20850,28 +21150,32 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     let grp_kind = p.peek_kind();
     if _kind_set_12(grp_kind) {
         let gd_atn = atn_decide_216(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 1 {
-            if !kind_set_has(&SYNC_119, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_119, &EXPECTED_119); }
-            let grp_kind = p.peek_kind();
-            if _kind_set_12(grp_kind) {
-                p.site = 332;
-                p.atn_ret_pending = 2178;
-                _parse_identifier(p);
-            } else if grp_kind == TK_INTEGER_LITERAL {
-                p.site = 333;
-                p.atn_ret_pending = 2180;
-                _parse_tuple_index(p);
-            } else {
-                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_119);
-            }
-            p.expect(TK_COLON, &SYNC_63, false);
-            p.site = 334;
-            p.atn_ret_pending = 2184;
-            _parse_expression(p, follow);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 331;
-            p.atn_ret_pending = 2174;
-            _parse_identifier(p);
+            if gd_atn == 1 {
+                if !kind_set_has(&SYNC_119, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_119, &EXPECTED_119); }
+                let grp_kind = p.peek_kind();
+                if _kind_set_12(grp_kind) {
+                    p.site = 332;
+                    p.atn_ret_pending = 2178;
+                    _parse_identifier(p);
+                } else if grp_kind == TK_INTEGER_LITERAL {
+                    p.site = 333;
+                    p.atn_ret_pending = 2180;
+                    _parse_tuple_index(p);
+                } else {
+                    p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_119);
+                }
+                p.expect(TK_COLON, &SYNC_63, false);
+                p.site = 334;
+                p.atn_ret_pending = 2184;
+                _parse_expression(p, follow);
+            } else {
+                p.site = 331;
+                p.atn_ret_pending = 2174;
+                _parse_identifier(p);
+            }
         }
     } else if grp_kind == TK_INTEGER_LITERAL {
         let grp_kind = p.peek_kind();
@@ -21089,6 +21393,10 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0)
     let kind = p.peek_kind();
     if _kind_set_68(kind) {
         let _atn_alt = atn_decide_222(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 0 {
             p.site = 341;
             p.atn_ret_pending = 2230;
@@ -21166,7 +21474,9 @@ fn _parse_enum_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         p.atn_ret_pending = 2258;
         _parse_enum_expr_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_56, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_225(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_225(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -21424,7 +21734,9 @@ fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> CallParamsVals 
         p.atn_ret_pending = 2320;
         _parse_expression(p, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_232(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_232(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     if !p.speculating {
@@ -21465,7 +21777,9 @@ fn _parse_closure_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     } else if grp_kind == TK_OR {
         p.take();
         if !kind_set_has(&SYNC_125, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_125, &EXPECTED_125); }
-        if atn_decide_236(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_236(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 358;
             p.atn_ret_pending = 2345;
             _parse_closure_parameters(p, FOLLOW_MASK_57);
@@ -21519,7 +21833,9 @@ fn _parse_closure_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         p.atn_ret_pending = 2369;
         _parse_closure_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_58, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_239(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_239(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -21551,7 +21867,9 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     p.site = 365;
     p.atn_ret_pending = 2383;
     _parse_pattern(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_45)));
-    if atn_decide_241(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_241(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COLON, &SYNC_46, false);
         p.site = 366;
         p.atn_ret_pending = 2391;
@@ -21590,14 +21908,18 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
         _parse_infinite_loop_expression(p, 0);
     } else if grp_kind == TK_KW_WHILE {
         let gd_atn = atn_decide_243(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 1 {
-            p.site = 369;
-            p.atn_ret_pending = 2403;
-            _parse_predicate_loop_expression(p, 0);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            p.site = 370;
-            p.atn_ret_pending = 2405;
-            _parse_predicate_pattern_loop_expression(p, 0);
+            if gd_atn == 1 {
+                p.site = 369;
+                p.atn_ret_pending = 2403;
+                _parse_predicate_loop_expression(p, 0);
+            } else {
+                p.site = 370;
+                p.atn_ret_pending = 2405;
+                _parse_predicate_pattern_loop_expression(p, 0);
+            }
         }
     } else if grp_kind == TK_KW_FOR {
         p.site = 371;
@@ -21808,7 +22130,9 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     p.site = 385;
     p.atn_ret_pending = 2486;
     _parse_block_expression(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_65)));
-    if p.atn.predict(&ATN_SIM, 247, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+    let opt_atn = p.atn.predict(&ATN_SIM, 247, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_KW_ELSE, &SYNC_132, false);
         if !kind_set_has(&SYNC_132, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_132, &EXPECTED_132); }
         let grp_kind = p.peek_kind();
@@ -21818,14 +22142,18 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             _parse_block_expression(p, 0);
         } else if grp_kind == TK_KW_IF {
             let gd_atn = atn_decide_248(&mut p.atn, &p.kinds, p.pos, 0);
-            if gd_atn == 1 {
-                p.site = 387;
-                p.atn_ret_pending = 2498;
-                _parse_if_expression(p, 0);
+            if gd_atn < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             } else {
-                p.site = 388;
-                p.atn_ret_pending = 2500;
-                _parse_if_let_expression(p, 0);
+                if gd_atn == 1 {
+                    p.site = 387;
+                    p.atn_ret_pending = 2498;
+                    _parse_if_expression(p, 0);
+                } else {
+                    p.site = 388;
+                    p.atn_ret_pending = 2500;
+                    _parse_if_let_expression(p, 0);
+                }
             }
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_132);
@@ -21875,7 +22203,9 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     p.site = 392;
     p.atn_ret_pending = 2522;
     _parse_block_expression(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_65)));
-    if p.atn.predict(&ATN_SIM, 250, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() }) == 0 {
+    let opt_atn = p.atn.predict(&ATN_SIM, 250, &p.kinds, p.pos, TK_EOF, 0, &[2, 3], &[], |_pred| match _pred { 2 => p.no_struct == 0, 3 => p.no_struct == 0, _ => unreachable() });
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_KW_ELSE, &SYNC_132, false);
         if !kind_set_has(&SYNC_132, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_132, &EXPECTED_132); }
         let grp_kind = p.peek_kind();
@@ -21885,14 +22215,18 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             _parse_block_expression(p, 0);
         } else if grp_kind == TK_KW_IF {
             let gd_atn = atn_decide_251(&mut p.atn, &p.kinds, p.pos, 0);
-            if gd_atn == 1 {
-                p.site = 394;
-                p.atn_ret_pending = 2534;
-                _parse_if_expression(p, 0);
+            if gd_atn < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             } else {
-                p.site = 395;
-                p.atn_ret_pending = 2536;
-                _parse_if_let_expression(p, 0);
+                if gd_atn == 1 {
+                    p.site = 394;
+                    p.atn_ret_pending = 2534;
+                    _parse_if_expression(p, 0);
+                } else {
+                    p.site = 395;
+                    p.atn_ret_pending = 2536;
+                    _parse_if_let_expression(p, 0);
+                }
             }
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_132);
@@ -22013,7 +22347,9 @@ fn _parse_match_arms__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.site = 404;
     p.atn_ret_pending = 2588;
     _parse_expression(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_26)));
-    if atn_decide_255(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_255(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -22057,7 +22393,9 @@ fn _parse_match_arm_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> 
     p.site = 406;
     p.atn_ret_pending = 2600;
     _parse_expression_with_block(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_26)));
-    if atn_decide_257(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_257(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -22127,7 +22465,9 @@ fn _parse_match_arm__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     p.site = 408;
     p.atn_ret_pending = 2613;
     _parse_pattern(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_68)));
-    if atn_decide_259(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_259(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 409;
         p.atn_ret_pending = 2617;
         _parse_match_arm_guard(p, follow);
@@ -22270,6 +22610,10 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     if _kind_set_83(kind) {
         if _kind_set_84(kind) {
             let _atn_alt = atn_decide_265(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 417;
                 p.atn_ret_pending = 2664;
@@ -22386,6 +22730,10 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             return _parse_identifier_pattern(p, follow);
         } else if _kind_set_12(kind) {
             let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 1 {
                 p.site = 420;
                 p.atn_ret_pending = 2672;
@@ -22411,6 +22759,10 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             return _parse_macro_invocation(p, follow);
         } else if _kind_set_89(kind) {
             let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 5 {
                 p.site = 424;
                 p.atn_ret_pending = 2680;
@@ -22431,6 +22783,10 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             return _parse_macro_invocation(p, follow);
         } else if kind == TK_KW_SELFTYPE {
             let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 5 {
                 p.site = 424;
                 p.atn_ret_pending = 2680;
@@ -22470,6 +22826,10 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     }
     if kind == TK_LPAREN {
         let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 7 {
             p.site = 426;
             p.atn_ret_pending = 2684;
@@ -22654,7 +23014,9 @@ fn _parse_identifier_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     p.site = 431;
     p.atn_ret_pending = 2734;
     _parse_identifier(p);
-    if atn_decide_272(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_272(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_AT, &SYNC_131, false);
         p.site = 432;
         p.atn_ret_pending = 2742;
@@ -22787,6 +23149,10 @@ fn _parse_range_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     let kind = p.peek_kind();
     if _kind_set_84(kind) {
         let _atn_alt = atn_decide_273(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 0 {
             return _parse_range_pattern__inner_alt_0(p, follow);
         }
@@ -22938,7 +23304,9 @@ fn _parse_reference_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     if !kind_set_has(&SYNC_100, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_100, &EXPECTED_100); }
     p.expect_set(&SYNC_100, &EXPECTED_100);
     if !kind_set_has(&SYNC_96, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_96, &EXPECTED_96); }
-    if atn_decide_278(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_278(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_KW_MUT, &SYNC_96, false);
     }
     p.site = 439;
@@ -22996,9 +23364,13 @@ fn _parse_struct_pattern_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0) 
     p.site = 442;
     p.atn_ret_pending = 2816;
     _parse_struct_pattern_fields(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_26)));
-    if atn_decide_281(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_281(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &SYNC_141, true);
-        if atn_decide_282(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_282(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 443;
             p.atn_ret_pending = 2826;
             _parse_struct_pattern_et_cetera(p, follow);
@@ -23051,6 +23423,10 @@ fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: i64 = 0) -> () 
     if _kind_set_91(kind) {
         if kind == TK_POUND {
             let _atn_alt = atn_decide_280(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 1 {
                 p.site = 444;
                 p.atn_ret_pending = 2828;
@@ -23136,26 +23512,30 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
         _parse_pattern(p, follow);
     } else if _kind_set_12(grp_kind) {
         let gd_atn = atn_decide_285(&mut p.atn, &p.kinds, p.pos, 0);
-        if gd_atn == 1 {
-            p.site = 450;
-            p.atn_ret_pending = 2858;
-            _parse_identifier(p);
-            p.expect(TK_COLON, &SYNC_131, false);
-            p.site = 451;
-            p.atn_ret_pending = 2862;
-            _parse_pattern(p, follow);
+        if gd_atn < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
         } else {
-            if !kind_set_has(&SYNC_138, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_138, &EXPECTED_138); }
-            if p.peek_kind() == TK_KW_REF {
-                p.take();
+            if gd_atn == 1 {
+                p.site = 450;
+                p.atn_ret_pending = 2858;
+                _parse_identifier(p);
+                p.expect(TK_COLON, &SYNC_131, false);
+                p.site = 451;
+                p.atn_ret_pending = 2862;
+                _parse_pattern(p, follow);
+            } else {
+                if !kind_set_has(&SYNC_138, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_138, &EXPECTED_138); }
+                if p.peek_kind() == TK_KW_REF {
+                    p.take();
+                }
+                if !kind_set_has(&SYNC_64, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_64, &EXPECTED_64); }
+                if p.peek_kind() == TK_KW_MUT {
+                    p.take();
+                }
+                p.site = 452;
+                p.atn_ret_pending = 2872;
+                _parse_identifier(p);
             }
-            if !kind_set_has(&SYNC_64, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_64, &EXPECTED_64); }
-            if p.peek_kind() == TK_KW_MUT {
-                p.take();
-            }
-            p.site = 452;
-            p.atn_ret_pending = 2872;
-            _parse_identifier(p);
         }
     } else if _kind_set_88(grp_kind) {
         if !kind_set_has(&SYNC_138, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_138, &EXPECTED_138); }
@@ -23257,7 +23637,9 @@ fn _parse_tuple_struct_items__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         p.atn_ret_pending = 2905;
         _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_76, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_291(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_291(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -23348,7 +23730,9 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
         p.atn_ret_pending = 2936;
         _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_76, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_295(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_295(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -23427,6 +23811,10 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
     if _kind_set_94(kind) {
         if kind == TK_DOTDOT {
             let _atn_alt = atn_decide_293(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 1 {
                 p.site = 460;
                 p.atn_ret_pending = 2928;
@@ -23438,6 +23826,10 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
             return _parse_tuple_pattern_items__inner_alt_0(p, follow);
         } else if _kind_set_97(kind) {
             let _atn_alt = atn_decide_293(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 2 {
                 return _parse_tuple_pattern_items__inner_alt_2(p, follow);
             }
@@ -23528,7 +23920,9 @@ fn _parse_slice_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         p.atn_ret_pending = 2972;
         _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_76, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_298(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_298(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -23619,6 +24013,10 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
     if _kind_set_37(kind) {
         if kind == TK_KW_IMPL {
             let _atn_alt = atn_decide_300(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 469;
                 p.atn_ret_pending = 2987;
@@ -23629,6 +24027,10 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
             return _parse_impl_trait_type(p, follow);
         } else if _kind_set_98(kind) {
             let _atn_alt = atn_decide_300(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 469;
                 p.atn_ret_pending = 2987;
@@ -23748,6 +24150,10 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     if _kind_set_101(kind) {
         if kind == TK_LPAREN {
             let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 472;
                 p.atn_ret_pending = 2995;
@@ -23763,6 +24169,10 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             return _parse_tuple_type(p, follow);
         } else if kind == TK_KW_FOR {
             let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 2 {
                 p.site = 474;
                 p.atn_ret_pending = 2999;
@@ -23777,6 +24187,10 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             return _parse_bare_function_type(p, follow);
         } else if _kind_set_11(kind) {
             let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 2 {
                 p.site = 474;
                 p.atn_ret_pending = 2999;
@@ -23792,6 +24206,10 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             return _parse_macro_invocation(p, follow);
         } else if kind == TK_KW_SELFTYPE {
             let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 2 {
                 p.site = 474;
                 p.atn_ret_pending = 2999;
@@ -23832,6 +24250,10 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     }
     if kind == TK_LSQUAREBRACKET {
         let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 8 {
             p.site = 480;
             p.atn_ret_pending = 3011;
@@ -24172,7 +24594,9 @@ fn _parse_bare_function_type__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         _parse_function_parameters_maybe_named_variadic(p, FOLLOW_MASK_3);
     }
     p.expect(TK_RPAREN, &SYNC_154, true);
-    if atn_decide_311(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_311(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 498;
         p.atn_ret_pending = 3123;
         _parse_bare_function_return_type(p, follow);
@@ -24196,12 +24620,18 @@ fn _parse_bare_function_type(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 }
 
 fn _parse_function_type_qualifiers__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if atn_decide_312(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_312(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_KW_UNSAFE, &SYNC_38, true);
     }
-    if atn_decide_313(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_2 = atn_decide_313(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_2 == 0 {
         p.expect(TK_KW_EXTERN, &SYNC_39, true);
-        if atn_decide_314(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+        let opt_atn = atn_decide_314(&mut p.atn, &p.kinds, p.pos, 0);
+        if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if opt_atn == 0 {
             p.site = 499;
             p.atn_ret_pending = 3139;
             _parse_abi(p);
@@ -24271,6 +24701,10 @@ fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow
     let kind = p.peek_kind();
     if _kind_set_104(kind) {
         let _atn_alt = atn_decide_315(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 0 {
             p.site = 501;
             p.atn_ret_pending = 3149;
@@ -24313,7 +24747,9 @@ fn _parse_maybe_named_function_parameters__inner(p: &mut Parser, follow: i64 = 0
         p.atn_ret_pending = 3163;
         _parse_maybe_named_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_78, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_317(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_317(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -24343,7 +24779,9 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         if !kind_set_has(&SYNC_155, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_155, &EXPECTED_155); }
     }
     if !kind_set_has(&SYNC_46, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_46, &EXPECTED_46); }
-    if atn_decide_319(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_319(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_27, &EXPECTED_27); }
         let grp_kind = p.peek_kind();
         if _kind_set_12(grp_kind) {
@@ -24540,7 +24978,9 @@ fn _parse_type_param_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         p.atn_ret_pending = 3255;
         _parse_type_param_bound(p, follow_open_with(follow_then_opening(FOLLOW_MASK_81, 16, follow), follow_open_set(FOLLOW_MASK_82)));
     }
-    if atn_decide_326(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_326(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_PLUS, &EMPTY_SYNC, true);
     }
     return;
@@ -24805,7 +25245,9 @@ fn _parse_lifetime_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
         _parse_lifetime(p);
         p.expect(TK_PLUS, &SYNC_83, true);
     }
-    if atn_decide_338(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_338(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.site = 529;
         p.atn_ret_pending = 3344;
         _parse_lifetime(p);
@@ -24961,7 +25403,9 @@ fn _parse_path_expr_segment__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     p.site = 535;
     p.atn_ret_pending = 3398;
     _parse_path_ident_segment(p);
-    if atn_decide_345(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_345(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_PATHSEP, &SYNC_87, false);
         p.site = 536;
         p.atn_ret_pending = 3406;
@@ -25041,14 +25485,18 @@ fn _parse_generic_args__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with 
     p.atn_ret_pending = 3430;
     _parse_generic_args_lifetimes(p, 0);
     if !kind_set_has(&SYNC_81, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_81, &EXPECTED_81); }
-    if atn_decide_348(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_348(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &SYNC_46, false);
         p.site = 539;
         p.atn_ret_pending = 3438;
         _parse_generic_args_types(p, 0);
     }
     if !kind_set_has(&SYNC_81, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_81, &EXPECTED_81); }
-    if atn_decide_349(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_2 = atn_decide_349(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_2 == 0 {
         p.expect(TK_COMMA, &SYNC_13, false);
         p.site = 540;
         p.atn_ret_pending = 3446;
@@ -25122,7 +25570,9 @@ fn _parse_generic_args__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with 
     p.atn_ret_pending = 3456;
     _parse_generic_args_types(p, 0);
     if !kind_set_has(&SYNC_81, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_81, &EXPECTED_81); }
-    if atn_decide_351(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_351(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &SYNC_13, false);
         p.site = 542;
         p.atn_ret_pending = 3464;
@@ -25260,6 +25710,10 @@ fn _parse_generic_args__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
     let kind = p.peek_kind();
     if kind == TK_LT {
         let _atn_alt = atn_decide_347(&mut p.atn, &p.kinds, p.pos, 0);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
         if _atn_alt == 1 {
             return _parse_generic_args__inner_alt_1(p, follow);
         }
@@ -25334,6 +25788,10 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     if _kind_set_110(kind) {
         if _kind_set_33(kind) {
             let _atn_alt = atn_decide_355(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 545;
                 p.atn_ret_pending = 3493;
@@ -25344,6 +25802,10 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
             return _parse_type_(p, follow);
         } else if _kind_set_12(kind) {
             let _atn_alt = atn_decide_355(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 1 {
                 p.site = 546;
                 p.atn_ret_pending = 3495;
@@ -25363,6 +25825,10 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
             return _parse_generic_args_const(p, follow);
         } else if _kind_set_108(kind) {
             let _atn_alt = atn_decide_355(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 1 {
                 p.site = 546;
                 p.atn_ret_pending = 3495;
@@ -25693,10 +26159,14 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     p.site = 568;
     p.atn_ret_pending = 3619;
     _parse_path_ident_segment(p);
-    if atn_decide_366(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_366(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_PATHSEP, &SYNC_32, true);
     }
-    if atn_decide_367(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn_2 = atn_decide_367(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn_2 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn_2 == 0 {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LT {
             p.site = 569;
@@ -25735,7 +26205,9 @@ fn _parse_type_path_fn__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         _parse_type_path_inputs(p, FOLLOW_MASK_3);
     }
     p.expect(TK_RPAREN, &SYNC_154, true);
-    if atn_decide_370(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_370(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_RARROW, &SYNC_46, false);
         p.site = 572;
         p.atn_ret_pending = 3649;
@@ -25769,7 +26241,9 @@ fn _parse_type_path_inputs__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         p.atn_ret_pending = 3661;
         _parse_type_(p, follow_open_with(follow_then_opening(FOLLOW_MASK_93, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     }
-    if atn_decide_372(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_372(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_COMMA, &EMPTY_SYNC, true);
     }
     return;
@@ -25792,7 +26266,9 @@ fn _parse_type_path_inputs(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 
 fn _parse_visibility__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_PUB, &SYNC_7, true);
-    if atn_decide_373(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let opt_atn = atn_decide_373(&mut p.atn, &p.kinds, p.pos, 0);
+    if opt_atn < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if opt_atn == 0 {
         p.expect(TK_LPAREN, &SYNC_172, false);
         if !kind_set_has(&SYNC_172, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_172, &EXPECTED_172); }
         let grp_kind = p.peek_kind();
@@ -25910,6 +26386,10 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
             return _parse_identifier(p);
         } else if kind == TK_KW_UNION {
             let _atn_alt = atn_decide_377(&mut p.atn, &p.kinds, p.pos, 0);
+            if _atn_alt < 0 {
+                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+                return;
+            }
             if _atn_alt == 0 {
                 p.site = 576;
                 p.atn_ret_pending = 3702;
