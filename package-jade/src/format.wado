@@ -1,7 +1,7 @@
 //! The `format` values a validator asserts when compiled to, each read strictly
 //! by the grammar Draft 2020-12 cites for it.
 
-use { Uri } from "core:uri";
+use { Uri, UriReference } from "core:uri";
 use { validate_ecma262_syntax } from "lib:re";
 
 /// A format Jade asserts.
@@ -66,10 +66,10 @@ impl Format {
             Email => whole(Scan::of(text), mailbox),
             Ipv4 => whole(Scan::of(text), |s| dotted_quad(s, Leading::Unpadded)),
             Ipv6 => is_ipv6(&Scan::of(text).chars, 1, Leading::Unpadded),
-            Uri => is_uri_reference(text) && has_scheme(text),
+            Uri => is_uri(text),
             UriReference => is_uri_reference(text),
-            Iri => is_iri_reference(text) && has_scheme(text),
-            IriReference => is_iri_reference(text),
+            Iri => iri_as_uri(text) matches { Some(mapped) && is_uri(mapped.as_str_slice()) },
+            IriReference => iri_as_uri(text) matches { Some(mapped) && is_uri_reference(mapped.as_str_slice()) },
             Uuid => is_uuid(text),
             UriTemplate => whole(Scan::of(text), uri_template),
             JsonPointer => whole(Scan::of(text), json_pointer),
@@ -454,7 +454,7 @@ fn address_literal(s: &mut Scan) -> bool {
         // groups of zeros."
         return is_ipv6(&address, 2, Leading::Padded);
     }
-    return whole(Scan { chars: literal.chars }, |s| dotted_quad(s, Leading::Padded));
+    return whole(Scan { chars: literal.chars }, |quad| dotted_quad(quad, Leading::Padded));
 }
 
 /// RFC 3339's `full-date`, its day within its month.
@@ -661,35 +661,22 @@ fn units(s: &mut Scan) -> String {
     return out;
 }
 
-/// Whether `text` is RFC 3986's `URI-reference`.
-fn is_uri_reference(text: StrSlice) -> bool {
+/// Whether `text` is RFC 3986's `URI`.
+fn is_uri(text: StrSlice) -> bool {
     return Uri::from_str(text) matches { Ok(_) };
 }
 
-/// Whether `text` begins with RFC 3986's `scheme ":"`. A `relative-ref` cannot,
-/// since its first segment holds no colon, so a `URI-reference` that does is a
-/// `URI`.
-fn has_scheme(text: StrSlice) -> bool {
-    let mut first = true;
-    for let c of text.chars() {
-        if c == ':' {
-            return !first;
-        }
-        let allowed = c.is_ascii_alphabetic() || !first && (c.is_ascii_digit() || c == '+' || c == '-' || c == '.');
-        if !allowed {
-            return false;
-        }
-        first = false;
-    }
-    return false;
+/// Whether `text` is RFC 3986's `URI-reference`.
+fn is_uri_reference(text: StrSlice) -> bool {
+    return UriReference::from_str(text) matches { Ok(_) };
 }
 
-/// Whether `text` is RFC 3987's `IRI-reference`. RFC 3987 3.1 maps an IRI to a
-/// URI by percent-encoding each character outside ASCII, and the IRI grammar
-/// admits such a character exactly where the URI grammar admits a
-/// percent-encoded octet, save that it must be a `ucschar`, or an `iprivate`
-/// in the query.
-fn is_iri_reference(text: StrSlice) -> bool {
+/// `text` with each character outside ASCII percent-encoded, as RFC 3987 3.1
+/// maps an IRI to a URI, or `None` where that character is not one the IRI
+/// grammar admits. It admits such a character exactly where the URI grammar
+/// admits a percent-encoded octet, save that it must be a `ucschar`, or an
+/// `iprivate` in the query.
+fn iri_as_uri(text: StrSlice) -> Option<String> {
     let mut mapped = String::with_capacity(text.len());
     let mut in_query = false;
     let mut in_fragment = false;
@@ -705,10 +692,10 @@ fn is_iri_reference(text: StrSlice) -> bool {
         } else if is_ucschar(c) || in_query && is_iprivate(c) {
             mapped.push_str("%00");
         } else {
-            return false;
+            return null;
         }
     }
-    return is_uri_reference(mapped.as_str_slice());
+    return Option::Some(mapped);
 }
 
 fn is_ucschar(c: char) -> bool {

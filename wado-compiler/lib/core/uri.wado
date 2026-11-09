@@ -1,14 +1,22 @@
 #![stdlib("core:uri")]
-//! URI references (RFC 3986) as identifiers: read one, resolve one against a
-//! base, and write one back. Every scheme is read by the generic syntax, and
-//! only ASCII is admitted. A URI to fetch over HTTP is `core:url`'s.
+//! URIs and URI references (RFC 3986) as identifiers: read one, resolve a
+//! reference against a URI, and write one back. Every scheme is read by the
+//! generic syntax, and only ASCII is admitted. A URI to fetch over HTTP is
+//! `core:url`'s.
 
 use { Deserialize, DeserializeError, Deserializer, Serialize, SerializeError, Serializer } from "core:serde";
+
+/// A URI (RFC 3986 §3): a URI reference with a scheme, so one that names a
+/// resource without a base, and one a reference resolves against. Two URIs are
+/// equal when their references are.
+pub struct Uri {
+    reference: UriReference,
+}
 
 /// A URI reference (RFC 3986 §4.1): a URI, or a relative reference to resolve
 /// against one. Every component is valid by construction. Two references are
 /// equal when their components are equal as written, the scheme's case aside.
-pub struct Uri {
+pub struct UriReference {
     /// Lowercase, as §3.1 says a reader should produce it.
     scheme: Option<String>,
     authority: Option<String>,
@@ -37,6 +45,18 @@ impl FromStr for Uri {
     type Err = UriError;
 
     fn from_str<S: AsStrSlice>(input: S) -> Result<Uri, UriError> {
+        let reference = UriReference::from_str(input)?;
+        if reference.scheme matches { None } {
+            return fail(0, "a URI must have a scheme");
+        }
+        return Result::Ok(Uri { reference });
+    }
+}
+
+impl FromStr for UriReference {
+    type Err = UriError;
+
+    fn from_str<S: AsStrSlice>(input: S) -> Result<UriReference, UriError> {
         let text = input.to_string();
         return Reader { text, pos: 0 }.reference();
     }
@@ -44,27 +64,26 @@ impl FromStr for Uri {
 
 impl Uri {
     /// `reference` resolved against this URI as its base (§5.2.2).
-    pub fn resolve(&self, reference: &Uri) -> Uri
-        contract self.scheme matches { Some(_) }, "the base must have a scheme"
-    {
+    pub fn resolve(&self, reference: &UriReference) -> Uri {
+        let base = &self.reference;
         let r = reference;
         let mut t = *r;
         if r.scheme matches { Some(_) } || r.authority matches { Some(_) } {
             t.path = remove_dot_segments(&r.path);
         } else if r.path.is_empty() {
-            t.path = self.path;
+            t.path = base.path;
             if r.query matches { None } {
-                t.query = self.query;
+                t.query = base.query;
             }
         } else if r.path.starts_with("/") {
             t.path = remove_dot_segments(&r.path);
         } else {
-            t.path = remove_dot_segments(&self.merge(&r.path));
+            t.path = remove_dot_segments(&base.merge(&r.path));
         }
         if r.scheme matches { None } {
-            t.scheme = self.scheme;
+            t.scheme = base.scheme;
             if r.authority matches { None } {
-                t.authority = self.authority;
+                t.authority = base.authority;
             }
         }
         // Without an authority, a path starting `//` would read back as one
@@ -72,9 +91,26 @@ impl Uri {
         if t.authority matches { None } && t.path.starts_with("//") {
             t.path = `/.${t.path}`;
         }
-        return t;
+        return Uri { reference: t };
     }
 
+    /// The URI as `Display` writes it.
+    pub fn to_string(&self) -> String {
+        return self.reference.to_string();
+    }
+
+    /// The fragment, without its `#`.
+    pub fn fragment(&self) -> Option<StrSlice> {
+        return self.reference.fragment();
+    }
+
+    /// This URI with no fragment: the resource it names.
+    pub fn without_fragment(&self) -> Uri {
+        return Uri { reference: self.reference.without_fragment() };
+    }
+}
+
+impl UriReference {
     /// The reference as `Display` writes it.
     pub fn to_string(&self) -> String {
         return `${self}`;
@@ -88,9 +124,9 @@ impl Uri {
         return null;
     }
 
-    /// This reference with no fragment: the resource it names.
-    pub fn without_fragment(&self) -> Uri {
-        return Uri { ..*self, fragment: null };
+    /// This reference with no fragment.
+    pub fn without_fragment(&self) -> UriReference {
+        return UriReference { ..*self, fragment: null };
     }
 
     /// `path` appended to this base's path after its last segment (§5.2.3).
@@ -107,23 +143,44 @@ impl Uri {
 
 impl Serialize for Uri {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        return s.serialize_string(&self.to_string());
+        return self.reference.serialize(s);
     }
 }
 
 impl Deserialize for Uri {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uri, DeserializeError> {
-        return match Uri::from_str(d.deserialize_string()?) {
-            Ok(uri) => Result::Ok(uri),
-            Err(e) => Result::Err(DeserializeError::invalid_value(
-                `invalid URI reference: ${e}`,
-            )),
-        };
+        return read(d, "URI");
+    }
+}
+
+impl Serialize for UriReference {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(&self.to_string());
+    }
+}
+
+impl Deserialize for UriReference {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<UriReference, DeserializeError> {
+        return read(d, "URI reference");
+    }
+}
+
+/// The string `d` holds, read as a `T`, which `what` names in the error.
+fn read<T: FromStr<Err = UriError>, D: Deserializer>(d: &mut D, what: String) -> Result<T, DeserializeError> {
+    return match T::from_str(d.deserialize_string()?) {
+        Ok(v) => Result::Ok(v),
+        Err(e) => Result::Err(DeserializeError::invalid_value(`invalid ${what}: ${e}`)),
+    };
+}
+
+impl Display for Uri {
+    fn fmt(&self, f: &mut Formatter) {
+        self.reference.fmt(f);
     }
 }
 
 /// The reference as §5.3 recomposes it.
-impl Display for Uri {
+impl Display for UriReference {
     fn fmt(&self, f: &mut Formatter) {
         if let Some(scheme) = &self.scheme {
             f.write_str(scheme);
@@ -182,8 +239,8 @@ struct Reader {
 }
 
 impl Reader {
-    fn reference(&mut self) -> Result<Uri, UriError> {
-        let mut uri = Uri { scheme: null, authority: null, path: "", query: null, fragment: null };
+    fn reference(&mut self) -> Result<UriReference, UriError> {
+        let mut uri = UriReference { scheme: null, authority: null, path: "", query: null, fragment: null };
         let first = self.find_any(0, ":/?#");
         if first < self.text.len() && self.text.byte_at(first) == b':' {
             self.check_scheme(first)?;
@@ -379,7 +436,7 @@ fn is_ip_future(s: StrSlice) -> bool {
 #[synopsis]
 test {
     let base = Uri::from_str("https://example.com/schemas/root.json").unwrap();
-    let r = base.resolve(&Uri::from_str("item.json#/$defs/id").unwrap());
+    let r = base.resolve(&UriReference::from_str("item.json#/$defs/id").unwrap());
     assert r.to_string() == "https://example.com/schemas/item.json#/$defs/id";
     assert r.fragment() matches { Some("/$defs/id") };
 }

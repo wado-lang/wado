@@ -2,7 +2,7 @@
 //! every reference resolved, then held against any number of instances.
 
 use { HashMap, HashSet } from "core:collections";
-use { Uri } from "core:uri";
+use { Uri, UriReference } from "core:uri";
 use { percent_decode } from "core:url";
 use { Regex } from "lib:re";
 use { Document, Node } from "./document.wado";
@@ -1186,8 +1186,8 @@ impl Compiler {
     }
 }
 
-fn parse_uri(text: &String, at: String) -> Result<Uri, SchemaError> {
-    return match Uri::from_str(text) {
+fn parse_uri(text: &String, at: String) -> Result<UriReference, SchemaError> {
+    return match UriReference::from_str(text) {
         Ok(uri) => Result::Ok(uri),
         Err(e) => Result::Err(SchemaError { pointer: at, message: `${e}` }),
     };
