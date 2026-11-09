@@ -2064,18 +2064,13 @@ impl<'a> Reify<'a> {
                 TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span)
             }
             ast::Stmt::If(if_stmt) => {
-                let recorded = self
-                    .ann_expression_types(if_stmt.id)
-                    .expect("a value-position `if` records its type");
+                let recorded = self.value_type(if_stmt.id, expected_type, false);
                 let expected = branch_expectation(expected_type, recorded);
                 let tir = self.reify_if_expr(if_stmt, ctx, expected, recorded);
                 TirStmt::new(TirStmtKind::Expr(tir), if_stmt.span)
             }
             ast::Stmt::Match(match_expr) => {
-                let recorded = self
-                    .ann_expression_types(match_expr.id)
-                    .or(expected_type)
-                    .unwrap_or(TypeTable::UNKNOWN);
+                let recorded = self.value_type(match_expr.id, expected_type, false);
                 let tir = self.reify_match_expr(match_expr, ctx, expected_type, recorded);
                 TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)
             }
@@ -2615,30 +2610,32 @@ impl<'a> Reify<'a> {
         }
     }
 
+    /// The type a value of node `id` is built at. The recorded type is the
+    /// source of truth, falling back to `expected_type` (or `UNKNOWN` when
+    /// neither is available) for AST shapes that evaporated during annotate.
+    /// A `null` is built at the type expected of it; any other value holding
+    /// an `Option<!>` is built at its own and widened where it goes
+    /// (`reify_expr`).
+    fn value_type(&self, id: AstId, expected_type: Option<TypeId>, is_null: bool) -> TypeId {
+        self.ann_expression_types(id)
+            .or(expected_type.filter(|_| is_null))
+            .or_else(|| {
+                self.ann_recorded_expression_type(id)
+                    .filter(|&t| self.tysys.type_table.borrow().contains_never_arg(t))
+            })
+            .or(expected_type)
+            .unwrap_or(TypeTable::UNKNOWN)
+    }
+
     fn reify_unmoved(
         &mut self,
         expr: &ast::Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        // The expression's recorded type is the source of truth for
-        // `TirExpr::type_id`. Falls back to `expected_type` (or
-        // `UNKNOWN` when neither is available) for AST shapes that
-        // evaporated during annotate (e.g. a stmt-position match
-        // whose recorder fires only at the stmt level). A `null` is built at
-        // the type expected of it; any other value holding an `Option<!>` is
-        // built at its own and widened where it goes (`reify_expr`).
         let is_null =
             matches!(expr, ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null));
-        let recorded_type = self
-            .ann_expression_types(expr.id())
-            .or(expected_type.filter(|_| is_null))
-            .or_else(|| {
-                self.ann_recorded_expression_type(expr.id())
-                    .filter(|&t| self.tysys.type_table.borrow().contains_never_arg(t))
-            })
-            .or(expected_type)
-            .unwrap_or(TypeTable::UNKNOWN);
+        let recorded_type = self.value_type(expr.id(), expected_type, is_null);
         let span = expr.span();
 
         // Replay an i128 / u128 numeric-literal coercion: annotate
@@ -4293,12 +4290,10 @@ impl<'a> Reify<'a> {
         }
     }
 
-    /// Reify a stmt-position `if cond { … } else { … }`. Stmt
-    /// position never carries an `expected_type` from the surrounding
-    /// block (the elaborator switches to `…_with_expected` only on a
-    /// trailing position; reify follows suit by passing `None` to the
-    /// branches). `Condition::LetChain` mirrors the expression-level
-    /// `IfLetChain` desugar.
+    /// Reify a stmt-position `if cond { … } else { … }`, whose value nothing
+    /// reads: a trailing one that is read reifies as the expression
+    /// (`reify_tail_stmt`). `Condition::LetChain` mirrors the
+    /// expression-level `IfLetChain` desugar.
     fn reify_if_stmt(&mut self, if_stmt: &ast::IfExpr, ctx: &mut FunctionContext) -> TirStmt {
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {

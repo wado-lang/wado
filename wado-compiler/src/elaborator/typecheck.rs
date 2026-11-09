@@ -7,7 +7,9 @@
 use crate::ast::{AstId, Expr};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId, TypeParamId};
+use crate::tir::{
+    EffectRef, ResolvedType, RowFlow, StructDef, TupleSlot, TypeId, TypeParamId, is_open_row,
+};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -245,8 +247,7 @@ fn check_at(
         // value can also be written back through the slot, a narrower row would
         // admit a wider one, so there the rows match. An effect parameter or
         // variable is the effect check's to resolve.
-        let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
-        if !open(expected_effects) && !actual_effects.iter().any(EffectRef::is_var) {
+        if !is_open_row(expected_effects) && !actual_effects.iter().any(EffectRef::is_var) {
             let covers = |wide: &[EffectRef], narrow: &[EffectRef]| {
                 narrow.iter().all(|effect| wide.contains(effect))
             };

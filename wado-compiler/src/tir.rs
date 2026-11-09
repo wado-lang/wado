@@ -95,6 +95,12 @@ impl EffectRef {
     }
 }
 
+/// Whether `row` still stands for whatever meets it: it names an effect
+/// parameter, or a variable the effect check solves.
+pub fn is_open_row(row: &[EffectRef]) -> bool {
+    row.iter().any(|e| e.is_param() || e.is_var())
+}
+
 /// A type parameter or pack: the declaration binding it, and its slot there.
 /// The one key a parameter is told apart and substituted by, so an enclosing
 /// function's `T` and a callee's own `T` at one slot are two parameters.
@@ -2034,10 +2040,11 @@ impl ExitScope {
     }
 }
 
-/// Combine two branch result types under the elaborator's rule:
-/// equal types agree; a `Never` branch defers to the other; two
-/// `extends`-related resources agree on the ancestor; an outright
-/// mismatch yields `None` so the caller falls back to `Unit`.
+/// Combine the result types of two branches whose value nothing reads, which
+/// the elaborator agrees no type for: equal types agree; a `Never` branch
+/// defers to the other, which is how a statement is seen to diverge; two
+/// `extends`-related resources agree on the ancestor; an outright mismatch
+/// yields `None` so the caller falls back to `Unit`.
 pub(crate) fn agree_branch_types(tt: &TypeTable, t: TypeId, e: TypeId) -> Option<TypeId> {
     if t == e {
         Some(t)

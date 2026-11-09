@@ -32,7 +32,7 @@ use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
     RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr,
     TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId,
-    positional_substitution, projection_arguments, range_item, solve_row,
+    is_open_row, positional_substitution, projection_arguments, range_item, solve_row,
 };
 
 #[derive(Debug, Clone)]
@@ -766,10 +766,9 @@ impl TypeTable {
             return None;
         }
         let return_type = self.branch_join(a_return, b_return)?;
-        let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
         let row = if a_row == b_row {
             a_row
-        } else if open(&a_row) || open(&b_row) {
+        } else if is_open_row(&a_row) || is_open_row(&b_row) {
             vec![self.mint_effect_var()]
         } else {
             let mut union = a_row;
@@ -7300,8 +7299,7 @@ enum RowSpelling {
 /// effect parameter stands for whatever row meets it, and a variable for the
 /// row the effect check solves it to.
 fn rows_agree(a: &[EffectRef], b: &[EffectRef]) -> bool {
-    let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
-    a == b || open(a) || open(b)
+    a == b || is_open_row(a) || is_open_row(b)
 }
 
 /// What one substitution replaces, leaf by leaf: a declaration's slots, solved
