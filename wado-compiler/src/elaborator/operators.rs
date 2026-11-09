@@ -285,8 +285,9 @@ pub(super) enum ExpectedTypeUse {
 
 /// Read off the syntax and the resolve walk, never a type: reify decides the
 /// same order with no synthesis to ask, and a type-dependent order would
-/// desync the two walks inside a tuple `for-of`. A form left out just resolves
-/// on its own, so a subset is safe.
+/// desync the two walks inside a tuple `for-of`. A form read as `Ignores` that
+/// hands the expected type on rejects a bare case beneath it; it never
+/// miscompiles.
 pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> ExpectedTypeUse {
     let bare_case = |ident: &ast::IdentExpr| {
         if tysys.bare_case_at(ident.id).is_some() {
@@ -317,10 +318,31 @@ pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> Expecte
             .map(|value| expected_type_use(value, tysys))
             .fold(block_tail_use(&lb.block, tysys), ExpectedTypeUse::max),
         ast::Expr::WithHandler(with_expr) => block_tail_use(&with_expr.body, tysys),
-        ast::Expr::Unary(unary) if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) => {
+        ast::Expr::Unary(unary)
+            if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Unchecked) =>
+        {
             expected_type_use(&unary.expr, tysys)
         }
-        _ => ExpectedTypeUse::Ignores,
+        ast::Expr::Unary(_)
+        | ast::Expr::Literal(_)
+        | ast::Expr::Binary(_)
+        | ast::Expr::Assign(_)
+        | ast::Expr::CompoundAssign(_)
+        | ast::Expr::ComparisonChain(_)
+        | ast::Expr::MethodCall(_)
+        | ast::Expr::FieldAccess(_)
+        | ast::Expr::Index(_)
+        | ast::Expr::Matches(_)
+        | ast::Expr::Closure(_)
+        | ast::Expr::TemplateString(_)
+        | ast::Expr::TaggedTemplate(_)
+        | ast::Expr::Cast(_)
+        | ast::Expr::StructLiteral(_)
+        | ast::Expr::TupleComprehension(_)
+        | ast::Expr::TryOp(_)
+        | ast::Expr::Spread(..)
+        | ast::Expr::Range(_)
+        | ast::Expr::Error(_) => ExpectedTypeUse::Ignores,
     }
 }
 
