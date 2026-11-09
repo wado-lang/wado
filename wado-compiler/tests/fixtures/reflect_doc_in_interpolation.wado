@@ -1,0 +1,11 @@
+// A local item inside a template interpolation takes the `///` comment written
+// there, which the outer lex hides behind the template token.
+
+test {
+    let doc = `${(|| {
+        /// Inner doc.
+        struct S { x: i32 }
+        return Reflect::<S>::doc();
+    })():?}`;
+    assert doc == "Option::Some(\"Inner doc.\")";
+}

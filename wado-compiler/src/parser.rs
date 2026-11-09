@@ -7428,7 +7428,7 @@ impl Parser {
             lex_result.tokens,
             None,
             None,
-            Arc::clone(&self.source_comments),
+            Arc::from(lex_result.comments.as_slice()),
             Vec::new(),
         );
         parser.next_ast_id = self.next_ast_id;

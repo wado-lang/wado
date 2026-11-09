@@ -109,24 +109,35 @@ fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Seriali
     return described(Schema::Object(s), Reflect::<T>::doc());
 }
 
-/// `schema` annotated with a doc comment. A first paragraph of one line,
-/// followed by more, is the `title` and the rest the `description`; any other
-/// comment is the `description` whole.
+/// `schema` annotated with a doc comment, its blank lines at either end left
+/// out. A first paragraph of one line, followed by more, is the `title` and the
+/// rest the `description`; any other comment is the `description` whole.
 fn described(schema: Schema, doc: Option<String>) -> Schema {
     let Some(doc) = doc else {
         return schema;
     };
-    let mut s = schema.into_object();
-    if let Some([first, rest]) = doc.split_once("\n\n") && !first.contains("\n") {
-        let mut rest = rest;
-        while rest.starts_with("\n") {
-            rest = rest.slice(1, rest.len());
-        }
-        s.title = Option::Some(first.to_string());
-        s.description = Option::Some(rest.to_string());
-    } else {
-        s.description = Option::Some(doc);
+    let lines: List<String> = doc.lines().collect();
+    let is_blank = |line: &String| line.trim().is_empty();
+    let mut start = 0;
+    let mut end = lines.len();
+    while start < end && is_blank(&lines[start]) {
+        start += 1;
     }
+    while end > start && is_blank(&lines[end - 1]) {
+        end -= 1;
+    }
+    if start == end {
+        return schema;
+    }
+    let mut s = schema.into_object();
+    if start + 1 < end && is_blank(&lines[start + 1]) {
+        s.title = Option::Some(lines[start]);
+        start += 1;
+        while is_blank(&lines[start]) {
+            start += 1;
+        }
+    }
+    s.description = Option::Some(lines.slice(start, end).to_list().join("\n"));
     return Schema::Object(s);
 }
 

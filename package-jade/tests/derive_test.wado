@@ -249,6 +249,23 @@ test "a case's comment describes its oneOf branch" {
     assert standalone::<Signal>() == #`{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Signal","$defs":{"Signal":{"description":"One line, then\na second, so no title.\n\nAnother paragraph.","oneOf":[{"description":"Raised.","type":"object","properties":{"Up":{"type":"integer","minimum":-2147483648,"maximum":2147483647}},"required":["Up"],"maxProperties":1},{"title":"Lowered.","description":"Blank lines between.","const":"Down"}]}}}`#;
 }
 
+///
+/// An edge.
+///
+/// Blank lines around.
+///
+struct Edge {
+    /// Across.
+    ///
+    x: f64,
+    ///
+    y: f64,
+}
+
+test "blank lines around a doc comment write no empty title or description" {
+    assert standalone::<Edge>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Edge","$defs":{"Edge":{"title":"An edge.","description":"Blank lines around.","type":"object","properties":{"x":{"description":"Across.","type":"number"},"y":{"type":"number"}},"required":["x","y"]}}}`;
+}
+
 /// A shade.
 enum Shade {
     /// Has no place in the schema.
