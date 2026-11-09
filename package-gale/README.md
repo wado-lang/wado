@@ -286,7 +286,7 @@ parse. It is for finding where the tournament departs from ANTLR4 over real
 inputs, not for use.
 
 The generated SQLite parser is 1.0 MB under `"longest"`, 2.9 MB under `"exact"`
-and 1.8 MB under `"verify"` (`gale gen --prediction <mode>`).
+and 3.5 MB under `"verify"` (`gale gen --prediction <mode>`).
 
 A `?` `*` `+` is ambiguous where its body and what follows it can start on one
 token. One at the end of its alternative counts too, since its caller's

@@ -1222,6 +1222,14 @@ so every continuation the caller's enter reaches, the callee's reached as well,
 and the callee's all died. So the verdict is recorded for each such caller in
 turn, and a caller with an operator of its own asks the simulator itself.
 
+When every alternative dies, the simulator picks the lowest one that had already
+ended the decision's rule, as the jar does. Where none had, the decision itself
+is a `no viable alternative`, a loop's and a `?`'s as much as a group's: on
+`s : x E ; x : A A A A A A B | A A A A A A ;`, the input `a a a a a a c` enters
+`x`'s second alternative and reports the `c`, while
+`( A A A A A A B | A A A A A A C )* E` reports `a a a a a a e` at the loop. A
+scan reads the miss as declining, and fails further on.
+
 Which gaps stay static is a cost decision as much as a correctness one. The
 simulator keeps each prediction for the program's life, as ANTLR4's DFA does,
 so a later parse reuses what an earlier one computed, but a first parse still
