@@ -9,7 +9,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{TraitRef, TypeId};
 use crate::token::Span;
 
-use super::super::scope::TraitContext;
+use super::super::scope::{ScopedBound, TraitContext};
 use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{DataDecls, StructFieldInfo};
 use crate::defs::DefId;
@@ -54,6 +54,10 @@ pub(in crate::elaborator) enum Owed {
         type_args: Vec<TypeId>,
         subject: TypeId,
     },
+    /// A bound on `subject`, whose trait arguments owe their trait's parameter
+    /// bounds. They are read when it is answered: a `Self::Assoc` among them
+    /// asks about impls the decl pass may not have reached.
+    BoundArgs { bound: ScopedBound, subject: TypeId },
     /// An argument owing bounds already instantiated, on behalf of
     /// `param_name`.
     TraitRefs {

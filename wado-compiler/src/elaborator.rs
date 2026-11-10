@@ -291,8 +291,16 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 (param.is_pack || !param.has_fn_bound())
                     && !param.bounds.iter().any(ast::TraitBound::writes_self)
             });
+        let mut owed = Vec::new();
+        let mut owe = |param: &ast::GenericParam, bounds: &[scope::ScopedBound]| {
+            let bound_to = binders.iter().find(|(p, _)| std::ptr::eq(*p, param));
+            if let Some(&(_, type_id)) = bound_to {
+                owed.extend(bounds.iter().map(|bound| (bound.clone(), type_id)));
+            }
+        };
         for param in early {
             let bounds = self.scoped_bounds(param);
+            owe(param, &bounds);
             self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.bind_fn_bound_params(&impl_block.type_params);
@@ -305,10 +313,11 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         self.set_self_binding(implementing);
         for param in late {
             let bounds = self.scoped_bounds(param);
+            owe(param, &bounds);
             self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.release_bounds_here(held);
-        self.check_bound_trait_args(&binders);
+        self.check_bound_trait_args(owed);
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {

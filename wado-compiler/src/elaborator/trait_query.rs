@@ -2722,19 +2722,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// [`Self::check_trait_ref_arg_bounds`] for every trait each of `binders`
-    /// is bounded by, the type the parameter binds being its `Self`. Every
-    /// parameter is bound first, since a bound may name one declared after its
-    /// own.
-    pub(super) fn check_bound_trait_args(&mut self, binders: &[(&ast::GenericParam, TypeId)]) {
-        for &(param, subject) in binders {
-            for bound in param.real_bounds() {
-                let Some(trait_) = self.trait_decl_of(&bound) else {
-                    continue;
-                };
-                let written = self.written_bound_args(&bound);
-                self.check_trait_ref_arg_bounds(trait_, &written, subject, bound.span);
-            }
+    /// [`Self::check_trait_ref_arg_bounds`] for each of `bounds`, on the type
+    /// its parameter binds. Every parameter is bound first, since a bound may
+    /// name one declared after its own.
+    pub(super) fn check_bound_trait_args(&mut self, bounds: Vec<(ScopedBound, TypeId)>) {
+        for (bound, subject) in bounds {
+            self.owe_bounds(OwedBounds {
+                span: bound.span,
+                owed: Owed::BoundArgs { bound, subject },
+            });
         }
     }
 
@@ -2991,6 +2987,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ArgsOwe::Bounds,
                     span,
                 );
+            }
+            Owed::BoundArgs { bound, subject } => {
+                if let Some(trait_) = self.trait_decl_of(&bound) {
+                    let written = self.bound_args_where_written(&bound, &ParamSpace::new());
+                    self.check_trait_ref_arg_bounds(trait_, &written, subject, span);
+                }
             }
             Owed::TraitRefs {
                 type_arg,

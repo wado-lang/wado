@@ -684,6 +684,33 @@ test {
 
 The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
 
+### Trait Arguments Meet the Trait's Parameter Bounds
+
+A trait reference's arguments must meet the bounds the trait puts on its parameters, with `Self` standing for the implementing or bounded type. This holds of an `impl` header and of a bound alike. As in Rust, nothing implies those bounds onto the arguments: an impl parameter has only the bounds the impl writes, so it restates what the trait needs.
+
+<!-- {"fixture":"impl_trait_arg_unmet_param_bound_error.wado"} -->
+
+```wado
+trait Q with () {
+    type QOut;
+    fn q() -> i32;
+}
+
+trait P with () {}
+
+trait Tr<T: Q> with () {
+    fn run(&self) -> i32;
+}
+
+struct X {}
+
+impl<U: P> Tr<U> for X {  // ERROR: type 'U' does not implement trait 'Q'
+    fn run(&self) -> i32 {
+        return 1;
+    }
+}
+```
+
 ### Trait Bounds
 
 Type parameters can have trait bounds that constrain what types can be used:
