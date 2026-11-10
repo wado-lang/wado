@@ -422,13 +422,15 @@ ifStatement
     : 'if' condition block ('else' (ifStatement | block))?
     ;
 
+// A condition holding a `let` is a let chain: comparison-level operands that
+// only `&&` joins. Without one it is an expression.
 condition
-    : conditionTerm ('&&' conditionTerm)*
+    : exprNoStruct
+    | (cmpExprNoStruct '&&')* letCondition ('&&' (letCondition | cmpExprNoStruct))*
     ;
 
-conditionTerm
-    : 'let' pattern '=' exprNoStruct
-    | exprNoStruct
+letCondition
+    : 'let' pattern '=' cmpExprNoStruct
     ;
 
 forStatement
