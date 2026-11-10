@@ -2526,7 +2526,9 @@ WS : ' ' -> skip ;
 // and the type arguments are still entered wherever that leaves a viable parse.
 // Where both readings do, as on `c == b as L < i > d`, the jar compares.
 test "a tail group optional enters while entering stays viable" {
-    let inputs: List<String> = ["b as L < i > ;", "c == b as L < i > ;", "c == b as L < i > d ;", "c < b as L < i > > d ;"];
+    let inputs: List<String> = [
+        "b as L < i > ;", "c == b as L < i > ;", "c == b as L < i > d ;", "c < b as L < i > > d ;",
+    ];
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         let got = parses(TAIL_GROUP_OPTIONAL_G4, "s", inputs, &GenerateOptions { prediction });
         assert got == "b as L < i > ; => (s (e (n b as (t L < (t i) >))) ;)

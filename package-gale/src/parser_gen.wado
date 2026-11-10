@@ -2351,7 +2351,12 @@ fn scan_body_is_leaf(body: &ScanElement) -> bool {
 
 /// Rewind an optional's body, scanned from `start` to `pos`, where the caller's
 /// continuation starts at `start` and none resumes at `pos`.
-fn gen_scan_yield_unless_resumed<S: AsStrSlice>(w: &mut CodeWriter, re: &ScanRepeatElement, start: S, ctx: &mut EmitContext) {
+fn gen_scan_yield_unless_resumed<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    re: &ScanRepeatElement,
+    start: S,
+    ctx: &mut EmitContext,
+) {
     let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
     w.begin(`if ${follow_yields_call("tokens", &start)} && !${resumes}`);
     gen_scan_rewind(w, ctx, &start);
@@ -5374,8 +5379,8 @@ fn gen_op_repeat_optional_group(
     let follow_gate = rep_op.gate_caller_follow;
     match &rep_op.strategy {
         OptionalLookahead(s) => {
-            let own = gen_lookahead_condition(ctx, &s.sig);
-            let enters = optional_entry_yielding(w, rep_op, own, null, follow_gate, ctx, name_counts);
+            let lookahead = gen_lookahead_condition(ctx, &s.sig);
+            let enters = optional_entry_yielding(w, rep_op, lookahead, null, follow_gate, ctx, name_counts);
             opt.gen_present(w, ctx, &enters, &optional_proven_first(rep_op));
         },
         OptionalShapeLookahead(s) => {
@@ -5385,7 +5390,7 @@ fn gen_op_repeat_optional_group(
         OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 // One answer, one set of scans.
-                let [winner, best] = gen_decided_optional_group(
+                let [winner, enters] = gen_decided_optional_group(
                     w,
                     rep_op,
                     &decision.branches,
@@ -5394,7 +5399,7 @@ fn gen_op_repeat_optional_group(
                     name_counts,
                     follow_gate,
                 );
-                gen_op_storable_optional_body(w, rep_op, &rep.element, ctx, &best, Option::Some(winner));
+                gen_op_storable_optional_body(w, rep_op, &rep.element, ctx, &enters, Option::Some(winner));
             } else {
                 let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
                 let enters = optional_entry_yielding(
@@ -5410,7 +5415,15 @@ fn gen_op_repeat_optional_group(
             }
         },
         Plain => {
-            let enters = optional_entry_yielding(w, rep_op, body_guard_cond(rep_op, ctx), null, follow_gate, ctx, name_counts);
+            let enters = optional_entry_yielding(
+                w,
+                rep_op,
+                body_guard_cond(rep_op, ctx),
+                null,
+                follow_gate,
+                ctx,
+                name_counts,
+            );
             opt.gen_present(w, ctx, &enters, &optional_proven_first(rep_op));
         },
         NonGreedy(_) => unreachable(),
@@ -5548,8 +5561,7 @@ fn atn_prec_arg(ctx: &EmitContext) -> String {
 /// yield gate: `!follow_yields(...) && cond` when the Repeat is
 /// tail-position (`gate_caller_follow`), so the Optional fires only when
 /// the caller's continuation does NOT claim the upcoming tokens; the
-/// unchanged `cond` otherwise. The Group-bodied counterpart of
-/// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
+/// unchanged `cond` otherwise.
 fn gate_cond_with_caller_follow<S: AsStrSlice>(cond: S, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
         return `${and_operand(cond)} && !${caller_follow_yields()}`;
@@ -6838,8 +6850,8 @@ fn gen_group_optional_static_enters(
     let follow_gate = r.gate_caller_follow;
     let own = match &r.strategy {
         OptionalLookahead(s) => {
-            let own = gen_lookahead_condition(ctx, &s.sig);
-            optional_entry_yielding(w, r, own, null, follow_gate, ctx, nc);
+            let lookahead = gen_lookahead_condition(ctx, &s.sig);
+            optional_entry_yielding(w, r, lookahead, null, follow_gate, ctx, nc);
         },
         OptionalShapeLookahead(s) => any_shape_enters(w, s, ctx, nc, follow_gate),
         OptionalScanGuard => {

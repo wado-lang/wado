@@ -1026,13 +1026,7 @@ pub fn atn_verified_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsSt
 
 /// Emit `sll_decide_fn_name(decision)`, which reads the DFA `forest` holds
 /// from node `start`.
-pub fn gen_sll_decide_fn(
-    w: &mut CodeWriter,
-    decision: i32,
-    start: i32,
-    forest: &SllForest,
-    analysis: &GrammarAnalysis,
-) {
+pub fn gen_sll_decide_fn(w: &mut CodeWriter, decision: i32, start: i32, forest: &SllForest, analysis: &GrammarAnalysis) {
     let mut f = FnSpec::new(sll_decide_fn_name(decision));
     f.add_param("atn", "&mut AtnPredictor");
     f.add_param("tokens", "&Array<i32>");
@@ -1040,7 +1034,7 @@ pub fn gen_sll_decide_fn(
     f.add_param("min_prec", "i32");
     f.set_return_type("i32");
     f.emit_begin(w);
-    gen_sll_node(w, forest, start, 0, analysis, &|a: String| a);
+    gen_sll_node(w, forest, start, 0, analysis);
     w.line(`return atn_predict_once(&ATN_SIM, ${decision}, atn, tokens, pos, TK_EOF, min_prec);`);
     w.end();
     w.blank();
@@ -1052,7 +1046,7 @@ pub fn gen_sll_shared_fns(w: &mut CodeWriter, forest: &SllForest, analysis: &Gra
     for let n of 0..<forest.nodes.len() {
         if forest.shared(n) {
             w.begin(`fn ${sll_node_fn_name(n)}(tokens: &Array<i32>, pos: i32) -> i32`);
-            gen_sll_branch(w, forest, n, 0, analysis, &|a: String| a);
+            gen_sll_branch(w, forest, n, 0, analysis);
             w.line("return -1;");
             w.end();
             w.blank();
@@ -1101,8 +1095,9 @@ pub global ATN_VERIFY_END: String = "atn_verify_end";
 /// both answer the pick they check, which `exact` makes too, so the parse goes
 /// on as `exact`'s would.
 /// Where no alternative survives under the parse's stack, as before a syntax
-/// error, the decision is moot: the pick stands and nothing is recorded. A verdict of -1, no alternative whose predicates
-/// hold, differs from every pick.
+/// error, the decision is moot: the pick stands and nothing is recorded. A
+/// verdict of -1, no alternative whose predicates hold, differs from every
+/// pick.
 ///
 /// The first difference is kept, and fails the parse only where it ends with
 /// no syntax error: on input the jar rejects, the simulator's pick is a guess
@@ -1163,26 +1158,18 @@ fn asking_tokens(edges: &List<SllEdge>, kinds: i32) -> List<i32> {
     return (0..<kinds).filter(|k| !named[k]).collect();
 }
 
-/// `node`, reading the token `depth` past `pos`. `answer` renders what a
-/// decided alternative, an expression, is returned as.
-fn gen_sll_node(
-    w: &mut CodeWriter,
-    forest: &SllForest,
-    node: i32,
-    depth: i32,
-    analysis: &GrammarAnalysis,
-    answer: &fn(String) -> String,
-) {
+/// `node`, reading the token `depth` past `pos`.
+fn gen_sll_node(w: &mut CodeWriter, forest: &SllForest, node: i32, depth: i32, analysis: &GrammarAnalysis) {
     match &forest.nodes[node] {
-        Alt(a) => w.line(`return ${answer(`${*a}`)};`),
+        Alt(a) => w.line(`return ${*a};`),
         Ask => {
         },
         Branch(_) => {
             if forest.shared(node) {
                 w.line(`let alt = ${sll_node_fn_name(node)}(tokens, ${token_pos(depth)});`);
-                w.line(`if alt >= 0 { return ${answer("alt")}; }`);
+                w.line("if alt >= 0 { return alt; }");
             } else {
-                gen_sll_branch(w, forest, node, depth, analysis, answer);
+                gen_sll_branch(w, forest, node, depth, analysis);
             }
         },
     }
@@ -1193,14 +1180,7 @@ fn token_pos(depth: i32) -> String {
 }
 
 /// The match branch `node` reads the token `depth` past `pos` in.
-fn gen_sll_branch(
-    w: &mut CodeWriter,
-    forest: &SllForest,
-    node: i32,
-    depth: i32,
-    analysis: &GrammarAnalysis,
-    answer: &fn(String) -> String,
-) {
+fn gen_sll_branch(w: &mut CodeWriter, forest: &SllForest, node: i32, depth: i32, analysis: &GrammarAnalysis) {
     let Branch(edges) = &forest.nodes[node] else {
         unreachable();
     };
@@ -1218,7 +1198,7 @@ fn gen_sll_branch(
     for let mut i = 0; i < edges.len(); i += 1 {
         if i != fallback {
             w.begin(`${analysis.token_names_of(&edges[i].tokens).join(" | ")} =>`);
-            gen_sll_node(w, forest, edges[i].to, depth + 1, analysis, answer);
+            gen_sll_node(w, forest, edges[i].to, depth + 1, analysis);
             w.end_with(",");
         }
     }
@@ -1229,7 +1209,7 @@ fn gen_sll_branch(
             w.line(`${analysis.token_names_of(&asking).join(" | ")} => {},`);
         }
         w.begin("_ =>");
-        gen_sll_node(w, forest, edges[fallback].to, depth + 1, analysis, answer);
+        gen_sll_node(w, forest, edges[fallback].to, depth + 1, analysis);
         w.end_with(",");
     }
     w.end_with(";");

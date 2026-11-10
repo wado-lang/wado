@@ -25,8 +25,8 @@ test "parse simple rule" {
 }
 
 // The tournament's scan of `unknownDeclaration` asks `value`'s loop at `e`,
-// where the scan is about to fail at `,`; a pick inside a scan is checked once,
-// as the tournament's, so verify does not report it as the lookahead DFA's.
+// where the scan is about to fail at `,`. Verify checks the tournament's pick,
+// not one made inside its scan, so it reports no lookahead DFA mismatch here.
 test "parse a comma-separated value list" {
     assert_parses("a { transition: box-shadow 200ms ease, transform 200ms ease; }");
 }
