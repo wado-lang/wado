@@ -388,44 +388,20 @@ HTTP routing needs `oha` and Bun, and is measured separately
 ## Profile-Guided Optimization
 
 A Wado build applies the profile each benchmark's `#[workload]` recorded into
-its `pgo/`. These tables compare that build with the two the flags give.
+its `pgo/`. The table below compares that build with the two the flags give.
 `-f no-pgo` ignores the profile and keeps the source's `cold_path()` markers;
 `-f no-cold-paths` drops every marker but still prices each call site by the
 profile. `+` means the PGO build is faster.
 
-Fuel at `-O2`, Wado 2026-11-10. Fuel does not depend on the host, so one run
-per build settles it:
+The PGO build's fuel at `-O2` is in [`fuel.json`](./fuel.json), which
+`mise run update-baselines` records. Fuel does not depend on the host, so one
+run per build settles it, and a flag measures the other two:
 
 ```sh
 wado test -O2 --allocator freelist --report-fuel --test-name fuel benchmark                 # PGO
 wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-pgo benchmark
 wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-cold-paths benchmark
 ```
-
-| Region                   | `no-cold-paths` |      `no-pgo` |           PGO | PGO vs `no-pgo` | PGO vs `no-cold-paths` |
-| ------------------------ | --------------: | ------------: | ------------: | --------------: | ---------------------: |
-| `codec/zlib/compress`    |     157,215,589 |   158,770,338 |   157,111,993 |           +1.1% |                  +0.1% |
-| `codec/zlib/decompress`  |      29,755,225 |    30,744,196 |    29,662,230 |           +3.6% |                  +0.3% |
-| `compute/fts`            |   1,359,789,394 | 1,420,789,480 | 1,363,789,589 |           +4.2% |                  -0.3% |
-| `compute/mandelbrot`     |   3,905,984,584 | 3,905,984,584 | 3,905,984,584 |           +0.0% |                  +0.0% |
-| `compute/sieve`          |     147,908,811 |   147,908,767 |   147,908,767 |           +0.0% |                  +0.0% |
-| `gale/generate`          |   1,304,286,141 | 1,319,605,797 | 1,299,444,940 |           +1.6% |                  +0.4% |
-| `gale/sqlite/highlight`  |      21,036,981 |    20,372,459 |    20,371,549 |           +0.0% |                  +3.3% |
-| `gale/sqlite/parse`      |      13,988,313 |    13,406,880 |    13,405,970 |           +0.0% |                  +4.3% |
-| `ml/microgpt/infer`      |   1,085,324,444 | 1,136,843,797 | 1,099,950,210 |           +3.4% |                  -1.3% |
-| `ml/microgpt/train`      |   1,354,492,067 | 1,381,959,745 | 1,360,562,514 |           +1.6% |                  -0.4% |
-| `serde/cbor/canada/de`   |      96,750,655 |   117,544,275 |    96,448,840 |          +21.9% |                  +0.3% |
-| `serde/cbor/canada/ser`  |      84,118,672 |    87,639,967 |    83,672,688 |           +4.7% |                  +0.5% |
-| `serde/cbor/catalog/de`  |      40,409,797 |    44,761,155 |    40,167,563 |          +11.4% |                  +0.6% |
-| `serde/cbor/catalog/ser` |      13,884,832 |    16,730,776 |    13,656,265 |          +22.5% |                  +1.7% |
-| `serde/cbor/twitter/de`  |      28,049,468 |    29,031,202 |    27,953,020 |           +3.9% |                  +0.3% |
-| `serde/cbor/twitter/ser` |       7,273,990 |     8,584,629 |     7,276,737 |          +18.0% |                  -0.0% |
-| `serde/json/canada/de`   |     281,172,947 |   320,140,952 |   282,488,380 |          +13.3% |                  -0.5% |
-| `serde/json/canada/ser`  |     257,556,205 |   255,510,421 |   255,159,698 |           +0.1% |                  +0.9% |
-| `serde/json/catalog/de`  |     118,186,539 |   121,276,423 |   118,382,020 |           +2.4% |                  -0.2% |
-| `serde/json/catalog/ser` |      21,268,351 |    22,542,724 |    21,459,975 |           +5.0% |                  -0.9% |
-| `serde/json/twitter/de`  |      69,577,133 |    70,405,409 |    69,673,759 |           +1.1% |                  -0.1% |
-| `serde/json/twitter/ser` |      17,156,612 |    17,787,377 |    17,445,375 |           +2.0% |                  -1.7% |
 
 Wall clock, best of three, with the builds alternated between rounds. The PGO
 and `no-pgo` figures are the tables above, from `mise run benchmark-all`.

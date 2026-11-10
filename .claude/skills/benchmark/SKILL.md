@@ -63,8 +63,9 @@ again as its `(no-pgo)` row, which `wado_rows` in `benchmark/wado.sh` prints, an
 the tables list both. http-routing has no such row, and the README says so.
 wasm-size has no profile, so a size change is the compiler's or the program's.
 
-The README's PGO section compares three builds, and its commands stand beside
-its tables. The `no-cold-paths` wall clock comes from three more runs, alternated
+The README's PGO section compares three builds by wall clock, and its commands
+stand beside its table. It records no fuel: `benchmark/fuel.json` is the one
+record of that. The `no-cold-paths` wall clock comes from three more runs, alternated
 with the three of the procedure. `benchmark-all` and `all-wado` leave out the
 table's `gale_html` row, so run `mise run -C benchmark gale-highlight-html` the
 same way.
