@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794284667643,
+  "lastUpdate": 1794305126200,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76285,6 +76285,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 404923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8ccca30f297a70cb83919a8973a1b45d692deb07",
+          "message": "Merge pull request #2599 from wado-lang/ccr-a7390310-f47sn8\n\nperf(optimize): remove struct fields no code reads",
+          "timestamp": "2026-11-10T18:46:22+09:00",
+          "tree_id": "2114c1c2c750febc2382197cc321369557ff82fb",
+          "url": "https://github.com/wado-lang/wado/commit/8ccca30f297a70cb83919a8973a1b45d692deb07"
+        },
+        "date": 1794305124965,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404534,
             "unit": "bytes"
           }
         ]
