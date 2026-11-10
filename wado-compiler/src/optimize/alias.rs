@@ -1180,9 +1180,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, type_table: &TypeTable, out:
                     }
                 }
             }
-            ExprKind::VariantConstruct {
-                payload: Some(p), ..
-            } => {
+            ExprKind::VariantConstruct { payload: p, .. } => {
                 if let Some(index) = p.as_expr().and_then(shared_local) {
                     out.insert(index);
                 }
@@ -1203,7 +1201,6 @@ fn collect_aliased_node(body: &Body, node: NodeRef, type_table: &TypeTable, out:
             | ExprKind::VariantTag { .. }
             | ExprKind::VariantTest { .. }
             | ExprKind::VariantPayload { .. }
-            | ExprKind::VariantConstruct { payload: None, .. }
             | ExprKind::GlobalVarSet { .. }
             | ExprKind::Local { .. }
             | ExprKind::GlobalVarGet { .. }

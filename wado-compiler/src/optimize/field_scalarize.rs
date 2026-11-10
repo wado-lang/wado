@@ -18,7 +18,6 @@ use crate::nir_arena::{
     StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::alias::bound_value;
 use crate::optimize::arena_query::{is_local, stmt_diverges};
@@ -879,9 +878,7 @@ impl NirRefVisitor for AliasScan<'_> {
                     }
                 }
                 ExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(op) = *payload {
-                        self.mark_published(body, op);
-                    }
+                    self.mark_published(body, *payload);
                 }
                 _ => {}
             },
@@ -1676,15 +1673,7 @@ fn bind_for_sync(
     span: Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
     if let Some(v) = value.as_value()
-        && matches!(
-            body.values.kind(v),
-            ValueKind::Int(..)
-                | ValueKind::Float(..)
-                | ValueKind::Bool(_)
-                | ValueKind::Char(_)
-                | ValueKind::Null
-                | ValueKind::Unit
-        )
+        && body.values.kind(v).is_operand_constant()
     {
         return (Vec::new(), value, Vec::new());
     }
@@ -2702,9 +2691,7 @@ fn walk_other_expr_kinds(
             walk_operand(body, functor, states, true, out, ctx);
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = *payload {
-                walk_operand(body, p, states, true, out, ctx);
-            }
+            walk_operand(body, *payload, states, true, out, ctx);
         }
         ExprKind::LabeledBlock { label, block, .. } => {
             let (label, block) = (label.clone(), *block);

@@ -529,9 +529,7 @@ fn "destructuring_assign_index_swap_out_of_range.wado/$test_trap_0_the_second_in
     let xs: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     let self_46: ref "Array<core:prelude/list.wado/List<i32>>";
     let v_55: ref "core:prelude/list.wado//List<i32>";
-    cold_path;
     xs = struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude/list.wado//List<i32>">(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 }), used: 2 };
-    cold_path;
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexSwap<i32>::index_swap$contract_report0"(0, 0, xs, 2, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("destructuring_assign_index_swap_out_of_range.wado:9"), used: 51 });
     unreachable;
     v_55 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(local.tee self_46(xs.repr), 2);
@@ -554,9 +552,7 @@ fn "destructuring_assign_index_swap_out_of_range.wado/$test_trap_1_the_first_ind
     let xs: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     let self_46: ref "Array<core:prelude/list.wado/List<i32>>";
     let v_55: ref "core:prelude/list.wado//List<i32>";
-    cold_path;
     xs = struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude/list.wado//List<i32>">(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 }), used: 2 };
-    cold_path;
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexSwap<i32>::index_swap$contract_report0"(1, 2, xs, 0, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("destructuring_assign_index_swap_out_of_range.wado:15"), used: 52 });
     unreachable;
     v_55 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(local.tee self_46(xs.repr), 0);
@@ -1143,7 +1139,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b123: block {
         l124: loop {
-            break_if b123 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b123 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1167,7 +1163,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b127: block {
         l128: loop {
-            break_if b127 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b127 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -2591,7 +2587,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                             $licm_repr_31 = other.repr;
                             b368: block {
                                 l369: loop {
-                                    break_if b368 (((i >= min_len) | ((i + 1) >= min_len)) | (((i + 1) + 1) >= min_len)) | ((((i + 1) + 1) + 1) >= min_len);
+                                    break_if b368 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
                                     x = builtin::array_get_value<u8>($mv$key$repr, i);
                                     y = builtin::array_get_value<u8>($licm_repr_31, i);
                                     if x <u y {
@@ -2788,7 +2784,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                             $licm_repr_31 = other_93.repr;
                             b397: block {
                                 l398: loop {
-                                    break_if b397 (((i_108 >= min_len_107) | ((i_108 + 1) >= min_len_107)) | (((i_108 + 1) + 1) >= min_len_107)) | ((((i_108 + 1) + 1) + 1) >= min_len_107);
+                                    break_if b397 (builtin::i64_extend_i32_s(i_108) + 3_i64) >= builtin::i64_extend_i32_s(min_len_107);
                                     x_109 = builtin::array_get_value<u8>($licm_repr_61, i_108);
                                     y_110 = builtin::array_get_value<u8>($licm_repr_31, i_108);
                                     if x_109 <u y_110 {
@@ -2892,7 +2888,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                     $licm_repr_31 = other_93.repr;
                     b418: block {
                         l419: loop {
-                            break_if b418 (((mid >= hi) | ((mid + 1) >= hi)) | (((mid + 1) + 1) >= hi)) | ((((mid + 1) + 1) + 1) >= hi);
+                            break_if b418 (builtin::i64_extend_i32_s(mid) + 3_i64) >= builtin::i64_extend_i32_s(hi);
                             b_end_104 = builtin::array_get_value<u8>($licm_repr_61, mid);
                             min_len_107 = builtin::array_get_value<u8>($licm_repr_31, mid);
                             if b_end_104 <u min_len_107 {

@@ -89,14 +89,14 @@ global global:cm_future_cancel_write_discards_result.wado::$const_obj_0: ref Arr
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<u8>$0: ref "core:prelude/types.wado//Option<u8>" = struct.new "core:prelude/types.wado//Option<u8>" { 0 };
 
 fn "cm_future_cancel_write_discards_result.wado/run"() with Stdout {
+    let tx_1: i32;
     let $cm_pair_5: i64;
     let $sroa_$pattern_temp_0_0_20: i32;
-    let $sroa_$pattern_temp_0_1_21: i32;
     let $sroa_$pattern_temp_0_0_22: i32;
     let $sroa_$pattern_temp_0_1_23: i32;
     let new_repr: ref Array<u8>;
     $sroa_$pattern_temp_0_0_20 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/future-new:u8"()));
-    $sroa_$pattern_temp_0_1_21 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
+    tx_1 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
     $sroa_$pattern_temp_0_0_22 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_23 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
     $sroa_$pattern_temp_0_0_22 = "cm_future_cancel_write_discards_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_22);
@@ -105,9 +105,9 @@ fn "cm_future_cancel_write_discards_result.wado/run"() with Stdout {
     drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($sroa_$pattern_temp_0_1_23, new_repr));
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_23);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_22);
-    drop("wasi/future-cancel-write:u8"($sroa_$pattern_temp_0_1_21));
+    drop("wasi/future-cancel-write:u8"(tx_1));
     "wasi/future-drop-readable:u8"($sroa_$pattern_temp_0_0_20);
-    drop("cm_future_cancel_write_discards_result.wado/$cm_future_write_u8"($sroa_$pattern_temp_0_1_21, 1));
+    drop("cm_future_cancel_write_discards_result.wado/$cm_future_write_u8"(tx_1, 1));
 }
 
 fn "cm_future_cancel_write_discards_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -180,7 +180,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
         };
     }; b10: block {
         l11: loop {
-            break_if b10 (((i >= 6) | ((i + 1) >= 6)) | (((i + 1) + 1) >= 6)) | ((((i + 1) + 1) + 1) >= 6);
+            break_if b10 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(6);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));

@@ -17,15 +17,7 @@ use crate::tir::ResolvedType;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-pub(super) struct IfChainToMatchRule<'t> {
-    type_table: &'t TypeTable,
-}
-
-impl<'t> IfChainToMatchRule<'t> {
-    pub(super) fn new(type_table: &'t TypeTable) -> Self {
-        Self { type_table }
-    }
-}
+pub(super) struct IfChainToMatchRule;
 
 /// One recognised `if K == x` statement, and where it sits in its block.
 struct Case {
@@ -35,20 +27,21 @@ struct Case {
     key: i128,
 }
 
-impl Rule for IfChainToMatchRule<'_> {
+impl Rule for IfChainToMatchRule {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        let type_table = engine.type_table();
         // The clone is for walking while `engine` is borrowed mutably.
         let Some(first) = engine.body.blocks[block]
             .stmts
             .iter()
-            .position(|&s| split_guard(engine.body, self.type_table, s).is_some())
+            .position(|&s| split_guard(engine.body, type_table, s).is_some())
         else {
             return false;
         };
         let stmts = engine.body.blocks[block].stmts.clone();
         let mut start = first;
         while start < stmts.len() {
-            let Some((local, ..)) = split_guard(engine.body, self.type_table, stmts[start]) else {
+            let Some((local, ..)) = split_guard(engine.body, type_table, stmts[start]) else {
                 start += 1;
                 continue;
             };
@@ -66,9 +59,7 @@ impl Rule for IfChainToMatchRule<'_> {
             let mut end = start;
             let mut cursor = start;
             while cursor < stmts.len() {
-                if let Some(case) =
-                    case_at(engine.body, self.type_table, stmts[cursor], cursor, local)
-                {
+                if let Some(case) = case_at(engine.body, type_table, stmts[cursor], cursor, local) {
                     // A repeated key is an arm the chain runs and a `Match` would not.
                     if !keys.insert(case.key) {
                         break;

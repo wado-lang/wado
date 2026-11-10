@@ -404,7 +404,7 @@ fn "trait_derived_method_call.wado/$test_0_a_derived_body_answers_a_method_call_
         $licm_repr_58 = $v0.repr;
         b1: block {
             l2: loop {
-                break_if b1 (((i >= 5) | ((i + 1) >= 5)) | (((i + 1) + 1) >= 5)) | ((((i + 1) + 1) + 1) >= 5);
+                break_if b1 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(5);
                 if builtin::array_get_value<u8>($licm_repr_58, i) != builtin::array_get_value<u8>(global:trait_derived_method_call.wado::$const_obj_1, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__16: 0;
                 }
@@ -456,7 +456,7 @@ fn "trait_derived_method_call.wado/$test_1_a_marker_s_body_answers_a_method_call
         $licm_repr_58 = $v0.repr;
         b11: block {
             l12: loop {
-                break_if b11 (((i >= 6) | ((i + 1) >= 6)) | (((i + 1) + 1) >= 6)) | ((((i + 1) + 1) + 1) >= 6);
+                break_if b11 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(6);
                 if builtin::array_get_value<u8>($licm_repr_58, i) != builtin::array_get_value<u8>(global:trait_derived_method_call.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__16: 0;
                 }
@@ -508,7 +508,7 @@ fn "trait_derived_method_call.wado/$test_2_a_primitive_s_impl_answers_a_method_c
         $licm_repr_20 = $v0.repr;
         b21: block {
             l22: loop {
-                break_if b21 (((i >= 1) | ((i + 1) >= 1)) | (((i + 1) + 1) >= 1)) | ((((i + 1) + 1) + 1) >= 1);
+                break_if b21 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(1);
                 if builtin::array_get_value<u8>($licm_repr_20, i) != builtin::array_get_value<u8>(global:trait_derived_method_call.wado::$const_obj_3, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
@@ -560,7 +560,7 @@ fn "trait_derived_method_call.wado/$test_3_a_derived_body_answers_through_a_boun
         $licm_repr_18 = $v0.repr;
         b31: block {
             l32: loop {
-                break_if b31 (((i >= 4) | ((i + 1) >= 4)) | (((i + 1) + 1) >= 4)) | ((((i + 1) + 1) + 1) >= 4);
+                break_if b31 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(4);
                 if builtin::array_get_value<u8>($licm_repr_18, i) != builtin::array_get_value<u8>(global:trait_derived_method_call.wado::$const_obj_4, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
@@ -1021,7 +1021,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b135: block {
         l136: loop {
-            break_if b135 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b135 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1045,7 +1045,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b139: block {
         l140: loop {
-            break_if b139 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b139 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

@@ -27,24 +27,27 @@ fn first_positive(arr: List<i32>) -> Option<i32> {
 
 export fn run() with Stdout {
     // Basic: inline threshold covers maybe_double (small function)
-    let a = maybe_double(5);
+    let a = maybe_double(builtin::black_box(5));
     if let Some(v) = a {
         assert v == 10;
     }
 
-    let b = maybe_double(-3);
-    assert b matches { None };
+    // Not an `assert`: its failure message would build the Option to print it.
+    if maybe_double(builtin::black_box(-3)) matches { Some(_) } {
+        panic("expected None");
+    }
 
     // Loop: first_positive uses for-of which inlines iterator methods
-    let arr: List<i32> = [-1, -2, 3, 4];
+    let arr: List<i32> = [-1, -2, builtin::black_box(3), 4];
     let c = first_positive(arr);
     if let Some(v) = c {
         assert v == 3;
     }
 
     let empty: List<i32> = [];
-    let d = first_positive(empty);
-    assert d matches { None };
+    if first_positive(empty) matches { Some(_) } {
+        panic("expected None");
+    }
 
     println("ok");
 }
@@ -53,6 +56,6 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_scope": "opt_labeled_block_fusion.wado/run\"",
-    "wir_pass": {"O2": ["nir/sroa_variant_return"]},
+    "wir_pass": {"O2": ["nir/sroa_variant_return", "wir/cleanup", "wir/elide_fused_write_only_locals"]},
     "wir_not_expect:O2": ["Option<i32>"]
 }

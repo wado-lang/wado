@@ -15,7 +15,6 @@ use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId}
 
 use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
-use crate::compiler_item::CompilerItem;
 use crate::name::{
     CELL_FIELD, MangledName, closure_call_wrapper_name, closure_inspect_wrapper_name,
     multi_value_split_local,
@@ -2767,22 +2766,18 @@ impl FunctionTranslator<'_, '_> {
             ValueKind::Bool(b) => WirInstr::I32Const(i32::from(b)),
             ValueKind::Char(c) => WirInstr::I32Const(c as i32),
             ValueKind::Null => {
-                if let Some(inner) = self.type_table.as_option(type_id) {
-                    assert!(
-                        !matches!(self.type_table.get(inner), ResolvedType::Unknown),
-                        "[WIR] promoted Null with unresolved Option inner type"
-                    );
-                    let (_, _, none_name, none_index) = self
-                        .type_table
-                        .compiler_variant_case(CompilerItem::OptionNone);
-                    let none_name = none_name.to_string();
-                    self.translate_variant_construct(type_id, none_index, &none_name, None, type_id)
-                } else {
-                    WirInstr::RefNull {
-                        heap_type: WirAbstractHeapType::None,
-                    }
+                assert!(
+                    self.type_table.as_option(type_id).is_none(),
+                    "[WIR] promoted Null at an Option type: `None` is a UnitCase"
+                );
+                WirInstr::RefNull {
+                    heap_type: WirAbstractHeapType::None,
                 }
             }
+            ValueKind::UnitCase {
+                variant_type,
+                case_index,
+            } => self.translate_unit_case(variant_type, case_index),
             ValueKind::Unit => WirInstr::Nop,
             ValueKind::Binary { op, lhs, rhs, .. } => {
                 let [left_ty, right_ty] = [lhs, rhs].map(|operand| {

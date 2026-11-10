@@ -8,6 +8,8 @@
 //! exactly that, scoped to the *reachable* operands — the pool is append-only, so
 //! seeding from it wholesale would keep long-folded locals alive forever.
 
+use std::ops::ControlFlow;
+
 use cranelift_entity::EntityRef;
 
 use super::value_copy::mutation::{Witness, expr_witnesses};
@@ -15,11 +17,13 @@ use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::niri::EditSink;
+use crate::optimize::const_folding::EngineSink;
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
 use crate::rarity::{Mark, Rarity};
@@ -486,11 +490,52 @@ pub(super) fn mentions_local_except(
 /// nesting. Shared by the inliner (cold-cost) and labeled-block fusion
 /// (unlabeled-break capture guard).
 pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    body.find_in_nodes_under(NodeRef::Block(block), |n| {
-        matches!(n, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. }))
-            .then_some(())
-    })
-    .is_some()
+    body.find_in_nodes_under(NodeRef::Block(block), |n| is_loop(body, n).then_some(()))
+        .is_some()
+}
+
+/// Whether `node` is a `loop` statement.
+pub(super) fn is_loop(body: &Body, node: NodeRef) -> bool {
+    matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. }))
+}
+
+/// The structured-control path from the root down to `stmt`'s enclosing chain:
+/// an outermost-first list of `(block, stmt_index)`.
+fn stmt_block_path(e: &Engine, stmt: StmtId) -> Vec<(BlockId, usize)> {
+    let mut path = Vec::new();
+    let mut last = stmt;
+    let mut node = e.parent_of(NodeRef::Stmt(stmt));
+    while let Some(n) = node {
+        match n {
+            NodeRef::Block(b) => {
+                if let Some(pos) = e.body.blocks[b].stmts.iter().position(|&x| x == last) {
+                    path.push((b, pos));
+                }
+                node = e.parent_of(NodeRef::Block(b));
+            }
+            NodeRef::Stmt(s) => {
+                last = s;
+                node = e.parent_of(NodeRef::Stmt(s));
+            }
+            NodeRef::Expr(_) | NodeRef::Pat(_) => node = e.parent_of(n),
+        }
+    }
+    path.reverse();
+    path
+}
+
+/// Whether `def_stmt` **dominates** the insertion point `before_stmt` (insert
+/// *before* it): in structured control flow, `def_stmt`'s enclosing block must be
+/// the deepest block common to both paths (not nested in a sibling branch
+/// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
+pub(super) fn def_dominates(e: &Engine, def_stmt: StmtId, before_stmt: StmtId) -> bool {
+    let dp = stmt_block_path(e, def_stmt);
+    let mp = stmt_block_path(e, before_stmt);
+    let mut l = 0;
+    while l < dp.len() && l < mp.len() && dp[l].0 == mp[l].0 {
+        l += 1;
+    }
+    l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
 }
 
 /// Whether `stmt` never falls through to the statement after it: a `return` /
@@ -519,6 +564,12 @@ impl MarkerBuiltins {
         Self(Mark::ALL.map(|mark| (project.builtin_func_id(mark.builtin()), mark)))
     }
 
+    /// The builtins of a program that names no marker.
+    #[cfg(test)]
+    pub(crate) fn unnamed() -> Self {
+        Self(Mark::ALL.map(|mark| (None, mark)))
+    }
+
     /// What a call to `func` states, where `func` is a marker.
     pub(crate) fn mark(self, func: FuncId) -> Option<Mark> {
         self.0
@@ -538,6 +589,61 @@ impl MarkerBuiltins {
             .0
             .iter()
             .any(|&(named, mark)| named.is_some() && mark.states(rarity))
+    }
+}
+
+/// The calls to a marker that run wherever `root` does: those under no branch or
+/// loop within it. Such a marker states how rarely the branch into `root` is
+/// taken. Writing a value over `root` erases it while that branch stands, and
+/// collapsing that branch onto `root` leaves it stating the rarity of a branch
+/// that is gone, on the path the branch stood on.
+pub(crate) fn unconditional_markers(
+    body: &Body,
+    root: NodeRef,
+    is_marker: impl Fn(FuncId) -> bool,
+) -> Vec<ExprId> {
+    let mut found = Vec::new();
+    body.walk_nodes_under::<()>(root, |node| {
+        ControlFlow::Continue(match node {
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Call { func_id, .. } if is_marker(*func_id) => {
+                    found.push(e);
+                    false
+                }
+                ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Switch { .. } => false,
+                ExprKind::Binary {
+                    op: NirBinaryOp::And | NirBinaryOp::Or,
+                    ..
+                } => false,
+                _ => true,
+            },
+            NodeRef::Stmt(s) => !matches!(
+                body.stmts[s].kind,
+                StmtKind::If { .. } | StmtKind::Loop { .. }
+            ),
+            NodeRef::Block(_) | NodeRef::Pat(_) => true,
+        })
+    });
+    found
+}
+
+/// Collapse the branch into `root` onto it, as far as its markers go: each one
+/// [`unconditional_markers`] finds becomes the empty block a unit statement is.
+pub(super) fn shed_unconditional_markers(
+    engine: &mut Engine,
+    root: NodeRef,
+    markers: MarkerBuiltins,
+) {
+    let calls = unconditional_markers(engine.body, root, |f| markers.mark(f).is_some());
+    shed_marker_calls(&mut EngineSink { engine }, calls);
+}
+
+/// Replace each marker call in `calls` with the empty block a unit statement is.
+pub(crate) fn shed_marker_calls<S: EditSink>(sink: &mut S, calls: Vec<ExprId>) {
+    for call in calls {
+        let ExprNode { span, type_id, .. } = sink.body().exprs[call];
+        let empty = sink.alloc_block(Vec::new(), span);
+        sink.replace_kind(call, ExprKind::plain_block(empty, type_id, "shed"));
     }
 }
 
@@ -1041,9 +1147,7 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             elements.iter().all(|&e| is_pure_operand(body, e))
         }
-        ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| is_pure_operand(body, p))
-        }
+        ExprKind::VariantConstruct { payload, .. } => is_pure_operand(body, *payload),
         ExprKind::LabeledBlock { block, .. } => is_pure_block(body, *block),
         ExprKind::If {
             condition,

@@ -96,7 +96,7 @@ global global:dict_mini.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>
 global global:dict_mini.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(110, 97, 109, 101, 58, 32);
 
 fn "dict_mini.wado/run"() with Stdout {
-    let $load_46: ref Array<u8>;
+    let $load_51: ref Array<u8>;
     let name_val: ref "core:prelude/string.wado//String";
     let $match_4: ref null "core:prelude/string.wado//String";
     let $sroa_dict_entries_106: ref "core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
@@ -226,7 +226,7 @@ fn "dict_mini.wado/run"() with Stdout {
                     $sroa_view_repr_547_1307 = name_val.repr;
                     b10: block {
                         l11: loop {
-                            break_if b10 (((i_193 >= start_891) | ((i_193 + 1) >= start_891)) | (((i_193 + 1) + 1) >= start_891)) | ((((i_193 + 1) + 1) + 1) >= start_891);
+                            break_if b10 (builtin::i64_extend_i32_s(i_193) + 3_i64) >= builtin::i64_extend_i32_s(start_891);
                             if builtin::array_get_value<u8>($sroa_view_repr_547_1307, i_193) != builtin::array_get_value<u8>(global:dict_mini.wado::$const_obj_6, i_193) {
                                 break $inline_dict_mini_wado_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___has_spec0_sroa_self_entries_key_repr__5__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
@@ -314,7 +314,7 @@ fn "dict_mini.wado/run"() with Stdout {
                     $sroa_view_repr_547_1307 = name_val.repr;
                     b25: block {
                         l26: loop {
-                            break_if b25 (((i_193 >= start_891) | ((i_193 + 1) >= start_891)) | (((i_193 + 1) + 1) >= start_891)) | ((((i_193 + 1) + 1) + 1) >= start_891);
+                            break_if b25 (builtin::i64_extend_i32_s(i_193) + 3_i64) >= builtin::i64_extend_i32_s(start_891);
                             if builtin::array_get_value<u8>($sroa_view_repr_547_1307, i_193) != builtin::array_get_value<u8>(global:dict_mini.wado::$const_obj_4, i_193) {
                                 break $inline_dict_mini_wado_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___has_spec1_sroa_self_entries_key_repr__7__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
@@ -390,7 +390,7 @@ fn "dict_mini.wado/run"() with Stdout {
     name_val = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $sroa_view_repr_547_1307 = global:dict_mini.wado::$const_obj_2;
     name_val.used = 6;
-    builtin::array_copy<u8>(local.tee $load_46(name_val.repr), 0, $sroa_view_repr_547_1307, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_51(name_val.repr), 0, $sroa_view_repr_547_1307, 0, 6);
     new_used_890 = n_886 < 0;
     $cm_pair_7_116 = builtin::i64_extend_i32_s(n_886);
     $cm_pair_7_116 = select i64($cm_pair_7_116 < 0_i64, 0_i64 - $cm_pair_7_116, $cm_pair_7_116);
@@ -455,7 +455,7 @@ fn "dict_mini.wado/run"() with Stdout {
         break $inline_count_digits_u64_9: 20;
     };
     if new_used_890 {
-        if @unlikely(local.tee new_used_890(name_val.used + 1) > builtin::array_len($load_46)) {
+        if @unlikely(local.tee new_used_890(name_val.used + 1) > builtin::array_len($load_51)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(name_val, new_used_890);
         }
@@ -511,7 +511,7 @@ fn "dict_mini.wado/run"() with Stdout {
                     $sroa_view_repr_547_1307 = name_val.repr;
                     b65: block {
                         l66: loop {
-                            break_if b65 (((i_193 >= start_891) | ((i_193 + 1) >= start_891)) | (((i_193 + 1) + 1) >= start_891)) | ((((i_193 + 1) + 1) + 1) >= start_891);
+                            break_if b65 (builtin::i64_extend_i32_s(i_193) + 3_i64) >= builtin::i64_extend_i32_s(start_891);
                             if builtin::array_get_value<u8>($sroa_view_repr_547_1307, i_193) != builtin::array_get_value<u8>(global:dict_mini.wado::$const_obj_1, i_193) {
                                 break $inline_dict_mini_wado_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___get_spec1_sroa_self_entries_key_repr__11__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                             }
@@ -598,7 +598,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b76: block {
         l77: loop {
-            break_if b76 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b76 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -620,7 +620,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b80: block {
         l81: loop {
-            break_if b80 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b80 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -687,7 +687,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
     let w: i64;
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 26); i = 0; b91: block {
         l92: loop {
-            break_if b91 (i > 18) | ((i + 8) > 18);
+            break_if b91 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s(18);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
@@ -706,7 +706,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
         };
     }; b95: block {
         l96: loop {
-            break_if b95 (((i >= 26) | ((i + 1) >= 26)) | (((i + 1) + 1) >= 26)) | ((((i + 1) + 1) + 1) >= 26);
+            break_if b95 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(26);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -815,7 +815,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
                 $licm_repr_47 = self_9.repr;
                 b111: block {
                     l112: loop {
-                        break_if b111 (((i_25 >= a_end) | ((i_25 + 1) >= a_end)) | (((i_25 + 1) + 1) >= a_end)) | ((((i_25 + 1) + 1) + 1) >= a_end);
+                        break_if b111 (builtin::i64_extend_i32_s(i_25) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                         if builtin::array_get_value<u8>($licm_repr_47, i_25) != builtin::array_get_value<u8>($licm_repr_46, i_25) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
@@ -883,7 +883,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
                 $licm_repr_40 = self_12.repr;
                 b125: block {
                     l126: loop {
-                        break_if b125 (((i_28 >= a_end) | ((i_28 + 1) >= a_end)) | (((i_28 + 1) + 1) >= a_end)) | ((((i_28 + 1) + 1) + 1) >= a_end);
+                        break_if b125 (builtin::i64_extend_i32_s(i_28) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                         if builtin::array_get_value<u8>($licm_repr_40, i_28) != builtin::array_get_value<u8>(key, i_28) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }

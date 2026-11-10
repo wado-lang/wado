@@ -7,19 +7,15 @@
 //! and cannot trap is left alone: WIR turns that `&&` into a branchless `a & b`.
 
 use crate::nir::{FuncParts, NirBinaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
+use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::token::Span;
-use crate::type_table::TypeTable;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
 
 pub fn split_and_conditions(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
-    let rule = SplitAndConditionRule {
-        type_table: &type_table,
-    };
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -31,31 +27,27 @@ pub fn split_and_conditions(project: &mut NirPackage) -> bool {
             ..
         } = func.parts();
         if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params);
-            changed |= engine.run(&[&rule]);
+            let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
+            changed |= engine.run(&[&SplitAndConditionRule]);
         }
     }
     changed
 }
 
-struct SplitAndConditionRule<'t> {
-    type_table: &'t TypeTable,
-}
+struct SplitAndConditionRule;
 
-impl SplitAndConditionRule<'_> {
-    /// The operands of `condition` when it is an `a && b` worth branching on.
-    fn split(&self, body: &Body, condition: Operand) -> Option<(Operand, Operand)> {
-        let ExprKind::Binary {
-            op: NirBinaryOp::And,
-            left,
-            right,
-        } = body.exprs[condition.as_expr()?].kind
-        else {
-            return None;
-        };
-        (!is_pure_nontrapping_operand_typed(body, right, Some(self.type_table)))
-            .then_some((left, right))
-    }
+/// The operands of `condition` when it is an `a && b` worth branching on.
+fn split(engine: &Engine, condition: Operand) -> Option<(Operand, Operand)> {
+    let ExprKind::Binary {
+        op: NirBinaryOp::And,
+        left,
+        right,
+    } = engine.body.exprs[condition.as_expr()?].kind
+    else {
+        return None;
+    };
+    (!is_pure_nontrapping_operand_typed(engine.body, right, Some(engine.type_table())))
+        .then_some((left, right))
 }
 
 /// `{ if right { then } }`, the block the outer `if` on `left` takes.
@@ -71,7 +63,7 @@ fn inner_if(engine: &mut Engine, right: Operand, then_block: BlockId, span: Span
     engine.alloc_block(vec![inner], span)
 }
 
-impl Rule for SplitAndConditionRule<'_> {
+impl Rule for SplitAndConditionRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let ExprKind::If {
             condition,
@@ -81,7 +73,7 @@ impl Rule for SplitAndConditionRule<'_> {
         else {
             return false;
         };
-        let Some((left, right)) = self.split(engine.body, condition) else {
+        let Some((left, right)) = split(engine, condition) else {
             return false;
         };
         let span = engine.body.exprs[id].span;
@@ -109,7 +101,7 @@ impl Rule for SplitAndConditionRule<'_> {
             else {
                 continue;
             };
-            let Some((left, right)) = self.split(engine.body, condition) else {
+            let Some((left, right)) = split(engine, condition) else {
                 continue;
             };
             let span = engine.body.stmts[*s].span;

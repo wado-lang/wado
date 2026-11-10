@@ -1253,6 +1253,7 @@ impl HeapFrame {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..) => {}
         }
     }
@@ -1371,9 +1372,9 @@ impl HeapFrame {
                     self.unify_op(effects, body, node, el);
                 }
             }
-            ExprKind::VariantConstruct {
-                payload: Some(p), ..
-            } => self.unify_op(effects, body, node, *p),
+            ExprKind::VariantConstruct { payload, .. } => {
+                self.unify_op(effects, body, node, *payload);
+            }
             ExprKind::If {
                 then_branch,
                 else_branch,
@@ -1424,7 +1425,6 @@ impl HeapFrame {
                 self.call_nodes.push((result, start..self.call_args.len()));
             }
             ExprKind::CmRawCall { .. }
-            | ExprKind::VariantConstruct { payload: None, .. }
             | ExprKind::EnumConstruct { .. }
             | ExprKind::PackedArray(_)
             | ExprKind::Dead => {}
@@ -1945,6 +1945,7 @@ fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
             | ValueKind::Char(_)
             | ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
             | ValueKind::Const(..) => {}
         }
     }

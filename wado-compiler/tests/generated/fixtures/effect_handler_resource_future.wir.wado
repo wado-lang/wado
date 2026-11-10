@@ -324,8 +324,8 @@ global global:core:prelude/string.wado::$const_obj_15: ref Array<u8> = array.new
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "effect_handler_resource_future.wado/run"() with Stdout {
-    let $load_22: i32;
-    let $load_23: i32;
+    let $load_25: i32;
+    let $load_26: i32;
     let f: ref "effect_handler_resource_future.wado//MockFuture";
     let rx_1: ref null "core:prelude//$Resource";
     let tx_2: ref null "core:prelude//$Resource";
@@ -425,24 +425,24 @@ value: "), used: 111 }, s1: struct.new "core:prelude/string.wado//String" { repr
     }
     global:effect_handler_resource_future.wado::$effect_core:prelude/types.wado/FutureWritable<i32> = $save_core:prelude/types.wado/FutureWritable<i32>;
     global:effect_handler_resource_future.wado::$effect_core:prelude/types.wado/Future<i32> = $save_core:prelude/types.wado/Future<i32>;
-    if @unlikely(local.tee $load_22(f.write_count) != 1) {
+    if @unlikely(local.tee $load_25(f.write_count) != 1) {
         cold_path;
-        "effect_handler_resource_future.wado/run$cold1"($load_22);
+        "effect_handler_resource_future.wado/run$cold1"($load_25);
         unreachable;
     }
-    if @unlikely(local.tee $load_23(f.read_count) != 1) {
+    if @unlikely(local.tee $load_26(f.read_count) != 1) {
         cold_path;
-        "effect_handler_resource_future.wado/run$cold0"($load_23);
+        "effect_handler_resource_future.wado/run$cold0"($load_26);
         unreachable;
     }
     $mv_arg_4 = block -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_resource_future.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($load_22, $load_23);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_resource_future.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($load_25, $load_26);
     };
-    $load_22 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
-    $load_23 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
-    $load_22 = "effect_handler_resource_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_22);
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_23, $mv_arg_4.repr, $mv_arg_4.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_22);
+    $load_25 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
+    $load_26 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
+    $load_25 = "effect_handler_resource_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_25);
+    "core:rt/write_string_to_stream$dae[add_newline]"($load_26, $mv_arg_4.repr, $mv_arg_4.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_25);
 }
 
 fn "effect_handler_resource_future.wado/$template_segment$effect_handler_resource_future.wado/$tmpl$e651684364ce8ab5"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -698,7 +698,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b57: block {
         l58: loop {
-            break_if b57 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b57 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -720,7 +720,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b61: block {
         l62: loop {
-            break_if b61 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b61 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));

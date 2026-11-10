@@ -11,7 +11,6 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKin
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeId;
-use crate::type_table::TypeTable;
 
 use super::arena_query::{is_addressed, is_pure_expr};
 use super::gate::{FunctionGate, GatedPass};
@@ -28,7 +27,7 @@ use crate::nir_value_graph::ValueKind;
 /// value-parameter temps.
 pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
-    let rule = ScalarForwardRule::new(&type_table);
+    let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::ScalarForward, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
@@ -41,22 +40,14 @@ pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -
         let Some(body) = body else {
             return false;
         };
-        let mut engine = Engine::new(body, buffers, locals, params);
-        engine.run(&[&rule])
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
+        engine.run(&[&ScalarForwardRule])
     })
 }
 
-struct ScalarForwardRule<'a> {
-    type_table: &'a TypeTable,
-}
+struct ScalarForwardRule;
 
-impl<'a> ScalarForwardRule<'a> {
-    fn new(type_table: &'a TypeTable) -> Self {
-        Self { type_table }
-    }
-}
-
-impl Rule for ScalarForwardRule<'_> {
+impl Rule for ScalarForwardRule {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
         // Maintain the block's live statement list and scan adjacent `(def, use)`
         // pairs. On a fold we drop `def` and re-examine at the same index (the
@@ -80,7 +71,7 @@ impl Rule for ScalarForwardRule<'_> {
     }
 }
 
-impl ScalarForwardRule<'_> {
+impl ScalarForwardRule {
     /// Try to forward the single-use pure scalar bound by `def_stmt` into its use
     /// in the adjacent `use_stmt`. Returns whether the fold happened (and `def_stmt`
     /// should be dropped from the block).
@@ -94,7 +85,8 @@ impl ScalarForwardRule<'_> {
         let Some((local, source, ty)) = forwardable_binding(engine.body, def_stmt) else {
             return false;
         };
-        if !self.type_table.is_primitive_like(ty) || !is_forwardable_value(engine.body, source) {
+        if !engine.type_table().is_primitive_like(ty) || !is_forwardable_value(engine.body, source)
+        {
             return false;
         }
         let Some(use_id) = sole_value_use(engine, local) else {

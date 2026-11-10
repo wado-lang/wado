@@ -184,7 +184,7 @@ fn fold_function(
     visitor
         .interpreter
         .record_alias_classes(alias_classes(body, type_table).to_classes());
-    let mut engine = Engine::new(body, buffers, locals, params);
+    let mut engine = Engine::new(body, buffers, locals, params, type_table);
     let root = engine.body.root();
     visitor.visit_block(&mut engine, root)
 }
@@ -233,8 +233,8 @@ impl Rule for ConstFoldRule<'_> {
 /// every niri rewrite through `Engine::*` so the real body's parent map and
 /// use index stay coherent (the visitor walks bottom-up in its own order; the
 /// engine is the commit mechanism, not the driver).
-struct EngineSink<'e, 'a> {
-    engine: &'e mut Engine<'a>,
+pub(super) struct EngineSink<'e, 'a> {
+    pub(super) engine: &'e mut Engine<'a>,
 }
 
 impl EditSink for EngineSink<'_, '_> {

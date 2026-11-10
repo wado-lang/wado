@@ -430,9 +430,9 @@ fn "opt_sroa_variant_return_try_seq_bind.wado/total_len$sroa[return]$spec0"($mv$
             let $mv$$vr_7$0: i32;
             let $mv$$vr_7$2: ref null "opt_sroa_variant_return_try_seq_bind.wado//StepErr";
             multivalue_bind [$mv$$vr_7$0, $array_clone_elem_5, $mv$$vr_7$2] = "opt_sroa_variant_return_try_seq_bind.wado/opt_sroa_variant_return_try_seq_bind.wado/Cursor::step$sroa[return]"(cur);
-            if ref.is_null(local.tee $array_clone_elem_5((if $mv$$vr_7$0 == 0 -> ref null "core:prelude/string.wado//String" {
+            if ref.is_null(local.tee $array_clone_elem_5((if @likely($mv$$vr_7$0 == 0) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
-            } else if @unlikely($mv$$vr_7$0 == 1) -> ref null "core:prelude/string.wado//String" {
+            } else if @likely($mv$$vr_7$0 == 1) -> ref null "core:prelude/string.wado//String" {
                 cold_path;
                 $qm_e = ref.as_non_null($mv$$vr_7$2);
                 cold_path;
@@ -474,9 +474,9 @@ fn "opt_sroa_variant_return_try_seq_bind.wado/total_len$sroa[return]$spec1"($mv$
             let $mv$$vr_7$0: i32;
             let $mv$$vr_7$2: ref null "opt_sroa_variant_return_try_seq_bind.wado//StepErr";
             multivalue_bind [$mv$$vr_7$0, $array_clone_elem_5, $mv$$vr_7$2] = "opt_sroa_variant_return_try_seq_bind.wado/opt_sroa_variant_return_try_seq_bind.wado/Cursor::step$sroa[return]"(cur);
-            if ref.is_null(local.tee $array_clone_elem_5((if $mv$$vr_7$0 == 0 -> ref null "core:prelude/string.wado//String" {
+            if ref.is_null(local.tee $array_clone_elem_5((if @likely($mv$$vr_7$0 == 0) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
-            } else if @unlikely($mv$$vr_7$0 == 1) -> ref null "core:prelude/string.wado//String" {
+            } else if @likely($mv$$vr_7$0 == 1) -> ref null "core:prelude/string.wado//String" {
                 cold_path;
                 $qm_e = ref.as_non_null($mv$$vr_7$2);
                 cold_path;
@@ -714,7 +714,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b73: block {
         l74: loop {
-            break_if b73 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b73 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -738,7 +738,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b77: block {
         l78: loop {
-            break_if b77 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b77 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

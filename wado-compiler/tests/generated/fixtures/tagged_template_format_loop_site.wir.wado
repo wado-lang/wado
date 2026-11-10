@@ -119,7 +119,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b5: block {
         l6: loop {
-            break_if b5 (((i >= 3) | ((i + 1) >= 3)) | (((i + 1) + 1) >= 3)) | ((((i + 1) + 1) + 1) >= 3);
+            break_if b5 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(3);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));

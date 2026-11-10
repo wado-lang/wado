@@ -1,13 +1,15 @@
 //! Write-only local elimination for Wado NIR: a `let x = expr;` whose `x` is
 //! never read, address-taken, or escaped loses its binding — the whole statement
-//! when `expr` is pure, else a bare `Expr(expr)`. The NIR analog of
+//! when `expr` is pure, else a bare `Expr(expr)`. A store `x = expr;` no later
+//! read observes goes the same way. The NIR analog of
 //! `wir_optimize/elide_local.rs`; running here exposes the freshly dead
 //! expressions to the rest of the fixed-point loop, which the WIR pass cannot.
 
-use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
+use crate::hashmap::IndexSet;
+use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
-use super::arena_query;
+use crate::optimize::arena_query::{def_dominates, is_loop};
 use crate::optimize::dce::deletable_value;
 use crate::optimize::mod_ref::CallFacts;
 
@@ -46,14 +48,16 @@ impl Rule for ElideRule<'_> {
         let len = stmts.len();
         for (i, stmt) in stmts.into_iter().enumerate() {
             let is_tail = i + 1 == len;
+            // A dead store leaves its local bound and read.
+            let unbound = bound_local(engine, stmt).filter(|&local| !is_kept(engine, local));
             match classify(engine, stmt, is_tail, self) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => {
-                    elided.extend(bound_local(engine, stmt));
+                    elided.extend(unbound);
                     changed = true;
                 }
                 Action::Demote(value) => {
-                    elided.extend(bound_local(engine, stmt));
+                    elided.extend(unbound);
                     let span = engine.body.stmts[stmt].span;
                     new_stmts.push(engine.alloc_stmt(StmtKind::Expr(value.into()), span));
                     changed = true;
@@ -88,11 +92,11 @@ fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
     }
 }
 
-/// Classify a statement for write-only-local elimination. Mirrors the former
-/// tree `Elider`: an unread `let x = value` or a bare `x = value` (assign at
-/// statement position) where `x` is unread is dropped when `value` is pure,
+/// Classify a statement for write-only-local elimination: an unread
+/// `let x = value`, or a bare `x = value` (assign at statement position) where
+/// `x` is unread or the store is dead, is dropped when `value` is pure,
 /// otherwise demoted to `Expr(value)`.
-fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> Action {
+fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> Action {
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
@@ -109,11 +113,6 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
                 value.as_expr().map_or(Action::Keep, Action::Demote)
             }
         }
-        // `x = value;` (Assign at stmt position) where `x` is unread. This
-        // catches the SROA / variant-lowering shadow-temp pattern where a pass
-        // introduces a local, writes to it via Assign, then a downstream pass
-        // folds away the only read site. The matching `let x;` declaration
-        // falls out once every write to `x` is gone.
         StmtKind::Expr(operand @ Operand::Value(_)) => {
             if !is_tail && deletable(engine, *operand, rule) {
                 return Action::Drop;
@@ -129,11 +128,16 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
             if assign.is_none() && !is_tail && deletable(engine, Operand::Expr(*e), rule) {
                 return Action::Drop;
             }
+            // `x = value;` where `x` is unread catches the SROA /
+            // variant-lowering shadow-temp pattern: a pass introduces a local,
+            // writes to it via Assign, then a downstream pass folds away the
+            // only read site. The matching `let x;` declaration falls out once
+            // every write to `x` is gone.
             if let Some((target, value)) = assign
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index) {
+                if !is_kept(engine, index) || is_dead_store(engine, stmt, index) {
                     return if deletable(engine, value, rule) {
                         Action::Drop
                     } else {
@@ -150,20 +154,106 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
 }
 
 /// Whether the value of a dead binding may go with it: no observable effect and
-/// no trap, since a trap is observable too. With a type table this is
-/// [`super::dce::deletable_value`], which answers a call by its summary: that is
-/// what lets a dead call to a pure helper leave rather than linger as a
-/// `drop(f(x))`. Without one only the structural predicate can answer.
+/// no trap, since a trap is observable too. [`super::dce::deletable_value`]
+/// answers a call by its summary: that is what lets a dead call to a pure helper
+/// leave rather than linger as a `drop(f(x))`.
 fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
-    match engine.value_graph_type_table() {
-        Some(types) => deletable_value(engine.body, value, types, rule.calls),
-        None => arena_query::is_pure_nontrapping_operand_typed(engine.body, value, None),
-    }
+    deletable_value(engine.body, value, engine.type_table(), rule.calls)
 }
 
 /// A local is kept (not elidable) when it is read anywhere in the body.
 fn is_kept(engine: &Engine, local: u32) -> bool {
     engine.is_local_read(local) || engine.reads_promoted_local(local)
+}
+
+/// Whether no read of `local` can observe what `store` writes into it. A move
+/// leaves its marker this way, and once the local's drop folds the marker is
+/// what keeps the local from being bound once.
+///
+/// A read is ordered against the store by where it sits: one after it in
+/// evaluation order follows it, and so does one before it inside a loop
+/// enclosing both, unless the local's own `let` re-binds it on the way there.
+/// A read in a later sibling branch is taken to follow, which keeps a store the
+/// branch never reaches.
+fn is_dead_store(engine: &mut Engine, store: StmtId, local: u32) -> bool {
+    if engine.reads_promoted_local(local) || engine.body_address_taken().contains(&local) {
+        return false;
+    }
+    let def = engine.local_def(local);
+    let store_chain: IndexSet<NodeRef> = ancestors(engine, NodeRef::Stmt(store)).collect();
+    assert_eq!(
+        store_chain.last(),
+        Some(&NodeRef::Block(engine.body.root())),
+        "the store is reachable"
+    );
+    !engine.local_reads(local).iter().any(|&mention| {
+        !engine.is_assign_target(mention) && read_follows(engine, &store_chain, mention, def)
+    })
+}
+
+/// `node` and every ancestor up to the body root, innermost first.
+fn ancestors<'e>(engine: &'e Engine, node: NodeRef) -> impl Iterator<Item = NodeRef> + 'e {
+    std::iter::successors(Some(node), |&n| engine.parent_of(n))
+}
+
+/// Whether `read` may run after the statement heading `store_chain`, the
+/// store's ancestors innermost first. The read climbs only until it meets that
+/// chain, and one that never does is detached: the use index keeps such a node,
+/// and it never runs.
+fn read_follows(
+    engine: &Engine,
+    store_chain: &IndexSet<NodeRef>,
+    read: ExprId,
+    def: Option<StmtId>,
+) -> bool {
+    let mut read_stmt = None;
+    let mut read_branch = NodeRef::Expr(read);
+    let mut node = read_branch;
+    let common = loop {
+        if let Some(at) = store_chain.get_index_of(&node) {
+            break at;
+        }
+        if read_stmt.is_none()
+            && let NodeRef::Stmt(s) = node
+        {
+            read_stmt = Some(s);
+        }
+        read_branch = node;
+        let Some(parent) = engine.parent_of(node) else {
+            return false;
+        };
+        node = parent;
+    };
+    // The store's own value runs before it writes.
+    if common == 0 {
+        return false;
+    }
+    let mut store_seen = false;
+    let mut read_after = false;
+    engine.body.for_each_child(store_chain[common], |c| {
+        store_seen |= c == store_chain[common - 1];
+        read_after |= c == read_branch && store_seen;
+    });
+    if read_after {
+        return true;
+    }
+    let shared = || store_chain.iter().skip(common).copied();
+    let Some(innermost_loop) = shared().find(|&n| is_loop(engine.body, n)) else {
+        return false;
+    };
+    let read_stmt = read_stmt
+        .or_else(|| {
+            shared().find_map(|n| match n {
+                NodeRef::Stmt(s) => Some(s),
+                _ => None,
+            })
+        })
+        .expect("a read sits in a statement");
+    // Re-bound on every path from the top of that loop to the read.
+    !def.is_some_and(|def| {
+        ancestors(engine, NodeRef::Stmt(def)).any(|n| n == innermost_loop)
+            && def_dominates(engine, def, read_stmt)
+    })
 }
 
 #[cfg(test)]
@@ -176,7 +266,7 @@ mod tests {
     use crate::call_args::CallArgs;
     use crate::nir::{FuncId, NirLocal};
     use crate::nir_arena::{BlockNode, Body, ExprNode, StmtNode};
-    use crate::nir_engine::EngineBuffers;
+    use crate::nir_engine::{EngineBuffers, TEST_TYPES};
     use crate::optimize::bounds::Proofs;
     use crate::optimize::mod_ref::FnEffect;
     use crate::token::Span;
@@ -229,7 +319,7 @@ mod tests {
         };
         let rule = ElideRule::new(calls);
         let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals, &[]);
+        let mut engine = Engine::new(body, &mut buffers, locals, &[], &TEST_TYPES);
         engine.run(&[&rule]);
     }
 
@@ -268,15 +358,13 @@ mod tests {
             ..FnEffect::default()
         }];
         let proofs = Proofs::from_iter(proven_callee.map(|f| (call, FuncId::new(f))));
-        let types = TypeTable::new();
         let calls = CallFacts {
             effects: &effects,
             proofs: &proofs,
         };
         let rule = ElideRule::new(calls);
         let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[]);
-        engine.set_value_graph_type_table(&types);
+        let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[], &TEST_TYPES);
         engine.run(&[&rule]);
         body.blocks[body.root()]
             .stmts

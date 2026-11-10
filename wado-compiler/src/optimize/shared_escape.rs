@@ -308,9 +308,7 @@ impl<'a> SharedEscape<'a> {
             ExprKind::ArrayLiteral { elements } | ExprKind::TupleLiteral { elements } => {
                 !elements.iter().any(|&e| taint.operand(e))
             }
-            ExprKind::VariantConstruct { payload, .. } => {
-                !payload.is_some_and(|p| taint.operand(p))
-            }
+            ExprKind::VariantConstruct { payload, .. } => !taint.operand(*payload),
             ExprKind::ClosureToCanonical { functor, .. } => !taint.operand(*functor),
             ExprKind::GlobalVarSet { value, .. } => !taint.operand(*value),
             ExprKind::IndirectCall { callee, args, .. } => {

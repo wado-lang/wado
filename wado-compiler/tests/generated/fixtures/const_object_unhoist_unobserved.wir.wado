@@ -498,7 +498,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b26: block {
         l27: loop {
-            break_if b26 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b26 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -520,7 +520,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b30: block {
         l31: loop {
-            break_if b30 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b30 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -1025,15 +1025,15 @@ fn "core:json/core:json/to_string<const_object_unhoist_unobserved.wado/Pair>$spe
     let $qm_e_19: ref "core:serde//SerializeError";
     let new_used_76: i32;
     let start_77: i32;
-    let r_83: ref null "core:serde//SerializeError";
+    let r_85: ref null "core:serde//SerializeError";
     buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     $thread_$inline_const_object_unhoist_unobserved_wado_Pair_core_serde_Serialize__serialize_core_json_JsonSerializer__1: block {
         buf_2.used = 1;
         builtin::array_copy<u8>(buf_2.repr, 0, global:core:json::$const_obj_44, 0, 1);
         "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf_2, global:core:json::$const_obj_43, 0);
-        if @likely(ref.is_null(local.tee r_83("core:json/core:json/serialize_into<i32>$sroa[value.value]"(buf_2, 1)))) {
+        if @likely(ref.is_null(local.tee r_85("core:json/core:json/serialize_into<i32>$sroa[value.value]"(buf_2, 1)))) {
         } else {
-            $qm_e_19 = ref.as_non_null(r_83);
+            $qm_e_19 = ref.as_non_null(r_85);
             cold_path;
             cold_path;
             return 1, ref.null none, $qm_e_19;

@@ -379,7 +379,7 @@ fn "reflect_same_name_across_modules.wado/$test_0_a_generic_struct_reflects_the_
     let s: ref "core:prelude/string.wado//String";
     let a_end: i32;
     let i: i32;
-    let $licm_repr_19: ref Array<u8>;
+    let $licm_repr_21: ref Array<u8>;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     s = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_2: ref "core:prelude/string.wado//String";
@@ -390,29 +390,29 @@ fn "reflect_same_name_across_modules.wado/$test_0_a_generic_struct_reflects_the_
         $mv_field_2 = global:reflect_same_name_across_modules.wado::$const_obj_1;
         "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_same_name_across_modules.wado/$tmpl$60f2adf5184ddec7,[core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(s, $mv_field_2);
     };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
         if local.tee a_end(s.used) != 4 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
-        $licm_repr_19 = s.repr;
+        $licm_repr_21 = s.repr;
         b4: block {
             l5: loop {
-                break_if b4 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                break_if b4 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
                 continue l5;
@@ -421,14 +421,14 @@ fn "reflect_same_name_across_modules.wado/$test_0_a_generic_struct_reflects_the_
         b10: block {
             l11: loop {
                 break_if b10 i >= a_end;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
                 continue l11;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
         "core:rt/panic"(local.tee s("core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_same_name_across_modules.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "reflect_same_name_across_modules.wado//$tmpl$d48748ffcad618c0" { h0: s, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_generic_struct_reflects_the_declaration_it_was_named_from at reflect_same_name_across_modules.wado:9
@@ -444,7 +444,7 @@ fn "reflect_same_name_across_modules.wado/$test_1_a_plain_struct_reflects_the_de
     let s: ref "core:prelude/string.wado//String";
     let a_end: i32;
     let i: i32;
-    let $licm_repr_19: ref Array<u8>;
+    let $licm_repr_21: ref Array<u8>;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     s = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_2: ref "core:prelude/string.wado//String";
@@ -455,29 +455,29 @@ fn "reflect_same_name_across_modules.wado/$test_1_a_plain_struct_reflects_the_de
         $mv_field_2 = global:reflect_same_name_across_modules.wado::$const_obj_4;
         "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_same_name_across_modules.wado/$tmpl$60f2adf5184ddec7,[core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(s, $mv_field_2);
     };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
         if local.tee a_end(s.used) != 4 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
-        $licm_repr_19 = s.repr;
+        $licm_repr_21 = s.repr;
         b17: block {
             l18: loop {
-                break_if b17 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                break_if b17 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
                 continue l18;
@@ -486,14 +486,14 @@ fn "reflect_same_name_across_modules.wado/$test_1_a_plain_struct_reflects_the_de
         b23: block {
             l24: loop {
                 break_if b23 i >= a_end;
-                if builtin::array_get_value<u8>($licm_repr_19, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_3, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i = i + 1;
                 continue l24;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
         "core:rt/panic"(local.tee s("core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_same_name_across_modules.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "reflect_same_name_across_modules.wado//$tmpl$d48748ffcad618c0" { h0: s, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_plain_struct_reflects_the_declaration_it_was_named_from at reflect_same_name_across_modules.wado:17
@@ -528,7 +528,7 @@ fn "reflect_same_name_across_modules.wado/$test_2_a_variant_reflects_the_declara
         $licm_repr_21 = s.repr;
         b30: block {
             l31: loop {
-                break_if b30 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+                break_if b30 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
                 if builtin::array_get_value<u8>($licm_repr_21, i) != builtin::array_get_value<u8>(global:reflect_same_name_across_modules.wado::$const_obj_6, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
@@ -920,7 +920,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b123: block {
         l124: loop {
-            break_if b123 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b123 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -944,7 +944,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b127: block {
         l128: loop {
-            break_if b127 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b127 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

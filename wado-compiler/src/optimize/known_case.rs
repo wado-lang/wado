@@ -9,16 +9,21 @@ use crate::nir_engine::{Engine, Rule};
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 
-use super::arena_query::{is_pure_nontrapping_operand_typed, single_payload_binding};
+use super::arena_query::{
+    MarkerBuiltins, is_pure_nontrapping_operand_typed, shed_unconditional_markers,
+    single_payload_binding,
+};
 
-pub(super) struct KnownCaseRule;
+pub(super) struct KnownCaseRule {
+    pub(super) markers: MarkerBuiltins,
+}
 
 impl Rule for KnownCaseRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         match &engine.body.exprs[id].kind {
             ExprKind::Match { expr, .. } => {
                 let scrutinee = *expr;
-                rewrite_match(engine, id, scrutinee)
+                rewrite_match(engine, id, scrutinee, self.markers)
             }
             ExprKind::VariantTest {
                 expr, case_index, ..
@@ -49,11 +54,13 @@ impl Rule for KnownCaseRule {
 /// Take the first arm the case can take: the ones before it are refused, and
 /// the ones after are unreachable once that arm is certain. Left as a match,
 /// lowering would still test the case and trap on the answer it cannot get.
-fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
-    let Some(construct) = known_construct(engine, scrutinee) else {
-        return false;
-    };
-    let Some(case_index) = construct_case(engine.body, construct) else {
+fn rewrite_match(
+    engine: &mut Engine,
+    id: ExprId,
+    scrutinee: Operand,
+    markers: MarkerBuiltins,
+) -> bool {
+    let Some(case_index) = known_index(engine, scrutinee) else {
         return false;
     };
     let ExprKind::Match { arms, .. } = &engine.body.exprs[id].kind else {
@@ -76,6 +83,9 @@ fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
     });
     if let Some((bound, payload_type)) = certain {
         let arm_body = arms[head].body;
+        if let Operand::Expr(e) = arm_body {
+            shed_unconditional_markers(engine, NodeRef::Expr(e), markers);
+        }
         return collapse_to_binding(
             engine,
             id,
@@ -190,47 +200,32 @@ fn collapse_to_binding(
     true
 }
 
-/// The case index a value is known to hold.
+/// The case `operand` is known to hold: the one it builds, or the one the value
+/// a single-assignment local was bound to builds. A local written again, or
+/// written through a reference, is not one — `local_has_one_version` is that
+/// test.
 fn known_index(engine: &mut Engine, operand: Operand) -> Option<u32> {
-    let construct = known_construct(engine, operand)?;
-    construct_case(engine.body, construct)
-}
-
-/// The construction `operand` is known to read back: itself, or the one a
-/// single-assignment local was bound to. A local written again, or written
-/// through a reference, is not one — `local_has_one_version` is that test.
-fn known_construct(engine: &mut Engine, operand: Operand) -> Option<ExprId> {
-    let expr = operand.as_expr()?;
-    if construct_case(engine.body, expr).is_some() {
-        return Some(expr);
-    }
-    let ExprKind::Local { index, .. } = engine.body.exprs[expr].kind else {
-        return None;
+    let value = match engine.body.local_read(operand) {
+        Some((index, _)) => {
+            if !engine.local_has_one_version(index) {
+                return None;
+            }
+            let def = engine.local_def(index)?;
+            let StmtKind::Let { value, .. } = engine.body.stmts[def].kind else {
+                return None;
+            };
+            value
+        }
+        None => operand,
     };
-    if !engine.local_has_one_version(index) {
-        return None;
-    }
-    let def = engine.local_def(index)?;
-    let StmtKind::Let { value, .. } = engine.body.stmts[def].kind else {
-        return None;
-    };
-    let value = value.as_expr()?;
-    construct_case(engine.body, value)
-        .is_some()
-        .then_some(value)
-}
-
-fn construct_case(body: &Body, expr: ExprId) -> Option<u32> {
-    let ExprKind::VariantConstruct { case_index, .. } = &body.exprs[expr].kind else {
-        return None;
-    };
-    Some(*case_index)
+    let (case, _) = engine.body.built_case(value)?;
+    Some(case)
 }
 
 /// A fold reads the case out of the scrutinee and drops it, so nothing may
 /// observe it running.
 fn droppable(engine: &Engine, scrutinee: Operand) -> bool {
-    is_pure_nontrapping_operand_typed(engine.body, scrutinee, engine.value_graph_type_table())
+    is_pure_nontrapping_operand_typed(engine.body, scrutinee, Some(engine.type_table()))
 }
 
 /// Whether `pattern` refuses every value of case `case`. Only a case pattern
@@ -265,7 +260,7 @@ mod tests {
     use crate::nir::NirLocal;
     use crate::nir_arena::Tracked;
     use crate::nir_arena::{BlockNode, ExprNode, StmtId, StmtNode};
-    use crate::nir_engine::EngineBuffers;
+    use crate::nir_engine::{EngineBuffers, TEST_TYPES};
     use crate::nir_value_graph::ValueKind;
     use crate::token::Span;
     use crate::type_table::TypeTable;
@@ -287,14 +282,12 @@ mod tests {
             span: Span::default(),
         });
         assert_eq!(root, body.root());
-        let construct = expr(
-            &mut body,
-            ExprKind::VariantConstruct {
+        let case_b = body.values.alloc_unshared(
+            ValueKind::UnitCase {
                 variant_type: TypeTable::I32,
                 case_index: 1,
-                case_name: "B".into(),
-                payload: None,
             },
+            TypeTable::I32,
         );
         let read = expr(
             &mut body,
@@ -310,7 +303,7 @@ mod tests {
                 local_index: 0,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value: Operand::Expr(construct),
+                value: Operand::Value(case_b),
                 skip_value_copy: false,
             },
             span: Span::default(),
@@ -341,8 +334,10 @@ mod tests {
             is_mut: false,
         }]);
         let mut buffers = EngineBuffers::default();
-        let rule = KnownCaseRule;
-        let mut engine = Engine::new(body, &mut buffers, &mut locals, &[]);
+        let rule = KnownCaseRule {
+            markers: MarkerBuiltins::unnamed(),
+        };
+        let mut engine = Engine::new(body, &mut buffers, &mut locals, &[], &TEST_TYPES);
         engine.run(&[&rule]);
     }
 
