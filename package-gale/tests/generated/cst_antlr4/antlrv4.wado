@@ -1181,7 +1181,8 @@ fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
 }
 
 fn follow_set_has(tables: &FollowTables, set: i32, kind: i32) -> bool {
-    return tables.sets[set * tables.stride + (kind >> 5)] >> (kind & 31) & 1 != 0;
+    let word = kind >> 5;
+    return word < tables.stride && tables.sets[set * tables.stride + word] >> (kind & 31) & 1 != 0;
 }
 internal global ATN_BASIC: i32 = 1;
 internal global ATN_RULE_START: i32 = 2;
