@@ -1032,7 +1032,6 @@ pub fn gen_sll_decide_fn(
     start: i32,
     forest: &SllForest,
     analysis: &GrammarAnalysis,
-    verify: bool,
 ) {
     let mut f = FnSpec::new(sll_decide_fn_name(decision));
     f.add_param("atn", "&mut AtnPredictor");
@@ -1041,12 +1040,7 @@ pub fn gen_sll_decide_fn(
     f.add_param("min_prec", "i32");
     f.set_return_type("i32");
     f.emit_begin(w);
-    let answer = |a: String| if verify {
-        atn_verified_call(decision, AtnPicker::LookaheadDfa, "atn", "tokens", "pos", "min_prec", a);
-    } else {
-        a;
-    };
-    gen_sll_node(w, forest, start, 0, analysis, &answer);
+    gen_sll_node(w, forest, start, 0, analysis, &|a: String| a);
     w.line(`return atn_predict_once(&ATN_SIM, ${decision}, atn, tokens, pos, TK_EOF, min_prec);`);
     w.end();
     w.blank();
@@ -1106,9 +1100,8 @@ pub global ATN_VERIFY_END: String = "atn_verify_end";
 /// simulator under no predicate, and `ATN_VERIFIED_AGAINST` takes its verdict;
 /// both answer the pick they check, which `exact` makes too, so the parse goes
 /// on as `exact`'s would.
-/// Where no alternative survives under the parse's stack, as in a scan of an
-/// alternative that is about to fail, the decision is moot: the pick stands
-/// and nothing is recorded. A verdict of -1, no alternative whose predicates
+/// Where no alternative survives under the parse's stack, as before a syntax
+/// error, the decision is moot: the pick stands and nothing is recorded. A verdict of -1, no alternative whose predicates
 /// hold, differs from every pick.
 ///
 /// The first difference is kept, and fails the parse only where it ends with

@@ -566,7 +566,6 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
 fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &HashSet<String>) {
     let eof = ctx.analysis.eof_kind_id();
     let mut explorer = SllExplorer::new(atn, eof);
-    let verify = ctx.settings.prediction.verifies();
     let mut forest = SllForest::new(atn.num_tokens);
     let mut starts: List<[i32, i32]> = [];
     for let d of 0..<atn.decision_state.len() {
@@ -575,7 +574,7 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
         }
     }
     for let [d, start] of starts {
-        gen_sll_decide_fn(w, d, start, &forest, &ctx.analysis, verify);
+        gen_sll_decide_fn(w, d, start, &forest, &ctx.analysis);
     }
     gen_sll_shared_fns(w, &forest, &ctx.analysis);
     let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect();
@@ -585,7 +584,7 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
             gen_lr_decide_fn(w, d, &lr_table(&sim, d, atn.num_tokens, eof), &ctx.analysis, ctx.plan.emit_follow);
         }
     }
-    if verify {
+    if ctx.settings.prediction.verifies() {
         gen_atn_verified_fn(w);
     }
 }

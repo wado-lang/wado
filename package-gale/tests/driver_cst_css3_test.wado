@@ -24,6 +24,13 @@ test "parse simple rule" {
     assert_parses("body { color: red; }");
 }
 
+// The tournament's scan of `unknownDeclaration` asks `value`'s loop at `e`,
+// where the scan is about to fail at `,`; a pick inside a scan is checked once,
+// as the tournament's, so verify does not report it as the lookahead DFA's.
+test "parse a comma-separated value list" {
+    assert_parses("a { transition: box-shadow 200ms ease, transform 200ms ease; }");
+}
+
 test "parse multiple properties" {
     assert_parses("h1 { font-size: 16px; margin: 0; }");
 }

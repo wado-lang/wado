@@ -8288,8 +8288,8 @@ fn gen_group_branch_body(
 
 /// The LR loop's pick at decision `decision`, from where `side` reads, through
 /// its table (`atn_lr_table.wado`), handed the caller's FOLLOW where the rule
-/// reads it. Under `prediction: "verify"` the pick is checked against the simulator.
-/// A table holds no predicate, so a loop that meets one asks the simulator.
+/// reads it. A table holds no predicate, so a loop that meets one asks the
+/// simulator.
 fn lr_decision_call(ctx: &mut EmitContext, decision: i32, side: PickSide) -> String {
     let met = *ctx.decisions.at_lr_loop(ctx.cursor.current_rule_index());
     if !met.is_empty() {
@@ -8300,11 +8300,26 @@ fn lr_decision_call(ctx: &mut EmitContext, decision: i32, side: PickSide) -> Str
     ctx.cursor.note_ref(&decide);
     let follow = if ctx.current_rule_reads_follow() { `, ${FOLLOW_PARAM}` } else { "" };
     let call = `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, min_prec${follow})`;
-    if !ctx.settings.prediction.verifies() {
+    return verified_pick(decision, AtnPicker::LrTable, side, "min_prec", call, ctx);
+}
+
+/// `call`, the pick `picker` makes at `decision`, checked against the simulator
+/// under `prediction: "verify"`. A pick inside a scan stays unchecked: the scan
+/// stands for the tournament, whose own pick the parse checks.
+fn verified_pick<S: AsStrSlice>(
+    decision: i32,
+    picker: AtnPicker,
+    side: PickSide,
+    prec: S,
+    call: String,
+    ctx: &mut EmitContext,
+) -> String {
+    if !ctx.settings.prediction.verifies() || side matches { Scan } {
         return call;
     }
+    let [tokens, pos] = pick_reads(side);
     ctx.cursor.note_ref(&ATN_VERIFIED);
-    return atn_verified_call(decision, AtnPicker::LrTable, ctx.atn_arg(), tokens, pos, "min_prec", call);
+    return atn_verified_call(decision, picker, ctx.atn_arg(), tokens, pos, prec, call);
 }
 
 /// The simulator's pick at decision `atn_dec`, from where `side` reads. It
@@ -8327,7 +8342,8 @@ fn atn_gated_predict_call(atn_dec: i32, gates: &List<AtnGate>, side: PickSide, c
     if gates.is_empty() {
         let decide = sll_decide_fn_name(atn_dec);
         ctx.cursor.note_ref(&decide);
-        return `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, ${prec})`;
+        let call = `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, ${prec})`;
+        return verified_pick(atn_dec, AtnPicker::LookaheadDfa, side, &prec, call, ctx);
     }
     return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, ${atn_gate_args(gates)})`;
 }
