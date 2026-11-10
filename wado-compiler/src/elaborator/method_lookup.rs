@@ -156,6 +156,8 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: Some(sig.defaults_module.clone()),
             impl_type_bindings: Vec::new(),
+            impl_slot_args: Vec::new(),
+            bound_trait_args: Vec::new(),
         }
     }
 }
@@ -278,6 +280,24 @@ impl ImplParamSlots {
 
     pub(crate) fn of_name(&self, param: &str) -> Option<u32> {
         self.slots.get(param).copied()
+    }
+
+    /// What fills each slot, in slot order: a parameter's binding in `bound`,
+    /// else the receiver's argument at a position the target writes concretely.
+    /// Empty where a parameter is unbound, which no instance can key on.
+    pub(super) fn args_in_slot_order(
+        &self,
+        bound: &IndexMap<String, BinderInScope>,
+        receiver_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let count = self.slots.values().map(|&slot| slot + 1).max().unwrap_or(0);
+        (0..count)
+            .map(|slot| match self.name_of(slot) {
+                Some(name) => bound.get(name).map(|b| b.type_id),
+                None => receiver_args.get(slot as usize).copied(),
+            })
+            .collect::<Option<Vec<_>>>()
+            .unwrap_or_default()
     }
 
     /// The parameter filling `slot`; `None` for a position the target writes
@@ -2031,8 +2051,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(Ordered::Nothing) | None => &[],
         };
-        let mut found_traits: Vec<TraitMethodMatch> =
-            self.materialize_matches(named, method_name, receiver_type_args, receiver_type_id);
+        let asked = required_trait.and_then(|wanted| wanted.args.as_deref());
+        let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
+            named,
+            method_name,
+            receiver_type_args,
+            receiver_type_id,
+            asked,
+        );
         // A named block declares the method, or its trait does, so it yields a
         // match; none means the block and the lowering disagree on the name.
         assert!(
@@ -2067,13 +2093,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The matches the named impls yield for `method_name`: read off each
     /// block, or for a body the compiler supplies with no block (`None`), off
-    /// the derived template.
+    /// the derived template. `asked` is the trait arguments a qualified call
+    /// names.
     fn materialize_matches(
         &mut self,
         named: &[Option<DefId>],
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
+        asked: Option<&[TypeId]>,
     ) -> Vec<TraitMethodMatch> {
         let mut found = Vec::new();
         // An impl the order names at two levels of the chain is one block.
@@ -2088,6 +2116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_name,
                     receiver_type_args,
                     receiver_type_id,
+                    asked,
                 )),
                 None => {
                     if let Some(recv_id) = receiver_type_id {
@@ -2106,13 +2135,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Project one candidate trait impl into 0+ [`TraitMethodMatch`]es: set up
     /// the impl's type-parameter / associated-type scope, then emit a match for
     /// the impl's own `method_name`, or failing that for any matching trait
-    /// default method with a body.
+    /// default method with a body. `asked`, the trait arguments a qualified
+    /// call names, binds what only the trait reference names.
     fn collect_trait_method_matches_from_impl(
         &mut self,
         impl_ref: &ImplBlockRef,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
+        asked: Option<&[TypeId]>,
     ) -> Vec<TraitMethodMatch> {
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
@@ -2302,6 +2333,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
+        // A parameter only the trait reference names, or only a projection in
+        // the target (`G`, `E` in `impl<G: Back, E> Shown<G> for G::Of<E>`),
+        // is bound by the arguments the call names.
+        let mut impl_slot_args = Vec::new();
+        if let (Some(asked), Some(receiver)) = (asked, receiver_type_id) {
+            let mut slots: TypeArgMap = scope
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .values()
+                .map(|b| {
+                    let id = TypeParamId {
+                        owner: impl_ref.0,
+                        index: b.index,
+                    };
+                    (id, b.type_id)
+                })
+                .collect();
+            let written = scope
+                .tysys
+                .signatures
+                .impl_sig(impl_ref.0)
+                .trait_type_args
+                .clone();
+            scope.tysys.type_table.borrow_mut().bind_impl_slots_asked(
+                impl_ref.0,
+                &written,
+                asked,
+                receiver,
+                &mut slots,
+            );
+            let declared = ImplParamSlots::of(&header.ty, &header.type_params);
+            let mut bound_here = false;
+            for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
+                if scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .contains_key(&param.name)
+                {
+                    continue;
+                }
+                let Some(slot) = declared.of_name(&param.name) else {
+                    continue;
+                };
+                let id = TypeParamId {
+                    owner: impl_ref.0,
+                    index: slot,
+                };
+                if let Some(&bound) = slots.get(&id) {
+                    Self::bind_type_param(&mut scope, Some(param), &param.name, slot, bound);
+                    bound_here = true;
+                }
+            }
+            if bound_here {
+                impl_slot_args = declared.args_in_slot_order(
+                    &scope.annotate_ctx.trait_ctx.type_params,
+                    receiver_type_args.unwrap_or_default(),
+                );
+            }
+        }
+
         // The receiver's type arguments, aligned to the impl's slots per its
         // shape (generic, ref, blanket, variadic) — which a flat positional
         // list cannot express. Method-level slots stay abstract: inference
@@ -2455,6 +2548,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_block: Some(impl_ref.0),
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
+                    impl_slot_args: impl_slot_args.clone(),
                     ..MethodInfo::of_sig(&method_sig, instantiated)
                 },
                 impl_module_source: impl_module_source.clone(),
@@ -2505,6 +2599,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_block: Some(impl_ref.0),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
+                        impl_slot_args,
                         ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
@@ -2602,6 +2697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             through_ref,
             method_name,
             required,
+            required_trait.and_then(|r| r.args.as_deref()).unwrap_or_default(),
         )
     }
 
@@ -3533,6 +3629,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+            impl_slot_args: _,
+            bound_trait_args: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

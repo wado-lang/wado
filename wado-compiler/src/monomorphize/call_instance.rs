@@ -174,13 +174,24 @@ impl Monomorphizer {
             return recorded.map(<[TypeId]>::to_vec);
         };
         let info = template.method_info.as_ref()?;
-        self.struct_info_for_method(
-            receiver,
-            type_table,
-            &info.method_name,
-            info.trait_name.as_ref(),
-        )
-        .map(|(_, args)| args)
+        let args = self
+            .struct_info_for_method(
+                receiver,
+                type_table,
+                &info.method_name,
+                info.trait_name.as_ref(),
+            )
+            .map(|(_, args)| args);
+        // A slot only the trait reference binds shows in no receiver argument,
+        // so the call recorded every slot.
+        match recorded {
+            Some(recorded)
+                if leaves_slot_open(template, args.as_deref().unwrap_or_default(), type_table) =>
+            {
+                Some(recorded.to_vec())
+            }
+            _ => args,
+        }
     }
 
     /// A blanket's impl arguments: the receiver it serves, then what its bounds
@@ -232,6 +243,25 @@ impl Monomorphizer {
             }
         }
     }
+}
+
+/// Whether `receiver_args` leave a slot of `template`'s block unfilled: one only
+/// its trait reference binds (`G` in `impl<G: Back> Shown<G> for i32`), or
+/// every slot of a projection target (`impl<G: Back> Shown<G> for G::T`).
+pub(super) fn leaves_slot_open(
+    template: &TirFunction,
+    receiver_args: &[TypeId],
+    type_table: &mut TypeTable,
+) -> bool {
+    let Some(block) = template.impl_origin else {
+        return false;
+    };
+    let positions = type_table.impl_target_args(block).len();
+    let filled = type_table.impl_slots(block, &receiver_args[..positions.min(receiver_args.len())]);
+    template
+        .impl_type_params
+        .iter()
+        .any(|param| !param.is_pack && !filled.contains_key(&param.id))
 }
 
 /// Whether `outer` is a newtype whose chain of bases passes `inner`.

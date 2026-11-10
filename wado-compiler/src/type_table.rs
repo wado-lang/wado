@@ -6589,6 +6589,35 @@ impl TypeTable {
         slots
     }
 
+    /// Fill the slots of impl block `def` its trait reference binds from the
+    /// arguments a call names: each of `written`, the reference's arguments,
+    /// against the one `asked` at its position, then the target read at what
+    /// `slots` then holds against `receiver`. A target projecting off a
+    /// parameter binds only this way: `G::Of<E>` reads `Boxed<E>` once `G` is
+    /// `Host`, and `Boxed<f32>` then fills `E`.
+    pub fn bind_impl_slots_asked(
+        &mut self,
+        def: DefId,
+        written: &[TypeId],
+        asked: &[TypeId],
+        receiver: TypeId,
+        slots: &mut TypeArgMap,
+    ) {
+        for (&written, &asked) in written.iter().zip(asked) {
+            if let Some(bound) = self.bind_type_params(&[written], &[asked]) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
+                }
+            }
+        }
+        let target = self.substitute_type_params(self.impl_target_whole(def), slots);
+        if let Some(bound) = self.bind_type_params(&[target], &[receiver]) {
+            for (slot, ty) in bound {
+                slots.entry(slot).or_insert(ty);
+            }
+        }
+    }
+
     /// The declaration impl block `def` targets, past any reference.
     pub fn impl_target_decl(&self, def: DefId) -> Option<DefId> {
         self.nominal_def(self.peel_refs(self.impl_target(def).whole))

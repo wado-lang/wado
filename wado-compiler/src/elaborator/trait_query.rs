@@ -2450,8 +2450,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
             &EffectRows::default(),
         );
+        // Slot 0 is the trait's `Self`; its arguments follow it.
+        let bound_trait_args = (1..)
+            .map_while(|index| slots.get(&TypeParamId { owner: decl, index }).copied())
+            .collect();
         // A bare bound dispatches on the parameter itself, off no `impl` block.
-        Some((fq_trait_name, MethodInfo::of_sig(&sig, instantiated)))
+        Some((
+            fq_trait_name,
+            MethodInfo {
+                bound_trait_args,
+                ..MethodInfo::of_sig(&sig, instantiated)
+            },
+        ))
     }
 }
 

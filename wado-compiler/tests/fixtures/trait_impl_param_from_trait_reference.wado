@@ -1,0 +1,68 @@
+// An impl parameter only the trait reference names is set by the arguments a
+// call names for the trait, written out or through a bound.
+use { println, Stdout } from "core:cli";
+
+trait Back with () {
+    fn name() -> String;
+}
+
+struct Host {}
+
+struct Guest {}
+
+impl Back for Host {
+    fn name() -> String {
+        return "host";
+    }
+}
+
+impl Back for Guest {
+    fn name() -> String {
+        return "guest";
+    }
+}
+
+trait Shown<G: Back> with () {
+    fn shown(&self) -> String;
+}
+
+impl<G: Back> Shown<G> for i32 {
+    fn shown(&self) -> String {
+        return `${*self} on ${G::name()}`;
+    }
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Display, G: Back> Shown<G> for Wrap<T> {
+    fn shown(&self) -> String {
+        return `${self.v} in ${G::name()}`;
+    }
+}
+
+fn show<G: Back, V: Shown<G>>(v: &V) -> String {
+    return v.shown();
+}
+
+fn via<G: Back>(v: &i32) -> String {
+    return Shown::<G>::shown(v);
+}
+
+export fn run() with Stdout {
+    let v: i32 = 1;
+    println(Shown::<Host>::shown(&v));
+    println(Shown::<Guest>::shown(&v));
+    println(show::<Host, i32>(&v));
+    println(show::<Guest, i32>(&v));
+    println(via::<Guest>(&v));
+    let w = Wrap::<String> { v: "w" };
+    println(Shown::<Host>::shown(&w));
+    println(show::<Guest, Wrap<String>>(&w));
+}
+
+__DATA__
+{
+  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\nw in host\nw in guest\n"
+}

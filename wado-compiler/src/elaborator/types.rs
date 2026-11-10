@@ -3449,6 +3449,14 @@ pub(super) struct MethodInfo {
     /// against them. Empty where the block declares none, or where the lookup
     /// answers from no block at all.
     pub(super) impl_type_bindings: Vec<DefaultTypeBinding>,
+    /// Every slot of the matched block in slot order, where its trait reference
+    /// binds one the receiver does not show (`G` in `impl<G: Back> Shown<G> for
+    /// i32`): the instance keys on these. Empty where the receiver shows all.
+    pub(super) impl_slot_args: Vec<TypeId>,
+    /// The arguments a bound names for the trait it dispatches through, which
+    /// set the slots of the impl answering it at an instance. Empty where the
+    /// call answers from a block.
+    pub(super) bound_trait_args: Vec<TypeId>,
 }
 
 impl MethodInfo {
@@ -3475,6 +3483,8 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: None,
             impl_type_bindings: Vec::new(),
+            impl_slot_args: Vec::new(),
+            bound_trait_args: Vec::new(),
         }
     }
 }

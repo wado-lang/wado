@@ -653,6 +653,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+            impl_slot_args,
+            bound_trait_args,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -1096,6 +1098,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     is_blanket: false,
                 })
             }
+        } else if !impl_slot_args.is_empty() {
+            Some(MonomorphInfo {
+                generic_name: MethodName::format_local(&base_struct_name, None, method_name),
+                impl_type_args: impl_slot_args,
+                method_type_args: method_type_args.clone(),
+                is_blanket: false,
+            })
         } else if let Some(ref blanket_param) = blanket_type_param {
             // For blanket impls, the template function uses the type param name (e.g., "I").
             // The call site uses the concrete receiver (e.g., "ListIter<i32>").
@@ -1141,6 +1150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .mark_receiver(&mut method_info, base_type_id);
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
+        method_info.trait_type_args = bound_trait_args;
 
         // A bound on a parameter answers from no block, so its instance decides
         // the template.

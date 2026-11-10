@@ -1,0 +1,57 @@
+// An impl whose target is a projection, `G::T`, answers where the trait
+// reference binds `G`: the projection then reads as the type it names there.
+use { println, Stdout } from "core:cli";
+
+trait Back with () {
+    type T;
+    type Of<E>;
+    fn name() -> String;
+}
+
+struct Host {}
+
+struct Boxed<E> {
+    n: i32,
+}
+
+impl Back for Host {
+    type T = i32;
+    type Of<E> = Boxed<E>;
+    fn name() -> String {
+        return "host";
+    }
+}
+
+trait Shown<G: Back> with () {
+    fn shown(&self) -> String;
+}
+
+impl<G: Back> Shown<G> for G::T {
+    fn shown(&self) -> String {
+        return `plain on ${G::name()}`;
+    }
+}
+
+impl<G: Back, E> Shown<G> for G::Of<E> {
+    fn shown(&self) -> String {
+        return `family on ${G::name()}`;
+    }
+}
+
+fn show<G: Back, V: Shown<G>>(v: &V) -> String {
+    return v.shown();
+}
+
+export fn run() with Stdout {
+    let v: i32 = 1;
+    println(Shown::<Host>::shown(&v));
+    println(show::<Host, i32>(&v));
+    let b = Boxed::<f32> { n: 2 };
+    println(Shown::<Host>::shown(&b));
+    println(show::<Host, Boxed<bool>>(&Boxed::<bool> { n: 3 }));
+}
+
+__DATA__
+{
+  "stdout": "plain on host\nplain on host\nfamily on host\nfamily on host\n"
+}
