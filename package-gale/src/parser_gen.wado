@@ -2291,7 +2291,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         } else {
             [] as List<i32>;
         };
-        let leaf_enters = re.gate_caller_follow && re.body matches { Token(_) | Wildcard | Excluded(_) };
+        let leaf_enters = re.gate_caller_follow && scan_body_is_leaf(&re.body);
         let call_enters = scan_enters_while_viable(re);
         let yield_gate = if leaf_enters || call_enters { String::new() } else { caller_follow_gate };
         let mut guard = scan_repeat_guard_excluding(&effective, &excluded, &yield_gate, ctx);
@@ -2301,11 +2301,8 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         w.begin(`if ${guard}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
         if call_enters {
-            assert !repeat_body_implied_by_guard(&re.body, &effective), "a rule-call body is scanned, which marks `sp`";
-            let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
-            w.begin(`if ${follow_yields_call("tokens", "sp")} && !${resumes}`);
-            gen_scan_rewind(w, ctx, "sp");
-            w.end();
+            assert !repeat_body_implied_by_guard(&re.body, &effective), "a body that is not one token is scanned, which marks `sp`";
+            gen_scan_yield_unless_resumed(w, re, "sp", ctx);
         }
         w.end();
         return;
@@ -2342,9 +2339,23 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     w.end();
 }
 
-/// The scan's twin of `enters_while_viable`.
+/// The scan's twin of `enters_while_viable`, for a body longer than the one
+/// token `leaf_enters_while_viable` answers.
 fn scan_enters_while_viable(re: &ScanRepeatElement) -> bool {
-    return re.kind matches { Optional } && re.body matches { RuleCall(_) } && re.gate_caller_follow && re.body_scannable;
+    return re.kind matches { Optional } && !scan_body_is_leaf(&re.body) && re.gate_caller_follow && re.body_scannable;
+}
+
+fn scan_body_is_leaf(body: &ScanElement) -> bool {
+    return body matches { Token(_) | Wildcard | Excluded(_) };
+}
+
+/// Rewind an optional's body, scanned from `start` to `pos`, where the caller's
+/// continuation starts at `start` and none resumes at `pos`.
+fn gen_scan_yield_unless_resumed<S: AsStrSlice>(w: &mut CodeWriter, re: &ScanRepeatElement, start: S, ctx: &mut EmitContext) {
+    let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
+    w.begin(`if ${follow_yields_call("tokens", &start)} && !${resumes}`);
+    gen_scan_rewind(w, ctx, &start);
+    w.end();
 }
 
 /// One scanned iteration: take the token the guard already proved, or scan the
@@ -2741,6 +2752,14 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
     // otherwise both sides commit to the first match, so no fall-through.
     let outer = ctx.cursor.next_scan_group();
     let chain_done = `osl_${outer}_done`;
+    let yielding = match &ole.as_repeat {
+        Some(re) && scan_enters_while_viable(re) => Option::Some(*re),
+        _ => null,
+    };
+    let start = `osl_${outer}_start`;
+    if yielding matches { Some(_) } {
+        gen_scan_mark(w, ctx, &start);
+    }
     w.begin(`${chain_done}:`);
     for let mut si = 0; si < ole.sigs.len(); si += 1 {
         let sig = &ole.sigs[si];
@@ -2781,6 +2800,9 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         w.end();
     }
     w.end();
+    if let Some(re) = &yielding {
+        gen_scan_yield_unless_resumed(w, re, &start, ctx);
+    }
 }
 
 /// Op-driven scan element walker — used by top-level scan entry
@@ -5083,16 +5105,17 @@ fn gen_op_optional(
         if let Group(g) = &r.body {
             if let Some(branches) = op_group_alt_decision(g, ctx) {
                 // One answer, one set of scans: the scan deciding entry is the
-                // scan the dispatch decides on, wrapped by the yield gate.
-                let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, follow_gate);
-                w.begin(`if ${best} >= 0`);
+                // scan the dispatch decides on.
+                let [winner, enters] = gen_decided_optional_group(w, r, &branches, g, ctx, nc, follow_gate);
+                w.begin(`if ${enters}`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
                 return;
             }
         }
     }
-    let entry = gate_cond_with_caller_follow(&gen_op_optional_entry_cond(w, r, ctx, nc), follow_gate);
+    let own = gen_op_optional_entry_cond(w, r, ctx, nc);
+    let entry = optional_entry_yielding(w, r, own, null, follow_gate, ctx, nc);
     w.begin(`if ${entry}`);
     gen_op(w, &r.body, ctx, nc, &optional_proven_first(r));
     w.end();
@@ -5350,12 +5373,11 @@ fn gen_op_repeat_optional_group(
     }
     let follow_gate = rep_op.gate_caller_follow;
     match &rep_op.strategy {
-        OptionalLookahead(s) => opt.gen_present(
-            w,
-            ctx,
-            &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), follow_gate),
-            &optional_proven_first(rep_op),
-        ),
+        OptionalLookahead(s) => {
+            let own = gen_lookahead_condition(ctx, &s.sig);
+            let enters = optional_entry_yielding(w, rep_op, own, null, follow_gate, ctx, name_counts);
+            opt.gen_present(w, ctx, &enters, &optional_proven_first(rep_op));
+        },
         OptionalShapeLookahead(s) => {
             assert rep_op.body_shape matches { StorableGroup }, "a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`";
             gen_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, follow_gate);
@@ -5363,28 +5385,53 @@ fn gen_op_repeat_optional_group(
         OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 // One answer, one set of scans.
-                let [winner, best] = gen_group_decide(
+                let [winner, best] = gen_decided_optional_group(
                     w,
+                    rep_op,
                     &decision.branches,
-                    &g_op.scan_group.alts,
+                    g_op,
                     ctx,
                     name_counts,
                     follow_gate,
                 );
-                gen_op_storable_optional_body(w, rep_op, &rep.element, ctx, `${best} >= 0`, Option::Some(winner));
+                gen_op_storable_optional_body(w, rep_op, &rep.element, ctx, &best, Option::Some(winner));
             } else {
                 let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
-                opt.gen_present(w, ctx, &gate_cond_with_caller_follow(`${scan_pos_var} >= 0`, follow_gate));
+                let enters = optional_entry_yielding(
+                    w,
+                    rep_op,
+                    `${scan_pos_var} >= 0`,
+                    Option::Some(scan_pos_var),
+                    follow_gate,
+                    ctx,
+                    name_counts,
+                );
+                opt.gen_present(w, ctx, &enters);
             }
         },
-        Plain => opt.gen_present(
-            w,
-            ctx,
-            &gate_cond_with_caller_follow(&body_guard_cond(rep_op, ctx), follow_gate),
-            &optional_proven_first(rep_op),
-        ),
+        Plain => {
+            let enters = optional_entry_yielding(w, rep_op, body_guard_cond(rep_op, ctx), null, follow_gate, ctx, name_counts);
+            opt.gen_present(w, ctx, &enters, &optional_proven_first(rep_op));
+        },
         NonGreedy(_) => unreachable(),
     }
+}
+
+/// Decide the group a greedy `?` holds, as `[winner, enters]`: the alternative,
+/// and whether the `?` takes it once the caller's continuation has its say.
+fn gen_decided_optional_group(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    branches: &List<DecisionBranch>,
+    g: &GroupOp,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+    follow_gate: bool,
+) -> [String, String] {
+    let viable = follow_gate && enters_while_viable(r);
+    let [winner, best] = gen_group_decide(w, branches, &g.scan_group.alts, ctx, nc, follow_gate && !viable);
+    let enters = optional_entry_yielding(w, r, `${best} >= 0`, Option::Some(best), viable, ctx, nc);
+    return [winner, enters];
 }
 
 /// A `?` over a group body, with the surface group it walks.
@@ -6352,48 +6399,59 @@ fn gen_leaf_optional_enters(
         Kinds(kinds) => subtract_sets(kinds, follow),
         _ => [],
     };
-    if enters_while_viable(rep_op) {
-        // A token the caller's continuation cannot start at decides by itself,
-        // as ANTLR4's LL(1) does, so `a { b: }` still reports inside the body.
-        // Where the continuation can start (the caller's, or the LR suffix
-        // loop's, which `follow` does not carry), the scan side enters only
-        // where the body scans, and the parse must too or the tournament
-        // measures a length the parse does not take.
-        let verdict = dedup_name("opt_enter", name_counts);
-        w.line(`let mut ${verdict}: bool = ${entry};`);
-        let lr_suffix = *ctx.cursor.lr_continuation();
-        let contested = if lr_suffix.is_empty() {
-            follow_admits_call("&p.kinds", "p.pos");
-        } else {
-            `(${follow_admits_call("&p.kinds", "p.pos")} || ${ctx.kind_check_str(&lr_suffix, "p.peek_kind()")})`;
-        };
-        w.begin(`if ${verdict} && ${contested}`);
-        let scan_pos = gen_scan_guard_with_prefix(
-            w,
-            &rep_op.scan_body,
-            ctx,
-            name_counts,
-            "opt_scan_pos",
-            "opt_scan",
-            false,
-        );
-        let resumes = continuation_resumes_at(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
-        w.line(`${verdict} = ${scan_pos} >= 0 && (!${follow_yields_call("&p.kinds", "p.pos")} || ${resumes});`);
-        w.end();
-        return Option::Some([verdict, proven]);
-    }
-    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
-    let enters = if caller_follow_gate.is_empty() { entry } else { `${entry} && !${caller_follow_gate}` };
+    let enters = optional_entry_yielding(w, rep_op, entry, null, rep_op.gate_caller_follow, ctx, name_counts);
     return Option::Some([enters, proven]);
 }
 
-/// Whether a tail `?` over a rule call yields to its caller only where entering
-/// would strand the caller's continuation. ANTLR4 resolves the ambiguity by
-/// entering, so a continuation that merely starts here does not yield: the
-/// body's end must fail to start it too. The scan side reads the same answer
-/// through `scan_enters_while_viable`.
+/// Whether a tail `?` yields to its caller only where entering would strand the
+/// caller's continuation. ANTLR4 resolves the ambiguity by entering, so a
+/// continuation that merely starts here does not yield: the body's end must
+/// fail to start it too. The scan side reads the same answer through
+/// `scan_enters_while_viable`.
 fn enters_while_viable(r: &RepeatOp) -> bool {
     return r.gate_caller_follow && r.body_scannable;
+}
+
+/// Whether a greedy `?` enters on `entry` once the caller's continuation has
+/// its say, which `follow_gate` asks for. Where `enters_while_viable` holds, a
+/// token the continuation cannot start at decides by itself, as ANTLR4's LL(1)
+/// does, so `a { b: }` still reports inside the body. Where it can (the
+/// caller's, or the LR suffix loop's, which `follow` does not carry), the scan
+/// side enters only where the body scans, and the parse must too or the
+/// tournament measures a length the parse does not take. `end` is where the
+/// scan `entry` already ran stopped; without one, the body is scanned here.
+fn optional_entry_yielding<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    entry: S,
+    end: Option<String>,
+    follow_gate: bool,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+) -> String {
+    if !follow_gate {
+        return entry.to_string();
+    }
+    if !enters_while_viable(r) {
+        return gate_cond_with_caller_follow(entry, true);
+    }
+    let verdict = dedup_name("opt_enter", nc);
+    w.line(`let mut ${verdict}: bool = ${entry};`);
+    let lr_suffix = *ctx.cursor.lr_continuation();
+    let contested = if lr_suffix.is_empty() {
+        follow_admits_call("&p.kinds", "p.pos");
+    } else {
+        `(${follow_admits_call("&p.kinds", "p.pos")} || ${ctx.kind_check_str(&lr_suffix, "p.peek_kind()")})`;
+    };
+    w.begin(`if ${verdict} && ${contested}`);
+    let scan_pos = match end {
+        Some(e) => e,
+        None => gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, "opt_scan_pos", "opt_scan", false),
+    };
+    let resumes = continuation_resumes_at(ctx, &r.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
+    w.line(`${verdict} = ${scan_pos} >= 0 && (!${follow_yields_call("&p.kinds", "p.pos")} || ${resumes});`);
+    w.end();
+    return verdict;
 }
 
 /// Whether what follows a tail-reaching repeat is known to start at `at`: the
@@ -6755,10 +6813,11 @@ fn gen_op_optional_static_enters(
     if r.strategy matches { OptionalScanGuard }
         && let Group(g) = &r.body
         && let Some(branches) = op_group_alt_decision(g, ctx) {
-        let [_, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, follow_gate);
-        return `${best} >= 0`;
+        let [_, enters] = gen_decided_optional_group(w, r, &branches, g, ctx, nc, follow_gate);
+        return enters;
     }
-    return gate_cond_with_caller_follow(&gen_op_optional_entry_cond(w, r, ctx, nc), follow_gate);
+    let own = gen_op_optional_entry_cond(w, r, ctx, nc);
+    return optional_entry_yielding(w, r, own, null, follow_gate, ctx, nc);
 }
 
 /// Whether a greedy `?` over the group `inner` enters here short of the probe,
@@ -6778,16 +6837,20 @@ fn gen_group_optional_static_enters(
     };
     let follow_gate = r.gate_caller_follow;
     let own = match &r.strategy {
-        OptionalLookahead(s) => gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), follow_gate),
+        OptionalLookahead(s) => {
+            let own = gen_lookahead_condition(ctx, &s.sig);
+            optional_entry_yielding(w, r, own, null, follow_gate, ctx, nc);
+        },
         OptionalShapeLookahead(s) => any_shape_enters(w, s, ctx, nc, follow_gate),
         OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
-                let [_, best] = gen_group_decide(w, &decision.branches, &g_op.scan_group.alts, ctx, nc, follow_gate);
-                return `${best} >= 0`;
+                let [_, enters] = gen_decided_optional_group(w, r, &decision.branches, g_op, ctx, nc, follow_gate);
+                return enters;
             }
-            gate_cond_with_caller_follow(`${gen_op_opt_scan_guard_for_group(w, g_op, ctx, nc)} >= 0`, follow_gate);
+            let scan_pos = gen_op_opt_scan_guard_for_group(w, g_op, ctx, nc);
+            optional_entry_yielding(w, r, `${scan_pos} >= 0`, Option::Some(scan_pos), follow_gate, ctx, nc);
         },
-        Plain => gate_cond_with_caller_follow(&body_guard_cond(r, ctx), follow_gate),
+        Plain => optional_entry_yielding(w, r, body_guard_cond(r, ctx), null, follow_gate, ctx, nc),
         NonGreedy(_) => unreachable(),
     };
     return optional_entry_test(own, inner, ctx);

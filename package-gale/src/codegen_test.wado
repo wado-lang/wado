@@ -2512,6 +2512,31 @@ test "a tail token optional enters while entering stays viable" {
     assert got == "readonly x; => (m (base readonly) (name x) ;)\nreadonly; => (m base (name readonly) ;)\nstatic readonly; => (m (base static) (name readonly) ;)\nstatic readonly x; => (m (base static readonly) (name x) ;)\n";
 }
 
+global TAIL_GROUP_OPTIONAL_G4: String = "
+grammar T;
+s : e ';' EOF ;
+e : n (('<' | '>' | '==') n)* ;
+n : ID ('as' t)* ;
+t : ID ('<' t '>')? ;
+ID : [a-zA-Z]+ ;
+WS : ' ' -> skip ;
+";
+
+// Wado's `x == y as List<i32>`: the comparison loop around `t` reads `< i` too,
+// and the type arguments are still entered wherever that leaves a viable parse.
+// Where both readings do, as on `c == b as L < i > d`, the jar compares.
+test "a tail group optional enters while entering stays viable" {
+    let inputs: List<String> = ["b as L < i > ;", "c == b as L < i > ;", "c == b as L < i > d ;", "c < b as L < i > > d ;"];
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let got = parses(TAIL_GROUP_OPTIONAL_G4, "s", inputs, &GenerateOptions { prediction });
+        assert got == "b as L < i > ; => (s (e (n b as (t L < (t i) >))) ;)
+c == b as L < i > ; => (s (e (n c) == (n b as (t L < (t i) >))) ;)
+c == b as L < i > d ; => (s (e (n c) == (n b as (t L)) < (n i) > (n d)) ;)
+c < b as L < i > > d ; => (s (e (n c) < (n b as (t L < (t i) >)) > (n d)) ;)
+", got;
+    }
+}
+
 global TAIL_TOKEN_UNKNOWN_CALLER_G4: String = "
 grammar T;
 s : f+ EOF ;
