@@ -258,7 +258,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
         let owner = self.tysys.resolutions.defs().def_at(impl_block.id);
-        let mut bound = Vec::new();
+        let mut binders = Vec::new();
         for param in &impl_block.type_params {
             let Some(slot) = slots.of_name(&param.name) else {
                 continue;
@@ -278,7 +278,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 scope::BinderInScope::declared(slot, type_id, param),
                 Vec::new(),
             );
-            bound.push((param, type_id));
+            binders.push((param, type_id));
         }
         // A bound writing no `Self` is in force before the signatures are
         // bound, which may project off it: `F: fn mut(I::Item) -> U`. A
@@ -308,7 +308,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.release_bounds_here(held);
-        self.check_bound_trait_args(&bound);
+        self.check_bound_trait_args(&binders);
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {

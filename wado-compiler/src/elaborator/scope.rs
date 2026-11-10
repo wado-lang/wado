@@ -1223,7 +1223,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         offset: u32,
     ) -> u32 {
         let mut idx = offset;
-        let mut bound = Vec::new();
+        let mut binders = Vec::new();
         for tp in params.iter().filter(|p| !p.is_effect) {
             // `<F: fn(...)>` binds the parameter directly to the bound's function
             // type: the bound is surface syntax for "F is exactly this
@@ -1248,12 +1248,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             let bounds = self.scoped_bounds(tp);
             self.bind_param(&tp.name, BinderInScope::declared(idx, type_id, tp), bounds);
-            bound.push((tp, type_id));
+            binders.push((tp, type_id));
             if consumed_index {
                 idx += 1;
             }
         }
-        self.check_bound_trait_args(&bound);
+        self.check_bound_trait_args(&binders);
         idx
     }
 

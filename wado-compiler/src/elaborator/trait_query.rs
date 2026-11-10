@@ -2722,12 +2722,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// [`Self::check_trait_ref_arg_bounds`] for every trait each of `bound`
-    /// is bounded by, the type its parameter binds being its `Self`. Every
+    /// [`Self::check_trait_ref_arg_bounds`] for every trait each of `binders`
+    /// is bounded by, the type the parameter binds being its `Self`. Every
     /// parameter is bound first, since a bound may name one declared after its
     /// own.
-    pub(super) fn check_bound_trait_args(&mut self, bound: &[(&ast::GenericParam, TypeId)]) {
-        for &(param, subject) in bound {
+    pub(super) fn check_bound_trait_args(&mut self, binders: &[(&ast::GenericParam, TypeId)]) {
+        for &(param, subject) in binders {
             for bound in param.real_bounds() {
                 let Some(trait_) = self.trait_decl_of(&bound) else {
                     continue;
