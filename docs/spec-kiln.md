@@ -87,6 +87,7 @@ use { highlight as highlight_impl } from "../grammar/Wado.g4"
             ],
             options: {
                 fragment_entries: ["statement"],
+                prediction: "longest",
             },
         },
     };
@@ -812,7 +813,10 @@ and ONNX's text format through the parser Gale builds from a grammar:
 ```wado
 use onnx from "../grammar/Onnx.g4"
     with {
-        generator: { module: "lib:gale" },
+        generator: {
+            module: "lib:gale",
+            options: { prediction: "longest" },
+        },
     };
 ```
 
