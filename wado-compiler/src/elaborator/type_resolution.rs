@@ -1388,14 +1388,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
-        // The `Self` bound a trait's frame gives its own declaration writes no
-        // arguments: there the trait is reached at its own parameters, which
-        // its registered frame holds by identity, not by a name a method's
-        // parameter can shadow.
-        let on_own_self = bound.bound.type_args.is_empty()
-            && self.tysys.type_table.borrow().type_param_id(base)
-                == Some(TypeParamId::trait_self(owner));
-        if on_own_self {
+        // On its own `Self` a trait is reached at its own parameters, which the
+        // bound its frame synthesizes does not write. The registered frame holds
+        // them by identity, which a method parameter's name cannot shadow.
+        if self.tysys.type_table.borrow().type_param_id(base)
+            == Some(TypeParamId::trait_self(owner))
+        {
+            assert!(
+                bound.bound.type_args.is_empty(),
+                "a trait's own `Self` carries only the bound its frame synthesizes"
+            );
             return self.trait_frame(owner)?.params.iter().copied().collect();
         }
         let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
