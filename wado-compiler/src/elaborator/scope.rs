@@ -409,7 +409,8 @@ pub(super) struct TraitContext {
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<DefId>,
     /// The arguments the impl block under walk writes for [`Self::self_trait`]:
-    /// a default body's call reaching that trait asks it at these.
+    /// what that trait's parameters are where a default body's bound names
+    /// them.
     pub(super) self_trait_args: Vec<TypeId>,
     /// Set while the body under walk is a trait's default body, written
     /// against the trait's `Self` rather than this concrete one: what each

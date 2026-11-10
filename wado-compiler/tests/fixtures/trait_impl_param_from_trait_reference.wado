@@ -57,6 +57,29 @@ impl<T: Display, G: Back> Shown<G> for Wrap<T> {
     }
 }
 
+trait Relayed<G: Back> with () {
+    type Next: Relayed<Guest>;
+    fn next(&self) -> Self::Next;
+    fn relayed(&self) -> String;
+
+    // The bound on `Next` names `Guest`, whatever `G` the impl answers at.
+    fn onward(&self) -> String {
+        return self.next().relayed();
+    }
+}
+
+impl<G: Back> Relayed<G> for i32 {
+    type Next = i32;
+
+    fn next(&self) -> i32 {
+        return *self;
+    }
+
+    fn relayed(&self) -> String {
+        return `${*self} relayed on ${G::name()}`;
+    }
+}
+
 trait Tag with () {}
 
 impl Tag for i32 {}
@@ -98,6 +121,7 @@ export fn run() with Stdout {
     println(Shown::<Guest>::twice(&v));
     println(make::<Host, i32>());
     println(make::<Guest, i32>());
+    println(Relayed::<Host>::onward(&v));
     println(Named::<Host>::named(&v));
     println(Named::<Guest>::named(&v));
     println(named::<Guest, i32>(&v));
@@ -108,5 +132,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\ntagged on host\ntagged on guest\ntagged on guest\nw in host\nw in guest\n"
+  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\n1 relayed on guest\ntagged on host\ntagged on guest\ntagged on guest\nw in host\nw in guest\n"
 }

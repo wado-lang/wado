@@ -12,7 +12,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
-    TupleSlot, TypeId,
+    TupleSlot, TypeArgMap, TypeId, TypeParamId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -293,7 +293,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// selected it ([`Elaborator::abstract_selections`]).
     pub(super) fn abstract_selection(&self, call: AstId) -> Option<AbstractSelection> {
         let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
-        selections.get(&call).copied()
+        selections.get(&call).cloned()
+    }
+
+    /// `args`, written in the frame of the trait declaring the default body
+    /// under walk, at the impl that body stands on: the trait's `Self` is the
+    /// impl's target, and each of its parameters the argument the impl writes.
+    fn at_impl_frame(&self, args: &[TypeId]) -> Vec<TypeId> {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        let declaring = trait_ctx
+            .self_trait
+            .expect("a default body is walked for one trait's impl");
+        let mut frame: TypeArgMap = (1..)
+            .zip(&trait_ctx.self_trait_args)
+            .map(|(index, &arg)| (TypeParamId { owner: declaring, index }, arg))
+            .collect();
+        if let Some(self_type) = trait_ctx.self_type {
+            frame.insert(TypeParamId::trait_self(declaring), self_type);
+        }
+        let mut table = self.tysys.type_table.borrow_mut();
+        args.iter()
+            .map(|&arg| table.substitute_type_params(arg, &frame))
+            .collect()
     }
 
     pub(super) fn resolve_method_call(
@@ -402,12 +423,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (None, Some(call)) => self.abstract_selection(call),
             _ => None,
         };
-        let declared_trait = selection.map(|s| {
+        let declared_trait = selection.as_ref().map(|s| {
             let mut required = self.tysys.required_trait(s.trait_decl);
-            // The block's own trait, reached at the arguments it writes.
-            let own = &self.annotate_ctx.trait_ctx.self_trait_args;
-            if self.annotate_ctx.trait_ctx.self_trait == Some(s.trait_decl) && !own.is_empty() {
-                required.args = Some(own.clone());
+            let args = match &s.trait_args {
+                Some(args) => self.at_impl_frame(args),
+                None => self.annotate_ctx.trait_ctx.self_trait_args.clone(),
+            };
+            if !args.is_empty() {
+                required.args = Some(args);
             }
             required
         });
@@ -489,7 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // through a reference reads the subject, so the reference the author
         // wrote selects no `&T` impl. The subject may be a reference itself,
         // where `Self` is the `&T` an impl was written for.
-        let subject = if selection.is_some_and(|s| s.through_ref) {
+        let subject = if selection.as_ref().is_some_and(|s| s.through_ref) {
             self.tysys.type_table.borrow().ref_pointee(receiver)
         } else {
             Some(receiver)
