@@ -1,0 +1,22 @@
+// A discarded statement with no effect reads nothing: a struct pattern in it
+// binding a field keeps the field no more than the statement's value is kept.
+
+use { println, Stdout } from "core:cli";
+
+struct S {
+    a: i32,
+    b: i32,
+}
+
+export fn run() with Stdout {
+    let s = builtin::black_box(S { a: 1, b: 2 });
+    match s { S { a, .. } => a + 1 };
+    println(`${s.b}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "wir_pass": {"O2": ["nir/dead_field"]},
+    "wir_not_expect:O2": ["    mut a: i32,"]
+}

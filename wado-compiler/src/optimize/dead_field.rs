@@ -62,7 +62,7 @@ pub(super) fn remove_dead_fields(project: &mut NirPackage, exec: &Executor) -> b
     };
     let field_slot = FieldSlot::of_package(project);
     let live = live_fields(project, types, field_slot, &summaries, global_calls);
-    let renumbering = renumber(project, types, &live);
+    let renumbering = renumber(project, &live);
     if renumbering.is_empty() {
         return false;
     }
@@ -100,20 +100,12 @@ fn instance_of(types: &TypeTable, type_id: TypeId) -> Option<StructInstance> {
     struct_instance(types.strip_handles(type_id), types)
 }
 
-fn renumber(project: &NirPackage, types: &TypeTable, live: &IndexSet<FieldKey>) -> Renumbering {
+fn renumber(project: &NirPackage, live: &IndexSet<FieldKey>) -> Renumbering {
     let mut renumbering = Renumbering::default();
     for decl in &project.structs {
         let Some(instance) = decl.instance() else {
             continue;
         };
-        if decl
-            .def
-            .decl()
-            .and_then(|def| types.compiler_type_item(def))
-            .is_some_and(CompilerItem::has_backend_layout)
-        {
-            continue;
-        }
         let mut next = 0;
         let map: Vec<Option<u32>> = decl
             .fields_in_order()
@@ -147,10 +139,19 @@ fn live_fields(
     summaries: &FnSummaries,
     global_calls: CallFacts,
 ) -> IndexSet<FieldKey> {
+    let pinned = project.structs.iter().filter(|decl| {
+        decl.def
+            .decl()
+            .and_then(|def| types.compiler_type_item(def))
+            .is_some_and(CompilerItem::has_backend_layout)
+    });
     let mut liveness = Liveness {
         types,
         field_slot,
-        live: IndexSet::default(),
+        live: pinned
+            .filter_map(|decl| Some((decl.instance()?, &decl.fields)))
+            .flat_map(|(instance, fields)| fields.iter().map(move |f| (instance.clone(), f.index)))
+            .collect(),
         held: IndexMap::default(),
         pending: Vec::new(),
     };
@@ -257,9 +258,7 @@ impl Liveness<'_> {
             }
             if let NodeRef::Block(b) = node {
                 for &s in &body.blocks[b].stmts {
-                    if discarded_value(body, b, s)
-                        .is_none_or(|op| !deletable_value(body, op, self.types, calls))
-                    {
+                    if !discards_deletable(body, b, s, self.types, calls) {
                         stack.push(NodeRef::Stmt(s));
                     }
                 }
@@ -372,14 +371,21 @@ impl FieldSlot {
     }
 }
 
-/// What the statement `s` of block `b` computes only to discard: the operand
-/// of an expression statement other than the last, which may be the block's
-/// value. Lowering leaves one for a `_` in a destructuring, say.
-fn discarded_value(body: &Body, b: BlockId, s: StmtId) -> Option<Operand> {
+/// Whether the statement `s` of block `b` computes a deletable value only to
+/// discard it: an expression statement other than the last, which may be the
+/// block's value. Lowering leaves one for a `_` in a destructuring, say. Such a
+/// statement reads nothing, and the rewrite deletes it.
+fn discards_deletable(
+    body: &Body,
+    b: BlockId,
+    s: StmtId,
+    types: &TypeTable,
+    calls: CallFacts,
+) -> bool {
     let StmtKind::Expr(op) = body.stmts[s].kind else {
-        return None;
+        return false;
     };
-    (body.blocks[b].stmts.last() != Some(&s)).then_some(op)
+    body.blocks[b].stmts.last() != Some(&s) && deletable_value(body, op, types, calls)
 }
 
 fn assert_reads_no_field(body: &Body, v: ValueId) {
@@ -443,41 +449,24 @@ impl Rewrite<'_> {
                     self.expr(body, e, &mut locals, &mut built);
                 }
                 NodeRef::Pat(p) => self.pattern(body, p),
-                NodeRef::Block(b) => self.drop_discarded_reads(body, b),
+                NodeRef::Block(b) => self.drop_discarded(body, b),
                 NodeRef::Expr(_) | NodeRef::Stmt(_) => {}
             }
             body.for_each_child(node, |child| stack.push(child));
         }
     }
 
-    /// Drop each statement of block `b` that reads a removed field only to
-    /// discard what it read.
-    fn drop_discarded_reads(&self, body: &mut Body, b: BlockId) {
-        let stmts = body.blocks[b].stmts.clone();
-        let kept: Vec<StmtId> = stmts
+    /// Drop each statement of block `b` that liveness never walked.
+    fn drop_discarded(&self, body: &mut Body, b: BlockId) {
+        let kept: Vec<StmtId> = body.blocks[b]
+            .stmts
             .iter()
             .copied()
-            .filter(|&s| {
-                discarded_value(body, b, s).is_none_or(|op| {
-                    !self.reads_removed_field(body, op)
-                        || !deletable_value(body, op, self.types, self.calls)
-                })
-            })
+            .filter(|&s| !discards_deletable(body, b, s, self.types, self.calls))
             .collect();
-        if kept.len() != stmts.len() {
+        if kept.len() != body.blocks[b].stmts.len() {
             body.blocks[b].stmts = kept;
         }
-    }
-
-    fn reads_removed_field(&self, body: &Body, op: Operand) -> bool {
-        let Operand::Expr(e) = op else {
-            return false;
-        };
-        body.find_in_nodes_under(NodeRef::Expr(e), |node| {
-            let NodeRef::Expr(e) = node else { return None };
-            self.reads(body, e)?.is_none().then_some(())
-        })
-        .is_some()
     }
 
     fn expr(
