@@ -1,0 +1,34 @@
+// A call reaches a cached specialization only if that clone still takes the
+// callee's own parameters, by name.
+//
+// `boundary_at(repr, start, len, index)` is specialized on `start` along one
+// route and on `index` along another, and `dae` drops a different parameter
+// from each clone. Both routes then reach the same bindings. The clone of
+// `(repr, len, index)` was taken to serve a call of `(repr, start, len)`: the
+// types and positions agree, so `slice` tested `len` where it meant `start`,
+// and a valid view failed its contract.
+//
+// The profile marks `StrCharIndicesIter::next` hot and
+// `StrSlice::is_char_boundary` cold, which orders the sites that reach the
+// clone cache.
+
+test "a view's contract tests its own start" {
+    let s: String = "abcdef";
+    let indices: List<[i32, char]> = s.as_str_slice().slice(2, 5).char_indices().collect();
+    assert indices.len() == 3;
+}
+
+test "an unchecked slice beside it" {
+    assert unchecked "hello".slice(2, 2) == "";
+}
+
+test "a floor beside it" {
+    let s = "ab日本";
+    assert s.substr_bytes(0, s.floor_char_boundary(4)) == "ab";
+}
+
+__DATA__
+{
+  "test": {},
+  "profile": "testdata/param_spec_clone_keeps_dropped_params.pgo"
+}
