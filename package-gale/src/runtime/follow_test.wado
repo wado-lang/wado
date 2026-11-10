@@ -62,6 +62,13 @@ test "an empty set admits any kind" {
     assert follow_resumes(&kinds([C]), 0, 3, &t, EOF_KIND);
 }
 
+test "a kind past every named one is in no set" {
+    // `-> type(100)` lexes a kind the stride does not reach.
+    let t = tables();
+    assert !follow_resumes(&kinds([99]), 0, 3, &t, EOF_KIND);
+    assert !follow_yields(&kinds([99]), 0, 1, &t, EOF_KIND);
+}
+
 test "a cut reading needs every position up to the depth" {
     let t = tables();
     assert follow_yields(&kinds([A, B, A, B]), 0, 4, &t, EOF_KIND);

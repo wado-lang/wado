@@ -631,9 +631,11 @@ impl GrammarAnalysis {
             return out;
         }
         let mut star: List<List<Reading>> = [];
+        let mut body: List<Reading> = [];
         for let budget of 0..=k {
+            body = self.readings_of_element(&rep.element, budget, visiting, cycled);
             let mut out = readings_empty(budget);
-            for let h of &self.readings_of_element(&rep.element, budget, visiting, cycled) {
+            for let h of &body {
                 if !h.ends {
                     readings_add(&mut out, *h, budget);
                 } else if !h.kinds.is_empty() {
@@ -646,7 +648,7 @@ impl GrammarAnalysis {
             return star[k];
         }
         let mut out: List<Reading> = [];
-        for let h of &self.readings_of_element(&rep.element, k, visiting, cycled) {
+        for let h of &body {
             if h.ends {
                 reading_then(&mut out, h, &star[k - h.kinds.len()], k);
             } else {

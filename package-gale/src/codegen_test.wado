@@ -2734,6 +2734,23 @@ test "a continuation behind a prefix admits only what the prefix starts with" {
     assert got == "x = [b, c]; => (s (d x = (e (a [ (l (el (e b)) , (el (e c))) ]))) ;)\nx = [b,, c,]; => (s (d x = (e (a [ (l (el (e b) ,) , (el (e c) ,)) ]))) ;)\nx = [b] ! y; => (s (d x = (e (a [ (l (el (e b))) ])) ! y) ;)\n";
 }
 
+global WILDCARD_SHAPE_G4: String = "
+grammar T;
+s : x (A C)* EOF ;
+x : Y (. B? C)? ;
+Y : 'y' ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+WS : ' ' -> skip ;
+";
+
+test "an optional group opening with a wildcard before a nested optional generates" {
+    // The wildcard admits every kind, so no shape signature can test it.
+    let got = parses(WILDCARD_SHAPE_G4, "s", ["y a c", "y a b c", "y a c a c"], &LONGEST);
+    assert got == "y a c => (s (x y a c))\ny a b c => (s (x y a b c))\ny a c a c => (s (x y a c) a c)\n";
+}
+
 test "a rule entry claims its call site's return state before returning early" {
     // Claimed after, a recovering entry would leave the stamp to the next
     // call from a site that stamps none.
