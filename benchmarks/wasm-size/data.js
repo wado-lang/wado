@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794320030821,
+  "lastUpdate": 1794336006326,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76353,6 +76353,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d93739a04b87a9c48a014895af84de120b676ce5"
         },
         "date": 1794320030283,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404534,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c94716d98254790afd025e29ebabdae5e031db68",
+          "message": "Merge pull request #2601 from wado-lang/compiler/default-body-projection-bounds\n\nfix(compiler): default bodies call through projections bounded at the trait's own parameters",
+          "timestamp": "2026-11-11T03:23:36+09:00",
+          "tree_id": "17860928d8c95573c5ef5ef5f35166af51df50ca",
+          "url": "https://github.com/wado-lang/wado/commit/c94716d98254790afd025e29ebabdae5e031db68"
+        },
+        "date": 1794336005113,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
