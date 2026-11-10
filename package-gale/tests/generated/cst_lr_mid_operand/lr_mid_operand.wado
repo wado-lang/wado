@@ -2020,11 +2020,11 @@ pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult
 }
 
 pub fn parse_s<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p, FOLLOW_SITE_2));
 }
 
 pub fn parse_e<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p, FOLLOW_SITE_3));
 }
 
 global CALL_FOLLOW_SETS: List<List<i32>> = [[4], [], [112], [16]];
@@ -2059,10 +2059,12 @@ global EXPECTED_0: List<i32> = [TK_ID];
 
 global FOLLOW_TABLES: FollowTables = FollowTables {
     stride: 1,
-    sets: [4, 16, 1, 112],
-    starts: [0, 3, 12],
-    readings: [0, 3, 0, 2, 5, 1, 2, 8, 1, 2, 3, 2],
+    sets: [4, 16, 1, 112, 116, 5],
+    starts: [0, 3, 12, 18, 24],
+    readings: [0, 3, 0, 2, 5, 1, 2, 8, 1, 2, 3, 2, 0, 8, 0, 0, 0, 0, 8, 8, 4, 5, 4, 5],
 };
 global FOLLOW_SITE_0: i64 = 1;
 global FOLLOW_SITE_1: i64 = 2;
+global FOLLOW_SITE_2: i64 = 3;
+global FOLLOW_SITE_3: i64 = 4;
 
