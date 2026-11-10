@@ -5,7 +5,7 @@
 
 use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
 use { Admits, Diagnostics, Rule, admits_or_everything } from "./gir.wado";
-use { RuleOverlap, ambiguity_routes, rule_overlap_groups } from "./rule_overlap.wado";
+use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
@@ -15,8 +15,7 @@ use {
     DecisionPredicates,
     PredicateSite,
     alt_has_gate,
-    MetGates,
-    alt_met_gates,
+    alt_meets_gate,
     alt_scan_gate_conditions,
     gate_condition_for,
     predicates_met_entering,
@@ -389,27 +388,11 @@ impl EmitContext {
     }
 
     /// Whether an `Ambiguous` node's decision is a runtime-ATN prediction.
-    pub fn ambiguous_routes_via_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
-        return !self.settings.atn.verifies() && self.ambiguous_reaches_atn(a, rule_name);
-    }
-
-    /// Whether the tournament's pick at an `Ambiguous` node is checked against
-    /// the simulator, which `auto` would hand the decision to.
-    pub fn ambiguous_checked_by_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
-        return self.settings.atn.verifies() && self.ambiguous_reaches_atn(a, rule_name);
-    }
-
-    fn ambiguous_reaches_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
-        if !self.plan.needs_atn
-            || self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) < 0
-            || self.atn_body_alt_numbers(&a.alts) matches { None } {
-            return false;
-        }
-        let alts = &self.current_rule().alternatives;
-        let simulator_weighs: List<i32> = a.alts.into_iter().filter(
-            |i| self.alt_met_gates(&alts[i]) matches { Simulator },
-        ).collect();
-        return ambiguity_routes(a, rule_name, &self.follow, self.settings.atn, &simulator_weighs);
+    pub fn ambiguous_routes_via_atn(&self, a: &AmbiguousNode) -> bool {
+        return self.settings.prediction.asks_simulator()
+            && self.plan.needs_atn
+            && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0
+            && self.atn_body_alt_numbers(&a.alts) matches { Some(_) };
     }
 
     /// The number the simulator answers each of the current rule's `alts` by
@@ -452,7 +435,7 @@ impl EmitContext {
             return true;
         }
         return exit.reaches_end
-            && self.follow.at_end_conflict_routes(&self.analysis.parser_rules()[exit.rule].name, kinds);
+            && self.follow.caller_may_continue_on(&self.analysis.parser_rules()[exit.rule].name, kinds);
     }
 
     /// Where an alternative of the rule being emitted renders its predicates.
@@ -472,12 +455,6 @@ impl EmitContext {
     /// `gate_conditions::alt_has_gate` for an alternative of the rule being emitted.
     pub fn alt_has_gate(&self, alt: &Alternative) -> bool {
         return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
-    }
-
-    /// `gate_conditions::alt_met_gates` for an alternative of the rule being
-    /// emitted.
-    pub fn alt_met_gates(&self, alt: &Alternative) -> MetGates {
-        return alt_met_gates(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
     /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
@@ -501,8 +478,9 @@ impl EmitContext {
 
     /// `rule_overlap::rule_overlap_groups` for the rule being emitted.
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
-        let met_gates = |alt: &Alternative| self.alt_met_gates(alt);
-        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, met_gates);
+        let site = self.predicate_site();
+        let meets_gate = |alt: &Alternative| alt_meets_gate(alt, &self.settings, &self.analysis, &site);
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, meets_gate);
     }
 
     /// Whether `rule` gets a value channel emitted: action execution is on and the
