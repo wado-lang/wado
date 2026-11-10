@@ -1,0 +1,21 @@
+//! The same impl as `from_param_source_selects_instance.wado`, written over a
+//! reference. A top-level shape test once read `&T` as concrete and mangled
+//! the unsubstituted spelling; the reference is peeled before the instance is
+//! named, so both spellings answer alike.
+
+struct W {
+    shown: String,
+}
+
+impl<T: Display> From<&T> for W {
+    fn from(value: &T) -> W {
+        return W { shown: `${*value}` };
+    }
+}
+
+test {
+    let s = "x";
+    assert W::from(&s).shown == "x";
+    let n = 5;
+    assert W::from(&n).shown == "5";
+}

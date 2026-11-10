@@ -926,19 +926,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A static reachable only through a blanket impl generic in the
-    /// parameter it declares (`impl<T: Display> From<T> for Wrapper`).
-    /// Selecting the instantiation from the argument's type is phase-4 work
-    /// (WEP 2026-07-31); until then the call is rejected rather than reaching
-    /// WIR build unresolved.
-    UnsupportedBlanketInstantiation {
-        trait_name: String,
-        receiver: String,
-        method: String,
-        arg_type: String,
-        span: Span,
-    },
-
     /// A method's own type parameters that the arguments do not settle. Left
     /// unspelled they reach codegen unsubstituted.
     UninferredMethodTypeArgs {
@@ -2367,19 +2354,6 @@ impl TypeError {
                         .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
-                ),
-                *span,
-            ),
-            TypeError::UnsupportedBlanketInstantiation {
-                trait_name,
-                receiver,
-                method,
-                arg_type,
-                span,
-            } => (
-                Code::TraitDeclInvalid,
-                format!(
-                    "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
                 ),
                 *span,
             ),

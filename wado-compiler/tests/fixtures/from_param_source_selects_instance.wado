@@ -1,0 +1,18 @@
+// A `From` impl generic in its source type is instantiated at the argument's
+// type: `ByAny::from(42)` reaches `impl<T: Display> From<T> for ByAny` at
+// `T = i32`. This once compiled past the elaborator and ICEd at WIR build
+// ("unresolved Call"), then was refused as unsupported.
+struct ByAny {
+    shown: String,
+}
+
+impl<T: Display> From<T> for ByAny {
+    fn from(value: T) -> ByAny {
+        return ByAny { shown: `${value}` };
+    }
+}
+
+test {
+    assert ByAny::from(42).shown == "42";
+    assert ByAny::from("s").shown == "s";
+}

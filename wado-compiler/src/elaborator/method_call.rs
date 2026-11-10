@@ -3119,7 +3119,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A newtype offering nothing of its own answers with its base's impls,
         // as the resolution does, so the survey reads them there.
         if survey.candidates.is_empty()
-            && survey.blanket_trait.is_none()
             && let key = self.static_receiver_key(struct_name, recv.key)
             && let Some((base_key, base_name)) = self.newtype_base_target(&key)
         {
@@ -3133,16 +3132,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.report_unmatched_static_arg(base_recv, method_name, &base_arg_types, span);
         }
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
-        if let Some(trait_name) = survey.blanket_trait {
-            let _ = self.emit(TypeError::UnsupportedBlanketInstantiation {
-                trait_name,
-                receiver: struct_name.to_string(),
-                method: method_name.to_string(),
-                arg_type: spelled,
-                span,
-            });
-            return true;
-        }
         // The trait the first candidate names. Where several traits supply the
         // name the call is an overload, reported before it reaches here.
         let Some(trait_name) = survey.candidates.first().map(|c| c.trait_name.clone()) else {
@@ -3356,8 +3345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let params = match offer.selector {
                 Selector::Absent => continue,
                 Selector::Blanket => {
-                    survey.blanket_trait.get_or_insert_with(trait_name);
-                    continue;
+                    unreachable!("a block offers the body it wrote or inherits, never a blanket's")
                 }
                 Selector::Params(params) => params,
             };
@@ -4050,7 +4038,4 @@ impl<'a> StaticReceiver<'a> {
 #[derive(Default)]
 pub(super) struct StaticArgSurvey {
     pub(super) candidates: Vec<ArgCandidate>,
-    /// The trait of a blanket impl among them, which admits every argument and
-    /// is therefore no alternative to list.
-    pub(super) blanket_trait: Option<String>,
 }
