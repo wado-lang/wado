@@ -602,9 +602,10 @@ impl Query<'_> {
             .iter()
             .flatten()
             .map(|binding| params_past(&binding.as_type()))
-            .chain([params_past(met), self.env.param_bounds.len() as u32])
-            .max()
-            .unwrap_or(0);
+            .fold(
+                params_past(met).max(self.env.param_bounds.len() as u32),
+                u32::max,
+            );
         let open = projection.map_params(&|i| {
             Some(match bindings.get(i as usize)? {
                 Some(binding) => binding.as_type(),
@@ -628,8 +629,10 @@ impl Query<'_> {
         let nested: Option<Vec<(SolverType, SolverType)>> = nested
             .into_iter()
             .map(|(projection, met)| {
-                let own = projection.map_params(&|i| i.checked_sub(past).map(SolverType::Param))?;
-                Some((own, met))
+                Some((
+                    projection.map_params(&|i| i.checked_sub(past).map(SolverType::Param))?,
+                    met,
+                ))
             })
             .collect();
         let Some(nested) = nested else {
@@ -1099,9 +1102,10 @@ fn params_past(ty: &SolverType) -> u32 {
             inner.iter().map(params_past).max().unwrap_or(0)
         }
         SolverType::Ref { inner, .. } => params_past(inner),
-        SolverType::Projection { base, args, .. } => {
-            args.iter().map(params_past).fold(params_past(base), u32::max)
-        }
+        SolverType::Projection { base, args, .. } => args
+            .iter()
+            .map(params_past)
+            .fold(params_past(base), u32::max),
     }
 }
 

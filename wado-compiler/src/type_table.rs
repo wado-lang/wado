@@ -6546,8 +6546,10 @@ impl TypeTable {
     /// trait arguments set one, so its instances differ by them alone.
     pub fn impl_trait_sets_params(&self, def: DefId) -> bool {
         let target = self.impl_target(def);
-        let in_target = if matches!(self.get(target.whole), ResolvedType::AssocTypeProjection { .. })
-        {
+        let in_target = if matches!(
+            self.get(target.whole),
+            ResolvedType::AssocTypeProjection { .. }
+        ) {
             IndexSet::default()
         } else {
             self.type_params_in(target.whole)

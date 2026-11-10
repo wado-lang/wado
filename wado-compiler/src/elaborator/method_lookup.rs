@@ -1972,10 +1972,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn bind_from_slots(
         scope: &mut scope::TypeParamScope<'_, '_, H>,
         header: &ImplHeader,
+        slots: &ImplParamSlots,
         owner: DefId,
         filled: &TypeArgMap,
     ) -> bool {
-        let slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let mut bound_any = false;
         for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
             if scope
@@ -2186,6 +2186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Extract type param mappings from the impl header before mutating self.
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
+        let param_slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let impl_struct_name = self.get_type_name(&header.ty);
         let is_blanket_type_param = matches!(
             &header.ty,
@@ -2297,7 +2298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow_mut()
                     .impl_slots(impl_ref.0, type_args);
-                Self::bind_from_slots(&mut scope, header, impl_ref.0, &filled);
+                Self::bind_from_slots(&mut scope, header, &param_slots, impl_ref.0, &filled);
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
             // map the pack to a TypePack so that the method body can reference it.
@@ -2359,10 +2360,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .bind_impl_slots_asked(impl_ref.0, asked, receiver, &mut slots);
-            if Self::bind_from_slots(&mut scope, header, impl_ref.0, &slots) {
+            if Self::bind_from_slots(&mut scope, header, &param_slots, impl_ref.0, &slots) {
                 impl_slot_args = impl_args_in_slot_order(
                     impl_ref.0,
-                    ImplParamSlots::of(&header.ty, &header.type_params).count(),
+                    param_slots.count(),
                     &Self::frame_slots(&scope, impl_ref.0),
                     receiver_type_args.unwrap_or_default(),
                 )
