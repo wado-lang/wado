@@ -1368,9 +1368,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_name: &str,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
-        if let Some(own) = self.own_declaration_args(base, owner) {
-            return Some(own);
-        }
         if let Some((bound, space)) = self
             .bound_closure_of(base_name)
             .unwrap_or_default()
@@ -1382,31 +1379,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.projection_base_trait_args(base, owner)
     }
 
-    /// With `base` the `Self` of `owner`'s own declaration, the arguments
-    /// `owner` is reached at: its own parameters, which the `Self` bound the
-    /// frame gives the declaration does not write. `None` for any other base.
-    fn own_declaration_args(&self, base: TypeId, owner: DefId) -> Option<Vec<TypeId>> {
-        let own_self = self.tysys.type_table.borrow().type_param_id(base)
-            == Some(TypeParamId::trait_self(owner));
-        if !own_self {
-            return None;
-        }
-        let binders = &self.annotate_ctx.trait_ctx.type_params;
-        let args = self
-            .tysys
-            .trait_env
-            .trait_type_params(owner)
-            .iter()
-            .map(|param| {
-                binders
-                    .get(&param.name)
-                    .expect("a trait's own frame binds each of its parameters")
-                    .type_id
-            })
-            .collect();
-        Some(args)
-    }
-
     /// The arguments the bound `owner` on `base`, written in `space`, reaches
     /// its trait at, defaults filled. `None` where one names no type.
     pub(super) fn bound_trait_args(
@@ -1416,8 +1388,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
-        if let Some(own) = self.own_declaration_args(base, owner) {
-            return Some(own);
+        // The `Self` bound a trait's frame gives its own declaration writes no
+        // arguments: there the trait is reached at its own parameters, which
+        // its registered frame holds by identity, not by a name a method's
+        // parameter can shadow.
+        let on_own_self = bound.bound.type_args.is_empty()
+            && self.tysys.type_table.borrow().type_param_id(base)
+                == Some(TypeParamId::trait_self(owner));
+        if on_own_self {
+            return self.trait_frame(owner)?.params.iter().copied().collect();
         }
         let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
         self.trait_args_at(owner, base, &written)

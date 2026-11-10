@@ -31,6 +31,12 @@ trait Shown<G: Back> with () {
     fn onward(&self) -> String {
         return self.next().shown();
     }
+
+    // The method's own `G` is not the trait's: `Next` stays at the trait's.
+    #[allow(shadowed_name)]
+    fn onward_with<G: Back>(&self) -> String {
+        return `${self.next().shown()} via ${G::name()}`;
+    }
 }
 
 impl<G: Back> Shown<G> for i32 {
@@ -91,11 +97,12 @@ export fn run() with Stdout {
     let v: i32 = 1;
     println(Shown::<Host>::onward(&v));
     println(Shown::<Guest>::onward(&v));
+    println(Shown::<Host>::onward_with::<Guest>(&v));
     let p = Pair { left: Leaf { n: 4 } };
     println(`${p.part_scale()}`);
 }
 
 __DATA__
 {
-  "stdout": "2 on host\n2 on guest\n40\n"
+  "stdout": "2 on host\n2 on guest\n2 on host via guest\n40\n"
 }
