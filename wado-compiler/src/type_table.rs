@@ -3526,7 +3526,7 @@ impl TypeTable {
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
     /// parameter as its argument in `args`, which name a prefix of them.
-    fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
+    pub fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
         assert!(
             args.len() <= frame.params.len(),
             "a trait is reached at no more arguments than it has parameters"

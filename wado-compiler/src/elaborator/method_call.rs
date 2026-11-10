@@ -12,10 +12,11 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
-    TupleSlot, TypeArgMap, TypeId, TypeParamId,
+    TupleSlot, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
+use std::sync::Arc;
 
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
@@ -301,19 +302,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// impl's target, and each of its parameters the argument the impl writes.
     fn at_impl_frame(&self, args: &[TypeId]) -> Vec<TypeId> {
         let trait_ctx = &self.annotate_ctx.trait_ctx;
-        let declaring = trait_ctx
-            .self_trait
-            .expect("a default body is walked for one trait's impl");
-        let mut frame: TypeArgMap = (1..)
-            .zip(&trait_ctx.self_trait_args)
-            .map(|(index, &arg)| (TypeParamId { owner: declaring, index }, arg))
-            .collect();
-        if let Some(self_type) = trait_ctx.self_type {
-            frame.insert(TypeParamId::trait_self(declaring), self_type);
-        }
+        let (Some(declaring), Some(self_type)) = (trait_ctx.self_trait, trait_ctx.self_type) else {
+            unreachable!("a default body is walked for one trait's impl on one target")
+        };
         let mut table = self.tysys.type_table.borrow_mut();
+        let frame = Arc::clone(
+            table
+                .trait_frame(declaring)
+                .expect("a trait's frame is registered before a body reads it"),
+        );
+        let slots = table.frame_slots(&frame, self_type, &trait_ctx.self_trait_args);
         args.iter()
-            .map(|&arg| table.substitute_type_params(arg, &frame))
+            .map(|&arg| table.substitute_type_params(arg, &slots))
             .collect()
     }
 
