@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794305126200,
+  "lastUpdate": 1794320030821,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76309,6 +76309,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8ccca30f297a70cb83919a8973a1b45d692deb07"
         },
         "date": 1794305124965,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404534,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d93739a04b87a9c48a014895af84de120b676ce5",
+          "message": "Merge pull request #2600 from wado-lang/compiler/impl-on-projection\n\nfix(compiler): bind impl parameters only the trait reference names",
+          "timestamp": "2026-11-10T22:54:58+09:00",
+          "tree_id": "9f5167ee4af9e6e043528d18ba2237a4fbf2d2d8",
+          "url": "https://github.com/wado-lang/wado/commit/d93739a04b87a9c48a014895af84de120b676ce5"
+        },
+        "date": 1794320030283,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
