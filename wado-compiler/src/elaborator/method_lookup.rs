@@ -3585,7 +3585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let key: Vec<TypeId> = concrete_type_args
                         .iter()
                         .copied()
-                        .chain(expected_index_type)
+                        .chain(Some(expected_index_type?))
                         .collect();
                     let slots = s.tysys.type_table.borrow_mut().impl_slots(block, &key);
                     let settled = s
@@ -3593,11 +3593,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .signatures
                         .impl_sig(block)
                         .instantiate_slots(&s.tysys.type_table, &slots);
-                    if expected_index_type.is_none()
-                        || settled.trait_type_args.first().copied() != expected_index_type
-                    {
-                        return None;
-                    }
                     (Cow::Owned(settled), slots)
                 } else {
                     (Cow::Borrowed(impl_sig), TypeArgMap::default())
