@@ -6647,7 +6647,8 @@ impl TypeTable {
     /// holds against `receiver`. A target projecting off a parameter binds
     /// only this way: `G::Of<E>` reads `Boxed<E>` once `G` is `Host`, and
     /// `Boxed<f32>` then fills `E`. What one read fills can settle another
-    /// projection's base, so the target is read until nothing more fills.
+    /// projection's base, or a slot a bound projects (`X` in
+    /// `impl<T: Left<Out = X>, X>`), so both are read until nothing more fills.
     pub fn bind_impl_slots_asked(
         &mut self,
         def: DefId,
@@ -6660,6 +6661,7 @@ impl TypeTable {
             let filled = slots.len();
             let target = self.substitute_type_params(self.impl_target_whole(def), slots);
             self.bind_each_into(&[target], &[receiver], slots);
+            self.project_impl_slots(def, slots);
             if slots.len() == filled {
                 return;
             }

@@ -95,6 +95,31 @@ impl<T: Tag, G: Back> Named<G> for T {
     }
 }
 
+trait Left with () {
+    type Out;
+}
+
+struct Unit {}
+
+impl Left for Unit {
+    type Out = i32;
+}
+
+trait Defaulted<G: Back> with () {
+    fn defaulted(&self) -> String;
+}
+
+// `X` is projected off `T` by its bound, once the receiver binds `T`.
+impl<T: Left<Out = X>, X: Default + Display, G: Back> Defaulted<G> for T {
+    fn defaulted(&self) -> String {
+        return `${X::default()} on ${G::name()}`;
+    }
+}
+
+fn defaulted<G: Back, V: Defaulted<G>>(v: &V) -> String {
+    return v.defaulted();
+}
+
 trait Duo<A, B> with () {
     fn duo(&self) -> String;
 }
@@ -145,6 +170,9 @@ export fn run() with Stdout {
     println(named::<Guest, i32>(&v));
     println(Duo::<Host, Guest>::duo(&v));
     println(Duo::<Guest, Host>::duo(&v));
+    let u = Unit {};
+    println(Defaulted::<Host>::defaulted(&u));
+    println(defaulted::<Guest, Unit>(&u));
     let w = Wrap::<String> { v: "w" };
     println(Shown::<Host>::shown(&w));
     println(show::<Guest, Wrap<String>>(&w));
@@ -152,5 +180,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\n1 relayed on guest\ntagged on host\ntagged on guest\ntagged on guest\nexact on guest\nblanket\nw in host\nw in guest\n"
+  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\n1 relayed on guest\ntagged on host\ntagged on guest\ntagged on guest\nexact on guest\nblanket\n0 on host\n0 on guest\nw in host\nw in guest\n"
 }
