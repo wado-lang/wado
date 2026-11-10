@@ -104,14 +104,15 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &Has
     }
     let mut sets: List<List<i32>> = [];
     let mut masks: List<String> = [];
-    for let entry of ctx.tables.follow_masks() {
-        let name = follow_mask_name(entry.id);
+    let all_masks = ctx.tables.follow_masks();
+    for let mut mask_id = 0; mask_id < all_masks.len(); mask_id += 1 {
+        let name = follow_mask_name(mask_id);
         if !used.contains(name) {
             continue;
         }
         let mut packed: i64 = 0;
         let mut slot = 0;
-        for let depth_set of &entry.mask {
+        for let depth_set of &all_masks[mask_id] {
             let id = intern_position_set(&mut sets, depth_set) + 1;
             assert id <= FOLLOW_MAX_POSITION_ID;
             packed |= id as i64 << (slot * FOLLOW_SLOT_BITS) as i64;

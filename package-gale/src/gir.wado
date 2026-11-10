@@ -850,10 +850,9 @@ pub struct CallerLoop {
     /// What follows the loop, never `NoFollow`.
     pub exit: FollowArg,
     /// `FOLLOW_MASK_<id>` starting with every kind the continuation can start
-    /// with. A deep chain of loops pushes the forwarded continuation past the
-    /// last slot, and with it the readings that end the caller's statement;
-    /// this stands in for them as an open reading. `null` where a kind is not
-    /// known.
+    /// with. A chain of loops can push the readings of the forwarded
+    /// continuation past the last slot; this stands in for them as an open
+    /// reading. `null` where a kind is not known.
     pub spill: Option<i32>,
 }
 

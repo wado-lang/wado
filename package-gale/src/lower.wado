@@ -375,11 +375,7 @@ fn loop_tail_follow(ctx: &mut LowerContext, rep: &RepeatElement, exit: FollowArg
 
 fn caller_loop(ctx: &mut LowerContext, loop_mask: i32, exit: FollowArg) -> CallerLoop {
     let mut heads = ctx.tables.follow_mask_head(loop_mask);
-    let spill = if continuation_heads_into(ctx, &exit, &mut heads) {
-        ctx.intern_follow_mask(&[heads]);
-    } else {
-        null;
-    };
+    let spill = if continuation_heads_into(ctx, &exit, &mut heads) { ctx.intern_follow_mask(&[heads]) } else { null };
     return CallerLoop { loop_mask, exit, spill };
 }
 

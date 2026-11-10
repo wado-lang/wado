@@ -18,19 +18,6 @@ pub struct KindSetEntry {
     pub tokens: List<i32>,
 }
 
-/// A runtime FOLLOW-continuation mask interned during parser codegen.
-/// Each distinct K-prefix mask is emitted once, as the packed `i64`
-/// `FOLLOW_MASK_<id>` (`gen_follow_mask_globals`) that repair call sites
-/// compose into their continuation. Interning the mask (not rule×mask)
-/// keeps the generated-parser growth proportional to the number of
-/// distinct continuations, not the call graph.
-pub struct FollowMaskEntry {
-    pub id: i32,
-    /// Canonical per-depth token sets, as kind ids. `mask[d]` lists the kinds
-    /// valid at depth `d` of the caller's continuation; emitted as `TK_*` names.
-    pub mask: List<List<i32>>,
-}
-
 /// Maximum K-prefix depth carried into `intern_follow_mask` for the
 /// multi-token follow-mask path. Bounds the runtime peek; deeper
 /// continuations are truncated (the deepest tokens are the cheapest to
@@ -44,9 +31,15 @@ pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
 pub struct TableRegistry {
     kind_sets: HashMap<List<i32>, KindSetEntry>,
     sync_sets: HashMap<List<i32>, KindSetEntry>,
-    follow_masks: HashMap<List<List<i32>>, FollowMaskEntry>,
-    /// Each interned mask, indexed by its id.
-    follow_mask_by_id: List<List<List<i32>>>,
+    /// The id of each interned mask.
+    follow_mask_ids: HashMap<List<List<i32>>, i32>,
+    /// The runtime FOLLOW-continuation masks, indexed by id: per depth `d`,
+    /// the canonical kinds valid at depth `d` of the caller's continuation.
+    /// Each is emitted once, as the packed `i64` `FOLLOW_MASK_<id>`
+    /// (`gen_follow_mask_globals`) that call sites compose into their
+    /// continuation, so the generated parser grows with the distinct
+    /// continuations rather than with the call graph.
+    follow_masks: List<List<List<i32>>>,
 }
 
 impl TableRegistry {
@@ -55,8 +48,8 @@ impl TableRegistry {
         return TableRegistry {
             kind_sets: HashMap::new(),
             sync_sets: HashMap::new(),
-            follow_masks: HashMap::new(),
-            follow_mask_by_id: [],
+            follow_mask_ids: HashMap::new(),
+            follow_masks: [],
         };
     }
 
@@ -116,24 +109,24 @@ impl TableRegistry {
         for let mut d = 0; d <= last_constrained; d += 1 {
             canonical.push(depths[d]);
         }
-        if let Some(entry) = self.follow_masks.get(canonical) {
-            return Option::<i32>::Some(entry.id);
+        if let Some(id) = self.follow_mask_ids.get(canonical) {
+            return Option::<i32>::Some(id);
         }
         let id = self.follow_masks.len();
-        self.follow_mask_by_id.push(canonical);
-        self.follow_masks[canonical] = FollowMaskEntry { id, mask: canonical };
+        self.follow_mask_ids[canonical] = id;
+        self.follow_masks.push(canonical);
         return Option::<i32>::Some(id);
     }
 
     /// The positions `FOLLOW_MASK_<id>` constrains — where a continuation
     /// composed behind it starts.
     pub fn follow_mask_positions(&self, id: i32) -> i32 {
-        return self.follow_mask_by_id[id].len();
+        return self.follow_masks[id].len();
     }
 
     /// The kinds `FOLLOW_MASK_<id>` starts with.
     pub fn follow_mask_head(&self, id: i32) -> List<i32> {
-        return self.follow_mask_by_id[id][0];
+        return self.follow_masks[id][0];
     }
 
     /// At `FOLLOW_MAX_DEPTH` the mask is the whole gate, since `follow_yields`
@@ -142,9 +135,9 @@ impl TableRegistry {
         return self.follow_mask_positions(id) >= FOLLOW_MAX_DEPTH;
     }
 
-    /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.
-    pub fn follow_masks(&self) -> List<FollowMaskEntry> {
-        return self.follow_masks.values().iter_value().collect();
+    /// The interned FOLLOW masks, indexed by id.
+    pub fn follow_masks(&self) -> List<List<List<i32>>> {
+        return self.follow_masks;
     }
 }
 
