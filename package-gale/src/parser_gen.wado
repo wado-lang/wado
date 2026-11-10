@@ -2328,15 +2328,33 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
             `(${kind_at("tokens", "pos + 1")})`,
             ctx,
         );
-    } else {
+    } else if !re.gate_caller_follow || !re.body_scannable {
         scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx);
+    } else if repeat_body_implied_by_guard(&re.body, &loop_admits) && re.duties.is_empty() {
+        let again = loop_resumes_first(&re.caller_follow_first, &loop_admits);
+        `${scan_repeat_guard(&loop_admits, "", ctx)} && ${leaf_enters_while_viable(ctx, &again, "tokens", "tokens", "pos")}`;
+    } else {
+        scan_repeat_guard(&loop_admits, "", ctx);
     };
     if guard == "false" {
         return;
     }
     w.begin(`while ${guard}`);
     gen_scan_iteration(w, re, &loop_admits, ctx, true);
+    if scan_loops_while_viable(re, &loop_admits) {
+        let again = loop_resumes_first(&re.caller_follow_first, &loop_admits);
+        let resumes = continuation_resumes_at(ctx, &again, "tokens", "tokens", "pos");
+        gen_scan_rewind_break(w, ctx, "sp", `${follow_yields_call("tokens", "sp")} && !${resumes}`);
+    }
     w.end();
+}
+
+/// The scan's twin of `gen_caller_follow_gate`, for a greedy loop whose
+/// iteration `gen_scan_iteration` marks at `sp`: one it walks rather than one
+/// token the guard proves.
+fn scan_loops_while_viable(re: &ScanRepeatElement, loop_admits: &Admits) -> bool {
+    return re.gate_caller_follow && re.body_scannable && !re.atn_decides && !re.non_greedy
+        && !(repeat_body_implied_by_guard(&re.body, loop_admits) && re.duties.is_empty());
 }
 
 /// The scan's twin of `enters_while_viable`, for a body longer than the one
@@ -4978,7 +4996,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         w.begin("loop");
         w.line("if p.recovering { break; }");
         if ctx.current_rule_reads_follow() {
-            gen_caller_follow_gate(w, r);
+            gen_caller_follow_gate(w, r, ctx, nc);
         }
         if let Group(g) = &r.body {
             // Where the body has alternatives its own decision is the guard:
@@ -5009,10 +5027,6 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
     let follow_gate = ctx.current_rule_reads_follow() && r.gate_caller_follow;
-    let cond = gate_cond_with_caller_follow(
-        &body_guard_cond(r, ctx),
-        follow_gate,
-    );
     if let Optional = r.kind {
         gen_op_optional(w, r, ctx, nc, follow_gate);
         return;
@@ -5023,7 +5037,10 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         w.end();
         gen_loop_back_sync(w, ctx, r);
     }
-    w.begin(`while !p.recovering && ${and_operand(cond)}`);
+    w.begin(`while !p.recovering && ${and_operand(body_guard_cond(r, ctx))}`);
+    if follow_gate {
+        gen_caller_follow_gate(w, r, ctx, nc);
+    }
     gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
     gen_loop_back_sync(w, ctx, r);
     w.end();
@@ -6576,34 +6593,55 @@ fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     return `(!${follow_yields_call(tokens, pos)} || ${resumes})`;
 }
 
-/// Runtime caller-FOLLOW yield gate at a tail-greedy Repeat's
-/// iteration entry. The mask is not compiled into the body; it arrives
-/// at runtime through the function's `follow` argument. Inert when
-/// `follow` is empty (`&EMPTY_FOLLOW`), so non-repair callers see no
-/// behaviour change; a repair caller that threaded in a
-/// `FOLLOW_MASK_<id>` makes the loop yield its caller's continuation.
-/// Emitted only when lower marked the Repeat tail-position
-/// (`gate_caller_follow`).
-fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
-    if rep_op.gate_caller_follow {
-        w.line(
-            `if ${follow_yields_call("&p.kinds", "p.pos")} { break; }`,
-        );
+/// Runtime caller-FOLLOW yield gate at a tail-greedy loop's iteration entry,
+/// emitted only where lower marked the loop tail-position
+/// (`gate_caller_follow`). The loop yields where the caller's continuation
+/// starts, unless the iteration keeps a parse viable: another iteration or the
+/// continuation starts where it ends. ANTLR4 resolves that ambiguity by
+/// looping, as `optional_entry_yielding` does by entering. A body the scan
+/// cannot walk yields wherever the continuation starts.
+fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
+    if !rep_op.gate_caller_follow {
+        return;
     }
+    let yields = follow_yields_call("&p.kinds", "p.pos");
+    if !rep_op.body_scannable {
+        w.line(`if ${yields} { break; }`);
+        return;
+    }
+    w.begin(`if ${yields}`);
+    let end = gen_scan_guard_with_prefix(w, &rep_op.scan_body, ctx, nc, "iter_scan_pos", "iter_scan", false);
+    let resumes = continuation_resumes_at(ctx, &loop_resumes_first(&rep_op.caller_follow_first, &rep_op.body_admits), "&p.kinds", "p.kinds", &end);
+    w.line(`if ${end} < 0 || !${resumes} { break; }`);
+    w.end();
+}
+
+/// What may start where a loop's iteration ends, short of the caller: the rest
+/// of its alternative, or another iteration.
+fn loop_resumes_first(local_first: &List<i32>, body_admits: &Admits) -> List<i32> {
+    let mut kinds = *local_first;
+    dedup_append_arr(&mut kinds, &admits_enumerated(body_admits));
+    return kinds;
 }
 
 /// The same gate where a `+`'s mandatory first iteration shares the loop body:
 /// that iteration is required, so it cannot yield to the caller.
-fn gen_iter_caller_follow_gate<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, plus_flag: S) {
+fn gen_iter_caller_follow_gate<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    plus_flag: S,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+) {
     if !rep_op.gate_caller_follow {
         return;
     }
     if plus_flag.is_empty() {
-        gen_caller_follow_gate(w, rep_op);
+        gen_caller_follow_gate(w, rep_op, ctx, nc);
         return;
     }
     w.begin(`if !${plus_flag}`);
-    gen_caller_follow_gate(w, rep_op);
+    gen_caller_follow_gate(w, rep_op, ctx, nc);
     w.end();
 }
 
@@ -6697,7 +6735,7 @@ fn gen_op_repeat_star_plus_greedy(
     } else if is_plus && body matches { Storable(_) } {
         let plus_flag = begin_plus_flag(w, name_counts);
         w.begin(`while !p.recovering && (${plus_flag} || ${body_guard_cond(rep_op, ctx)})`);
-        gen_iter_caller_follow_gate(w, rep_op, &plus_flag);
+        gen_iter_caller_follow_gate(w, rep_op, &plus_flag, ctx, name_counts);
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, GroupEntry::Looped(plus_flag));
     } else {
         if is_plus {
@@ -6707,7 +6745,7 @@ fn gen_op_repeat_star_plus_greedy(
             gen_loop_back_sync(w, ctx, rep_op);
         }
         w.begin(`while !p.recovering && ${and_operand(body_guard_cond(rep_op, ctx))}`);
-        gen_caller_follow_gate(w, rep_op);
+        gen_caller_follow_gate(w, rep_op, ctx, name_counts);
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, looped(), null, &admits_kinds(&rep_op.body_admits));
     }
     gen_loop_back_sync(w, ctx, rep_op);
@@ -6781,12 +6819,13 @@ fn gen_loop_static_enters(
     // Every `break` below is an exit the static path takes.
     w.begin("loop");
     if !repeat_is_scan_guarded(r, ctx) {
-        let cond = gate_cond_with_caller_follow(&body_guard_cond(r, ctx), ctx.current_rule_reads_follow()
-            && r.gate_caller_follow);
-        w.line(`if ${negate_cond(&cond)} { break; }`);
+        w.line(`if ${negate_cond(&body_guard_cond(r, ctx))} { break; }`);
+        if ctx.current_rule_reads_follow() {
+            gen_caller_follow_gate(w, r, ctx, nc);
+        }
     } else {
         if ctx.current_rule_reads_follow() {
-            gen_caller_follow_gate(w, r);
+            gen_caller_follow_gate(w, r, ctx, nc);
         }
         let decided = if let Group(g) = &r.body {
             op_group_alt_decision(g, ctx);
@@ -7011,7 +7050,7 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
     if guarded_only {
         w.begin(`if !${plus_flag}`);
     }
-    gen_caller_follow_gate(w, rep_op);
+    gen_caller_follow_gate(w, rep_op, ctx, name_counts);
     let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.duties, &rep_op.body_admits, ctx, name_counts);
     // `Always`, though a `+` has a flag: the whole guard sits inside
     // `if !plus_flag`, which already excluded the mandatory iteration.
@@ -7060,7 +7099,7 @@ fn gen_rep_speculative_iteration(
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
 ) {
-    gen_caller_follow_gate(w, rep_op);
+    gen_caller_follow_gate(w, rep_op, ctx, nc);
     let guard = body_guard_cond(rep_op, ctx);
     if guard != "true" {
         w.line(`if ${negate_cond(&guard)} { break; }`);
@@ -7480,7 +7519,7 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     name_counts: &mut List<[String, i32]>,
     plus_flag: S,
 ) -> String {
-    gen_iter_caller_follow_gate(w, rep_op, plus_flag);
+    gen_iter_caller_follow_gate(w, rep_op, plus_flag, ctx, name_counts);
     // No gate break: every branch of the decision carries the gate the loop
     // would test, so a predicate the decision already answered is not asked
     // a second time.

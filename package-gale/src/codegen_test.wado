@@ -951,11 +951,11 @@ test "verify checks a contested repeat against the simulator" {
         ["s", "a b"],
         ["s", "a a a b"],
         ["t", "c d d"],
+        ["t", "c d d d"],
     ], &verify);
-    assert agreed == "a b => (s (a a) b)\na a a b => (s (a a) (a a) (a a) b)\nc d d => (t c (c d) (c d))\n";
+    assert agreed == "a b => (s (a a) b)\na a a b => (s (a a) (a a) (a a) b)\nc d d => (t c (c d) (c d))\nc d d d => (t c (c d d) (c d))\n", agreed;
     let source = gen_with(CONTESTED_REPEATS_G4, &verify).source;
     for let [rule, input] of [
-        ["t", "c d d d"],
         ["u", "a a b"],
         ["u", "a b a b"],
     ] {
@@ -2480,16 +2480,17 @@ ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ";
 
-// The loop's FOLLOW gate yields wherever the caller's continuation matches;
-// telling a viable iteration from a stranding one takes the simulator.
+// Rust's `impl Fn() -> a::R + Send`: the outer path reads `:: r` too, but the
+// inner one stays viable, and ANTLR4 resolves that by looping. The loop yields
+// to its caller's continuation only where the iteration would strand it.
 test "a greedy loop keeps an iteration its caller's continuation also reads" {
-    // Rust's `impl Fn() -> a::R + Send`: the outer path reads `:: r` too, but
-    // the inner one stays viable, and ANTLR4 resolves that by looping.
-    let got = parses(LOOP_ENTERS_WHILE_VIABLE_G4, "s", [
-        "fn impl f ( ) -> a :: r + s { }", "fn impl f ( ) -> a :: r { }", "fn impl f ( ) -> a :: r :: q + s { }",
-        "fn impl a :: b + c { }",
-    ]);
-    assert got == "fn impl f ( ) -> a :: r + s { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r)) + (tp (seg s)))))) { })\nfn impl f ( ) -> a :: r { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r)))))) { })\nfn impl f ( ) -> a :: r :: q + s { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r) :: (seg q)) + (tp (seg s)))))) { })\nfn impl a :: b + c { } => (s fn (ty impl (tp (seg a) :: (seg b)) + (tp (seg c))) { })\n";
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let got = parses(LOOP_ENTERS_WHILE_VIABLE_G4, "s", [
+            "fn impl f ( ) -> a :: r + s { }", "fn impl f ( ) -> a :: r { }", "fn impl f ( ) -> a :: r :: q + s { }",
+            "fn impl a :: b + c { }",
+        ], &GenerateOptions { prediction });
+        assert got == "fn impl f ( ) -> a :: r + s { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r)) + (tp (seg s)))))) { })\nfn impl f ( ) -> a :: r { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r)))))) { })\nfn impl f ( ) -> a :: r :: q + s { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r) :: (seg q)) + (tp (seg s)))))) { })\nfn impl a :: b + c { } => (s fn (ty impl (tp (seg a) :: (seg b)) + (tp (seg c))) { })\n", got;
+    }
 }
 
 global TAIL_TOKEN_OPTIONAL_G4: String = "

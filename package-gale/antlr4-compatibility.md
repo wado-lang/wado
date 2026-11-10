@@ -853,8 +853,12 @@ SLL. A tail-greedy `Repeat` at a rule's tail can over-consume tokens that
 belong to the caller's continuation; the repair gates that loop on the
 caller's deterministic FOLLOW continuation, threaded as a runtime
 argument rather than baked into a specialised callee. At a tail-greedy
-`Repeat` the loop yields to the caller exactly when the next tokens match
-the caller's continuation at every depth. The parameter is pruned
+`Repeat` the loop yields to the caller when the next tokens match the
+caller's continuation at every depth, unless the iteration keeps a parse
+viable: another iteration or the continuation starts where its scan ends.
+The continuation keeps every reading it composes: what overflows the slots
+moves to a per-parse link table, and two open readings join into a union
+the runtime interns. The parameter is pruned
 entirely when a grammar has no such gate — gate-free grammars carry no
 `follow` at all (it also costs a stack slot per recursive scan frame,
 which overflowed the wasm stack on a deep-recursion grammar). Because the

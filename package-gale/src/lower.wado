@@ -1983,7 +1983,7 @@ fn lower_scan_group(
             });
         },
         SimpleCst => {
-            let se = lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact);
+            let se = lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact, outer_suffix);
             return with_scan_group_atn_site(se, g, outer_follow, follow_is_exact, ctx);
         },
         General => {
@@ -3075,7 +3075,7 @@ fn lower_group_op<S: AsStrSlice>(
             return lower_token_only_group(alts, name_counts, ctx);
         },
         SimpleCst => {
-            let op = lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact);
+            let op = lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact, outer_suffix);
             return with_group_atn_site(op, g, ctx);
         },
         General => {
@@ -3448,6 +3448,7 @@ fn lower_simple_cst_group(
     ctx: &mut LowerContext,
     outer_follow: &List<i32>,
     follow_is_exact: bool,
+    outer_suffix: &List<Element>,
 ) -> Op {
     let type_name = group_variant_type_name(alts);
     let field = dedup_name(&group_field_base_name(alts), name_counts);
@@ -3457,19 +3458,17 @@ fn lower_simple_cst_group(
     let mut inner_counts: List<[String, i32]> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
-        assert !alt.elements.is_empty(), "a SimpleCst alt is one RuleRef, never empty";
-        let elem = &alt.elements[0];
-        let case_name = group_case_name(alt);
-        let op = lower_simple_cst_alt_call(elem, &mut inner_counts);
+        let follow_arg = simple_cst_alt_follow_arg(ctx, alt, outer_suffix);
+        let op = lower_simple_cst_alt_call(&alt.elements[0], follow_arg, &mut inner_counts);
         bodies.push(AltBody {
             alt_index: i,
-            case_name: case_name,
+            case_name: group_case_name(alt),
             struct_name: "",
             ops: [op],
             fields: [],
             prefix_self_ref_min_prec: 0,
         });
-        let call = lower_scan_element(elem, ctx, &SIMPLE_CST_NO_FOLLOW, FollowArg::NoFollow, false);
+        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_NO_FOLLOW, follow_arg, false);
         scan_bodies.push(alt_scan_body(alt, [call], ctx));
     }
     let owner = DiagnosticOwner {
@@ -3497,21 +3496,30 @@ fn lower_simple_cst_scan_group(
     ctx: &mut LowerContext,
     outer_follow: &List<i32>,
     follow_is_exact: bool,
+    outer_suffix: &List<Element>,
 ) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     for let alt of alts {
-        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_NO_FOLLOW, FollowArg::NoFollow, false);
+        let follow_arg = simple_cst_alt_follow_arg(ctx, alt, outer_suffix);
+        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_NO_FOLLOW, follow_arg, false);
         bodies.push(alt_scan_body(alt, [call], ctx));
     }
     return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);
 }
 
-fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -> Op {
+/// What a SimpleCst alternative's one call continues into: what follows the
+/// group, as a General group's tail call is told.
+fn simple_cst_alt_follow_arg(ctx: &mut LowerContext, alt: &Alternative, outer_suffix: &List<Element>) -> FollowArg {
+    assert alt.elements.len() == 1, "a SimpleCst alt is one RuleRef";
+    return compute_follow_arg(ctx, &follow_elements_of(&alt.elements, outer_suffix), 0);
+}
+
+fn lower_simple_cst_alt_call(elem: &Element, follow_arg: FollowArg, counts: &mut List<[String, i32]>) -> Op {
     if let RuleRef(r) = *elem {
         return Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
-            follow_arg: FollowArg::NoFollow,
+            follow_arg: follow_arg,
             min_prec_arg: null,
             field: dedup_name(&r.field_name, counts),
             dedup_base: r.field_name,
