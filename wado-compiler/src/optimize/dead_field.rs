@@ -480,9 +480,8 @@ impl Rewrite<'_> {
     }
 
     /// The new index of the field `e` reads, by a `FieldAccess` or a
-    /// `field_slot` call, when its struct loses a field: `None` inside for a
-    /// removed one.
-    fn reads(&self, body: &Body, e: ExprId) -> Option<Option<u32>> {
+    /// `field_slot` call, when its struct loses a field.
+    fn reads(&self, body: &Body, e: ExprId) -> Option<u32> {
         let kind = &body.exprs[e].kind;
         let (receiver, field_index) = if let ExprKind::FieldAccess {
             expr, field_index, ..
@@ -494,7 +493,8 @@ impl Rewrite<'_> {
         } else {
             return None;
         };
-        Some(self.map(body.operand_type(receiver))?[field_index as usize])
+        let new = self.map(body.operand_type(receiver))?[field_index as usize];
+        Some(new.expect("a field the program reads is live"))
     }
 
     /// Top down, so a dropped operand is never visited: what it reads may be a
@@ -537,7 +537,6 @@ impl Rewrite<'_> {
         built: &mut IndexSet<ExprId>,
     ) {
         if let Some(new) = self.reads(body, e) {
-            let new = new.expect("a field the program reads is live");
             match &mut body.exprs[e].kind {
                 ExprKind::FieldAccess { field_index, .. } => *field_index = new,
                 ExprKind::Call { args, .. } => {
