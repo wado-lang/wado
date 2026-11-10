@@ -815,6 +815,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             target,
             target_type_args,
             projections,
+            trait_type_args.clone(),
         );
         let sig = ImplSig {
             def: impl_def,
@@ -2881,6 +2882,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             },
         );
 
+        if abstract_selections.is_some() {
+            scope.annotate_ctx.trait_ctx.self_trait_args = scope
+                .tysys
+                .signatures
+                .impl_sig(impl_def)
+                .trait_type_args
+                .clone();
+        }
         scope.annotate_ctx.trait_ctx.abstract_selections = abstract_selections;
 
         // From here on the method's own AST is read, which a trait's default

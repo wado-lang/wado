@@ -5,6 +5,7 @@ use { println, Stdout } from "core:cli";
 trait Back with () {
     type T;
     type Of<E>;
+    type Two<A, B>;
     fn name() -> String;
 }
 
@@ -14,9 +15,15 @@ struct Boxed<E> {
     n: i32,
 }
 
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
 impl Back for Host {
     type T = i32;
     type Of<E> = Boxed<E>;
+    type Two<A, B> = Pair<A, B>;
     fn name() -> String {
         return "host";
     }
@@ -38,8 +45,35 @@ impl<G: Back, E> Shown<G> for G::Of<E> {
     }
 }
 
+trait Paired<G: Back, F> with () {
+    fn paired(&self) -> String;
+}
+
+impl<G: Back, F, E> Paired<G, F> for G::Two<F, E> {
+    fn paired(&self) -> String {
+        return `pair on ${G::name()}`;
+    }
+}
+
+trait Linked<G: Back> with () {
+    fn linked(&self) -> String;
+}
+
+// `H` is bound only by matching `G::Two<H, i32>`, which `H::Of<E>`, read
+// first, waits on.
+impl<G: Back, H: Back, E> Linked<G> for Pair<H::Of<E>, G::Two<H, i32>> {
+    fn linked(&self) -> String {
+        return `linked on ${G::name()} through ${H::name()}`;
+    }
+}
+
 fn show<G: Back, V: Shown<G>>(v: &V) -> String {
     return v.shown();
+}
+
+// `T` is the caller's own parameter, at the index the impl gives `G`.
+fn paired<T>(p: &Pair<T, i32>) -> String {
+    return Paired::<Host, T>::paired(p);
 }
 
 export fn run() with Stdout {
@@ -49,9 +83,17 @@ export fn run() with Stdout {
     let b = Boxed::<f32> { n: 2 };
     println(Shown::<Host>::shown(&b));
     println(show::<Host, Boxed<bool>>(&Boxed::<bool> { n: 3 }));
+    let p = Pair::<String, i32> { a: "x", b: 4 };
+    println(Paired::<Host, String>::paired(&p));
+    println(paired::<String>(&p));
+    let link = Pair::<Boxed<bool>, Pair<Host, i32>> {
+        a: Boxed::<bool> { n: 5 },
+        b: Pair::<Host, i32> { a: Host {}, b: 6 },
+    };
+    println(Linked::<Host>::linked(&link));
 }
 
 __DATA__
 {
-  "stdout": "plain on host\nplain on host\nfamily on host\nfamily on host\n"
+  "stdout": "plain on host\nplain on host\nfamily on host\nfamily on host\npair on host\npair on host\nlinked on host through host\n"
 }

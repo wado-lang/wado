@@ -20,7 +20,7 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
 
-use super::call_instance::open_slots;
+use super::call_instance::{named_at_trait_args, open_slots};
 use super::state::Monomorphizer;
 use super::{Templates, Unrewritten, module_source_for_trait_impl};
 use crate::name::FqTraitName;
@@ -1210,7 +1210,12 @@ impl Monomorphizer {
             let is_blanket = info
                 .receiver()
                 .is_declared_binder_of(generic.impl_type_params.iter().map(|p| p.name.as_str()));
-            if is_blanket && !impl_type_arg_names.is_empty() {
+            if let Some(named) = named_at_trait_args(generic, &key.impl_type_args, type_table) {
+                LocalMethodName {
+                    method_type_args: method_type_arg_names,
+                    ..named
+                }
+            } else if is_blanket && !impl_type_arg_names.is_empty() {
                 info.with_substituted_struct_name(&impl_type_arg_names[0])
             } else {
                 info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
@@ -2873,6 +2878,13 @@ impl Monomorphizer {
         let new_func_name = new_info.to_mangled_name();
 
         if new_func_name == old_func_name {
+            // A slot the trait reference sets shows in no name, only in the
+            // arguments the call recorded.
+            if let Some(mi) = &mut method_func.monomorph_info {
+                for arg in &mut mi.impl_type_args {
+                    *arg = self.substitute_type(*arg, substitution, type_table);
+                }
+            }
             return;
         }
 
@@ -2931,8 +2943,7 @@ impl Monomorphizer {
         let template = self.functions.templates.get(template)?.borrow();
         let receiver_args = type_table.generic_type_args(receiver).unwrap_or_default();
         let mut slots = open_slots(&template, &receiver_args, type_table)?;
-        let written = &template.method_info.as_ref()?.trait_type_args;
-        type_table.bind_impl_slots_asked(block, written, asked, receiver, &mut slots);
+        type_table.bind_impl_slots_asked(block, asked, receiver, &mut slots);
         impl_args_in_slot_order(
             block,
             method_param_offset(&template.impl_type_params),

@@ -1172,6 +1172,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An impl on `[..T]` declaring a parameter beside the pack
+    /// (`impl<..T, G: Back> Shown<G> for [..T]`). Its instances key on the
+    /// tuple's elements alone, which leave no place for `G`.
+    VariadicImplParamBesidePack {
+        param: String,
+        span: Span,
+    },
+
     /// A `..X` whose `X` is not a declared type pack. A scalar parameter stands
     /// for one position, so spreading it says nothing a bare `X` does not.
     SpreadOfNonPack {
@@ -2645,6 +2653,13 @@ impl TypeError {
             TypeError::UnsupportedVariadicImplTarget { span } => (
                 Code::OrphanRule,
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
+                *span,
+            ),
+            TypeError::VariadicImplParamBesidePack { param, span } => (
+                Code::OrphanRule,
+                format!(
+                    "an impl on the variadic tuple `[..T]` takes no type parameter beside its pack, and `{param}` is one: its instances are told apart by the tuple's elements alone, which is not supported yet"
+                ),
                 *span,
             ),
             TypeError::SpreadOfNonPack { name, span } => (

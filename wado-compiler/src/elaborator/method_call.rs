@@ -402,7 +402,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (None, Some(call)) => self.abstract_selection(call),
             _ => None,
         };
-        let declared_trait = selection.map(|s| self.tysys.required_trait(s.trait_decl));
+        let declared_trait = selection.map(|s| {
+            let mut required = self.tysys.required_trait(s.trait_decl);
+            // The block's own trait, reached at the arguments it writes.
+            let own = &self.annotate_ctx.trait_ctx.self_trait_args;
+            if self.annotate_ctx.trait_ctx.self_trait == Some(s.trait_decl) && !own.is_empty() {
+                required.args = Some(own.clone());
+            }
+            required
+        });
         // A qualified call names one trait, so the inherent-method step — a
         // different namespace — is skipped; only that trait's impls may
         // answer. The ref-impl priority step still runs (with the filter):

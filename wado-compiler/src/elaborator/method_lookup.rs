@@ -2354,17 +2354,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut impl_slot_args = Vec::new();
         if let (Some(asked), Some(receiver)) = (asked, receiver_type_id) {
             let mut slots = Self::frame_slots(&scope, impl_ref.0);
-            let written = scope
-                .tysys
-                .signatures
-                .impl_sig(impl_ref.0)
-                .trait_type_args
-                .clone();
             scope
                 .tysys
                 .type_table
                 .borrow_mut()
-                .bind_impl_slots_asked(impl_ref.0, &written, asked, receiver, &mut slots);
+                .bind_impl_slots_asked(impl_ref.0, asked, receiver, &mut slots);
             if Self::bind_from_slots(&mut scope, header, impl_ref.0, &slots) {
                 impl_slot_args = impl_args_in_slot_order(
                     impl_ref.0,

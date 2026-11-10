@@ -24,6 +24,21 @@ impl Back for Guest {
 
 trait Shown<G: Back> with () {
     fn shown(&self) -> String;
+
+    // A default body reaches its own trait at the arguments the impl writes.
+    fn twice(&self) -> String {
+        return `${self.shown()}, ${self.shown()}`;
+    }
+}
+
+trait Make<G: Back> with () {
+    fn make() -> String;
+}
+
+impl<G: Back> Make<G> for i32 {
+    fn make() -> String {
+        return `made on ${G::name()}`;
+    }
 }
 
 impl<G: Back> Shown<G> for i32 {
@@ -42,12 +57,35 @@ impl<T: Display, G: Back> Shown<G> for Wrap<T> {
     }
 }
 
+trait Tag with () {}
+
+impl Tag for i32 {}
+
+trait Named<G: Back> with () {
+    fn named(&self) -> String;
+}
+
+// Instances of a blanket differ by `G` alone, with the receiver the same.
+impl<T: Tag, G: Back> Named<G> for T {
+    fn named(&self) -> String {
+        return `tagged on ${G::name()}`;
+    }
+}
+
 fn show<G: Back, V: Shown<G>>(v: &V) -> String {
     return v.shown();
 }
 
+fn named<G: Back, V: Named<G>>(v: &V) -> String {
+    return v.named();
+}
+
 fn via<G: Back>(v: &i32) -> String {
     return Shown::<G>::shown(v);
+}
+
+fn make<G: Back, V: Make<G>>() -> String {
+    return V::make();
 }
 
 export fn run() with Stdout {
@@ -57,6 +95,12 @@ export fn run() with Stdout {
     println(show::<Host, i32>(&v));
     println(show::<Guest, i32>(&v));
     println(via::<Guest>(&v));
+    println(Shown::<Guest>::twice(&v));
+    println(make::<Host, i32>());
+    println(make::<Guest, i32>());
+    println(Named::<Host>::named(&v));
+    println(Named::<Guest>::named(&v));
+    println(named::<Guest, i32>(&v));
     let w = Wrap::<String> { v: "w" };
     println(Shown::<Host>::shown(&w));
     println(show::<Guest, Wrap<String>>(&w));
@@ -64,5 +108,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\nw in host\nw in guest\n"
+  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\ntagged on host\ntagged on guest\ntagged on guest\nw in host\nw in guest\n"
 }

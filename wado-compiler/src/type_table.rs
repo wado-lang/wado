@@ -6480,6 +6480,9 @@ struct ImplTarget {
     /// own `TypeParam`.
     args: Vec<TypeId>,
     projections: Vec<ImplProjection>,
+    /// The arguments the block's trait reference writes, empty for an
+    /// inherent block.
+    trait_args: Vec<TypeId>,
 }
 
 /// Slots of an impl block that a bound determines rather than its target:
@@ -6516,13 +6519,15 @@ impl TargetBinding {
 
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
-    /// the head it names, with the slots its bounds determine.
+    /// the head it names, with the slots its bounds determine and the
+    /// arguments its trait reference writes.
     pub fn record_impl_target(
         &mut self,
         def: DefId,
         whole: TypeId,
         args: Vec<TypeId>,
         projections: Vec<ImplProjection>,
+        trait_args: Vec<TypeId>,
     ) {
         self.impl_targets.insert(
             def,
@@ -6530,8 +6535,28 @@ impl TypeTable {
                 whole,
                 args,
                 projections,
+                trait_args,
             },
         );
+    }
+
+    /// Whether impl block `def`'s trait reference names a parameter its target
+    /// does not: `G` in `impl<G: Back> Shown<G> for i32`, or any in a
+    /// projection target, `impl<G: Back> Shown<G> for G::T`. Only a call's
+    /// trait arguments set one, so its instances differ by them alone.
+    pub fn impl_trait_sets_params(&self, def: DefId) -> bool {
+        let target = self.impl_target(def);
+        let in_target = if matches!(self.get(target.whole), ResolvedType::AssocTypeProjection { .. })
+        {
+            IndexSet::default()
+        } else {
+            self.type_params_in(target.whole)
+        };
+        target.trait_args.iter().any(|&arg| {
+            self.type_params_in(arg)
+                .iter()
+                .any(|param| param.owner == def && !in_target.contains(param))
+        })
     }
 
     /// Impl block `def`'s target head at `head_args`; `None` where the target
@@ -6595,23 +6620,48 @@ impl TypeTable {
         }
     }
 
+    /// Impl block `def`'s receiver and trait arguments at the instance `args`
+    /// key, one argument per slot in slot order.
+    pub fn impl_instance_at(&mut self, def: DefId, args: &[TypeId]) -> (TypeId, Vec<TypeId>) {
+        let slots: TypeArgMap = args
+            .iter()
+            .zip(0..)
+            .map(|(&ty, index)| (TypeParamId { owner: def, index }, ty))
+            .collect();
+        let receiver = self.substitute_type_params(self.impl_target_whole(def), &slots);
+        let trait_args = self
+            .impl_target(def)
+            .trait_args
+            .clone()
+            .into_iter()
+            .map(|arg| self.substitute_type_params(arg, &slots))
+            .collect();
+        (receiver, trait_args)
+    }
+
     /// Fill the slots of impl block `def` its trait reference binds from the
-    /// arguments a call names: each of `written`, the reference's arguments,
-    /// against the one `asked` at its position, then the target read at what
-    /// `slots` then holds against `receiver`. A target projecting off a
-    /// parameter binds only this way: `G::Of<E>` reads `Boxed<E>` once `G` is
-    /// `Host`, and `Boxed<f32>` then fills `E`.
+    /// arguments a call names: each argument the reference writes against the
+    /// one `asked` at its position, then the target read at what `slots` then
+    /// holds against `receiver`. A target projecting off a parameter binds
+    /// only this way: `G::Of<E>` reads `Boxed<E>` once `G` is `Host`, and
+    /// `Boxed<f32>` then fills `E`. What one read fills can settle another
+    /// projection's base, so the target is read until nothing more fills.
     pub fn bind_impl_slots_asked(
         &mut self,
         def: DefId,
-        written: &[TypeId],
         asked: &[TypeId],
         receiver: TypeId,
         slots: &mut TypeArgMap,
     ) {
-        self.bind_each_into(written, asked, slots);
-        let target = self.substitute_type_params(self.impl_target_whole(def), slots);
-        self.bind_each_into(&[target], &[receiver], slots);
+        self.bind_each_into(&self.impl_target(def).trait_args, asked, slots);
+        loop {
+            let filled = slots.len();
+            let target = self.substitute_type_params(self.impl_target_whole(def), slots);
+            self.bind_each_into(&[target], &[receiver], slots);
+            if slots.len() == filled {
+                return;
+            }
+        }
     }
 
     /// The declaration impl block `def` targets, past any reference.

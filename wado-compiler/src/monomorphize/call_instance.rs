@@ -2,6 +2,7 @@
 //! rewrite looks up, keyed by the template the call recorded.
 
 use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, BlanketReceiver};
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TemplateId, TirExpr,
     TirExprKind, TirFunction, TypeArgMap, TypeId,
@@ -127,7 +128,7 @@ impl Monomorphizer {
         &self,
         key: &InstantiationKey,
         templates: &Templates,
-        type_table: &TypeTable,
+        type_table: &mut TypeTable,
     ) -> String {
         let template = key
             .template
@@ -135,6 +136,14 @@ impl Monomorphizer {
             .and_then(|id| templates.get(id))
             .expect("an instance names a registered template")
             .borrow();
+        if let Some(named) = named_at_trait_args(&template, &key.impl_type_args, type_table) {
+            let key = InstantiationKey {
+                impl_type_args: Vec::new(),
+                method_info: Some(named),
+                ..key.clone()
+            };
+            return self.method_instantiation_name_inner(&key, type_table, &[]);
+        }
         self.method_instantiation_name_inner(key, type_table, &template.impl_type_params)
     }
 
@@ -244,6 +253,34 @@ impl Monomorphizer {
             }
         }
     }
+}
+
+/// `template` named at the instance `impl_type_args` key, one argument per
+/// slot, where its block's trait reference sets a parameter its target does
+/// not: by the receiver and the trait arguments the slots make. The receiver
+/// alone tells no two such instances apart (`i32^Shown<Host>::shown` and
+/// `i32^Shown<Guest>::shown`). `None` for any other block.
+pub(super) fn named_at_trait_args(
+    template: &TirFunction,
+    impl_type_args: &[TypeId],
+    type_table: &mut TypeTable,
+) -> Option<LocalMethodName> {
+    let block = template.impl_origin?;
+    if !type_table.impl_trait_sets_params(block) {
+        return None;
+    }
+    let (receiver, trait_args) = type_table.impl_instance_at(block, impl_type_args);
+    let trait_args: Vec<FqTypeName> = trait_args
+        .iter()
+        .map(|&arg| type_table.fq_type_name(arg))
+        .collect();
+    Some(
+        template
+            .method_info
+            .as_ref()?
+            .at_owner(&type_table.fq_type_name(receiver))
+            .with_trait_type_args(&trait_args),
+    )
 }
 
 /// The slots of `template`'s block `receiver_args` fill, where they leave one
