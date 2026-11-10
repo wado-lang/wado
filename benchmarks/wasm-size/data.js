@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794279599204,
+  "lastUpdate": 1794284667643,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76241,6 +76241,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 404932,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "161f3d3986a27bda4d818f452d1d00569f94e3ae",
+          "message": "Merge pull request #2597 from wado-lang/compiler/unit-case-value\n\nperf(compiler): fold payload-less cases as constants, and tighten counted loops",
+          "timestamp": "2026-11-10T13:09:11+09:00",
+          "tree_id": "f0f6c49602a1557f7e412c3c980f1244ff83805e",
+          "url": "https://github.com/wado-lang/wado/commit/161f3d3986a27bda4d818f452d1d00569f94e3ae"
+        },
+        "date": 1794284667218,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21995,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404923,
             "unit": "bytes"
           }
         ]
