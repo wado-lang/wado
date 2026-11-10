@@ -6932,13 +6932,17 @@ impl TypeTable {
                 && self.agree(concrete, written, open, binding);
         }
         // An `_` or an unresolvable name: nothing written to match against.
-        // A projection, written inside an `<F: fn(...)>` signature, is its
-        // base's binding's, which the solver checks once the base is bound.
-        if matches!(
-            self.get(written),
-            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::AssocTypeProjection { .. }
-        ) {
+        if matches!(self.get(written), ResolvedType::Unknown | ResolvedType::Error) {
             return true;
+        }
+        // A projection is its base's binding's, which the solver checks once
+        // the base is bound. One still standing off a parameter names no type
+        // yet, so the same projection meets it part for part.
+        if matches!(self.get(written), ResolvedType::AssocTypeProjection { .. }) {
+            return match self.projection_parts(written, concrete) {
+                Some((written, concrete)) => self.bind_all(&written, &concrete, open, binding),
+                None => true,
+            };
         }
         if let Some(agrees) =
             self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, open, binding))
@@ -6955,6 +6959,36 @@ impl TypeTable {
                 == self.fq_base_type_name(concrete).head();
         }
         written == concrete
+    }
+
+    /// The base and arguments of `a` and of `b` where both project one
+    /// associated type of one trait at as many arguments; `None` otherwise.
+    fn projection_parts(&self, a: TypeId, b: TypeId) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
+        let (
+            ResolvedType::AssocTypeProjection {
+                param_id: base_a,
+                assoc_name: name_a,
+                args: args_a,
+                owning_trait: trait_a,
+                ..
+            },
+            ResolvedType::AssocTypeProjection {
+                param_id: base_b,
+                assoc_name: name_b,
+                args: args_b,
+                owning_trait: trait_b,
+                ..
+            },
+        ) = (self.get(a), self.get(b))
+        else {
+            return None;
+        };
+        (name_a == name_b && trait_a == trait_b && args_a.len() == args_b.len()).then(|| {
+            (
+                [*base_a].into_iter().chain(args_a.iter().copied()).collect(),
+                [*base_b].into_iter().chain(args_b.iter().copied()).collect(),
+            )
+        })
     }
 
     /// Whether two receiver-side types can be one, answering an open variable

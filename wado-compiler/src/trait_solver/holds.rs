@@ -596,7 +596,12 @@ impl Query<'_> {
         let SolverType::Projection { base, .. } = projection else {
             unreachable!("only a projection is deferred");
         };
-        if self.at_bindings(base, bindings).is_none()
+        let met = self.normalized(met);
+        // A projection the normalizer leaves standing reads off a caller's
+        // parameter, which names no type yet: the impl's projection of the
+        // same member meets it argument for argument, its base among them.
+        let off_caller = same_member(projection, &met);
+        if (!off_caller && self.at_bindings(base, bindings).is_none())
             || self.at_bindings(projection, bindings).is_some()
         {
             return Through::Open;
@@ -606,7 +611,7 @@ impl Query<'_> {
             .flatten()
             .map(|binding| params_past(&binding.as_type()))
             .fold(
-                params_past(met).max(self.env.param_bounds.len() as u32),
+                params_past(&met).max(self.env.param_bounds.len() as u32),
                 u32::max,
             );
         let open = projection.map_params(&|i| {
@@ -616,15 +621,30 @@ impl Query<'_> {
             })
         });
         let member = self.normalized(&open.expect("every parameter maps"));
-        if matches!(member, SolverType::Projection { .. }) {
-            return Through::Open;
-        }
         let mut slots: Vec<Option<Binding>> = (0..past)
             .map(|caller| Some(Binding::One(SolverType::Param(caller))))
             .chain(bindings.iter().cloned())
             .collect();
         let mut nested = Vec::new();
-        if !match_target(&member, &self.normalized(met), &mut slots, &mut nested) {
+        let matched = match (&member, &met) {
+            (
+                SolverType::Projection { base, args, .. },
+                SolverType::Projection {
+                    base: met_base,
+                    args: met_args,
+                    ..
+                },
+            ) if same_member(&member, &met) => {
+                match_target(base, met_base, &mut slots, &mut nested)
+                    && args
+                        .iter()
+                        .zip(met_args)
+                        .all(|(arg, met_arg)| match_target(arg, met_arg, &mut slots, &mut nested))
+            }
+            (SolverType::Projection { .. }, _) => return Through::Open,
+            _ => match_target(&member, &met, &mut slots, &mut nested),
+        };
+        if !matched {
             return Through::Refuted;
         }
         // A projection nested in the member names the impl's parameters only
@@ -1094,6 +1114,24 @@ enum Through {
     Open,
     /// Its member does not match the type it met.
     Refuted,
+}
+
+/// Whether `a` and `b` both project one associated type, at as many arguments.
+fn same_member(a: &SolverType, b: &SolverType) -> bool {
+    match (a, b) {
+        (
+            SolverType::Projection {
+                trait_, assoc, args, ..
+            },
+            SolverType::Projection {
+                trait_: b_trait,
+                assoc: b_assoc,
+                args: b_args,
+                ..
+            },
+        ) => trait_ == b_trait && assoc == b_assoc && args.len() == b_args.len(),
+        _ => false,
+    }
 }
 
 /// One past the highest parameter or pack index `ty` mentions.

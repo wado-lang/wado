@@ -2,6 +2,7 @@
 //! collecting instantiation sites, variadic expansion, and method call resolution.
 
 use std::cell::RefCell;
+use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -821,6 +822,35 @@ impl Monomorphizer {
             .or(written)
     }
 
+    /// Point `call` at the instance `info` names, its block's arguments
+    /// `impl_type_args` and its own `method_type_args`, both at this instance.
+    fn rename_to_instance(
+        &self,
+        call: &mut FunctionRef,
+        info: LocalMethodName,
+        impl_type_args: Vec<TypeId>,
+        method_type_args: Vec<TypeId>,
+        type_table: &mut TypeTable,
+    ) {
+        let template =
+            self.static_template_at(call.template.take(), &info, &impl_type_args, type_table);
+        let module_source = template
+            .as_ref()
+            .map_or(call.module_source.clone(), |t| t.home(type_table.defs()));
+        *call = FunctionRef {
+            module_source,
+            name: info.to_mangled_name(),
+            template,
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: mem::take(&mut call.name),
+                impl_type_args,
+                method_type_args,
+                is_blanket: false,
+            }),
+            method_info: Some(info),
+        };
+    }
+
     /// The concrete type a `T^Trait::method` receiver dispatches on: what
     /// [`Self::receiver_param_answer`] says, what a projection receiver
     /// (`T::Item`) binds at the instance, else, for a receiver no call
@@ -1568,7 +1598,6 @@ impl Monomorphizer {
                 {
                     let info = self.trait_named_at_instance(info, substitution, type_table);
                     let old_func_name = call_func.name.clone();
-                    let module_source = call_func.module_source.clone();
 
                     // Derive substituted type args from the callee's own monomorph_info.
                     // The callee's monomorph_info records which type params the callee
@@ -1854,28 +1883,13 @@ impl Monomorphizer {
                             };
                         }
                     } else if new_func_name != old_func_name {
-                        let template = self.static_template_at(
-                            call_func.template.take(),
-                            &new_info,
-                            &sub_impl_type_args,
+                        self.rename_to_instance(
+                            call_func,
+                            new_info,
+                            sub_impl_type_args,
+                            sub_method_type_args,
                             type_table,
                         );
-                        let module_source = template
-                            .as_ref()
-                            .map_or(module_source, |t| t.home(type_table.defs()));
-                        let monomorph_info = Some(MonomorphInfo {
-                            generic_name: old_func_name,
-                            impl_type_args: sub_impl_type_args,
-                            method_type_args: sub_method_type_args,
-                            is_blanket: false,
-                        });
-                        **call_func = FunctionRef {
-                            module_source,
-                            name: new_func_name,
-                            template,
-                            monomorph_info,
-                            method_info: Some(new_info),
-                        };
                     }
                 }
                 for arg in args {
@@ -2746,6 +2760,41 @@ impl Monomorphizer {
             return;
         };
         let info = self.trait_named_at_instance(info, substitution, type_table);
+
+        // A block written for a projection (`impl<G, E> Tr<G> for G::Of<E>`)
+        // is named by the slots the call recorded, which the receiver, once
+        // substituted, no longer shows.
+        if let Some(block) = method_func.template.as_ref().and_then(TemplateId::block)
+            && matches!(
+                type_table.get(type_table.impl_target_whole(block)),
+                ResolvedType::AssocTypeProjection { .. }
+            )
+        {
+            let mi = method_func
+                .monomorph_info
+                .as_ref()
+                .expect("a call on a projection's block records its slots");
+            let [impl_type_args, method_type_args] = [&mi.impl_type_args, &mi.method_type_args]
+                .map(|args| {
+                    args.iter()
+                        .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                        .collect::<Vec<_>>()
+                });
+            let names = |args: &[TypeId]| -> Vec<FqTypeName> {
+                args.iter().map(|&tid| type_table.fq_type_name(tid)).collect()
+            };
+            let mut new_info =
+                info.with_type_args(&names(&impl_type_args), &names(&method_type_args));
+            new_info.trait_type_args = self.trait_args_at_instance(&info, substitution, type_table);
+            self.rename_to_instance(
+                method_func,
+                new_info,
+                impl_type_args,
+                method_type_args,
+                type_table,
+            );
+            return;
+        }
 
         // An impl written for the reference itself outranks the `&T` blanket.
         let (ref_impl, ref_impl_template) = info
