@@ -2008,7 +2008,7 @@ impl SolverBridge {
         };
         let param = |site, name: &str| {
             let binder = reached(site, name)?;
-            position_among(&binder_ids, |id| id == binder.type_id).map(ParamKind::Type)
+            position_among(&binder_ids, |&id| id == binder.type_id).map(ParamKind::Type)
         };
         let named = place_head(&binder_ids, &table);
         let declaring = |site, base: &str, assoc: &str| {
@@ -2663,12 +2663,7 @@ fn place_head(binders: &[TypeId], table: &TypeTable) -> impl Fn(&TypeHead) -> Op
         .iter()
         .map(|&binder| table.fq_type_name(binder).head().clone())
         .collect();
-    move |head| {
-        let at = heads.iter().position(|held| held == head)?;
-        Some(ParamKind::Type(
-            u32::try_from(at).expect("fewer than 2^32 params"),
-        ))
-    }
+    move |head| position_among(&heads, |held| held == head).map(ParamKind::Type)
 }
 
 /// The type of each of `ctx`'s binders, at its position.
@@ -2680,10 +2675,10 @@ fn binder_types(ctx: &scope::Scope) -> Vec<TypeId> {
         .collect()
 }
 
-fn position_among(binders: &[TypeId], is: impl Fn(TypeId) -> bool) -> Option<u32> {
+fn position_among<B>(binders: &[B], is: impl Fn(&B) -> bool) -> Option<u32> {
     binders
         .iter()
-        .position(|&binder| is(binder))
+        .position(is)
         .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
 }
 
@@ -2705,7 +2700,7 @@ fn place_binder<'a>(
     table: &'a TypeTable,
 ) -> impl Fn(Binder) -> Option<u32> + 'a {
     move |binder| {
-        position_among(binders, |held| match binder {
+        position_among(binders, |&held| match binder {
             Binder::Param(id) => table.type_param_id(held) == Some(id),
             Binder::Family(id) => held == id,
         })

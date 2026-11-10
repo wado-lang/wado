@@ -2830,13 +2830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return Vec::new();
         };
-        self.in_bound_frame(&found, &ParamSpace::new(), |e| {
-            found
-                .type_args
-                .iter()
-                .map(|ty| e.resolve_type(ty))
-                .collect()
-        })
+        self.bound_args_where_written(&found, &ParamSpace::new())
     }
 
     /// [`Self::enforce_single_bound_args`] for each of `refs`, bounds already

@@ -226,7 +226,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if decls.iter().filter(|&&other| other == decl).count() < 2 {
                     return true;
                 }
-                let trait_ref = self.trait_ref_where_written(bound, decl);
+                let args = self.bound_args_where_written(bound, &bound.space);
+                let trait_ref = TraitRef::new(decl, args);
                 let fresh = !traits_seen.contains(&trait_ref);
                 traits_seen.push(trait_ref);
                 fresh
@@ -1143,9 +1144,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         out.push((bound, Vec::new()));
                         continue;
                     };
-                    let written = e.in_bound_frame(&bound, &ParamSpace::new(), |e| {
-                        e.written_bound_args(&bound.bound)
-                    });
+                    let written = e.bound_args_where_written(&bound, &ParamSpace::new());
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
                     let closure = e.tysys.trait_env.supertrait_closure(&decl).to_vec();
@@ -1231,13 +1230,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.with_type_params_bound(space, |e| e.under_self_binding(binding, body))
     }
 
-    /// `scoped`, which names `decl`, with its arguments read where it was
-    /// written.
-    fn trait_ref_where_written(&mut self, scoped: &ScopedBound, decl: DefId) -> TraitRef {
-        let args = self.in_bound_frame(scoped, &scoped.space, |e| {
-            e.written_bound_args(&scoped.bound)
-        });
-        TraitRef::new(decl, args)
+    /// The arguments `scoped` writes, read in the frame it was written in with
+    /// `space` answering for its trait's parameters.
+    pub(super) fn bound_args_where_written(
+        &mut self,
+        scoped: &ScopedBound,
+        space: &ParamSpace,
+    ) -> Vec<TypeId> {
+        self.in_bound_frame(scoped, space, |e| e.written_bound_args(&scoped.bound))
     }
 
     /// `types` resolved with `space` answering for the names it was written in.
@@ -1422,7 +1422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
-        let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
+        let written = self.bound_args_where_written(bound, space);
         self.trait_args_at(owner, base, &written)
     }
 
