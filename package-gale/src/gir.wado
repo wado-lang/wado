@@ -912,23 +912,6 @@ pub struct IterationDuties {
     /// expression` eats the only arm of `match x { A => 1, }`. Empty where the
     /// two heads cannot overlap, so such a loop emits the guard it always did.
     pub reserve_scan: List<ScanElement> = [],
-    /// Whether an iteration that would strand the loop's *optional*
-    /// continuation declines instead: `stmt+ expr?` over `{ y }.m()` gives the
-    /// loop the `{ y }` and leaves the `.m()` to nobody. The three fields below
-    /// are what that iteration asks, and are meaningless while this is false.
-    pub decline_stranded: bool = false,
-    /// FIRST of what follows the Repeat in its own alternative. With the body's
-    /// own first set and the caller's FOLLOW it answers "can anything continue
-    /// from where this iteration would end".
-    pub decline_cont_first: List<i32> = [],
-    /// Scan mirror of that continuation, run from the iteration's *start* to
-    /// ask the other half: is exiting here viable at all? A loop declines only
-    /// when the answer is yes, so an iteration whose alternative has no other
-    /// reading is still taken.
-    pub decline_scan: List<ScanElement> = [],
-    /// The enclosing rule's FOLLOW, conjoined into the exit-viability verdict
-    /// exactly as `probe_viable` is into the non-greedy probe's.
-    pub decline_viable: List<i32> = [],
 }
 
 impl IterationDuties {
@@ -936,17 +919,7 @@ impl IterationDuties {
     /// shortcut may ask: naming the fields instead is what let the scan's
     /// take-the-token path skip a reserve the parse applies.
     pub fn is_empty(&self) -> bool {
-        return self.reserve_scan.is_empty() && !self.decline_stranded;
-    }
-
-    /// Whether anything past the reserve is owed. `gen_rep_scan_guard` builds
-    /// the reserve into the guard's own scan, so an entry that ran the guard
-    /// and nothing else asserts on this.
-    ///
-    /// Beside `is_empty` on purpose: both name the fields, and a duty added to
-    /// this struct is one edit away from each.
-    pub fn owes_beyond_reserve(&self) -> bool {
-        return self.decline_stranded;
+        return self.reserve_scan.is_empty();
     }
 }
 

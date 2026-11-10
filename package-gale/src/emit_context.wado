@@ -376,11 +376,6 @@ impl EmitContext {
         return self.follow.precedes_eof_token(&self.current_rule().name);
     }
 
-    /// The strings `r` for which `rule r EOF` can occur, for the current rule.
-    pub fn current_rule_input_end(&self) -> List<List<List<i32>>> {
-        return self.follow.input_end(&self.current_rule().name);
-    }
-
     /// Whether a call to the rule `snake` can reach a decision the simulator
     /// decides, so the scan pushes the return state the prediction reads.
     pub fn scan_reaches_simulator<S: AsStrSlice>(&self, snake: S) -> bool {

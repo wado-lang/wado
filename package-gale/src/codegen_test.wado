@@ -538,28 +538,6 @@ X : 'x' ; Y : 'y' ; Z : 'z' ;
     assert !output.contains("fn scan_n(");
 }
 
-test "a decline check names each continuing token once" {
-    let input = "grammar T;
-s : (t | t X)* EOF ;
-t : '(' fs? ')' ;
-fs : f (',' f)* ','? ;
-f : at* v? ty ;
-at : '#' '[' ID ']' ;
-v : 'pub' ;
-ty : ID | '(' fs? ')' ;
-X : 'x' ;
-ID : [a-w]+ ;
-";
-    let output = longest_source(input);
-    assert output.contains("decline_kind");
-    for let line of output.split("\n") {
-        let terms: List<String> = line.split(" || ").map(|t| t.trim().to_string()).collect();
-        for let i of 1..<terms.len() {
-            assert terms[i] != terms[i - 1] || terms[i].contains("{");
-        }
-    }
-}
-
 test "a scan function nothing calls is not emitted" {
     let input = "grammar T;
 s : a b EOF ;
@@ -5318,6 +5296,21 @@ WS : ' ' -> skip ;
         ["a", "x;q"],
     ]);
     assert chained == "x; => (a x)\nx;; => (a x ;)\nx;q => (a x ;)\n";
+}
+
+test "an entered rule's end reads through a caller no rule calls to the end of the input" {
+    // `u` is neither the first rule nor called, and the jar ends it where the
+    // input ends: `x;` exits `t`'s loop for `u`'s `;`, `x;;` cannot.
+    let got = parses_each("grammar U;
+s : X ;
+t : X (';' X?)* ;
+u : t ';' ;
+X : 'x' ;
+", [
+        ["t", "x;"],
+        ["t", "x;;"],
+    ], &LONGEST);
+    assert got == "x; => (t x)\nx;; => (t x ;)\n";
 }
 
 // `expression` calls only itself, so every continuation past its end comes

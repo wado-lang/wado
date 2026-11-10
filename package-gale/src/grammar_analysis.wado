@@ -552,6 +552,92 @@ impl GrammarAnalysis {
         return self.readings_of_elements(elements, from, k, &mut visiting, &mut cycled);
     }
 
+    /// Per rule, what follows it where a parse enters it directly, at most `k`
+    /// tokens deep: whatever follows a call of it, read on through the caller's
+    /// own entry, and the end of the input after the first rule and after a rule
+    /// no other rule calls. The jar reads an entered rule's end that way.
+    pub fn entry_readings(&mut self, k: i32) -> List<List<Reading>> {
+        let rule_count = self.parser_rules().len();
+        let mut sites: List<EntrySite> = [];
+        for let caller of 0..<rule_count {
+            for let a of 0..<self.parser_rules()[caller].alternatives.len() {
+                let elements = self.parser_rules()[caller].alternatives[a].elements;
+                self.collect_entry_sites(&elements, &[], caller, k, &mut sites);
+            }
+        }
+        let mut called_elsewhere = List::<bool>::filled(rule_count, false);
+        for let s of &sites {
+            if s.caller != s.callee {
+                called_elsewhere[s.callee] = true;
+            }
+        }
+        let mut input_end: List<Reading> = [];
+        readings_add(&mut input_end, Reading { kinds: List::filled(k, [self.eof_kind_id()]), ends: false }, k);
+        let mut entry: List<List<Reading>> = [];
+        for let ri of 0..<rule_count {
+            entry.push(if ri == 0 || !called_elsewhere[ri] { input_end } else { [] });
+        }
+        loop {
+            let mut changed = false;
+            for let s of &sites {
+                let mut grown = entry[s.callee];
+                for let r of &s.readings {
+                    if r.ends {
+                        reading_then(&mut grown, r, &entry[s.caller], k);
+                    } else {
+                        readings_add(&mut grown, *r, k);
+                    }
+                }
+                if grown != entry[s.callee] {
+                    entry[s.callee] = grown;
+                    changed = true;
+                }
+            }
+            if !changed {
+                return entry;
+            }
+        }
+    }
+
+    /// Each call in `elements`, followed by `suffix`, with the readings of what
+    /// follows it in its rule: a loop's body is followed by the loop again.
+    fn collect_entry_sites(
+        &mut self,
+        elements: &List<Element>,
+        suffix: &List<Element>,
+        caller: i32,
+        k: i32,
+        sites: &mut List<EntrySite>,
+    ) {
+        for let i of 0..<elements.len() {
+            let mut rest = elements_from(elements, i + 1);
+            rest.extend(suffix);
+            match &elements[i] {
+                RuleRef(r) => {
+                    let callee = self.rule_index_of(&r.name);
+                    assert callee >= 0, "a rule reference names a parser rule";
+                    sites.push(EntrySite { caller, callee, readings: self.readings_from(&rest, 0, k) });
+                },
+                Group(g) => {
+                    for let alt of &g.alternatives {
+                        self.collect_entry_sites(&alt.elements, &rest, caller, k, sites);
+                    }
+                },
+                Repeat(rep) => {
+                    let mut body_suffix: List<Element> = [];
+                    if !rep.kind matches { Optional } {
+                        body_suffix.push(Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star }));
+                    }
+                    body_suffix.extend(&rest);
+                    self.collect_entry_sites(&[rep.element], &body_suffix, caller, k, sites);
+                },
+                Label(lab) => self.collect_entry_sites(&[lab.element], &rest, caller, k, sites),
+                TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+                },
+            }
+        }
+    }
+
     fn readings_of_elements(
         &mut self,
         elements: &List<Element>,
@@ -1682,6 +1768,13 @@ fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> {
         },
         TokenRef(_) | Literal(_) | RuleRef(_) | Label(_) | Wildcard(_) | Not(_) => null,
     };
+}
+
+/// One call, by rule index, with the readings of what follows it in its rule.
+struct EntrySite {
+    caller: i32,
+    callee: i32,
+    readings: List<Reading>,
 }
 
 global READINGS_MAX_BUDGET: i32 = 16;

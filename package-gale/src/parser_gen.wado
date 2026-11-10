@@ -2424,55 +2424,9 @@ fn gen_scan_iteration_duties(
     kind: RepeatKind,
     ctx: &mut EmitContext,
 )
-    contract duties.is_empty() || kind matches { Star | Plus }, "only a loop can starve a suffix or strand a continuation; lowering stamps duties for no other kind"
+    contract duties.is_empty() || kind matches { Star | Plus }, "only a loop can starve a suffix; lowering stamps duties for no other kind"
 {
     gen_scan_reserve(w, duties, loop_admits, ctx);
-    gen_scan_decline_stranded(w, duties, loop_admits, ctx);
-}
-
-/// Scan-side twin of `gen_rep_decline_stranded`: an iteration that would strand
-/// the alternative is not counted, so the tournament measures the length the
-/// parse will actually consume. `sp` is the iteration's start and `pos` its end,
-/// which is the pair the two questions need.
-fn gen_scan_decline_stranded(w: &mut CodeWriter, duties: &IterationDuties, loop_admits: &Admits, ctx: &mut EmitContext) {
-    if !duties.decline_stranded {
-        return;
-    }
-    let gc = ctx.cursor.next_scan_group();
-    gen_kind_read(w, `dk_${gc}`, "tokens", "pos");
-    let can_continue = `${decline_continue_check(loop_admits, duties, `dk_${gc}`, ctx)} || ${decline_ends_input_check(
-        `dk_${gc}`,
-        "tokens",
-        "sp",
-        "pos",
-        ctx,
-    )}`;
-    w.begin(`if ${negate_cond(can_continue)}`);
-    gen_scan_mark(w, ctx, `dc_${gc}`);
-    w.line(`let mut dc_${gc}_exit = false;`);
-    // The probe re-walks the continuation from the iteration's start, so it
-    // starts from the gate the iteration started with — not the one it ended
-    // with, which is a reading the parse has not taken here.
-    gen_scan_rewind(w, ctx, "sp");
-    w.begin(`dcl_${gc}:`);
-    for let se of &duties.decline_scan {
-        gen_scan_op_element(w, se, ctx, `break dcl_${gc};`);
-    }
-    emit_probe_verdict(
-        w,
-        DECLINE_ASKS_CALLER,
-        &duties.decline_viable,
-        `dc_${gc}_exit`,
-        ctx,
-        duties.decline_scan.is_empty(),
-    );
-    w.end();
-    // Both exits leave a walk that did not happen, so both put the gate back:
-    // declining rewinds to the iteration's start, and continuing resumes at the
-    // iteration's end with the gate that iteration actually produced.
-    gen_scan_rewind_break(w, ctx, "sp", `dc_${gc}_exit`);
-    gen_scan_rewind(w, ctx, `dc_${gc}`);
-    w.end();
 }
 
 /// Scan-side twin of the reserve check `gen_scan_guard_with_prefix` emits: an
@@ -5017,12 +4971,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
                 return;
             }
         }
-        // The guard carries the reserve, and no grammar has brought a loop here
-        // owing more. Asserted rather than discharged, because a discharge no
-        // grammar reaches is untested code that reads as coverage. If one fires,
-        // call `gen_iteration_duties` here as the decided entry above does, and
-        // bring the grammar that fired it.
-        assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
+        // The guard carries the reserve, the only duty an iteration owes.
         let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &r.body_admits, ctx, nc);
         w.line(`if ${scan_pos} < 0 { break; }`);
         gen_op(w, &r.body, ctx, nc);
@@ -7088,7 +7037,7 @@ fn repeat_speculates(rep_op: &RepeatOp, inner: &Element, is_plus: bool, ctx: &Em
 }
 
 /// One iteration of a `repeat_speculates` loop. It ends where the scan guard
-/// would have, so the decline asks the same question of the same end.
+/// would have, so the reserve asks the same question of the same end.
 ///
 /// A rewound iteration leaves `pending` as the guard would have: its own
 /// failure only where the repeat-exit probe re-parses the same call.
@@ -7170,65 +7119,6 @@ impl Speculation {
     }
 }
 
-/// A decline is stamped only where the walk reaches the rule's tail
-/// (`lower_decline_scan`), so its verdict always asks the caller.
-global DECLINE_ASKS_CALLER: bool = true;
-
-/// Decline an iteration that would strand the loop's own alternative.
-///
-/// `scan_pos` is where the iteration would end. Two questions decide it, the
-/// token test first because the second is a scan: is that end a dead end, with
-/// no further iteration, no continuation and no caller able to resume there;
-/// and is exiting viable at all. Both are needed, and
-/// `driver_cst_loop_declines_stranded_iteration_test` pins each with a case the
-/// other would get wrong.
-///
-/// "No caller could resume" asks the rule's classical FOLLOW rather than the
-/// threaded mask. The mask is inert wherever no caller supplied one, so asking
-/// it would call the end of the input a dead end and decline the last iteration
-/// of every top-level list.
-fn gen_rep_decline_stranded<S: AsStrSlice, S1: AsStrSlice>(
-    w: &mut CodeWriter,
-    duties: &IterationDuties,
-    body_admits: &Admits,
-    scan_pos: S,
-    ctx: &mut EmitContext,
-    nc: &mut List<[String, i32]>,
-    refuse: S1,
-) {
-    if !duties.decline_stranded {
-        return;
-    }
-    let cont_kind = dedup_name("decline_kind", nc);
-    let dead_end = dedup_name("decline_dead", nc);
-    w.begin(`if ${scan_pos} >= 0`);
-    gen_kind_read(w, &cont_kind, "p.kinds", scan_pos);
-    let can_continue = `${decline_continue_check(body_admits, duties, &cont_kind, ctx)} || ${decline_ends_input_check(
-        &cont_kind,
-        "p.kinds",
-        "p.pos",
-        scan_pos,
-        ctx,
-    )}`;
-    w.begin(`if ${negate_cond(can_continue)}`);
-    w.line(`let mut ${dead_end}: bool = false;`);
-    gen_viability_probe(
-        w,
-        &duties.decline_scan,
-        &dead_end,
-        "decline_scan",
-        ctx,
-        nc,
-        null,
-        DECLINE_ASKS_CALLER,
-        &duties.decline_viable,
-        duties.decline_scan.is_empty(),
-    );
-    w.line(`if ${dead_end} { ${refuse} }`);
-    w.end();
-    w.end();
-}
-
 /// Which iterations an entry may refuse.
 ///
 /// A `+`'s first iteration is mandatory and takes what prediction picked. The
@@ -7266,12 +7156,12 @@ fn gen_iteration_duties<S: AsStrSlice, S1: AsStrSlice = String>(
     nc: &mut List<[String, i32]>,
     refuse: S1 = PLAIN_BREAK,
 ) {
-    if duties.is_empty() {
+    if duties.is_empty() || reserve_in_guard {
         return;
     }
     // The exemption is the entry's, not a duty's, so it wraps the whole
     // discharge. Applied per duty it can reach one and miss another, and a
-    // decline that fires on a `+`'s mandatory iteration emits a `+` matching
+    // refusal that fires on a `+`'s mandatory iteration emits a `+` matching
     // zero times.
     let exempt_first = if let UnlessFirst(flag) = refusable {
         w.begin(`if !${*flag}`);
@@ -7279,10 +7169,7 @@ fn gen_iteration_duties<S: AsStrSlice, S1: AsStrSlice = String>(
     } else {
         false;
     };
-    gen_rep_decline_stranded(w, duties, body_admits, at, ctx, nc, &refuse);
-    if !reserve_in_guard {
-        gen_rep_reserve_at(w, duties, body_admits, at, ctx, nc, &refuse);
-    }
+    gen_rep_reserve_at(w, duties, body_admits, at, ctx, nc, &refuse);
     if exempt_first {
         w.end();
     }
@@ -7455,60 +7342,6 @@ fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWrit
 /// The kind at `at` as an expression, EOF past the end.
 fn kind_at<S: AsStrSlice, S1: AsStrSlice>(stream: S, at: S1) -> String {
     return `if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF }`;
-}
-
-/// Whether an iteration from `start` to `end` that ends the input is kept with
-/// no continuation from the caller to ask. Exiting instead is viable only where
-/// the iteration's tokens can follow the rule and end the input, as `;` can
-/// after `list` in `s : list ';' EOF`; the jar keeps every other such iteration.
-/// The grammar answers that statically up to `INPUT_END_MAX_LEN` tokens
-/// (`current_rule_input_end`), and a longer iteration is kept.
-fn decline_ends_input_check<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
-    end_kind: S,
-    stream: S1,
-    start: S2,
-    end: S3,
-    ctx: &mut EmitContext,
-) -> String {
-    let unknown = if ctx.current_rule_reads_follow() { `${FOLLOW_PARAM} == 0 && ` } else { "" };
-    let ends_input = `${unknown}${end_kind} == TK_EOF`;
-    let mut exits: List<String> = [];
-    let by_len = ctx.current_rule_input_end();
-    for let n of 1..=by_len.len() {
-        let positions = &by_len[n - 1];
-        if positions.is_empty() {
-            continue;
-        }
-        let mut clause = `${end} == ${start} + ${n}`;
-        for let d of 0..<n {
-            let at = if d == 0 { `${stream}[${start}]` } else { `${stream}[${start} + ${d}]` };
-            clause.push_str(` && ${ctx.kind_check_str(&positions[d], &at)}`);
-        }
-        exits.push(clause);
-    }
-    if exits.is_empty() {
-        return ends_input;
-    }
-    return `${ends_input} && ${negate_cond(exits.join(" || "))}`;
-}
-
-/// Whether the token after an iteration lets the walk go on without declining:
-/// another iteration, the continuation, or a viable exit.
-fn decline_continue_check<S: AsStrSlice>(
-    loop_admits: &Admits,
-    duties: &IterationDuties,
-    subject: S,
-    ctx: &mut EmitContext,
-) -> String {
-    let mut exits = duties.decline_cont_first;
-    dedup_append_arr(&mut exits, &duties.decline_viable);
-    let Kinds(loop_first) = loop_admits else {
-        assert !exits.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's or the rule's FOLLOW";
-        return `${repeat_guard_cond(loop_admits, &NO_KINDS, subject, ctx)} || ${ctx.kind_check_str(&exits, subject)}`;
-    };
-    let mut kinds = *loop_first;
-    dedup_append_arr(&mut kinds, &exits);
-    return ctx.kind_check_str(&kinds, subject);
 }
 
 fn gen_rep_decided_entry<S: AsStrSlice>(

@@ -331,6 +331,7 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
         parser_rules.push(lower_rule(rule, ctx));
     }
     ctx.marks.follow_rule_snakes = follow_rule_snakes(grammar, &ctx.analysis, &ctx.marks);
+    ctx.marks.entry_follow_sites = entry_follow_sites(grammar, ctx);
     return LoweredGrammar {
         name: grammar.name,
         source_files: grammar.source_files,
@@ -362,6 +363,22 @@ fn follow_rule_snakes(grammar: &Grammar, analysis: &GrammarAnalysis, marks: &Low
         }
     }
     return snakes;
+}
+
+/// The continuation each rule's entry passes: what follows the rule where the
+/// parse starts at it (`GrammarAnalysis::entry_readings`).
+fn entry_follow_sites(grammar: &Grammar, ctx: &mut LowerContext) -> List<i32> {
+    let mut sites = List::<i32>::filled(grammar.parser_rules.len(), -1);
+    if !ctx.marks.caller_follow_gate {
+        return sites;
+    }
+    let entry = ctx.analysis.entry_readings(FOLLOW_SITE_DEPTH);
+    for let ri of 0..<grammar.parser_rules.len() {
+        if !entry[ri].is_empty() && ctx.marks.follow_rule_snakes.contains_str(&grammar.parser_rules[ri].snake_name) {
+            sites[ri] = ctx.intern_follow_site(&entry[ri]);
+        }
+    }
+    return sites;
 }
 
 /// Classify a parser rule by shape and dispatch to the matching
@@ -3039,7 +3056,7 @@ fn lower_group_alt<S: AsStrSlice, S1: AsStrSlice>(
 /// as `Op::ListLabel(Repeat(_))` while the scan still surfaces a top-level
 /// `ScanElement::Repeat`. Every site that rebinds a repeat's caller FOLLOW asks
 /// through here, so `x+=(y*)` cannot take that rebind — and with it the reserve
-/// and decline guards — on the scan alone.
+/// guard — on the scan alone.
 fn op_repeat_inner(op: &Op) -> Option<&RepeatOp> {
     return match op {
         Repeat(r) => Option::Some(r),
@@ -4262,8 +4279,6 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             alt_elements,
             index,
             ctx,
-            reaches_rule_tail,
-            rule_name,
             outer_suffix,
         ),
     };
@@ -4275,42 +4290,19 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
 /// the parse's `RepeatOp` and the scan's `ScanRepeatElement` build their duties
 /// from the same body. Two calls with the same arguments cannot disagree, which
 /// is the invariant the mirrored stamps could only assert.
-fn lower_iteration_duties<S: AsStrSlice>(
+fn lower_iteration_duties(
     non_greedy: bool,
     kind: RepeatKind,
     loop_admits: &Admits,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut LowerContext,
-    reaches_rule_tail: bool,
-    rule_name: S,
     outer_suffix: &List<Element>,
 ) -> IterationDuties {
     let mut duties = IterationDuties {};
     let continuation = follow_elements_of(alt_elements, outer_suffix);
     if let Some(scan) = lower_reserve_scan(non_greedy, kind, loop_admits, &continuation, index, ctx) {
         duties.reserve_scan = scan;
-    }
-    // No `mark_rule_reads_follow` for the decline: it asks the rule's classical
-    // FOLLOW, a superset of anything a caller's mask admits, so the runtime mask
-    // would decide nothing. Marking it would thread a `follow` parameter through
-    // every caller of every rule carrying such a loop — 6000 lines of SQLite's
-    // parser, for no answer.
-    let rule_follow = ctx.follow.for_probe(rule_name);
-    if let Some(hit) = lower_decline_scan(
-        non_greedy,
-        kind,
-        loop_admits,
-        alt_elements,
-        index,
-        ctx,
-        reaches_rule_tail,
-        &rule_follow,
-    ) {
-        duties.decline_stranded = true;
-        duties.decline_scan = hit.0;
-        duties.decline_cont_first = hit.1;
-        duties.decline_viable = rule_follow;
     }
     return duties;
 }
@@ -4345,58 +4337,6 @@ fn lower_reserve_scan(
     }
     return lower_scan_continuation_elements(alt_elements, index, ctx);
 }
-
-/// The continuation a greedy loop asks before committing to an iteration, or
-/// `null` wherever the loop cannot strand its own alternative — which leaves
-/// every other loop's emit unchanged.
-///
-/// `X* Y?` where an `X` and a `Y` can start on the same token: the loop takes
-/// every `X` its body scans, so the input that reads as `Y` loses its head to
-/// the loop and what follows the head has no taker. `stmt+ expr?` over
-/// `{ y }.m()` is the shape — the `{ y }` scans as a statement and strands the
-/// `.m()`.
-///
-/// The caller is the other continuation that can lose its head, and an empty
-/// suffix leaves it the only one: `statement+` ending a case clause takes
-/// `default` as a statement and strands the `:` of `default :`.
-///
-/// The conditions mirror `lower_reserve_scan`'s and answer the other half of
-/// the same question. A reservation protects a *mandatory* suffix from the
-/// loop; this protects an *optional* one, which nothing else does. Both need
-/// the loop's head to overlap what it could take, or the loop could not have
-/// taken that input in the first place. Only this one needs the rule's tail,
-/// because it ends by asking the caller's FOLLOW.
-///
-/// Returns the continuation's scan and its FIRST set together: the guard needs
-/// both and the set is what decides whether to build the scan at all, so
-/// computing it once is the difference between one `first_of_elements_from` per
-/// qualifying loop and two.
-fn lower_decline_scan(
-    non_greedy: bool,
-    kind: RepeatKind,
-    loop_admits: &Admits,
-    alt_elements: &List<Element>,
-    index: i32,
-    ctx: &mut LowerContext,
-    reaches_rule_tail: bool,
-    rule_follow: &List<i32>,
-) -> Option<[List<ScanElement>, List<i32>]> {
-    if non_greedy || !kind matches { Star | Plus } || !reaches_rule_tail {
-        return null;
-    }
-    if !ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1) {
-        return null;
-    }
-    let suffix_first = ctx.analysis.first_of_elements_from(alt_elements, index + 1);
-    if !admits_overlap(loop_admits, &suffix_first) && !admits_overlap(loop_admits, rule_follow) {
-        return null;
-    }
-    return match lower_scan_continuation_elements(alt_elements, index, ctx) {
-        Some(scan) => Option::Some([scan, suffix_first]),
-        None => null,
-    };
-}
-
 
 /// The continuation for emit's probe, built only for the Repeat kinds whose
 /// decision can need it, and only where the scan's end settles the exit.

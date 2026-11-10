@@ -8,6 +8,7 @@ use { Grammar } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from "./gir.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE } from "./emit_context.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
+use { follow_site_name } from "./table_registry.wado";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
 use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
@@ -142,8 +143,8 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &EmitC
     w.line(`return parse_${start.snake_name}(input, max_errors);`);
     w.end();
     w.blank();
-    for let rule of &lowered.parser_rules {
-        gen_parse_rule_entry(w, rule, ctx);
+    for let ri of 0..<lowered.parser_rules.len() {
+        gen_parse_rule_entry(w, &lowered.parser_rules[ri], ri, ctx);
     }
 }
 
@@ -200,16 +201,24 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
 }
 
 /// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry as a thin wrapper
-/// over `_run_parse_entry`. The closure defers to `_parse_<rule>(p)` so a follow-gated
-/// or LR entry's defaulted `follow` / `min_prec` arguments fill in.
-fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &EmitContext) {
+/// over `_run_parse_entry`. The closure defers to `_parse_<rule>(p)`, passing
+/// what follows the rule where the parse starts at it; an LR entry's defaulted
+/// `min_prec` fills in.
+fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, rule_index: i32, ctx: &EmitContext) {
     let header = rule_header(rule);
     w.begin(
         `pub fn parse_${header.snake_name}<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(
             ctx,
         )}`,
     );
-    let call = `_parse_${header.snake_name}(p)`;
+    let follow = if let Some(site) = ctx.plan.entry_follow_site(rule_index) {
+        let name = follow_site_name(site);
+        w.note(&name);
+        `, ${name}`;
+    } else {
+        "";
+    };
+    let call = `_parse_${header.snake_name}(p${follow})`;
     let entry = if entry_emits_vals(ctx, &header.name) {
         `|p: &mut Parser| { let _ = ${call}; }`;
     } else {
