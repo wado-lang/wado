@@ -2,7 +2,7 @@ use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { comment_end, ident_end, scan_closed_string } from "./g4/scan.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
-use { FOLLOW_LINK_ID, FOLLOW_CONT_BITS, FOLLOW_SLOT_BITS as RUNTIME_SLOT_BITS } from "./runtime/follow.wado";
+use { FOLLOW_LINK_ID } from "./runtime/follow.wado";
 
 /// Open an `if` arm, or chain it onto the arm already open.
 pub fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, chained: bool, cond: S) {
@@ -89,60 +89,23 @@ pub fn dedup_name<S: AsStrSlice>(base: S, counts: &mut List<[String, i32]>) -> S
     return base.to_string();
 }
 
-/// A continuation is one `i64`: `FOLLOW_CONT_SLOTS` positions of
-/// `FOLLOW_SLOT_BITS`, each holding a 1-based `FOLLOW_SETS` index and a bit
-/// saying it opens a fresh reading. Composition is a shift, so a call site
-/// spells it in constants and a rule carries one parameter. What a shift would
-/// push past the last slot moves to the runtime's link table, and a
-/// `FOLLOW_LINK_ID` slot stands for it, so composing loses no reading.
-pub global FOLLOW_SLOT_BITS: i32 = RUNTIME_SLOT_BITS as i32;
-
-pub global FOLLOW_CONT_SLOTS: i32 = (FOLLOW_CONT_BITS / RUNTIME_SLOT_BITS) as i32;
-
-pub global FOLLOW_MAX_POSITION_ID: i32 = FOLLOW_LINK_ID as i32 - 1;
+/// A continuation is one `i64`: frames of `FOLLOW_SLOT_BITS`, each naming a
+/// continuation site, innermost first. Where a reading of a site ends, the next
+/// frame is read; past the last frame the continuation is unknown. Composition
+/// is a shift, so a call site spells it in constants and a rule carries one
+/// parameter. What a shift would push past the last slot moves to the
+/// runtime's link table, and a `FOLLOW_LINK_ID` slot stands for it, so
+/// composing loses no frame.
+pub global FOLLOW_SITE_LIMIT: i32 = FOLLOW_LINK_ID as i32 - 1;
 
 /// The whole continuation forwarded unmoved.
 pub fn follow_forward_args() -> String {
     return FOLLOW_PARAM;
 }
 
-/// `prefix` ahead of the caller's continuation, which therefore starts at the
-/// `positions` the prefix already constrains. `opens` marks that start as a
-/// fresh reading rather than more of the same one.
-///
-/// Behind `prefix`, the forwarded half is masked down to its positions first. A
-/// reading it opens begins where the alternation was written, and `prefix`
-/// moves that point without moving the mark, so the gate would revive the
-/// reading `prefix` positions early — `{ x, y }` inside `[ … ]` handing its own
-/// comma to the list, whose next iteration also starts with one. Opened, the
-/// forwarded half starts at the gate, so its own readings do too and keep their
-/// marks: masked, `f (',' f)* ')'` would lose its `)` behind `f`'s `('::' g)*`.
-///
-/// An empty continuation is an unknown one. Behind `prefix` it only stops
-/// constraining, but as an alternative to it, it is a reading the slots cannot
-/// hold, so the result carries `FOLLOW_OPEN_READING` for `follow_admits`. An
-/// open reading behind `prefix` is dropped: `follow_admits` asks only where a
-/// reading can start, and every reading here starts with the prefix. Carried as
-/// a bare mark it would admit any kind, and `[b, c]` would give its `,` to the
-/// element before it.
-pub fn follow_composed<S: AsStrSlice>(prefix: S, positions: i32, opens: bool) -> String {
-    let helper = if opens { "follow_then_opening" } else { "follow_then" };
-    return `${helper}(${prefix}, ${positions * FOLLOW_SLOT_BITS}, ${FOLLOW_PARAM})`;
-}
-
-/// `prefix` or `alternative`, each read from the gate's position. Unlike the
-/// forwarded half in `follow_composed`, `alternative` is spelled here, so every
-/// reading it opens already begins at the gate and keeps its mark.
-pub fn follow_alternative<S: AsStrSlice, S1: AsStrSlice>(prefix: S, positions: i32, alternative: S1) -> String {
-    return `follow_or(${prefix}, ${positions * FOLLOW_SLOT_BITS}, ${alternative})`;
-}
-
-/// `cont` with one more reading the slots cannot hold, `open` being
-/// `follow_open_set` of the kinds it starts with or a bare
-/// `FOLLOW_OPEN_READING`. The open field names one set, or a union of them
-/// the runtime interns, so a reading added to another keeps both.
-pub fn follow_opened<S: AsStrSlice, S1: AsStrSlice>(cont: S, open: S1) -> String {
-    return `follow_open_with(${cont}, ${open})`;
+/// Site `site` ahead of the caller's continuation.
+pub fn follow_pushed<S: AsStrSlice>(site: S) -> String {
+    return `follow_push(${site}, ${FOLLOW_PARAM})`;
 }
 
 /// A `follow_yields` call on the forwarded continuation.
@@ -176,8 +139,11 @@ fn follow_query<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
     pos: S2,
     cont: S3,
 ) -> String {
-    return `${query}(${tokens}, ${pos}, ${cont}, &FOLLOW_SETS, TK_EOF)`;
+    return `${query}(${tokens}, ${pos}, ${cont}, &${FOLLOW_TABLES}, TK_EOF)`;
 }
+
+/// The generated global holding every continuation site's readings.
+pub global FOLLOW_TABLES: String = "FOLLOW_TABLES";
 
 /// `follow_yields_call` where the site is `gated` on the caller's FOLLOW, else "".
 pub fn follow_yields_call_if<S: AsStrSlice, S1: AsStrSlice>(gated: bool, tokens: S, pos: S1) -> String {

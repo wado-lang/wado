@@ -856,9 +856,12 @@ argument rather than baked into a specialised callee. At a tail-greedy
 `Repeat` the loop yields to the caller when the next tokens match the
 caller's continuation at every depth, unless the iteration keeps a parse
 viable: another iteration or the continuation starts where its scan ends.
-The continuation keeps every reading it composes: what overflows the slots
-moves to a per-parse link table, and two open readings join into a union
-the runtime interns. The parameter is pruned
+The continuation is a chain of frames, one per call that leaves something of
+its rule behind. A frame names a site: the ways the rest of that rule can
+begin, up to the gate's depth, each marked by whether the rule ends there and
+the next frame takes over. A loop's body continues into the loop again, so
+another iteration and the exit are both readings of one site. What overflows
+the slots moves to a per-parse link table, so no frame is lost. The parameter is pruned
 entirely when a grammar has no such gate — gate-free grammars carry no
 `follow` at all (it also costs a stack slot per recursive scan frame,
 which overflowed the wasm stack on a deep-recursion grammar). Because the

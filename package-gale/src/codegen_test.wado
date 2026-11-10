@@ -575,18 +575,18 @@ X : 'x' ; Y : 'y' ; Z : 'z' ; W : 'w' ;
 
 // Generating SQLite alone takes about the default five seconds.
 #[timeout_ms(30000)]
-test "every emitted FOLLOW mask is named by a call" {
+test "every emitted FOLLOW site is named by a call" {
     let output = gen_source(#include_str("../tests/grammars/SQLite.g4"));
-    let mut masks = 0;
+    let mut sites = 0;
     for let line of output.split("\n") {
-        if !line.starts_with("global FOLLOW_MASK_") {
+        if !line.starts_with("global FOLLOW_SITE_") {
             continue;
         }
-        masks += 1;
+        sites += 1;
         let name = line.split(":").next().unwrap().to_string().split(" ").last().unwrap().to_string();
         assert output.contains(`${name},`) || output.contains(`${name})`) || output.contains(`${name} `);
     }
-    assert masks > 0, "SQLite interns FOLLOW masks";
+    assert sites > 0, "SQLite interns FOLLOW sites";
 }
 
 test "an optional takes the token its guard tested" {
@@ -2714,7 +2714,7 @@ WS : ' ' -> skip ;
     assert got == "new -a(); => (s (e new (e - (e a)) (args ( ))) ;)\n-a(); => (s (e - (e (e a) (args ( )))) ;)\n";
 }
 
-global OPEN_READING_BEHIND_PREFIX_G4: String = "
+global CONTINUATION_BEHIND_PREFIX_G4: String = "
 grammar T;
 s : d ';' ;
 d : ID '=' e ('!' ID)? ;
@@ -2726,11 +2726,11 @@ ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ";
 
-test "an open reading behind a prefix admits only what the prefix starts with" {
+test "a continuation behind a prefix admits only what the prefix starts with" {
     // TypeScript's `arrayElement : ... ','?` in an initializer an optional
     // follows: the list's `]` comes first, so the `,` before `c` is the next
     // element's, not a trailing one.
-    let got = parses(OPEN_READING_BEHIND_PREFIX_G4, "s", ["x = [b, c];", "x = [b,, c,];", "x = [b] ! y;"]);
+    let got = parses(CONTINUATION_BEHIND_PREFIX_G4, "s", ["x = [b, c];", "x = [b,, c,];", "x = [b] ! y;"]);
     assert got == "x = [b, c]; => (s (d x = (e (a [ (l (el (e b)) , (el (e c))) ]))) ;)\nx = [b,, c,]; => (s (d x = (e (a [ (l (el (e b) ,) , (el (e c) ,)) ]))) ;)\nx = [b] ! y; => (s (d x = (e (a [ (l (el (e b))) ])) ! y) ;)\n";
 }
 

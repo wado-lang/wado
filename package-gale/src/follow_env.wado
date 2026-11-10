@@ -51,13 +51,13 @@ impl FollowSet {
 /// * `rule_follow` — per-rule classical FOLLOW set, computed by
 ///   the worklist fixed point in [`compute_rule_follow`].
 ///
-/// The follow-mask registry — the distinct-mask table consumed by
-/// codegen to emit the `FOLLOW_MASK_<id>` globals — is intentionally
-/// NOT populated here. Lower's element walks (the only walker that
-/// needs to know every site's per-call-site `caller_follow`) mint
-/// registry entries directly via `LowerContext::intern_follow_mask`, so
-/// there is one authoritative element-walking pass that both builds
-/// the IR and registers masks. Duplicating that walk in
+/// The continuation-site registry — the distinct-site table consumed by
+/// codegen to emit `FOLLOW_TABLES` — is intentionally NOT populated
+/// here. Lower's element walks (the only walker that needs to know every
+/// site's per-call-site `caller_follow`) mint registry entries directly
+/// via `LowerContext::intern_follow_site`, so there is one authoritative
+/// element-walking pass that both builds the IR and registers sites.
+/// Duplicating that walk in
 /// `FollowEnv::build` to pre-populate the registry would only re-derive
 /// what lower is already about to compute — and would have to be kept
 /// in lock-step with lower's per-shape handling, which is the kind of

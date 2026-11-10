@@ -104,14 +104,6 @@ Remaining:
 
 Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`dead-ends.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.
 
-### Iter-body K-prefix for `Repeat` inner rule references
-
-The K-prefix follow-mask path closes the multi-token tail-greedy gap at the outer alternative position, but a rule reference inside a `Repeat` body still falls back to the 1-token mask path. The fixed-point "next iteration | exit-to-caller" computation that would let it gate is straightforward but not yet plumbed.
-
-### Multi-alt rule-reference expansion in the caller-side mask analysis
-
-The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
-
 ### Opaque first sets in the LR routing and precedence checks
 
 `op_first_has_lr` in `lower.wado` answers that any rule call may start with a loop operator. So a self-reference nested in a subrule and followed by a call (`e : e '(' (e g)? ')' | e '+' e | ID ; g : ':' ID ;`) routes the whole rule to the runtime simulator, which is exact but slower. The same helper decides the static operands' precedence floor, so reading the callee's first set (`GrammarAnalysis::first_of_rule`) changes parse behaviour there too, and needs the corpus to confirm it.

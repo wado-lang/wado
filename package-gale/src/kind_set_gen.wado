@@ -1,13 +1,14 @@
-//! Token-set tables — `_kind_set_<id>` helpers, `FOLLOW_MASK_<id>` and
-//! `SYNC_<id>` globals — and the lookahead conditions that read them.
-//! Module-level emit: `codegen` writes the tables once, rule bodies only
-//! intern sets and build conditions.
+//! Token-set tables — `_kind_set_<id>` helpers, `FOLLOW_TABLES` with its
+//! `FOLLOW_SITE_<id>` names, and `SYNC_<id>` globals — and the lookahead
+//! conditions that read them. Module-level emit: `codegen` writes the tables
+//! once, rule bodies only intern sets and build conditions.
 
 use { EmitContext } from "./emit_context.wado";
-use { follow_mask_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
+use { follow_site_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { HashSet } from "core:collections";
-use { FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
-use { sets_overlap } from "./token_kinds.wado";
+use { FOLLOW_SITE_LIMIT, FOLLOW_TABLES } from "./gen_util.wado";
+use { sets_overlap, union_kind_arrays } from "./token_kinds.wado";
+use { Reading } from "./readings.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { DISPATCH_KIND_LOCAL } from "./ident.wado";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
@@ -90,44 +91,69 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSe
     }
 }
 
-/// Emit the runtime FOLLOW tables: `FOLLOW_SETS` holds every distinct position
-/// set once, as the bitset `kind_set_has` reads, and each `FOLLOW_MASK_<id>`
-/// packs its positions into one `i64`. A continuation is therefore a scalar a
-/// call site composes with a shift, and a rule takes one parameter rather than
-/// a row of slots.
-pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
-    // No caller-FOLLOW gate anywhere ⇒ no call site names either table.
-    // A grammar that gates on a forwarded `follow` alone interns no mask
-    // and still reads `FOLLOW_SETS`, so only the masks are conditional.
+/// Emit the runtime FOLLOW tables: `FOLLOW_TABLES` holds every distinct
+/// position set once, as a row of `stride` bitset words (all ones for a
+/// position that admits any kind), and each site the
+/// emitted code names as a row. The row opens with the set its readings can
+/// start with and whether one is empty (`set << 1 | empty`), which turns most
+/// queries away at one test, then each reading as a header (`len << 1 | ends`)
+/// and its positions' set indices. `FOLLOW_SITE_<id>` is the row's 1-based
+/// number, so a continuation is a scalar a call site composes with a shift, and
+/// a rule takes one parameter rather than a row of slots.
+pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
+    // No caller-FOLLOW gate anywhere ⇒ no call site names the tables. A grammar
+    // that gates on a forwarded `follow` alone names no site and still reads
+    // the tables, so only the sites are conditional.
     if !ctx.plan.emit_follow {
         return;
     }
     let mut sets: List<List<i32>> = [];
-    let mut masks: List<String> = [];
-    let all_masks = ctx.tables.follow_masks();
-    for let mut mask_id = 0; mask_id < all_masks.len(); mask_id += 1 {
-        let name = follow_mask_name(mask_id);
+    let mut starts: List<String> = ["0"];
+    let mut readings: List<String> = [];
+    let mut names: List<String> = [];
+    let all_sites = ctx.tables.follow_sites();
+    for let mut site_id = 0; site_id < all_sites.len(); site_id += 1 {
+        let name = follow_site_name(site_id);
         if !used.contains(name) {
             continue;
         }
-        let mut packed: i64 = 0;
-        let mut slot = 0;
-        for let depth_set of &all_masks[mask_id] {
-            let id = intern_position_set(&mut sets, depth_set) + 1;
-            assert id <= FOLLOW_MAX_POSITION_ID;
-            packed |= id as i64 << (slot * FOLLOW_SLOT_BITS) as i64;
-            slot += 1;
+        let site = &all_sites[site_id];
+        let [heads, has_empty] = site_heads(site);
+        readings.push(`${intern_position_set(&mut sets, &heads) << 1 | if has_empty { 1 } else { 0 }}`);
+        for let r of site {
+            readings.push(`${r.kinds.len() << 1 | if r.ends { 1 } else { 0 }}`);
+            for let position of &r.kinds {
+                readings.push(`${intern_position_set(&mut sets, position)}`);
+            }
         }
-        assert slot <= FOLLOW_CONT_SLOTS;
-        masks.push(`global ${name}: i64 = ${packed};`);
+        starts.push(`${readings.len()}`);
+        assert starts.len() - 1 <= FOLLOW_SITE_LIMIT, "the sites must fit a continuation slot";
+        names.push(`global ${name}: i64 = ${starts.len() - 1};`);
     }
+    let stride = ((ctx.analysis.token_kind_count() - 1) >> 5) + 1;
     let mut rendered: List<String> = [];
     for let set of &sets {
-        rendered.push(`[${kind_bitset_words(set).join(", ")}]`);
+        if set.is_empty() {
+            for let _ of 0..<stride {
+                rendered.push("-1");
+            }
+            continue;
+        }
+        let words = kind_bitset_words(set);
+        assert words.len() <= stride;
+        rendered.extend(&words);
+        for let _ of words.len()..<stride {
+            rendered.push("0");
+        }
     }
-    w.line(`global FOLLOW_SETS: List<List<i32>> = [${rendered.join(", ")}];`);
-    for let mask of &masks {
-        w.line(mask);
+    w.line(`global ${FOLLOW_TABLES}: FollowTables = FollowTables {`);
+    w.line(`    stride: ${stride},`);
+    w.line(`    sets: [${rendered.join(", ")}],`);
+    w.line(`    starts: [${starts.join(", ")}],`);
+    w.line(`    readings: [${readings.join(", ")}],`);
+    w.line("};");
+    for let line of &names {
+        w.line(line);
     }
     w.blank();
 }
@@ -149,6 +175,26 @@ pub fn kind_bitset_words(set: &List<i32>) -> List<String> {
         out.push(if *word == i32::MIN { String::from("i32::MIN") } else { `${*word}` });
     }
     return out;
+}
+
+/// The kinds a site's readings start with, and whether one of them is empty. A
+/// site is never only the empty reading, which `continuation_arg` forwards
+/// instead, so some reading starts with a token.
+fn site_heads(site: &List<Reading>) -> [List<i32>, bool] {
+    let mut heads: List<i32> = [];
+    let mut has_empty = false;
+    let mut any = false;
+    for let r of site {
+        if r.kinds.is_empty() {
+            has_empty = true;
+        } else if r.kinds[0].is_empty() {
+            any = true;
+        } else {
+            heads = union_kind_arrays(&heads, &r.kinds[0]);
+        }
+    }
+    assert any || !heads.is_empty(), "a site starts with some token";
+    return [if any { [] } else { heads }, has_empty];
 }
 
 /// The index of `set` in `sets`, appending it when it is new. A grammar

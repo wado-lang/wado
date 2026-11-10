@@ -30,9 +30,7 @@ use {
     follow_sep,
     negate_cond,
     and_operand,
-    follow_composed,
-    follow_alternative,
-    follow_opened,
+    follow_pushed,
     follow_admits_call,
     follow_exit_viable_call,
     follow_resumes_call,
@@ -214,9 +212,9 @@ use { lr_decide_fn_name } from "./atn_lr_table.wado";
 /// the grammar has a caller-FOLLOW gate (`ctx.current_rule_reads_follow()`); guarded at
 /// every call site so grammars with no FOLLOW repair pay no per-frame cost.
 ///
-/// The continuation is one packed `i64` (see `follow_composed`): a call
-/// prepending its own mask shifts the caller's along in constants, so nothing
-/// is allocated, copied, or threaded per frame. See `follow_yields`.
+/// The continuation is one packed `i64` of site frames (see `follow_push`): a
+/// call pushing its own site shifts the caller's along, so nothing is
+/// allocated, copied, or threaded per frame. See `follow_yields`.
 fn add_follow_param(f: &mut FnSpec) {
     add_zero_default_param(f, FOLLOW_PARAM, "i64");
 }
@@ -2353,7 +2351,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     // walked from `sp` has an end to ask about.
     if yields_unless_viable && walks_iteration {
         let resumes = continuation_resumes_at(ctx, &again, "tokens", "tokens", "pos");
-        gen_scan_rewind_break(w, ctx, "sp", `${follow_yields_call("tokens", "sp")} && !${resumes}`);
+        gen_scan_rewind_break(w, ctx, "sp", `!${resumes} && ${follow_yields_call("tokens", "sp")}`);
     }
     w.end();
 }
@@ -2369,7 +2367,8 @@ fn scan_body_is_leaf(body: &ScanElement) -> bool {
 }
 
 /// Rewind an optional's body, scanned from `start` to `pos`, where the caller's
-/// continuation starts at `start` and none resumes at `pos`.
+/// continuation starts at `start` and none resumes at `pos`. A body that took
+/// nothing has nothing to rewind, which spares the walk of the continuation.
 fn gen_scan_yield_unless_resumed<S: AsStrSlice>(
     w: &mut CodeWriter,
     re: &ScanRepeatElement,
@@ -2377,7 +2376,7 @@ fn gen_scan_yield_unless_resumed<S: AsStrSlice>(
     ctx: &mut EmitContext,
 ) {
     let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
-    w.begin(`if ${follow_yields_call("tokens", &start)} && !${resumes}`);
+    w.begin(`if pos != ${start} && !${resumes} && ${follow_yields_call("tokens", &start)}`);
     gen_scan_rewind(w, ctx, &start);
     w.end();
 }
@@ -6485,7 +6484,7 @@ fn optional_entry_yielding<S: AsStrSlice>(
         None => gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, "opt_scan_pos", "opt_scan", false),
     };
     let resumes = continuation_resumes_at(ctx, &r.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
-    w.line(`${verdict} = ${scan_pos} >= 0 && (!${follow_yields_call("&p.kinds", "p.pos")} || ${resumes});`);
+    w.line(`${verdict} = ${scan_pos} >= 0 && (${resumes} || !${follow_yields_call("&p.kinds", "p.pos")});`);
     w.end();
     return verdict;
 }
@@ -6597,7 +6596,7 @@ fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 ) -> String {
     let end = `${pos} + 1`;
     let resumes = continuation_resumes_at(ctx, local_first, &tokens, stream, &end);
-    return `(!${follow_yields_call(tokens, pos)} || ${resumes})`;
+    return `(${resumes} || !${follow_yields_call(tokens, pos)})`;
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy loop's iteration entry,
@@ -6607,11 +6606,25 @@ fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// continuation starts where it ends. ANTLR4 resolves that ambiguity by
 /// looping, as `optional_entry_yielding` does by entering. A body the scan
 /// cannot walk yields wherever the continuation starts.
-fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
+///
+/// `entry` is the loop's own guard where it has not been tested yet. A token
+/// the body cannot start with ends the loop either way, and reading the caller's
+/// continuation costs a walk of its frames, so the guard goes first.
+fn gen_caller_follow_gate<S: AsStrSlice = String>(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+    entry: S = "true",
+) {
     if !rep_op.gate_caller_follow {
         return;
     }
-    let yields = follow_yields_call("&p.kinds", "p.pos");
+    let yields = if entry.as_str_slice() == "true" {
+        follow_yields_call("&p.kinds", "p.pos");
+    } else {
+        `${and_operand(entry)} && ${follow_yields_call("&p.kinds", "p.pos")}`;
+    };
     if !rep_op.body_scannable {
         w.line(`if ${yields} { break; }`);
         return;
@@ -6665,39 +6678,10 @@ fn follow_arg_expr(ctx: &mut EmitContext, arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "0",
         Forward => follow_forward_args(),
-        ForwardOpen(first) => follow_opened(
-            &follow_forward_args(),
-            &follow_open_set_expr(ctx, *first),
-        ),
-        Mask(id) => ctx.follow_mask_ref(*id),
-        // The caller's continuation shifts along behind the new head, starting
-        // where the head stops constraining.
-        Combined(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.tables.follow_mask_positions(*id), false),
-        // Same, and what follows the loop opens a fresh reading: the loop
-        // iteration and it are alternatives, not a sequence.
-        AltMask(le) => {
-            let loop_ref = ctx.follow_mask_ref(le.loop_mask);
-            let positions = ctx.tables.follow_mask_positions(le.loop_mask);
-            match le.exit {
-                Forward => follow_composed(loop_ref, positions, true),
-                ForwardOpen(first) => follow_opened(
-                    &follow_composed(loop_ref, positions, true),
-                    &follow_open_set_expr(ctx, first),
-                ),
-                _ => follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit)),
-            }
+        Site(site) => {
+            let site_ref = ctx.follow_site_ref(site.id);
+            if site.ends { follow_pushed(site_ref) } else { site_ref }
         },
-        OpenLoop(le) => follow_opened(&follow_arg_expr(ctx, &le.exit), &follow_open_set_expr(ctx, Option::Some(
-            le.loop_mask,
-        ))),
-    };
-}
-
-/// The open reading a `ForwardOpen` adds: the kinds it starts with, or any.
-fn follow_open_set_expr(ctx: &mut EmitContext, first: Option<i32>) -> String {
-    return match first {
-        Some(id) => `follow_open_set(${ctx.follow_mask_ref(id)})`,
-        None => "FOLLOW_OPEN_READING",
     };
 }
 
@@ -7063,7 +7047,7 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
     if guarded_only {
         w.begin(`if !${plus_flag}`);
     }
-    gen_caller_follow_gate(w, rep_op, ctx, name_counts);
+    gen_caller_follow_gate(w, rep_op, ctx, name_counts, body_guard_cond(rep_op, ctx));
     let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.duties, &rep_op.body_admits, ctx, name_counts);
     // `Always`, though a `+` has a flag: the whole guard sits inside
     // `if !plus_flag`, which already excluded the mandatory iteration.
@@ -7112,11 +7096,11 @@ fn gen_rep_speculative_iteration(
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
 ) {
-    gen_caller_follow_gate(w, rep_op, ctx, nc);
     let guard = body_guard_cond(rep_op, ctx);
     if guard != "true" {
         w.line(`if ${negate_cond(&guard)} { break; }`);
     }
+    gen_caller_follow_gate(w, rep_op, ctx, nc);
     let pending = dedup_name("sp_pending", nc);
     w.line(`let ${pending} = p.pending;`);
     let mark = Speculation::begin(w, dedup_name("sp", nc));

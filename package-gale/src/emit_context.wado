@@ -9,7 +9,7 @@ use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
-use { TableRegistry, follow_mask_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
+use { TableRegistry, follow_site_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { ParserPlan } from "./parser_plan.wado";
 use {
     DecisionPredicates,
@@ -697,9 +697,9 @@ impl EmitContext {
         return self.cursor.noted(sync_list_name(id));
     }
 
-    /// The global naming FOLLOW mask `id`.
-    pub fn follow_mask_ref(&mut self, id: i32) -> String {
-        return self.cursor.noted(follow_mask_name(id));
+    /// The global naming continuation site `id`.
+    pub fn follow_site_ref(&mut self, id: i32) -> String {
+        return self.cursor.noted(follow_site_name(id));
     }
 
     /// Render a token-set membership check on `expr`.

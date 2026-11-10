@@ -80,7 +80,8 @@ use { LitToken } from "./lexer_gen.wado";
 use { LowerContext, LowerMarks } from "./lower_context.wado";
 use { GrammarAnalysis, close_over_callers, is_nullable } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
-use { FOLLOW_MASK_MAX_K } from "./table_registry.wado";
+use { FOLLOW_SITE_DEPTH } from "./table_registry.wado";
+use { readings_are_empty, readings_end } from "./readings.wado";
 use {
     alt_is_left_recursive,
     compute_prefix_self_ref_min_prec,
@@ -141,7 +142,7 @@ use {
     FieldDecl,
     FieldKind,
     FollowArg,
-    CallerLoop,
+    FollowSite,
     DiagnosticKind,
     DiagnosticOwner,
     DiagnosticSite,
@@ -158,18 +159,16 @@ use {
     lr_trailing_prec,
 } from "./gir.wado";
 
-/// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
-/// a `Label` or greedy repeat wrapping one, or a greedy loop over a group,
-/// whose tail calls continue past the loop. Other shapes discard it in
-/// `lower_op`, so computing a mask there interns a dead `FOLLOW_MASK` and
-/// perturbs mask ids.
+/// True when an element threads a `FollowArg` into a callee: a `RuleRef`, or
+/// a `Label` or `?` wrapping one. A loop's body continues into the loop, which
+/// `repeat_body_follow` reads for itself. Other shapes discard it in
+/// `lower_op`, so computing a site there interns a dead `FOLLOW_SITE` and
+/// perturbs site ids.
 fn element_consumes_follow_arg(elem: &Element) -> bool {
     return match elem {
         RuleRef(_) => true,
         Label(lab) => element_consumes_follow_arg(&lab.element),
-        // `greedy_optional_inner_follow` hands the continuation down: whole to
-        // a `?`, and to a loop as the other reading beside its next iteration.
-        Repeat(rep) => !rep.non_greedy && (element_consumes_follow_arg(&rep.element) || loops_over_group(rep)),
+        Repeat(rep) => rep.kind matches { Optional } && element_consumes_follow_arg(&rep.element),
         Group(g) => if let Some(inner) = transparent_inner(g) {
             element_consumes_follow_arg(inner);
         } else {
@@ -188,18 +187,15 @@ fn transparent_inner(g: &GroupElement) -> Option<&Element> {
     return null;
 }
 
-fn loops_over_group(rep: &RepeatElement) -> bool {
-    return !rep.kind matches { Optional } && rep.element matches { Group(_) };
-}
-
-/// A position whose continuation ends with the element list it sits in — a
-/// rule's own alternative, or a group body a loop re-enters.
+/// A position whose continuation ends with the element list it sits in: a
+/// rule's own alternative.
 global NO_OUTER_SUFFIX: List<Element> = [];
 
 /// The elements a position's continuation runs through: the alternative's own,
-/// then what follows the group holding it. Inside `(OR names? OR) body` the
-/// continuation of `names?` is `OR body`, and only the first half is in the
-/// list the group walks.
+/// then what follows the group holding it, up to the end of the rule. Inside
+/// `(OR names? OR) body` the continuation of `names?` is `OR body`, and only
+/// the first half is in the list the group walks. Inside a loop, what follows
+/// is the loop again (`loop_rest`).
 fn follow_elements_of(elements: &List<Element>, outer_suffix: &List<Element>) -> List<Element> {
     if outer_suffix.is_empty() {
         return *elements;
@@ -219,31 +215,25 @@ fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
     return out;
 }
 
-/// Compute the runtime FOLLOW argument a `RuleRef` call at index `i`
-/// in `elements` must supply to its callee. Instead of cloning the
-/// callee per mask (the retired `__follow_<id>` variant mechanism),
-/// the caller threads the mask as data.
-///
-/// The callee's continuation past the call is the local suffix
-/// `elements[i+1..]`:
-///
-///   - a local prefix spanning `FOLLOW_MAX_DEPTH` → `Mask(id)`: it fills every
-///     position the gate reads, so nothing the caller adds is reachable;
-///   - a shorter non-empty local prefix → `Combined(id)`: the prefix ahead of
-///     whatever the CURRENT rule was called with (the runtime `follow`). The
-///     forwarded half is kept even for a non-nullable suffix, where the prefix
-///     already spans it: the depth past the suffix is what separates a callee's
-///     own reading of a token from the caller's;
-///   - empty local prefix, callee strictly at this rule's tail → `Forward`;
-///   - a caller loop heading the suffix → `AltMask`: another iteration or what
-///     follows the loop, whichever the input matches.
+/// The runtime FOLLOW argument a call at index `i` in `elements` supplies to
+/// its callee: the rest of the rule past it, `elements[i+1..]`, as a
+/// continuation site. Instead of cloning the callee per continuation (the
+/// retired `__follow_<id>` variant mechanism), the caller threads it as data.
 fn compute_follow_arg(ctx: &mut LowerContext, elements: &List<Element>, i: i32) -> FollowArg {
-    let arg = follow_arg_for(ctx, elements, i);
-    // `Forward`, `Combined` and `AltMask` all spell the caller's own slots into
-    // the call — but only where the callee declares them, so this is an edge in
-    // the fixpoint `lower` closes, not a verdict.
-    if !arg matches { NoFollow | Mask(_) } {
-        if let Some(target) = rule_ref_snake(&elements[i]) {
+    return forwarding_into(ctx, &elements[i], follow_arg_for(ctx, elements, i));
+}
+
+/// `arg`, recorded as an edge where it spells the caller's own continuation
+/// into a call to `callee`. Only where the callee declares one, so this is an
+/// edge in the fixpoint `lower` closes, not a verdict.
+fn forwarding_into(ctx: &mut LowerContext, callee: &Element, arg: FollowArg) -> FollowArg {
+    let forwards = match &arg {
+        NoFollow => false,
+        Forward => true,
+        Site(site) => site.ends,
+    };
+    if forwards {
+        if let Some(target) = rule_ref_snake(callee) {
             ctx.mark_rule_forwards_follow(&target);
         }
     }
@@ -273,269 +263,42 @@ fn follow_arg_for(ctx: &mut LowerContext, elements: &List<Element>, i: i32) -> F
     return continuation_arg(ctx, elements, i + 1);
 }
 
-/// The FOLLOW argument for what continues from `elements[from]` on.
+/// The FOLLOW argument for what continues from `elements[from]` on: nothing
+/// past the rule's own continuation, or the site reading the rest. A rest that
+/// can match nothing reads on into what the current rule was called with,
+/// which is no reason to drop either: `x?` ahead of the caller's `x` is both.
 fn continuation_arg(ctx: &mut LowerContext, elements: &List<Element>, from: i32) -> FollowArg {
-    // A caller loop is an alternative to what follows it, not a prefix of it:
-    // prepending asserts the loop's first token at a depth the other reading
-    // does not have it, and dropping it gives the loop's token to the callee.
-    if let Some(loop_mask) = caller_loop_mask(ctx, elements, from) {
-        let exit = continuation_arg(ctx, elements, from + 1);
-        if exit matches { NoFollow } {
-            return exit;
-        }
-        return FollowArg::AltMask(CallerLoop { loop_mask, exit });
+    let readings = ctx.analysis.readings_from(elements, from, FOLLOW_SITE_DEPTH);
+    if readings_are_empty(&readings) {
+        return FollowArg::Forward;
     }
-    let mut visiting: List<String> = [];
-    let [deep, consumed] = ctx.analysis.deep_position_first_sets_from(elements, from, FOLLOW_MASK_MAX_K, &mut visiting);
-    // A mask stopping short of the suffix proves only that the caller's
-    // continuation could *start* here, not that it can complete.
-    let covers_suffix = from + consumed >= elements.len();
-    // Effective caller-continuation mask. Prefer the multi-depth deep
-    // walk; when it halts immediately (a `Repeat` / `Group` / multi-alt
-    // `RuleRef` at the suffix head, e.g. `a b?`), fall back to the
-    // 1-token follow. `compute_call_site_follow` keeps a first-exact
-    // deep-nullable suffix's `first(b)` and drops a non-first-exact one
-    // (soundness invariant 2) — exactly the depth-0 token the deep walk
-    // misses.
-    let one_tok = ctx.analysis.compute_call_site_follow(elements, from - 1);
-    let mut mask: List<List<i32>> = [];
-    if !deep.is_empty() {
-        mask = deep;
-    } else if !one_tok.is_empty() {
-        mask.push(one_tok);
-    }
-    if !ctx.analysis.tail_is_nullable_deep(elements, from) {
-        // A mask that stops short of an optional head proves nothing: the token
-        // it names may be the callee's own, and yielding it strands the token
-        // where the caller declines the optional. Greedy is ANTLR4's answer for
-        // nested subrules — the inner `if` keeps the `else` its caller could
-        // also take.
-        let mut head_visiting: List<String> = [];
-        if !covers_suffix && ctx.analysis.element_is_nullable_deep(&elements[from], &mut head_visiting) {
-            return FollowArg::NoFollow;
-        }
-        // The local suffix is the whole continuation the callee must clear, but
-        // what the current rule was called with continues past it — appending
-        // that only ever makes the gate more selective, and the depth is what
-        // separates a callee's own reading from the caller's. `|a| b` and
-        // `|a|b| c` are the same two tokens at the loop and differ at the third.
-        if let Some(id) = ctx.intern_follow_mask(&mask) {
-            return sequenced_follow_arg(ctx, id, covers_suffix);
-        }
-        return FollowArg::NoFollow;
-    }
-    // A suffix that can vanish entirely is no continuation to gate on: yielding
-    // on its first token hands back one the caller may take none of. What the
-    // current rule was called with is the answer instead — the mask would say
-    // `htmlElement` is followed by `htmlChardata?` and nothing else, and `<p>`
-    // would give its text to the loop that called it.
-    if from < elements.len() && !covers_suffix {
-        let suffix_first = ctx.analysis.first_of_elements_from(elements, from);
-        return FollowArg::ForwardOpen(ctx.intern_follow_mask(&[suffix_first]));
-    }
-    if let Some(id) = ctx.intern_follow_mask(&mask) {
-        return sequenced_follow_arg(ctx, id, covers_suffix);
-    }
-    return FollowArg::Forward;
+    return FollowArg::Site(FollowSite { id: ctx.intern_follow_site(&readings), ends: readings_end(&readings) });
 }
 
-/// A local prefix followed by what the current rule was called with. The
-/// forwarded half is appended one position past the prefix, so it belongs there
-/// only when the prefix spans the suffix: a prefix halted by a multi-token
-/// element leaves tokens between the two, and `if EXPR blockExpression` would
-/// assert the caller's next token one past the `{`. A prefix already spanning
-/// `FOLLOW_MAX_DEPTH` puts the forwarded half past every position
-/// `follow_yields` reads. Either way the static mask is the whole gate.
-fn sequenced_follow_arg(ctx: &LowerContext, mask_id: i32, covers_suffix: bool) -> FollowArg {
-    if !covers_suffix || ctx.tables.follow_mask_is_full(mask_id) {
-        return FollowArg::Mask(mask_id);
+/// What a repeat's body continues into: a `?` runs it once, so what follows
+/// the repeat; a loop runs it again, so the loop and then that.
+fn repeat_body_suffix(rep: &RepeatElement, outer_suffix: &List<Element>) -> List<Element> {
+    if rep.kind matches { Optional } {
+        return *outer_suffix;
     }
-    return FollowArg::Combined(mask_id);
+    let mut rest: List<Element> = [Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star })];
+    for let elem of outer_suffix {
+        rest.push(*elem);
+    }
+    return rest;
 }
 
-/// What a repeat's body is told about its own continuation. A greedy `?` runs
-/// its body once, so it passes its own arg down. A greedy loop's body continues
-/// with another iteration or with what follows the loop, which a bare rule-call
-/// body is told here and a group body's tail by `retarget_loop_tail_follow`.
-fn greedy_optional_inner_follow(ctx: &mut LowerContext, rep: &RepeatElement, follow_arg: FollowArg) -> FollowArg {
-    if rep.non_greedy {
-        return FollowArg::NoFollow;
-    }
+/// What a repeat's body is told about its own continuation, `body_suffix`
+/// being `repeat_body_suffix`. A `?` passes its own arg down; a loop body's
+/// call reads the loop.
+fn repeat_body_follow(ctx: &mut LowerContext, rep: &RepeatElement, follow_arg: FollowArg, body_suffix: &List<Element>) -> FollowArg {
     if rep.kind matches { Optional } {
         return follow_arg;
     }
-    if rep.element matches { Group(_) } {
+    if !element_consumes_follow_arg(&rep.element) {
         return FollowArg::NoFollow;
     }
-    return loop_tail_follow(ctx, rep, follow_arg).unwrap_or(FollowArg::NoFollow);
-}
-
-/// What a call ending one iteration of greedy loop `rep` continues into:
-/// another iteration, or `exit`, what follows the loop; unknown where `exit`
-/// is. `null` where the loop offers no next iteration to read.
-fn loop_tail_follow(ctx: &mut LowerContext, rep: &RepeatElement, exit: FollowArg) -> Option<FollowArg> {
-    let iteration = loop_iteration_mask(ctx, rep);
-    if iteration matches { None } && !loops_over_alternatives(rep) {
-        return null;
-    }
-    if exit matches { NoFollow } {
-        return Option::Some(exit);
-    }
-    if let Some(loop_mask) = iteration {
-        return Option::Some(FollowArg::AltMask(CallerLoop { loop_mask, exit }));
-    }
-    let mut visiting: List<String> = [];
-    let first = ctx.analysis.first_of_element(&rep.element, &mut visiting);
-    let Some(loop_mask) = ctx.intern_follow_mask(&[first]) else {
-        return null;
-    };
-    return Option::Some(FollowArg::OpenLoop(CallerLoop { loop_mask, exit }));
-}
-
-/// What a repeat body's tail `Forward` call is retargeted to, or `null` where
-/// `Forward` already reads the right continuation: a greedy `?` lowers its body
-/// against the repeat's own suffix (`greedy_optional_inner_suffix`). Every
-/// other body is lowered as if it ended its rule, so `Forward` would read past
-/// what follows the repeat. A non-greedy body is told nothing, as
-/// `greedy_optional_inner_follow` tells a rule-call body.
-fn repeat_body_tail_follow(ctx: &mut LowerContext, rep: &RepeatElement, follow_arg: FollowArg) -> Option<FollowArg> {
-    if rep.non_greedy {
-        return Option::Some(FollowArg::NoFollow);
-    }
-    if rep.kind matches { Optional } {
-        return null;
-    }
-    return Option::Some(loop_tail_follow(ctx, rep, follow_arg).unwrap_or(FollowArg::NoFollow));
-}
-
-/// A greedy `*` / `+` over a group of several alternatives.
-fn loops_over_alternatives(rep: &RepeatElement) -> bool {
-    return !rep.non_greedy
-        && !rep.kind matches { Optional }
-        && rep.element matches { Group(g) && g.alternatives.len() > 1 };
-}
-
-/// The suffix twin of `greedy_optional_inner_follow`: what continues past a
-/// loop is another iteration, which no enclosing suffix describes.
-fn greedy_optional_inner_suffix(rep: &RepeatElement, outer_suffix: &List<Element>) -> List<Element> {
-    if !rep.non_greedy && rep.kind matches { Optional } {
-        return *outer_suffix;
-    }
-    return NO_OUTER_SUFFIX;
-}
-
-/// Give a greedy loop body's tail `RuleCall` `tail`, from `loop_tail_follow`:
-/// the body was lowered as if it ended its rule, so the call reads `Forward`,
-/// but it continues into another iteration or what follows the loop. Only the
-/// body's own tail qualifies. A nested group's tail continues inside that
-/// group, and would yield tokens its own alt still needs.
-fn retarget_loop_tail_follow(op: Op, tail: &FollowArg) -> Op {
-    return match op {
-        RuleCall(rc) => {
-            if rc.follow_arg matches { Forward } {
-                let mut call = rc;
-                call.follow_arg = *tail;
-                Op::RuleCall(call);
-            } else {
-                Op::RuleCall(rc);
-            }
-        },
-        Group(g) => {
-            let mut group = g;
-            for let alt of &mut group.alts {
-                if !alt.ops.is_empty() {
-                    let last = alt.ops.len() - 1;
-                    alt.ops[last] = retarget_loop_tail_follow(alt.ops[last], tail);
-                }
-            }
-            Op::Group(group);
-        },
-        ListLabel(ll) => {
-            let mut labelled = ll;
-            labelled.inner = retarget_loop_tail_follow(labelled.inner, tail);
-            Op::ListLabel(labelled);
-        },
-        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) | Repeat(_) => op,
-    };
-}
-
-/// Scan-side mirror of `retarget_loop_tail_follow`. The two must move together:
-/// a scan that counts a tail iteration the parse yields makes the longest-match
-/// tournament pick an alt the parse then refuses.
-fn retarget_scan_loop_tail_follow(element: ScanElement, tail: &FollowArg) -> ScanElement {
-    return match element {
-        RuleCall(rc) => {
-            if rc.follow_arg matches { Forward } {
-                let mut call = rc;
-                call.follow_arg = *tail;
-                ScanElement::RuleCall(call);
-            } else {
-                ScanElement::RuleCall(rc);
-            }
-        },
-        Group(g) => {
-            let mut group = g;
-            for let alt of &mut group.alts {
-                if !alt.elements.is_empty() {
-                    let last = alt.elements.len() - 1;
-                    alt.elements[last] = retarget_scan_loop_tail_follow(alt.elements[last], tail);
-                }
-            }
-            ScanElement::Group(group);
-        },
-        Token(_) | Wildcard | Excluded(_) | Repeat(_) | OptionalLookahead(_) => element,
-    };
-}
-
-/// The interned iteration prefix of the greedy loop at `elements[from]`, if one
-/// stands there; see `loop_iteration_mask`.
-fn caller_loop_mask(ctx: &mut LowerContext, elements: &List<Element>, from: i32) -> Option<i32> {
-    if from >= elements.len() {
-        return null;
-    }
-    let Repeat(rep) = &elements[from] else {
-        return null;
-    };
-    return loop_iteration_mask(ctx, rep);
-}
-
-/// The interned iteration prefix of greedy loop `rep`, or `null` when the loop
-/// is not one this evidence covers: a non-greedy or `?` repeat decides
-/// elsewhere, and a one-position prefix is the over-approximation soundness
-/// invariant 1 rejects. A multi-alt body has no single prefix, and one reading
-/// per alternative is not enough either: ExprAmbiguity's
-/// `( {5 >= $_p}? '*' expr[6] | {4 >= $_p}? '+' expr[5] )*` reads the inner
-/// `expr`'s `*` as the outer loop's too, and the inner loop yields where ANTLR4
-/// keeps it greedy. A `?` heading a continuation is not a reading to yield to:
-/// the inner `if` keeps the `else` its caller could also take.
-fn loop_iteration_mask(ctx: &mut LowerContext, rep: &RepeatElement) -> Option<i32> {
-    if rep.non_greedy || rep.kind matches { Optional } {
-        return null;
-    }
-    let body_elements: List<Element> = match &rep.element {
-        Group(g) => {
-            if g.alternatives.len() != 1 {
-                return null;
-            }
-            g.alternatives[0].elements;
-        },
-        TokenRef(_) | Literal(_) | RuleRef(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => [rep.element],
-    };
-    let mut visiting: List<String> = [];
-    let [prefix, _consumed] = ctx.analysis.deep_position_first_sets_from(
-        &body_elements,
-        0,
-        FOLLOW_MASK_MAX_K,
-        &mut visiting,
-    );
-    // Two positions is the whole bar, not a stand-in for one. Demanding the
-    // walk span the body instead rejects `(SEP seg)`, whose second element is
-    // the rule the loop exists to re-enter, and takes the repair with it —
-    // `driver_cst_ll_opt_tail_caller_loop_test` is the case.
-    if prefix.len() < 2 {
-        return ctx.intern_follow_mask(&ctx.analysis.exact_two_position_first_sets(&body_elements));
-    }
-    return ctx.intern_follow_mask(&prefix);
+    return forwarding_into(ctx, &rep.element, continuation_arg(ctx, body_suffix, 0));
 }
 
 /// Whether a tail-greedy `Repeat` at index `i` in `elements` should
@@ -567,9 +330,9 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
     GrammarAnalysis::new(&grammar.parser_rules),
     GenSettings {},
 )) -> LoweredGrammar {
-    // The FOLLOW masks the per-rule walk below interns at each `RuleRef`
-    // site are the ones emit names, and `gen_follow_mask_globals` emits a
-    // `FOLLOW_MASK_<id>` for each mask emitted code names. Caches (first /
+    // The continuation sites the per-rule walk below interns at each `RuleRef`
+    // are the ones emit names, and `gen_follow_tables` emits a row for each
+    // site emitted code names. Caches (first /
     // nullable / single-token / scannable / tail-greedy) survive across the
     // lower-then-emit boundary and only get computed once.
     let mut parser_rules: List<Rule> = [];
@@ -2334,8 +2097,8 @@ fn lower_scan_plain_repeat(
     gate_caller_follow: bool,
     outer_suffix: &List<Element>,
 ) -> ScanRepeatElement {
-    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
-    let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
+    let inner_suffix = repeat_body_suffix(rep, outer_suffix);
+    let inner_follow_arg = repeat_body_follow(ctx, rep, follow_arg, &inner_suffix);
     let mut inner_visiting: List<String> = [];
     let inner_first = ctx.analysis.first_of_element(&rep.element, &mut inner_visiting);
 
@@ -2350,14 +2113,7 @@ fn lower_scan_plain_repeat(
         false,
         &inner_suffix,
     );
-    let mut body = strict_repeat_body(lowered, &rep.element, ctx);
-    // The standalone `scan_<rule>` walks this copy while the parse function
-    // walks `RepeatOp.scan_body`; both must give the body's tail call the same
-    // FOLLOW as the parse side, or the scan reports an end the parse walks past
-    // and the enclosing optional commits on a length that never happens.
-    if let Some(tail) = repeat_body_tail_follow(ctx, rep, follow_arg) {
-        body = retarget_scan_loop_tail_follow(body, &tail);
-    }
+    let body = strict_repeat_body(lowered, &rep.element, ctx);
     let effective_gate = gate_caller_follow && !rep.non_greedy;
     if effective_gate {
         ctx.mark_caller_follow_gate();
@@ -3723,8 +3479,8 @@ fn lower_repeat_op<S: AsStrSlice>(
     follow_is_exact: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
-    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
-    let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
+    let inner_suffix = repeat_body_suffix(rep, outer_suffix);
+    let inner_follow_arg = repeat_body_follow(ctx, rep, follow_arg, &inner_suffix);
     let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
     // Every shape decision below reads the body the op was lowered from, not
     // the label wrapping it — a label changes a repeat's typing, never its
@@ -3863,12 +3619,7 @@ fn lower_repeat_op<S: AsStrSlice>(
         false,
         &inner_suffix,
     );
-    let mut scan_body = strict_repeat_body(lowered_scan_body, &rep.element, ctx);
-    let mut body = body;
-    if let Some(tail) = repeat_body_tail_follow(ctx, rep, follow_arg) {
-        body = retarget_loop_tail_follow(body, &tail);
-        scan_body = retarget_scan_loop_tail_follow(scan_body, &tail);
-    }
+    let scan_body = strict_repeat_body(lowered_scan_body, &rep.element, ctx);
     let body_is_single_alt_group = if let Group(g) = body_elem {
         g.alternatives.len() == 1;
     } else {

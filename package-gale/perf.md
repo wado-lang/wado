@@ -728,8 +728,8 @@ These did not pay, measured on the same harness:
 
 Open levers on `benchmark/gale_gen`:
 
-- [ ] **Kind sets and FOLLOW masks still arrive as names.** `kind_check_str`
-  and `intern_follow_mask` get `TK_*` names from the lowered IR, so
+- [ ] **Kind sets still arrive as names.** `kind_check_str` gets `TK_*`
+  names from the lowered IR, so
   `names_to_ids` interns each name again through a string-keyed map. Fixing
   this means threading ids through `lower` and prediction.
 - [ ] **The rule-name maps behind the SCC-memoised analyses** (`first_of_rule_at`,

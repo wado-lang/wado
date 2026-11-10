@@ -1,0 +1,94 @@
+//! The ways a sequence of grammar elements can begin, at most `k` tokens deep,
+//! as the runtime FOLLOW gate reads a continuation site. A reading is one run of
+//! positions; readings of the same length that agree on whether the sequence
+//! ends there merge, so a site holds at most `2k + 1` of them however many ways
+//! its elements derive.
+
+use { union_kind_arrays } from "./token_kinds.wado";
+
+/// One way a sequence begins: the kinds at each position, and whether the
+/// sequence ends right after them, so that what follows it is read next. A
+/// reading as long as the budget never ends: the gate reads no further.
+pub struct Reading {
+    /// Per position, the kinds valid there. An empty position admits any kind,
+    /// as `.` and `~x` do.
+    pub kinds: List<List<i32>>,
+    pub ends: bool,
+}
+
+/// The one reading of a sequence that matches nothing and ends.
+pub fn readings_empty(k: i32) -> List<Reading> {
+    let mut out: List<Reading> = [];
+    readings_add(&mut out, Reading { kinds: [], ends: true }, k);
+    return out;
+}
+
+/// The one reading of a single position admitting `kinds`.
+pub fn readings_of_position(kinds: List<i32>, k: i32) -> List<Reading> {
+    let mut out: List<Reading> = [];
+    readings_add(&mut out, Reading { kinds: [kinds], ends: true }, k);
+    return out;
+}
+
+/// Add `reading` to `out`, cut at `k` positions, merged into the reading of
+/// its length and ending where there is one.
+pub fn readings_add(out: &mut List<Reading>, reading: Reading, k: i32) {
+    let mut r = reading;
+    if r.kinds.len() >= k {
+        r.kinds.truncate(k);
+        r.ends = false;
+    }
+    let mut at = 0;
+    while at < out.len() && reading_key(&out[at]) < reading_key(&r) {
+        at += 1;
+    }
+    if at < out.len() && reading_key(&out[at]) == reading_key(&r) {
+        for let mut i = 0; i < r.kinds.len(); i += 1 {
+            out[at].kinds[i] = union_position(&out[at].kinds[i], &r.kinds[i]);
+        }
+        return;
+    }
+    out.insert(at, r);
+}
+
+fn reading_key(r: &Reading) -> i32 {
+    return r.kinds.len() * 2 + if r.ends { 1 } else { 0 };
+}
+
+fn union_position(a: &List<i32>, b: &List<i32>) -> List<i32> {
+    if a.is_empty() || b.is_empty() {
+        return [];
+    }
+    return union_kind_arrays(a, b);
+}
+
+/// Every reading of `from`, cut at `k`.
+pub fn readings_union_into(out: &mut List<Reading>, from: &List<Reading>, k: i32) {
+    for let r of from {
+        readings_add(out, *r, k);
+    }
+}
+
+/// `head`'s reading, then `tail`'s, cut at `k`. A head reading that ends
+/// continues into `tail`, which must already be cut at what is left of `k`.
+pub fn reading_then(out: &mut List<Reading>, head: &Reading, tail: &List<Reading>, k: i32)
+    contract head.ends
+{
+    for let t of tail {
+        let mut kinds = head.kinds;
+        for let position of &t.kinds {
+            kinds.push(*position);
+        }
+        readings_add(out, Reading { kinds, ends: t.ends }, k);
+    }
+}
+
+/// Whether some reading continues into what follows the sequence.
+pub fn readings_end(readings: &List<Reading>) -> bool {
+    return readings.iter_ref().any(|r| r.ends);
+}
+
+/// Whether the sequence is nothing but the empty one.
+pub fn readings_are_empty(readings: &List<Reading>) -> bool {
+    return readings.len() == 1 && readings[0].ends && readings[0].kinds.is_empty();
+}
