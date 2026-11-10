@@ -19,7 +19,8 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, StructDef,
-    SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId, positional_substitution,
+    SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId, impl_args_in_slot_order,
+    positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -282,22 +283,10 @@ impl ImplParamSlots {
         self.slots.get(param).copied()
     }
 
-    /// What fills each slot, in slot order: a parameter's binding in `bound`,
-    /// else the receiver's argument at a position the target writes concretely.
-    /// Empty where a parameter is unbound, which no instance can key on.
-    pub(super) fn args_in_slot_order(
-        &self,
-        bound: &IndexMap<String, BinderInScope>,
-        receiver_args: &[TypeId],
-    ) -> Vec<TypeId> {
-        let count = self.slots.values().map(|&slot| slot + 1).max().unwrap_or(0);
-        (0..count)
-            .map(|slot| match self.name_of(slot) {
-                Some(name) => bound.get(name).map(|b| b.type_id),
-                None => receiver_args.get(slot as usize).copied(),
-            })
-            .collect::<Option<Vec<_>>>()
-            .unwrap_or_default()
+    /// How many slots the parameters take, concrete positions between them
+    /// included.
+    pub(super) fn count(&self) -> u32 {
+        self.slots.values().map(|&slot| slot + 1).max().unwrap_or(0)
     }
 
     /// The parameter filling `slot`; `None` for a position the target writes
@@ -1978,6 +1967,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(name.to_string(), BinderInScope::of(slot, type_id, decl));
     }
 
+    /// Bind each of `header`'s parameters the frame does not hold yet to what
+    /// `filled` holds at its slot. Whether any was bound.
+    fn bind_from_slots(
+        scope: &mut scope::TypeParamScope<'_, '_, H>,
+        header: &ImplHeader,
+        owner: DefId,
+        filled: &TypeArgMap,
+    ) -> bool {
+        let slots = ImplParamSlots::of(&header.ty, &header.type_params);
+        let mut bound_any = false;
+        for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
+            if scope
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&param.name)
+            {
+                continue;
+            }
+            let Some(slot) = slots.of_name(&param.name) else {
+                continue;
+            };
+            if let Some(&bound) = filled.get(&TypeParamId { owner, index: slot }) {
+                Self::bind_type_param(scope, Some(param), &param.name, slot, bound);
+                bound_any = true;
+            }
+        }
+        bound_any
+    }
+
+    /// The frame's bindings as the slots of `owner`, the block they belong to.
+    fn frame_slots(scope: &scope::TypeParamScope<'_, '_, H>, owner: DefId) -> TypeArgMap {
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|b| {
+                let id = TypeParamId {
+                    owner,
+                    index: b.index,
+                };
+                (id, b.type_id)
+            })
+            .collect()
+    }
+
     /// The lists a `Type::method(...)` call checks and pads against. Every
     /// static spelling asks this one question, so none of them differs on the
     /// arity it checks.
@@ -2256,33 +2292,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A parameter nested in a target argument (`T` in `impl<T> Peek for
             // Listed<Option<T>>`) is what matching the target binds.
             if blanket_name.is_none() {
-                let slots = ImplParamSlots::of(&header.ty, &header.type_params);
                 let filled = scope
                     .tysys
                     .type_table
                     .borrow_mut()
                     .impl_slots(impl_ref.0, type_args);
-                for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
-                    if scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .contains_key(&param.name)
-                    {
-                        continue;
-                    }
-                    let Some(slot) = slots.of_name(&param.name) else {
-                        continue;
-                    };
-                    let id = TypeParamId {
-                        owner: impl_ref.0,
-                        index: slot,
-                    };
-                    let Some(&bound) = filled.get(&id) else {
-                        continue;
-                    };
-                    Self::bind_type_param(&mut scope, Some(param), &param.name, slot, bound);
-                }
+                Self::bind_from_slots(&mut scope, header, impl_ref.0, &filled);
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
             // map the pack to a TypePack so that the method body can reference it.
@@ -2338,60 +2353,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is bound by the arguments the call names.
         let mut impl_slot_args = Vec::new();
         if let (Some(asked), Some(receiver)) = (asked, receiver_type_id) {
-            let mut slots: TypeArgMap = scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .values()
-                .map(|b| {
-                    let id = TypeParamId {
-                        owner: impl_ref.0,
-                        index: b.index,
-                    };
-                    (id, b.type_id)
-                })
-                .collect();
+            let mut slots = Self::frame_slots(&scope, impl_ref.0);
             let written = scope
                 .tysys
                 .signatures
                 .impl_sig(impl_ref.0)
                 .trait_type_args
                 .clone();
-            scope.tysys.type_table.borrow_mut().bind_impl_slots_asked(
-                impl_ref.0,
-                &written,
-                asked,
-                receiver,
-                &mut slots,
-            );
-            let declared = ImplParamSlots::of(&header.ty, &header.type_params);
-            let mut bound_here = false;
-            for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
-                if scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .contains_key(&param.name)
-                {
-                    continue;
-                }
-                let Some(slot) = declared.of_name(&param.name) else {
-                    continue;
-                };
-                let id = TypeParamId {
-                    owner: impl_ref.0,
-                    index: slot,
-                };
-                if let Some(&bound) = slots.get(&id) {
-                    Self::bind_type_param(&mut scope, Some(param), &param.name, slot, bound);
-                    bound_here = true;
-                }
-            }
-            if bound_here {
-                impl_slot_args = declared.args_in_slot_order(
-                    &scope.annotate_ctx.trait_ctx.type_params,
+            scope
+                .tysys
+                .type_table
+                .borrow_mut()
+                .bind_impl_slots_asked(impl_ref.0, &written, asked, receiver, &mut slots);
+            if Self::bind_from_slots(&mut scope, header, impl_ref.0, &slots) {
+                impl_slot_args = impl_args_in_slot_order(
+                    impl_ref.0,
+                    ImplParamSlots::of(&header.ty, &header.type_params).count(),
+                    &Self::frame_slots(&scope, impl_ref.0),
                     receiver_type_args.unwrap_or_default(),
-                );
+                )
+                // A block the arguments leave partly unbound keys no instance,
+                // and its call reports the unmet bound at WIR build.
+                .unwrap_or_default();
             }
         }
 
@@ -2399,19 +2382,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // shape (generic, ref, blanket, variadic) — which a flat positional
         // list cannot express. Method-level slots stay abstract: inference
         // solves them at the call site.
-        let impl_slots: TypeArgMap = scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .values()
-            .map(|b| {
-                let id = TypeParamId {
-                    owner: impl_ref.0,
-                    index: b.index,
-                };
-                (id, b.type_id)
-            })
-            .collect();
+        let impl_slots = Self::frame_slots(&scope, impl_ref.0);
         // The same frame under the names the block wrote, which is what a
         // parameter default naming one (`v: T = T::default()`) spells. Taken
         // before the method's own parameters join the frame: those are still
@@ -2697,7 +2668,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             through_ref,
             method_name,
             required,
-            required_trait.and_then(|r| r.args.as_deref()).unwrap_or_default(),
+            required_trait
+                .and_then(|r| r.args.as_deref())
+                .unwrap_or_default(),
         )
     }
 

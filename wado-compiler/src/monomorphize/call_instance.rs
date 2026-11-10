@@ -186,7 +186,8 @@ impl Monomorphizer {
         // so the call recorded every slot.
         match recorded {
             Some(recorded)
-                if leaves_slot_open(template, args.as_deref().unwrap_or_default(), type_table) =>
+                if open_slots(template, args.as_deref().unwrap_or_default(), type_table)
+                    .is_some() =>
             {
                 Some(recorded.to_vec())
             }
@@ -245,23 +246,21 @@ impl Monomorphizer {
     }
 }
 
-/// Whether `receiver_args` leave a slot of `template`'s block unfilled: one only
-/// its trait reference binds (`G` in `impl<G: Back> Shown<G> for i32`), or
-/// every slot of a projection target (`impl<G: Back> Shown<G> for G::T`).
-pub(super) fn leaves_slot_open(
+/// The slots of `template`'s block `receiver_args` fill, where they leave one
+/// open: one only its trait reference binds (`G` in `impl<G: Back> Shown<G>
+/// for i32`), or every slot of a projection target (`impl<G: Back> Shown<G>
+/// for G::T`). `None` where they fill every slot.
+pub(super) fn open_slots(
     template: &TirFunction,
     receiver_args: &[TypeId],
     type_table: &mut TypeTable,
-) -> bool {
-    let Some(block) = template.impl_origin else {
-        return false;
-    };
-    let positions = type_table.impl_target_args(block).len();
-    let filled = type_table.impl_slots(block, &receiver_args[..positions.min(receiver_args.len())]);
+) -> Option<TypeArgMap> {
+    let filled = type_table.impl_slots(template.impl_origin?, receiver_args);
     template
         .impl_type_params
         .iter()
         .any(|param| !param.is_pack && !filled.contains_key(&param.id))
+        .then_some(filled)
 }
 
 /// Whether `outer` is a newtype whose chain of bases passes `inner`.
@@ -293,16 +292,19 @@ fn method_args_at(
         return Some(recorded.method_type_args.clone());
     }
     let receiver_slots = usize::from(site.receiver.is_some());
+    let written: Vec<TypeId> = template
+        .params
+        .iter()
+        .skip(receiver_slots)
+        .map(|param| type_table.peel_refs(param.type_id))
+        .collect();
+    let concrete: Vec<TypeId> = site
+        .args
+        .iter()
+        .map(|arg| type_table.peel_refs(arg.expr.type_id))
+        .collect();
     let mut bound = TypeArgMap::default();
-    for (param, arg) in template.params.iter().skip(receiver_slots).zip(site.args) {
-        let written = type_table.peel_refs(param.type_id);
-        let concrete = type_table.peel_refs(arg.expr.type_id);
-        if let Some(slots) = type_table.bind_type_params(&[written], &[concrete]) {
-            for (slot, ty) in slots {
-                bound.entry(slot).or_insert(ty);
-            }
-        }
-    }
+    type_table.bind_each_into(&written, &concrete, &mut bound);
     template
         .type_params
         .iter()

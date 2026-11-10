@@ -14,13 +14,13 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole, method_param_offset,
-    transpose_tuple_expr,
+    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole,
+    impl_args_in_slot_order, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
 
-use super::call_instance::leaves_slot_open;
+use super::call_instance::open_slots;
 use super::state::Monomorphizer;
 use super::{Templates, Unrewritten, module_source_for_trait_impl};
 use crate::name::FqTraitName;
@@ -1643,11 +1643,8 @@ impl Monomorphizer {
                             info.with_type_args(&impl_names, &method_names)
                         }
                     };
-                    new_info.trait_type_args = info
-                        .trait_type_args
-                        .iter()
-                        .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                        .collect();
+                    new_info.trait_type_args =
+                        self.trait_args_at_instance(&info, substitution, type_table);
                     // For type param receivers, also update method type args if they
                     // contain type params that need substitution (e.g., R → FixedReader
                     // in a default trait method body calling Self::read::<R>(r)).
@@ -2872,11 +2869,7 @@ impl Monomorphizer {
                 .map(|&tid| type_table.fq_type_name(tid))
                 .collect();
         }
-        new_info.trait_type_args = info
-            .trait_type_args
-            .iter()
-            .map(|&tid| self.substitute_type(tid, substitution, type_table))
-            .collect();
+        new_info.trait_type_args = self.trait_args_at_instance(&info, substitution, type_table);
         let new_func_name = new_info.to_mangled_name();
 
         if new_func_name == old_func_name {
@@ -2910,6 +2903,19 @@ impl Monomorphizer {
         }
     }
 
+    /// The trait arguments `info`'s call names, at this instance.
+    fn trait_args_at_instance(
+        &self,
+        info: &LocalMethodName,
+        substitution: &TypeArgMap,
+        type_table: &mut TypeTable,
+    ) -> Vec<TypeId> {
+        info.trait_type_args
+            .iter()
+            .map(|&tid| self.substitute_type(tid, substitution, type_table))
+            .collect()
+    }
+
     /// Every slot of `template`'s block at `receiver`, where its trait reference
     /// binds one the receiver does not show (`G` in `impl<G: Back> Shown<G> for
     /// i32`): read off `asked`, the arguments the bound dispatched through names
@@ -2924,24 +2930,15 @@ impl Monomorphizer {
         let block = template.block()?;
         let template = self.functions.templates.get(template)?.borrow();
         let receiver_args = type_table.generic_type_args(receiver).unwrap_or_default();
-        if !leaves_slot_open(&template, &receiver_args, type_table) {
-            return None;
-        }
+        let mut slots = open_slots(&template, &receiver_args, type_table)?;
         let written = &template.method_info.as_ref()?.trait_type_args;
-        let positions = type_table.impl_target_args(block).len();
-        let mut slots = type_table.impl_slots(block, &receiver_args[..positions.min(receiver_args.len())]);
         type_table.bind_impl_slots_asked(block, written, asked, receiver, &mut slots);
-        (0..method_param_offset(&template.impl_type_params))
-            .map(|index| {
-                slots
-                    .get(&TypeParamId {
-                        owner: block,
-                        index,
-                    })
-                    .or_else(|| receiver_args.get(index as usize))
-                    .copied()
-            })
-            .collect()
+        impl_args_in_slot_order(
+            block,
+            method_param_offset(&template.impl_type_params),
+            &slots,
+            &receiver_args,
+        )
     }
 
     /// Whether `receiver` derives `info`'s trait through a `Reflect*` blanket.

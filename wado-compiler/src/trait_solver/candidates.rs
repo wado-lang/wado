@@ -97,20 +97,22 @@ pub fn instance_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, &Env::default(), ty, &[trait_], args, |t, _| t == trait_)
-        .in_scope
-        .into_iter()
-        .filter(|c| {
-            answers_named_args(
-                program,
-                &program.impls()[&c.impl_],
-                &levels[c.depth as usize],
-                ty,
-                &c.trait_args,
-                args,
-            )
-        })
-        .collect()
+    collect(program, &Env::default(), ty, &[trait_], args, |t, _| {
+        t == trait_
+    })
+    .in_scope
+    .into_iter()
+    .filter(|c| {
+        answers_named_args(
+            program,
+            &program.impls()[&c.impl_],
+            &levels[c.depth as usize],
+            ty,
+            &c.trait_args,
+            args,
+        )
+    })
+    .collect()
 }
 
 /// The written `Ord` impl whose `cmp` the `==` that `c` answers on `receiver`

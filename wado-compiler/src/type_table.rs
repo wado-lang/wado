@@ -6578,15 +6578,21 @@ impl TypeTable {
     /// block, so an earlier module's bound check can ask.
     pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> TypeArgMap {
         let mut slots = IndexMap::default();
-        for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
-            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
+        self.bind_each_into(self.impl_target_args(def), receiver_args, &mut slots);
+        self.project_impl_slots(def, &mut slots);
+        slots
+    }
+
+    /// Bind each of `written` against the one in `concrete` at its position
+    /// into `slots`, keeping a slot already filled.
+    pub fn bind_each_into(&self, written: &[TypeId], concrete: &[TypeId], slots: &mut TypeArgMap) {
+        for (&written, &concrete) in written.iter().zip(concrete) {
+            if let Some(bound) = self.bind_type_params(&[written], &[concrete]) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
                 }
             }
         }
-        self.project_impl_slots(def, &mut slots);
-        slots
     }
 
     /// Fill the slots of impl block `def` its trait reference binds from the
@@ -6603,19 +6609,9 @@ impl TypeTable {
         receiver: TypeId,
         slots: &mut TypeArgMap,
     ) {
-        for (&written, &asked) in written.iter().zip(asked) {
-            if let Some(bound) = self.bind_type_params(&[written], &[asked]) {
-                for (slot, ty) in bound {
-                    slots.entry(slot).or_insert(ty);
-                }
-            }
-        }
+        self.bind_each_into(written, asked, slots);
         let target = self.substitute_type_params(self.impl_target_whole(def), slots);
-        if let Some(bound) = self.bind_type_params(&[target], &[receiver]) {
-            for (slot, ty) in bound {
-                slots.entry(slot).or_insert(ty);
-            }
-        }
+        self.bind_each_into(&[target], &[receiver], slots);
     }
 
     /// The declaration impl block `def` targets, past any reference.
