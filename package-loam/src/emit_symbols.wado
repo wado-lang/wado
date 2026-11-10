@@ -89,8 +89,8 @@ internal struct Names {
 }
 
 impl Names {
-    /// The identifiers of `axes`, then of `tensors`, each tensor once in the
-    /// order first seen.
+    /// An identifier for each of `tensors`, in the order first seen, past the
+    /// names the module binds and `axes`, which name its marker types.
     internal fn of(tensors: List<String>, axes: &List<String>, imports_map: bool) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         if imports_map {
@@ -270,7 +270,7 @@ internal struct Symbols {
     internal used: HashSet<String>,
     /// Each padded symbol's valid length, as `build` reads it from `lengths`.
     /// Its extent in the inputs is the capacity.
-    internal lengths: HashMap<String, String> = HashMap::new(),
+    lengths: HashMap<String, String> = HashMap::new(),
     /// The padded symbols something read the value of.
     internal read: HashSet<String> = HashSet::new(),
     /// Each padded symbol a past grows along, whose past `build` takes at the
@@ -591,15 +591,8 @@ fn value_of(host: String) -> String {
     return `scalar::<${BACKEND_PARAM}, i64>(backend, ${host})`;
 }
 
+/// The names of `shape`'s axes, as a turbofish lists them.
 internal fn axis_list(shape: &Shape) -> String {
-    return axis_run(shape, 0, shape.rank());
-}
-
-/// The names of `shape`'s axes `from..<to`, as a turbofish lists them.
-fn axis_run(shape: &Shape, from: i32, to: i32) -> String {
-    let mut names: List<String> = [];
-    for let i of from..<to {
-        names.push(shape.axes[i].name);
-    }
+    let names: List<String> = shape.axes.into_iter().map(|a| a.name).collect();
     return names.join(", ");
 }
