@@ -199,6 +199,15 @@ struct SubstitutedCall {
     module_source: ModuleSource,
 }
 
+/// The method type arguments `func` recorded, already in the instance's frame
+/// (`substitute_types_in_expr` substitutes them before any arm reads them).
+fn recorded_method_type_args(func: &FunctionRef) -> Vec<TypeId> {
+    func.monomorph_info
+        .iter()
+        .flat_map(|m| m.method_type_args.iter().copied())
+        .collect()
+}
+
 /// The mangled name of the template `blanket` provides for `method`: a
 /// blanket's body is keyed by its receiver *parameter*, never by the type that
 /// dispatches to it.
@@ -1597,30 +1606,16 @@ impl Monomorphizer {
                     let old_func_name = call_func.name.clone();
                     let module_source = call_func.module_source.clone();
 
-                    // Derive substituted type args from the callee's own monomorph_info.
-                    // The callee's monomorph_info records which type params the callee
-                    // uses (impl-level and method-level). We substitute through the
-                    // outer function's substitution map to resolve any type params.
-                    //
-                    // This is the single source of truth for the callee's type args.
-                    // We must NOT use the outer substitution map's entries directly
-                    // as type args — those are the outer function's type params, not
-                    // the callee's.
+                    // The callee's own monomorph_info, substituted above, is the
+                    // single source of truth for its type args. The outer
+                    // substitution's entries are the outer function's type
+                    // params, not the callee's.
                     let (sub_impl_type_args, sub_method_type_args) = if let FunctionRef {
                         monomorph_info: Some(mi),
                         ..
                     } = &**call_func
                     {
-                        (
-                            mi.impl_type_args
-                                .iter()
-                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                .collect::<Vec<_>>(),
-                            mi.method_type_args
-                                .iter()
-                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                .collect::<Vec<_>>(),
-                        )
+                        (mi.impl_type_args.clone(), mi.method_type_args.clone())
                     } else if !self.current_impl_type_params.is_empty()
                         && info.struct_type_args.is_empty()
                         && self.current_impl_receiver.as_ref() == Some(&info.fq_base_struct_name())
@@ -1675,32 +1670,15 @@ impl Monomorphizer {
                             info.with_type_args(&impl_names, &method_names)
                         }
                     };
-                    // For type param receivers, also update method type args if they
-                    // contain type params that need substitution (e.g., R → FixedReader
-                    // in a default trait method body calling Self::read::<R>(r)).
-                    // The with_substituted_struct_name above only replaces the struct
-                    // name, not the method type args.
-                    if info.is_type_param_receiver
-                        && let FunctionRef {
-                            monomorph_info: Some(mi),
-                            ..
-                        } = &**call_func
-                    {
-                        let substituted_method_args: Vec<TypeId> = mi
-                            .method_type_args
+                    // A type-param receiver's name takes its method type args
+                    // substituted too (R → FixedReader in a default trait method
+                    // body calling Self::read::<R>(r)):
+                    // with_substituted_struct_name replaces only the struct name.
+                    if info.is_type_param_receiver && !sub_method_type_args.is_empty() {
+                        new_info.method_type_args = sub_method_type_args
                             .iter()
-                            .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                            .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
-                        let any_changed = substituted_method_args
-                            .iter()
-                            .zip(mi.method_type_args.iter())
-                            .any(|(a, b)| a != b);
-                        if any_changed {
-                            new_info.method_type_args = substituted_method_args
-                                .iter()
-                                .map(|&tid| type_table.fq_type_name(tid))
-                                .collect();
-                        }
                     }
                     let new_func_name = new_info.to_mangled_name();
 
@@ -1759,18 +1737,7 @@ impl Monomorphizer {
                                 .impl_module(&new_info, receiver_module.as_ref());
                             let concrete_module =
                                 concrete_impl_module.or(blanket_module).or(receiver_module);
-                            let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
-                                monomorph_info: Some(mi),
-                                ..
-                            } = &**call_func
-                            {
-                                mi.method_type_args
-                                    .iter()
-                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                    .collect()
-                            } else {
-                                Vec::new()
-                            };
+                            let method_type_arg_tids = sub_method_type_args.clone();
                             // Generics have a defined home module by construction:
                             // either the trait-impl block's module, or — for
                             // auto-derived impls — the receiver type's module
@@ -2511,8 +2478,7 @@ impl Monomorphizer {
         else {
             return false;
         };
-        let method_type_args =
-            self.substituted_method_type_args(method_func, substitution, type_table);
+        let method_type_args = recorded_method_type_args(method_func);
         let (ref_info, monomorph_info) = ref_blanket_instance(
             ref_blanket_generic(ref_kind, trait_fq, info),
             inner,
@@ -2529,29 +2495,12 @@ impl Monomorphizer {
         true
     }
 
-    /// The call's own method type arguments at this instance. They are written
-    /// in the enclosing body's parameters, as the receiver is.
-    fn substituted_method_type_args(
-        &self,
-        method_func: &FunctionRef,
-        substitution: &TypeArgMap,
-        type_table: &mut TypeTable,
-    ) -> Vec<TypeId> {
-        method_func
-            .monomorph_info
-            .iter()
-            .flat_map(|m| &m.method_type_args)
-            .map(|arg| self.substitute_type(*arg, substitution, type_table))
-            .collect()
-    }
-
     /// A call through a universal `&T` blanket at this instance: the `&` head
-    /// stays, and only the pointee it is keyed by takes the substitution.
+    /// stays, and the pointee it is keyed by is the one its recorded args name.
     fn substitute_ref_blanket_pointee(
         &self,
         method_func: &mut FunctionRef,
         info: &LocalMethodName,
-        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) {
         let [pointee] = method_func
@@ -2569,9 +2518,7 @@ impl Monomorphizer {
             .trait_name
             .as_ref()
             .expect("a `&T` blanket call names its trait");
-        let pointee = self.substitute_type(pointee, substitution, type_table);
-        let method_type_args =
-            self.substituted_method_type_args(method_func, substitution, type_table);
+        let method_type_args = recorded_method_type_args(method_func);
         let (ref_info, monomorph_info) = ref_blanket_instance(
             ref_blanket_generic(ref_kind, trait_name, info),
             pointee,
@@ -2779,7 +2726,7 @@ impl Monomorphizer {
             return;
         }
         if self.is_universal_ref_blanket_call(method_func) {
-            self.substitute_ref_blanket_pointee(method_func, &info, substitution, type_table);
+            self.substitute_ref_blanket_pointee(method_func, &info, type_table);
             return;
         }
 
@@ -2827,18 +2774,7 @@ impl Monomorphizer {
             .collect();
         let type_args: Vec<TypeId> = sorted_entries.iter().map(|(_, tid)| **tid).collect();
 
-        // Left unsubstituted, the instance keys on the template's abstract `S`.
-        let sub_method_type_args: Vec<TypeId> = match &*method_func {
-            FunctionRef {
-                monomorph_info: Some(mi),
-                ..
-            } => mi
-                .method_type_args
-                .iter()
-                .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                .collect(),
-            _ => Vec::new(),
-        };
+        let sub_method_type_args = recorded_method_type_args(method_func);
 
         // Compute the new method info with concrete type names.
         // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
@@ -2917,13 +2853,7 @@ impl Monomorphizer {
                 call,
             );
         } else {
-            self.resolve_generic_dispatch(
-                method_func,
-                receiver_type_id,
-                substitution,
-                type_table,
-                call,
-            );
+            self.resolve_generic_dispatch(method_func, receiver_type_id, type_table, call);
         }
     }
 
@@ -3095,14 +3025,13 @@ impl Monomorphizer {
     }
 
     /// Normal monomorphization for a concrete/generic receiver (`List<T>::len` →
-    /// `List<i32>::len`): keep any existing blanket `monomorph_info` (substituting
-    /// its impl args), and re-resolve the body's home module through `TraitEnv`
-    /// for the post-substitution name.
+    /// `List<i32>::len`): keep any existing blanket `monomorph_info`, and
+    /// re-resolve the body's home module through `TraitEnv` for the
+    /// post-substitution name.
     fn resolve_generic_dispatch(
         &self,
         method_func: &mut FunctionRef,
         receiver_type_id: TypeId,
-        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         call: SubstitutedCall,
     ) {
@@ -3138,10 +3067,7 @@ impl Monomorphizer {
         // The call's own impl args name its block's parameters; the enclosing
         // substitution names them only where the call has none of its own.
         let final_impl_ta = match existing_impl_ta {
-            Some(args) if same_block => args
-                .iter()
-                .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                .collect(),
+            Some(args) if same_block => args,
             _ => type_args,
         };
         let final_method_ta = existing_method_ta.unwrap_or_default();

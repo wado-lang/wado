@@ -3627,14 +3627,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut return_type = resolution.return_type;
         let mut callee_params = resolution.params;
-        let instance_args = self.static_instance_args(
-            block,
-            impl_type_args,
-            &mut callee_params.param_types,
-            args,
-            &mut return_type,
-            span,
-        );
+        let instance_args = block
+            .and_then(|block| {
+                self.slot_instance_args(
+                    block,
+                    impl_type_args.to_vec(),
+                    &mut callee_params.param_types,
+                    args,
+                    &mut return_type,
+                    span,
+                )
+            })
+            .unwrap_or_else(|| impl_type_args.to_vec());
         self.retype_static_to_newtype(
             &self.impl_target(struct_name),
             block,
@@ -3750,30 +3754,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         return_type
-    }
-}
-
-impl<H: CompilerHost> Elaborator<'_, H> {
-    /// What a static call's instance is keyed by: the receiver's arguments,
-    /// then the trait arguments keying `block`, the slots only those name
-    /// inferred from `args` into `params` and `return_type`.
-    pub(super) fn static_instance_args(
-        &mut self,
-        block: Option<DefId>,
-        receiver_args: &[TypeId],
-        params: &mut [TypeId],
-        args: &[TypeId],
-        return_type: &mut TypeId,
-        span: Span,
-    ) -> Vec<TypeId> {
-        let Some(block) = block else {
-            return receiver_args.to_vec();
-        };
-        let inferred = self.infer_trait_arg_slots(block, params, args, return_type, span);
-        if inferred.is_empty() {
-            return receiver_args.to_vec();
-        }
-        self.impl_instance_args(block, receiver_args.to_vec(), &inferred)
     }
 }
 

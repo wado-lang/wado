@@ -29,8 +29,27 @@ impl<T: Show> Put<T> for X {
     }
 }
 
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+struct Made {
+    shown: String,
+}
+
+impl<T: Show> Make<T> for Made {
+    fn make(v: T) -> Made {
+        return Made { shown: v.show() };
+    }
+}
+
 test {
     let x = X {};
     assert X::put(&x, 7 as i64) == "i64 7";
     assert X::put(&x, "s") == "string s";
+}
+
+test "an associated function takes the parameter from its argument" {
+    assert Made::make(7 as i64).shown == "i64 7";
+    assert Made::make("s").shown == "string s";
 }

@@ -731,7 +731,7 @@ order.
 
 Every form binds a parameter only the trait's arguments determine, and owes its
 bounds at the call (`impl_param_from_trait_arg_*.wado`). The forms reach that
-through shared steps (`infer_trait_arg_slots`, `impl_instance_args`), not yet
+through shared steps (`slot_instance_args`, `impl_instance_args`), not yet
 through one resolver, and the instance keys still differ by form: a head impl's
 is its target's positions followed by its keyed trait arguments, and a value
 blanket's is its parameters in order.

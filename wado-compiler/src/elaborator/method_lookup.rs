@@ -1365,19 +1365,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.defer_impl_bounds(block, inferred, span, OwedBounds::All);
     }
 
-    /// [`Self::mint_trait_arg_slots`] into a call's `params` and `return_type`,
-    /// settled against its `args`. Answers what stands for each slot.
-    pub(super) fn infer_trait_arg_slots(
+    /// The key of `block`'s instance at a call whose `args` settle the slots
+    /// only its trait arguments name, [`Self::mint_trait_arg_slots`] read into
+    /// the call's `params` and `return_type`; `None` where it has no such slot.
+    pub(super) fn slot_instance_args(
         &mut self,
         block: DefId,
+        positions: Vec<TypeId>,
         params: &mut [TypeId],
         args: &[TypeId],
         return_type: &mut TypeId,
         span: Span,
-    ) -> TypeArgMap {
+    ) -> Option<Vec<TypeId>> {
         let inferred = self.mint_trait_arg_slots(block);
         if inferred.is_empty() {
-            return inferred;
+            return None;
         }
         {
             let mut table = self.tysys.type_table.borrow_mut();
@@ -1387,7 +1389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             *return_type = table.substitute_type_params(*return_type, &inferred);
         }
         self.settle_trait_arg_slots(block, &inferred, params, args, return_type, span);
-        inferred
+        Some(self.impl_instance_args(block, positions, &inferred))
     }
 
     /// What `block`'s instance is keyed by: the receiver's `positions`, then
@@ -3188,12 +3190,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         FunctionRef {
             module_source: info.impl_module_source.clone(),
             template: Some(self.tysys.signatures.declared_template(info.method_def)),
-            monomorph_info: info.instance_args.clone().map(|impl_type_args| MonomorphInfo {
-                generic_name: name.clone(),
-                impl_type_args,
-                method_type_args: vec![],
-                is_blanket: false,
-            }),
+            monomorph_info: info
+                .instance_args
+                .clone()
+                .map(|impl_type_args| MonomorphInfo {
+                    generic_name: name.clone(),
+                    impl_type_args,
+                    method_type_args: vec![],
+                    is_blanket: false,
+                }),
             name,
             method_info: Some(LocalMethodName::new(
                 info.receiver.clone(),
@@ -3553,10 +3558,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // T`) is the key's to settle, so such a block answers only a
                 // subscript whose key is known.
                 let block = impl_ref.0;
-                let slotted = !s.tysys.type_table.borrow().impl_trait_arg_slots(block).is_empty();
+                let slotted = !s
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_trait_arg_slots(block)
+                    .is_empty();
                 let (impl_sig, trait_arg_slots) = if slotted {
-                    let key: Vec<TypeId> =
-                        concrete_type_args.iter().copied().chain(expected_index_type).collect();
+                    let key: Vec<TypeId> = concrete_type_args
+                        .iter()
+                        .copied()
+                        .chain(expected_index_type)
+                        .collect();
                     let slots = s.tysys.type_table.borrow_mut().impl_slots(block, &key);
                     let settled = s
                         .tysys
@@ -3610,9 +3623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .unwrap_or(TypeTable::UNKNOWN);
 
                 let instance_args = (!trait_arg_slots.is_empty()).then(|| {
-                    let mut args = concrete_type_args.clone();
-                    args.extend(s.trait_args_keying(Some(block), &impl_sig.trait_type_args));
-                    args
+                    s.impl_instance_args(block, concrete_type_args.clone(), &trait_arg_slots)
                 });
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,

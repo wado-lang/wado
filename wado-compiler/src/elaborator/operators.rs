@@ -2294,17 +2294,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&param| self.tysys.through_ref(param))
             .collect();
-        let inferred = match (resolved.impl_def, args.first()) {
+        let instance_args = match (resolved.impl_def, args.first()) {
             (Some(block), Some(&(_, span))) => {
                 let operands: Vec<TypeId> = args.iter().map(|&(arg, _)| arg).collect();
-                let slots = self.infer_trait_arg_slots(
+                let positions = self
+                    .tysys
+                    .impl_position_args(receiver_head)
+                    .unwrap_or_default();
+                self.slot_instance_args(
                     block,
+                    positions,
                     &mut referents,
                     &operands,
                     &mut return_type,
                     span,
-                );
-                Some((block, slots))
+                )
             }
             _ => None,
         };
@@ -2346,14 +2350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((kind, header)) => self.ref_impl_function(kind, header, resolved, receiver),
             None => self.operator_impl_function(resolved, receiver),
         };
-        if let Some((block, slots)) = inferred
-            && !slots.is_empty()
-        {
-            let positions = self
-                .tysys
-                .impl_position_args(receiver_head)
-                .unwrap_or_default();
-            let impl_type_args = self.impl_instance_args(block, positions, &slots);
+        if let Some(impl_type_args) = instance_args {
             function_ref.monomorph_info = Some(MonomorphInfo {
                 generic_name: function_ref.name.clone(),
                 impl_type_args,
