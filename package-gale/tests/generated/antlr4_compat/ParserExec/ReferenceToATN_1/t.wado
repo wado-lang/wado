@@ -1,5 +1,7 @@
 #![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/ParserExec/ReferenceToATN_1.g4"])]
 
+use { HashMap, HashSeed } from "core:collections";
+
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -987,15 +989,19 @@ internal global FOLLOW_ID_MASK: i64 = 127;
 
 internal global FOLLOW_OPENS_BIT: i64 = 128;
 
-internal global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_CONT_MASK: i64 = 0x0000_FFFF_FFFF_FFFF;
 
-internal global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+internal global FOLLOW_SEQUENCED: i64 = 0x0000_7F7F_7F7F_7F7F;
 
-internal global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+internal global FOLLOW_OPEN_READING: i64 = 0x0001_0000_0000_0000;
 
-internal global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_OPEN_FIELD: i64 = ~0x0000_FFFF_FFFF_FFFF;
 
-internal global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
+internal global FOLLOW_OPEN_SET_SHIFT: i64 = 49;
+
+global FOLLOW_OPEN_ID_MASK: i64 = 0x7FFF;
+
+global FOLLOW_OPEN_UNION_BASE: i64 = FOLLOW_ID_MASK + 1;
 
 internal fn follow_open_mark(cont: i64) -> i64 {
     return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
@@ -1012,7 +1018,48 @@ internal fn follow_open_join(a: i64, b: i64) -> i64 {
     if b == 0 {
         return a;
     }
-    return FOLLOW_OPEN_READING;
+    return FOLLOW_OPEN_READING | follow_open_union(follow_open_id(a), follow_open_id(b)) << FOLLOW_OPEN_SET_SHIFT;
+}
+
+fn follow_open_id(open: i64) -> i64 {
+    return open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_OPEN_ID_MASK;
+}
+
+struct FollowOpenUnions {
+    members: List<[i64, i64]>,
+    joined: HashMap<i64, i64>,
+}
+
+global mut FOLLOW_OPEN_UNIONS: FollowOpenUnions = FollowOpenUnions { members: [], joined: HashMap::with_seed(
+    FOLLOW_SEED,
+) };
+
+fn follow_open_union(a: i64, b: i64) -> i64 {
+    let key = i64::min(a, b) | i64::max(a, b) << 16;
+    if let Some(id) = FOLLOW_OPEN_UNIONS.joined.get(key) {
+        return id;
+    }
+    let [a_low, a_high] = follow_open_members(a);
+    let [b_low, b_high] = follow_open_members(b);
+    let members = [a_low | b_low, a_high | b_high];
+    let mut index = 0;
+    while index < FOLLOW_OPEN_UNIONS.members.len() && FOLLOW_OPEN_UNIONS.members[index] != members {
+        index += 1;
+    }
+    if index == FOLLOW_OPEN_UNIONS.members.len() {
+        FOLLOW_OPEN_UNIONS.members.push(members);
+    }
+    let id = FOLLOW_OPEN_UNION_BASE + index as i64;
+    assert id <= FOLLOW_OPEN_ID_MASK, "the open unions must fit the open field";
+    FOLLOW_OPEN_UNIONS.joined[key] = id;
+    return id;
+}
+
+fn follow_open_members(id: i64) -> [i64, i64] {
+    if id >= FOLLOW_OPEN_UNION_BASE {
+        return FOLLOW_OPEN_UNIONS.members[(id - FOLLOW_OPEN_UNION_BASE) as i32];
+    }
+    return if id < 64 { [1 << id, 0] } else { [0, 1 << id - 64] };
 }
 
 internal fn follow_open_with(cont: i64, open: i64) -> i64 {
@@ -1020,32 +1067,97 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
 }
 
 internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
+    return prefix | (follow_behind(cont, prefix_bits) & FOLLOW_SEQUENCED) << prefix_bits;
 }
 
 internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
-    return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
+    let opened = (follow_behind(cont, prefix_bits) | FOLLOW_OPENS_BIT) << prefix_bits;
+    return prefix | opened | follow_open_mark(cont);
 }
 
 internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
-    return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
+    let opened = (follow_behind(alternative, prefix_bits) | FOLLOW_OPENS_BIT) << prefix_bits;
+    return prefix | opened | alternative & FOLLOW_OPEN_FIELD;
 }
 
-internal global FOLLOW_CONT_BITS: i64 = 56;
+internal global FOLLOW_LINK_ID: i64 = 127;
 
-internal global FOLLOW_OPENS_BITS: i64 = 0x0080_8080_8080_8080;
+internal global FOLLOW_CONT_BITS: i64 = 48;
 
-internal fn follow_spill(cont: i64, forwarded: i64, shift: i64, spill: i64) -> i64 {
-    let slots = forwarded & FOLLOW_CONT_MASK;
-    if slots == 0 {
-        return cont;
+global FOLLOW_INDEX_BITS: i64 = 7;
+
+struct FollowLinks {
+    conts: List<i64>,
+    ids: HashMap<i64, i32>,
+}
+
+global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
+
+global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+
+internal fn follow_links_reset() {
+    FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+}
+
+fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
+    let slots = cont & FOLLOW_CONT_MASK;
+    let room = FOLLOW_CONT_BITS - prefix_bits;
+    if slots >> room == 0 {
+        return slots;
     }
-    if shift < FOLLOW_CONT_BITS && (slots | FOLLOW_OPENS_BIT) >> FOLLOW_CONT_BITS - shift & FOLLOW_OPENS_BITS == 0 {
-        return cont;
+    assert !follow_is_link(slots), "a continuation starts with its prefix, never a link";
+    let link = FOLLOW_LINK_ID | follow_spread_index(follow_link_id(cont)) << FOLLOW_SLOT_BITS;
+    assert link >> room == 0, "a link must fit behind the prefix";
+    return link;
+}
+
+fn follow_link_id(cont: i64) -> i32 {
+    if let Some(id) = FOLLOW_LINKS.ids.get(cont) {
+        return id;
     }
-    return cont & FOLLOW_CONT_MASK | follow_open_set(spill);
+    let id = FOLLOW_LINKS.conts.len();
+    FOLLOW_LINKS.conts.push(cont);
+    FOLLOW_LINKS.ids[cont] = id;
+    return id;
+}
+
+fn follow_spread_index(id: i32) -> i64 {
+    let mut spread: i64 = 0;
+    let mut shift: i64 = 0;
+    let mut rest = id as i64;
+    while rest != 0 {
+        spread |= (rest & FOLLOW_ID_MASK) << shift;
+        rest >>= FOLLOW_INDEX_BITS;
+        shift += FOLLOW_SLOT_BITS;
+    }
+    return spread;
+}
+
+fn follow_gather_index(spread: i64) -> i32 {
+    let mut id: i64 = 0;
+    let mut shift: i64 = 0;
+    let mut rest = spread;
+    while rest != 0 {
+        id |= (rest & FOLLOW_ID_MASK) << shift;
+        rest >>= FOLLOW_SLOT_BITS;
+        shift += FOLLOW_INDEX_BITS;
+    }
+    return id as i32;
+}
+
+fn follow_is_link(c: i64) -> bool {
+    return c & FOLLOW_ID_MASK == FOLLOW_LINK_ID;
+}
+
+fn follow_link_opens(c: i64) -> bool {
+    return c & FOLLOW_OPENS_BIT != 0;
+}
+
+fn follow_linked(c: i64) -> i64
+    contract follow_is_link(c)
+{
+    let target = FOLLOW_LINKS.conts[follow_gather_index(c >> FOLLOW_SLOT_BITS)] & FOLLOW_CONT_MASK;
+    return if follow_link_opens(c) { target | FOLLOW_OPENS_BIT } else { target & FOLLOW_SEQUENCED };
 }
 
 internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
@@ -1069,8 +1181,28 @@ fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bo
     if open == 0 {
         return false;
     }
-    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
+    let id = follow_open_id(open);
+    if id < FOLLOW_OPEN_UNION_BASE {
+        return follow_open_member_has(id, kind, sets, unknown_has);
+    }
+    let [low, high] = follow_open_members(id);
+    return follow_open_word_has(low, 0, kind, sets, unknown_has)
+        || follow_open_word_has(high, 64, kind, sets, unknown_has);
+}
+
+fn follow_open_word_has(word: i64, base: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
+    let mut rest = word;
+    while rest != 0 {
+        if follow_open_member_has(base + i64::ctz(rest), kind, sets, unknown_has) {
+            return true;
+        }
+        rest &= rest - 1;
+    }
+    return false;
+}
+
+fn follow_open_member_has(id: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
+    return if id == 0 { unknown_has } else { follow_set_has(sets, id, kind) };
 }
 
 fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
@@ -1100,6 +1232,12 @@ fn follow_heads_have(
     let mut c = cont & FOLLOW_CONT_MASK;
     let mut head = true;
     while c & FOLLOW_ID_MASK != 0 {
+        if follow_is_link(c) {
+            if !follow_link_opens(c) {
+                break;
+            }
+            c = follow_linked(c);
+        }
         if c & FOLLOW_OPENS_BIT != 0 {
             head = true;
         }
@@ -1120,6 +1258,12 @@ internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<
     let mut alive = true;
     let mut constrained = false;
     while c & FOLLOW_ID_MASK != 0 {
+        if follow_is_link(c) {
+            if !follow_link_opens(c) && depth >= FOLLOW_MAX_DEPTH {
+                break;
+            }
+            c = follow_linked(c);
+        }
         if c & FOLLOW_OPENS_BIT != 0 {
             if alive && constrained {
                 return true;
@@ -3293,6 +3437,7 @@ fn _parse_a(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
+    follow_links_reset();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
