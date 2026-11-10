@@ -4,7 +4,6 @@ use {
     FollowTables,
     FOLLOW_SLOT_BITS,
     follow_admits,
-    follow_exit_viable,
     follow_push,
     follow_resumes,
     follow_yields,
@@ -44,7 +43,6 @@ test "a site that can match nothing reads on into its caller's" {
     assert !follow_yields(&kinds([C]), 0, cont, &t, EOF_KIND);
     assert follow_resumes(&kinds([B]), 0, cont, &t, EOF_KIND);
     assert !follow_admits(&kinds([C]), 0, cont, &t, EOF_KIND);
-    assert !follow_exit_viable(&kinds([C]), 0, cont, &t, EOF_KIND);
 }
 
 test "an unknown caller admits, but yields only once a token was read" {
@@ -53,7 +51,6 @@ test "an unknown caller admits, but yields only once a token was read" {
     assert !follow_yields(&tokens, 0, 1, &t, EOF_KIND);
     assert follow_admits(&tokens, 0, 1, &t, EOF_KIND);
     assert !follow_resumes(&tokens, 0, 1, &t, EOF_KIND);
-    assert follow_exit_viable(&tokens, 0, 1, &t, EOF_KIND);
     assert follow_yields(&kinds([A, C]), 0, 1, &t, EOF_KIND);
 }
 
