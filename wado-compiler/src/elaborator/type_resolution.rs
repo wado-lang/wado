@@ -1369,7 +1369,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
         if let Some(own) = self.own_declaration_args(base, owner) {
-            return own;
+            return Some(own);
         }
         if let Some((bound, space)) = self
             .bound_closure_of(base_name)
@@ -1382,26 +1382,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.projection_base_trait_args(base, owner)
     }
 
-    /// Inside `owner`'s own declaration, with `base` its `Self`, the arguments
-    /// `owner` is reached at: its own parameters. The `Self` bound the frame
-    /// gives the declaration writes none of them. `None` anywhere else; the
-    /// inner `None` where a parameter has no binder in the frame.
-    fn own_declaration_args(&self, base: TypeId, owner: DefId) -> Option<Option<Vec<TypeId>>> {
-        let trait_ctx = &self.annotate_ctx.trait_ctx;
-        let in_own_declaration = trait_ctx.self_trait == Some(owner)
-            && trait_ctx.self_type == Some(base)
-            && matches!(
-                self.tysys.type_table.borrow().get(base),
-                ResolvedType::TypeParam { .. }
-            );
-        in_own_declaration.then(|| {
-            self.tysys
-                .trait_env
-                .trait_type_params(owner)
-                .iter()
-                .map(|param| Some(trait_ctx.type_params.get(&param.name)?.type_id))
-                .collect()
-        })
+    /// With `base` the `Self` of `owner`'s own declaration, the arguments
+    /// `owner` is reached at: its own parameters, which the `Self` bound the
+    /// frame gives the declaration does not write. `None` for any other base.
+    fn own_declaration_args(&self, base: TypeId, owner: DefId) -> Option<Vec<TypeId>> {
+        let own_self = self.tysys.type_table.borrow().type_param_id(base)
+            == Some(TypeParamId::trait_self(owner));
+        if !own_self {
+            return None;
+        }
+        let binders = &self.annotate_ctx.trait_ctx.type_params;
+        let args = self
+            .tysys
+            .trait_env
+            .trait_type_params(owner)
+            .iter()
+            .map(|param| {
+                binders
+                    .get(&param.name)
+                    .expect("a trait's own frame binds each of its parameters")
+                    .type_id
+            })
+            .collect();
+        Some(args)
     }
 
     /// The arguments the bound `owner` on `base`, written in `space`, reaches
@@ -1414,7 +1417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
         if let Some(own) = self.own_declaration_args(base, owner) {
-            return own;
+            return Some(own);
         }
         let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
         self.trait_args_at(owner, base, &written)
