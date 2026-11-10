@@ -1964,13 +1964,9 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
     !clone.is_dead
         && clone.params.len() == original.params.len()
         && clone.return_type == original.return_type
-        && clone
-            .params
-            .iter()
-            .zip(&original.params)
-            .all(|(c, o)| {
-                c.type_id == o.type_id && c.local_index == o.local_index && c.name == o.name
-            })
+        && clone.params.iter().zip(&original.params).all(|(c, o)| {
+            c.type_id == o.type_id && c.local_index == o.local_index && c.name == o.name
+        })
 }
 
 /// Replace every value-position read of a bound field with its constant.
