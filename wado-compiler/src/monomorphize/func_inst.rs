@@ -2781,7 +2781,9 @@ impl Monomorphizer {
                         .collect::<Vec<_>>()
                 });
             let names = |args: &[TypeId]| -> Vec<FqTypeName> {
-                args.iter().map(|&tid| type_table.fq_type_name(tid)).collect()
+                args.iter()
+                    .map(|&tid| type_table.fq_type_name(tid))
+                    .collect()
             };
             let mut new_info =
                 info.with_type_args(&names(&impl_type_args), &names(&method_type_args));

@@ -6932,12 +6932,16 @@ impl TypeTable {
                 && self.agree(concrete, written, open, binding);
         }
         // An `_` or an unresolvable name: nothing written to match against.
-        if matches!(self.get(written), ResolvedType::Unknown | ResolvedType::Error) {
+        if matches!(
+            self.get(written),
+            ResolvedType::Unknown | ResolvedType::Error
+        ) {
             return true;
         }
-        // A projection is its base's binding's, which the solver checks once
-        // the base is bound. One still standing off a parameter names no type
-        // yet, so the same projection meets it part for part.
+        // A projection, written inside an `<F: fn(...)>` signature or as a
+        // block's target, is its base's binding's, which the solver checks
+        // once the base is bound. One still standing off a parameter names no
+        // type yet, so the same projection meets it part for part.
         if matches!(self.get(written), ResolvedType::AssocTypeProjection { .. }) {
             return match self.projection_parts(written, concrete) {
                 Some((written, concrete)) => self.bind_all(&written, &concrete, open, binding),
@@ -6985,8 +6989,14 @@ impl TypeTable {
         };
         (name_a == name_b && trait_a == trait_b && args_a.len() == args_b.len()).then(|| {
             (
-                [*base_a].into_iter().chain(args_a.iter().copied()).collect(),
-                [*base_b].into_iter().chain(args_b.iter().copied()).collect(),
+                [*base_a]
+                    .into_iter()
+                    .chain(args_a.iter().copied())
+                    .collect(),
+                [*base_b]
+                    .into_iter()
+                    .chain(args_b.iter().copied())
+                    .collect(),
             )
         })
     }

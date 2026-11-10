@@ -600,7 +600,7 @@ impl Query<'_> {
         // A projection the normalizer leaves standing reads off a caller's
         // parameter, which names no type yet: the impl's projection of the
         // same member meets it argument for argument, its base among them.
-        let off_caller = same_member(projection, &met);
+        let off_caller = projection_parts(projection, &met).is_some();
         if (!off_caller && self.at_bindings(base, bindings).is_none())
             || self.at_bindings(projection, bindings).is_some()
         {
@@ -626,23 +626,12 @@ impl Query<'_> {
             .chain(bindings.iter().cloned())
             .collect();
         let mut nested = Vec::new();
-        let matched = match (&member, &met) {
-            (
-                SolverType::Projection { base, args, .. },
-                SolverType::Projection {
-                    base: met_base,
-                    args: met_args,
-                    ..
-                },
-            ) if same_member(&member, &met) => {
-                match_target(base, met_base, &mut slots, &mut nested)
-                    && args
-                        .iter()
-                        .zip(met_args)
-                        .all(|(arg, met_arg)| match_target(arg, met_arg, &mut slots, &mut nested))
-            }
-            (SolverType::Projection { .. }, _) => return Through::Open,
-            _ => match_target(&member, &met, &mut slots, &mut nested),
+        let matched = match projection_parts(&member, &met) {
+            Some(parts) => parts
+                .into_iter()
+                .all(|(ours, theirs)| match_target(ours, theirs, &mut slots, &mut nested)),
+            None if matches!(member, SolverType::Projection { .. }) => return Through::Open,
+            None => match_target(&member, &met, &mut slots, &mut nested),
         };
         if !matched {
             return Through::Refuted;
@@ -1116,22 +1105,35 @@ enum Through {
     Refuted,
 }
 
-/// Whether `a` and `b` both project one associated type, at as many arguments.
-fn same_member(a: &SolverType, b: &SolverType) -> bool {
-    match (a, b) {
-        (
-            SolverType::Projection {
-                trait_, assoc, args, ..
-            },
-            SolverType::Projection {
-                trait_: b_trait,
-                assoc: b_assoc,
-                args: b_args,
-                ..
-            },
-        ) => trait_ == b_trait && assoc == b_assoc && args.len() == b_args.len(),
-        _ => false,
-    }
+/// The base and arguments of `a` and of `b`, paired, where both project one
+/// associated type at as many arguments; `None` otherwise.
+fn projection_parts<'t>(
+    a: &'t SolverType,
+    b: &'t SolverType,
+) -> Option<Vec<(&'t SolverType, &'t SolverType)>> {
+    let (
+        SolverType::Projection {
+            base,
+            trait_,
+            assoc,
+            args,
+        },
+        SolverType::Projection {
+            base: b_base,
+            trait_: b_trait,
+            assoc: b_assoc,
+            args: b_args,
+        },
+    ) = (a, b)
+    else {
+        return None;
+    };
+    (trait_ == b_trait && assoc == b_assoc && args.len() == b_args.len()).then(|| {
+        [(&**base, &**b_base)]
+            .into_iter()
+            .chain(args.iter().zip(b_args))
+            .collect()
+    })
 }
 
 /// One past the highest parameter or pack index `ty` mentions.
