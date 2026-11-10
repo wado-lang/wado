@@ -314,20 +314,17 @@ impl SettledAs {
     }
 }
 
-/// What `enclosing` declares `type_id` is bound by, through every name it knows
-/// the type under. Empty where it knows of no such name, which is every argument
-/// that is not one of its own parameters.
+/// What `enclosing` declares `type_id` is bound by, through every binder
+/// standing for it. Empty for an argument that is not one of its own
+/// parameters.
 ///
-/// One type reaches a frame under several names whenever an `impl` binds two of
-/// a trait's parameters to one type, and each name's bounds hold of it, so they
-/// are taken together rather than one of them picked.
+/// One type reaches a frame through several binders whenever an `impl` binds
+/// two of a trait's parameters to one type, and each one's bounds hold of it,
+/// so they are taken together rather than one of them picked.
 fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
     enclosing
-        .type_params
-        .iter()
-        .filter(|(_, binder)| binder.type_id == type_id)
-        .filter_map(|(name, _)| enclosing.type_param_bounds.get(name))
-        .flatten()
+        .bounds_of(type_id)
+        .into_iter()
         .cloned()
         .collect()
 }
@@ -3328,7 +3325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         scope.annotate_ctx.trait_ctx.clear_binders();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.clear_bounds();
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {
                 continue;
@@ -5679,15 +5676,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let arg_count = given_args.map_or(call.args.len(), <[TypeId]>::len);
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(type_param_name)
-            .cloned();
+        let bounds = self.carried_bounds(type_param_type_id);
 
-        if let Some(bounds) = bounds
-            && let Some((found_trait, method_info_result)) = {
+        if let Some((found_trait, method_info_result)) = {
                 self.find_method_in_trait_bounds(
                     Some(call.id),
                     false,

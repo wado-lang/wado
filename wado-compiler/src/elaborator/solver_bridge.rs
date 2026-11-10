@@ -2010,7 +2010,7 @@ impl SolverBridge {
                         tysys.trait_env.impl_trait_binding_assoc(&target, assoc)
                     });
             }
-            let bounds = ctx.trait_ctx.type_param_bounds.get(base)?;
+            let bounds = ctx.trait_ctx.bounds_named(base);
             tysys
                 .trait_env
                 .bound_declaring_assoc_type(bounds, assoc, &tysys.resolutions)

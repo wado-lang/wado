@@ -478,10 +478,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     fn saved_param_bounds(&self, name: &str) -> Vec<String> {
         self.saved()
-            .type_param_bounds
-            .get(name)
-            .map(|bounds| bounds.iter().map(|b| b.name.clone()).collect())
-            .unwrap_or_default()
+            .bounds_named(name)
+            .iter()
+            .map(|b| b.name.clone())
+            .collect()
     }
 
     /// `impl<T> Trait for Foo<T>` — the target's arguments name the impl's
@@ -693,9 +693,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 _ => Vec::new(),
             }
         };
-
-        let saved_bounds = self.saved().type_param_bounds.clone();
-        self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
 
         // Before the trait's parameters, since `impl<T> From<T> for ByAny`
         // spells both `T`: binding the trait's first claims the name for an
@@ -2633,7 +2630,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn resolve_function(&mut self, func: &Function) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.clear_binders();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.clear_bounds();
         scope.sem.decls.clear_fn_local_items();
 
         scope.reject_second_effect_param(&func.type_params);

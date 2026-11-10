@@ -14,7 +14,8 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{TraitRef, TypeId};
+use crate::tir::{TraitRef, TypeId, TypeParamId};
+use crate::type_table::TypeTable;
 
 use super::coercion::PendingLiterals;
 use super::sem::decls::PendingBounds;
@@ -94,6 +95,24 @@ impl ParamRef {
     }
 }
 
+/// A binder's identity: the type it stands for and the parameter it stands in
+/// for. The name reaching it is not part of it, since a method's `T` shadowing
+/// its impl's leaves values of the impl's `T` in the body.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(super) struct BinderKey {
+    type_id: TypeId,
+    decl: Option<ast::AstId>,
+    owner: Option<DefId>,
+}
+
+/// Whose bounds answer for a type: the one binder a written name reaches, or
+/// every binder standing for one type parameter, which a type alone names.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum BoundHolder {
+    Param(TypeParamId),
+    Binder(BinderKey),
+}
+
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
 /// and the parameter it stands in for.
 #[derive(Clone, Copy, Debug)]
@@ -144,7 +163,17 @@ impl BinderInScope {
 
     /// Whether `other` is this same parameter bound again.
     fn stands_for_same(&self, other: &Self) -> bool {
-        self.type_id == other.type_id && self.decl == other.decl && self.owner == other.owner
+        self.key() == other.key()
+    }
+
+    /// What tells this binder from any other in a frame, whatever name
+    /// reaches it.
+    pub(super) fn key(&self) -> BinderKey {
+        BinderKey {
+            type_id: self.type_id,
+            decl: self.decl,
+            owner: self.owner,
+        }
     }
 
     /// A name in scope that no parameter declares — see [`Self::decl`].
@@ -283,7 +312,7 @@ impl ScopedBound {
 
     /// What `param` declares, pinned to one frame's `Self`. An `fn` bound is left
     /// out: it is realised in the parameter's own type, so nothing reaches it
-    /// through a trait name, which is the only way `type_param_bounds` is read.
+    /// through a trait name, which is the only way a binder's bounds are read.
     pub(super) fn pin_declared(
         param: &ast::GenericParam,
         self_binding: Option<SelfBinding>,
@@ -388,14 +417,14 @@ pub(super) struct TraitContext {
     /// Type parameters currently in scope. Set when resolving generic structs,
     /// functions, or impl blocks.
     pub(super) type_params: IndexMap<String, BinderInScope>,
-    /// The binders a method's parameter of the same name shadowed, each with
-    /// the bounds it carried. No name reaches one, but the body still holds
-    /// values of it, through `self`.
-    pub(super) shadowed: Vec<(String, BinderInScope, Vec<ScopedBound>)>,
-    /// Trait bounds on type parameters in scope (name → full bounds with assoc
-    /// types), each paired with the `Self` its written types mean. Used for
-    /// resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
-    pub(super) type_param_bounds: IndexMap<String, Vec<ScopedBound>>,
+    /// The binders a method's parameter of the same name shadowed. No name
+    /// reaches one, but the body still holds values of it, through `self`.
+    pub(super) shadowed: Vec<(String, BinderInScope)>,
+    /// Trait bounds on the binders in scope, each paired with the `Self` its
+    /// written types mean. Used for resolving trait methods on type params
+    /// (e.g., `T.cmp()` when T: Ord). Keyed by the binder, so a shadowed one
+    /// keeps its own.
+    binder_bounds: IndexMap<BinderKey, Vec<ScopedBound>>,
     /// Associated type bindings in scope (`Self::Name` → resolved type).
     /// Set when resolving trait implementations.
     pub(super) assoc_type_bindings: AssocBindings,
@@ -432,36 +461,106 @@ impl TraitContext {
     /// name: a callee's parameter bound to the caller's `K` under the letter
     /// `K` is that same binder, not a second one shadowing it.
     pub(super) fn binders(&self) -> Vec<FrameBinder<'_>> {
-        let named = self.type_params.iter().map(|(name, binder)| {
-            let bounds = self
-                .type_param_bounds
-                .get(name)
-                .map_or(&[][..], Vec::as_slice);
-            (binder, bounds)
-        });
-        let shadowed = self
-            .shadowed
-            .iter()
-            .map(|(_, binder, bounds)| (binder, bounds.as_slice()));
+        let distinct: IndexMap<BinderKey, &BinderInScope> = self
+            .every_binder()
+            .map(|binder| (binder.key(), binder))
+            .collect();
         let mut binders: IndexMap<TypeId, FrameBinder<'_>> = IndexMap::default();
-        for (binder, bounds) in named.chain(shadowed) {
+        for (key, binder) in distinct {
             let held = binders.entry(binder.type_id).or_insert(FrameBinder {
                 type_id: binder.type_id,
                 is_affine: false,
                 bounds: Vec::new(),
             });
             held.is_affine |= binder.is_affine;
-            held.bounds.extend(bounds);
+            held.bounds.extend(self.binder_bounds.get(&key).into_iter().flatten());
         }
         binders.into_values().collect()
     }
 
-    /// The binder whose type is `type_id`, shadowed or not.
-    pub(super) fn binder(&self, type_id: TypeId) -> Option<&BinderInScope> {
+    /// Every binder the frame holds, named or shadowed.
+    fn every_binder(&self) -> impl Iterator<Item = &BinderInScope> {
         self.type_params
             .values()
-            .chain(self.shadowed.iter().map(|(_, binder, _)| binder))
+            .chain(self.shadowed.iter().map(|(_, binder)| binder))
+    }
+
+    /// The binder whose type is `type_id`, shadowed or not.
+    pub(super) fn binder(&self, type_id: TypeId) -> Option<&BinderInScope> {
+        self.every_binder()
             .find(|binder| binder.type_id == type_id)
+    }
+
+    /// The bounds the binder `name` reaches carries.
+    pub(super) fn bounds_named(&self, name: &str) -> &[ScopedBound] {
+        self.type_params
+            .get(name)
+            .map_or(&[], |binder| self.bounds_of_binder(binder))
+    }
+
+    /// The bounds `binder` carries.
+    pub(super) fn bounds_of_binder(&self, binder: &BinderInScope) -> &[ScopedBound] {
+        self.binder_bounds
+            .get(&binder.key())
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// Whose bounds a projection off the binder `name` reaches reads.
+    pub(super) fn holder_named(&self, name: &str) -> Option<BoundHolder> {
+        Some(BoundHolder::Binder(self.type_params.get(name)?.key()))
+    }
+
+    /// Whose bounds a projection off `ty` reads, where `ty` is a parameter.
+    pub(super) fn holder_of(table: &TypeTable, ty: TypeId) -> Option<BoundHolder> {
+        util::bound_param(table, ty).map(BoundHolder::Param)
+    }
+
+    /// The bounds `holder` carries.
+    pub(super) fn bounds_held(&self, table: &TypeTable, holder: BoundHolder) -> Vec<&ScopedBound> {
+        match holder {
+            BoundHolder::Binder(key) => self.binder_bounds.get(&key).into_iter().flatten().collect(),
+            BoundHolder::Param(param) => self.bounds_of_param(table, param),
+        }
+    }
+
+    /// The type of the binder standing for `holder`: a pack's, for its element.
+    pub(super) fn holder_type(&self, table: &TypeTable, holder: BoundHolder) -> Option<TypeId> {
+        match holder {
+            BoundHolder::Binder(key) => Some(key.type_id),
+            BoundHolder::Param(param) => self
+                .every_binder()
+                .find(|binder| table.type_param_id(binder.type_id) == Some(param))
+                .map(|binder| binder.type_id),
+        }
+    }
+
+    /// Whether any binder in scope carries a bound.
+    pub(super) fn has_bounds(&self) -> bool {
+        self.every_binder()
+            .any(|binder| self.binder_bounds.contains_key(&binder.key()))
+    }
+
+    /// Replace the bounds `binder` carries with `bounds`.
+    pub(super) fn set_bounds(&mut self, binder: BinderKey, bounds: Vec<ScopedBound>) {
+        if bounds.is_empty() {
+            self.binder_bounds.shift_remove(&binder);
+        } else {
+            self.binder_bounds.insert(binder, bounds);
+        }
+    }
+
+    /// Add `bounds` to what the binder `name` reaches carries.
+    pub(super) fn add_bounds(&mut self, name: &str, bounds: Vec<ScopedBound>) {
+        if bounds.is_empty() {
+            return;
+        }
+        let binder = self.type_params[name].key();
+        self.binder_bounds.entry(binder).or_default().extend(bounds);
+    }
+
+    /// Drop every bound, for a frame naming its own parameters.
+    pub(super) fn clear_bounds(&mut self) {
+        self.binder_bounds.clear();
     }
 
     /// The binder standing for the parameter the reference `site`, written
@@ -521,8 +620,8 @@ impl TraitContext {
             .shadowed
             .iter()
             .rev()
-            .filter(|(shadowed, ..)| shadowed == name)
-            .map(|(_, binder, _)| binder);
+            .filter(|(shadowed, _)| shadowed == name)
+            .map(|(_, binder)| binder);
         self.type_params
             .get(name)
             .into_iter()
@@ -540,12 +639,27 @@ impl TraitContext {
             .map_or_else(Vec::new, |binder| binder.bounds)
     }
 
-    /// Bind `name` to `binder`, keeping the binder it shadows with its bounds.
+    /// The bounds every binder standing for the parameter `param` carries:
+    /// its type and the placeholder of a pack's element share the identity.
+    pub(super) fn bounds_of_param(
+        &self,
+        table: &TypeTable,
+        param: TypeParamId,
+    ) -> Vec<&ScopedBound> {
+        self.binders()
+            .into_iter()
+            .filter(|binder| table.type_param_id(binder.type_id) == Some(param))
+            .flat_map(|binder| binder.bounds)
+            .collect()
+    }
+
+    /// Bind `name` to `binder`, keeping the binder it shadows.
     ///
     /// A binder of the type the name already reaches is a second parameter
     /// standing for that type: a callee's `K` bound to the caller's `K`, or
     /// two `fn`-bound parameters of one signature. Both stay reachable by
-    /// identity, and the bounds stay with the type the name still reaches.
+    /// identity, and the bounds are the new binder's alone: the type is the
+    /// one the name still reaches.
     pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
         let Some(held) = self.type_params.insert(name.to_string(), binder) else {
             return;
@@ -553,17 +667,14 @@ impl TraitContext {
         if held.stands_for_same(&binder) {
             return;
         }
-        let bounds = if held.type_id == binder.type_id {
-            Vec::new()
-        } else {
-            self.type_param_bounds
-                .shift_remove(name)
-                .unwrap_or_default()
-        };
-        self.shadowed.push((name.to_string(), held, bounds));
+        if held.type_id == binder.type_id {
+            self.binder_bounds.shift_remove(&held.key());
+        }
+        self.shadowed.push((name.to_string(), held));
     }
 
-    /// Unbind every type parameter, for a frame naming its own.
+    /// Unbind every type parameter, for a frame naming its own. The bounds
+    /// stay with their binders, so binding one again restores what it carries.
     pub(super) fn clear_binders(&mut self) {
         self.type_params.clear();
         self.shadowed.clear();
@@ -710,7 +821,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let ctx = &mut scope.annotate_ctx.trait_ctx;
         ctx.clear_binders();
-        ctx.type_param_bounds.clear();
+        ctx.clear_bounds();
         scope.register_generic_params(owner, params, 0);
         scope
     }
@@ -724,7 +835,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let ctx = &mut scope.annotate_ctx.trait_ctx;
         ctx.clear_binders();
-        ctx.type_param_bounds.clear();
+        ctx.clear_bounds();
         ctx.assoc_type_bindings.clear();
         scope.register_impl_block_params(impl_block);
         scope
@@ -1073,8 +1184,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// effect params. Returns the next free index (i.e. `offset +
     /// non_effect_count`).
     ///
-    /// Trait bounds attached to each parameter are also recorded in
-    /// `type_param_bounds` so trait-method lookups on the parameter work.
+    /// Trait bounds attached to each parameter are recorded with its binder so
+    /// trait-method lookups on the parameter work.
     pub(super) fn register_generic_params(
         &mut self,
         owner: DefId,
@@ -1154,27 +1265,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         binder: BinderInScope,
         bounds: Vec<ScopedBound>,
     ) {
-        self.annotate_ctx.trait_ctx.bind(name, binder);
-        self.annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .shift_remove(name);
-        self.add_param_bounds(name, bounds);
-    }
-
-    /// File `bounds` under `name`, keeping what is already there. For a name
-    /// with no binder to pair them with, and for the second half of a binding
-    /// whose bounds are read after the name is bound.
-    pub(super) fn add_param_bounds(&mut self, name: &str, bounds: Vec<ScopedBound>) {
-        if bounds.is_empty() {
-            return;
-        }
-        self.annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .entry(name.to_string())
-            .or_default()
-            .extend(bounds);
+        let ctx = &mut self.annotate_ctx.trait_ctx;
+        ctx.bind(name, binder);
+        ctx.set_bounds(binder.key(), bounds);
     }
 
     /// What `param` declares, pinned to the `Self` this frame binds — what the
@@ -1468,7 +1561,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // The impl's own parameter keeps the name, but the trait's mark
             // and bounds still reach what it binds.
             if ctx.type_params.contains_key(&param.name) {
-                ctx.shadowed.push((param.name.clone(), binder, bounds));
+                ctx.shadowed.push((param.name.clone(), binder));
+                ctx.set_bounds(binder.key(), bounds);
                 continue;
             }
             self.bind_param(&param.name, binder, bounds);

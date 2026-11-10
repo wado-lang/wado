@@ -35,7 +35,7 @@ use super::synth::ArgClass;
 use super::trait_query::{DerivedAt, OnBoundTrait, SelfBinding};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, RealTypeParams, TypeError};
 use super::tysys::TypeSystem;
-use super::{AbstractSelection, Elaborator};
+use super::{AbstractSelection, Elaborator, util};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -219,16 +219,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the declaration only spells them. A binding reading a trait parameter
     /// the projection does not know is left out.
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
-        if let Some(name) = self.tysys.binder_name(ty) {
+        let tt = self.tysys.type_table.borrow();
+        if let Some(param) = util::bound_param(&tt, ty) {
             return self
                 .annotate_ctx
                 .trait_ctx
-                .type_param_bounds
-                .get(&name)
+                .bounds_of_param(&tt, param)
+                .into_iter()
                 .cloned()
-                .unwrap_or_default();
+                .collect();
         }
-        let tt = self.tysys.type_table.borrow();
         let ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,

@@ -478,14 +478,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A type parameter has no impl block to read the rhs off; its bounds
         // say it, as `T: Shl<u32>` does. The dispatch reports two bounds that
         // disagree, so the hint selects nothing.
-        let param_name = match self.tysys.type_table.borrow().get(self_type_id) {
-            ResolvedType::TypeParam { .. } | ResolvedType::PackElement { .. } => {
-                self.tysys.binder_name(self_type_id)
-            }
-            _ => None,
-        };
-        if let Some(param_name) = param_name {
-            return self.bound_declared_rhs_type(&param_name, trait_, method_name, self_type_id);
+        let is_param = matches!(
+            self.tysys.type_table.borrow().get(self_type_id),
+            ResolvedType::TypeParam { .. } | ResolvedType::PackElement { .. }
+        );
+        if is_param {
+            return self.bound_declared_rhs_type(trait_, method_name, self_type_id);
         }
         let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
         let admitted =
@@ -509,17 +507,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// reports no ambiguity of its own; the dispatch already does.
     fn bound_declared_rhs_type(
         &mut self,
-        param_name: &str,
         trait_: DefId,
         method_name: &str,
         self_type_id: TypeId,
     ) -> Option<TypeId> {
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(param_name)?
-            .clone();
+        let bounds = self.carried_bounds(self_type_id);
         let (bound, declared) = bounds.iter().find_map(|bound| {
             let decl = self.trait_decl_of(bound)?;
             if decl != trait_ {
@@ -2333,10 +2325,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bounds: scope
                     .annotate_ctx
                     .trait_ctx
-                    .type_param_bounds
-                    .get(name)
-                    .cloned()
-                    .unwrap_or_default(),
+                    .bounds_of_binder(binder)
+                    .to_vec(),
                 // The frame holds a pack as the pack it was declared as, so
                 // there is nothing left to mint: it carries over as it stands.
                 settled: SettledAs::Type(binder.type_id),

@@ -21,7 +21,7 @@ use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
-    TraitCheckFrame, trait_params_from_impl,
+    TraitCheckFrame, TraitContext, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
 use super::trait_env::{DefaultArg, ImplMethodHeader, InheritedBound, ViaClause};
@@ -2105,7 +2105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         candidate: &BoundCandidate,
     ) -> Vec<ProjectionAnswer> {
-        let self_name = self.tysys.binder_name(self_type_id).unwrap_or_default();
+        let holder = TraitContext::holder_of(&self.tysys.type_table.borrow(), self_type_id);
         let read_as = ScopedBound::new(
             candidate.bound.clone(),
             candidate.written_self.at(self_type_id, candidate.decl),
@@ -2118,7 +2118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_args = if at_bound {
                 bound_args.clone()
             } else {
-                self.trait_args_for(self_type_id, &self_name, *declaring)
+                self.trait_args_for(self_type_id, holder, *declaring)
             };
             // Reached at the bound's own arguments, only what that bound binds
             // answers: another bound on the trait is another instantiation.
@@ -2126,13 +2126,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (true, Some(args)) => self
                     .frame_projection_of_trait(
                         self_type_id,
-                        &self_name,
+                        holder,
                         *declaring,
                         Some(args),
                         &decl.name,
                     )
                     .or_else(|| self.carried_binding(self_type_id, &decl.name)),
-                _ => self.frame_projection(self_type_id, &self_name, &decl.name),
+                _ => self.frame_projection(self_type_id, holder, &decl.name),
             };
             let answer = known.unwrap_or_else(|| {
                 let open = self.family_params(*declaring, &decl.name);
@@ -2140,7 +2140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     base: self_type_id,
                     trait_args,
                 };
-                self.make_projection_at(site, &self_name, *declaring, &decl.name, &open)
+                self.make_projection_at(site, holder, *declaring, &decl.name, &open)
             });
             answers.push(ProjectionAnswer::at_any(
                 *declaring,
@@ -3272,7 +3272,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct ImplInfo {
             /// Each declared parameter and where the target names it, so the
             /// instantiation binds it by position. `None` where the target
-            /// does not name it, leaving bounds with no binder to pair with.
+            /// does not name it.
             type_params: Vec<(ast::GenericParam, Option<u32>)>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this block implements, as its own header names it —
@@ -3337,16 +3337,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `impl<T> IntoIterator for List<T>` registering for `List<u8>`
             // binds `T` to `u8`: the slot is where the target names it.
             for (param, slot) in &info.type_params {
+                let Some(slot) = *slot else {
+                    continue;
+                };
+                let Some(&arg) = concrete_type_args.get(slot as usize) else {
+                    continue;
+                };
                 let bounds = ScopedBound::pin_declared(param, Some(implementing));
-                let bound_to = slot.and_then(|slot| {
-                    let &arg = concrete_type_args.get(slot as usize)?;
-                    let param = ParamRef::declared(param, &scope.tysys.resolutions);
-                    Some(BinderInScope::standing_for(slot, arg, &param))
-                });
-                match bound_to {
-                    Some(binder) => scope.bind_param(&param.name, binder, bounds),
-                    None => scope.add_param_bounds(&param.name, bounds),
-                }
+                let param_ref = ParamRef::declared(param, &scope.tysys.resolutions);
+                let binder = BinderInScope::standing_for(slot, arg, &param_ref);
+                scope.bind_param(&param.name, binder, bounds);
             }
 
             let trait_ref = scope.impl_trait_ref(&info.trait_type, &info.target, info.trait_key);

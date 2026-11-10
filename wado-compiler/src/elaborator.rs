@@ -266,16 +266,6 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             if !param.is_pack && param.has_fn_bound() {
                 continue;
             }
-            // A name the enclosing frame already numbered keeps that number;
-            // renumbering it here would give one parameter two indices.
-            if self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(&param.name)
-            {
-                continue;
-            }
             let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
                 owner,
                 param.name.clone(),
@@ -289,14 +279,19 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             );
         }
         // A bound writing no `Self` is in force before the signatures are
-        // bound, which may project off it: `F: fn mut(I::Item) -> U`.
+        // bound, which may project off it: `F: fn mut(I::Item) -> U`. A
+        // signature's own bounds wait for it to be bound.
         let (early, late): (Vec<_>, Vec<_>) = impl_block
             .type_params
             .iter()
-            .partition(|param| !param.bounds.iter().any(ast::TraitBound::writes_self));
+            .filter(|param| param.fills_impl_slot())
+            .partition(|param| {
+                (param.is_pack || !param.has_fn_bound())
+                    && !param.bounds.iter().any(ast::TraitBound::writes_self)
+            });
         for param in early {
             let bounds = self.scoped_bounds(param);
-            self.add_param_bounds(&param.name, bounds);
+            self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.bind_fn_bound_params(&impl_block.type_params);
         // Between the names and the rest of their bounds: the target is
@@ -308,7 +303,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         self.set_self_binding(implementing);
         for param in late {
             let bounds = self.scoped_bounds(param);
-            self.add_param_bounds(&param.name, bounds);
+            self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.release_bounds_here(held);
     }
