@@ -46,6 +46,7 @@ struct core:prelude/string.wado//StrSlice {  // TypeId(4)
 
 struct value_copy_live_ref_holder_keeps_copy.wado//P {  // TypeId(5)
     mut a: i32,
+    mut b: i32,
 }
 
 struct value_copy_live_ref_holder_keeps_copy.wado//H {  // TypeId(6)
@@ -224,7 +225,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/task-return from "wasi/task-return";
 
-global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_0: ref "Array<value_copy_live_ref_holder_keeps_copy.wado/P>" = array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1 });
+global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_0: ref "Array<value_copy_live_ref_holder_keeps_copy.wado/P>" = array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1, b: 1 });
 global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(49, 48, 57, 32, 49, 48, 57);
 global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_3: ref Array<i32> = array.new_fixed<i32>(1, 2);
 global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_4: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
@@ -253,7 +254,7 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/element_kept_through_a_closure"()
             continue l1;
         };
     };
-    builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1 }), 0).a = 9;
+    builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1, b: 1 }), 0).a = 9;
     $sroa_$iter_0_index_50 = kept.used;
     if @unlikely(0 >= $sroa_$iter_0_index_50) {
         cold_path;
@@ -268,14 +269,14 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/run"() with Stdout {
     let $cm_pair_7_99: i64;
     let $sroa_$pattern_temp_0_0_13_105: i32;
     let $sroa_$pattern_temp_0_1_14_106: i32;
-    let ref_val_260: ref "value_copy_live_ref_holder_keeps_copy.wado//P";
+    let ref_val_262: ref "value_copy_live_ref_holder_keeps_copy.wado//P";
     let new_repr: ref Array<u8>;
     let $vc_payload_1: ref "core:prelude/list.wado//List<i32>";
     let $sroa_o_value_22: ref null "core:prelude/list.wado//List<i32>";
     let held: ref null "core:prelude/slice.wado//SliceRefIter<i32>";
     let $local_5: ref "core:prelude/slice.wado//SliceRefIter<i32>";
-    let ref_val_349: ref "core:prelude//$Cell<i32>";
-    let $av_870: i32;
+    let ref_val_351: ref "core:prelude//$Cell<i32>";
+    let $av_872: i32;
     $mv_field_5 = block -> ref "core:prelude/string.wado//String" {
         self_9 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
         if @unlikely(1 >= builtin::array_len(self_9.repr)) {
@@ -344,18 +345,18 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/run"() with Stdout {
         held = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: array.new_fixed<i32>(1, 2), index: 0, end: 2 };
         builtin::array_set<i32>(array.new_fixed<i32>(1, 2), 0, 7);
         $local_5 = ref.as_non_null(held);
-        $av_870 = $inline_iterator_handed_away_1__$inline_core_prelude_types_wado_Option__i32___unwrap_7: block -> ref "core:prelude//$Cell<i32>" {
+        $av_872 = $inline_iterator_handed_away_1__$inline_core_prelude_types_wado_Option__i32___unwrap_7: block -> ref "core:prelude//$Cell<i32>" {
             $inline_iterator_handed_away_1__$fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_8: block {
-                break_if $inline_iterator_handed_away_1__$fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_8 local.tee $av_870($local_5.index) >= $local_5.end;
-                ref_val_349 = struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>($local_5.repr, $av_870) };
-                $local_5.index = $av_870 + 1;
-                break $inline_iterator_handed_away_1__$inline_core_prelude_types_wado_Option__i32___unwrap_7: ref_val_349;
+                break_if $inline_iterator_handed_away_1__$fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_8 local.tee $av_872($local_5.index) >= $local_5.end;
+                ref_val_351 = struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>($local_5.repr, $av_872) };
+                $local_5.index = $av_872 + 1;
+                break $inline_iterator_handed_away_1__$inline_core_prelude_types_wado_Option__i32___unwrap_7: ref_val_351;
             };
             cold_path;
             "core:prelude/types.wado/core:prelude/types.wado/Option<&i32>::unwrap$cold0$dae[self]"();
             unreachable;
         }.value;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_live_ref_holder_keeps_copy.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($sroa_$pattern_temp_0_0_13_105, $sroa_$pattern_temp_0_1_14_106, $av_870);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_live_ref_holder_keeps_copy.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($sroa_$pattern_temp_0_0_13_105, $sroa_$pattern_temp_0_1_14_106, $av_872);
     };
     $sroa_$pattern_temp_0_0_13_105 = builtin::i32_wrap_i64(local.tee $cm_pair_7_99("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_106 = builtin::i32_wrap_i64($cm_pair_7_99 >> 32_i64);
@@ -381,18 +382,18 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_field_5, $sroa_$pattern_temp_0_0_13_105);
         }
-        $av_870 = $mv_field_5.used;
+        $av_872 = $mv_field_5.used;
         $mv_field_5.used = $sroa_$pattern_temp_0_0_13_105;
-        builtin::array_set_u8($mv_field_5.repr, $av_870, 45);
+        builtin::array_set_u8($mv_field_5.repr, $av_872, 45);
     } else {
     }
     if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_105($mv_field_5.used + $sroa_$pattern_temp_0_1_14_106) > builtin::array_len($mv_field_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_field_5, $sroa_$pattern_temp_0_0_13_105);
     }
-    $av_870 = $mv_field_5.used;
+    $av_872 = $mv_field_5.used;
     $mv_field_5.used = $sroa_$pattern_temp_0_0_13_105;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_field_5.repr, $av_870, $cm_pair_7_99, $sroa_$pattern_temp_0_1_14_106);
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_field_5.repr, $av_872, $cm_pair_7_99, $sroa_$pattern_temp_0_1_14_106);
     $inline_core_prelude_string_wado_String__format_value_copy_live_ref_holder_keeps_copy_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__2__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_value_copy_live_ref_holder_keeps_copy_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__2__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };
@@ -402,10 +403,10 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_106, $mv_field_5.repr, $mv_field_5.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_105);
     $mv_field_5 = block -> ref "core:prelude/string.wado//String" {
-        builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//H">(array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//H">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//H" { p: struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1 } }), 0).p.a = 9;
-        ref_val_260 = builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_0, 0);
-        builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1 }), 0).a = 9;
-        $sroa_$pattern_temp_0_0_13_105 = ref_val_260.a;
+        builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//H">(array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//H">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//H" { p: struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1, b: 1 } }), 0).p.a = 9;
+        ref_val_262 = builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_0, 0);
+        builtin::array_get_value<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(array.new_fixed<ref "value_copy_live_ref_holder_keeps_copy.wado//P">(struct.new "value_copy_live_ref_holder_keeps_copy.wado//P" { a: 1, b: 1 }), 0).a = 9;
+        $sroa_$pattern_temp_0_0_13_105 = ref_val_262.a;
         $sroa_$pattern_temp_0_1_14_106 = "value_copy_live_ref_holder_keeps_copy.wado/element_kept_through_a_closure"();
         "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_live_ref_holder_keeps_copy.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"(1, $sroa_$pattern_temp_0_0_13_105, $sroa_$pattern_temp_0_1_14_106);
     };
