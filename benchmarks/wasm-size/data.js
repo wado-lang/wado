@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794336006326,
+  "lastUpdate": 1794351857779,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76397,6 +76397,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c94716d98254790afd025e29ebabdae5e031db68"
         },
         "date": 1794336005113,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404534,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9ede919b27be8f1ebcba29f368380e61e9db8733",
+          "message": "Merge pull request #2602 from wado-lang/claude/emi-fix-20261111\n\nfix(EMI): reuse a cached specialization only when its parameters are the callee's",
+          "timestamp": "2026-11-11T07:47:56+09:00",
+          "tree_id": "f90f6da8fa89100bd3aee31fcacda8dff353ec64",
+          "url": "https://github.com/wado-lang/wado/commit/9ede919b27be8f1ebcba29f368380e61e9db8733"
+        },
+        "date": 1794351857266,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
