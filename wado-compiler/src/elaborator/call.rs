@@ -25,7 +25,7 @@ use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound, TraitContext};
+use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
@@ -312,17 +312,6 @@ impl SettledAs {
     pub(super) fn is_pack(&self) -> bool {
         matches!(self, Self::Pack(_))
     }
-}
-
-/// What `enclosing` declares `type_id` is bound by, through every binder
-/// standing for it. Empty for an argument that is not one of its own
-/// parameters.
-///
-/// One type reaches a frame through several binders whenever an `impl` binds
-/// two of a trait's parameters to one type, and each one's bounds hold of it,
-/// so they are taken together rather than one of them picked.
-fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
-    enclosing.bounds_of(type_id).to_vec()
 }
 
 /// The receiver's parameter name, which a default cannot name.
@@ -3289,11 +3278,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // function '?2::default'`) over the call site's real complaint that the
         // parameter could not be inferred, so it binds nothing.
         //
-        // Dispatch on the parameter (`T::default()`) reads its bounds by name,
-        // so the name has to carry them. Where the binding brought none and
-        // stands for a parameter of the enclosing scope, that parameter's are
-        // the ones in force: `T` *is* the caller's `X` here, so it is bound by
-        // whatever `X` is bound by.
+        // Dispatch on the parameter (`T::default()`) reads the bounds on the
+        // type it stands for, which clearing the frame dropped. Where the
+        // binding brought none and stands for a parameter of the enclosing
+        // scope, that parameter's are the ones in force: `T` *is* the caller's
+        // `X` here, so it is bound by whatever `X` is bound by, through every
+        // binder of the caller's standing for it.
         let installed: Vec<Option<Vec<ScopedBound>>> = {
             let table = scope.tysys.type_table.borrow();
             bindings
@@ -3308,7 +3298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     // A pack is no parameter of the enclosing scope, whatever
                     // a same-named one there is bound by.
-                    Some(type_id.map_or_else(Vec::new, |id| enclosing_bounds_of(scope.saved(), id)))
+                    Some(type_id.map_or_else(Vec::new, |id| scope.saved().bounds_of(id).to_vec()))
                 })
                 .collect()
         };
@@ -5675,18 +5665,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bounds = self.carried_bounds(type_param_type_id);
 
         if let Some((found_trait, method_info_result)) = {
-                self.find_method_in_trait_bounds(
-                    Some(call.id),
-                    false,
-                    &bounds,
-                    method_name,
-                    type_param_type_id,
-                    call.span,
-                    None,
-                    ArgSource::Exprs(&mut ArgProbe::new(&call.args, ctx)),
-                )
-            }
-        {
+            self.find_method_in_trait_bounds(
+                Some(call.id),
+                false,
+                &bounds,
+                method_name,
+                type_param_type_id,
+                call.span,
+                None,
+                ArgSource::Exprs(&mut ArgProbe::new(&call.args, ctx)),
+            )
+        } {
             if let Some(def) = method_info_result.method_def
                 && self.report_unavailable(def, call.span)
             {

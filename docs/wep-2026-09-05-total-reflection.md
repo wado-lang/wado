@@ -382,9 +382,10 @@ proving the kind. Both are revisitable, and a derivation that turns out to need
 the bound on the arm is the reason to revisit.
 
 The mechanism underneath is unchanged by the spelling: bounds in force are
-name-keyed in `annotate_ctx.trait_ctx.type_param_bounds`, which
-`reflect_pack_bound_ty` reads, so an arm pushes a synthesized bound onto that
-map under RAII and every existing projection path serves it unchanged.
+keyed in `annotate_ctx.trait_ctx` by the type a binder stands for, which
+`reflect_pack_bound_ty` reads, so an arm puts a synthesized bound on the
+subject's type under RAII and every existing projection path serves it
+unchanged.
 
 ### What each construct answers
 

@@ -221,7 +221,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         let tt = self.tysys.type_table.borrow();
         if util::bound_param(&tt, ty).is_some() {
-            return self.annotate_ctx.trait_ctx.bounds_reaching(&tt, ty).to_vec();
+            return self
+                .annotate_ctx
+                .trait_ctx
+                .bounds_reaching(&tt, ty)
+                .to_vec();
         }
         let ResolvedType::AssocTypeProjection {
             param_id,

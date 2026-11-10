@@ -2322,7 +2322,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|(name, binder)| DefaultTypeBinding {
                 param: ParamRef::of(impl_ref.0, name),
-                bounds: scope.annotate_ctx.trait_ctx.bounds_of(binder.type_id).to_vec(),
+                bounds: scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .bounds_of(binder.type_id)
+                    .to_vec(),
                 // The frame holds a pack as the pack it was declared as, so
                 // there is nothing left to mint: it carries over as it stands.
                 settled: SettledAs::Type(binder.type_id),

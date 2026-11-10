@@ -535,19 +535,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The frame puts no bound on the base, so what the base itself
         // carries answers: a projection travels with its own.
-        let found = declared
-            .or_else(|| self.projection_member_owner(base_type_id, &namespaced.name));
+        let found =
+            declared.or_else(|| self.projection_member_owner(base_type_id, &namespaced.name));
         if let Some(owner) = found {
             return Some(AssocTarget::Projection {
                 base: base_type_id,
                 owner,
             });
         }
-        let _ = self.unknown_namespaced_type(
-            &namespaced.namespace,
-            &namespaced.name,
-            namespaced.span,
-        );
+        let _ =
+            self.unknown_namespaced_type(&namespaced.namespace, &namespaced.name, namespaced.span);
         None
     }
 
@@ -1216,7 +1213,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_decl_of(scoped)
             .expect("a bound that declares an associated type names a trait");
         let args = self.in_bound_frame(scoped, &scoped.space, |e| {
-            scoped.bound.type_args.iter().map(|arg| e.resolve_type(arg)).collect()
+            scoped
+                .bound
+                .type_args
+                .iter()
+                .map(|arg| e.resolve_type(arg))
+                .collect()
         });
         TraitRef::new(decl, args)
     }
@@ -1540,9 +1542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         assoc_name: assoc_name.clone(),
                         answer: TypeTable::UNKNOWN,
                     };
-                    trait_ctx
-                        .binder(*param_id)
-                        .map(|_| (*id, *param_id, asked))
+                    trait_ctx.binder(*param_id).map(|_| (*id, *param_id, asked))
                 })
                 .collect()
         };

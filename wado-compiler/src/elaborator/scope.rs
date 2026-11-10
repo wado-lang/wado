@@ -436,11 +436,13 @@ impl TraitContext {
     pub(super) fn binders(&self) -> Vec<FrameBinder<'_>> {
         let mut binders: IndexMap<TypeId, FrameBinder<'_>> = IndexMap::default();
         for binder in self.every_binder() {
-            let held = binders.entry(binder.type_id).or_insert_with(|| FrameBinder {
-                type_id: binder.type_id,
-                is_affine: false,
-                bounds: self.bounds_of(binder.type_id).iter().collect(),
-            });
+            let held = binders
+                .entry(binder.type_id)
+                .or_insert_with(|| FrameBinder {
+                    type_id: binder.type_id,
+                    is_affine: false,
+                    bounds: self.bounds_of(binder.type_id).iter().collect(),
+                });
             held.is_affine |= binder.is_affine;
         }
         binders.into_values().collect()
@@ -455,8 +457,7 @@ impl TraitContext {
 
     /// The binder whose type is `type_id`, shadowed or not.
     pub(super) fn binder(&self, type_id: TypeId) -> Option<&BinderInScope> {
-        self.every_binder()
-            .find(|binder| binder.type_id == type_id)
+        self.every_binder().find(|binder| binder.type_id == type_id)
     }
 
     /// The bounds in force on `type_id`.
@@ -483,7 +484,9 @@ impl TraitContext {
         let param = util::bound_param(table, ty);
         self.every_binder()
             .map(|binder| binder.type_id)
-            .find(|&binder| binder == ty || param.is_some_and(|p| table.type_param_id(binder) == Some(p)))
+            .find(|&binder| {
+                binder == ty || param.is_some_and(|p| table.type_param_id(binder) == Some(p))
+            })
     }
 
     /// Whether any binder in scope carries a bound.
@@ -501,7 +504,10 @@ impl TraitContext {
         }
         let held = self.bounds.entry(type_id).or_default();
         for bound in bounds {
-            match held.iter_mut().find(|other| other.bound.id == bound.bound.id) {
+            match held
+                .iter_mut()
+                .find(|other| other.bound.id == bound.bound.id)
+            {
                 Some(other) => *other = bound,
                 None => held.push(bound),
             }
