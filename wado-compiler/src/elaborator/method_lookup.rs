@@ -1281,6 +1281,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The bounds impl `def` places on `slots`, owed by the call at `span`:
     /// the `Open` ones awaiting their answer, or `All` where selecting the
     /// block checked none, as for a slot only its trait arguments determine.
+    /// `All` owes the kind as well: an unmarked parameter refuses an affine
+    /// argument.
     fn defer_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span, owed: OwedBounds) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
@@ -1297,6 +1299,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(param) = header.type_params.iter().find(|p| p.name == bound.name) else {
                 continue;
             };
+            if matches!(owed, OwedBounds::All)
+                && !param.is_affine
+                && self
+                    .tysys
+                    .is_affine(*arg, &self.annotate_ctx.trait_ctx.affine_params())
+            {
+                self.report_unmet(
+                    UnmetImplBound {
+                        param: param.name.clone(),
+                        type_arg: *arg,
+                        missing: UnmetKind::Affine,
+                    },
+                    span,
+                );
+            }
             let bounds = self.declared_bounds(param, None, &impl_args);
             let owes = matches!(owed, OwedBounds::All) || self.awaits_pending_call(*arg) || {
                 let tt = self.tysys.type_table.borrow();

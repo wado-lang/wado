@@ -1594,9 +1594,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             let resolved_arg = self.resolve_type(arg);
             let ctx = &mut self.annotate_ctx.trait_ctx;
-            let binder = BinderInScope::declared(ctx.type_params.len() as u32, resolved_arg, param);
-            // The impl's own parameter keeps the name, but the trait's mark
-            // still reaches what it binds.
+            // The trait's `affine` does not reach what it binds: an impl's own
+            // parameter is affine only where the impl marks it, and an unmarked
+            // one keeps the impl off affine arguments instead.
+            let binder = BinderInScope {
+                is_affine: false,
+                ..BinderInScope::declared(ctx.type_params.len() as u32, resolved_arg, param)
+            };
             if ctx.type_params.contains_key(&param.name) {
                 ctx.shadowed.push((param.name.clone(), binder));
                 continue;
