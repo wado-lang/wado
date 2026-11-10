@@ -195,8 +195,9 @@ Whole program and backend:
 - `dce` — remove unreachable functions, types, globals, literals, and imports.
 - `dead_field` — remove a struct field no code reads from its type, and from
   every literal, assignment and pattern that names it. A copy of the struct
-  reads no field by itself. A removed field's initializer still runs when it
-  has an effect.
+  reads no field by itself. A body-less call that may read everything its
+  arguments reach, such as `builtin::black_box`, reads every field of what
+  they reach. A removed field's initializer still runs when it has an effect.
 - `promote_fields` / `freeze_pure_arith` — fold pure field reads and arithmetic
   into the value graph.
 - `match_to_bitset` — test membership in a set of literals and ranges with one
@@ -331,6 +332,8 @@ Architectural work is tracked in
 - [ ] Global value numbering across effectful nodes.
 - [ ] Instruction combining over identical operands (`x - x`, `x & x`, `~(~x)`).
 - [ ] Dead store elimination at NIR, and of field and array stores.
+- [ ] Deleting a loop that computes nothing a later read sees, such as one that
+  only drains an iterator: `for let b of s.bytes() {}` still walks every byte.
 - [ ] Removing a struct field only written through a reference to it: a field
   passed as `&mut s.f` counts as read, even to a callee that only writes it.
 - [ ] Strength reduction, reassociation, jump threading, and CFG simplification.

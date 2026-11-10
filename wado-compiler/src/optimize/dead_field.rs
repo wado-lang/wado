@@ -4,7 +4,10 @@
 //!
 //! A field is read where a `FieldAccess` names it outside an assignment's
 //! target, where a struct pattern binds or tests it, and where a reference to
-//! it is taken, which is a `FieldAccess` too. A literal's slot for the field
+//! it is taken, which is a `FieldAccess` too. A call to a body-less function
+//! whose declaration lets it read everything its arguments reach, as
+//! `builtin::black_box` does, reads every field of the structs they reach. A
+//! literal's slot for the field
 //! and an assignment to it name it without reading it: what they hold is read
 //! only if the field is. So liveness is a least fixed point. Every field starts
 //! dead, and the operands its slots and assignments hold are walked once it
@@ -205,7 +208,9 @@ fn live_fields(
                     .any(|f| !liveness.live.contains(&(instance.clone(), f.index)))
                     && liveness.reaches(instance)
             })
-            .flat_map(|(instance, decl)| decl.fields.iter().map(move |f| (instance.clone(), f.index)))
+            .flat_map(|(instance, decl)| {
+                decl.fields.iter().map(move |f| (instance.clone(), f.index))
+            })
             .collect();
         if reached.is_empty() {
             return liveness.live;
@@ -239,9 +244,10 @@ impl Liveness<'_> {
             .types
             .find_struct_instance(*def, args)
             .expect("a concrete struct declaration has its type");
-        self.handed
-            .iter()
-            .any(|&ty| self.types.reaches_object_data(ty, self.types.object_kind(object)))
+        self.handed.iter().any(|&ty| {
+            self.types
+                .reaches_object_data(ty, self.types.object_kind(object))
+        })
     }
 
     fn read(&mut self, key: FieldKey) {

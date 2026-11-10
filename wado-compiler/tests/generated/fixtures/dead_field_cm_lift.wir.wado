@@ -173,7 +173,7 @@ fn "dead_field_cm_lift.wado/$cm_binding__wasi:clocks/system-clock@0.3.0#now"() w
 
 fn "dead_field_cm_lift.wado/$cm_export__run"() {
     let $v0: u32;
-    if @unlikely(local.tee $v0(black_box("dead_field_cm_lift.wado/$cm_binding__wasi:clocks/system-clock@0.3.0#now"()).nanoseconds) >=u 1000000000) {
+    if @unlikely(local.tee $v0("dead_field_cm_lift.wado/$cm_binding__wasi:clocks/system-clock@0.3.0#now"().nanoseconds) >=u 1000000000) {
         cold_path;
         "dead_field_cm_lift.wado/run$cold0"($v0);
         unreachable;
