@@ -18,8 +18,8 @@
 //! A struct's layout reaches the linear memory of a Component Model call only
 //! through the lift and lower code synthesized for it, which reads offsets off
 //! the WIT record and each field through a `FieldAccess`. A struct whose layout
-//! `wir_build` reads past NIR keeps every field
-//! (`CompilerItem::has_backend_layout`).
+//! `wir_build` reads past NIR (`CompilerItem::has_backend_layout`) starts with
+//! every field live.
 
 use std::ops::ControlFlow;
 
