@@ -1036,6 +1036,21 @@ internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
+internal global FOLLOW_CONT_BITS: i64 = 56;
+
+internal global FOLLOW_OPENS_BITS: i64 = 0x0080_8080_8080_8080;
+
+internal fn follow_spill(cont: i64, forwarded: i64, shift: i64, spill: i64) -> i64 {
+    let slots = forwarded & FOLLOW_CONT_MASK;
+    if slots == 0 {
+        return cont;
+    }
+    if shift < FOLLOW_CONT_BITS && (slots | FOLLOW_OPENS_BIT) >> (FOLLOW_CONT_BITS - shift) & FOLLOW_OPENS_BITS == 0 {
+        return cont;
+    }
+    return cont & FOLLOW_CONT_MASK | follow_open_set(spill);
+}
+
 internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
 }

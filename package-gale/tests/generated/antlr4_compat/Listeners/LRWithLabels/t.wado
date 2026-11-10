@@ -1033,6 +1033,21 @@ internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
+internal global FOLLOW_CONT_BITS: i64 = 56;
+
+internal global FOLLOW_OPENS_BITS: i64 = 0x0080_8080_8080_8080;
+
+internal fn follow_spill(cont: i64, forwarded: i64, shift: i64, spill: i64) -> i64 {
+    let slots = forwarded & FOLLOW_CONT_MASK;
+    if slots == 0 {
+        return cont;
+    }
+    if shift < FOLLOW_CONT_BITS && (slots | FOLLOW_OPENS_BIT) >> (FOLLOW_CONT_BITS - shift) & FOLLOW_OPENS_BITS == 0 {
+        return cont;
+    }
+    return cont & FOLLOW_CONT_MASK | follow_open_set(spill);
+}
+
 internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
 }
@@ -3439,7 +3454,7 @@ fn scan_e_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(26);
-    pos = scan_e(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
+    pos = scan_e(tokens, pos, atn, memo, follow_spill(follow_then_opening(FOLLOW_MASK_1, 16, follow), follow, 16, FOLLOW_MASK_2), 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
     while atn_decide_1(atn, tokens, pos, 0) == 0 {
@@ -3448,7 +3463,7 @@ fn scan_e_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
             sg_0: {
                 pos += 1;
                 atn.stack.push(34);
-                pos = scan_e(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
+                pos = scan_e(tokens, pos, atn, memo, follow_spill(follow_then_opening(FOLLOW_MASK_1, 16, follow), follow, 16, FOLLOW_MASK_2), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
@@ -3547,7 +3562,7 @@ fn _parse_e(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
 fn _parse_e_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
     p.atn_ret_pending = 26;
-    _parse_e(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+    _parse_e(p, follow_spill(follow_then_opening(FOLLOW_MASK_1, 16, follow), follow, 16, FOLLOW_MASK_2));
     loop {
         if p.recovering { break; }
         let rs_pick_0 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
@@ -3556,7 +3571,7 @@ fn _parse_e_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_LIT_COMMA, &SYNC_0, false);
         p.site = 4;
         p.atn_ret_pending = 34;
-        _parse_e(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+        _parse_e(p, follow_spill(follow_then_opening(FOLLOW_MASK_1, 16, follow), follow, 16, FOLLOW_MASK_2));
     }
     return;
 }
@@ -3637,9 +3652,10 @@ global SYNC_0: List<i32> = [4];
 global EXPECTED_0: List<i32> = [TK_INT];
 global SYNC_1: List<i32> = [128];
 
-global FOLLOW_SETS: List<List<i32>> = [[256], [512], [4]];
+global FOLLOW_SETS: List<List<i32>> = [[256], [512], [4], [768]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 770;
+global FOLLOW_MASK_2: i64 = 4;
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x03\x00\x02\x00\x24\x00\x0a\x00\x00\x00\x02\x00\x04\x00\x0e\x00\x1b\x00\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x04\x05\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x01\x00\x05\x00\x00\x00\x01\x00\x04\x00\x01\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x07\x00\x0b\x00\x18\x00\x09\x00\x02\x00\x03\x00\x08\x00\x0d\x00\x0f\x00\x0e\x00\x0c\x00\x12\x00\x10\x00\x04\x00\x0f\x00\x13\x00\x14\x00\x05\x00\x16\x00\x17\x00\x11\x00\x1a\x00\x06\x00\x03\x00\x1c\x00\x1e\x00\x1d\x00\x19\x00\x20\x00\x24\x00\x21\x00\x22\x00\x03\x00\x1f\x00\x1c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 
