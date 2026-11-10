@@ -4,7 +4,6 @@
 
 struct const_object_globalization.wado//EncCode {  // TypeId(0)
     mut code: i32,
-    mut len: i32,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(1)
@@ -15,7 +14,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(1)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -193,18 +191,16 @@ global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_
 
 fn "const_object_globalization.wado/stored_then_mutated"() {
     let i: i32;
-    let $deref_ref_26: ref "const_object_globalization.wado//EncCode";
     let $sroa_codes_repr_68: ref "Array<const_object_globalization.wado/EncCode>";
-    $sroa_codes_repr_68 = array.new_fixed<ref "const_object_globalization.wado//EncCode">(struct.new "const_object_globalization.wado//EncCode" { code: 0, len: 0 }, struct.new "const_object_globalization.wado//EncCode" { code: 0, len: 0 }, struct.new "const_object_globalization.wado//EncCode" { code: 0, len: 0 });
+    $sroa_codes_repr_68 = array.new_fixed<ref "const_object_globalization.wado//EncCode">(struct.new "const_object_globalization.wado//EncCode" { code: 0 }, struct.new "const_object_globalization.wado//EncCode" { code: 0 }, struct.new "const_object_globalization.wado//EncCode" { code: 0 });
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
             if i <u 3 {
-                local.tee $deref_ref_26(builtin::array_get_value<ref "const_object_globalization.wado//EncCode">($sroa_codes_repr_68, i)).code = 0;
-                $deref_ref_26.len = 8;
+                builtin::array_get_value<ref "const_object_globalization.wado//EncCode">($sroa_codes_repr_68, i).code = 0;
             } else {
-                builtin::array_set<ref "const_object_globalization.wado//EncCode">($sroa_codes_repr_68, i, struct.new "const_object_globalization.wado//EncCode" { code: 0, len: 8 });
+                builtin::array_set<ref "const_object_globalization.wado//EncCode">($sroa_codes_repr_68, i, struct.new "const_object_globalization.wado//EncCode" { code: 0 });
             }
             i = i + 1;
             continue l1;
@@ -581,7 +577,7 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -1247,7 +1243,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_79: bool;
     let x_83: i64;
-    let $sroa_view_repr_313: ref Array<u8>;
+    let $sroa_view_repr_312: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
@@ -1256,24 +1252,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
     $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_83(x_83 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_83 < 0_i64, 0_i64 - x_83, x_83)));
     is_negative_79 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_79, $mv$t$h0);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), is_negative_79, x_83, $mv$t$h0);
-    $sroa_view_repr_313 = global:core:prelude/string.wado::$const_obj_1;
+    $sroa_view_repr_312 = global:core:prelude/string.wado::$const_obj_1;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_79 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_79, $sroa_view_repr_313, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, is_negative_79, $sroa_view_repr_312, 0, 1);
     $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, 0, 3);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), $mv$t$h0, 104_i64, 3);
-    $sroa_view_repr_313 = global:core:prelude/string.wado::$const_obj_1;
+    $sroa_view_repr_312 = global:core:prelude/string.wado::$const_obj_1;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_79 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_79, $sroa_view_repr_313, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, is_negative_79, $sroa_view_repr_312, 0, 1);
     $mv$t$h0 = $mv$t$h2 < 0;
     $mv$t$h2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_83(x_83 = builtin::i64_extend_i32_s($mv$t$h2); select i64(x_83 < 0_i64, 0_i64 - x_83, x_83)));
     $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h0, $mv$t$h2);

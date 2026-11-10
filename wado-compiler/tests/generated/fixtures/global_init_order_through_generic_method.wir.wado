@@ -13,63 +13,51 @@ struct global_init_order_through_generic_method.wado//Seed {  // TypeId(1)
 
 struct global_init_order_through_generic_method.wado//Holder<i64> {  // TypeId(2)
     mut k: i64,
-    mut items: ref "core:prelude/list.wado//List<i64>",
 }
 
-struct core:prelude/list.wado//List<i64> {  // TypeId(3)
-    mut repr: ref Array<i64>,
-    mut used: i32,
-}
+enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(3)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(4)
+array Array<u8> (mut u8);  // TypeId(4)
 
-array Array<u8> (mut u8);  // TypeId(5)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
-array Array<i64> (mut i64);  // TypeId(6)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//global_init_order_through_generic_method.wado/run" = fn();  // TypeId(12)
 
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//global_init_order_through_generic_method.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//global_init_order_through_generic_method.wado/run" = fn();  // TypeId(14)
+type "functype//global_init_order_through_generic_method.wado/$initialize_module" = fn();  // TypeId(14)
 
-type "functype//global_init_order_through_generic_method.wado/$cm_export__run" = fn();  // TypeId(15)
+type "functype//global_init_order_through_generic_method.wado/$initialize_modules$cold0" = fn();  // TypeId(15)
 
-type "functype//global_init_order_through_generic_method.wado/$initialize_module" = fn();  // TypeId(16)
+type "functype//core:rt/unreachable" = fn();  // TypeId(16)
 
-type "functype//global_init_order_through_generic_method.wado/$initialize_modules$cold0" = fn();  // TypeId(17)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(18)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new" = fn() -> [i64, ref "core:prelude/list.wado//List<i64>"];  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(22)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(26)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
-
-type "functype//global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -234,10 +222,7 @@ fn "global_init_order_through_generic_method.wado/$cm_export__run"() {
 
 fn "global_init_order_through_generic_method.wado/$initialize_module"() {
     global:global_init_order_through_generic_method.wado::SEED = struct.new "global_init_order_through_generic_method.wado//Seed" { k: black_box(7_i64) };
-    let $mv_k_1: i64;
-    let $mv_items_2: ref "core:prelude/list.wado//List<i64>";
-    multivalue_bind [$mv_k_1, $mv_items_2] = "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"();
-    global:global_init_order_through_generic_method.wado::HOLD = struct.new "global_init_order_through_generic_method.wado//Holder<i64>" { k: $mv_k_1, items: $mv_items_2 };
+    global:global_init_order_through_generic_method.wado::HOLD = struct.new "global_init_order_through_generic_method.wado//Holder<i64>" { k: global:global_init_order_through_generic_method.wado::SEED.k };
 }
 
 fn "global_init_order_through_generic_method.wado/$initialize_modules$cold0"() {
@@ -354,16 +339,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
         return;
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
-}
-
-fn "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"() {
-    return global:global_init_order_through_generic_method.wado::SEED.k, "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i64>());
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
-    let used: i32;
-    used = builtin::array_len(elements);
-    return struct.new "core:prelude/list.wado//List<i64>" { repr: elements, used: used };
 }
 
 export fn "global_init_order_through_generic_method.wado/$cm_export__run" as "run"

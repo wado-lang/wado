@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -235,28 +234,28 @@ global global:bytes_literal_arg_coercion.wado::$const_obj_0: ref Array<u8> = arr
 
 fn "bytes_literal_arg_coercion.wado/run"() with Stdout {
     let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_36: i32;
-    let $sroa_$pattern_temp_0_1_37: i32;
+    let $sroa_$pattern_temp_0_0_35: i32;
+    let $sroa_$pattern_temp_0_1_36: i32;
     let new_repr: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:bytes_literal_arg_coercion.wado::$modules_initialized);
         cold_path;
         "bytes_literal_arg_coercion.wado/$initialize_modules$cold0"();
     };
-    $sroa_$pattern_temp_0_0_36 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_37 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_36 = "bytes_literal_arg_coercion.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_36);
+    $sroa_$pattern_temp_0_0_35 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_36 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_35 = "bytes_literal_arg_coercion.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_35);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, global:bytes_literal_arg_coercion.wado::$const_obj_0, 0, 7);
     builtin::array_set_u8(new_repr, 7, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_37, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_37);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_36);
-    $sroa_$pattern_temp_0_0_36 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_37 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_36);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_36, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_36);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_35);
+    $sroa_$pattern_temp_0_0_35 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_36 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_35);
     new_repr = array.new_fixed<u8>(104, 105, 10);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]$spec0"($sroa_$pattern_temp_0_1_37, new_repr, 3);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_37);
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]$spec0"($sroa_$pattern_temp_0_1_36, new_repr, 3);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_36);
 }
 
 fn "bytes_literal_arg_coercion.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -703,7 +702,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail"(t) {

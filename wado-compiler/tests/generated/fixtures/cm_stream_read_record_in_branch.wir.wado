@@ -14,7 +14,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(1)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -49,11 +48,7 @@ struct core:prelude/string.wado//StrSlice {  // TypeId(5)
     mut end: i32,
 }
 
-struct core:prelude/types.wado//ReadInto {  // TypeId(6)
-    mut ptr: i32,
-    mut room: i32,
-    mut lending: ref null "core:prelude//$Cell<bool>",
-}
+struct core:prelude/types.wado//ReadInto {}  // TypeId(6)
 
 struct core:prelude/types.wado//CopySettlement {  // TypeId(7)
     mut handle: i32,
@@ -89,7 +84,6 @@ struct core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry> {
 
 struct core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry> {  // TypeId(13)
     mut items: ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>",
-    mut result: "core:prelude/types.wado//enum:CopyResult",
 }
 
 struct core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]> {  // TypeId(14)
@@ -150,204 +144,200 @@ variant core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:fil
     Some(ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]"),
 }
 
-struct core:prelude//$Cell<bool> {  // TypeId(28)
-    mut value: bool,
-}
-
-struct core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>> {  // TypeId(29)
+struct core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>> {  // TypeId(28)
     mut value: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>",
 }
 
-struct core:prelude/types.wado//ReadyEvent::Copied {  // TypeId(30)
+struct core:prelude/types.wado//ReadyEvent::Copied {  // TypeId(29)
     discriminant: i32,
     payload_0: "core:prelude/types.wado//enum:CopyResult",
 }
 
-struct wasi:filesystem/types.wado//DescriptorType::Other {  // TypeId(31)
+struct wasi:filesystem/types.wado//DescriptorType::Other {  // TypeId(30)
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some {  // TypeId(32)
+struct core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some {  // TypeId(31)
     discriminant: i32,
     payload_0: ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(33)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(34)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(33)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(35)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(34)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(36)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(35)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(37)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(36)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(38)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(37)
 
-type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(39)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(38)
 
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(40)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(39)
 
-type "functype//wasi/$wasi:filesystem/preopens@0.3.0#get-directories" = fn(i32);  // TypeId(41)
+type "functype//wasi/$wasi:filesystem/preopens@0.3.0#get-directories" = fn(i32);  // TypeId(40)
 
-type "functype//wasi/$wasi:filesystem/types@0.3.0#[method]descriptor.read-directory" = fn(i32, i32);  // TypeId(42)
+type "functype//wasi/$wasi:filesystem/types@0.3.0#[method]descriptor.read-directory" = fn(i32, i32);  // TypeId(41)
 
-type "functype//cm_stream_read_record_in_branch.wado/run" = fn();  // TypeId(43)
+type "functype//cm_stream_read_record_in_branch.wado/run" = fn();  // TypeId(42)
 
-type "functype//cm_stream_read_record_in_branch.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" = fn(ref null "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>", i32);  // TypeId(44)
+type "functype//cm_stream_read_record_in_branch.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" = fn(ref null "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>", i32);  // TypeId(43)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories" = fn() -> ref null "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(45)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories" = fn() -> ref null "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(44)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.read-directory" = fn(ref null "core:prelude//$Resource") -> ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(46)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.read-directory" = fn(ref null "core:prelude//$Resource") -> ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(45)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_export__run" = fn();  // TypeId(47)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_export__run" = fn();  // TypeId(46)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_stream_lift_DirectoryEntry" = fn(i32, i32, i32) -> ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(48)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_stream_lift_DirectoryEntry" = fn(i32, i32, i32) -> ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(47)
 
-type "functype//cm_stream_read_record_in_branch.wado/$initialize_modules$cold0" = fn();  // TypeId(49)
+type "functype//cm_stream_read_record_in_branch.wado/$initialize_modules$cold0" = fn();  // TypeId(48)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec0" = fn(i32, i32, ref "core:prelude/types.wado//ReadInto") -> ref null "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(50)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec0" = fn(i32, i32, ref "core:prelude/types.wado//ReadInto") -> ref null "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(49)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec1" = fn(i32, i32, ref "core:prelude/types.wado//ReadInto") -> ref null "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(51)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec1" = fn(i32, i32, ref "core:prelude/types.wado//ReadInto") -> ref null "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(50)
 
-type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(52)
+type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(51)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(53)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(52)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(54)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(53)
 
-type "functype//core:prelude/string.wado/utf8_seq_len" = fn(u8) -> i32;  // TypeId(55)
+type "functype//core:prelude/string.wado/utf8_seq_len" = fn(u8) -> i32;  // TypeId(54)
 
-type "functype//core:prelude/string.wado/decode_char_at" = fn(ref Array<u8>, i32) -> [u32, i32];  // TypeId(56)
+type "functype//core:prelude/string.wado/decode_char_at" = fn(ref Array<u8>, i32) -> [u32, i32];  // TypeId(55)
 
-type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(57)
+type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(56)
 
-type "functype//core:prelude/string.wado/utf8_prefix_end" = fn(ref Array<u8>, i32, i32, i32) -> i32;  // TypeId(58)
+type "functype//core:prelude/string.wado/utf8_prefix_end" = fn(ref Array<u8>, i32, i32, i32) -> i32;  // TypeId(57)
 
-type "functype//core:prelude/types.wado/settled_copy_at$sroa[return]" = fn(i32) -> [i32, i32];  // TypeId(59)
+type "functype//core:prelude/types.wado/settled_copy_at$sroa[return]" = fn(i32) -> [i32, i32];  // TypeId(58)
 
-type "functype//core:prelude/types.wado/settled_copy" = fn(i32, i32) -> i32;  // TypeId(60)
+type "functype//core:prelude/types.wado/settled_copy" = fn(i32, i32) -> i32;  // TypeId(59)
 
-type "functype//core:rt/memory_into_gc_array$dae[at]" = fn(ref Array<u8>, i32, i32);  // TypeId(61)
+type "functype//core:rt/memory_into_gc_array$dae[at]" = fn(ref Array<u8>, i32, i32);  // TypeId(60)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(62)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(61)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(63)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(62)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(64)
+type "functype//core:rt/unreachable" = fn();  // TypeId(63)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(65)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(64)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(66)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(65)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> i32;  // TypeId(67)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> i32;  // TypeId(66)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::remove$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(68)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::remove$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(67)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(69)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(68)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(70)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(69)
 
-type "functype//core:prelude/types.wado/$initialize_module" = fn();  // TypeId(71)
+type "functype//core:prelude/types.wado/$initialize_module" = fn();  // TypeId(70)
 
-type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(72)
+type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(71)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(73)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(72)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(74)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(73)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(75)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(74)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(76)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(75)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign" = fn(ref "core:prelude/format.wado//Formatter", bool);  // TypeId(77)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign" = fn(ref "core:prelude/format.wado//Formatter", bool);  // TypeId(76)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(78)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(77)
 
-type "functype//core:prelude/primitive.wado/i64::abs" = fn(i64) -> i64;  // TypeId(79)
+type "functype//core:prelude/primitive.wado/i64::abs" = fn(i64) -> i64;  // TypeId(78)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(80)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(79)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count" = fn(ref "core:prelude/string.wado//StrCharIter") -> i32;  // TypeId(81)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count" = fn(ref "core:prelude/string.wado//StrCharIter") -> i32;  // TypeId(80)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_view" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(82)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_view" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(81)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(83)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(82)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(84)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(83)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(85)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(84)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(86)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(85)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32, i32);  // TypeId(87)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32, i32);  // TypeId(86)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(88)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(87)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(89)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(88)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::char_prefix_end" = fn(ref Array<u8>, i32, i32, i32) -> i32;  // TypeId(90)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::char_prefix_end" = fn(ref Array<u8>, i32, i32, i32) -> i32;  // TypeId(89)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked" = fn(ref Array<u8>, i32, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(91)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked" = fn(ref Array<u8>, i32, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(90)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars" = fn(ref Array<u8>, i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(92)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars" = fn(ref Array<u8>, i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(91)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(93)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/list.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(92)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish" = fn(ref null "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>") -> ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>]";  // TypeId(94)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish" = fn(ref null "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>") -> ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>]";  // TypeId(93)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::remove$unchecked" = fn(ref null "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>", i32) -> ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";  // TypeId(95)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::remove$unchecked" = fn(ref null "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>", i32) -> ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";  // TypeId(94)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>::settle" = fn(ref null "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>", ref null "core:prelude//$Resource") -> ref "core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(96)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>::settle" = fn(ref null "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>", ref null "core:prelude//$Resource") -> ref "core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(95)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow" = fn(ref null "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>");  // TypeId(97)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow" = fn(ref null "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>");  // TypeId(96)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(98)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(97)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref "Array<core:prelude/types.wado/CopySettlement>") -> [ref "Array<core:prelude/types.wado/CopySettlement>", i32];  // TypeId(99)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref "Array<core:prelude/types.wado/CopySettlement>") -> [ref "Array<core:prelude/types.wado/CopySettlement>", i32];  // TypeId(98)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(100)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(99)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(101)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(100)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>");  // TypeId(102)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>");  // TypeId(101)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::grow" = fn(ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>");  // TypeId(103)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::grow" = fn(ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>");  // TypeId(102)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(104)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(103)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(105)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(104)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(105)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(107)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(106)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(108)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(107)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(109)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(108)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(110)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(109)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(111)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(110)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode" = fn(i32);  // TypeId(112)
+type "functype//wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode" = fn(i32);  // TypeId(111)
 
-type "functype//wasi/stream-drop-readable:wasi:filesystem/types.wado#DirectoryEntry" = fn(i32);  // TypeId(113)
+type "functype//wasi/stream-drop-readable:wasi:filesystem/types.wado#DirectoryEntry" = fn(i32);  // TypeId(112)
 
-type "functype//wasi/resource-drop:wasi:filesystem/types.wado#Descriptor" = fn(i32);  // TypeId(114)
+type "functype//wasi/resource-drop:wasi:filesystem/types.wado#Descriptor" = fn(i32);  // TypeId(113)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(115)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(114)
 
-type "functype//wasi/stream-read:wasi:filesystem/types.wado#DirectoryEntry" = fn(i32, i32, i32) -> i32;  // TypeId(116)
+type "functype//wasi/stream-read:wasi:filesystem/types.wado#DirectoryEntry" = fn(i32, i32, i32) -> i32;  // TypeId(115)
 
-type "functype//wasi/stream-cancel-read:wasi:filesystem/types.wado#DirectoryEntry" = fn(i32) -> u32;  // TypeId(117)
+type "functype//wasi/stream-cancel-read:wasi:filesystem/types.wado#DirectoryEntry" = fn(i32) -> u32;  // TypeId(116)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(118)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(117)
 
-type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(119)
+type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(118)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(120)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(119)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -442,12 +432,12 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     $moved_13 = local.tee $pattern_temp_1((if $load_0 > 0 -> ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>]" {
         $moved_13 = dir_stream_3;
         dir_stream_3 = ref.null none;
-        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec0"($moved_13.value, 100, struct.new "core:prelude/types.wado//ReadInto" { ptr: 0, room: 0, lending: ref.null none });
+        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec0"($moved_13.value, 100, struct.new "core:prelude/types.wado//ReadInto" {});
         "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish"(struct.new "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>" { copy: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]" { 0: $moved_13, 1: started_88 } } } });
     } else {
         $moved_13 = dir_stream_3;
         dir_stream_3 = ref.null none;
-        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec1"($moved_13.value, 0, struct.new "core:prelude/types.wado//ReadInto" { ptr: 0, room: 0, lending: ref.null none });
+        started_88 = "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec1"($moved_13.value, 0, struct.new "core:prelude/types.wado//ReadInto" {});
         "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish"(struct.new "core:prelude/types.wado//ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>" { copy: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]" { 0: $moved_13, 1: started_88 } } } });
     })).0;
     entries = $pattern_temp_1.1.items;
@@ -1473,7 +1463,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative) {
@@ -1718,13 +1708,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
 fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>::settle"(self, end) {
     let packed_3: i32;
     let count: i32;
+    let items: ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>";
     let $drop_spill_7: ref "core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>";
-    let self_8: ref null "core:prelude/types.wado//CopyBuffer";
-    $drop_spill_7 = struct.new "core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>" { items: (if local.tee count(local.tee packed_3(local.tee self_8(self.buffer).packed = "core:prelude/types.wado/settled_copy"(self_8.handle, self_8.packed); self_8.packed) >>u 4) == 0 -> ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>" {
+    let self_9: ref null "core:prelude/types.wado//CopyBuffer";
+    items = (if local.tee count(local.tee packed_3(local.tee self_9(self.buffer).packed = "core:prelude/types.wado/settled_copy"(self_9.handle, self_9.packed); self_9.packed) >>u 4) == 0 -> ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>" {
         self.items;
     } else {
         "cm_stream_read_record_in_branch.wado/$cm_stream_lift_DirectoryEntry"(end.value, self.buffer.ptr, count);
-    }), result: (if local.tee packed_3(packed_3 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+    });
+    drop((if local.tee packed_3(packed_3 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
     } else if packed_3 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
         1;
@@ -1733,12 +1725,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<wasi:filesystem/
     } else {
         "core:rt/unreachable"();
         unreachable;
-    }) };
+    }));
+    $drop_spill_7 = struct.new "core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>" { items: items };
     if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee self_8(self.buffer)) == 0 {
-            drop("core:prelude/types.wado/settled_copy"(self_8.handle, self_8.packed));
-            if local.tee packed_3(self_8.size) > 0 {
-                drop("mem/realloc"(self_8.ptr, packed_3, self_8.align, 0));
+        if ref.is_null(local.tee self_9(self.buffer)) == 0 {
+            drop("core:prelude/types.wado/settled_copy"(self_9.handle, self_9.packed));
+            if local.tee packed_3(self_9.size) > 0 {
+                drop("mem/realloc"(self_9.ptr, packed_3, self_9.align, 0));
             }
         }
         self.buffer = ref.null none;

@@ -78,13 +78,13 @@ fn "opt_bce_len_minus_non_length_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#w
 }
 
 fn "opt_bce_len_minus_non_length_field.wado/$cm_export__run"() {
-    let $sroa_t_n_2: i32;
-    $sroa_t_n_2 = black_box(5);
+    let $dead_field_slot_3: i32;
+    $dead_field_slot_3 = black_box(5);
     drop(black_box(3));
-    "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"($sroa_t_n_2);
-    $sroa_t_n_2 = black_box(-2147483648);
+    "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"($dead_field_slot_3);
+    $dead_field_slot_3 = black_box(-2147483648);
     drop(black_box(3));
-    "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"($sroa_t_n_2);
+    "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"($dead_field_slot_3);
     "wasi/task-return"(0);
 }
 
@@ -101,16 +101,16 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
     let q: u64;
     let tens: i32;
     let start_162: i32;
-    let $sroa_view_repr_527: ref Array<u8>;
+    let $sroa_view_repr_506: ref Array<u8>;
     if @unlikely(local.tee idx(s - 1) >= s) {
         cold_path;
         "opt_bce_len_minus_non_length_field.wado/f$cold0$dae[s]"();
         unreachable;
     }
     out_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-    $sroa_view_repr_527 = global:opt_bce_len_minus_non_length_field.wado::$const_obj_0;
+    $sroa_view_repr_506 = global:opt_bce_len_minus_non_length_field.wado::$const_obj_0;
     out_14.used = 3;
-    builtin::array_copy<u8>(local.tee $load_0(out_14.repr), 0, $sroa_view_repr_527, 0, 3);
+    builtin::array_copy<u8>(local.tee $load_0(out_14.repr), 0, $sroa_view_repr_506, 0, 3);
     s = idx < 0;
     x = builtin::i64_extend_i32_s(idx);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -190,22 +190,22 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
     }
     start_162 = out_14.used;
     out_14.used = s;
-    $sroa_view_repr_527 = out_14.repr;
+    $sroa_view_repr_506 = out_14.repr;
     s = start_162 + idx;
     b23: block {
         l24: loop {
             break_if b23 (s - start_162) < 2;
             q = x /u 100_i64;
             tens = local.tee idx(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_527, s - 1, (48 + idx) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_527, s - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_506, s - 1, (48 + idx) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_506, s - 2, 48 + tens);
             s = s - 2;
             x = q;
             continue l24;
         };
     };
     if s > start_162 {
-        builtin::array_set_u8($sroa_view_repr_527, start_162, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_506, start_162, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;

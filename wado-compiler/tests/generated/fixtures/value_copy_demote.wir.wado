@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -452,7 +451,7 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -1501,7 +1500,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_
     let tens: i32;
     let start_427: i32;
     let self_788: ref "core:prelude/string.wado//String";
-    let $sroa_view_repr_1328: ref Array<u8>;
+    let $sroa_view_repr_1327: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
@@ -1602,15 +1601,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_
     if $mv$t$h0 > start_427 {
         builtin::array_set_u8($load_7, start_427, 48 + builtin::i32_wrap_i64(x_83 %u 10_i64));
     }
-    $sroa_view_repr_1328 = global:core:prelude/string.wado::$const_obj_2;
+    $sroa_view_repr_1327 = global:core:prelude/string.wado::$const_obj_2;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_7)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_79 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_79, $sroa_view_repr_1328, 0, 1);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_value_copy_demote_wado__tmpl_111d7d65913347d1_core_prelude_string_wado_String___fmt_61_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
+    builtin::array_copy<u8>(out_3.repr, is_negative_79, $sroa_view_repr_1327, 0, 1);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_value_copy_demote_wado__tmpl_111d7d65913347d1_core_prelude_string_wado_String___fmt_61_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: out_3 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__70: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             self_788 = $temp_inline_core_prelude_traits_wado_TemplateHole_value_copy_demote_wado__tmpl_111d7d65913347d1_core_prelude_string_wado_String___fmt_61_0.buf;
@@ -1636,7 +1635,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_
     is_negative_79 = out_3.used;
     out_3.used = $mv$t$h0;
     builtin::array_copy<u8>(out_3.repr, is_negative_79, $load_7, 0, 1);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_value_copy_demote_wado__tmpl_111d7d65913347d1_core_prelude_string_wado_String___fmt_61_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
+    $temp_inline_core_prelude_traits_wado_TemplateHole_value_copy_demote_wado__tmpl_111d7d65913347d1_core_prelude_string_wado_String___fmt_61_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: out_3 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__107: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2: block {
             $mv$t$h1 = $temp_inline_core_prelude_traits_wado_TemplateHole_value_copy_demote_wado__tmpl_111d7d65913347d1_core_prelude_string_wado_String___fmt_61_0.buf;

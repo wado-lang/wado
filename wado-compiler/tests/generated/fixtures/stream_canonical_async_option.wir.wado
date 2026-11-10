@@ -14,7 +14,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(1)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -94,7 +93,6 @@ struct core:prelude/types.wado//ReadCopy<u8> {  // TypeId(12)
 
 struct core:prelude/types.wado//StreamChunk<u8> {  // TypeId(13)
     mut items: ref "core:prelude/list.wado//List<u8>",
-    mut result: "core:prelude/types.wado//enum:CopyResult",
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(14)
@@ -862,7 +860,7 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -1083,32 +1081,33 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(self) {
     let packed_2: i32;
     let count_3: i32;
+    let items: ref "core:prelude/list.wado//List<u8>";
     let $drop_spill_7: ref "core:prelude/types.wado//StreamChunk<u8>";
-    let self_7: ref null "core:prelude/types.wado//CopyBuffer";
-    let ptr_10: i32;
-    let arr_18: ref Array<u8>;
+    let self_8: ref null "core:prelude/types.wado//CopyBuffer";
+    let ptr_11: i32;
+    let arr_19: ref Array<u8>;
     let i: i32;
     let w: i64;
     let $licm_arith_7: i32;
-    $drop_spill_7 = struct.new "core:prelude/types.wado//StreamChunk<u8>" { items: (if local.tee count_3(local.tee packed_2(local.tee self_7(self.buffer).packed = "core:prelude/types.wado/settled_copy"(self_7.handle, self_7.packed); self_7.packed) >>u 4) == 0 -> ref "core:prelude/list.wado//List<u8>" {
+    items = (if local.tee count_3(local.tee packed_2(local.tee self_8(self.buffer).packed = "core:prelude/types.wado/settled_copy"(self_8.handle, self_8.packed); self_8.packed) >>u 4) == 0 -> ref "core:prelude/list.wado//List<u8>" {
         self.items;
     } else {
-        ptr_10 = self.buffer.ptr;
-        arr_18 = builtin::array_new<u8>(count_3);
+        ptr_11 = self.buffer.ptr;
+        arr_19 = builtin::array_new<u8>(count_3);
         i = 0;
         $licm_arith_7 = count_3 - 8;
         b103: block {
             l104: loop {
                 break_if b103 i > $licm_arith_7;
-                w = builtin::load_i64(ptr_10 + i);
-                builtin::array_set_u8(arr_18, i, builtin::i32_wrap_i64(w));
-                builtin::array_set_u8(arr_18, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
-                builtin::array_set_u8(arr_18, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
-                builtin::array_set_u8(arr_18, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
-                builtin::array_set_u8(arr_18, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
-                builtin::array_set_u8(arr_18, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
-                builtin::array_set_u8(arr_18, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
-                builtin::array_set_u8(arr_18, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
+                w = builtin::load_i64(ptr_11 + i);
+                builtin::array_set_u8(arr_19, i, builtin::i32_wrap_i64(w));
+                builtin::array_set_u8(arr_19, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
+                builtin::array_set_u8(arr_19, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
+                builtin::array_set_u8(arr_19, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
+                builtin::array_set_u8(arr_19, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
+                builtin::array_set_u8(arr_19, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
+                builtin::array_set_u8(arr_19, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
+                builtin::array_set_u8(arr_19, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
                 i = i + 8;
                 continue l104;
             };
@@ -1116,13 +1115,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[
         b105: block {
             l106: loop {
                 break_if b105 i >= count_3;
-                builtin::array_set_u8(arr_18, i, builtin::load_u8(ptr_10 + i));
+                builtin::array_set_u8(arr_19, i, builtin::load_u8(ptr_11 + i));
                 i = i + 1;
                 continue l106;
             };
         };
-        struct.new "core:prelude/list.wado//List<u8>" { repr: arr_18, used: count_3 };
-    }), result: (if local.tee packed_2(packed_2 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+        struct.new "core:prelude/list.wado//List<u8>" { repr: arr_19, used: count_3 };
+    });
+    drop((if local.tee packed_2(packed_2 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
     } else if packed_2 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
         1;
@@ -1131,12 +1131,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[
     } else {
         "core:rt/unreachable"();
         unreachable;
-    }) };
+    }));
+    $drop_spill_7 = struct.new "core:prelude/types.wado//StreamChunk<u8>" { items: items };
     if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee self_7(self.buffer)) == 0 {
-            drop("core:prelude/types.wado/settled_copy"(self_7.handle, self_7.packed));
-            if local.tee packed_2(self_7.size) > 0 {
-                drop("mem/realloc"(self_7.ptr, packed_2, self_7.align, 0));
+        if ref.is_null(local.tee self_8(self.buffer)) == 0 {
+            drop("core:prelude/types.wado/settled_copy"(self_8.handle, self_8.packed));
+            if local.tee packed_2(self_8.size) > 0 {
+                drop("mem/realloc"(self_8.ptr, packed_2, self_8.align, 0));
             }
         }
         self.buffer = ref.null none;

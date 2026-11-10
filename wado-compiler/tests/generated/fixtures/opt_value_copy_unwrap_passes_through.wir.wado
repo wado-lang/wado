@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -397,7 +396,7 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -1298,7 +1297,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_c
     let q: u64;
     let tens: i32;
     let start_270: i32;
-    let $sroa_view_repr_1167: ref Array<u8>;
+    let $sroa_view_repr_1166: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -1399,14 +1398,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_c
     if $mv$t$h0 > start_270 {
         builtin::array_set_u8($load_6, start_270, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
     }
-    $sroa_view_repr_1167 = global:core:prelude/string.wado::$const_obj_0;
+    $sroa_view_repr_1166 = global:core:prelude/string.wado::$const_obj_0;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_70 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(local.tee $load_6(out_3.repr), is_negative_70, $sroa_view_repr_1167, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_6(out_3.repr), is_negative_70, $sroa_view_repr_1166, 0, 1);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__60: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {

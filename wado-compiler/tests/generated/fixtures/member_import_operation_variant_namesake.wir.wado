@@ -9,7 +9,6 @@ struct core:prelude/string.wado//String {  // TypeId(0)
 
 struct member_import_operation_variant_namesake.wado//$Dispatch_sub/member_import_op_iface.wado/Greeting {  // TypeId(1)
     mut outer: ref null "member_import_operation_variant_namesake.wado//$Dispatch_sub/member_import_op_iface.wado/Greeting",
-    mut op_hello: ref struct,
     mut op_bye: ref struct,
 }
 
@@ -17,11 +16,11 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(3)
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(4)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(4)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(5)
+struct canonical//CanonicalClosure_0 {  // TypeId(5)
     env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_1",
+    func: ref "functype/$canonical_closure_fn_0",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
@@ -87,8 +86,8 @@ fn "member_import_operation_variant_namesake.wado/$cm_export__run"() {
         if ref.is_null(local.tee $local_0(global:member_import_operation_variant_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting)) == 0 {
             global:member_import_operation_variant_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $av_23 = local.tee v_7(block -> ref "core:prelude/string.wado//String" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($local_1.op_bye)).env);
+                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1.op_bye)).env);
             }).used;
             v_7 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v_7.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_23)), 0, $array_clone_src_2, 0, $av_23); $array_clone_dst_3, used: $av_23 };
             global:member_import_operation_variant_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting = $local_0;

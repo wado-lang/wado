@@ -49,7 +49,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -278,7 +277,7 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
     let current: i32;
     let out_26: ref "core:prelude/string.wado//String";
     let $sroa_$iter_0_start_122: i32;
-    let array_547: ref null "core:linear//LinearArray<u64>";
+    let array_546: ref null "core:linear//LinearArray<u64>";
     let $drop_spill_2: u64;
     let $v3: i32;
     $v3 = 2147483647 / 8;
@@ -287,18 +286,18 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
         "core:linear/core:linear/LinearArray<u64>::filled$contract_report0"(32768, $v3, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:8"), used: 30 });
         unreachable;
     }
-    $v3 = local.tee array_547("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
+    $v3 = local.tee array_546("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
     if @unlikely(0 >= $v3) {
         cold_path;
         "core:linear/core:linear/LinearArray<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:9"), used: 30 });
         unreachable;
     }
-    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_547.block).ptr + (0 * 8));
-    if ref.is_null(array_547) == 0 {
+    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_546.block).ptr + (0 * 8));
+    if ref.is_null(array_546) == 0 {
         if ref.is_null($load_1) == 0 {
             drop("mem/realloc"($load_1.ptr, $load_1.bytes, 16, 0));
         }
-        array_547.block = ref.null none;
+        array_546.block = ref.null none;
     }
     $v3 = builtin::memory_size();
     $sroa_$iter_0_start_122 = 1;
@@ -993,7 +992,7 @@ fn "core:linear/core:linear/$tmpl$59e16269228f9c88^core:prelude/traits.wado/Refl
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/primitive.wado/i64::abs"(x) {

@@ -562,7 +562,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_with
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
-    let start_151: i32;
+    let start_149: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
@@ -638,22 +638,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_with
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_151 = out_3.used;
+        start_149 = out_3.used;
         out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_151, 45);
+        builtin::array_set_u8(out_3.repr, start_149, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
     }
-    start_151 = out_3.used;
+    start_149 = out_3.used;
     out_3.used = is_negative_65;
     arr = out_3.repr;
-    t = start_151 + t;
+    t = start_149 + t;
     b92: block {
         l93: loop {
-            break_if b92 (t - start_151) < 2;
+            break_if b92 (t - start_149) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
@@ -663,8 +663,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_with
             continue l93;
         };
     };
-    if t > start_151 {
-        builtin::array_set_u8(arr, start_151, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_149 {
+        builtin::array_set_u8(arr, start_149, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
