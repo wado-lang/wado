@@ -39,7 +39,7 @@ pub fn candidates(
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
     let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
-    let answered = collect(program, env, receiver, in_scope, |trait_, own| {
+    let answered = collect(program, env, receiver, in_scope, &[], |trait_, own| {
         decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
@@ -47,7 +47,7 @@ pub fn candidates(
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-    let reserved = collect(program, env, receiver, in_scope, |trait_, _| {
+    let reserved = collect(program, env, receiver, in_scope, &[], |trait_, _| {
         decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
@@ -67,7 +67,8 @@ pub fn bound_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, env, ty, &[trait_], |t, _| t == trait_)
+    let asked = program.per_param(Some(trait_), args);
+    collect(program, env, ty, &[trait_], &asked, |t, _| t == trait_)
         .in_scope
         .into_iter()
         .filter(|c| {
@@ -96,7 +97,13 @@ pub fn instance_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, &Env::default(), ty, &[trait_], |t, _| t == trait_)
+    // A binder the call leaves open fits any type, so it determines nothing.
+    let asked: Vec<Option<SolverType>> = program
+        .per_param(Some(trait_), args)
+        .into_iter()
+        .map(|arg| arg.filter(|arg| !matches!(arg, SolverType::Param(_) | SolverType::Pack(_))))
+        .collect();
+    collect(program, &Env::default(), ty, &[trait_], &asked, |t, _| t == trait_)
         .in_scope
         .into_iter()
         .filter(|c| {
@@ -126,12 +133,14 @@ pub fn cmp_giving_eq(program: &Program, receiver: &SolverType, c: &Candidate) ->
     }
 }
 
-/// The impls whose trait or own body `declares` the method.
+/// The impls whose trait or own body `declares` the method, asked at what
+/// `asked` writes for each of the trait's parameters.
 fn collect(
     program: &Program,
     env: &Env,
     receiver: &SolverType,
     in_scope: &[TraitDeclId],
+    asked: &[Option<SolverType>],
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
     let mut found = Candidates::default();
@@ -163,7 +172,7 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, impl_, def, ty) else {
+            let Some(trait_args) = impl_applies(program, env, impl_, def, ty, asked) else {
                 continue;
             };
             let candidate = Candidate {
@@ -172,6 +181,7 @@ fn collect(
                 trait_args,
                 depth,
                 generality: generality(&def.target),
+                opens_trait_args: def.trait_args.iter().any(|arg| arg.mentions(&|_| true)),
                 is_variadic: is_variadic(&def.target),
             };
             if in_scope.contains(&trait_) {

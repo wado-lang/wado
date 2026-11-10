@@ -647,6 +647,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+            inferred_impl_slots,
+            trait_args,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -947,7 +949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // before inference is what lets `h.two_method<T>(1 as i64, 2 as i32)`
         // report that `T` cannot be both — and what keeps a generic method's
         // own slots, opaque until solved, out of the comparison.
-        let substituted_param_types: Vec<TypeId> = if method_type_args.is_empty() {
+        let mut substituted_param_types: Vec<TypeId> = if method_type_args.is_empty() {
             expected_param_types.clone()
         } else {
             expected_param_types
@@ -955,6 +957,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
                 .collect()
         };
+        if let Some(block) = dispatched_impl_block {
+            self.settle_trait_arg_slots(
+                block,
+                &inferred_impl_slots,
+                &mut substituted_param_types,
+                &args,
+                &mut return_type,
+                span,
+            );
+        }
         if !method_type_args.is_empty() {
             self.recoerce_literal_args(args_ast, &mut args, &substituted_param_types);
         }
@@ -1064,6 +1076,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mangled_method_name =
             MethodName::format_local(&receiver_struct_name, trait_name.as_ref(), method_name);
 
+        let keyed_trait_args = self.trait_args_keying(dispatched_impl_block, &trait_args);
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
             // A method from a concrete instantiation impl (`impl List<u8>`) is a
@@ -1102,11 +1115,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_type_args: method_type_args.clone(),
                 is_blanket: true,
             })
-        } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
+        } else if receiver_type_args.is_some()
+            || !method_type_args.is_empty()
+            || !keyed_trait_args.is_empty()
+        {
             let generic_name = MethodName::format_local(&base_struct_name, None, method_name);
+            let mut impl_type_args = receiver_type_args.unwrap_or_default();
+            impl_type_args.extend(keyed_trait_args);
             Some(MonomorphInfo {
                 generic_name,
-                impl_type_args: receiver_type_args.unwrap_or_default(),
+                impl_type_args,
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
@@ -1135,9 +1153,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .mark_receiver(&mut method_info, base_type_id);
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
-
         // A bound on a parameter answers from no block, so its instance decides
-        // the template.
+        // the template, and the bound's trait arguments key it where that
+        // block's parameters come from them.
+        if dispatched_impl_block.is_none() {
+            method_info.trait_type_args = trait_args
+                .iter()
+                .map(|&arg| self.apply_infer_holes(arg))
+                .collect();
+        }
+
         let template = match (dispatched_method_def, dispatched_impl_block) {
             (Some(def), Some(block)) => Some(TemplateId::in_block(def, block)),
             (Some(_), None) => None,

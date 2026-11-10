@@ -2268,7 +2268,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // An impl read on a link below the receiver answers in the receiver's
         // type, as a method call does (WEP 2026-01-29).
-        let return_type = match resolved.impl_type_id {
+        let mut return_type = match resolved.impl_type_id {
             Some(link) if link != receiver_head => {
                 self.tysys
                     .substitute_newtype_in_type(resolved.return_type, link, receiver_head)
@@ -2276,13 +2276,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => resolved.return_type,
         };
 
+        // A slot only the impl's trait arguments determine (`R` in
+        // `impl<R> Eq<R> for Tag`) is the operand's to settle.
+        let inferred = match (resolved.impl_def, args.first()) {
+            (Some(block), Some(&(_, span))) => {
+                Some((block, self.mint_trait_arg_slots(block), span))
+            }
+            _ => None,
+        };
+        let mut referents: Vec<TypeId> = resolved
+            .param_types
+            .iter()
+            .map(|&param| {
+                let param = match &inferred {
+                    Some((_, slots, _)) if !slots.is_empty() => self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .substitute_type_params(param, slots),
+                    _ => param,
+                };
+                self.tysys.through_ref(param)
+            })
+            .collect();
+        if let Some((block, slots, span)) = &inferred {
+            let operands: Vec<TypeId> = args.iter().map(|&(arg, _)| arg).collect();
+            self.settle_trait_arg_slots(
+                *block,
+                slots,
+                &mut referents,
+                &operands,
+                &mut return_type,
+                *span,
+            );
+        }
+
         // Per argument, decide whether the parameter is by reference, compute the
         // logical expected type, and delegate to the same `typecheck` helper
         // `resolve_method_call` uses — so operator dispatch and a direct call
         // apply identical `check_assignable` rules and cannot diverge. Mismatches
         // accumulate in the logger rather than early-returning, as method calls do.
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
-        for (&(arg, arg_span), &param_ty) in args.iter().zip(resolved.param_types.iter()) {
+        for ((&(arg, arg_span), &param_ty), &referent) in
+            args.iter().zip(resolved.param_types.iter()).zip(&referents)
+        {
             let wrap = self.tysys.type_table.borrow().is_reference(param_ty);
             // For a `&Self` parameter the "value-level" expected type is the
             // receiver's type, preserving newtype identity when an impl on the
@@ -2291,7 +2328,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // *different* referent, and that one is what the operand must
             // match. A by-value parameter is itself the expected type.
             let expected = if wrap {
-                let referent = self.tysys.through_ref(param_ty);
                 // A trait spelled with an argument (`Add<Feet>`) declares a
                 // referent of its own. A bare `Add` declares `&Self`, which a
                 // variadic `impl Ord for [..T]` resolves to a shape the operand
@@ -2302,16 +2338,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && referent != receiver_head;
                 if declares_rhs { referent } else { receiver }
             } else {
-                param_ty
+                referent
             };
             self.typecheck_into_callee(arg, expected, arg_span);
             wrap_flags.push(wrap);
         }
 
-        let function_ref = match self.ref_impl_of(resolved) {
+        let mut function_ref = match self.ref_impl_of(resolved) {
             Some((kind, header)) => self.ref_impl_function(kind, header, resolved, receiver),
             None => self.operator_impl_function(resolved, receiver),
         };
+        if let Some((block, slots, _)) = inferred
+            && !slots.is_empty()
+        {
+            let mut impl_type_args = self
+                .tysys
+                .impl_position_args(receiver_head)
+                .unwrap_or_default();
+            let mut impl_slots = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .impl_slots(block, &impl_type_args);
+            impl_slots.extend(slots);
+            let trait_args = self
+                .tysys
+                .signatures
+                .impl_sig(block)
+                .instantiate_slots(&self.tysys.type_table, &impl_slots)
+                .trait_type_args;
+            impl_type_args.extend(self.trait_args_keying(Some(block), &trait_args));
+            function_ref.monomorph_info = Some(MonomorphInfo {
+                generic_name: function_ref.name.clone(),
+                impl_type_args,
+                method_type_args: vec![],
+                is_blanket: false,
+            });
+        }
 
         // When the operator-dispatch request carries a source AST id in
         // `origin`, record the dispatch decision so reify can re-emit the
@@ -2432,6 +2495,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let table = self.tysys.type_table.borrow();
             method_info.receiver_param = table.substitution_slot(table.peel_refs(receiver));
         }
+        method_info.trait_type_args = resolved
+            .bound_trait_args
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
 
         // Only a *concrete* block's function lives in the block's module: a
         // generic block's instance is materialised in the receiver type's,

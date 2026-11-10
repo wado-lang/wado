@@ -85,12 +85,13 @@ impl Monomorphizer {
             Vec::new()
         } else {
             let args = self.impl_args_at(&template, site.template, &site, type_table)?;
-            // A written target takes one argument per position, and the slots
-            // past them (nested in an argument, projected by a bound) are read
-            // out of those; any other target takes one per scalar parameter.
+            // A written target takes one argument per position, then one per
+            // trait argument keying it, and the slots past them (nested in an
+            // argument, projected by a bound) are read out of those; any other
+            // target takes one per scalar parameter.
             let positions = template
                 .impl_origin
-                .map_or(0, |block| type_table.impl_target_args(block).len());
+                .map_or(0, |block| type_table.impl_key_len(block));
             let required = if positions > 0 {
                 positions
             } else {
@@ -174,13 +175,23 @@ impl Monomorphizer {
             return recorded.map(<[TypeId]>::to_vec);
         };
         let info = template.method_info.as_ref()?;
-        self.struct_info_for_method(
-            receiver,
-            type_table,
-            &info.method_name,
-            info.trait_name.as_ref(),
-        )
-        .map(|(_, args)| args)
+        let mut args = self
+            .struct_info_for_method(
+                receiver,
+                type_table,
+                &info.method_name,
+                info.trait_name.as_ref(),
+            )
+            .map(|(_, args)| args)?;
+        // The trait arguments keying the instance come with the call, which
+        // recorded them after the receiver's.
+        if let Some(block) = template.impl_origin {
+            let from = type_table.impl_target_args(block).len();
+            if type_table.impl_key_len(block) > from {
+                args.extend_from_slice(recorded?.get(from..)?);
+            }
+        }
+        Some(args)
     }
 
     /// A blanket's impl arguments: the receiver it serves, then what its bounds

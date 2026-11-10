@@ -1,0 +1,52 @@
+// An impl parameter only the trait reference names is part of the instance:
+// `impl<T: Show> Put<T> for X` at `T = i64` and at `T = String` are two
+// functions, reached by a direct call and through a bound alike. An instance
+// keyed by the receiver alone made the two one.
+use { println, Stdout } from "core:cli";
+
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+struct X {}
+
+impl<T: Show> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.show();
+    }
+}
+
+fn via<A: Put<String>>(a: &A) -> String {
+    return a.put("bound");
+}
+
+fn via_param<A: Put<U>, U>(a: &A, u: U) -> String {
+    return a.put(u);
+}
+
+export fn run() with Stdout {
+    let x = X {};
+    println(x.put(7 as i64));
+    println(x.put("direct"));
+    println(via(&x));
+    println(via_param(&x, 9 as i64));
+}
+
+__DATA__
+{"stdout": "i64 7\nstring direct\nstring bound\ni64 9\n"}

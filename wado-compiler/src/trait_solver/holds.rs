@@ -309,7 +309,8 @@ impl Query<'_> {
                 if subject.is_some() && program.not_inherited.contains(&id) {
                     return None;
                 }
-                let answer = self.impl_answers(id, def, ty)?;
+                let asked = program.per_param(Some(trait_), args);
+                let answer = self.impl_answers(id, def, ty, &asked)?;
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
                 if !answers_args(program, def, ty, subject, &answer.trait_args, args) {
@@ -339,7 +340,15 @@ impl Query<'_> {
 
     /// Whether one impl applies to `ty`: its target matches, and every bound
     /// holds of what the match bound.
-    fn impl_answers(&mut self, id: ImplId, def: &ImplDef, ty: &SolverType) -> Option<Answer> {
+    /// `asked` is what the question writes at each of the trait's parameters,
+    /// `None` where it leaves one open.
+    fn impl_answers(
+        &mut self,
+        id: ImplId,
+        def: &ImplDef,
+        ty: &SolverType,
+        asked: &[Option<SolverType>],
+    ) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
         // A value blanket answers no reference; `&T` reaches it through the
@@ -349,9 +358,33 @@ impl Query<'_> {
         }
         let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
         let mut deferred = Vec::new();
-        if !match_target(&def.target, ty, &mut bindings, &mut deferred)
-            || self.projections_refuted(&deferred, &bindings)
-        {
+        if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
+            return None;
+        }
+        // A parameter the trait reference alone determines, `impl<U> Tr<U>
+        // for X`, is what the bound asks at its position.
+        let offered = program.per_param(def.trait_, &def.trait_args);
+        let mut left_to_the_call = vec![false; def.params.len()];
+        for (at, offer) in offered.iter().enumerate() {
+            let Some(offer) = offer else {
+                continue;
+            };
+            match asked.get(at).and_then(Option::as_ref) {
+                Some(ask) => {
+                    if !match_target(offer, ask, &mut bindings, &mut deferred) {
+                        return None;
+                    }
+                }
+                // A selection asking no argument there leaves what only that
+                // argument names to the call's own inference.
+                None => {
+                    for (index, open) in left_to_the_call.iter_mut().enumerate() {
+                        *open |= offer.mentions_param(index as u32);
+                    }
+                }
+            }
+        }
+        if self.projections_refuted(&deferred, &bindings) {
             return None;
         }
         if reached_by(program, implemented, ty, def.origin.yields_to())
@@ -399,7 +432,10 @@ impl Query<'_> {
             // parameter, and is bound at monomorphization with its bound
             // (WEP 2026-03-14).
             let Some(binding) = bindings[index].clone() else {
-                if param.bounds.is_empty() || pins_on(index).next().is_some() {
+                if param.bounds.is_empty()
+                    || pins_on(index).next().is_some()
+                    || left_to_the_call[index]
+                {
                     continue;
                 }
                 return None;
@@ -767,6 +803,7 @@ pub(super) fn impl_applies(
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
+    asked: &[Option<SolverType>],
 ) -> Option<Vec<SolverType>> {
     Some(
         Query {
@@ -776,7 +813,7 @@ pub(super) fn impl_applies(
             member_next: false,
             at_itself: Some(ty.clone()),
         }
-        .impl_answers(id, def, ty)?
+        .impl_answers(id, def, ty, asked)?
         .trait_args,
     )
 }

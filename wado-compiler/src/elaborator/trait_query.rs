@@ -2445,8 +2445,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
             &EffectRows::default(),
         );
+        let mut trait_args: Vec<(u32, TypeId)> = slots
+            .iter()
+            .filter(|(slot, _)| slot.owner == decl && *slot != &TypeParamId::trait_self(decl))
+            .map(|(slot, &arg)| (slot.index, arg))
+            .collect();
+        trait_args.sort_unstable_by_key(|&(index, _)| index);
+        let trait_args = trait_args.into_iter().map(|(_, arg)| arg).collect();
         // A bare bound dispatches on the parameter itself, off no `impl` block.
-        Some((fq_trait_name, MethodInfo::of_sig(&sig, instantiated)))
+        Some((
+            fq_trait_name,
+            MethodInfo {
+                trait_args,
+                ..MethodInfo::of_sig(&sig, instantiated)
+            },
+        ))
     }
 }
 
@@ -3681,6 +3694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type,
             param_types: vec![ref_self_ty],
             is_type_param_receiver: false,
+            bound_trait_args: Vec::new(),
         })
     }
 

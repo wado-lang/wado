@@ -215,6 +215,15 @@ fn blanket_template_name(
     .to_mangled_name()
 }
 
+/// Whether `template`'s block keys its instance by its trait arguments too
+/// ([`TypeTable::impl_key_trait_args`]), so a call through a bound appends the
+/// bound's.
+fn keyed_by_trait_args(template: Option<&TemplateId>, type_table: &TypeTable) -> bool {
+    template
+        .and_then(TemplateId::block)
+        .is_some_and(|block| !type_table.impl_key_trait_args(block).is_empty())
+}
+
 /// The call `method` of `trait_name` names through the universal `&T`
 /// blanket, before its pointee keys it.
 fn ref_blanket_generic(
@@ -1152,9 +1161,7 @@ impl Monomorphizer {
         // projected by a bound sits past the receiver's positions, and is read
         // out of the arguments there.
         if let Some(block) = generic.impl_origin
-            && let Some(positions) = key
-                .impl_type_args
-                .get(..type_table.impl_target_args(block).len())
+            && let Some(positions) = key.impl_type_args.get(..type_table.impl_key_len(block))
         {
             for (slot, ty) in type_table.impl_slots(block, positions) {
                 substitution.entry(slot).or_insert(ty);
@@ -1729,9 +1736,37 @@ impl Monomorphizer {
                             } else {
                                 Vec::new()
                             };
-                            let impl_type_arg_tids: Vec<TypeId> = type_table
+                            // Generics have a defined home module by construction:
+                            // either the trait-impl block's module, or — for
+                            // auto-derived impls — the receiver type's module
+                            // (`module_source_for_trait_impl`). Crash here rather
+                            // than fall back to the call-site module; a failure
+                            // means a missing prelude definition or an unhandled
+                            // `ResolvedType` arm in `module_source_for_trait_impl`.
+                            let resolved_module = concrete_module.unwrap_or_else(|| {
+                                panic!(
+                                    "no home module for generic dispatch `{}` \
+                                         (concrete type id {:?}); add the missing impl \
+                                         to the prelude, or extend \
+                                         `module_source_for_trait_impl` for the receiver's \
+                                         `ResolvedType` arm",
+                                    new_info.to_mangled_name(),
+                                    concrete_type_id,
+                                )
+                            });
+                            let template = self.served_template(
+                                blanket.as_ref(),
+                                &new_info,
+                                concrete_type_id,
+                                &resolved_module,
+                                type_table,
+                            );
+                            let mut impl_type_arg_tids: Vec<TypeId> = type_table
                                 .generic_type_args(concrete_type_id)
                                 .unwrap_or_default();
+                            if keyed_by_trait_args(template.as_ref(), type_table) {
+                                impl_type_arg_tids.extend_from_slice(&info.trait_type_args);
+                            }
                             // A generic-instance receiver
                             // (`List<i32>^Default::default`) must queue its impl
                             // instantiation even with no method type args of its
@@ -1781,31 +1816,6 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 })
                             };
-                            // Generics have a defined home module by construction:
-                            // either the trait-impl block's module, or — for
-                            // auto-derived impls — the receiver type's module
-                            // (`module_source_for_trait_impl`). Crash here rather
-                            // than fall back to the call-site module; a failure
-                            // means a missing prelude definition or an unhandled
-                            // `ResolvedType` arm in `module_source_for_trait_impl`.
-                            let resolved_module = concrete_module.unwrap_or_else(|| {
-                                panic!(
-                                    "no home module for generic dispatch `{}` \
-                                         (concrete type id {:?}); add the missing impl \
-                                         to the prelude, or extend \
-                                         `module_source_for_trait_impl` for the receiver's \
-                                         `ResolvedType` arm",
-                                    new_info.to_mangled_name(),
-                                    concrete_type_id,
-                                )
-                            });
-                            let template = self.served_template(
-                                blanket.as_ref(),
-                                &new_info,
-                                concrete_type_id,
-                                &resolved_module,
-                                type_table,
-                            );
                             let resolved_module = template
                                 .as_ref()
                                 .map_or(resolved_module, |t| t.home(type_table.defs()));
@@ -2542,12 +2552,15 @@ impl Monomorphizer {
     /// parameters are named.
     fn trait_named_at_instance(
         &self,
-        info: LocalMethodName,
+        mut info: LocalMethodName,
         substitution: &TypeArgMap,
-        type_table: &TypeTable,
+        type_table: &mut TypeTable,
     ) -> LocalMethodName {
         if !info.is_type_param_receiver {
             return info;
+        }
+        for arg in &mut info.trait_type_args {
+            *arg = self.substitute_type(*arg, substitution, type_table);
         }
         let Some(trait_name) = info.trait_name.as_ref() else {
             return info;
@@ -2979,7 +2992,17 @@ impl Monomorphizer {
         // instead means the type has no impl of its own, so nothing else queues
         // that instance.
         let served_by_receiver_scan = receiver_has_type_args && blanket_module.is_none();
-        let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
+        let monomorph_info = if keyed_by_trait_args(template.as_ref(), type_table) {
+            let recv_inner = type_table.peel_refs(receiver_type_id);
+            let mut impl_type_args = type_table.generic_type_args(recv_inner).unwrap_or_default();
+            impl_type_args.extend_from_slice(&new_info.trait_type_args);
+            Some(MonomorphInfo {
+                generic_name: old_func_name,
+                impl_type_args,
+                method_type_args,
+                is_blanket: false,
+            })
+        } else if self.functions.has_impl(&new_info) || served_by_receiver_scan {
             None
         } else {
             // Blanket impl: an associated-type projection (`S::SeqSerializer^…`)

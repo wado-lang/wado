@@ -25,7 +25,7 @@ use crate::name::{
     FqTraitName, FqTypeName, minted_name, unalias_namespace_member, written_param_name,
 };
 use crate::resolve::{Resolution, Resolutions};
-use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId};
+use crate::tir::{ResolvedType, StructDef, TirLocal, TypeArgMap, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -3449,6 +3449,12 @@ pub(super) struct MethodInfo {
     /// against them. Empty where the block declares none, or where the lookup
     /// answers from no block at all.
     pub(super) impl_type_bindings: Vec<DefaultTypeBinding>,
+    /// The block's parameters only its trait reference names (`T` in
+    /// `impl<T> Tr<T> for X`), each a variable the call infers.
+    pub(super) inferred_impl_slots: TypeArgMap,
+    /// The arguments of the trait reference the call reaches the method
+    /// through: the matched block's, or the bound's it dispatches on.
+    pub(super) trait_args: Vec<TypeId>,
 }
 
 impl MethodInfo {
@@ -3475,6 +3481,8 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: None,
             impl_type_bindings: Vec::new(),
+            inferred_impl_slots: TypeArgMap::default(),
+            trait_args: Vec::new(),
         }
     }
 }
@@ -4883,6 +4891,10 @@ pub(super) struct ResolvedTraitMethod {
     /// concrete type. Propagated into `LocalMethodName::is_type_param_receiver`
     /// so monomorphization substitutes it correctly.
     pub(super) is_type_param_receiver: bool,
+    /// The arguments of the trait reference a bound dispatches through, which
+    /// key the instance where the answering block's parameters come from them;
+    /// empty where an impl answers.
+    pub(super) bound_trait_args: Vec<TypeId>,
 }
 
 impl ResolvedTraitMethod {
@@ -4907,6 +4919,7 @@ impl ResolvedTraitMethod {
             return_type: info.return_type,
             param_types: info.param_types,
             is_type_param_receiver: true,
+            bound_trait_args: info.trait_args,
         }
     }
 
@@ -4933,6 +4946,7 @@ impl ResolvedTraitMethod {
             return_type: info.output_type,
             param_types: info.rhs_type.into_iter().collect(),
             is_type_param_receiver: false,
+            bound_trait_args: Vec::new(),
         }
     }
 }

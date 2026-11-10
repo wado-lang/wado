@@ -215,7 +215,10 @@ blanket impls. They are ranked:
    the receiver (`impl Tag for Box_<i32>`) comes first, then one written for its
    head (`impl<T> Tag for Box_<T>`), then a value blanket
    (`impl<T: Bound> Tr for T`). A blanket names no type at all, only a condition
-   the receiver meets. See [Specific Impls Win](#specific-impls-win).
+   the receiver meets. At one argument list, an impl writing the trait's
+   arguments (`impl Eq<String> for Tag`) comes before one writing a parameter
+   there (`impl<R> Eq<R> for Tag`). See
+   [Specific Impls Win](#specific-impls-win).
 
 A candidate's level is the level it is selected at. An impl whose target is the
 newtype sits at the newtype's level and one targeting the base at the base's. A
@@ -959,6 +962,33 @@ The specific impl applies to the instantiation it names; every other
 instantiation takes the general one. Declaration order does not matter. This is
 the generality rank of [The Order](#the-order), which also puts either of these
 above a value blanket (`impl<T: Bound> Tag for T`).
+
+The trait's arguments are read the same way. An impl writing them wins over one
+leaving a parameter there, at the argument list both reach, whether a call names
+the trait through an operator, a method or a bound:
+
+<!-- {"fixture":"impl_trait_arg_specific_wins.wado"} -->
+
+```wado
+impl Eq<String> for Tag { fn eq(&self, other: &String) -> bool { return self.name == *other; } }      // specific — wins for String
+impl<R: Text> Eq<R> for Tag { fn eq(&self, other: &R) -> bool { return self.name == other.text(); } } // general
+
+fn same<A: Eq<U>, U>(a: A, u: U) -> bool {
+    return a == u;
+}
+
+test {
+    let t = Tag { name: "x" };
+    let s: String = "x";
+    assert t == "x" && t == Name { s: "x" } && t != Name { s: "y" };
+    assert t.eq(&s) && !t.eq(&Name { s: "y" });
+    assert same(t, "x") && same(t, Name { s: "x" });
+}
+```
+
+Two impls that both leave the argument to the call cover the same function
+wherever both bounds hold, and nothing ranks them, so a call reaching both
+reports as two head impls do ([Ambiguity](#ambiguity)).
 
 This holds only for a trait impl, where the trait gives both methods one
 signature. An inherent impl carries no such contract, so two inherent blocks

@@ -18,8 +18,9 @@ use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
 };
 use crate::tir::{
-    EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, StructDef,
-    SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId, positional_substitution,
+    EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
+    StructDef, SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId,
+    positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -36,7 +37,8 @@ use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{
-    ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
+    BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written,
+    receiver_as_written,
 };
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
@@ -156,6 +158,8 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: Some(sig.defaults_module.clone()),
             impl_type_bindings: Vec::new(),
+            inferred_impl_slots: TypeArgMap::default(),
+            trait_args: Vec::new(),
         }
     }
 }
@@ -1263,7 +1267,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check the bounds impl `def` places on its parameters, where the
     /// parameter or an argument of its bound is still open, once they are
     /// answered.
-    fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
+    pub(super) fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
         let names = ImplParamSlots::of(&header.ty, &header.type_params);
@@ -1291,6 +1295,85 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.defer_declared_bounds(param, *arg, bounds, span);
             }
         }
+    }
+
+    /// A variable for each slot of impl block `block` only its trait arguments
+    /// determine (`T` in `impl<T> Tr<T> for X`): the call infers it, as it
+    /// infers a method's own parameter.
+    pub(super) fn mint_trait_arg_slots(&mut self, block: DefId) -> TypeArgMap {
+        let slots = self
+            .tysys
+            .type_table
+            .borrow()
+            .impl_trait_arg_slots(block)
+            .to_vec();
+        if slots.is_empty() {
+            return TypeArgMap::default();
+        }
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let header = impl_header(&trait_env, &ImplBlockRef(block));
+        let names = ImplParamSlots::of(&header.ty, &header.type_params);
+        slots
+            .into_iter()
+            .map(|slot| {
+                let name = names
+                    .name_of(slot.index)
+                    .expect("a trait-argument slot is one of its block's parameters");
+                (slot, self.mint_infer_var_named(name))
+            })
+            .collect()
+    }
+
+    /// Solve the variables [`Self::mint_trait_arg_slots`] gave `block` against
+    /// the arguments the call passes, read them out of the call's types, and
+    /// owe the block's bounds on what they settle to.
+    pub(super) fn settle_trait_arg_slots(
+        &mut self,
+        block: DefId,
+        inferred: &TypeArgMap,
+        params: &mut [TypeId],
+        args: &[TypeId],
+        return_type: &mut TypeId,
+        span: Span,
+    ) {
+        if inferred.is_empty() {
+            return;
+        }
+        for (&param, &arg) in params.iter().zip(args) {
+            if self.type_has_infer_hole(param) {
+                self.solve_infer_holes_against(param, arg);
+            }
+        }
+        for param in params {
+            *param = self.apply_infer_holes(*param);
+        }
+        *return_type = self.apply_infer_holes(*return_type);
+        self.defer_open_impl_bounds(block, inferred, span);
+    }
+
+    /// `trait_args`, answered, where they key `block`'s instance
+    /// ([`TypeTable::impl_key_trait_args`]); empty where the target's
+    /// arguments key it alone.
+    pub(super) fn trait_args_keying(
+        &self,
+        block: Option<DefId>,
+        trait_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let keyed = block.is_some_and(|block| {
+            !self
+                .tysys
+                .type_table
+                .borrow()
+                .impl_key_trait_args(block)
+                .is_empty()
+        });
+        if !keyed {
+            return Vec::new();
+        }
+        trait_args
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect()
     }
 
     /// The impls of `kind` that `admits` and that may answer `method_name` on
@@ -2054,7 +2137,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             | None => {}
         }
-        self.select_trait_match(found_traits, method_name, span, probe)
+        self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
     }
 
     /// The matches the named impls yield for `method_name`: read off each
@@ -2294,6 +2377,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
+        // A parameter only the trait reference names (`T` in `impl<T> Tr<T>
+        // for X`) is the call's to infer, as a method's own parameter is.
+        let inferred_impl_slots = scope.mint_trait_arg_slots(impl_ref.0);
+        let names = ImplParamSlots::of(&header.ty, &header.type_params);
+        for (slot, &var) in &inferred_impl_slots {
+            let name = names
+                .name_of(slot.index)
+                .expect("a trait-argument slot is one of its block's parameters");
+            let param = header.type_params.iter().find(|p| p.name == name);
+            Self::bind_type_param(&mut scope, param, name, slot.index, var);
+        }
+
         // The receiver's type arguments, aligned to the impl's slots per its
         // shape (generic, ref, blanket, variadic) — which a flat positional
         // list cannot express. Method-level slots stay abstract: inference
@@ -2441,6 +2536,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_block: Some(impl_ref.0),
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
+                    inferred_impl_slots: inferred_impl_slots.clone(),
+                    trait_args: trait_args.clone(),
                     ..MethodInfo::of_sig(&method_sig, instantiated)
                 },
                 impl_module_source: impl_module_source.clone(),
@@ -2491,6 +2588,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_block: Some(impl_ref.0),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
+                        inferred_impl_slots,
+                        trait_args: trait_args.clone(),
                         ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
@@ -2519,13 +2618,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         let env = Arc::clone(&self.tysys.trait_env);
-        let (blankets, heads): (Vec<&ImplHeader>, Vec<&ImplHeader>) = tied
+        let (blankets, heads): (Vec<DefId>, Vec<DefId>) = tied
             .iter()
             .flatten()
+            .copied()
             .collect::<IndexSet<_>>()
             .into_iter()
-            .map(|def| &env.impl_headers[def])
-            .partition(|header| matches!(header.ty, Type::Named(_)));
+            .partition(|&def| {
+                env.blanket_of_block(def)
+                    .is_some_and(|b| matches!(b.receiver, BlanketReceiver::Value))
+            });
+        let blankets: Vec<&ImplHeader> = blankets.iter().map(|def| &env.impl_headers[def]).collect();
+        let heads: Vec<&ImplHeader> = heads.iter().map(|def| &env.impl_headers[def]).collect();
         let receiver = self.tysys.type_id_to_string(receiver);
         if let [first, _, ..] = blankets.as_slice() {
             let _ = self.emit(TypeError::AmbiguousValueBlankets {
@@ -2543,6 +2647,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// Report the impls of one trait that each leave a slot to the call and all
+    /// admit its arguments (`impl<T: A> Put<T> for X` beside `impl<T: B>
+    /// Put<T> for X`), naming the trait at what the call passes.
+    fn report_impls_tied_at_call(
+        &mut self,
+        found: &[TraitMethodMatch],
+        tied: &[usize],
+        classes: &[ArgClass],
+        receiver: TypeId,
+        span: Span,
+    ) {
+        let first = &found[tied[0]];
+        for (&param, class) in first.method_info.param_types.iter().zip(classes) {
+            if let ArgClass::Exact(arg) = class
+                && self.type_has_infer_hole(param)
+            {
+                self.solve_infer_holes_against(param, *arg);
+            }
+        }
+        let args: Vec<String> = first
+            .trait_args
+            .iter()
+            .map(|&arg| {
+                let arg = self.apply_infer_holes(arg);
+                self.tysys.type_id_to_string(arg)
+            })
+            .collect();
+        let env = Arc::clone(&self.tysys.trait_env);
+        let header_of = |i: usize| {
+            let block = found[i]
+                .method_info
+                .impl_block
+                .expect("a match leaving a slot to the call is read off its block");
+            &env.impl_headers[&block]
+        };
+        let head = header_of(tied[0]).trait_head_name().unwrap_or_default();
+        let _ = self.emit(TypeError::AmbiguousHeadImpls {
+            trait_name: format!("{head}<{}>", args.join(", ")),
+            receiver: self.tysys.type_id_to_string(receiver),
+            headers: tied.iter().map(|&i| header_as_written(header_of(i))).collect(),
+            span,
+        });
     }
 
     /// What the order says about this call (`docs/wep-2026-09-01-trait-resolution.md`).
@@ -2598,6 +2746,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         mut found_traits: Vec<TraitMethodMatch>,
         method_name: &str,
+        receiver: Option<TypeId>,
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<TraitMethodMatch> {
@@ -2630,7 +2779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .copied()
                 .filter(|&i| classes.len() <= found_traits[i].method_info.param_types.len())
                 .collect();
-            let admitted: Vec<usize> = applicable
+            let mut admitted: Vec<usize> = applicable
                 .iter()
                 .copied()
                 .filter(|&i| {
@@ -2640,6 +2789,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .all(|(class, &param)| self.class_admits(param, class))
                 })
                 .collect();
+            // An impl writing the trait's arguments defines the function the
+            // call names; one leaving a slot to the call only covers it.
+            let writes_trait_args =
+                |i: &usize| found_traits[*i].method_info.inferred_impl_slots.is_empty();
+            if admitted.iter().any(writes_trait_args) {
+                admitted.retain(writes_trait_args);
+            } else if let ([first, _, ..], Some(receiver)) = (admitted.as_slice(), receiver) {
+                // Two impls each leaving a slot to the call cover the same
+                // function, and no argument can tell them apart.
+                self.report_impls_tied_at_call(&found_traits, &admitted, &classes, receiver, span);
+                return Some(found_traits.swap_remove(*first));
+            }
             // Unique-or-error: exactly one admitted candidate wins. No ranking
             // — a literal admits every numeric width, so it never selects
             // between them. Several leave the set for the ambiguity report; none
@@ -3519,6 +3680,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+            inferred_impl_slots,
+            trait_args,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -3653,6 +3816,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !subst.is_empty() {
             return_type = self.substitute_ctx_in_frame(&subst, return_type);
         }
+        if let Some(block) = impl_block {
+            self.settle_trait_arg_slots(
+                block,
+                &inferred_impl_slots,
+                &mut param_types.clone(),
+                &args,
+                &mut return_type,
+                method_call.span,
+            );
+        }
 
         let defaults: Vec<(String, Option<ast::Expr>)> = method_param_names
             .into_iter()
@@ -3695,13 +3868,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_call_module_source =
             method_trait_impl_source.unwrap_or_else(|| output_module_source.clone());
 
+        // The receiver's arguments key the instance by themselves unless the
+        // trait's arguments must join them.
+        let keyed_trait_args = self.trait_args_keying(impl_block, &trait_args);
+        let monomorph_info = (!keyed_trait_args.is_empty()).then(|| {
+            let mut impl_type_args = self
+                .tysys
+                .impl_position_args(output_base_type_id)
+                .unwrap_or_default();
+            impl_type_args.extend(keyed_trait_args);
+            MonomorphInfo {
+                generic_name: method_info.to_mangled_name(),
+                impl_type_args,
+                method_type_args: type_args.clone(),
+                is_blanket: false,
+            }
+        });
         let func = FunctionRef {
             module_source: method_call_module_source,
             name: method_info.to_mangled_name(),
             template: method_def
                 .zip(impl_block)
                 .map(|(def, block)| TemplateId::in_block(def, block)),
-            monomorph_info: None,
+            monomorph_info,
             method_info: Some(method_info),
         };
 

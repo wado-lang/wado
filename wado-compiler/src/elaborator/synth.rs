@@ -274,7 +274,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || param == TypeTable::ERROR
             || matches!(
                 tt.get(tt.peel_refs(param)),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                ResolvedType::TypeParam { .. }
+                    | ResolvedType::TypePack { .. }
+                    | ResolvedType::InferVar(_)
             )
         {
             return true;
