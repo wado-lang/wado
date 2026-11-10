@@ -264,7 +264,7 @@ fn continuation_arg(ctx: &mut LowerContext, elements: &List<Element>, from: i32)
         if exit matches { NoFollow } {
             return exit;
         }
-        return FollowArg::AltMask(CallerLoop { loop_mask, exit });
+        return FollowArg::AltMask(caller_loop(ctx, loop_mask, exit));
     }
     let mut visiting: List<String> = [];
     let [deep, consumed] = ctx.analysis.deep_position_first_sets_from(elements, from, FOLLOW_MASK_MAX_K, &mut visiting);
@@ -363,14 +363,55 @@ fn loop_tail_follow(ctx: &mut LowerContext, rep: &RepeatElement, exit: FollowArg
         return Option::Some(exit);
     }
     if let Some(loop_mask) = iteration {
-        return Option::Some(FollowArg::AltMask(CallerLoop { loop_mask, exit }));
+        return Option::Some(FollowArg::AltMask(caller_loop(ctx, loop_mask, exit)));
     }
     let mut visiting: List<String> = [];
     let first = ctx.analysis.first_of_element(&rep.element, &mut visiting);
     let Some(loop_mask) = ctx.intern_follow_mask(&[first]) else {
         return null;
     };
-    return Option::Some(FollowArg::OpenLoop(CallerLoop { loop_mask, exit }));
+    return Option::Some(FollowArg::OpenLoop(caller_loop(ctx, loop_mask, exit)));
+}
+
+fn caller_loop(ctx: &mut LowerContext, loop_mask: i32, exit: FollowArg) -> CallerLoop {
+    let mut heads = ctx.tables.follow_mask_head(loop_mask);
+    let spill = if continuation_heads_into(ctx, &exit, &mut heads) {
+        ctx.intern_follow_mask(&[heads]);
+    } else {
+        null;
+    };
+    return CallerLoop { loop_mask, exit, spill };
+}
+
+/// Adds to `heads` every kind `arg`'s continuation can start with, answering
+/// whether they are all known. What the current rule was called with starts
+/// with a kind of its FOLLOW.
+fn continuation_heads_into(ctx: &mut LowerContext, arg: &FollowArg, heads: &mut List<i32>) -> bool {
+    return match arg {
+        NoFollow | ForwardOpen(None) => false,
+        Forward => forwarded_heads_into(ctx, heads),
+        ForwardOpen(Some(first)) => {
+            heads.extend(&ctx.tables.follow_mask_head(*first));
+            forwarded_heads_into(ctx, heads);
+        },
+        Mask(id) | Combined(id) => {
+            heads.extend(&ctx.tables.follow_mask_head(*id));
+            true;
+        },
+        AltMask(le) | OpenLoop(le) => {
+            heads.extend(&ctx.tables.follow_mask_head(le.loop_mask));
+            continuation_heads_into(ctx, &le.exit, heads);
+        },
+    };
+}
+
+fn forwarded_heads_into(ctx: &mut LowerContext, heads: &mut List<i32>) -> bool {
+    let rule = ctx.current_rule_name();
+    if !ctx.follow.is_exact(&rule) {
+        return false;
+    }
+    heads.extend(&ctx.follow.for_probe(&rule));
+    return true;
 }
 
 /// What a repeat body's tail `Forward` call is retargeted to, or `null` where

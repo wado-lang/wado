@@ -2539,6 +2539,34 @@ c < b as L < i > > d ; => (s (e (n c) < (n b as (t L < (t i) >)) > (n d)) ;)
     }
 }
 
+global DEEP_TAIL_GROUP_OPTIONAL_G4: String = "
+grammar T;
+s : e ';' EOF ;
+e : a ('||' a)* ;
+a : c ('&&' c)* ;
+c : x (('<' | '>' | '==') x)* ;
+x : m ('+' m)* ;
+m : n ('*' n)* ;
+n : ID ('as' t)* ;
+t : ID ('<' t '>')? ;
+ID : [a-zA-Z]+ ;
+WS : ' ' -> skip ;
+";
+
+// The same decision five loops deep, as in Wado's precedence levels: the loops'
+// readings push the `;` that ends `e` past the continuation's last slot, and
+// `t` still enters where the `;` resumes after the type arguments.
+test "a tail group optional enters while entering stays viable under deep loops" {
+    let inputs: List<String> = ["c == b as L < i > ;", "c == b as L < i > d ;", "c == b as L < i > || d ;"];
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let got = parses(DEEP_TAIL_GROUP_OPTIONAL_G4, "s", inputs, &GenerateOptions { prediction });
+        assert got == "c == b as L < i > ; => (s (e (a (c (x (m (n c))) == (x (m (n b as (t L < (t i) >))))))) ;)
+c == b as L < i > d ; => (s (e (a (c (x (m (n c))) == (x (m (n b as (t L)))) < (x (m (n i))) > (x (m (n d)))))) ;)
+c == b as L < i > || d ; => (s (e (a (c (x (m (n c))) == (x (m (n b as (t L < (t i) >)))))) || (a (c (x (m (n d)))))) ;)
+", got;
+    }
+}
+
 global TAIL_TOKEN_UNKNOWN_CALLER_G4: String = "
 grammar T;
 s : f+ EOF ;

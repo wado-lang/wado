@@ -45,8 +45,8 @@ pub struct TableRegistry {
     kind_sets: HashMap<List<i32>, KindSetEntry>,
     sync_sets: HashMap<List<i32>, KindSetEntry>,
     follow_masks: HashMap<List<List<i32>>, FollowMaskEntry>,
-    /// Positions each interned mask constrains, indexed by its id.
-    follow_mask_depths: List<i32>,
+    /// Each interned mask, indexed by its id.
+    follow_mask_by_id: List<List<List<i32>>>,
 }
 
 impl TableRegistry {
@@ -56,7 +56,7 @@ impl TableRegistry {
             kind_sets: HashMap::new(),
             sync_sets: HashMap::new(),
             follow_masks: HashMap::new(),
-            follow_mask_depths: [],
+            follow_mask_by_id: [],
         };
     }
 
@@ -120,7 +120,7 @@ impl TableRegistry {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.follow_masks.len();
-        self.follow_mask_depths.push(canonical.len());
+        self.follow_mask_by_id.push(canonical);
         self.follow_masks[canonical] = FollowMaskEntry { id, mask: canonical };
         return Option::<i32>::Some(id);
     }
@@ -128,13 +128,18 @@ impl TableRegistry {
     /// The positions `FOLLOW_MASK_<id>` constrains — where a continuation
     /// composed behind it starts.
     pub fn follow_mask_positions(&self, id: i32) -> i32 {
-        return self.follow_mask_depths[id];
+        return self.follow_mask_by_id[id].len();
+    }
+
+    /// The kinds `FOLLOW_MASK_<id>` starts with.
+    pub fn follow_mask_head(&self, id: i32) -> List<i32> {
+        return self.follow_mask_by_id[id][0];
     }
 
     /// At `FOLLOW_MAX_DEPTH` the mask is the whole gate, since `follow_yields`
     /// reads no deeper.
     pub fn follow_mask_is_full(&self, id: i32) -> bool {
-        return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
+        return self.follow_mask_positions(id) >= FOLLOW_MAX_DEPTH;
     }
 
     /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.

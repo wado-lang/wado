@@ -142,6 +142,12 @@ pub fn follow_opened<S: AsStrSlice, S1: AsStrSlice>(cont: S, open: S1) -> String
     return `follow_open_with(${cont}, ${open})`;
 }
 
+/// `cont`, which shifts the forwarded continuation `shift` bits, with what that
+/// pushes past the last slot standing as an open reading of `spill`'s head.
+pub fn follow_spilled<S: AsStrSlice, S1: AsStrSlice>(cont: S, shift: i32, spill: S1) -> String {
+    return `follow_spill(${cont}, ${FOLLOW_PARAM}, ${shift}, ${spill})`;
+}
+
 /// A `follow_yields` call on the forwarded continuation.
 pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
     return follow_query("follow_yields", tokens, pos, &FOLLOW_PARAM);
