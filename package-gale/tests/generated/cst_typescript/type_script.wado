@@ -9747,6 +9747,7 @@ fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
+    let osl_49_start = pos;
     osl_49_done: {
         if pos < tokens.len() && tokens[pos] == TK_Assign && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LessThan {
             let sol_50_save = pos;
@@ -9776,6 +9777,9 @@ fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             }
             pos = sol_51_save;
         }
+    }
+    if follow_yields(tokens, osl_49_start, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        pos = osl_49_start;
     }
     return pos;
 }

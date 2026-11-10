@@ -7757,6 +7757,8 @@ fn scan_function_qualifiers(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     if atn_decide_56(atn, tokens, pos, 0) == 0 {
         pos += 1;
     }
+    let osl_160_start = pos;
+    let osl_160_start_gate = *gate;
     osl_160_done: {
         if pos < tokens.len() && tokens[pos] == TK_KW_EXTERN && pos + 1 < tokens.len() && _kind_set_24(tokens[pos + 1]) {
             pos += 2;
@@ -7766,6 +7768,10 @@ fn scan_function_qualifiers(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
             pos += 1;
             break osl_160_done;
         }
+    }
+    if follow_yields(tokens, osl_160_start, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        pos = osl_160_start;
+        *gate = osl_160_start_gate;
     }
     return pos;
 }
@@ -9509,6 +9515,8 @@ fn scan_type_param(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     }
     if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { return -1; }
     pos += 1;
+    let osl_172_start = pos;
+    let osl_172_start_gate = *gate;
     osl_172_done: {
         if pos < tokens.len() && tokens[pos] == TK_COLON && pos + 1 < tokens.len() && _kind_set_41(tokens[pos + 1]) {
             let sol_173_save = pos;
@@ -9528,6 +9536,10 @@ fn scan_type_param(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
             pos += 1;
             break osl_172_done;
         }
+    }
+    if follow_yields(tokens, osl_172_start, follow, &FOLLOW_SETS, TK_EOF) && !((if pos < tokens.len() { tokens[pos] } else { TK_EOF }) == TK_EQ || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        pos = osl_172_start;
+        *gate = osl_172_start_gate;
     }
     if atn_decide_146(atn, tokens, pos, 0) == 0 {
         let sp = pos;
@@ -13884,6 +13896,8 @@ fn scan_function_type_qualifiers(tokens: &Array<i32>, pos: i32, gate: &mut ScanG
     if atn_decide_312(atn, tokens, pos, 0) == 0 {
         pos += 1;
     }
+    let osl_52_start = pos;
+    let osl_52_start_gate = *gate;
     osl_52_done: {
         if pos < tokens.len() && tokens[pos] == TK_KW_EXTERN && pos + 1 < tokens.len() && _kind_set_24(tokens[pos + 1]) {
             pos += 2;
@@ -13893,6 +13907,10 @@ fn scan_function_type_qualifiers(tokens: &Array<i32>, pos: i32, gate: &mut ScanG
             pos += 1;
             break osl_52_done;
         }
+    }
+    if follow_yields(tokens, osl_52_start, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        pos = osl_52_start;
+        *gate = osl_52_start_gate;
     }
     return pos;
 }
@@ -23583,6 +23601,8 @@ fn scan_struct_pattern_elements__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut
     pos = scan_struct_pattern_fields(tokens, pos, gate, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_26)));
     atn.stack.pop();
     if pos < 0 { return -1; }
+    let osl_24_start = pos;
+    let osl_24_start_gate = *gate;
     osl_24_done: {
         if pos < tokens.len() && tokens[pos] == TK_COMMA && pos + 1 < tokens.len() && _kind_set_92(tokens[pos + 1]) {
             let sol_25_save = pos;
@@ -23602,6 +23622,10 @@ fn scan_struct_pattern_elements__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut
             pos += 1;
             break osl_24_done;
         }
+    }
+    if follow_yields(tokens, osl_24_start, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        pos = osl_24_start;
+        *gate = osl_24_start_gate;
     }
     return pos;
 }

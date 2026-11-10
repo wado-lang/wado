@@ -3414,6 +3414,7 @@ fn scan_item__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follo
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
+    let osl_0_start = pos;
     osl_0_done: {
         if pos < tokens.len() && tokens[pos] == TK_LIT_as && pos + 1 < tokens.len() && _kind_set_0(tokens[pos + 1]) {
             let sol_1_save = pos;
@@ -3436,6 +3437,9 @@ fn scan_item__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follo
             pos = sol_2_save;
             break osl_0_done;
         }
+    }
+    if follow_yields(tokens, osl_0_start, follow, &FOLLOW_SETS, TK_EOF) && !(_kind_set_1((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        pos = osl_0_start;
     }
     if atn_decide_4(atn, tokens, pos, 0) == 0 {
         let sp = pos;
@@ -3492,7 +3496,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_ID {
-        if _kind_set_1(p.peek_at(1)) {
+        if _kind_set_2(p.peek_at(1)) {
             return _parse_item__inner_alt_0(p, follow);
         } else if p.peek_at(1) == TK_LIT_LPAREN {
             let _atn_alt = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
@@ -3712,6 +3716,10 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 fn _kind_set_1(k: i32) -> bool {
+    return k matches { TK_LIT_idx | TK_LIT_no };
+}
+
+fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_EOF | TK_ID | TK_LIT_as | TK_LIT_idx | TK_LIT_no | TK_LIT_z };
 }
 
