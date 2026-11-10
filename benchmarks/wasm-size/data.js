@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794269231536,
+  "lastUpdate": 1794279599204,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76177,6 +76177,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6a35467924666f71b5f65c02f3833b826c46065b"
         },
         "date": 1794269230571,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22002,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404932,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e957b5c00873b146bf4a976a7fe714eaa6d67db7",
+          "message": "Merge pull request #2598 from wado-lang/gale-atn-verify\n\nfeat(gale)!: build ANTLR4's tree by default, with a prediction option",
+          "timestamp": "2026-11-10T11:40:46+09:00",
+          "tree_id": "23d7173716e95413bcb07d8ed2ffeafd7e27d53c",
+          "url": "https://github.com/wado-lang/wado/commit/e957b5c00873b146bf4a976a7fe714eaa6d67db7"
+        },
+        "date": 1794279597960,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
