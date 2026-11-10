@@ -30,6 +30,7 @@ use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
 use super::sig::{DeclSig, MethodSig, Param};
+use super::trait_query::ArgsOwe;
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
@@ -4430,6 +4431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &type_args.method_args,
             &[],
             self_binding,
+            ArgsOwe::BoundsAndKind,
             span,
         );
     }

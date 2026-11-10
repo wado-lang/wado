@@ -781,6 +781,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .trait_type
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
+        if let (Some(trait_), Some(trait_type)) = (trait_decl, &impl_block.trait_type) {
+            scope.check_trait_ref_arg_bounds(trait_, &trait_type_args, target, trait_type.span());
+        }
 
         if let [source] = trait_type_args[..]
             && trait_decl.is_some()

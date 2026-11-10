@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ParamRef, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
+use super::trait_query::{ArgsOwe, DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
 use super::type_resolution::ParamSpace;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -1694,6 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &type_args,
                 impl_args,
                 Some(self_binding),
+                ArgsOwe::BoundsAndKind,
                 span,
             );
         }

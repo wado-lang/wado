@@ -1223,6 +1223,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         offset: u32,
     ) -> u32 {
         let mut idx = offset;
+        let mut bound = Vec::new();
         for tp in params.iter().filter(|p| !p.is_effect) {
             // `<F: fn(...)>` binds the parameter directly to the bound's function
             // type: the bound is surface syntax for "F is exactly this
@@ -1247,10 +1248,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             let bounds = self.scoped_bounds(tp);
             self.bind_param(&tp.name, BinderInScope::declared(idx, type_id, tp), bounds);
+            bound.push((tp, type_id));
             if consumed_index {
                 idx += 1;
             }
         }
+        self.check_bound_trait_args(&bound);
         idx
     }
 
@@ -1555,9 +1558,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Bind a trait's declared type parameters to the impl's concrete trait
     /// arguments: `trait Foo<T, U>` against `Foo<i32, String>` registers
-    /// `T → i32` and `U → String` with their bounds. Impl-level type params must
-    /// already be registered, the trait args being able to name them
+    /// `T → i32` and `U → String`. Impl-level type params must already be
+    /// registered, the trait args being able to name them
     /// (`impl<X> Foo<Container<X>>`). Existing entries are left untouched.
+    ///
+    /// The trait's bounds are not implied onto the arguments, as in Rust: the
+    /// header owes them ([`Self::check_trait_ref_arg_bounds`]), and an impl
+    /// parameter has only the bounds the impl writes.
     ///
     /// `implementing` is what the trait declared these bounds' `Self` to mean.
     /// The caller passes it rather than leaving this to read ambient state it
@@ -1579,10 +1586,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         let supplied =
             trait_params_from_impl(&trait_decl_type_params, trait_args, Some(implementing));
-        for TraitParamFromImpl {
-            param, arg, bounds, ..
-        } in supplied
-        {
+        for TraitParamFromImpl { param, arg, .. } in supplied {
             let Some(arg) = arg else {
                 continue;
             };
@@ -1590,13 +1594,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let ctx = &mut self.annotate_ctx.trait_ctx;
             let binder = BinderInScope::declared(ctx.type_params.len() as u32, resolved_arg, param);
             // The impl's own parameter keeps the name, but the trait's mark
-            // and bounds still reach what it binds.
+            // still reaches what it binds.
             if ctx.type_params.contains_key(&param.name) {
                 ctx.shadowed.push((param.name.clone(), binder));
-                ctx.add_bounds_on(&binder, bounds);
                 continue;
             }
-            self.bind_param(&param.name, binder, bounds);
+            self.bind_param(&param.name, binder, Vec::new());
         }
     }
 }

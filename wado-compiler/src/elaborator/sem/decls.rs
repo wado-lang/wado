@@ -47,6 +47,13 @@ pub(in crate::elaborator) struct OwedBounds {
 pub(in crate::elaborator) enum Owed {
     /// A generic type application's arguments, owing its declaration's bounds.
     DeclArgs { def: DefId, type_args: Vec<TypeId> },
+    /// A trait reference's arguments, owing its trait's parameter bounds with
+    /// `Self` standing for `subject`.
+    TraitArgs {
+        trait_: DefId,
+        type_args: Vec<TypeId>,
+        subject: TypeId,
+    },
     /// An argument owing bounds already instantiated, on behalf of
     /// `param_name`.
     TraitRefs {

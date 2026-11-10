@@ -3,6 +3,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::hashmap::IndexMap;
 
@@ -49,7 +50,18 @@ use crate::synthesis::traits::{
     REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
 };
 use crate::tir::{AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef};
+use crate::trait_solver::args_per_param;
 use crate::unparse::unparse_generic_params_into;
+
+/// What a use's arguments owe the parameters they fill.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ArgsOwe {
+    /// The bounds, and a copyable argument where the parameter is not `affine`.
+    BoundsAndKind,
+    /// The bounds alone: a trait reference, whose arguments' affinity no rule
+    /// checks yet.
+    Bounds,
+}
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
@@ -2630,7 +2642,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(ast::GenericParam::is_real_type_param)
             .collect();
-        self.enforce_type_arg_bounds(&type_params, type_args, &[], None, span);
+        self.enforce_type_arg_bounds(
+            &type_params,
+            type_args,
+            &[],
+            None,
+            ArgsOwe::BoundsAndKind,
+            span,
+        );
     }
 
     /// Check the bounds on a generic type declaration's type arguments, for
@@ -2663,6 +2682,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
+    /// Check a trait reference's arguments against the bounds the trait puts on
+    /// its parameters, `Self` standing for `subject`. As in Rust, nothing
+    /// implies those bounds onto the arguments: an `impl` header or a bound
+    /// naming `Tr<U>` under `trait Tr<T: Q>` owes `U: Q` itself.
+    pub(super) fn check_trait_ref_arg_bounds(
+        &mut self,
+        trait_: DefId,
+        written: &[TypeId],
+        subject: TypeId,
+        span: Span,
+    ) {
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let params = trait_env.trait_type_params(trait_);
+        if !params
+            .iter()
+            .any(|p| p.bounds.iter().any(ast::TraitBound::names_a_trait))
+        {
+            return;
+        }
+        // A position left to its default owes nothing here: the trait's own
+        // declaration answers for its defaults.
+        let type_args: Vec<TypeId> = args_per_param(
+            written,
+            params.len(),
+            params.iter().position(|p| p.is_pack),
+            |run| self.tysys.type_table.borrow_mut().make_tuple(run),
+        )
+        .into_iter()
+        .map_while(|arg| arg)
+        .collect();
+        self.owe_bounds(OwedBounds {
+            span,
+            owed: Owed::TraitArgs {
+                trait_,
+                type_args,
+                subject,
+            },
+        });
+    }
+
+    /// [`Self::check_trait_ref_arg_bounds`] for every trait each of `bound`
+    /// is bounded by, the type its parameter binds being its `Self`. Every
+    /// parameter is bound first, since a bound may name one declared after its
+    /// own.
+    pub(super) fn check_bound_trait_args(&mut self, bound: &[(&ast::GenericParam, TypeId)]) {
+        for &(param, subject) in bound {
+            for bound in param.real_bounds() {
+                let Some(trait_) = self.trait_decl_of(&bound) else {
+                    continue;
+                };
+                let written = self.written_bound_args(&bound);
+                self.check_trait_ref_arg_bounds(trait_, &written, subject, bound.span);
+            }
+        }
+    }
+
     /// Check the bounds the decl pass met before the solver was built, each
     /// in the frame it was met in.
     pub(super) fn check_deferred_decl_arg_bounds(&mut self) {
@@ -2687,6 +2762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The single enforcement of trait bounds on a generic decl's type args,
+    /// and of the `affine` marks where `owes` says so,
     /// shared by every generic-call kind so the rule cannot drift. Only an arg
     /// that is one type in the frame is enforced: a rigid parameter meets a
     /// bound from the bounds in force on it (spec-traits.md §Eligibility).
@@ -2699,6 +2775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         impl_args: &[(ParamRef, TypeId)],
         self_binding: Option<SelfBinding>,
+        owes: ArgsOwe,
         span: Span,
     ) {
         let at_call = self.tysys.call_site_types(params, type_args, impl_args);
@@ -2723,7 +2800,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_rigid(&self.tysys, &self.annotate_ctx, type_arg);
             // An element of an enclosing pack is no one type, yet its kind is
             // its pack's: only a hole leaves the kind open.
-            if !param.is_affine
+            if owes == ArgsOwe::BoundsAndKind
+                && !param.is_affine
                 && (rigid || !self.tysys.type_table.borrow().contains_infer_var(type_arg))
             {
                 let affine_params = self.annotate_ctx.trait_ctx.affine_params();
@@ -2880,7 +2958,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 else {
                     return;
                 };
-                self.enforce_type_arg_bounds(&params, &type_args, &[], None, span);
+                self.enforce_type_arg_bounds(
+                    &params,
+                    &type_args,
+                    &[],
+                    None,
+                    ArgsOwe::BoundsAndKind,
+                    span,
+                );
+            }
+            Owed::TraitArgs {
+                trait_,
+                type_args,
+                subject,
+            } => {
+                let params: Vec<ast::GenericParam> = self
+                    .tysys
+                    .trait_env
+                    .trait_type_params(trait_)
+                    .into_iter()
+                    .cloned()
+                    .collect();
+                let implementing = SelfBinding {
+                    type_id: subject,
+                    declaring_trait: Some(trait_),
+                };
+                self.enforce_type_arg_bounds(
+                    &params,
+                    &type_args,
+                    &[],
+                    Some(implementing),
+                    ArgsOwe::Bounds,
+                    span,
+                );
             }
             Owed::TraitRefs {
                 type_arg,
