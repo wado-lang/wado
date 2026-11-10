@@ -25,7 +25,7 @@ pub struct Candidates {
 }
 
 /// Every impl that could answer a call of `method` on `receiver` made in
-/// `scope`.
+/// `scope`, a trait-qualified call naming the trait's arguments `asked`.
 #[must_use]
 pub fn candidates(
     program: &Program,
@@ -33,13 +33,14 @@ pub fn candidates(
     receiver: &SolverType,
     method: MethodId,
     scope: ModuleId,
+    asked: &[SolverType],
 ) -> Candidates {
     let in_scope: &[TraitDeclId] = program
         .scopes
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
     let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
-    let answered = collect(program, env, receiver, in_scope, |trait_, own| {
+    let answered = collect(program, env, receiver, in_scope, asked, |trait_, own| {
         decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
@@ -47,7 +48,7 @@ pub fn candidates(
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-    let reserved = collect(program, env, receiver, in_scope, |trait_, _| {
+    let reserved = collect(program, env, receiver, in_scope, asked, |trait_, _| {
         decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
@@ -67,7 +68,7 @@ pub fn bound_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, env, ty, &[trait_], |t, _| t == trait_)
+    collect(program, env, ty, &[trait_], args, |t, _| t == trait_)
         .in_scope
         .into_iter()
         .filter(|c| {
@@ -96,20 +97,22 @@ pub fn instance_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, &Env::default(), ty, &[trait_], |t, _| t == trait_)
-        .in_scope
-        .into_iter()
-        .filter(|c| {
-            answers_named_args(
-                program,
-                &program.impls()[&c.impl_],
-                &levels[c.depth as usize],
-                ty,
-                &c.trait_args,
-                args,
-            )
-        })
-        .collect()
+    collect(program, &Env::default(), ty, &[trait_], args, |t, _| {
+        t == trait_
+    })
+    .in_scope
+    .into_iter()
+    .filter(|c| {
+        answers_named_args(
+            program,
+            &program.impls()[&c.impl_],
+            &levels[c.depth as usize],
+            ty,
+            &c.trait_args,
+            args,
+        )
+    })
+    .collect()
 }
 
 /// The written `Ord` impl whose `cmp` the `==` that `c` answers on `receiver`
@@ -126,12 +129,14 @@ pub fn cmp_giving_eq(program: &Program, receiver: &SolverType, c: &Candidate) ->
     }
 }
 
-/// The impls whose trait or own body `declares` the method.
+/// The impls whose trait or own body `declares` the method, asked at the trait
+/// arguments `asked`.
 fn collect(
     program: &Program,
     env: &Env,
     receiver: &SolverType,
     in_scope: &[TraitDeclId],
+    asked: &[SolverType],
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
     let mut found = Candidates::default();
@@ -163,7 +168,7 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, impl_, def, ty) else {
+            let Some(trait_args) = impl_applies(program, env, impl_, def, ty, asked) else {
                 continue;
             };
             let candidate = Candidate {
@@ -324,7 +329,7 @@ mod tests {
     }
 
     fn ask(program: &Program, receiver: &SolverType) -> Candidates {
-        candidates(program, &Env::default(), receiver, M, HERE)
+        candidates(program, &Env::default(), receiver, M, HERE, &[])
     }
 
     /// The traits the out-of-scope candidates would have answered through.
@@ -725,7 +730,7 @@ mod tests {
     #[test]
     fn a_trait_out_of_scope_contributes_no_candidate() {
         let p = program(Builder::default().concrete(TR, decl(POINT)));
-        let found = candidates(&p, &Env::default(), &decl(POINT), M, ELSEWHERE);
+        let found = candidates(&p, &Env::default(), &decl(POINT), M, ELSEWHERE, &[]);
         assert_eq!(found.in_scope, vec![]);
         assert_eq!(out_of_scope(&found), vec![TR]);
     }
@@ -759,7 +764,7 @@ mod tests {
                 .concrete(TR, decl(POINT))
                 .concrete(OTHER, decl(POINT)),
         );
-        let found = candidates(&p, &Env::default(), &decl(POINT), M, ModuleId(7));
+        let found = candidates(&p, &Env::default(), &decl(POINT), M, ModuleId(7), &[]);
         assert_eq!(found.in_scope, vec![]);
         assert_eq!(out_of_scope(&found), vec![TR, OTHER]);
     }
@@ -790,7 +795,7 @@ mod tests {
         let env = Env {
             param_bounds: vec![vec![ParamBound::bare(LIMIT)]],
         };
-        let found = candidates(&p, &env, &SolverType::Param(0), M, HERE);
+        let found = candidates(&p, &env, &SolverType::Param(0), M, HERE, &[]);
         assert_eq!(found.in_scope.len(), 1);
     }
 

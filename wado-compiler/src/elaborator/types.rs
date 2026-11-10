@@ -1172,6 +1172,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An impl on `[..T]` declaring a parameter beside the pack
+    /// (`impl<..T, G: Back> Shown<G> for [..T]`). Its instances key on the
+    /// tuple's elements alone, which leave no place for `G`.
+    VariadicImplParamBesidePack {
+        param: String,
+        span: Span,
+    },
+
     /// A `..X` whose `X` is not a declared type pack. A scalar parameter stands
     /// for one position, so spreading it says nothing a bare `X` does not.
     SpreadOfNonPack {
@@ -2647,6 +2655,13 @@ impl TypeError {
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
                 *span,
             ),
+            TypeError::VariadicImplParamBesidePack { param, span } => (
+                Code::OrphanRule,
+                format!(
+                    "an impl on the variadic tuple `[..T]` takes no type parameter beside its pack, and `{param}` is one: its instances are told apart by the tuple's elements alone, which is not supported yet"
+                ),
+                *span,
+            ),
             TypeError::SpreadOfNonPack { name, span } => (
                 Code::TypeMismatch,
                 format!(
@@ -3449,6 +3464,14 @@ pub(super) struct MethodInfo {
     /// against them. Empty where the block declares none, or where the lookup
     /// answers from no block at all.
     pub(super) impl_type_bindings: Vec<DefaultTypeBinding>,
+    /// Every slot of the matched block in slot order, where its trait reference
+    /// binds one the receiver does not show (`G` in `impl<G: Back> Shown<G> for
+    /// i32`): the instance keys on these. Empty where the receiver shows all.
+    pub(super) impl_slot_args: Vec<TypeId>,
+    /// The arguments a bound names for the trait it dispatches through, which
+    /// set the slots of the impl answering it at an instance. Empty where the
+    /// call answers from a block.
+    pub(super) bound_trait_args: Vec<TypeId>,
 }
 
 impl MethodInfo {
@@ -3475,6 +3498,8 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: None,
             impl_type_bindings: Vec::new(),
+            impl_slot_args: Vec::new(),
+            bound_trait_args: Vec::new(),
         }
     }
 }

@@ -16,6 +16,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
+use std::sync::Arc;
 
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
@@ -293,7 +294,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// selected it ([`Elaborator::abstract_selections`]).
     pub(super) fn abstract_selection(&self, call: AstId) -> Option<AbstractSelection> {
         let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
-        selections.get(&call).copied()
+        selections.get(&call).cloned()
+    }
+
+    /// `args`, written in the frame of the trait declaring the default body
+    /// under walk, at the impl that body stands on: the trait's `Self` is the
+    /// impl's target, and each of its parameters the argument the impl writes.
+    fn at_impl_frame(&self, args: &[TypeId]) -> Vec<TypeId> {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        let (Some(declaring), Some(self_type)) = (trait_ctx.self_trait, trait_ctx.self_type) else {
+            unreachable!("a default body is walked for one trait's impl on one target")
+        };
+        let mut table = self.tysys.type_table.borrow_mut();
+        let frame = Arc::clone(
+            table
+                .trait_frame(declaring)
+                .expect("a trait's frame is registered before a body reads it"),
+        );
+        let slots = table.frame_slots(&frame, self_type, &trait_ctx.self_trait_args);
+        args.iter()
+            .map(|&arg| table.substitute_type_params(arg, &slots))
+            .collect()
     }
 
     pub(super) fn resolve_method_call(
@@ -402,7 +423,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (None, Some(call)) => self.abstract_selection(call),
             _ => None,
         };
-        let declared_trait = selection.map(|s| self.tysys.required_trait(s.trait_decl));
+        let declared_trait = selection.as_ref().map(|s| {
+            let mut required = self.tysys.required_trait(s.trait_decl);
+            let args = match &s.trait_args {
+                Some(args) => self.at_impl_frame(args),
+                None => self.annotate_ctx.trait_ctx.self_trait_args.clone(),
+            };
+            if !args.is_empty() {
+                required.args = Some(args);
+            }
+            required
+        });
         // A qualified call names one trait, so the inherent-method step — a
         // different namespace — is skipped; only that trait's impls may
         // answer. The ref-impl priority step still runs (with the filter):
@@ -481,7 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // through a reference reads the subject, so the reference the author
         // wrote selects no `&T` impl. The subject may be a reference itself,
         // where `Self` is the `&T` an impl was written for.
-        let subject = if selection.is_some_and(|s| s.through_ref) {
+        let subject = if selection.as_ref().is_some_and(|s| s.through_ref) {
             self.tysys.type_table.borrow().ref_pointee(receiver)
         } else {
             Some(receiver)
@@ -653,6 +684,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+            impl_slot_args,
+            bound_trait_args,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -1096,6 +1129,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     is_blanket: false,
                 })
             }
+        } else if !impl_slot_args.is_empty() {
+            Some(MonomorphInfo {
+                generic_name: MethodName::format_local(&base_struct_name, None, method_name),
+                impl_type_args: impl_slot_args,
+                method_type_args: method_type_args.clone(),
+                is_blanket: false,
+            })
         } else if let Some(ref blanket_param) = blanket_type_param {
             // For blanket impls, the template function uses the type param name (e.g., "I").
             // The call site uses the concrete receiver (e.g., "ListIter<i32>").
@@ -1141,6 +1181,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .mark_receiver(&mut method_info, base_type_id);
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
+        method_info.trait_type_args = bound_trait_args;
 
         // A bound on a parameter answers from no block, so its instance decides
         // the template.

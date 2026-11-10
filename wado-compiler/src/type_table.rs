@@ -3547,7 +3547,7 @@ impl TypeTable {
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
     /// parameter as its argument in `args`, which name a prefix of them.
-    fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
+    pub fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
         assert!(
             args.len() <= frame.params.len(),
             "a trait is reached at no more arguments than it has parameters"
@@ -6501,6 +6501,9 @@ struct ImplTarget {
     /// own `TypeParam`.
     args: Vec<TypeId>,
     projections: Vec<ImplProjection>,
+    /// The arguments the block's trait reference writes, empty for an
+    /// inherent block.
+    trait_args: Vec<TypeId>,
 }
 
 /// Slots of an impl block that a bound determines rather than its target:
@@ -6537,13 +6540,15 @@ impl TargetBinding {
 
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
-    /// the head it names, with the slots its bounds determine.
+    /// the head it names, with the slots its bounds determine and the
+    /// arguments its trait reference writes.
     pub fn record_impl_target(
         &mut self,
         def: DefId,
         whole: TypeId,
         args: Vec<TypeId>,
         projections: Vec<ImplProjection>,
+        trait_args: Vec<TypeId>,
     ) {
         self.impl_targets.insert(
             def,
@@ -6551,8 +6556,30 @@ impl TypeTable {
                 whole,
                 args,
                 projections,
+                trait_args,
             },
         );
+    }
+
+    /// Whether impl block `def`'s trait reference names a parameter its target
+    /// does not: `G` in `impl<G: Back> Shown<G> for i32`, or any in a
+    /// projection target, `impl<G: Back> Shown<G> for G::T`. Only a call's
+    /// trait arguments set one, so its instances differ by them alone.
+    pub fn impl_trait_sets_params(&self, def: DefId) -> bool {
+        let target = self.impl_target(def);
+        let in_target = if matches!(
+            self.get(target.whole),
+            ResolvedType::AssocTypeProjection { .. }
+        ) {
+            IndexSet::default()
+        } else {
+            self.type_params_in(target.whole)
+        };
+        target.trait_args.iter().any(|&arg| {
+            self.type_params_in(arg)
+                .iter()
+                .any(|param| param.owner == def && !in_target.contains(param))
+        })
     }
 
     /// Impl block `def`'s target head at `head_args`; `None` where the target
@@ -6599,15 +6626,67 @@ impl TypeTable {
     /// block, so an earlier module's bound check can ask.
     pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> TypeArgMap {
         let mut slots = IndexMap::default();
-        for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
-            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
+        self.bind_each_into(self.impl_target_args(def), receiver_args, &mut slots);
+        self.project_impl_slots(def, &mut slots);
+        slots
+    }
+
+    /// Bind each of `written` against the one in `concrete` at its position
+    /// into `slots`, keeping a slot already filled.
+    pub fn bind_each_into(&self, written: &[TypeId], concrete: &[TypeId], slots: &mut TypeArgMap) {
+        for (&written, &concrete) in written.iter().zip(concrete) {
+            if let Some(bound) = self.bind_type_params(&[written], &[concrete]) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
                 }
             }
         }
-        self.project_impl_slots(def, &mut slots);
-        slots
+    }
+
+    /// Impl block `def`'s receiver and trait arguments at the instance `args`
+    /// key, one argument per slot in slot order.
+    pub fn impl_instance_at(&mut self, def: DefId, args: &[TypeId]) -> (TypeId, Vec<TypeId>) {
+        let slots: TypeArgMap = args
+            .iter()
+            .zip(0..)
+            .map(|(&ty, index)| (TypeParamId { owner: def, index }, ty))
+            .collect();
+        let receiver = self.substitute_type_params(self.impl_target_whole(def), &slots);
+        let trait_args = self
+            .impl_target(def)
+            .trait_args
+            .clone()
+            .into_iter()
+            .map(|arg| self.substitute_type_params(arg, &slots))
+            .collect();
+        (receiver, trait_args)
+    }
+
+    /// Fill the slots of impl block `def` its trait reference binds from the
+    /// arguments a call names: each argument the reference writes against the
+    /// one `asked` at its position, then the target read at what `slots` then
+    /// holds against `receiver`. A target projecting off a parameter binds
+    /// only this way: `G::Of<E>` reads `Boxed<E>` once `G` is `Host`, and
+    /// `Boxed<f32>` then fills `E`. What one read fills can settle another
+    /// projection's base, or a slot a bound projects (`X` in
+    /// `impl<T: Left<Out = X>, X>`), so both are read until nothing more fills.
+    pub fn bind_impl_slots_asked(
+        &mut self,
+        def: DefId,
+        asked: &[TypeId],
+        receiver: TypeId,
+        slots: &mut TypeArgMap,
+    ) {
+        self.bind_each_into(&self.impl_target(def).trait_args, asked, slots);
+        loop {
+            let filled = slots.len();
+            let target = self.substitute_type_params(self.impl_target_whole(def), slots);
+            self.bind_each_into(&[target], &[receiver], slots);
+            self.project_impl_slots(def, slots);
+            if slots.len() == filled {
+                return;
+            }
+        }
     }
 
     /// The declaration impl block `def` targets, past any reference.
@@ -7731,7 +7810,7 @@ mod tests {
     /// asks whether it covers every instance of that head.
     fn covers(table: &mut TypeTable, whole: TypeId, args: Vec<TypeId>) -> bool {
         let block = DefId::for_test(1);
-        table.record_impl_target(block, whole, args, vec![]);
+        table.record_impl_target(block, whole, args, vec![], vec![]);
         table.impl_covers_every_instance(block)
     }
 

@@ -6,6 +6,7 @@ use super::program::{
     RefRule, SolverType, Source, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
+use std::mem;
 
 /// A bound that holds, and the bodies its answer owes.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
@@ -309,7 +310,7 @@ impl Query<'_> {
                 if subject.is_some() && program.not_inherited.contains(&id) {
                     return None;
                 }
-                let answer = self.impl_answers(id, def, ty)?;
+                let answer = self.impl_answers(id, def, ty, args)?;
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
                 if !answers_args(program, def, ty, subject, &answer.trait_args, args) {
@@ -337,9 +338,17 @@ impl Query<'_> {
             })
     }
 
-    /// Whether one impl applies to `ty`: its target matches, and every bound
-    /// holds of what the match bound.
-    fn impl_answers(&mut self, id: ImplId, def: &ImplDef, ty: &SolverType) -> Option<Answer> {
+    /// Whether one impl applies to `ty` asked at the trait arguments `args`:
+    /// its target and its trait reference match, and every bound holds of what
+    /// the match bound. A parameter only the trait reference names, as `G` in
+    /// `impl<G: Back> Shown<G> for G::T`, is bound by the arguments asked.
+    fn impl_answers(
+        &mut self,
+        id: ImplId,
+        def: &ImplDef,
+        ty: &SolverType,
+        args: &[SolverType],
+    ) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
         // A value blanket answers no reference; `&T` reaches it through the
@@ -349,7 +358,26 @@ impl Query<'_> {
         }
         let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
         let mut deferred = Vec::new();
-        if !match_target(&def.target, ty, &mut bindings, &mut deferred)
+        if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
+            return None;
+        }
+        // The arguments asked bind together or not at all: one the impl's own
+        // refutes would leave the rest binding an impl that answers nothing,
+        // and it would outrank one that does. Whether the impl answers at them
+        // is [`answers_args`]'s to decide.
+        let written = program.per_param(def.trait_, &def.trait_args);
+        let asked = program.per_param(def.trait_, args);
+        let mut trial = (bindings.clone(), deferred.clone());
+        let all_match = written.iter().zip(&asked).all(|pair| match pair {
+            (Some(written), Some(asked)) => {
+                match_target(written, asked, &mut trial.0, &mut trial.1)
+            }
+            _ => true,
+        });
+        if all_match {
+            (bindings, deferred) = trial;
+        }
+        if !self.bound_through_projections(&mut deferred, &mut bindings)
             || self.projections_refuted(&deferred, &bindings)
         {
             return None;
@@ -525,6 +553,98 @@ impl Query<'_> {
             }
         }
         true
+    }
+
+    /// Bind the parameters only a deferred projection's arguments name, from
+    /// the type it met: once its base is bound, `G::Of<E>` reads as the member
+    /// it names with `E` still open (`Boxed<E>`), which that type then matches.
+    /// One binding can unlock another projection's base, so this repeats until
+    /// nothing binds. False where a member does not match.
+    fn bound_through_projections(
+        &mut self,
+        deferred: &mut Vec<(SolverType, SolverType)>,
+        bindings: &mut [Option<Binding>],
+    ) -> bool {
+        loop {
+            let mut bound_any = false;
+            for (projection, met) in mem::take(deferred) {
+                match self.bound_through(&projection, &met, bindings) {
+                    Through::Bound(nested) => {
+                        bound_any = true;
+                        deferred.extend(nested);
+                    }
+                    Through::Open => deferred.push((projection, met)),
+                    Through::Refuted => return false,
+                }
+            }
+            if !bound_any {
+                return true;
+            }
+        }
+    }
+
+    /// Match the member `projection` names against `met`, binding what it
+    /// leaves open. The member holds the caller's parameters through what the
+    /// bindings hold, so the open ones move past every caller index, and a
+    /// caller's parameter matches only itself.
+    fn bound_through(
+        &mut self,
+        projection: &SolverType,
+        met: &SolverType,
+        bindings: &mut [Option<Binding>],
+    ) -> Through {
+        let SolverType::Projection { base, .. } = projection else {
+            unreachable!("only a projection is deferred");
+        };
+        if self.at_bindings(base, bindings).is_none()
+            || self.at_bindings(projection, bindings).is_some()
+        {
+            return Through::Open;
+        }
+        let past = bindings
+            .iter()
+            .flatten()
+            .map(|binding| params_past(&binding.as_type()))
+            .fold(
+                params_past(met).max(self.env.param_bounds.len() as u32),
+                u32::max,
+            );
+        let open = projection.map_params(&|i| {
+            Some(match bindings.get(i as usize)? {
+                Some(binding) => binding.as_type(),
+                None => SolverType::Param(past + i),
+            })
+        });
+        let member = self.normalized(&open.expect("every parameter maps"));
+        if matches!(member, SolverType::Projection { .. }) {
+            return Through::Open;
+        }
+        let mut slots: Vec<Option<Binding>> = (0..past)
+            .map(|caller| Some(Binding::One(SolverType::Param(caller))))
+            .chain(bindings.iter().cloned())
+            .collect();
+        let mut nested = Vec::new();
+        if !match_target(&member, &self.normalized(met), &mut slots, &mut nested) {
+            return Through::Refuted;
+        }
+        // A projection nested in the member names the impl's parameters only
+        // when it mentions no caller's.
+        let nested: Option<Vec<(SolverType, SolverType)>> = nested
+            .into_iter()
+            .map(|(projection, met)| {
+                Some((
+                    projection.map_params(&|i| i.checked_sub(past).map(SolverType::Param))?,
+                    met,
+                ))
+            })
+            .collect();
+        let Some(nested) = nested else {
+            return Through::Open;
+        };
+        for (binding, slot) in bindings.iter_mut().zip(slots.split_off(past as usize)) {
+            *binding = slot;
+        }
+        Through::Bound(nested)
     }
 
     /// Whether a projection a match met, readable at `bindings` already, holds
@@ -767,6 +887,7 @@ pub(super) fn impl_applies(
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
+    args: &[SolverType],
 ) -> Option<Vec<SolverType>> {
     Some(
         Query {
@@ -776,7 +897,7 @@ pub(super) fn impl_applies(
             member_next: false,
             at_itself: Some(ty.clone()),
         }
-        .impl_answers(id, def, ty)?
+        .impl_answers(id, def, ty, args)?
         .trait_args,
     )
 }
@@ -962,6 +1083,33 @@ fn all_fit(asked: &[SolverType], offered: &[SolverType]) -> bool {
 /// impl does: `impl Eq for D`, not `impl Eq<String> for D`.
 pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
     answers_args(program, def, &def.target, None, &def.trait_args, &[])
+}
+
+/// What reading a deferred projection through its bound base came to.
+enum Through {
+    /// Its member matched, binding what it could; the projections nested in
+    /// the member are deferred in its place.
+    Bound(Vec<(SolverType, SolverType)>),
+    /// Its base, or the member it names, is not known yet.
+    Open,
+    /// Its member does not match the type it met.
+    Refuted,
+}
+
+/// One past the highest parameter or pack index `ty` mentions.
+fn params_past(ty: &SolverType) -> u32 {
+    match ty {
+        SolverType::Param(index) | SolverType::Pack(index) => index + 1,
+        SolverType::AnyRow => 0,
+        SolverType::Decl(_, inner) | SolverType::Tuple(inner) => {
+            inner.iter().map(params_past).max().unwrap_or(0)
+        }
+        SolverType::Ref { inner, .. } => params_past(inner),
+        SolverType::Projection { base, args, .. } => args
+            .iter()
+            .map(params_past)
+            .fold(params_past(base), u32::max),
+    }
 }
 
 /// Match an impl target against a type, binding the target's parameters by

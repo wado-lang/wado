@@ -2441,24 +2441,31 @@ fn check_impl_coherence(
     violations
 }
 
-/// The variadic trait impls whose target the compiler cannot implement: a pack
-/// beside other elements (`[i32, ..T]`) or under a reference. Only the bare
-/// `[..T]` is implemented.
+/// The variadic trait impls the compiler cannot implement: a pack beside other
+/// elements (`[i32, ..T]`) or under a reference, or a type parameter beside the
+/// pack. Only the bare `[..T]` over its pack alone is implemented.
 fn check_variadic_impl_targets(
     impl_headers: &IndexMap<DefId, ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
     impl_headers
         .values()
-        .filter(|header| {
-            header.is_trait_impl()
-                && is_user_local(&header.module)
-                && is_unsupported_variadic_target(&header.ty)
-        })
-        .map(|header| {
-            (
-                header.module.clone(),
-                TypeError::UnsupportedVariadicImplTarget { span: header.span },
-            )
+        .filter(|header| header.is_trait_impl() && is_user_local(&header.module))
+        .filter_map(|header| {
+            let error = if is_unsupported_variadic_target(&header.ty) {
+                TypeError::UnsupportedVariadicImplTarget { span: header.span }
+            } else if spreads_pack(&header.ty) {
+                let beside = header
+                    .type_params
+                    .iter()
+                    .find(|param| param.fills_impl_slot() && !param.is_pack)?;
+                TypeError::VariadicImplParamBesidePack {
+                    param: beside.name.clone(),
+                    span: header.span,
+                }
+            } else {
+                return None;
+            };
+            Some((header.module.clone(), error))
         })
         .collect()
 }

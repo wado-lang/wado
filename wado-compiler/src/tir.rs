@@ -2310,6 +2310,27 @@ pub fn solve_row(
     out
 }
 
+/// What fills each of impl block `owner`'s first `count` slots, in slot order:
+/// `slots` at a parameter's, else the receiver's argument at a position the
+/// target writes concretely. `None` where a slot is unfilled, which no
+/// instance can key on.
+#[must_use]
+pub fn impl_args_in_slot_order(
+    owner: DefId,
+    count: u32,
+    slots: &TypeArgMap,
+    receiver_args: &[TypeId],
+) -> Option<Vec<TypeId>> {
+    (0..count)
+        .map(|index| {
+            slots
+                .get(&TypeParamId { owner, index })
+                .or_else(|| receiver_args.get(index as usize))
+                .copied()
+        })
+        .collect()
+}
+
 /// Substitution-key base for method-level type params: past the highest
 /// impl-param *index*, not the count. A concrete type in a receiver slot
 /// (`String` in `impl<V> ... for TreeMap<String, V>`) is not a param, so a later

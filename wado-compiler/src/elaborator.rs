@@ -236,10 +236,15 @@ pub struct Elaborator<'a, H: CompilerHost> {
 }
 
 /// What a default body's author selected at one call through a bound.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct AbstractSelection {
     /// The trait the bound names.
     pub(crate) trait_decl: DefId,
+    /// The arguments the bound names for that trait, in the frame of the trait
+    /// declaring the body: `Self` and its parameters stand for what each impl
+    /// writes. `None` for that trait's own bound on its `Self`, whose
+    /// arguments are the trait's parameters themselves.
+    pub(crate) trait_args: Option<Vec<TypeId>>,
     /// The receiver was a reference to the bound's subject, so an impl for
     /// the reference answers no call the author wrote.
     pub(crate) through_ref: bool,

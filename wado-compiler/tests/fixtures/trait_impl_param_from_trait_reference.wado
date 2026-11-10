@@ -1,0 +1,184 @@
+// An impl parameter only the trait reference names is set by the arguments a
+// call names for the trait, written out or through a bound.
+use { println, Stdout } from "core:cli";
+
+trait Back with () {
+    fn name() -> String;
+}
+
+struct Host {}
+
+struct Guest {}
+
+impl Back for Host {
+    fn name() -> String {
+        return "host";
+    }
+}
+
+impl Back for Guest {
+    fn name() -> String {
+        return "guest";
+    }
+}
+
+trait Shown<G: Back> with () {
+    fn shown(&self) -> String;
+
+    // A default body reaches its own trait at the arguments the impl writes.
+    fn twice(&self) -> String {
+        return `${self.shown()}, ${self.shown()}`;
+    }
+}
+
+trait Make<G: Back> with () {
+    fn make() -> String;
+}
+
+impl<G: Back> Make<G> for i32 {
+    fn make() -> String {
+        return `made on ${G::name()}`;
+    }
+}
+
+impl<G: Back> Shown<G> for i32 {
+    fn shown(&self) -> String {
+        return `${*self} on ${G::name()}`;
+    }
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Display, G: Back> Shown<G> for Wrap<T> {
+    fn shown(&self) -> String {
+        return `${self.v} in ${G::name()}`;
+    }
+}
+
+trait Relayed<G: Back> with () {
+    type Next: Relayed<Guest>;
+    fn next(&self) -> Self::Next;
+    fn relayed(&self) -> String;
+
+    // The bound on `Next` names `Guest`, whatever `G` the impl answers at.
+    fn onward(&self) -> String {
+        return self.next().relayed();
+    }
+}
+
+impl<G: Back> Relayed<G> for i32 {
+    type Next = i32;
+
+    fn next(&self) -> i32 {
+        return *self;
+    }
+
+    fn relayed(&self) -> String {
+        return `${*self} relayed on ${G::name()}`;
+    }
+}
+
+trait Tag with () {}
+
+impl Tag for i32 {}
+
+trait Named<G: Back> with () {
+    fn named(&self) -> String;
+}
+
+// Instances of a blanket differ by `G` alone, with the receiver the same.
+impl<T: Tag, G: Back> Named<G> for T {
+    fn named(&self) -> String {
+        return `tagged on ${G::name()}`;
+    }
+}
+
+trait Left with () {
+    type Out;
+}
+
+struct Unit {}
+
+impl Left for Unit {
+    type Out = i32;
+}
+
+trait Defaulted<G: Back> with () {
+    fn defaulted(&self) -> String;
+}
+
+// `X` is projected off `T` by its bound, once the receiver binds `T`.
+impl<T: Left<Out = X>, X: Default + Display, G: Back> Defaulted<G> for T {
+    fn defaulted(&self) -> String {
+        return `${X::default()} on ${G::name()}`;
+    }
+}
+
+fn defaulted<G: Back, V: Defaulted<G>>(v: &V) -> String {
+    return v.defaulted();
+}
+
+trait Duo<A, B> with () {
+    fn duo(&self) -> String;
+}
+
+// Asked at `Duo<Guest, Host>`, the first argument refutes this impl, so the
+// second binds nothing and the blanket answers.
+impl<G: Back> Duo<Host, G> for i32 {
+    fn duo(&self) -> String {
+        return `exact on ${G::name()}`;
+    }
+}
+
+impl<T: Tag, A, B> Duo<A, B> for T {
+    fn duo(&self) -> String {
+        return "blanket";
+    }
+}
+
+fn show<G: Back, V: Shown<G>>(v: &V) -> String {
+    return v.shown();
+}
+
+fn named<G: Back, V: Named<G>>(v: &V) -> String {
+    return v.named();
+}
+
+fn via<G: Back>(v: &i32) -> String {
+    return Shown::<G>::shown(v);
+}
+
+fn make<G: Back, V: Make<G>>() -> String {
+    return V::make();
+}
+
+export fn run() with Stdout {
+    let v: i32 = 1;
+    println(Shown::<Host>::shown(&v));
+    println(Shown::<Guest>::shown(&v));
+    println(show::<Host, i32>(&v));
+    println(show::<Guest, i32>(&v));
+    println(via::<Guest>(&v));
+    println(Shown::<Guest>::twice(&v));
+    println(make::<Host, i32>());
+    println(make::<Guest, i32>());
+    println(Relayed::<Host>::onward(&v));
+    println(Named::<Host>::named(&v));
+    println(Named::<Guest>::named(&v));
+    println(named::<Guest, i32>(&v));
+    println(Duo::<Host, Guest>::duo(&v));
+    println(Duo::<Guest, Host>::duo(&v));
+    let u = Unit {};
+    println(Defaulted::<Host>::defaulted(&u));
+    println(defaulted::<Guest, Unit>(&u));
+    let w = Wrap::<String> { v: "w" };
+    println(Shown::<Host>::shown(&w));
+    println(show::<Guest, Wrap<String>>(&w));
+}
+
+__DATA__
+{
+  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\n1 relayed on guest\ntagged on host\ntagged on guest\ntagged on guest\nexact on guest\nblanket\n0 on host\n0 on guest\nw in host\nw in guest\n"
+}
