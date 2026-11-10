@@ -1,7 +1,7 @@
 //! The lowering from the compiler's tables into the solver's [`Program`], and
 //! the solver's answers read back as the compiler keys them.
 
-use crate::ast::{FunctionType, GenericParam, NamedType, Type};
+use crate::ast::{AstId, FunctionType, GenericParam, NamedType, Type};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -90,11 +90,12 @@ fn said(
 /// What the names in a written type mean where it is written.
 struct Written<'a> {
     resolutions: &'a Resolutions,
-    /// The binders in scope.
-    param: &'a dyn Fn(&str) -> Option<ParamKind>,
+    /// The binder the name written at a site reaches.
+    param: &'a dyn Fn(AstId, &str) -> Option<ParamKind>,
     /// The trait among a binder's bounds declaring an associated type, which
-    /// is what `T::Item` projects through.
-    declaring: &'a dyn Fn(&str, &str) -> Option<DefId>,
+    /// is what `T::Item` projects through: the projection's site, the binder's
+    /// name, and the associated type's.
+    declaring: &'a dyn Fn(AstId, &str, &str) -> Option<DefId>,
     /// What `Self` means, where anything does.
     self_type: Option<&'a SolverType>,
 }
@@ -404,15 +405,15 @@ impl Lowering {
     }
 
     /// A written trait argument as the solver spells it, `param` placing the
-    /// binders of the space it is written in.
+    /// binder heads of the space it is written in.
     fn named_arg(
         &self,
         name: &FqTypeName,
-        param: &dyn Fn(&str) -> Option<ParamKind>,
+        param: &dyn Fn(&TypeHead) -> Option<ParamKind>,
     ) -> Result<SolverType, Unsaid> {
         let args = said(name.args().iter().map(|arg| self.named_arg(arg, param)))?;
         let pointee = match name.head() {
-            TypeHead::Binder { name, .. } => param(name).ok_or(Unsaid::Open)?.spelled()?,
+            binder @ TypeHead::Binder { .. } => param(binder).ok_or(Unsaid::Open)?.spelled()?,
             TypeHead::Tuple => SolverType::Tuple(args),
             TypeHead::Builtin(builtin) => SolverType::Decl(
                 self.known_type(&DeclKey::Builtin(builtin.clone()))
@@ -466,7 +467,7 @@ impl Lowering {
     fn bound_named(
         &self,
         named: &FqTraitName,
-        param: &dyn Fn(&str) -> Option<ParamKind>,
+        param: &dyn Fn(&TypeHead) -> Option<ParamKind>,
     ) -> Result<ParamBound, Unsaid> {
         let trait_ = named
             .canonical()
@@ -533,7 +534,7 @@ impl Lowering {
             Type::Named(named) if named.name == "Self" => {
                 written.self_type.cloned().ok_or(Unsaid::Unsayable)
             }
-            Type::Named(named) => match (written.param)(&named.name) {
+            Type::Named(named) => match (written.param)(named.id, &named.name) {
                 Some(ParamKind::Signature(sig)) => self.ast_type(&Type::Function(sig), written),
                 Some(kind) => kind.spelled(),
                 None => Ok(SolverType::Decl(declared(named.id)?, Vec::new())),
@@ -543,8 +544,8 @@ impl Lowering {
                 Ok(SolverType::Decl(declared(generic.id)?, args))
             }
             Type::Tuple(elems) => all(elems).map(SolverType::Tuple),
-            Type::TypePackSpread(NamedType { name, .. }) => {
-                match (written.param)(name).ok_or(Unsaid::Open)? {
+            Type::TypePackSpread(NamedType { id, name, .. }) => {
+                match (written.param)(*id, name).ok_or(Unsaid::Open)? {
                     ParamKind::Pack(index) | ParamKind::Type(index) => Ok(SolverType::Pack(index)),
                     ParamKind::Signature(_) => Err(Unsaid::Unsayable),
                 }
@@ -561,11 +562,15 @@ impl Lowering {
                 let base = if projection.namespace == "Self" {
                     written.self_type.cloned().ok_or(Unsaid::Unsayable)?
                 } else {
-                    (written.param)(&projection.namespace)
+                    (written.param)(projection.id, &projection.namespace)
                         .ok_or(Unsaid::Open)?
                         .spelled()?
                 };
-                let trait_ = (written.declaring)(&projection.namespace, &projection.name)
+                let trait_ = (written.declaring)(
+                    projection.id,
+                    &projection.namespace,
+                    &projection.name,
+                )
                     .and_then(|def| self.known_trait(def))
                     .ok_or(Unsaid::Unsayable)?;
                 Ok(SolverType::Projection {
@@ -821,8 +826,8 @@ fn lower_header(
     env: &TraitEnv,
     resolutions: &Resolutions,
 ) -> Option<LoweredImpl> {
-    let param = |name: &str| ParamKind::of(&header.type_params, name);
-    let declaring_here = |base: &str, assoc: &str| {
+    let param = |_, name: &str| ParamKind::of(&header.type_params, name);
+    let declaring_here = |_, base: &str, assoc: &str| {
         if base == "Self" {
             let implemented: Vec<DefId> = header.trait_def().into_iter().collect();
             return env
@@ -900,11 +905,11 @@ fn lower_header(
         for binding in &header.associated_types {
             // A family's own parameters follow the impl's, as
             // `Program::assoc_bindings` spells them.
-            let in_family = |name: &str| match ParamKind::of(&binding.type_params, name) {
+            let in_family = |site, name: &str| match ParamKind::of(&binding.type_params, name) {
                 Some(ParamKind::Type(j)) => Some(ParamKind::Type(past + j)),
                 Some(ParamKind::Pack(j)) => Some(ParamKind::Pack(past + j)),
                 Some(signature @ ParamKind::Signature(_)) => Some(signature),
-                None => param(name),
+                None => param(site, name),
             };
             let family = Written {
                 param: &in_family,
@@ -1417,11 +1422,13 @@ impl SolverBridge {
         for (trait_, closure) in tysys.trait_env.supertrait_closures_in_own_space() {
             let id = lowering.trait_decl(*trait_);
             let own = tysys.trait_env.trait_type_params(*trait_);
-            let place = |name: &str| ParamKind::of(own.iter().copied(), name);
+            let place = |_, name: &str| ParamKind::of(own.iter().copied(), name);
             let space = Written {
                 resolutions: &tysys.resolutions,
                 param: &place,
-                declaring: &|base, assoc| declaring_among(tysys, own.iter().copied(), base, assoc),
+                declaring: &|_, base, assoc| {
+                    declaring_among(tysys, own.iter().copied(), base, assoc)
+                },
                 self_type: None,
             };
             // An edge whose arguments the lowering cannot say states nothing:
@@ -1459,8 +1466,8 @@ impl SolverBridge {
         // A default naming another parameter is opaque to the solver.
         let closed = Written {
             resolutions: &tysys.resolutions,
-            param: &|_| None,
-            declaring: &|_, _| None,
+            param: &|_, _| None,
+            declaring: &|_, _, _| None,
             self_type: None,
         };
         for (&trait_, header) in &tysys.trait_env.trait_decl_headers {
@@ -1574,11 +1581,11 @@ impl SolverBridge {
             }
         }
         for (&def, info) in &data.generic_newtypes {
-            let param = |name: &str| ParamKind::of(info.type_params.iter(), name);
+            let param = |_, name: &str| ParamKind::of(info.type_params.iter(), name);
             let space = Written {
                 resolutions: &tysys.resolutions,
                 param: &param,
-                declaring: &|base, assoc| {
+                declaring: &|_, base, assoc| {
                     declaring_among(tysys, info.type_params.iter(), base, assoc)
                 },
                 self_type: None,
@@ -1995,10 +2002,18 @@ impl SolverBridge {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
         // receiver the environment cannot place lowers to nothing.
-        let place = place_in(ctx);
         let table = tysys.type_table.borrow();
-        let param = |name: &str| place(name).map(ParamKind::Type);
-        let declaring = |base: &str, assoc: &str| {
+        let binder_ids = binder_types(ctx);
+        let reached = |site, name: &str| {
+            ctx.trait_ctx
+                .binder_reached_at(&tysys.resolutions, site, name)
+        };
+        let param = |site, name: &str| {
+            let binder = reached(site, name)?;
+            position_among(&binder_ids, |id| id == binder.type_id).map(ParamKind::Type)
+        };
+        let named = place_head(&binder_ids, &table);
+        let declaring = |site, base: &str, assoc: &str| {
             if base == "Self" {
                 return ctx
                     .trait_ctx
@@ -2010,13 +2025,12 @@ impl SolverBridge {
                         tysys.trait_env.impl_trait_binding_assoc(&target, assoc)
                     });
             }
-            let bounds = ctx.trait_ctx.bounds_named(base);
+            let bounds = ctx.trait_ctx.binder_bounds(reached(site, base)?.key());
             tysys
                 .trait_env
                 .bound_declaring_assoc_type(&bounds, assoc, &tysys.resolutions)
         };
         let binders = ctx.trait_ctx.binders();
-        let binder_ids: Vec<TypeId> = binders.iter().map(|binder| binder.type_id).collect();
         let placed = place_binder(&binder_ids, &table);
         let mut env = Env::default();
         let mut unstated = Vec::new();
@@ -2029,7 +2043,7 @@ impl SolverBridge {
                 .get(&binder.type_id)
                 .into_iter()
                 .flatten()
-                .map(|declared| self.lowering.bound_named(declared, &param));
+                .map(|declared| self.lowering.bound_named(declared, &named));
             let scoped = binder.bounds.iter().map(|scoped| {
                 let self_type = scoped
                     .self_binding
@@ -2115,10 +2129,11 @@ impl SolverBridge {
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
-        let place = place_in(ctx);
+        let table = tysys.type_table.borrow();
+        let binders = binder_types(ctx);
         let ParamBound { trait_, args } = self
             .lowering
-            .bound_named(asked, &|name| place(name).map(ParamKind::Type))?;
+            .bound_named(asked, &place_head(&binders, &table))?;
         Ok(Question {
             env,
             ty,
@@ -2643,14 +2658,16 @@ pub(super) enum Ordered {
     Duplicated(Vec<Option<DefId>>),
 }
 
-/// Where each type parameter `ctx` has in scope sits in the environment
-/// [`SolverBridge::env_for`] built, which is what gives a rigid parameter its
-/// [`SolverType::Param`].
-fn place_in(ctx: &scope::Scope) -> impl Fn(&str) -> Option<u32> + '_ {
-    let binders = binder_types(ctx);
-    move |name: &str| {
-        let type_id = ctx.trait_ctx.type_params.get(name)?.type_id;
-        position_among(&binders, |binder| binder == type_id)
+/// Where the binder a [`TypeHead::Binder`] names sits among `binders` (a
+/// scope's [`binder_types`]): the one spelled with that head, which carries
+/// the declaration owning the parameter as well as its name.
+fn place_head<'a>(
+    binders: &'a [TypeId],
+    table: &'a TypeTable,
+) -> impl Fn(&TypeHead) -> Option<ParamKind> + 'a {
+    move |head| {
+        position_among(binders, |binder| table.fq_type_name(binder).head() == head)
+            .map(ParamKind::Type)
     }
 }
 

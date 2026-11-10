@@ -633,6 +633,22 @@ impl TraitContext {
         self.binder_declared_at(resolutions, decl, name)
     }
 
+    /// The binder the name written at `site` reaches, whether the site names
+    /// it or projects through it.
+    pub(super) fn binder_reached_at(
+        &self,
+        resolutions: &Resolutions,
+        site: ast::AstId,
+        name: &str,
+    ) -> Option<&BinderInScope> {
+        match resolutions.get(site) {
+            Resolution::Binder(decl) | Resolution::Projection(decl) => {
+                self.binder_declared_at(resolutions, decl, name)
+            }
+            Resolution::Def(_) | Resolution::Unresolved => None,
+        }
+    }
+
     /// The binder of the pack a signature minted for the `[..element]` written
     /// at `site`, where `element` names no pack.
     pub(super) fn repeat_pack(
