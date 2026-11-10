@@ -12,7 +12,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, BoundsOf, FamilySite, ParamRef, ScopedBound};
+use super::scope::{BoundsOf, FamilySite, ParamRef, ScopedBound};
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -108,9 +108,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(spread) => {
                 let (name, span) = (&spread.name, &spread.span);
-                if let Some(&BinderInScope { type_id, .. }) =
-                    self.annotate_ctx.trait_ctx.repeat_pack(name)
-                {
+                if let Some(type_id) = self.repeat_pack_at(spread.id, name) {
                     if self.tysys.type_table.borrow().is_tuple(type_id) {
                         return type_id;
                     }
@@ -835,6 +833,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn binder_at(&self, site: AstId, name: &str) -> Option<TypeId> {
         let trait_ctx = &self.annotate_ctx.trait_ctx;
         let held = trait_ctx.binder_at(&self.tysys.resolutions, site, name)?;
+        Some(held.type_id)
+    }
+
+    /// The pack minted for the `..name` written at `site`, where `name` names
+    /// no pack.
+    pub(super) fn repeat_pack_at(&self, site: AstId, name: &str) -> Option<TypeId> {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        let held = trait_ctx.repeat_pack(&self.tysys.resolutions, site, name)?;
         Some(held.type_id)
     }
 

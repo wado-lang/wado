@@ -633,11 +633,16 @@ impl TraitContext {
         self.binder_declared_at(resolutions, decl, name)
     }
 
-    /// The pack a signature minted for `[..element]` where `element` names no
-    /// pack. Found by the element's spelling: the parser mints it, so no site
-    /// resolves to it.
-    pub(super) fn repeat_pack(&self, element: &str) -> Option<&BinderInScope> {
-        self.type_params.get(&repeat_pack_name(element))
+    /// The binder of the pack a signature minted for the `[..element]` written
+    /// at `site`, where `element` names no pack.
+    pub(super) fn repeat_pack(
+        &self,
+        resolutions: &Resolutions,
+        site: ast::AstId,
+        element: &str,
+    ) -> Option<&BinderInScope> {
+        let pack = resolutions.repeat_pack(site)?;
+        self.binder_declared_at(resolutions, pack, &repeat_pack_name(element))
     }
 
     /// The binder standing for `param`, as [`Self::binder_at`] finds one.
