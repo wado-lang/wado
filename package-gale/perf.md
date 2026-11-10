@@ -882,11 +882,12 @@ cache does not by itself close the gap to the scan.
   brought that down. What shipped decides the ambiguity
   with the compiled scan instead — a greedy `?` scans its body then the
   continuation before entering, a non-greedy loop scans the continuation before
-  exiting. Where the scan runs out — the rule's tail — the verdict conjoins
-  the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
-  optional's callee was receiving the inner's own FIRST) rather than a second
-  runtime argument. That last conjunct is why a probe may ask the FOLLOW only
-  where the walk really reaches the rule's tail (soundness invariant 10). Release
+  exiting. Where the scan runs out — the rule's tail — the verdict asks the
+  caller's continuation, or the rule's classical FOLLOW where the rule carries
+  none, which cost one bug fix in `follow_env` (an optional's callee was
+  receiving the inner's own FIRST). That last question is why a probe may ask
+  it only where the walk really reaches the rule's tail (soundness invariant
+  10). Release
   `sqlite_parse` measured unchanged at every step, each arm's own spread moving
   further than any gap between the arms.
 - **Recursive lexer rule with `.+?` / `.*?`**

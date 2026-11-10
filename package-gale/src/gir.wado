@@ -899,12 +899,11 @@ pub struct ListLabelOp {
 /// What a loop's iteration owes before it commits, as one value both sides
 /// carry and every entry path discharges through `gen_iteration_duties`.
 ///
-/// Grouped rather than left as loose stamps because each of these has to reach
-/// three places at once — the parse's guarded entry, the parse's decided entry,
-/// and the scan — and a stamp that reaches two of them is a length the
-/// tournament commits to and the parse refuses. Ask `is_empty`, never the
-/// fields: that is what a shortcut has to get right, and it is right here for
-/// any duty added later.
+/// A duty has to reach three places at once — the parse's guarded entry, the
+/// parse's decided entry, and the scan — and a stamp that reaches two of them
+/// is a length the tournament commits to and the parse refuses. Ask `is_empty`,
+/// never the fields: that is what a shortcut has to get right, and it is right
+/// here for any duty added later.
 pub struct IterationDuties {
     /// The mandatory suffix the loop must leave to its own alternative. A
     /// greedy iteration whose body starts where the suffix does takes what the

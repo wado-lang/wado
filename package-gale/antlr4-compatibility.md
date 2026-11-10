@@ -998,9 +998,10 @@ relevant sites.
    not scanned, which "an empty-alt predicate gates the empty alternative" in
    `codegen_test.wado` pins.
 10. A viability probe asks the caller only where the walk reaches the rule's
-    tail. The probe scans the continuation and, when that runs out, conjoins
-    the rule's FOLLOW — an answer that is only about the caller if nothing
-    else follows inside the rule. A group body, an LR suffix, and an LR rule's
+    tail. The probe scans the continuation and, when that runs out, asks the
+    caller's continuation (`follow_admits`), or the rule's classical FOLLOW
+    where the rule carries none — an answer that is only about the caller if
+    nothing else follows inside the rule. A group body, an LR suffix, and an LR rule's
     atom alternative all end short of the rule (the LR atom ends where the
     precedence loop begins), so each answers `reaches_rule_tail = false`.
     Stamping the atom `true` rejected `CASE a WHEN 1 THEN 2 END + 1`: the probe
