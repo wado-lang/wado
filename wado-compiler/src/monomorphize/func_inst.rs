@@ -2767,10 +2767,7 @@ impl Monomorphizer {
         // where the elaborator recorded every slot.
         if !info.is_type_param_receiver
             && let Some(block) = method_func.template.as_ref().and_then(TemplateId::block)
-            && matches!(
-                type_table.get(type_table.impl_target_whole(block)),
-                ResolvedType::AssocTypeProjection { .. }
-            )
+            && type_table.impl_targets_projection(block)
         {
             let mi = method_func
                 .monomorph_info

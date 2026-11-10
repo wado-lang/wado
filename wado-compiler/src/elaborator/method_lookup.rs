@@ -2354,15 +2354,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is bound by the arguments the call names, or by a receiver that is
         // that projection off the caller's own parameter (`G::Of<f32>`).
         let mut impl_slot_args = Vec::new();
-        let target_projects = {
-            let table = scope.tysys.type_table.borrow();
-            matches!(
-                table.get(table.impl_target_whole(impl_ref.0)),
-                ResolvedType::AssocTypeProjection { .. }
-            )
-        };
         if let Some(receiver) = receiver_type_id
-            && (asked.is_some() || target_projects)
+            && (asked.is_some()
+                || scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_targets_projection(impl_ref.0))
         {
             let mut slots = Self::frame_slots(&scope, impl_ref.0);
             scope.tysys.type_table.borrow_mut().bind_impl_slots_asked(

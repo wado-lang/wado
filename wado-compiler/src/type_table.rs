@@ -6689,6 +6689,15 @@ impl TypeTable {
         }
     }
 
+    /// Whether impl block `def` is written for a projection (`G::Of<E>`),
+    /// which a receiver matches only through the block's other slots.
+    pub fn impl_targets_projection(&self, def: DefId) -> bool {
+        matches!(
+            self.get(self.impl_target_whole(def)),
+            ResolvedType::AssocTypeProjection { .. }
+        )
+    }
+
     /// The declaration impl block `def` targets, past any reference.
     pub fn impl_target_decl(&self, def: DefId) -> Option<DefId> {
         self.nominal_def(self.peel_refs(self.impl_target(def).whole))
@@ -7017,7 +7026,11 @@ impl TypeTable {
             && args_a.len() == args_b.len()
             && trait_args_a.len() == trait_args_b.len();
         let parts = |base: TypeId, trait_args: &[TypeId], args: &[TypeId]| -> Vec<TypeId> {
-            [base].into_iter().chain(trait_args.iter().copied()).chain(args.iter().copied()).collect()
+            [base]
+                .into_iter()
+                .chain(trait_args.iter().copied())
+                .chain(args.iter().copied())
+                .collect()
         };
         alike.then(|| {
             (
