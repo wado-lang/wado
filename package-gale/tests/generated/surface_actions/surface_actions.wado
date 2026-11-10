@@ -1108,7 +1108,11 @@ fn follow_reads(
             let mut matched = 0;
             while matched < len
                 && depth + matched < budget
-                && follow_set_has(tables, readings[at + 1 + matched], follow_kind_at(tokens, pos + depth + matched, eof_kind)) {
+                && follow_set_has(tables, readings[at + 1 + matched], follow_kind_at(
+                    tokens,
+                    pos + depth + matched,
+                    eof_kind,
+                )) {
                 matched += 1;
             }
             if depth + matched >= budget {
