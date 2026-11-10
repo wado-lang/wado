@@ -1047,7 +1047,7 @@ internal fn follow_spill(cont: i64, forwarded: i64, shift: i64, spill: i64) -> i
     if slots == 0 {
         return cont;
     }
-    if shift < FOLLOW_CONT_BITS && (slots | FOLLOW_OPENS_BIT) >> (FOLLOW_CONT_BITS - shift) & FOLLOW_OPENS_BITS == 0 {
+    if shift < FOLLOW_CONT_BITS && (slots | FOLLOW_OPENS_BIT) >> FOLLOW_CONT_BITS - shift & FOLLOW_OPENS_BITS == 0 {
         return cont;
     }
     return cont & FOLLOW_CONT_MASK | follow_open_set(spill);
