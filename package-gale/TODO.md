@@ -33,7 +33,7 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 ### Robustness on hostile input
 
 - [ ] **Mid operands nested in each other take time growing as the fourth power of the depth.** With `lr_mid_operand.g4`, `x` followed by `n` × `between y` and then `n` × `and z` takes 0.18M fuel at `n = 4`, 1.1M at 8, 16M at 16 and 349M at 32 under `longest`. An `and` or `or` chain after one `between` grows linearly.
-- [ ] **A generated parser exhausts the Wasm call stack on deeply nested input.** It traps instead of reporting a diagnostic. Grog's `Protobuf.g4` parser traps in `scan_message_def` / `scan_message_body` / `scan_message_element` on 20000 nested `message M {` … `}`. The parse has no nesting limit to report against.
+- [ ] **A generated parser exhausts the Wasm call stack on deeply nested input.** It traps instead of reporting a diagnostic. Grog's `Protobuf.g4` parser traps in `scan_message_def` / `scan_message_body` / `scan_message_element` on 20000 nested `message M {` … `}`, and Wado.g4's on about 600 nested templates with the host's 1 MiB stack (`MAX_WASM_STACK` in `wado-host`). The fix is a recursion bound in the generated parser that reports a syntax error and recovers past the nesting, as the compiler's `MAX_NESTING` does.
 
 ## Stage C — action / predicate execution
 

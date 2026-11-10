@@ -17,6 +17,12 @@ pub const DEFAULT_COLLECTOR: Collector = Collector::Copying;
 /// collector splits it in two, so a program allocates through half per cycle.
 pub const DEFAULT_GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
 
+/// The Wasm stack a guest may use, twice wasmtime's default. A recursive-descent
+/// parser Gale generates takes a frame per rule, so wasmtime's 512 KiB ran out
+/// near 300 nested templates in Wado.g4. Within the 2 MiB async stack, which
+/// must hold it.
+pub const MAX_WASM_STACK: usize = 1 << 20;
+
 /// Enable the Wasm features what Wado emits may use.
 fn enable_wasm_features(config: &mut Config) {
     config.wasm_component_model_gc(true);
@@ -42,6 +48,7 @@ pub fn default_config(opt_level: OptLevel) -> Config {
     // way up to the working set and pays a full trace at every rung. The 4 GiB
     // of address space is reserved either way: this commits, it does not map.
     config.gc_heap_initial_size(DEFAULT_GC_HEAP_INITIAL_SIZE);
+    config.max_wasm_stack(MAX_WASM_STACK);
     config.cranelift_opt_level(opt_level);
     config
 }
