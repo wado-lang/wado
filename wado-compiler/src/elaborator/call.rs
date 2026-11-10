@@ -25,7 +25,7 @@ use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound};
+use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
@@ -3298,7 +3298,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     // A pack is no parameter of the enclosing scope, whatever
                     // a same-named one there is bound by.
-                    Some(type_id.map_or_else(Vec::new, |id| scope.saved().bounds_of(id).to_vec()))
+                    Some(type_id.map_or_else(Vec::new, |id| {
+                        scope.saved().bounds(&table, BoundsOf::Type(id))
+                    }))
                 })
                 .collect()
         };

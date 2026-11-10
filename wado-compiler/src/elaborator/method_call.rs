@@ -27,7 +27,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
-use super::scope::{ParamRef, ScopedBound};
+use super::scope::{BoundsOf, ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
@@ -221,11 +221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         let tt = self.tysys.type_table.borrow();
         if util::bound_param(&tt, ty).is_some() {
-            return self
-                .annotate_ctx
-                .trait_ctx
-                .bounds_reaching(&tt, ty)
-                .to_vec();
+            return self.annotate_ctx.trait_ctx.bounds(&tt, BoundsOf::Type(ty));
         }
         let ResolvedType::AssocTypeProjection {
             param_id,

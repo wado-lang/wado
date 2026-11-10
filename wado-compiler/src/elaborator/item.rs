@@ -658,9 +658,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 
     /// Enter an `impl` block's own frame: its target type parameters bound
-    /// into the positional slots the block is abstract over, the enclosing
-    /// bounds restored, the trait reference's parameters bound to the impl's
-    /// arguments, and `Self` set to the impl target.
+    /// into the positional slots the block is abstract over, the trait
+    /// reference's parameters bound to the impl's arguments, and `Self` set to
+    /// the impl target.
     ///
     /// The one definition of an impl's slot numbering. A method frame is this
     /// plus the method's own parameters, numbered past these slots.

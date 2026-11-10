@@ -2013,7 +2013,7 @@ impl SolverBridge {
             let bounds = ctx.trait_ctx.bounds_named(base);
             tysys
                 .trait_env
-                .bound_declaring_assoc_type(bounds, assoc, &tysys.resolutions)
+                .bound_declaring_assoc_type(&bounds, assoc, &tysys.resolutions)
         };
         let binders = ctx.trait_ctx.binders();
         let binder_ids: Vec<TypeId> = binders.iter().map(|binder| binder.type_id).collect();

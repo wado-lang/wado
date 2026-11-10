@@ -1,0 +1,30 @@
+// A bound whose argument projects off the parameter it bounds,
+// `T: Conv<T::Out>`. Reading the bound's arguments asks for `T::Out`, whose
+// trait arguments are the bound's again; that inner ask stays abstract rather
+// than recursing until the compiler's stack overflows.
+
+trait Conv<X> with () {
+    type Out;
+    fn get(&self) -> X;
+}
+
+fn f<T: Conv<T::Out>>(t: T) -> T::Out {
+    return t.get();
+}
+
+struct C {}
+
+impl Conv<i32> for C {
+    type Out = i32;
+
+    fn get(&self) -> i32 {
+        return 7;
+    }
+}
+
+test {
+    assert f(C {}) == 7;
+}
+
+__DATA__
+{"test": {}}

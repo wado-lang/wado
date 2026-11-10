@@ -20,7 +20,7 @@ use crate::type_table::TypeTable;
 use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
-    BinderInScope, BoundSelf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
+    BinderInScope, BoundSelf, BoundsOf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
     TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
@@ -2125,7 +2125,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (true, Some(args)) => self
                     .frame_projection_of_trait(self_type_id, *declaring, Some(args), &decl.name)
                     .or_else(|| self.carried_binding(self_type_id, &decl.name)),
-                _ => self.frame_projection(self_type_id, &decl.name),
+                _ => self.frame_projection(BoundsOf::Type(self_type_id), &decl.name),
             };
             let answer = known.unwrap_or_else(|| {
                 let open = self.family_params(*declaring, &decl.name);
@@ -3263,9 +3263,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Collect matching impl block info (avoids borrow conflicts during resolution)
         struct ImplInfo {
-            /// Each declared parameter and where the target names it, so the
-            /// instantiation binds it by position. `None` where the target
-            /// does not name it.
+            def: DefId,
+            /// Each declared parameter and its slot, so the instantiation binds
+            /// it by what the target puts there. `None` for a parameter that
+            /// fills no slot.
             type_params: Vec<(ast::GenericParam, Option<u32>)>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this block implements, as its own header names it —
@@ -3303,6 +3304,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             continue;
                         };
                         result.push(ImplInfo {
+                            def: entry,
                             type_params,
                             assoc_types: header.associated_types.clone(),
                             trait_key,
@@ -3328,12 +3330,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             scope.set_self_binding(implementing);
 
             // `impl<T> IntoIterator for List<T>` registering for `List<u8>`
-            // binds `T` to `u8`: the slot is where the target names it.
+            // binds `T` to `u8`, and `impl<T> Tr for Wrap<Option<T>>` for
+            // `Wrap<Option<S>>` binds `T` to `S`: the target, matched at any
+            // depth, says what each slot holds.
+            let slots = scope
+                .tysys
+                .type_table
+                .borrow_mut()
+                .impl_slots(info.def, &concrete_type_args);
             for (param, slot) in &info.type_params {
                 let Some(slot) = *slot else {
                     continue;
                 };
-                let Some(&arg) = concrete_type_args.get(slot as usize) else {
+                let id = TypeParamId {
+                    owner: info.def,
+                    index: slot,
+                };
+                let Some(&arg) = slots.get(&id) else {
                     continue;
                 };
                 let bounds = ScopedBound::pin_declared(param, Some(implementing));

@@ -143,6 +143,18 @@ impl BinderInScope {
         }
     }
 
+    /// What tells this binder from another standing for the same type: the
+    /// parameter it stands in for, and its slot, since two parameters of one
+    /// owner bound to a site's arguments name no declaration apart.
+    pub(super) fn key(&self) -> BinderKey {
+        BinderKey {
+            type_id: self.type_id,
+            index: self.index,
+            decl: self.decl,
+            owner: self.owner,
+        }
+    }
+
     /// Whether `other` is this same parameter bound again.
     fn stands_for_same(&self, other: &Self) -> bool {
         self.type_id == other.type_id && self.decl == other.decl && self.owner == other.owner
@@ -156,6 +168,34 @@ impl BinderInScope {
             decl: None,
             owner: None,
             is_affine: false,
+        }
+    }
+}
+
+/// A binder's identity: see [`BinderInScope::key`]. Two parameters standing
+/// for one type are two binders, each bounded by what it declares.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(super) struct BinderKey {
+    type_id: TypeId,
+    index: u32,
+    decl: Option<ast::AstId>,
+    owner: Option<DefId>,
+}
+
+/// Whose bounds answer for a type: the binder a written name reaches, or the
+/// type itself, which answers to every bound in force on it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(super) enum BoundsOf {
+    Binder(BinderKey),
+    Type(TypeId),
+}
+
+impl BoundsOf {
+    /// The type the bounds hold of.
+    pub(super) fn base(self) -> TypeId {
+        match self {
+            Self::Binder(key) => key.type_id,
+            Self::Type(ty) => ty,
         }
     }
 }
@@ -392,12 +432,13 @@ pub(super) struct TraitContext {
     /// The binders a method's parameter of the same name shadowed. No name
     /// reaches one, but the body still holds values of it, through `self`.
     pub(super) shadowed: Vec<(String, BinderInScope)>,
-    /// Trait bounds in force, by the type a binder stands for, each paired
-    /// with the `Self` its written types mean. Used for resolving trait
-    /// methods on type params (e.g., `T.cmp()` when T: Ord). A bound is a fact
-    /// about the type, not the name: a method's `T` shadowing its impl's
-    /// leaves values of the impl's `T`, which still answer to its bounds.
-    bounds: IndexMap<TypeId, Vec<ScopedBound>>,
+    /// Trait bounds in force, by the type they hold of, each with the binder
+    /// that brought it and the `Self` its written types mean. Used for
+    /// resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
+    /// A bound is a fact about the type, not the name: a method's `T`
+    /// shadowing its impl's leaves values of the impl's `T`, which still
+    /// answer to its bounds.
+    bounds: IndexMap<TypeId, Vec<(BinderKey, ScopedBound)>>,
     /// Associated type bindings in scope (`Self::Name` → resolved type).
     /// Set when resolving trait implementations.
     pub(super) assoc_type_bindings: AssocBindings,
@@ -429,10 +470,10 @@ impl TraitContext {
             .collect()
     }
 
-    /// Every binder the frame holds, a shadowed one included, each once with
-    /// the bounds every name reaching it carries. A binder is its type, not its
-    /// name: a callee's parameter bound to the caller's `K` under the letter
-    /// `K` is that same binder, not a second one shadowing it.
+    /// Every type the frame's binders stand for, a shadowed binder's included,
+    /// each once with the bounds every binder standing for it carries. A
+    /// callee's parameter bound to the caller's `K` under the letter `K`
+    /// stands for that same type, not a second one shadowing it.
     pub(super) fn binders(&self) -> Vec<FrameBinder<'_>> {
         let mut binders: IndexMap<TypeId, FrameBinder<'_>> = IndexMap::default();
         for binder in self.every_binder() {
@@ -441,7 +482,7 @@ impl TraitContext {
                 .or_insert_with(|| FrameBinder {
                     type_id: binder.type_id,
                     is_affine: false,
-                    bounds: self.bounds_of(binder.type_id).iter().collect(),
+                    bounds: self.type_bounds(binder.type_id).collect(),
                 });
             held.is_affine |= binder.is_affine;
         }
@@ -460,33 +501,69 @@ impl TraitContext {
         self.every_binder().find(|binder| binder.type_id == type_id)
     }
 
-    /// The bounds in force on `type_id`.
-    pub(super) fn bounds_of(&self, type_id: TypeId) -> &[ScopedBound] {
-        self.bounds.get(&type_id).map_or(&[], Vec::as_slice)
+    /// Every bound in force on `ty`, a written bound two binders brought held
+    /// once.
+    fn type_bounds(&self, ty: TypeId) -> impl Iterator<Item = &ScopedBound> {
+        let held = self.bounds.get(&ty).map_or(&[][..], Vec::as_slice);
+        held.iter()
+            .enumerate()
+            .filter(|(i, (_, bound))| {
+                !held[..*i]
+                    .iter()
+                    .any(|(_, earlier)| earlier.bound.id == bound.bound.id)
+            })
+            .map(|(_, (_, bound))| bound)
+    }
+
+    /// What the binder `key` names declares: the bounds it brought, or, for a
+    /// binder that brought none, those of the type it names, bounded where it
+    /// is declared.
+    pub(super) fn binder_bounds(&self, key: BinderKey) -> Vec<ScopedBound> {
+        let held = self.bounds.get(&key.type_id).map_or(&[][..], Vec::as_slice);
+        let own: Vec<ScopedBound> = held
+            .iter()
+            .filter(|(by, _)| *by == key)
+            .map(|(_, bound)| bound.clone())
+            .collect();
+        if own.is_empty() {
+            return self.type_bounds(key.type_id).cloned().collect();
+        }
+        own
     }
 
     /// The bounds the binder the written name `name` reaches carries.
-    pub(super) fn bounds_named(&self, name: &str) -> &[ScopedBound] {
+    pub(super) fn bounds_named(&self, name: &str) -> Vec<ScopedBound> {
         self.type_params
             .get(name)
-            .map_or(&[], |binder| self.bounds_of(binder.type_id))
+            .map_or_else(Vec::new, |binder| self.binder_bounds(binder.key()))
     }
 
-    /// The bounds the frame's binder for `ty` carries.
-    pub(super) fn bounds_reaching(&self, table: &TypeTable, ty: TypeId) -> &[ScopedBound] {
-        self.binder_type_of(table, ty)
-            .map_or(&[], |binder| self.bounds_of(binder))
+    /// The bounds `of` names.
+    pub(super) fn bounds(&self, table: &TypeTable, of: BoundsOf) -> Vec<ScopedBound> {
+        match of {
+            BoundsOf::Binder(key) => self.binder_bounds(key),
+            BoundsOf::Type(ty) => self
+                .type_bounds(self.bounded_type(table, ty))
+                .cloned()
+                .collect(),
+        }
     }
 
-    /// The type of the frame's binder for `ty`: `ty` itself, or the pack whose
-    /// element placeholder it is.
-    pub(super) fn binder_type_of(&self, table: &TypeTable, ty: TypeId) -> Option<TypeId> {
-        let param = util::bound_param(table, ty);
-        self.every_binder()
+    /// The type `ty`'s bounds are held under: `ty`, or the pack a binder in
+    /// the frame stands for whose element placeholder `ty` is, since a pack's
+    /// bound holds of each member.
+    pub(super) fn bounded_type(&self, table: &TypeTable, ty: TypeId) -> TypeId {
+        if self.bounds.contains_key(&ty) {
+            return ty;
+        }
+        let Some(param) = util::bound_param(table, ty) else {
+            return ty;
+        };
+        let pack = self
+            .every_binder()
             .map(|binder| binder.type_id)
-            .find(|&binder| {
-                binder == ty || param.is_some_and(|p| table.type_param_id(binder) == Some(p))
-            })
+            .find(|&binder| table.type_param_id(binder) == Some(param));
+        pack.unwrap_or(ty)
     }
 
     /// Whether any binder in scope carries a bound.
@@ -495,29 +572,30 @@ impl TraitContext {
             .any(|binder| self.bounds.contains_key(&binder.type_id))
     }
 
-    /// Put `bounds` in force on `type_id`. A written bound already in force
-    /// there is read again where this frame reads it, so it takes the new
-    /// reading rather than holding twice.
-    pub(super) fn add_bounds_on(&mut self, type_id: TypeId, bounds: Vec<ScopedBound>) {
+    /// Put `bounds` in force on `binder`'s type, brought by `binder`. A
+    /// written bound it already brought is read again where this frame reads
+    /// it, so it takes the new reading rather than holding twice.
+    pub(super) fn add_bounds_on(&mut self, binder: &BinderInScope, bounds: Vec<ScopedBound>) {
         if bounds.is_empty() {
             return;
         }
-        let held = self.bounds.entry(type_id).or_default();
+        let key = binder.key();
+        let held = self.bounds.entry(key.type_id).or_default();
         for bound in bounds {
             match held
                 .iter_mut()
-                .find(|other| other.bound.id == bound.bound.id)
+                .find(|(by, other)| *by == key && other.bound.id == bound.bound.id)
             {
-                Some(other) => *other = bound,
-                None => held.push(bound),
+                Some((_, other)) => *other = bound,
+                None => held.push((key, bound)),
             }
         }
     }
 
-    /// Put `bounds` in force on the type the binder `name` reaches.
+    /// Put `bounds` in force on the binder `name` reaches.
     pub(super) fn add_bounds(&mut self, name: &str, bounds: Vec<ScopedBound>) {
-        let type_id = self.type_params[name].type_id;
-        self.add_bounds_on(type_id, bounds);
+        let binder = self.type_params[name];
+        self.add_bounds_on(&binder, bounds);
     }
 
     /// Drop every bound, for a frame naming its own parameters.
@@ -598,7 +676,7 @@ impl TraitContext {
     /// A binder of the type the name already reaches is a second parameter
     /// standing for that type: a callee's `K` bound to the caller's `K`, or
     /// two `fn`-bound parameters of one signature. Both stay reachable by
-    /// identity, and the bounds stay with the type.
+    /// identity, each with its own bounds.
     pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
         let Some(held) = self.type_params.insert(name.to_string(), binder) else {
             return;
@@ -610,7 +688,7 @@ impl TraitContext {
     }
 
     /// Unbind every type parameter, for a frame naming its own. The bounds
-    /// stay with their types, so binding one again restores what it carries.
+    /// stay with their binders, so binding one again restores what it carries.
     pub(super) fn clear_binders(&mut self) {
         self.type_params.clear();
         self.shadowed.clear();
@@ -1193,9 +1271,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// The two are one fact: a binder without its bounds dispatches on nothing,
     /// and bounds without a binder are a constraint no name reaches. The bounds
-    /// hold of the type the binder stands for, so a method parameter shadowing
-    /// an impl's dispatches on its own traits alone, and values of the impl's
-    /// still answer to the impl's.
+    /// stay with the binder, so a method parameter shadowing an impl's
+    /// dispatches on its own traits alone, and values of the impl's still
+    /// answer to the impl's.
     pub(super) fn bind_param(
         &mut self,
         name: &str,
@@ -1204,7 +1282,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         let ctx = &mut self.annotate_ctx.trait_ctx;
         ctx.bind(name, binder);
-        ctx.add_bounds_on(binder.type_id, bounds);
+        ctx.add_bounds_on(&binder, bounds);
     }
 
     /// What `param` declares, pinned to the `Self` this frame binds — what the
@@ -1499,7 +1577,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // and bounds still reach what it binds.
             if ctx.type_params.contains_key(&param.name) {
                 ctx.shadowed.push((param.name.clone(), binder));
-                ctx.add_bounds_on(binder.type_id, bounds);
+                ctx.add_bounds_on(&binder, bounds);
                 continue;
             }
             self.bind_param(&param.name, binder, bounds);
