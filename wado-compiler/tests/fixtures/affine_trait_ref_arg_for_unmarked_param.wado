@@ -1,0 +1,36 @@
+// A trait reference's argument fills the trait's parameter as a call's fills a
+// function's: an affine one for a parameter not declared `affine` is an error,
+// since the trait's default bodies may copy it. `twice` copies `T`, so
+// `Tr<Conn>` would run `Conn`'s drop twice.
+
+affine struct Conn {
+    n: i32,
+}
+
+impl Drop for Conn {
+    fn drop(self) {}
+}
+
+trait Tr<T> with () {
+    fn twice(&self, t: T) -> [T, T] {
+        return [t, t];
+    }
+}
+
+struct X {}
+
+impl Tr<Conn> for X {}
+
+fn through<affine U, S: Tr<U>>(_s: S) -> i32 {
+    return 0;
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":22:6: analysis error: affine type 'Conn' given for 'T', which may be copied; `affine T` would admit it",
+    "compile_errors_contains": [
+        ":24:25: analysis error: affine type 'U' given for 'T', which may be copied"
+    ]
+}

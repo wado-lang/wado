@@ -168,7 +168,8 @@ test {
 
 A type parameter or an associated type without the mark may be copied. An
 affine argument for one, or an `impl` binding an affine type to one, is an error
-naming it (`AFFINE_ARGUMENT`).
+naming it (`AFFINE_ARGUMENT`). A trait's parameter is one too: `impl Tr<Conn>`
+and a bound `S: Tr<Conn>` are errors under `trait Tr<T>`.
 
 <!-- {"fixture":"affine_argument_for_unmarked_param.wado"} -->
 

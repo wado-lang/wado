@@ -33,7 +33,6 @@ use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
-use super::trait_query::ArgsOwe;
 use super::trait_query::{DerivedAt, SelfBinding};
 use super::type_resolution::ParamSpace;
 use super::typecheck::{TypeCheckResult, check_assignable};
@@ -4431,7 +4430,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &type_args.method_args,
             &[],
             self_binding,
-            ArgsOwe::BoundsAndKind,
             span,
         );
     }
