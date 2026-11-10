@@ -566,13 +566,10 @@ impl Lowering {
                         .ok_or(Unsaid::Open)?
                         .spelled()?
                 };
-                let trait_ = (written.declaring)(
-                    projection.id,
-                    &projection.namespace,
-                    &projection.name,
-                )
-                    .and_then(|def| self.known_trait(def))
-                    .ok_or(Unsaid::Unsayable)?;
+                let trait_ =
+                    (written.declaring)(projection.id, &projection.namespace, &projection.name)
+                        .and_then(|def| self.known_trait(def))
+                        .ok_or(Unsaid::Unsayable)?;
                 Ok(SolverType::Projection {
                     base: Box::new(base),
                     trait_,
@@ -2003,7 +2000,8 @@ impl SolverBridge {
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
         // receiver the environment cannot place lowers to nothing.
         let table = tysys.type_table.borrow();
-        let binder_ids = binder_types(ctx);
+        let binders = ctx.trait_ctx.binders();
+        let binder_ids: Vec<TypeId> = binders.iter().map(|binder| binder.type_id).collect();
         let reached = |site, name: &str| {
             ctx.trait_ctx
                 .binder_reached_at(&tysys.resolutions, site, name)
@@ -2030,7 +2028,6 @@ impl SolverBridge {
                 .trait_env
                 .bound_declaring_assoc_type(&bounds, assoc, &tysys.resolutions)
         };
-        let binders = ctx.trait_ctx.binders();
         let placed = place_binder(&binder_ids, &table);
         let mut env = Env::default();
         let mut unstated = Vec::new();
