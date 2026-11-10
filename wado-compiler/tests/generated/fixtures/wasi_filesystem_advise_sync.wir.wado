@@ -88,19 +88,7 @@ struct core:prelude/types.wado//$tmpl$ac8fec2d6428d13b {  // TypeId(11)
     mut r2: ref "core:prelude/string.wado//String",
 }
 
-<<<<<<< HEAD
-struct wasi:clocks/system_clock.wado//Instant {}  // TypeId(13)
-||||||| f6ac4f5a6
-struct wasi:clocks/system_clock.wado//Instant {  // TypeId(13)
-    mut seconds: i64,
-    mut nanoseconds: u32,
-}
-=======
-struct wasi:clocks/system_clock.wado//Instant {  // TypeId(12)
-    mut seconds: i64,
-    mut nanoseconds: u32,
-}
->>>>>>> origin/main
+struct wasi:clocks/system_clock.wado//Instant {}  // TypeId(12)
 
 struct wasi:filesystem/types.wado//DescriptorStat {  // TypeId(13)
     mut type: ref "wasi:filesystem/types.wado//DescriptorType",
@@ -4157,35 +4145,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::insert"(self, member) {
-<<<<<<< HEAD
-    let self_5: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>";
-    let self_12: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>";
-    let value_13: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>";
-    let $mv$$match_4$0: i32;
-    let $mv$$match_4$1: ref null "core:prelude/types.wado//ResourceId";
-    let $mv$$match_4$2: ref null "core:prelude/types.wado//ReadyEvent";
-    multivalue_bind [$mv$$match_4$0, $mv$$match_4$1, $mv$$match_4$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(member);
-    if $mv$$match_4$0 == 0 {
-        "wasi/waitable-join"($mv$$match_4$1.handle, self.raw.value);
-        if @unlikely(local.tee $mv$$match_4$0(local.tee self_5(self.members).used) >= builtin::array_len(self_5.repr)) {
-            cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_5);
-||||||| f6ac4f5a6
-    let event: ref "core:prelude/types.wado//ReadyEvent";
-    let self_5: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>";
-    let self_12: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>";
-    let value_13: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>";
-    let $mv$$match_4$0: i32;
-    let $mv$$match_4$1: ref null "core:prelude/types.wado//ResourceId";
-    let $mv$$match_4$2: ref null "core:prelude/types.wado//ReadyEvent";
-    multivalue_bind [$mv$$match_4$0, $mv$$match_4$1, $mv$$match_4$2] = "core:prelude/types.wado/core:prelude/types.wado/Subtask^core:prelude/types.wado/Waitable::wait_on$sroa[return]"(member);
-    if $mv$$match_4$0 == 0 {
-        "wasi/waitable-join"($mv$$match_4$1.handle, self.raw.value);
-        if @unlikely(local.tee $mv$$match_4$0(local.tee self_5(self.members).used) >= builtin::array_len(self_5.repr)) {
-            cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_5);
-=======
-    let event: ref "core:prelude/types.wado//ReadyEvent";
     let self_16: ref "core:prelude/list.wado//List<core:prelude/types.wado/Resolution>";
     let self_22: i32;
     let self_29: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>";
@@ -4199,43 +4158,19 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
         multivalue_bind [$mv$self_11$0, $mv$self_11$1] = "core:prelude/types.wado/delivered_at$sroa[return]"($sroa_id_handle_47);
         if $mv$self_11$0 == 1 {
             $mv$self_11$0 = 1;
-            $mv$self_11$1 = self_22 = local.tee self_16(global:core:prelude/types.wado::DELIVERED).used; if @unlikely($mv$self_11$1 >=u self_22) {
+            drop(self_22 = local.tee self_16(global:core:prelude/types.wado::DELIVERED).used; if @unlikely($mv$self_11$1 >=u self_22) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$self_11$1, self_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado:390"), used: 26 });
                 unreachable;
-            }; builtin::array_get_value<ref "core:prelude/types.wado//Resolution">(self_16.repr, $mv$self_11$1).state;
+            }; builtin::array_get_value<ref "core:prelude/types.wado//Resolution">(self_16.repr, $mv$self_11$1).state);
         } else if @likely($mv$self_11$0 == 0) {
             $mv$self_11$0 = 0;
-            $mv$self_11$1 = 0;
         } else {
             unreachable;
->>>>>>> origin/main
         }
-<<<<<<< HEAD
-        builtin::array_set<ref null "core:prelude//$Resource">(self_5.repr, $mv$$match_4$0, member);
-        self_5.used = $mv$$match_4$0 + 1;
-    } else if @likely($mv$$match_4$0 == 1) {
-        drop(ref.as_non_null($mv$$match_4$2));
-        self_12 = self.ready;
-        value_13 = struct.new "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>" { member: member };
-        if @unlikely(local.tee $mv$$match_4$0(self_12.used) >= builtin::array_len(self_12.repr)) {
-            cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>::grow"(self_12);
-||||||| f6ac4f5a6
-        builtin::array_set<ref null "core:prelude//$Resource">(self_5.repr, $mv$$match_4$0, member);
-        self_5.used = $mv$$match_4$0 + 1;
-    } else if @likely($mv$$match_4$0 == 1) {
-        event = ref.as_non_null($mv$$match_4$2);
-        self_12 = self.ready;
-        value_13 = struct.new "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>" { member: member, event: event };
-        if @unlikely(local.tee $mv$$match_4$0(self_12.used) >= builtin::array_len(self_12.repr)) {
-            cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>::grow"(self_12);
-=======
         if $mv$self_11$0 == 1 {
-            event = struct.new "core:prelude/types.wado//ReadyEvent::Call" { discriminant: 1, payload_0: $mv$self_11$1 };
             self_36 = self.ready;
-            value_37 = struct.new "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>" { member: member, event: event };
+            value_37 = struct.new "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>" { member: member };
             if @unlikely(local.tee $sroa_id_handle_47(self_36.used) >= builtin::array_len(self_36.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>::grow"(self_36);
@@ -4243,7 +4178,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             builtin::array_set<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(self_36.repr, $sroa_id_handle_47, value_37);
             break $fused_$inline_core_prelude_types_wado_Subtask_core_prelude_types_wado_Waitable__wait_on_sroa_return__0: self_36.used = $sroa_id_handle_47 + 1;
         } else {
->>>>>>> origin/main
         }
         "wasi/waitable-join"($sroa_id_handle_47, self.raw.value);
         if @unlikely(local.tee $sroa_id_handle_47(local.tee self_29(self.members).used) >= builtin::array_len(self_29.repr)) {
@@ -4384,13 +4318,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::remove$contract_report0"(at_36, $mv$reported$handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:1063"), used: 28 });
         unreachable;
-<<<<<<< HEAD
-    }; value_30 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $load_11($mv_arg_1.repr), at); builtin::array_copy<ref null "core:prelude//$Resource">($load_11, at, $load_11, at + 1, ($mv$reported$handle - 1) - at); $mv_arg_1.used = $mv$reported$handle - 1; builtin::array_set<ref null "core:prelude//$Resource">($load_11, $mv_arg_1.used, ref.null none); value_30 } };
-||||||| f6ac4f5a6
-    }; value_30 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $load_11($mv_arg_1.repr), at); builtin::array_copy<ref null "core:prelude//$Resource">($load_11, at, $load_11, at + 1, ($mv$reported$handle - 1) - at); $mv_arg_1.used = $mv$reported$handle - 1; builtin::array_set<ref null "core:prelude//$Resource">($load_11, $mv_arg_1.used, ref.null none); value_30, event: $mv$reported$event } };
-=======
-    }; ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $sroa_$iter_0_repr_59(self_34.repr), at_36); builtin::array_copy<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_59, at_36, $sroa_$iter_0_repr_59, at_36 + 1, ($mv$reported$handle - 1) - at_36); self_34.used = $mv$reported$handle - 1; builtin::array_set<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_59, self_34.used, ref.null none); ref_val, event: $mv$reported$event } };
->>>>>>> origin/main
+    }; ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $sroa_$iter_0_repr_59(self_34.repr), at_36); builtin::array_copy<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_59, at_36, $sroa_$iter_0_repr_59, at_36 + 1, ($mv$reported$handle - 1) - at_36); self_34.used = $mv$reported$handle - 1; builtin::array_set<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_59, self_34.used, ref.null none); ref_val } };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$ac8fec2d6428d13b,[core:prelude/string.wado/String,bool]>"(t) {

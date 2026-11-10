@@ -55,13 +55,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
 type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(22)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
-||||||| f6ac4f5a6
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
-=======
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
->>>>>>> origin/main
 
 type "functype//global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
@@ -347,28 +341,4 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-<<<<<<< HEAD
-||||||| f6ac4f5a6
-fn "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"() {
-    return global:global_init_order_through_generic_method.wado::SEED.k, "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i64>());
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
-    let used: i32;
-    used = builtin::array_len(elements);
-    return struct.new "core:prelude/list.wado//List<i64>" { repr: elements, used: used };
-}
-
-=======
-fn "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"() {
-    return global:global_init_order_through_generic_method.wado::SEED.k, "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(array.new_fixed<i64>());
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
-    let used: i32;
-    used = builtin::array_len(elements);
-    return struct.new "core:prelude/list.wado//List<i64>" { repr: elements, used: used };
-}
-
->>>>>>> origin/main
 export fn "global_init_order_through_generic_method.wado/$cm_export__run" as "run"

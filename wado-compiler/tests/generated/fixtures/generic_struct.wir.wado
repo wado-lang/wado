@@ -996,19 +996,9 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-<<<<<<< HEAD
     b103: block {
         l104: loop {
-            break_if b103 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
-||||||| f6ac4f5a6
-    b102: block {
-        l103: loop {
-            break_if b102 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
-=======
-    b102: block {
-        l103: loop {
-            break_if b102 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
->>>>>>> origin/main
+            break_if b103 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1030,19 +1020,9 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l106;
         };
     };
-<<<<<<< HEAD
     b107: block {
         l108: loop {
-            break_if b107 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
-||||||| f6ac4f5a6
-    b106: block {
-        l107: loop {
-            break_if b106 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
-=======
-    b106: block {
-        l107: loop {
-            break_if b106 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
->>>>>>> origin/main
+            break_if b107 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1888,19 +1868,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                             min_len = select i32($mv$key$used < b_end, $mv$key$used, b_end);
                             i = 0;
                             $licm_repr_31 = other.repr;
-<<<<<<< HEAD
                             b222: block {
                                 l223: loop {
-                                    break_if b222 (((i >= min_len) | ((i + 1) >= min_len)) | (((i + 1) + 1) >= min_len)) | ((((i + 1) + 1) + 1) >= min_len);
-||||||| f6ac4f5a6
-                            b221: block {
-                                l222: loop {
-                                    break_if b221 (((i >= min_len) | ((i + 1) >= min_len)) | (((i + 1) + 1) >= min_len)) | ((((i + 1) + 1) + 1) >= min_len);
-=======
-                            b221: block {
-                                l222: loop {
-                                    break_if b221 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
->>>>>>> origin/main
+                                    break_if b222 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
                                     x = builtin::array_get_value<u8>($mv$key$repr, i);
                                     y = builtin::array_get_value<u8>($licm_repr_31, i);
                                     if x <u y {

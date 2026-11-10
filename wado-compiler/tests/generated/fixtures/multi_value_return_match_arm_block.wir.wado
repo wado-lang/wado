@@ -936,19 +936,9 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-<<<<<<< HEAD
     b108: block {
         l109: loop {
-            break_if b108 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
-||||||| f6ac4f5a6
-    b116: block {
-        l117: loop {
-            break_if b116 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
-=======
-    b116: block {
-        l117: loop {
-            break_if b116 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
->>>>>>> origin/main
+            break_if b108 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -970,19 +960,9 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l111;
         };
     };
-<<<<<<< HEAD
     b112: block {
         l113: loop {
-            break_if b112 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
-||||||| f6ac4f5a6
-    b120: block {
-        l121: loop {
-            break_if b120 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
-=======
-    b120: block {
-        l121: loop {
-            break_if b120 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
->>>>>>> origin/main
+            break_if b112 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1083,22 +1063,10 @@ fn "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[re
     let $load_2: i32;
     let de: ref "core:cbor//CborDeserializer";
     let $vr_7: ref "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]";
-<<<<<<< HEAD
     let $qm_e_17: ref "core:serde//DeserializeError";
     let v_23: ref "core:prelude/int128.wado//u128";
     de = struct.new "core:cbor//CborDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$input$repr, start: 0, end: $mv$input$used }, pos: 0 };
-    $mv_1_2 = (if local.tee $mv$input$used(local.tee $vr_7($inline_core_cbor_CborDeserializer_core_serde_Deserializer__deserialize_u64_sroa_return__0: block -> ref "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
-||||||| f6ac4f5a6
-    let $qm_e_16: ref "core:serde//DeserializeError";
-    let v_22: ref "core:prelude/int128.wado//u128";
-    de = struct.new "core:cbor//CborDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$input$repr, start: 0, end: $mv$input$used }, pos: 0, depth: 0, max_depth: 100, strict: 1 };
-    $mv_1_2 = (if local.tee $mv$input$used(local.tee $vr_7($inline_core_cbor_CborDeserializer_core_serde_Deserializer__deserialize_u64_sroa_return__0: block -> ref "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
-=======
-    let $qm_e_16: ref "core:serde//DeserializeError";
-    let v_22: ref "core:prelude/int128.wado//u128";
-    de = struct.new "core:cbor//CborDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$input$repr, start: 0, end: $mv$input$used }, pos: 0, depth: 0, max_depth: 100, strict: 1 };
     $mv_1_2 = (if @likely(local.tee $mv$input$used(local.tee $vr_7($inline_core_cbor_CborDeserializer_core_serde_Deserializer__deserialize_u64_sroa_return__0: block -> ref "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
->>>>>>> origin/main
         if @unlikely(0 >= (local.tee $mv$input$used(local.tee $load_0(de.input).end) - local.tee $load_2($load_0.start))) {
             cold_path;
             $qm_e_17 = struct.new "core:serde//DeserializeError" {};
@@ -1126,13 +1094,7 @@ fn "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[re
         }
         let $mv$$vr_14$1: ref null "core:prelude/int128.wado//u128";
         multivalue_bind [$mv$input$used, $mv$$vr_14$1, $mv_2_3] = "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128$sroa[return]"(de);
-<<<<<<< HEAD
-        v_23 = (if $mv$input$used == 0 -> ref "core:prelude/int128.wado//u128" {
-||||||| f6ac4f5a6
-        v_22 = (if $mv$input$used == 0 -> ref "core:prelude/int128.wado//u128" {
-=======
-        v_22 = (if @likely($mv$input$used == 0) -> ref "core:prelude/int128.wado//u128" {
->>>>>>> origin/main
+        v_23 = (if @likely($mv$input$used == 0) -> ref "core:prelude/int128.wado//u128" {
             ref.as_non_null($mv$$vr_14$1);
         } else if @likely($mv$input$used == 1) -> ref "core:prelude/int128.wado//u128" {
             cold_path;
@@ -1160,16 +1122,8 @@ fn "core:cbor/core:cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[re
             cold_path;
             break $inline_core_cbor_CborDeserializer_core_serde_Deserializer__deserialize_u64_sroa_return__0: struct.new "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:serde//DeserializeError" {} };
         }
-<<<<<<< HEAD
         break $inline_core_cbor_CborDeserializer_core_serde_Deserializer__deserialize_u64_sroa_return__0: struct.new "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: v_23.low, 2: ref.null none };
-    }).0) == 0 -> u64 {
-||||||| f6ac4f5a6
-        break $inline_core_cbor_CborDeserializer_core_serde_Deserializer__deserialize_u64_sroa_return__0: struct.new "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: v_22.low, 2: ref.null none };
-    }).0) == 0 -> u64 {
-=======
-        break $inline_core_cbor_CborDeserializer_core_serde_Deserializer__deserialize_u64_sroa_return__0: struct.new "tuple//[i32, u64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: v_22.low, 2: ref.null none };
     }).0) == 0) -> u64 {
->>>>>>> origin/main
         $vr_7.1;
     } else if @likely($mv$input$used == 1) -> u64 {
         cold_path;
@@ -1568,22 +1522,10 @@ fn "core:cbor/core:cbor/CborDeserializer::read_be$sroa[return]"(self, n) {
     } else {
         0;
     }) {
-<<<<<<< HEAD
         b192: block {
             l193: loop {
-                break_if b192 (((i >= n) | ((i + 1) >= n)) | (((i + 1) + 1) >= n)) | ((((i + 1) + 1) + 1) >= n);
+                break_if b192 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(n);
                 v = (v << 8_i64) | builtin::i64_extend_i32_u($contract_arg_0 = $load_0 + i; builtin::array_get_value<u8>($licm_repr_22, $licm_start_21 + $contract_arg_0));
-||||||| f6ac4f5a6
-        b200: block {
-            l201: loop {
-                break_if b200 (((i >= n) | ((i + 1) >= n)) | (((i + 1) + 1) >= n)) | ((((i + 1) + 1) + 1) >= n);
-                v = (v << 8_i64) | builtin::i64_extend_i32_u($contract_arg_0 = $load_0 + i; builtin::array_get_value<u8>($licm_repr_21, $licm_start_20 + $contract_arg_0));
-=======
-        b200: block {
-            l201: loop {
-                break_if b200 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(n);
-                v = (v << 8_i64) | builtin::i64_extend_i32_u($contract_arg_0 = $load_0 + i; builtin::array_get_value<u8>($licm_repr_21, $licm_start_20 + $contract_arg_0));
->>>>>>> origin/main
                 i = i + 1;
                 v = (v << 8_i64) | builtin::i64_extend_i32_u($contract_arg_0 = $load_0 + i; builtin::array_get_value<u8>($licm_repr_22, $licm_start_21 + $contract_arg_0));
                 i = i + 1;
@@ -1782,24 +1724,10 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
             }
             let $mv$$vr_20$1: ref null "tuple//[u8, u8, u64, bool]";
             let $mv$$vr_20$2: ref null "core:serde//DeserializeError";
-<<<<<<< HEAD
             multivalue_bind [end_103, $mv$$vr_20$1, $mv$$vr_20$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
-            end_103 = local.tee $pattern_temp_0((if end_103 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-||||||| f6ac4f5a6
-            multivalue_bind [end_97, $mv$$vr_20$1, $mv$$vr_20$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
-            end_97 = local.tee $pattern_temp_0((if end_97 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-=======
-            multivalue_bind [end_97, $mv$$vr_20$1, $mv$$vr_20$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
-            end_97 = local.tee $pattern_temp_0((if @likely(end_97 == 0) -> ref "tuple//[u8, u8, u64, bool]" {
->>>>>>> origin/main
+            end_103 = local.tee $pattern_temp_0((if @likely(end_103 == 0) -> ref "tuple//[u8, u8, u64, bool]" {
                 ref.as_non_null($mv$$vr_20$1);
-<<<<<<< HEAD
-            } else if @unlikely(end_103 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
-||||||| f6ac4f5a6
-            } else if @unlikely(end_97 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
-=======
-            } else if @likely(end_97 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
->>>>>>> origin/main
+            } else if @likely(end_103 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 cold_path;
                 $qm_e_5 = ref.as_non_null($mv$$vr_20$2);
                 cold_path;
@@ -1901,12 +1829,11 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag$sroa[return]"(self) {
     arg = 0_i64;
     lo = 0_i64;
     indef = 0;
-<<<<<<< HEAD
     $licm_repr_40 = bytes.repr;
     $licm_arith_41 = $mv$$vr_21$0 - 1;
     b237: block {
         l238: loop {
-            break_if b237 (((indef >= $mv$$vr_21$0) | ((indef + 1) >= $mv$$vr_21$0)) | (((indef + 1) + 1) >= $mv$$vr_21$0)) | ((((indef + 1) + 1) + 1) >= $mv$$vr_21$0);
+            break_if b237 (builtin::i64_extend_i32_s(indef) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_21$0);
             b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_40, indef));
             if local.tee pr($licm_arith_41 - indef) < 8 {
                 lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
@@ -1936,81 +1863,6 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag$sroa[return]"(self) {
             }
             indef = indef + 1;
             continue l238;
-||||||| f6ac4f5a6
-    $licm_repr_34 = bytes.repr;
-    $licm_arith_35 = $mv$$vr_21$0 - 1;
-    if $mv$$vr_21$0 <= $mv$$vr_21$0 {
-        b246: block {
-            l247: loop {
-                break_if b246 (((indef >= $mv$$vr_21$0) | ((indef + 1) >= $mv$$vr_21$0)) | (((indef + 1) + 1) >= $mv$$vr_21$0)) | ((((indef + 1) + 1) + 1) >= $mv$$vr_21$0);
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                continue l247;
-            };
-=======
-    $licm_repr_34 = bytes.repr;
-    $licm_arith_35 = $mv$$vr_21$0 - 1;
-    if $mv$$vr_21$0 <= $mv$$vr_21$0 {
-        b246: block {
-            l247: loop {
-                break_if b246 (builtin::i64_extend_i32_s(indef) + 3_i64) >= builtin::i64_extend_i32_s($mv$$vr_21$0);
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_34, indef));
-                if local.tee pr($licm_arith_35 - indef) < 8 {
-                    lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
-                } else {
-                    arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
-                }
-                indef = indef + 1;
-                continue l247;
-            };
->>>>>>> origin/main
         };
     };
     b243: block {
@@ -2039,15 +1891,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128$sroa[return]"(self)
             let $mv$$vr_8$1: ref null "tuple//[u8, u8, u64, bool]";
             let $mv$$vr_8$2: ref null "core:serde//DeserializeError";
             multivalue_bind [$mv$$vr_8$0, $mv$$vr_8$1, $mv$$vr_8$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
-<<<<<<< HEAD
-            $mv$$vr_8$0 = local.tee $pattern_temp_0((if $mv$$vr_8$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-||||||| f6ac4f5a6
-            $licm_pos_11 = self.pos;
-            $mv$$vr_8$0 = local.tee $pattern_temp_0((if $mv$$vr_8$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-=======
-            $licm_pos_11 = self.pos;
             $mv$$vr_8$0 = local.tee $pattern_temp_0((if @likely($mv$$vr_8$0 == 0) -> ref "tuple//[u8, u8, u64, bool]" {
->>>>>>> origin/main
                 ref.as_non_null($mv$$vr_8$1);
             } else if @likely($mv$$vr_8$0 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 cold_path;

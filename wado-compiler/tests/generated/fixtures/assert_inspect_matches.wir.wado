@@ -257,27 +257,27 @@ fn "assert_inspect_matches.wado/$cm_export__run"() {
 fn "assert_inspect_matches.wado/run$cold0"(s) {
     let $load_4: ref Array<u8>;
     let out_6: ref "core:prelude/string.wado//String";
-    let new_used_82: i32;
-    let start_83: i32;
-    let $sroa_view_repr_103: ref Array<u8>;
+    let new_used_84: i32;
+    let start_85: i32;
+    let $sroa_view_repr_105: ref Array<u8>;
     if ref.is_null(global:assert_inspect_matches.wado::$const_obj_14) {
         global:assert_inspect_matches.wado::$const_obj_14 = array.new_data<u8>("Assertion failed in run at assert_inspect_matches.wado:12
 condition: s matches { Rectangle(_) }
 s: ");
     }
     out_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(116), used: 0 };
-    $sroa_view_repr_103 = global:assert_inspect_matches.wado::$const_obj_14;
+    $sroa_view_repr_105 = global:assert_inspect_matches.wado::$const_obj_14;
     out_6.used = 99;
-    builtin::array_copy<u8>(out_6.repr, 0, $sroa_view_repr_103, 0, 99);
+    builtin::array_copy<u8>(out_6.repr, 0, $sroa_view_repr_105, 0, 99);
     "core:prelude/traits.wado/assert_inspect_matches.wado/Shape^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(s, out_6);
-    $sroa_view_repr_103 = global:assert_inspect_matches.wado::$const_obj_13;
-    if @unlikely(local.tee new_used_82(out_6.used + 1) > builtin::array_len(out_6.repr)) {
+    $sroa_view_repr_105 = global:assert_inspect_matches.wado::$const_obj_13;
+    if @unlikely(local.tee new_used_84(out_6.used + 1) > builtin::array_len(out_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_6, new_used_82);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_6, new_used_84);
     }
-    start_83 = out_6.used;
-    out_6.used = new_used_82;
-    builtin::array_copy<u8>(local.tee $load_4(out_6.repr), start_83, $sroa_view_repr_103, 0, 1);
+    start_85 = out_6.used;
+    out_6.used = new_used_84;
+    builtin::array_copy<u8>(local.tee $load_4(out_6.repr), start_85, $sroa_view_repr_105, 0, 1);
     "core:rt/panic"($load_4, out_6.used);
     unreachable;
 }
@@ -1187,92 +1187,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     return out_3;
 }
 
-<<<<<<< HEAD
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e,[assert_inspect_matches.wado/Shape]>"(t) {
-    let $load_2: ref "core:prelude/string.wado//String";
-    let $load_3: ref "core:prelude/string.wado//String";
-    let $load_4: ref "core:prelude/string.wado//String";
-    let $load_5: ref "core:prelude/string.wado//String";
-    let out_3: ref "core:prelude/string.wado//String";
-    let self_9: ref "core:prelude/string.wado//StrSlice";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_matches_wado__tmpl_e2e46b083840cc9e_assert_inspect_matches_wado_Shape___fmt_7_0: ref "core:prelude/format.wado//Formatter";
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("assert_inspect_matches.wado/assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e,assert_inspect_matches.wado/Shape>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
-    self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e,assert_inspect_matches.wado/Shape>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_matches_wado__tmpl_e2e46b083840cc9e_assert_inspect_matches_wado_Shape___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/traits.wado/assert_inspect_matches.wado/Shape^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<assert_inspect_matches.wado/Shape>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_matches_wado__tmpl_e2e46b083840cc9e_assert_inspect_matches_wado_Shape___fmt_7_0);
-    self_9 = "assert_inspect_matches.wado/assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e^core:prelude/traits.wado/ReflectTemplate::tail"(t);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    return out_3;
-}
-
-fn "core:prelude/traits.wado/assert_inspect_matches.wado/Shape^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $load_0: ref "assert_inspect_matches.wado//Shape";
-    let $load_2: ref "core:prelude/string.wado//String";
-    if local.tee $load_0(self.value).discriminant == 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_7);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"($load_2, global:core:prelude/traits.wado::$const_obj_12);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<f64>$sroa[payload.value]"(let $mv_value_1: f64; multivalue_bind [$mv_value_1] = "assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$sroa[v.value]$spec0$dae[index]"($load_0); $mv_value_1, f);
-    }
-    if self.value.discriminant == 1 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_7);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"($load_2, global:core:prelude/traits.wado::$const_obj_9);
-        let $mv_arg_2: ref "tuple//[f64, f64]";
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<[f64,f64]>"(local.tee $mv_arg_2("assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$[f64,f64]$spec0$dae[index]"(self)).0, $mv_arg_2.1, f);
-    }
-    if self.value.discriminant == 2 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_7);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"($load_2, global:core:prelude/traits.wado::$const_obj_6);
-    }
-}
-
-||||||| f6ac4f5a6
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e,[assert_inspect_matches.wado/Shape]>"(t) {
-    let $load_2: ref "core:prelude/string.wado//String";
-    let $load_3: ref "core:prelude/string.wado//String";
-    let $load_4: ref "core:prelude/string.wado//String";
-    let $load_5: ref "core:prelude/string.wado//String";
-    let out_3: ref "core:prelude/string.wado//String";
-    let self_9: ref "core:prelude/string.wado//StrSlice";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_matches_wado__tmpl_e2e46b083840cc9e_assert_inspect_matches_wado_Shape___fmt_5_0: ref "core:prelude/format.wado//Formatter";
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("assert_inspect_matches.wado/assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e,assert_inspect_matches.wado/Shape>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
-    self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e,assert_inspect_matches.wado/Shape>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_matches_wado__tmpl_e2e46b083840cc9e_assert_inspect_matches_wado_Shape___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/traits.wado/assert_inspect_matches.wado/Shape^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<assert_inspect_matches.wado/Shape>" { value: t.h0 }, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_matches_wado__tmpl_e2e46b083840cc9e_assert_inspect_matches_wado_Shape___fmt_5_0);
-    self_9 = "assert_inspect_matches.wado/assert_inspect_matches.wado/$tmpl$e2e46b083840cc9e^core:prelude/traits.wado/ReflectTemplate::tail"(t);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    return out_3;
-}
-
-fn "core:prelude/traits.wado/assert_inspect_matches.wado/Shape^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $load_0: ref "assert_inspect_matches.wado//Shape";
-    let $load_2: ref "core:prelude/string.wado//String";
-    if local.tee $load_0(self.value).discriminant == 0 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_7);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"($load_2, global:core:prelude/traits.wado::$const_obj_12);
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<f64>$sroa[payload.value]"(let $mv_value_1: f64; multivalue_bind [$mv_value_1] = "assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$f64$sroa[v.value]$spec0$dae[index]"($load_0); $mv_value_1, f);
-    }
-    if self.value.discriminant == 1 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_7);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"($load_2, global:core:prelude/traits.wado::$const_obj_9);
-        let $mv_arg_2: ref "tuple//[f64, f64]";
-        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<[f64,f64]>"(local.tee $mv_arg_2("assert_inspect_matches.wado/$case_ref$assert_inspect_matches.wado/Shape$[f64,f64]$spec0$dae[index]"(self)).0, $mv_arg_2.1, f);
-    }
-    if self.value.discriminant == 2 {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_8);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_7);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"($load_2, global:core:prelude/traits.wado::$const_obj_6);
-    }
-}
-
-=======
->>>>>>> origin/main
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {
     let $load_6: i32;
     let $load_26: char;

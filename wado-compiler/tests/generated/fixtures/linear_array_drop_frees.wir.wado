@@ -286,36 +286,18 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
         "core:linear/core:linear/LinearArray<u64>::filled$contract_report0"(32768, $v3, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:8"), used: 30 });
         unreachable;
     }
-<<<<<<< HEAD
-    $v3 = local.tee array_546("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
-||||||| f6ac4f5a6
-    $v3 = local.tee array_547("core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"()).len;
-=======
     let $mv_block_1: ref null "core:linear//Block";
     multivalue_bind [$mv_block_1, $v3] = "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"();
-    array_547 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v3 };
->>>>>>> origin/main
+    array_546 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v3 };
     if @unlikely(0 >= $v3) {
         cold_path;
         "core:linear/core:linear/LinearArray<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:9"), used: 30 });
         unreachable;
     }
-<<<<<<< HEAD
-    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_546.block).ptr + (0 * 8));
-    if ref.is_null(array_546) == 0 {
-        if ref.is_null($load_1) == 0 {
-            drop("mem/realloc"($load_1.ptr, $load_1.bytes, 16, 0));
-||||||| f6ac4f5a6
-    $drop_spill_2 = builtin::load_i64(local.tee $load_1(array_547.block).ptr + (0 * 8));
-    if ref.is_null(array_547) == 0 {
-        if ref.is_null($load_1) == 0 {
-            drop("mem/realloc"($load_1.ptr, $load_1.bytes, 16, 0));
-=======
     $drop_spill_2 = builtin::load_i64($mv_block_1.ptr + (0 * 8));
-    if ref.is_null(array_547) == 0 {
+    if ref.is_null(array_546) == 0 {
         if ref.is_null($mv_block_1) == 0 {
             drop("mem/realloc"($mv_block_1.ptr, $mv_block_1.bytes, 16, 0));
->>>>>>> origin/main
         }
         array_546.block = ref.null none;
     }
