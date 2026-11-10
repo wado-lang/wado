@@ -2581,6 +2581,7 @@ impl Monomorphizer {
             if let Some(projected) = node.projected()
                 && !node.args().is_empty()
             {
+                let owning_trait = projected.owning_trait?;
                 let family = Self::family_at_instance(&projected, bound, type_table)?;
                 let args: Vec<FqTypeName> = node
                     .args()
@@ -2588,7 +2589,7 @@ impl Monomorphizer {
                     .map(|arg| Self::trait_arg_at_instance(arg, bound, type_table))
                     .collect();
                 return Some(type_table.family_name_at(
-                    projected.owning_trait,
+                    owning_trait,
                     projected.assoc,
                     family,
                     &args,
@@ -2618,11 +2619,13 @@ impl Monomorphizer {
 
     /// What the projection `projected` binds at the instance, its own
     /// parameters still open: answered by the impl its trait is reached at.
+    /// `None` for one written with no trait settled, which names no member.
     fn family_at_instance(
         projected: &Projected<'_>,
         bound: &impl Fn(&FqTypeName) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
+        let owning_trait = projected.owning_trait?;
         let base_id = Self::type_at_instance(projected.base, bound, type_table)?;
         let trait_args: Option<Vec<TypeId>> = projected.trait_args.and_then(|args| {
             args.iter()
@@ -2631,7 +2634,7 @@ impl Monomorphizer {
         });
         type_table.resolve_assoc_type_qualified(
             base_id,
-            &projected.owning_trait,
+            &owning_trait,
             trait_args.as_deref(),
             projected.assoc,
         )

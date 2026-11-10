@@ -433,8 +433,10 @@ impl Lowering {
             ),
             TypeHead::Projection(_) => {
                 let projected = name.projected().expect("a projection head projects");
-                let trait_ = self
-                    .known_trait(projected.owning_trait)
+                // A projection written with no trait settled names no member.
+                let trait_ = projected
+                    .owning_trait
+                    .and_then(|owning| self.known_trait(owning))
                     .ok_or(Unsaid::Unsayable)?;
                 SolverType::Projection {
                     base: Box::new(self.named_arg(projected.base, param)?),

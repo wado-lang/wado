@@ -2791,11 +2791,22 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                 }
                 // A projection names no type until its base is one, and the
                 // trait declaring the member is part of that name
-                // (WEP-2026-08-12). A site that must know resolves it at its own
-                // arguments rather than reading this spelling.
-                Some(Resolution::Projection(_)) | None => {
-                    name::FqTypeName::builtin(&get_type_name_static(ty))
+                // (WEP-2026-08-12), which the bounds on the base settle. A site
+                // that must know resolves it at its own arguments; this keeps
+                // the base, so `T::Out` and `U::Out` stay two.
+                Some(Resolution::Projection(base)) => {
+                    let ast::Type::NamespacedGeneric(ns) = ty else {
+                        unreachable!("only `base::Assoc` resolves to a projection");
+                    };
+                    let base = match resolutions.binder_owner(base) {
+                        Some(owner) => {
+                            name::FqTypeName::binder_of(resolutions.defs(), owner, &ns.namespace)
+                        }
+                        None => name::FqTypeName::binder(&ns.namespace),
+                    };
+                    name::FqTypeName::written_projection(base, &ns.name)
                 }
+                None => name::FqTypeName::builtin(&get_type_name_static(ty)),
                 Some(Resolution::Unresolved) => {
                     name::FqTypeName::unresolved(&get_type_name_static(ty))
                 }

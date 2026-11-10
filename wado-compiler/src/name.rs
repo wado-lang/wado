@@ -3583,8 +3583,10 @@ pub struct ProjectionHead {
     base: FqTypeName,
     assoc: String,
     /// The trait declaring `assoc`, part of the identity: two traits declaring
-    /// one name on a type bind it to different types (WEP-2026-08-12).
-    owning_trait: DeclaredHead,
+    /// one name on a type bind it to different types (WEP-2026-08-12). `None`
+    /// for a projection as written, before the bounds in force on its base
+    /// say which trait declares the member: a bound's argument `Conv<T::Out>`.
+    owning_trait: Option<DeclaredHead>,
     /// The arguments the trait is reached at, part of the identity too:
     /// `Holder<i32>`'s `Out` and `Holder<String>`'s are two types. `None`
     /// where a bare bound left one unwritten.
@@ -3787,8 +3789,20 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Projection(Box::new(ProjectionHead {
             base,
             assoc: assoc.to_string(),
-            owning_trait: DeclaredHead::new(defs, owning_trait),
+            owning_trait: Some(DeclaredHead::new(defs, owning_trait)),
             trait_args,
+        })))
+    }
+
+    /// The associated type `assoc` of `base` as written, its declaring trait
+    /// not yet settled (`T::Out` in a bound's arguments).
+    #[must_use]
+    pub fn written_projection(base: FqTypeName, assoc: &str) -> Self {
+        Self::of_head_kind(TypeHead::Projection(Box::new(ProjectionHead {
+            base,
+            assoc: assoc.to_string(),
+            owning_trait: None,
+            trait_args: None,
         })))
     }
 
@@ -3994,7 +4008,7 @@ impl FqTypeName {
             TypeHead::Projection(head) => Some(Projected {
                 base: &head.base,
                 assoc: &head.assoc,
-                owning_trait: head.owning_trait.def(),
+                owning_trait: head.owning_trait.as_ref().map(DeclaredHead::def),
                 trait_args: head.trait_args.as_deref(),
             }),
             _ => None,
@@ -4046,13 +4060,14 @@ impl FqTypeName {
                 None => out.push_str(name),
             },
             TypeHead::Projection(head) => {
-                out.push_str(&format!(
-                    "{}::{}#{}/{}",
-                    head.base.to_mangled(),
-                    head.assoc,
-                    head.owning_trait.module(),
-                    head.owning_trait.mangled()
-                ));
+                out.push_str(&format!("{}::{}", head.base.to_mangled(), head.assoc));
+                if let Some(owning_trait) = &head.owning_trait {
+                    out.push_str(&format!(
+                        "#{}/{}",
+                        owning_trait.module(),
+                        owning_trait.mangled()
+                    ));
+                }
                 if let Some(trait_args) = head.trait_args.as_ref().filter(|args| !args.is_empty()) {
                     let args: Vec<String> = trait_args.iter().map(FqTypeName::to_mangled).collect();
                     out.push_str(&format!("[{}]", args.join(",")));
@@ -4222,8 +4237,8 @@ pub struct Projected<'n> {
     pub base: &'n FqTypeName,
     /// The associated type's name.
     pub assoc: &'n str,
-    /// The trait declaring it.
-    pub owning_trait: DefId,
+    /// The trait declaring it; see [`ProjectionHead`].
+    pub owning_trait: Option<DefId>,
     /// The arguments the trait is reached at; see [`ProjectionHead`].
     pub trait_args: Option<&'n [FqTypeName]>,
 }
