@@ -1050,10 +1050,6 @@ internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &Fol
     return follow_reads(tokens, pos, cont, 0, FOLLOW_MAX_DEPTH, false, tables, eof_kind);
 }
 
-internal fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
-    return follow_reads(tokens, pos, cont, 0, FOLLOW_MAX_DEPTH, true, tables, eof_kind);
-}
-
 internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
     return follow_reads(tokens, pos, cont, 0, 1, true, tables, eof_kind);
 }
@@ -5651,7 +5647,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                         pos += 1;
                     }
                     break sg_407_done;
-                } else if _kind_set_8(sgk_407) {
+                } else if _kind_set_7(sgk_407) {
                     pos += 1;
                     break sg_407_done;
                 }
@@ -5678,7 +5674,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                             pos += 1;
                         }
                         break sg_409_done;
-                    } else if _kind_set_8(sgk_409) {
+                    } else if _kind_set_7(sgk_409) {
                         pos += 1;
                         break sg_409_done;
                     }
@@ -5730,7 +5726,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
     }
     let osl_412_start = pos;
     osl_412_done: {
-        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_11(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_10(tokens[pos + 1]) {
             let sol_413_save = pos;
             sol_413: {
                 pos += 1;
@@ -5738,7 +5734,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos = scan_expr(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_11, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sol_413; }
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break sol_413; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break sol_413; }
                 pos += 1;
                 atn.stack.push(448);
                 pos = scan_expr(tokens, pos, atn, memo, follow, 0);
@@ -5748,7 +5744,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             }
             pos = sol_413_save;
         }
-        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_11(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_10(tokens[pos + 1]) {
             let sol_414_save = pos;
             sol_414: {
                 pos += 1;
@@ -5857,7 +5853,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_CREATE { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_13(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_12(tokens[pos]) {
         let sp = pos;
         pos += 1;
         if pos < 0 { pos = sp; }
@@ -5973,7 +5969,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredicto
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_CREATE { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_13(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_12(tokens[pos]) {
         let sp = pos;
         pos += 1;
         if pos < 0 { pos = sp; }
@@ -6011,11 +6007,11 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredicto
     }
     pos = scan_any_name(tokens, pos, atn, memo);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _kind_set_14(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_13(tokens[pos]) {
         let sp = pos;
         sg_355_done: {
             let sgk_355 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_15(sgk_355) {
+            if _kind_set_14(sgk_355) {
                 pos += 1;
                 break sg_355_done;
             } else if sgk_355 == TK_K_INSTEAD {
@@ -6033,7 +6029,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredicto
     let gp_356 = pos;
     sg_356_done: {
         let sgk_356 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_16(sgk_356) {
+        if _kind_set_15(sgk_356) {
             pos += 1;
             break sg_356_done;
         } else if sgk_356 == TK_K_UPDATE {
@@ -6214,7 +6210,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredicto
         }
         return -1;
     }
-    while pos < tokens.len() && _kind_set_17(tokens[pos]) {
+    while pos < tokens.len() && _kind_set_16(tokens[pos]) {
         let sp = pos;
         sg_364_done: {
             sg_364: {
@@ -6323,7 +6319,7 @@ fn scan_create_view_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_CREATE { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_13(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_12(tokens[pos]) {
         let sp = pos;
         pos += 1;
         if pos < 0 { pos = sp; }
@@ -6812,7 +6808,7 @@ fn scan_factored_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
     }
     let osl_397_start = pos;
     osl_397_done: {
-        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_11(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_10(tokens[pos + 1]) {
             let sol_398_save = pos;
             sol_398: {
                 pos += 1;
@@ -6820,7 +6816,7 @@ fn scan_factored_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos = scan_expr(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_11, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sol_398; }
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break sol_398; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break sol_398; }
                 pos += 1;
                 atn.stack.push(1018);
                 pos = scan_expr(tokens, pos, atn, memo, follow, 0);
@@ -6830,7 +6826,7 @@ fn scan_factored_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             }
             pos = sol_398_save;
         }
-        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_11(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_10(tokens[pos + 1]) {
             let sol_399_save = pos;
             sol_399: {
                 pos += 1;
@@ -7062,7 +7058,7 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo:
                 if pos > sg_390_best { sg_390_best = pos; }
             }
         }
-    } else if _kind_set_19(sgk_390) {
+    } else if _kind_set_18(sgk_390) {
         pos = gp_390;
         sg_390_1: {
             atn.stack.push(1134);
@@ -7336,7 +7332,7 @@ fn scan_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo:
     }
     let osl_310_start = pos;
     osl_310_done: {
-        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_11(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_10(tokens[pos + 1]) {
             let sol_311_save = pos;
             sol_311: {
                 pos += 1;
@@ -7344,7 +7340,7 @@ fn scan_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo:
                 pos = scan_expr(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_11, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sol_311; }
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break sol_311; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break sol_311; }
                 pos += 1;
                 atn.stack.push(1331);
                 pos = scan_expr(tokens, pos, atn, memo, follow, 0);
@@ -7354,7 +7350,7 @@ fn scan_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo:
             }
             pos = sol_311_save;
         }
-        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_11(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_LIMIT && pos + 1 < tokens.len() && _kind_set_10(tokens[pos + 1]) {
             let sol_312_save = pos;
             sol_312: {
                 pos += 1;
@@ -8017,7 +8013,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
                 }
                 break sg_279_done;
             }
-        } else if _kind_set_35(sgk_279) {
+        } else if _kind_set_32(sgk_279) {
             sg_279_1: {
                 if pos < tokens.len() && tokens[pos] == TK_K_NOT {
                     pos += 1;
@@ -8058,7 +8054,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
                 let gp_280 = pos;
                 let sgk_280 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_280_best = -1;
-                if _kind_set_33(sgk_280) {
+                if _kind_set_30(sgk_280) {
                     pos = gp_280;
                     sg_280_0: {
                         pos = scan_signed_number(tokens, pos, atn, memo, follow);
@@ -8080,7 +8076,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
                         pos += 1;
                         if pos > sg_280_best { sg_280_best = pos; }
                     }
-                } else if _kind_set_34(sgk_280) {
+                } else if _kind_set_31(sgk_280) {
                     pos = gp_280;
                     pos += 1;
                     if pos > sg_280_best { sg_280_best = pos; }
@@ -8135,7 +8131,7 @@ fn scan_conflict_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_CONFLICT { break sg_292; }
                 pos += 1;
-                if pos >= tokens.len() || !_kind_set_36(tokens[pos]) { break sg_292; }
+                if pos >= tokens.len() || !_kind_set_33(tokens[pos]) { break sg_292; }
                 pos += 1;
                 break sg_292_done;
             }
@@ -8150,7 +8146,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_39(kind) {
+    if _kind_set_36(kind) {
         if kind == TK_OPEN_PAR {
             let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
             if _atn_alt < 0 {
@@ -8229,11 +8225,11 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
                 return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
             }
             return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
-        } else if _kind_set_40(kind) {
+        } else if _kind_set_37(kind) {
             return scan_expr__alt_3(tokens, start, atn, memo, min_prec, follow);
-        } else if _kind_set_41(kind) {
+        } else if _kind_set_38(kind) {
             return scan_expr__alt_0(tokens, start, atn, memo, min_prec, follow);
-        } else if _kind_set_42(kind) {
+        } else if _kind_set_39(kind) {
             let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
             if _atn_alt < 0 {
                 return -1;
@@ -8245,7 +8241,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
                 return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
             }
             return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
-        } else if _kind_set_43(kind) {
+        } else if _kind_set_40(kind) {
             let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
             if _atn_alt < 0 {
                 return -1;
@@ -8276,7 +8272,7 @@ fn scan_expr_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
 
 fn scan_expr_lr_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_69(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_62(tokens[pos]) { return -1; }
     pos += 1;
     atn.stack.push(1869);
     pos = scan_expr(tokens, pos, atn, memo, follow, 14);
@@ -8287,7 +8283,7 @@ fn scan_expr_lr_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
 
 fn scan_expr_lr_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_33(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_30(tokens[pos]) { return -1; }
     pos += 1;
     atn.stack.push(1875);
     pos = scan_expr(tokens, pos, atn, memo, follow, 13);
@@ -8298,7 +8294,7 @@ fn scan_expr_lr_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
 
 fn scan_expr_lr_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_70(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_63(tokens[pos]) { return -1; }
     pos += 1;
     atn.stack.push(1881);
     pos = scan_expr(tokens, pos, atn, memo, follow, 12);
@@ -8309,7 +8305,7 @@ fn scan_expr_lr_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
 
 fn scan_expr_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_71(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_64(tokens[pos]) { return -1; }
     pos += 1;
     atn.stack.push(1887);
     pos = scan_expr(tokens, pos, atn, memo, follow, 11);
@@ -8320,7 +8316,7 @@ fn scan_expr_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
 
 fn scan_expr_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_72(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_65(tokens[pos]) { return -1; }
     pos += 1;
     atn.stack.push(1893);
     pos = scan_expr(tokens, pos, atn, memo, follow, 10);
@@ -8345,12 +8341,12 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: 
             pos = gp_331;
             sg_331_0: {
                 pos += 1;
-                if pos < tokens.len() && _kind_set_11(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_10(tokens[pos]) {
                     let sp = pos;
                     let gp_332 = pos;
                     let sgk_332 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     let mut sg_332_best = -1;
-                    if _kind_set_44(sgk_332) {
+                    if _kind_set_41(sgk_332) {
                         let sg_332_atn = atn_decide_189(atn, tokens, pos, min_prec);
                         if sg_332_atn == 0 {
                             pos = gp_332;
@@ -8388,7 +8384,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: 
                                 if pos > sg_332_best { sg_332_best = pos; }
                             }
                         }
-                    } else if _kind_set_45(sgk_332) {
+                    } else if _kind_set_42(sgk_332) {
                         pos = gp_332;
                         sg_332_1: {
                             atn.stack.push(1911);
@@ -8448,7 +8444,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: 
                 if pos > sg_331_best { sg_331_best = pos; }
             }
         }
-    } else if _kind_set_62(sgk_331) {
+    } else if _kind_set_56(sgk_331) {
         pos = gp_331;
         sg_331_1: {
             if atn_decide_191(atn, tokens, pos, min_prec) == 0 {
@@ -8514,7 +8510,7 @@ fn scan_expr_lr_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: 
     if pos < tokens.len() && tokens[pos] == TK_K_NOT {
         pos += 1;
     }
-    if pos >= tokens.len() || !_kind_set_73(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_66(tokens[pos]) { return -1; }
     pos += 1;
     atn.stack.push(1954);
     pos = scan_expr(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_70, follow), 0);
@@ -8542,7 +8538,7 @@ fn scan_expr_lr_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: 
     let mut pos = pos;
     sg_338_done: {
         let sgk_338 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_47(sgk_338) {
+        if _kind_set_44(sgk_338) {
             pos += 1;
             break sg_338_done;
         } else if sgk_338 == TK_K_NOT {
@@ -8700,7 +8696,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
             if sgk_283 == TK_K_ON {
                 sg_283_0: {
                     pos += 1;
-                    if pos >= tokens.len() || !_kind_set_50(tokens[pos]) { break sg_283_0; }
+                    if pos >= tokens.len() || !_kind_set_47(tokens[pos]) { break sg_283_0; }
                     pos += 1;
                     let gp_284 = pos;
                     let sgk_284 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8725,7 +8721,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
                                 if pos > sg_284_best { sg_284_best = pos; }
                             }
                         }
-                    } else if _kind_set_51(sgk_284) {
+                    } else if _kind_set_48(sgk_284) {
                         pos = gp_284;
                         pos += 1;
                         if pos > sg_284_best { sg_284_best = pos; }
@@ -8861,7 +8857,7 @@ fn scan_raise_function(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, me
         if sgk_277 == TK_K_IGNORE {
             pos += 1;
             break sg_277_done;
-        } else if _kind_set_52(sgk_277) {
+        } else if _kind_set_49(sgk_277) {
             sg_277_1: {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_277_1; }
@@ -8922,7 +8918,7 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
     let gp_315 = pos;
     sg_315_done: {
         let sgk_315 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_53(sgk_315) {
+        if _kind_set_50(sgk_315) {
             sg_315_0: {
                 sg_316_done: {
                     let sgk_316 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9129,7 +9125,7 @@ fn scan_pragma_value(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_57(kind) {
+    if _kind_set_52(kind) {
         try_0: {
             pos = scan_signed_number(tokens, pos, atn, memo, follow);
             if pos < 0 { break try_0; }
@@ -9204,7 +9200,7 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, mem
         pos = start + 1;
         return pos;
     }
-    if _kind_set_11(kind) {
+    if _kind_set_10(kind) {
         if _kind_set_5(kind) {
             let _atn_alt = atn_decide_229(atn, tokens, pos, 0);
             if _atn_alt < 0 {
@@ -9214,7 +9210,7 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, mem
                 return scan_result_column__alt_1(tokens, start, atn, memo, follow);
             }
             return scan_result_column__alt_2(tokens, start, atn, memo, follow);
-        } else if _kind_set_59(kind) {
+        } else if _kind_set_54(kind) {
             return scan_result_column__alt_2(tokens, start, atn, memo, follow);
         }
     }
@@ -9253,7 +9249,7 @@ fn scan_table_or_subquery__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPred
                 return scan_table_or_subquery__alt_1(tokens, start, atn, memo, follow);
             }
             return scan_table_or_subquery__alt_0(tokens, start, atn, memo, follow);
-        } else if _kind_set_62(kind) {
+        } else if _kind_set_56(kind) {
             let _atn_alt = atn_decide_232(atn, tokens, pos, 0);
             if _atn_alt < 0 {
                 return -1;
@@ -9306,12 +9302,12 @@ fn scan_join_operator(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, mem
     if kind == TK_COMMA {
         pos = start + 1;
         return pos;
-    } else if _kind_set_64(kind) {
+    } else if _kind_set_58(kind) {
         try_1: {
             if pos < tokens.len() && tokens[pos] == TK_K_NATURAL {
                 pos += 1;
             }
-            if pos < tokens.len() && _kind_set_67(tokens[pos]) {
+            if pos < tokens.len() && _kind_set_60(tokens[pos]) {
                 let sp = pos;
                 sg_274_done: {
                     let sgk_274 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9321,7 +9317,7 @@ fn scan_join_operator(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, mem
                             pos += 1;
                         }
                         break sg_274_done;
-                    } else if _kind_set_68(sgk_274) {
+                    } else if _kind_set_61(sgk_274) {
                         pos += 1;
                         break sg_274_done;
                     }
@@ -9638,7 +9634,7 @@ fn scan_compound_operator(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
 
 fn scan_signed_number(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _kind_set_33(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_30(tokens[pos]) {
         let sp = pos;
         pos += 1;
         if pos < 0 { pos = sp; }
@@ -9652,7 +9648,7 @@ fn scan_module_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_11(kind) {
+    if _kind_set_10(kind) {
         if _kind_set_5(kind) {
             let _atn_alt = atn_decide_275(atn, tokens, pos, 0);
             if _atn_alt < 0 {
@@ -9662,7 +9658,7 @@ fn scan_module_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
                 return scan_module_argument__alt_0(tokens, start, atn, memo, follow);
             }
             return scan_module_argument__alt_1(tokens, start, atn, memo, follow);
-        } else if _kind_set_59(kind) {
+        } else if _kind_set_54(kind) {
             return scan_module_argument__alt_0(tokens, start, atn, memo, follow);
         }
     }
@@ -9673,7 +9669,7 @@ fn scan_table_alias(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo:
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_58(kind) {
+    if _kind_set_53(kind) {
         pos = start + 1;
         return pos;
     } else if kind == TK_OPEN_PAR {
@@ -9694,7 +9690,7 @@ fn scan_any_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &m
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_62(kind) {
+    if _kind_set_56(kind) {
         pos = start + 1;
         return pos;
     } else if kind == TK_OPEN_PAR {
@@ -10501,8 +10497,7 @@ fn _parse_alter_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     pos = gp_3;
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(9, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_12 { 0 } else { 1 });
@@ -10719,8 +10714,7 @@ fn _parse_attach_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(14, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_18 { 0 } else { 1 });
@@ -10759,13 +10753,13 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_19 < 0 && rs_pick_19 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_19 = rs_pick_19 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = _kind_set_7(p.peek_kind());
+        let mut opt_enter: bool = _kind_set_6(p.peek_kind());
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_7(tokens[pos]) { break opt_scan; }
+                if pos >= tokens.len() || !_kind_set_6(tokens[pos]) { break opt_scan; }
                 pos += 1;
                 opt_scan_pos = pos;
             }
@@ -10945,7 +10939,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if p.peek_kind() == TK_K_ALL {
                 p.take();
             }
-        } else if _kind_set_8(grp_kind) {
+        } else if _kind_set_7(grp_kind) {
             p.take();
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_14);
@@ -10962,7 +10956,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !p.recovering && !p.speculating {
             let mut rs_enters = false;
             loop {
-                if !_kind_set_9(p.peek_kind()) { break; }
+                if !_kind_set_8(p.peek_kind()) { break; }
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut iter_scan_pos: i32 = -1;
                     iter_scan: {
@@ -10979,7 +10973,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                             pos += 1;
                                         }
                                         break sg_8_done;
-                                    } else if _kind_set_8(sgk_8) {
+                                    } else if _kind_set_7(sgk_8) {
                                         pos += 1;
                                         break sg_8_done;
                                     }
@@ -10995,7 +10989,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_10((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_9((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -11011,7 +11005,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if p.peek_kind() == TK_K_ALL {
                 p.take();
             }
-        } else if _kind_set_8(grp_kind) {
+        } else if _kind_set_7(grp_kind) {
             p.take();
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_14);
@@ -11024,7 +11018,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_33 < 0 && rs_pick_33 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_33 = rs_pick_33 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2));
+        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2));
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -11118,7 +11112,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_37 < 0 && rs_pick_37 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_37 = rs_pick_37 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_10(p.peek_at(1));
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos_2: i32 = -1;
             opt_scan_2: {
@@ -11170,7 +11164,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break opt_scan; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break opt_scan; }
                 pos += 1;
                 p.atn.stack.push(448);
                 pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, follow, 0);
@@ -11298,8 +11292,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(32, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_43 { 0 } else { 1 });
@@ -11374,8 +11367,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(33, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_45 { 0 } else { 1 });
@@ -11410,7 +11402,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_49 < 0 && rs_pick_49 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_49 = rs_pick_49 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_3: bool = p.peek_kind() == TK_K_WHERE && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_3: bool = p.peek_kind() == TK_K_WHERE && _kind_set_10(p.peek_at(1));
         if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -11461,7 +11453,7 @@ fn _parse_create_index_stmt(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_K_CREATE, &SYNC_23, false);
     if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_23, &EXPECTED_23); }
-    if _kind_set_13(p.peek_kind()) {
+    if _kind_set_12(p.peek_kind()) {
         p.take();
     }
     p.expect(TK_K_TABLE, &SYNC_7, false);
@@ -11574,8 +11566,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     pos = gp_24;
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(38, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_53 { 0 } else { 1 });
@@ -11678,8 +11669,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     pos = gp_29;
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(39, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_55 { 0 } else { 1 });
@@ -11778,7 +11768,7 @@ fn _parse_create_table_stmt(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_K_CREATE, &SYNC_27, false);
     if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_27, &EXPECTED_27); }
-    if _kind_set_13(p.peek_kind()) {
+    if _kind_set_12(p.peek_kind()) {
         p.take();
     }
     p.expect(TK_K_TRIGGER, &SYNC_7, false);
@@ -11820,11 +11810,11 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                if pos < tokens.len() && _kind_set_14(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_13(tokens[pos]) {
                     let sp = pos;
                     sg_36_done: {
                         let sgk_36 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_15(sgk_36) {
+                        if _kind_set_14(sgk_36) {
                             pos += 1;
                             break sg_36_done;
                         } else if sgk_36 == TK_K_INSTEAD {
@@ -11842,7 +11832,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let gp_37 = pos;
                 sg_37_done: {
                     let sgk_37 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_16(sgk_37) {
+                    if _kind_set_15(sgk_37) {
                         pos += 1;
                         break sg_37_done;
                     } else if sgk_37 == TK_K_UPDATE {
@@ -12023,7 +12013,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     break opt_enter_scan;
                 }
-                while pos < tokens.len() && _kind_set_17(tokens[pos]) {
+                while pos < tokens.len() && _kind_set_16(tokens[pos]) {
                     let sp = pos;
                     sg_45_done: {
                         sg_45: {
@@ -12125,8 +12115,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_K_END { break opt_enter_scan; }
                 pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(46, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_66 { 0 } else { 1 });
@@ -12158,11 +12147,11 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan_2; }
-                if pos < tokens.len() && _kind_set_14(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_13(tokens[pos]) {
                     let sp = pos;
                     sg_48_done: {
                         let sgk_48 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_15(sgk_48) {
+                        if _kind_set_14(sgk_48) {
                             pos += 1;
                             break sg_48_done;
                         } else if sgk_48 == TK_K_INSTEAD {
@@ -12180,7 +12169,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let gp_49 = pos;
                 sg_49_done: {
                     let sgk_49 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_16(sgk_49) {
+                    if _kind_set_15(sgk_49) {
                         pos += 1;
                         break sg_49_done;
                     } else if sgk_49 == TK_K_UPDATE {
@@ -12361,7 +12350,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     break opt_enter_scan_2;
                 }
-                while pos < tokens.len() && _kind_set_17(tokens[pos]) {
+                while pos < tokens.len() && _kind_set_16(tokens[pos]) {
                     let sp = pos;
                     sg_57_done: {
                         sg_57: {
@@ -12463,8 +12452,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_K_END { break opt_enter_scan_2; }
                 pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(47, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_68 { 0 } else { 1 });
@@ -12524,7 +12512,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_29, &EXPECTED_29); }
     let grp_kind = p.peek_kind();
-    if _kind_set_16(grp_kind) {
+    if _kind_set_15(grp_kind) {
         p.take();
     } else if grp_kind == TK_K_UPDATE {
         p.take();
@@ -12696,7 +12684,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     break opt_enter_scan_3;
                 }
-                while pos < tokens.len() && _kind_set_17(tokens[pos]) {
+                while pos < tokens.len() && _kind_set_16(tokens[pos]) {
                     let sp = pos;
                     sg_64_done: {
                         sg_64: {
@@ -12798,8 +12786,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_K_END { break opt_enter_scan_3; }
                 pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_3 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_3 = true; }
             }
         }
         atn_shadow(53, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_77 { 0 } else { 1 });
@@ -12820,7 +12807,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_K_ROW, &SYNC_35, false);
     }
     if !kind_set_has(&SYNC_35, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_35, &EXPECTED_35); }
-    if p.peek_kind() == TK_K_WHEN && _kind_set_11(p.peek_at(1)) {
+    if p.peek_kind() == TK_K_WHEN && _kind_set_10(p.peek_at(1)) {
         p.take();
         p.site = 71;
         p.atn_ret_pending = 674;
@@ -12829,7 +12816,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_K_BEGIN, &SYNC_36, false);
     if !kind_set_has(&SYNC_36, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_36, &EXPECTED_36); }
     let mut _plus_first = true;
-    while !p.recovering && (_plus_first || _kind_set_17(p.peek_kind())) {
+    while !p.recovering && (_plus_first || _kind_set_16(p.peek_kind())) {
         _plus_first = false;
         if !kind_set_has(&SYNC_36, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_36, &EXPECTED_36); }
         let grp_kind = p.peek_kind();
@@ -12961,7 +12948,7 @@ fn _parse_create_trigger_stmt(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_create_view_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_K_CREATE, &SYNC_38, false);
     if !kind_set_has(&SYNC_38, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_38, &EXPECTED_38); }
-    if _kind_set_13(p.peek_kind()) {
+    if _kind_set_12(p.peek_kind()) {
         p.take();
     }
     p.expect(TK_K_VIEW, &SYNC_7, false);
@@ -13009,8 +12996,7 @@ fn _parse_create_view_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos = scan_select_stmt(tokens, pos, &mut p.atn, &mut p.memo, follow);
                 p.atn.stack.pop();
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(60, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_88 { 0 } else { 1 });
@@ -13048,8 +13034,7 @@ fn _parse_create_view_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos = scan_select_stmt(tokens, pos, &mut p.atn, &mut p.memo, follow);
                 p.atn.stack.pop();
                 if pos < 0 { break opt_enter_scan_2; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(61, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_90 { 0 } else { 1 });
@@ -13164,8 +13149,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> (
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(62, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_92 { 0 } else { 1 });
@@ -13234,8 +13218,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> (
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(63, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_94 { 0 } else { 1 });
@@ -13257,7 +13240,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> (
     if rs_pick_96 < 0 && rs_pick_96 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_96 = rs_pick_96 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_3: bool = p.peek_kind() == TK_OPEN_PAR && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_3: bool = p.peek_kind() == TK_OPEN_PAR && _kind_set_10(p.peek_at(1));
         if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -13348,7 +13331,7 @@ fn _parse_delete_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_101 < 0 && rs_pick_101 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_101 = rs_pick_101 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = p.peek_kind() == TK_K_WHERE && _kind_set_11(p.peek_at(1));
+        let mut opt_enter: bool = p.peek_kind() == TK_K_WHERE && _kind_set_10(p.peek_at(1));
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -13412,7 +13395,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_104 < 0 && rs_pick_104 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_104 = rs_pick_104 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = p.peek_kind() == TK_K_WHERE && _kind_set_11(p.peek_at(1));
+        let mut opt_enter: bool = p.peek_kind() == TK_K_WHERE && _kind_set_10(p.peek_at(1));
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -13432,7 +13415,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && ((_kind_set_18((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && ((_kind_set_17((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(69, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_104 { 0 } else { 1 });
     }
@@ -13514,7 +13497,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if rs_simulated_106 {
         if !kind_set_has(&SYNC_42, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_42, &EXPECTED_42); }
-        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2)) {
+        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2)) {
             p.take();
             p.expect(TK_K_BY, &SYNC_9, false);
             p.site = 90;
@@ -13541,7 +13524,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break opt_scan; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break opt_scan; }
                 pos += 1;
                 p.atn.stack.push(858);
                 pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, follow, 0);
@@ -13597,8 +13580,7 @@ fn _parse_detach_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(75, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_115 { 0 } else { 1 });
@@ -13666,8 +13648,7 @@ fn _parse_drop_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(76, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_116 { 0 } else { 1 });
@@ -13698,8 +13679,7 @@ fn _parse_drop_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan_2; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(77, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_118 { 0 } else { 1 });
@@ -13770,8 +13750,7 @@ fn _parse_drop_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(78, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_120 { 0 } else { 1 });
@@ -13802,8 +13781,7 @@ fn _parse_drop_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan_2; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(79, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_122 { 0 } else { 1 });
@@ -13874,8 +13852,7 @@ fn _parse_drop_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(80, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_124 { 0 } else { 1 });
@@ -13906,8 +13883,7 @@ fn _parse_drop_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan_2; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(81, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_126 { 0 } else { 1 });
@@ -13978,8 +13954,7 @@ fn _parse_drop_view_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(82, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_128 { 0 } else { 1 });
@@ -14010,8 +13985,7 @@ fn _parse_drop_view_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan_2; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter_2 = true; }
             }
         }
         atn_shadow(83, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_130 { 0 } else { 1 });
@@ -14061,7 +14035,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !p.recovering && !p.speculating {
             let mut rs_enters = false;
             loop {
-                if !_kind_set_9(p.peek_kind()) { break; }
+                if !_kind_set_8(p.peek_kind()) { break; }
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut iter_scan_pos: i32 = -1;
                     iter_scan: {
@@ -14081,7 +14055,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_10((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_9((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -14100,7 +14074,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_135 < 0 && rs_pick_135 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_135 = rs_pick_135 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2));
+        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2));
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -14194,7 +14168,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_139 < 0 && rs_pick_139 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_139 = rs_pick_139 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_10(p.peek_at(1));
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos_2: i32 = -1;
             opt_scan_2: {
@@ -14246,7 +14220,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break opt_scan; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break opt_scan; }
                 pos += 1;
                 p.atn.stack.push(1018);
                 pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, follow, 0);
@@ -14560,7 +14534,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                             if pos > sg_104_best { sg_104_best = pos; }
                         }
                     }
-                } else if _kind_set_19(sgk_104) {
+                } else if _kind_set_18(sgk_104) {
                     pos = gp_104;
                     sg_104_1: {
                         p.atn.stack.push(1134);
@@ -14583,8 +14557,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 } else {
                     pos = gp_104;
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(93, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_146 { 0 } else { 1 });
@@ -14804,7 +14777,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 _parse_select_stmt(p, follow);
             }
         }
-    } else if _kind_set_19(grp_kind_2) {
+    } else if _kind_set_18(grp_kind_2) {
         p.site = 120;
         p.atn_ret_pending = 1134;
         _parse_select_stmt(p, follow);
@@ -14856,7 +14829,7 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                if pos < tokens.len() && _kind_set_20(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_19(tokens[pos]) {
                     let sp = pos;
                     sg_114_done: {
                         let sgk_114 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -14881,8 +14854,7 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(100, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_159 { 0 } else { 1 });
@@ -15188,8 +15160,7 @@ fn _parse_release_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(107, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_168 { 0 } else { 1 });
@@ -15387,7 +15358,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_176 < 0 && rs_pick_176 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_176 = rs_pick_176 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2));
+        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2));
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -15481,7 +15452,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_180 < 0 && rs_pick_180 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_180 = rs_pick_180 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_10(p.peek_at(1));
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos_2: i32 = -1;
             opt_scan_2: {
@@ -15533,7 +15504,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break opt_scan; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break opt_scan; }
                 pos += 1;
                 p.atn.stack.push(1277);
                 pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, follow, 0);
@@ -15591,7 +15562,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !p.recovering && !p.speculating {
             let mut rs_enters = false;
             loop {
-                if !_kind_set_9(p.peek_kind()) { break; }
+                if !_kind_set_8(p.peek_kind()) { break; }
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut iter_scan_pos: i32 = -1;
                     iter_scan: {
@@ -15611,7 +15582,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_10((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_9((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -15630,7 +15601,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_188 < 0 && rs_pick_188 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_188 = rs_pick_188 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2));
+        let mut opt_enter: bool = p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2));
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -15724,7 +15695,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_192 < 0 && rs_pick_192 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_192 = rs_pick_192 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_2: bool = p.peek_kind() == TK_K_LIMIT && _kind_set_10(p.peek_at(1));
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos_2: i32 = -1;
             opt_scan_2: {
@@ -15776,7 +15747,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break opt_scan; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break opt_scan; }
                 pos += 1;
                 p.atn.stack.push(1331);
                 pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, follow, 0);
@@ -15827,11 +15798,11 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
         let rs_simulated_197 = rs_pick_197 == 0;
         if !p.recovering && !p.speculating {
             let mut opt_enter: bool = false;
-            if _kind_set_21(p.peek_kind()) {
+            if _kind_set_20(p.peek_kind()) {
                 opt_enter_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || !_kind_set_21(tokens[pos]) { break opt_enter_scan; }
+                    if pos >= tokens.len() || !_kind_set_20(tokens[pos]) { break opt_enter_scan; }
                     pos += 1;
                     p.atn.stack.push(1343);
                     pos = scan_result_column(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_44, follow));
@@ -15968,8 +15939,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         if pos < 0 { pos = sp; }
                     }
-                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_22(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                    if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
                 }
             }
             atn_shadow(126, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_197 { 0 } else { 1 });
@@ -16008,7 +15978,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                             }
                             iter_scan_pos = pos;
                         }
-                        if iter_scan_pos < 0 || !(_kind_set_23((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                        if iter_scan_pos < 0 || !(_kind_set_21((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                     }
                     rs_enters = true;
                     break;
@@ -16088,7 +16058,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter_2 = opt_scan_pos >= 0 && ((_kind_set_24((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter_2 = opt_scan_pos >= 0 && ((_kind_set_22((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(129, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_201 { 0 } else { 1 });
         }
@@ -16209,7 +16179,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_pick_206 < 0 && rs_pick_206 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         let rs_simulated_206 = rs_pick_206 == 0;
         if !p.recovering && !p.speculating {
-            let mut opt_enter_3: bool = p.peek_kind() == TK_K_WHERE && _kind_set_11(p.peek_at(1));
+            let mut opt_enter_3: bool = p.peek_kind() == TK_K_WHERE && _kind_set_10(p.peek_at(1));
             if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                 let mut opt_scan_pos_2: i32 = -1;
                 opt_scan_2: {
@@ -16243,7 +16213,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_pick_208 < 0 && rs_pick_208 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         let rs_simulated_208 = rs_pick_208 == 0;
         if !p.recovering && !p.speculating {
-            let mut opt_enter_4: bool = p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2));
+            let mut opt_enter_4: bool = p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2));
             if opt_enter_4 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                 let mut opt_scan_pos_3: i32 = -1;
                 opt_scan_3: {
@@ -16334,7 +16304,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                 }
                                 iter_scan_pos = pos;
                             }
-                            if iter_scan_pos < 0 || !(_kind_set_25((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                            if iter_scan_pos < 0 || !(_kind_set_23((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                         }
                         rs_enters = true;
                         break;
@@ -16351,7 +16321,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if rs_pick_212 < 0 && rs_pick_212 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
             let rs_simulated_212 = rs_pick_212 == 0;
             if !p.recovering && !p.speculating {
-                let mut opt_enter: bool = p.peek_kind() == TK_K_HAVING && _kind_set_11(p.peek_at(1));
+                let mut opt_enter: bool = p.peek_kind() == TK_K_HAVING && _kind_set_10(p.peek_at(1));
                 if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut opt_scan_pos: i32 = -1;
                     opt_scan: {
@@ -16617,8 +16587,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(140, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_221 { 0 } else { 1 });
@@ -16767,7 +16736,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_26((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_24((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -16788,7 +16757,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_225 < 0 && rs_pick_225 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_225 = rs_pick_225 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = p.peek_kind() == TK_K_WHERE && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_2: bool = p.peek_kind() == TK_K_WHERE && _kind_set_10(p.peek_at(1));
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -16959,7 +16928,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                if pos < tokens.len() && _kind_set_18(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_17(tokens[pos]) {
                     let sp = pos;
                     sg_164_done: {
                         sg_164: {
@@ -17002,7 +16971,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                             pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_10, follow), 0);
                             p.atn.stack.pop();
                             if pos < 0 { break sg_164; }
-                            if pos < tokens.len() && _kind_set_12(tokens[pos]) {
+                            if pos < tokens.len() && _kind_set_11(tokens[pos]) {
                                 let sp = pos;
                                 sg_167_done: {
                                     sg_167: {
@@ -17023,8 +16992,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_6(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(145, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_228 { 0 } else { 1 });
@@ -17173,7 +17141,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_27((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_25((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -17194,7 +17162,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_232 < 0 && rs_pick_232 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_232 = rs_pick_232 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = p.peek_kind() == TK_K_WHERE && _kind_set_11(p.peek_at(1));
+        let mut opt_enter_2: bool = p.peek_kind() == TK_K_WHERE && _kind_set_10(p.peek_at(1));
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -17214,7 +17182,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_2 = opt_scan_pos >= 0 && ((_kind_set_18((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos >= 0 && ((_kind_set_17((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(148, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_232 { 0 } else { 1 });
     }
@@ -17296,7 +17264,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if rs_simulated_234 {
         if !kind_set_has(&SYNC_42, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_42, &EXPECTED_42); }
-        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2)) {
+        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2)) {
             p.take();
             p.expect(TK_K_BY, &SYNC_9, false);
             p.site = 174;
@@ -17323,7 +17291,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { break opt_scan; }
+                if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { break opt_scan; }
                 pos += 1;
                 p.atn.stack.push(1610);
                 pos = scan_expr(tokens, pos, &mut p.atn, &mut p.memo, follow, 0);
@@ -17395,7 +17363,7 @@ fn _parse_column_def__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos = scan_type_name(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_55, follow));
                 p.atn.stack.pop();
                 if pos < 0 { break opt_enter_scan; }
-                while pos < tokens.len() && _kind_set_28(tokens[pos]) {
+                while pos < tokens.len() && _kind_set_26(tokens[pos]) {
                     let sp = pos;
                     p.atn.stack.push(1626);
                     pos = scan_column_constraint(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_55, follow));
@@ -17403,8 +17371,7 @@ fn _parse_column_def__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_29(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(154, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_243 { 0 } else { 1 });
@@ -17422,7 +17389,7 @@ fn _parse_column_def__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !p.recovering && !p.speculating {
             let mut rs_enters = false;
             loop {
-                if !_kind_set_28(p.peek_kind()) { break; }
+                if !_kind_set_26(p.peek_kind()) { break; }
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut iter_scan_pos: i32 = -1;
                     iter_scan: {
@@ -17434,7 +17401,7 @@ fn _parse_column_def__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos < 0 { break iter_scan; }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_28((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_26((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -17636,17 +17603,17 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_pick_251 < 0 && rs_pick_251 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         let rs_simulated_251 = rs_pick_251 == 0;
         if !p.recovering && !p.speculating {
-            let mut opt_enter: bool = _kind_set_30(p.peek_kind());
+            let mut opt_enter: bool = _kind_set_27(p.peek_kind());
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                 let mut opt_scan_pos: i32 = -1;
                 opt_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || !_kind_set_30(tokens[pos]) { break opt_scan; }
+                    if pos >= tokens.len() || !_kind_set_27(tokens[pos]) { break opt_scan; }
                     pos += 1;
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && ((_kind_set_31((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && ((_kind_set_28((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(161, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_251 { 0 } else { 1 });
         }
@@ -17665,7 +17632,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_simulated_253 {
             p.expect(TK_K_AUTOINCREMENT, &EMPTY_SYNC, true);
         }
-    } else if _kind_set_35(grp_kind) {
+    } else if _kind_set_32(grp_kind) {
         if !kind_set_has(&SYNC_71, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_71, &EXPECTED_71); }
         if p.peek_kind() == TK_K_NOT {
             p.take();
@@ -17690,7 +17657,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_73, &EXPECTED_73); }
         let grp_kind = p.peek_kind();
-        if _kind_set_33(grp_kind) {
+        if _kind_set_30(grp_kind) {
             p.site = 190;
             p.atn_ret_pending = 1707;
             _parse_signed_number(p, follow);
@@ -17715,7 +17682,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 gd_scan_2: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || !_kind_set_32(tokens[pos]) { break gd_scan_2; }
+                    if pos >= tokens.len() || !_kind_set_29(tokens[pos]) { break gd_scan_2; }
                     pos += 1;
                     gd_end_2 = pos;
                 }
@@ -17738,7 +17705,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     _parse_literal_value(p);
                 }
             }
-        } else if _kind_set_34(grp_kind) {
+        } else if _kind_set_31(grp_kind) {
             p.site = 191;
             p.atn_ret_pending = 1709;
             _parse_literal_value(p);
@@ -17786,7 +17753,7 @@ fn _parse_conflict_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_256 < 0 && rs_pick_256 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_256 = rs_pick_256 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter: bool = p.peek_kind() == TK_K_ON && p.peek_at(1) == TK_K_CONFLICT && _kind_set_36(p.peek_at(2));
+        let mut opt_enter: bool = p.peek_kind() == TK_K_ON && p.peek_at(1) == TK_K_CONFLICT && _kind_set_33(p.peek_at(2));
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
@@ -17798,7 +17765,7 @@ fn _parse_conflict_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                         if pos >= tokens.len() || tokens[pos] != TK_K_CONFLICT { break sg_174; }
                         pos += 1;
-                        if pos >= tokens.len() || !_kind_set_36(tokens[pos]) { break sg_174; }
+                        if pos >= tokens.len() || !_kind_set_33(tokens[pos]) { break sg_174; }
                         pos += 1;
                         break sg_174_done;
                     }
@@ -17836,7 +17803,7 @@ fn _parse_conflict_clause(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn scan_expr__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_32(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_29(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -17975,7 +17942,7 @@ fn _parse_expr__inner_alt_3(p: &mut Parser, min_prec: i32, follow: i64 = 0) -> (
 
 fn scan_expr__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, min_prec: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_37(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_34(tokens[pos]) { return -1; }
     pos += 1;
     atn.stack.push(1763);
     pos = scan_expr(tokens, pos, atn, memo, follow, 15);
@@ -17993,7 +17960,7 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, min_prec: i32, follow: i64 = 0) -> 
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     let gd_kind = p.peek_kind();
-    if _kind_set_11(gd_kind) {
+    if _kind_set_10(gd_kind) {
         gd_winner = 0;
         gd_scan: {
             let tokens = &p.kinds;
@@ -18100,11 +18067,11 @@ fn scan_expr__alt_13(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_38(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_35(tokens[pos]) {
         let sp = pos;
         sg_183_done: {
             let sgk_183 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_11(sgk_183) {
+            if _kind_set_10(sgk_183) {
                 sg_183_0: {
                     if atn_decide_173(atn, tokens, pos, min_prec) == 0 {
                         pos += 1;
@@ -18251,7 +18218,7 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, min_prec: i32, follow: i64 = 0) -> 
     let rs_simulated_292 = rs_pick_292 == 0;
     if !p.recovering && !p.speculating {
         let mut opt_enter: bool = false;
-        if _kind_set_11(p.peek_kind()) {
+        if _kind_set_10(p.peek_kind()) {
             opt_enter_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
@@ -18341,7 +18308,7 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, min_prec: i32, follow: i64 = 0) -> 
         if !kind_set_has(&SYNC_82, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_82, &EXPECTED_82); }
     }
     if !kind_set_has(&SYNC_83, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_83, &EXPECTED_83); }
-    if p.peek_kind() == TK_K_ELSE && _kind_set_11(p.peek_at(1)) {
+    if p.peek_kind() == TK_K_ELSE && _kind_set_10(p.peek_at(1)) {
         p.take();
         p.site = 244;
         p.atn_ret_pending = 1852;
@@ -18429,7 +18396,7 @@ fn scan_expr__alt_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo
 fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_9, &EXPECTED_9); }
     let kind = p.peek_kind();
-    if _kind_set_39(kind) {
+    if _kind_set_36(kind) {
         if kind == TK_OPEN_PAR {
             let _atn_alt = atn_verified(168, 2, &mut p.atn, &p.kinds, p.pos, min_prec, atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec));
             if _atn_alt >= 0 && !p.recovering && !p.speculating {
@@ -18658,13 +18625,13 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
-        } else if _kind_set_40(kind) {
+        } else if _kind_set_37(kind) {
             return _parse_expr__inner_alt_3(p, min_prec, follow);
-        } else if _kind_set_41(kind) {
+        } else if _kind_set_38(kind) {
             p.site = 195;
             p.atn_ret_pending = 1739;
             return _parse_literal_value(p);
-        } else if _kind_set_42(kind) {
+        } else if _kind_set_39(kind) {
             let _atn_alt = atn_verified(168, 2, &mut p.atn, &p.kinds, p.pos, min_prec, atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec));
             if _atn_alt >= 0 && !p.recovering && !p.speculating {
                 let _sd_tokens = &p.kinds;
@@ -18701,7 +18668,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
-        } else if _kind_set_43(kind) {
+        } else if _kind_set_40(kind) {
             let _atn_alt = atn_verified(168, 2, &mut p.atn, &p.kinds, p.pos, min_prec, atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec));
             if _atn_alt >= 0 && !p.recovering && !p.speculating {
                 let _sd_tokens = &p.kinds;
@@ -18811,12 +18778,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
                     let mut pos: i32 = p.pos;
                     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break gd_scan; }
                     pos += 1;
-                    if pos < tokens.len() && _kind_set_11(tokens[pos]) {
+                    if pos < tokens.len() && _kind_set_10(tokens[pos]) {
                         let sp = pos;
                         let gp_194 = pos;
                         let sgk_194 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                         let mut sg_194_best = -1;
-                        if _kind_set_44(sgk_194) {
+                        if _kind_set_41(sgk_194) {
                             let sg_194_atn = atn_decide_189(&mut p.atn, tokens, pos, min_prec);
                             if sg_194_atn == 0 {
                                 pos = gp_194;
@@ -18854,7 +18821,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
                                     if pos > sg_194_best { sg_194_best = pos; }
                                 }
                             }
-                        } else if _kind_set_45(sgk_194) {
+                        } else if _kind_set_42(sgk_194) {
                             pos = gp_194;
                             sg_194_1: {
                                 p.atn.stack.push(1911);
@@ -18936,7 +18903,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
                         let gp_198 = pos;
                         let sgk_198 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                         let mut sg_198_best = -1;
-                        if _kind_set_44(sgk_198) {
+                        if _kind_set_41(sgk_198) {
                             let sg_198_atn = atn_decide_189(&mut p.atn, tokens, pos, min_prec);
                             if sg_198_atn == 0 {
                                 pos = gp_198;
@@ -18974,7 +18941,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
                                     if pos > sg_198_best { sg_198_best = pos; }
                                 }
                             }
-                        } else if _kind_set_45(sgk_198) {
+                        } else if _kind_set_42(sgk_198) {
                             pos = gp_198;
                             sg_198_1: {
                                 p.atn.stack.push(1911);
@@ -19156,8 +19123,8 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
             if rs_pick_283 < 0 && rs_pick_283 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
             let rs_simulated_283 = rs_pick_283 == 0;
             if !p.recovering && !p.speculating {
-                let mut opt_enter_2: bool = p.peek_kind() == TK_K_ESCAPE && _kind_set_11(p.peek_at(1));
-                if opt_enter_2 && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || _kind_set_46(p.peek_kind())) {
+                let mut opt_enter_2: bool = p.peek_kind() == TK_K_ESCAPE && _kind_set_10(p.peek_at(1));
+                if opt_enter_2 && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || _kind_set_43(p.peek_kind())) {
                     let mut opt_scan_pos_2: i32 = -1;
                     opt_scan_2: {
                         let tokens = &p.kinds;
@@ -19176,7 +19143,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
                         }
                         opt_scan_pos_2 = pos;
                     }
-                    opt_enter_2 = opt_scan_pos_2 >= 0 && ((_kind_set_46((if opt_scan_pos_2 < p.kinds.len() { p.kinds[opt_scan_pos_2] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                    opt_enter_2 = opt_scan_pos_2 >= 0 && ((_kind_set_43((if opt_scan_pos_2 < p.kinds.len() { p.kinds[opt_scan_pos_2] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
                 }
                 atn_shadow(194, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_283 { 0 } else { 1 });
             }
@@ -19190,7 +19157,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
         } else if _atn_alt == 11 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             let _gk = p.peek_kind();
-            if _kind_set_47(_gk) {
+            if _kind_set_44(_gk) {
                 p.take();
             } else if _gk == TK_K_NOT {
                 p.take();
@@ -19311,7 +19278,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && ((_kind_set_48((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && ((_kind_set_45((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(198, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_297 { 0 } else { 1 });
     }
@@ -19338,7 +19305,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !p.recovering && !p.speculating {
             let mut rs_enters = false;
             loop {
-                if !_kind_set_49(p.peek_kind()) { break; }
+                if !_kind_set_46(p.peek_kind()) { break; }
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut iter_scan_pos: i32 = -1;
                     iter_scan: {
@@ -19349,7 +19316,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                             if sgk_206 == TK_K_ON {
                                 sg_206_0: {
                                     pos += 1;
-                                    if pos >= tokens.len() || !_kind_set_50(tokens[pos]) { break sg_206_0; }
+                                    if pos >= tokens.len() || !_kind_set_47(tokens[pos]) { break sg_206_0; }
                                     pos += 1;
                                     let gp_207 = pos;
                                     let sgk_207 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -19374,7 +19341,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                                 if pos > sg_207_best { sg_207_best = pos; }
                                             }
                                         }
-                                    } else if _kind_set_51(sgk_207) {
+                                    } else if _kind_set_48(sgk_207) {
                                         pos = gp_207;
                                         pos += 1;
                                         if pos > sg_207_best { sg_207_best = pos; }
@@ -19406,7 +19373,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_48((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_45((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -19468,7 +19435,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         p.expect(TK_K_DEFAULT, &SYNC_90, true);
                     }
                 }
-            } else if _kind_set_51(grp_kind) {
+            } else if _kind_set_48(grp_kind) {
                 p.take();
             } else if grp_kind == TK_K_NO {
                 p.take();
@@ -19712,7 +19679,7 @@ fn _parse_raise_function__inner(p: &mut Parser) -> () {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_IGNORE {
         p.take();
-    } else if _kind_set_52(grp_kind) {
+    } else if _kind_set_49(grp_kind) {
         p.take();
         p.expect(TK_COMMA, &SYNC_101, false);
         p.site = 250;
@@ -19766,7 +19733,7 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && ((_kind_set_30((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && ((_kind_set_27((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(210, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_313 { 0 } else { 1 });
     }
@@ -19780,13 +19747,13 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_315 < 0 && rs_pick_315 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_315 = rs_pick_315 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = _kind_set_30(p.peek_kind());
+        let mut opt_enter_2: bool = _kind_set_27(p.peek_kind());
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos_2: i32 = -1;
             opt_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_30(tokens[pos]) { break opt_scan_2; }
+                if pos >= tokens.len() || !_kind_set_27(tokens[pos]) { break opt_scan_2; }
                 pos += 1;
                 opt_scan_pos_2 = pos;
             }
@@ -19825,7 +19792,7 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if !kind_set_has(&SYNC_103, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_103, &EXPECTED_103); }
     let grp_kind = p.peek_kind();
-    if _kind_set_53(grp_kind) {
+    if _kind_set_50(grp_kind) {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_PRIMARY {
             p.take();
@@ -19932,8 +19899,7 @@ fn _parse_with_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_54(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(218, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_325 { 0 } else { 1 });
@@ -20026,7 +19992,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
-                if pos < tokens.len() && _kind_set_55(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_51(tokens[pos]) {
                     let sp = pos;
                     sg_215_done: {
                         let sgk_215 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -20051,8 +20017,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_56(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(220, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_328 { 0 } else { 1 });
@@ -20161,7 +20126,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && ((_kind_set_30((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && ((_kind_set_27((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(223, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_332 { 0 } else { 1 });
     }
@@ -20175,13 +20140,13 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_334 < 0 && rs_pick_334 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_334 = rs_pick_334 == 0;
     if !p.recovering && !p.speculating {
-        let mut opt_enter_2: bool = _kind_set_30(p.peek_kind());
+        let mut opt_enter_2: bool = _kind_set_27(p.peek_kind());
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
             let mut opt_scan_pos_2: i32 = -1;
             opt_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_30(tokens[pos]) { break opt_scan_2; }
+                if pos >= tokens.len() || !_kind_set_27(tokens[pos]) { break opt_scan_2; }
                 pos += 1;
                 opt_scan_pos_2 = pos;
             }
@@ -20213,7 +20178,7 @@ fn _parse_ordering_term(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_pragma_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_60, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_60, &EXPECTED_60); }
     let kind = p.peek_kind();
-    if _kind_set_57(kind) {
+    if _kind_set_52(kind) {
         p.site = 268;
         p.atn_ret_pending = 2245;
         _parse_signed_number(p, follow);
@@ -20322,7 +20287,7 @@ fn _parse_result_column__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     if rs_pick_340 < 0 && rs_pick_340 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_340 = rs_pick_340 == 0;
     if !p.recovering && !p.speculating {
-        atn_shadow(230, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_58(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_58(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_340 { 0 } else { 1 });
+        atn_shadow(230, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_53(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_53(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_340 { 0 } else { 1 });
     }
     if rs_simulated_340 {
         if !kind_set_has(&SYNC_109, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_109, &EXPECTED_109); }
@@ -20344,11 +20309,11 @@ fn scan_result_column__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
     if pos < 0 { return -1; }
     let osl_217_start = pos;
     osl_217_done: {
-        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_58(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_53(tokens[pos + 1]) {
             pos += 2;
             break osl_217_done;
         }
-        if pos < tokens.len() && _kind_set_58(tokens[pos]) {
+        if pos < tokens.len() && _kind_set_53(tokens[pos]) {
             pos += 1;
             break osl_217_done;
         }
@@ -20366,7 +20331,7 @@ fn _parse_result_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         return;
     }
-    if _kind_set_11(kind) {
+    if _kind_set_10(kind) {
         if _kind_set_5(kind) {
             let _atn_alt = atn_verified(229, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_229(&mut p.atn, &p.kinds, p.pos, 0));
             if _atn_alt >= 0 && !p.recovering && !p.speculating {
@@ -20394,7 +20359,7 @@ fn _parse_result_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 return _parse_result_column__inner_alt_1(p, follow);
             }
             return _parse_result_column__inner_alt_2(p, follow);
-        } else if _kind_set_59(kind) {
+        } else if _kind_set_54(kind) {
             return _parse_result_column__inner_alt_2(p, follow);
         }
     }
@@ -20445,7 +20410,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
                 pos = scan_any_name(tokens, pos, &mut p.atn, &mut p.memo);
                 if pos < 0 { break opt_enter_scan; }
                 osl_221_done: {
-                    if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_60(tokens[pos + 1]) {
+                    if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
                         let sol_222_save = pos;
                         sol_222: {
                             pos += 1;
@@ -20456,7 +20421,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
                         pos = sol_222_save;
                         break osl_221_done;
                     }
-                    if pos < tokens.len() && _kind_set_60(tokens[pos]) {
+                    if pos < tokens.len() && _kind_set_55(tokens[pos]) {
                         let sol_223_save = pos;
                         sol_223: {
                             pos = scan_table_alias(tokens, pos, &mut p.atn, &mut p.memo);
@@ -20467,7 +20432,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
                         break osl_221_done;
                     }
                 }
-                if pos < tokens.len() && _kind_set_55(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_51(tokens[pos]) {
                     let sp = pos;
                     sg_224_done: {
                         let sgk_224 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -20492,8 +20457,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
                     }
                     if pos < 0 { pos = sp; }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_61(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(233, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_343 { 0 } else { 1 });
@@ -20511,7 +20475,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
     if rs_pick_345 < 0 && rs_pick_345 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_345 = rs_pick_345 == 0;
     if !p.recovering && !p.speculating {
-        atn_shadow(234, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_60(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_60(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_345 { 0 } else { 1 });
+        atn_shadow(234, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_55(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_55(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_345 { 0 } else { 1 });
     }
     if rs_simulated_345 {
         if !kind_set_has(&SYNC_110, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_110, &EXPECTED_110); }
@@ -20596,7 +20560,7 @@ fn scan_table_or_subquery__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
     if pos < 0 { return -1; }
     let osl_226_start = pos;
     osl_226_done: {
-        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_60(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
             let sol_227_save = pos;
             sol_227: {
                 pos += 1;
@@ -20607,7 +20571,7 @@ fn scan_table_or_subquery__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             pos = sol_227_save;
             break osl_226_done;
         }
-        if pos < tokens.len() && _kind_set_60(tokens[pos]) {
+        if pos < tokens.len() && _kind_set_55(tokens[pos]) {
             let sol_228_save = pos;
             sol_228: {
                 pos = scan_table_alias(tokens, pos, atn, memo);
@@ -20618,7 +20582,7 @@ fn scan_table_or_subquery__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             break osl_226_done;
         }
     }
-    if pos != osl_226_start && !(_kind_set_55((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF)) && follow_yields(tokens, osl_226_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_226_start && !(_kind_set_51((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF)) && follow_yields(tokens, osl_226_start, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_226_start;
     }
     if atn_decide_236(atn, tokens, pos, 0) == 0 {
@@ -20674,7 +20638,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
                 if pos < 0 { break opt_enter_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break opt_enter_scan; }
                 pos += 1;
-                if pos < tokens.len() && _kind_set_11(tokens[pos]) {
+                if pos < tokens.len() && _kind_set_10(tokens[pos]) {
                     let sp = pos;
                     sg_231_done: {
                         sg_231: {
@@ -20707,7 +20671,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
                 if pos >= tokens.len() || tokens[pos] != TK_CLOSE_PAR { break opt_enter_scan; }
                 pos += 1;
                 osl_233_done: {
-                    if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_60(tokens[pos + 1]) {
+                    if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
                         let sol_234_save = pos;
                         sol_234: {
                             pos += 1;
@@ -20718,7 +20682,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
                         pos = sol_234_save;
                         break osl_233_done;
                     }
-                    if pos < tokens.len() && _kind_set_60(tokens[pos]) {
+                    if pos < tokens.len() && _kind_set_55(tokens[pos]) {
                         let sol_235_save = pos;
                         sol_235: {
                             pos = scan_table_alias(tokens, pos, &mut p.atn, &mut p.memo);
@@ -20729,8 +20693,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
                         break osl_233_done;
                     }
                 }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_61(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
             }
         }
         atn_shadow(238, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_350 { 0 } else { 1 });
@@ -20790,7 +20753,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
     if rs_pick_356 < 0 && rs_pick_356 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_356 = rs_pick_356 == 0;
     if !p.recovering && !p.speculating {
-        atn_shadow(241, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_60(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_60(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_356 { 0 } else { 1 });
+        atn_shadow(241, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_55(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_55(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_356 { 0 } else { 1 });
     }
     if rs_simulated_356 {
         if !kind_set_has(&SYNC_110, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_110, &EXPECTED_110); }
@@ -20824,7 +20787,7 @@ fn scan_table_or_subquery__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_11(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_10(tokens[pos]) {
         let sp = pos;
         sg_238_done: {
             sg_238: {
@@ -20858,7 +20821,7 @@ fn scan_table_or_subquery__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
     pos += 1;
     let osl_240_start = pos;
     osl_240_done: {
-        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_60(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
             let sol_241_save = pos;
             sol_241: {
                 pos += 1;
@@ -20869,7 +20832,7 @@ fn scan_table_or_subquery__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             pos = sol_241_save;
             break osl_240_done;
         }
-        if pos < tokens.len() && _kind_set_60(tokens[pos]) {
+        if pos < tokens.len() && _kind_set_55(tokens[pos]) {
             let sol_242_save = pos;
             sol_242: {
                 pos = scan_table_alias(tokens, pos, atn, memo);
@@ -21035,7 +20998,7 @@ fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () 
     if rs_pick_362 < 0 && rs_pick_362 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
     let rs_simulated_362 = rs_pick_362 == 0;
     if !p.recovering && !p.speculating {
-        atn_shadow(245, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_60(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_60(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_362 { 0 } else { 1 });
+        atn_shadow(245, 1, p.pos, if (p.peek_kind() == TK_K_AS && _kind_set_55(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) || (_kind_set_55(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_362 { 0 } else { 1 });
     }
     if rs_simulated_362 {
         if !kind_set_has(&SYNC_110, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_110, &EXPECTED_110); }
@@ -21061,7 +21024,7 @@ fn scan_table_or_subquery__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
     pos += 1;
     let osl_246_start = pos;
     osl_246_done: {
-        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_60(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
             let sol_247_save = pos;
             sol_247: {
                 pos += 1;
@@ -21072,7 +21035,7 @@ fn scan_table_or_subquery__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             pos = sol_247_save;
             break osl_246_done;
         }
-        if pos < tokens.len() && _kind_set_60(tokens[pos]) {
+        if pos < tokens.len() && _kind_set_55(tokens[pos]) {
             let sol_248_save = pos;
             sol_248: {
                 pos = scan_table_alias(tokens, pos, atn, memo);
@@ -21136,7 +21099,7 @@ fn _parse_table_or_subquery__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 return _parse_table_or_subquery__inner_alt_1(p, follow);
             }
             return _parse_table_or_subquery__inner_alt_0(p, follow);
-        } else if _kind_set_62(kind) {
+        } else if _kind_set_56(kind) {
             let _atn_alt = atn_verified(232, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_232(&mut p.atn, &p.kinds, p.pos, 0));
             if _atn_alt >= 0 && !p.recovering && !p.speculating {
                 let _sd_tokens = &p.kinds;
@@ -21200,7 +21163,7 @@ fn _parse_join_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !p.recovering && !p.speculating {
             let mut rs_enters = false;
             loop {
-                if !_kind_set_63(p.peek_kind()) { break; }
+                if !_kind_set_57(p.peek_kind()) { break; }
                 if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut iter_scan_pos: i32 = -1;
                     iter_scan: {
@@ -21224,7 +21187,7 @@ fn _parse_join_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         iter_scan_pos = pos;
                     }
-                    if iter_scan_pos < 0 || !(_kind_set_63((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                    if iter_scan_pos < 0 || !(_kind_set_57((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                 }
                 rs_enters = true;
                 break;
@@ -21266,7 +21229,7 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if kind == TK_COMMA {
         p.take();
         return;
-    } else if _kind_set_64(kind) {
+    } else if _kind_set_58(kind) {
         if !kind_set_has(&SYNC_112, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_112, &EXPECTED_112); }
         if p.peek_kind() == TK_K_NATURAL {
             p.take();
@@ -21455,11 +21418,11 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
         let rs_simulated_375 = rs_pick_375 == 0;
         if !p.recovering && !p.speculating {
             let mut opt_enter: bool = false;
-            if _kind_set_21(p.peek_kind()) {
+            if _kind_set_20(p.peek_kind()) {
                 opt_enter_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || !_kind_set_21(tokens[pos]) { break opt_enter_scan; }
+                    if pos >= tokens.len() || !_kind_set_20(tokens[pos]) { break opt_enter_scan; }
                     pos += 1;
                     p.atn.stack.push(2490);
                     pos = scan_result_column(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_44, follow));
@@ -21596,8 +21559,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         if pos < 0 { pos = sp; }
                     }
-                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_65(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
+                    if follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { opt_enter = true; }
                 }
             }
             atn_shadow(257, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_375 { 0 } else { 1 });
@@ -21636,7 +21598,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                             }
                             iter_scan_pos = pos;
                         }
-                        if iter_scan_pos < 0 || !(_kind_set_23((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                        if iter_scan_pos < 0 || !(_kind_set_21((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                     }
                     rs_enters = true;
                     break;
@@ -21716,7 +21678,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter_2 = opt_scan_pos >= 0 && ((_kind_set_24((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter_2 = opt_scan_pos >= 0 && ((_kind_set_22((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(260, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_379 { 0 } else { 1 });
         }
@@ -21837,7 +21799,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_pick_384 < 0 && rs_pick_384 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         let rs_simulated_384 = rs_pick_384 == 0;
         if !p.recovering && !p.speculating {
-            let mut opt_enter_3: bool = p.peek_kind() == TK_K_WHERE && _kind_set_11(p.peek_at(1));
+            let mut opt_enter_3: bool = p.peek_kind() == TK_K_WHERE && _kind_set_10(p.peek_at(1));
             if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                 let mut opt_scan_pos_2: i32 = -1;
                 opt_scan_2: {
@@ -21871,7 +21833,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_pick_386 < 0 && rs_pick_386 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         let rs_simulated_386 = rs_pick_386 == 0;
         if !p.recovering && !p.speculating {
-            let mut opt_enter_4: bool = p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY && _kind_set_11(p.peek_at(2));
+            let mut opt_enter_4: bool = p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY && _kind_set_10(p.peek_at(2));
             if opt_enter_4 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                 let mut opt_scan_pos_3: i32 = -1;
                 opt_scan_3: {
@@ -21962,7 +21924,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                 }
                                 iter_scan_pos = pos;
                             }
-                            if iter_scan_pos < 0 || !(_kind_set_25((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
+                            if iter_scan_pos < 0 || !(_kind_set_23((if iter_scan_pos < p.kinds.len() { p.kinds[iter_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, iter_scan_pos, follow, &FOLLOW_TABLES, TK_EOF)) { break; }
                         }
                         rs_enters = true;
                         break;
@@ -21979,7 +21941,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if rs_pick_390 < 0 && rs_pick_390 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
             let rs_simulated_390 = rs_pick_390 == 0;
             if !p.recovering && !p.speculating {
-                let mut opt_enter: bool = p.peek_kind() == TK_K_HAVING && _kind_set_11(p.peek_at(1));
+                let mut opt_enter: bool = p.peek_kind() == TK_K_HAVING && _kind_set_10(p.peek_at(1));
                 if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
                     let mut opt_scan_pos: i32 = -1;
                     opt_scan: {
@@ -22213,7 +22175,7 @@ fn _parse_compound_operator(p: &mut Parser) -> () {
 
 fn _parse_signed_number__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_66, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_66, &EXPECTED_66); }
-    if _kind_set_33(p.peek_kind()) {
+    if _kind_set_30(p.peek_kind()) {
         p.take();
     }
     p.expect(TK_NUMERIC_LITERAL, &EMPTY_SYNC, true);
@@ -22238,7 +22200,7 @@ fn _parse_signed_number(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_literal_value__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_117, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_117, &EXPECTED_117); }
     let kind = p.peek_kind();
-    if _kind_set_32(kind) {
+    if _kind_set_29(kind) {
         p.take();
         return;
     }
@@ -22268,7 +22230,7 @@ fn _parse_literal_value(p: &mut Parser) -> () {
 fn _parse_unary_operator__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_118, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_118, &EXPECTED_118); }
     let kind = p.peek_kind();
-    if _kind_set_37(kind) {
+    if _kind_set_34(kind) {
         p.take();
         return;
     }
@@ -22331,7 +22293,7 @@ fn scan_module_argument__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredi
 fn _parse_module_argument__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_9, &EXPECTED_9); }
     let kind = p.peek_kind();
-    if _kind_set_11(kind) {
+    if _kind_set_10(kind) {
         if _kind_set_5(kind) {
             let _atn_alt = atn_verified(275, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_275(&mut p.atn, &p.kinds, p.pos, 0));
             if _atn_alt >= 0 && !p.recovering && !p.speculating {
@@ -22363,7 +22325,7 @@ fn _parse_module_argument__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 312;
             p.atn_ret_pending = 2634;
             return _parse_column_def(p, follow);
-        } else if _kind_set_59(kind) {
+        } else if _kind_set_54(kind) {
             p.site = 311;
             p.atn_ret_pending = 2632;
             return _parse_expr(p, follow);
@@ -22395,7 +22357,7 @@ fn _parse_module_argument(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_column_alias__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_119, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_119, &EXPECTED_119); }
     let kind = p.peek_kind();
-    if _kind_set_58(kind) {
+    if _kind_set_53(kind) {
         p.take();
         return;
     }
@@ -22425,7 +22387,7 @@ fn _parse_column_alias(p: &mut Parser) -> () {
 fn _parse_keyword__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_120, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_120, &EXPECTED_120); }
     let kind = p.peek_kind();
-    if _kind_set_66(kind) {
+    if _kind_set_59(kind) {
         p.take();
         return;
     }
@@ -22744,7 +22706,7 @@ fn _parse_savepoint_name(p: &mut Parser) -> () {
 fn _parse_table_alias__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_121, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_121, &EXPECTED_121); }
     let kind = p.peek_kind();
-    if _kind_set_58(kind) {
+    if _kind_set_53(kind) {
         p.take();
         return;
     } else if kind == TK_OPEN_PAR {
@@ -22801,7 +22763,7 @@ fn _parse_any_name__inner(p: &mut Parser) -> () {
     if kind == TK_IDENTIFIER {
         p.take();
         return;
-    } else if _kind_set_66(kind) {
+    } else if _kind_set_59(kind) {
         p.site = 332;
         p.atn_ret_pending = 2732;
         _parse_keyword(p);
@@ -23244,274 +23206,246 @@ fn _kind_set_5(k: i32) -> bool {
 }
 
 fn _kind_set_6(k: i32) -> bool {
-    return k matches { TK_EOF | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_SCOL | TK_UNEXPECTED_CHAR };
-}
-
-fn _kind_set_7(k: i32) -> bool {
     return k matches { TK_K_DEFERRED | TK_K_EXCLUSIVE | TK_K_IMMEDIATE };
 }
 
-fn _kind_set_8(k: i32) -> bool {
+fn _kind_set_7(k: i32) -> bool {
     return k matches { TK_K_EXCEPT | TK_K_INTERSECT };
 }
 
-fn _kind_set_9(k: i32) -> bool {
+fn _kind_set_8(k: i32) -> bool {
     return k matches { TK_K_EXCEPT | TK_K_INTERSECT | TK_K_UNION };
 }
 
-fn _kind_set_10(k: i32) -> bool {
+fn _kind_set_9(k: i32) -> bool {
     return k matches { TK_K_EXCEPT | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_UNION };
 }
 
-fn _kind_set_11(k: i32) -> bool {
+fn _kind_set_10(k: i32) -> bool {
     return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_MINUS | TK_NUMERIC_LITERAL | TK_OPEN_PAR | TK_PLUS | TK_STRING_LITERAL | TK_TILDE };
 }
 
-fn _kind_set_12(k: i32) -> bool {
+fn _kind_set_11(k: i32) -> bool {
     return k matches { TK_COMMA | TK_K_OFFSET };
 }
 
-fn _kind_set_13(k: i32) -> bool {
+fn _kind_set_12(k: i32) -> bool {
     return k matches { TK_K_TEMP | TK_K_TEMPORARY };
 }
 
-fn _kind_set_14(k: i32) -> bool {
+fn _kind_set_13(k: i32) -> bool {
     return k matches { TK_K_AFTER | TK_K_BEFORE | TK_K_INSTEAD };
 }
 
-fn _kind_set_15(k: i32) -> bool {
+fn _kind_set_14(k: i32) -> bool {
     return k matches { TK_K_AFTER | TK_K_BEFORE };
 }
 
-fn _kind_set_16(k: i32) -> bool {
+fn _kind_set_15(k: i32) -> bool {
     return k matches { TK_K_DELETE | TK_K_INSERT };
 }
 
-fn _kind_set_17(k: i32) -> bool {
+fn _kind_set_16(k: i32) -> bool {
     return k matches { TK_K_DELETE | TK_K_INSERT | TK_K_REPLACE | TK_K_SELECT | TK_K_UPDATE | TK_K_VALUES | TK_K_WITH };
 }
 
-fn _kind_set_18(k: i32) -> bool {
+fn _kind_set_17(k: i32) -> bool {
     return k matches { TK_K_LIMIT | TK_K_ORDER };
 }
 
-fn _kind_set_19(k: i32) -> bool {
+fn _kind_set_18(k: i32) -> bool {
     return k matches { TK_K_SELECT | TK_K_WITH };
 }
 
-fn _kind_set_20(k: i32) -> bool {
+fn _kind_set_19(k: i32) -> bool {
     return k matches { TK_ASSIGN | TK_OPEN_PAR };
 }
 
-fn _kind_set_21(k: i32) -> bool {
+fn _kind_set_20(k: i32) -> bool {
     return k matches { TK_K_ALL | TK_K_DISTINCT };
 }
 
-fn _kind_set_22(k: i32) -> bool {
-    return k matches { TK_CLOSE_PAR | TK_EOF | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_INSERT | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_SCOL | TK_UNEXPECTED_CHAR };
-}
-
-fn _kind_set_23(k: i32) -> bool {
+fn _kind_set_21(k: i32) -> bool {
     return k matches { TK_COMMA | TK_K_FROM | TK_K_GROUP | TK_K_WHERE };
 }
 
-fn _kind_set_24(k: i32) -> bool {
+fn _kind_set_22(k: i32) -> bool {
     return k matches { TK_K_GROUP | TK_K_WHERE };
 }
 
-fn _kind_set_25(k: i32) -> bool {
+fn _kind_set_23(k: i32) -> bool {
     return k matches { TK_COMMA | TK_K_HAVING };
 }
 
-fn _kind_set_26(k: i32) -> bool {
+fn _kind_set_24(k: i32) -> bool {
     return k matches { TK_COMMA | TK_K_WHERE };
 }
 
-fn _kind_set_27(k: i32) -> bool {
+fn _kind_set_25(k: i32) -> bool {
     return k matches { TK_COMMA | TK_K_LIMIT | TK_K_ORDER | TK_K_WHERE };
 }
 
-fn _kind_set_28(k: i32) -> bool {
+fn _kind_set_26(k: i32) -> bool {
     return k matches { TK_K_CHECK | TK_K_COLLATE | TK_K_CONSTRAINT | TK_K_DEFAULT | TK_K_NOT | TK_K_NULL | TK_K_PRIMARY | TK_K_REFERENCES | TK_K_UNIQUE };
 }
 
-fn _kind_set_29(k: i32) -> bool {
-    return k matches { TK_CLOSE_PAR | TK_COMMA | TK_EOF | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_SCOL | TK_UNEXPECTED_CHAR };
-}
-
-fn _kind_set_30(k: i32) -> bool {
+fn _kind_set_27(k: i32) -> bool {
     return k matches { TK_K_ASC | TK_K_DESC };
 }
 
-fn _kind_set_31(k: i32) -> bool {
+fn _kind_set_28(k: i32) -> bool {
     return k matches { TK_K_AUTOINCREMENT | TK_K_ON };
 }
 
-fn _kind_set_32(k: i32) -> bool {
+fn _kind_set_29(k: i32) -> bool {
     return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
 }
 
-fn _kind_set_33(k: i32) -> bool {
+fn _kind_set_30(k: i32) -> bool {
     return k matches { TK_MINUS | TK_PLUS };
 }
 
-fn _kind_set_34(k: i32) -> bool {
+fn _kind_set_31(k: i32) -> bool {
     return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_STRING_LITERAL };
 }
 
-fn _kind_set_35(k: i32) -> bool {
+fn _kind_set_32(k: i32) -> bool {
     return k matches { TK_K_NOT | TK_K_NULL };
 }
 
-fn _kind_set_36(k: i32) -> bool {
+fn _kind_set_33(k: i32) -> bool {
     return k matches { TK_K_ABORT | TK_K_FAIL | TK_K_IGNORE | TK_K_REPLACE | TK_K_ROLLBACK };
 }
 
-fn _kind_set_37(k: i32) -> bool {
+fn _kind_set_34(k: i32) -> bool {
     return k matches { TK_K_NOT | TK_MINUS | TK_PLUS | TK_TILDE };
 }
 
-fn _kind_set_38(k: i32) -> bool {
+fn _kind_set_35(k: i32) -> bool {
     return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_MINUS | TK_NUMERIC_LITERAL | TK_OPEN_PAR | TK_PLUS | TK_STAR | TK_STRING_LITERAL | TK_TILDE };
 }
 
-fn _kind_set_39(k: i32) -> bool {
+fn _kind_set_36(k: i32) -> bool {
     return k matches { TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_MINUS | TK_NUMERIC_LITERAL | TK_OPEN_PAR | TK_PLUS | TK_STRING_LITERAL | TK_TILDE };
 }
 
-fn _kind_set_40(k: i32) -> bool {
+fn _kind_set_37(k: i32) -> bool {
     return k matches { TK_MINUS | TK_PLUS | TK_TILDE };
 }
 
-fn _kind_set_41(k: i32) -> bool {
+fn _kind_set_38(k: i32) -> bool {
     return k matches { TK_BLOB_LITERAL | TK_NUMERIC_LITERAL };
 }
 
-fn _kind_set_42(k: i32) -> bool {
+fn _kind_set_39(k: i32) -> bool {
     return k matches { TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_STRING_LITERAL };
 }
 
-fn _kind_set_43(k: i32) -> bool {
+fn _kind_set_40(k: i32) -> bool {
     return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOTNULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT };
 }
 
-fn _kind_set_44(k: i32) -> bool {
+fn _kind_set_41(k: i32) -> bool {
     return k matches { TK_K_SELECT | TK_K_VALUES | TK_K_WITH };
 }
 
-fn _kind_set_45(k: i32) -> bool {
+fn _kind_set_42(k: i32) -> bool {
     return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITHOUT | TK_MINUS | TK_NUMERIC_LITERAL | TK_OPEN_PAR | TK_PLUS | TK_STRING_LITERAL | TK_TILDE };
 }
 
-fn _kind_set_46(k: i32) -> bool {
+fn _kind_set_43(k: i32) -> bool {
     return k matches { TK_AMP | TK_ASSIGN | TK_DIV | TK_EQ | TK_GT | TK_GT2 | TK_GT_EQ | TK_K_AND | TK_K_BETWEEN | TK_K_COLLATE | TK_K_GLOB | TK_K_IN | TK_K_IS | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_OR | TK_K_REGEXP | TK_LT | TK_LT2 | TK_LT_EQ | TK_MINUS | TK_MOD | TK_NOT_EQ1 | TK_NOT_EQ2 | TK_PIPE | TK_PIPE2 | TK_PLUS | TK_STAR };
 }
 
-fn _kind_set_47(k: i32) -> bool {
+fn _kind_set_44(k: i32) -> bool {
     return k matches { TK_K_ISNULL | TK_K_NOTNULL };
 }
 
-fn _kind_set_48(k: i32) -> bool {
+fn _kind_set_45(k: i32) -> bool {
     return k matches { TK_K_DEFERRABLE | TK_K_MATCH | TK_K_NOT | TK_K_ON };
 }
 
-fn _kind_set_49(k: i32) -> bool {
+fn _kind_set_46(k: i32) -> bool {
     return k matches { TK_K_MATCH | TK_K_ON };
 }
 
-fn _kind_set_50(k: i32) -> bool {
+fn _kind_set_47(k: i32) -> bool {
     return k matches { TK_K_DELETE | TK_K_UPDATE };
 }
 
-fn _kind_set_51(k: i32) -> bool {
+fn _kind_set_48(k: i32) -> bool {
     return k matches { TK_K_CASCADE | TK_K_RESTRICT };
 }
 
-fn _kind_set_52(k: i32) -> bool {
+fn _kind_set_49(k: i32) -> bool {
     return k matches { TK_K_ABORT | TK_K_FAIL | TK_K_ROLLBACK };
 }
 
-fn _kind_set_53(k: i32) -> bool {
+fn _kind_set_50(k: i32) -> bool {
     return k matches { TK_K_PRIMARY | TK_K_UNIQUE };
 }
 
-fn _kind_set_54(k: i32) -> bool {
-    return k matches { TK_K_DELETE | TK_K_INSERT | TK_K_REPLACE | TK_K_SELECT | TK_K_UPDATE | TK_K_VALUES };
-}
-
-fn _kind_set_55(k: i32) -> bool {
+fn _kind_set_51(k: i32) -> bool {
     return k matches { TK_K_INDEXED | TK_K_NOT };
 }
 
-fn _kind_set_56(k: i32) -> bool {
-    return k matches { TK_EOF | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_LIMIT | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_SCOL | TK_UNEXPECTED_CHAR };
-}
-
-fn _kind_set_57(k: i32) -> bool {
+fn _kind_set_52(k: i32) -> bool {
     return k matches { TK_MINUS | TK_NUMERIC_LITERAL | TK_PLUS };
 }
 
-fn _kind_set_58(k: i32) -> bool {
+fn _kind_set_53(k: i32) -> bool {
     return k matches { TK_IDENTIFIER | TK_STRING_LITERAL };
 }
 
-fn _kind_set_59(k: i32) -> bool {
+fn _kind_set_54(k: i32) -> bool {
     return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_MINUS | TK_NUMERIC_LITERAL | TK_PLUS | TK_TILDE };
 }
 
-fn _kind_set_60(k: i32) -> bool {
+fn _kind_set_55(k: i32) -> bool {
     return k matches { TK_IDENTIFIER | TK_OPEN_PAR | TK_STRING_LITERAL };
 }
 
-fn _kind_set_61(k: i32) -> bool {
-    return k matches { TK_CLOSE_PAR | TK_COMMA | TK_EOF | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_CROSS | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_GROUP | TK_K_INNER | TK_K_INSERT | TK_K_INTERSECT | TK_K_JOIN | TK_K_LEFT | TK_K_LIMIT | TK_K_NATURAL | TK_K_ON | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_WHERE | TK_K_WITH | TK_SCOL | TK_UNEXPECTED_CHAR };
-}
-
-fn _kind_set_62(k: i32) -> bool {
+fn _kind_set_56(k: i32) -> bool {
     return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL };
 }
 
-fn _kind_set_63(k: i32) -> bool {
+fn _kind_set_57(k: i32) -> bool {
     return k matches { TK_COMMA | TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL };
 }
 
-fn _kind_set_64(k: i32) -> bool {
+fn _kind_set_58(k: i32) -> bool {
     return k matches { TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL };
 }
 
-fn _kind_set_65(k: i32) -> bool {
-    return k matches { TK_EOF | TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXCEPT | TK_K_EXPLAIN | TK_K_INSERT | TK_K_INTERSECT | TK_K_LIMIT | TK_K_ORDER | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UNION | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_SCOL | TK_UNEXPECTED_CHAR };
-}
-
-fn _kind_set_66(k: i32) -> bool {
+fn _kind_set_59(k: i32) -> bool {
     return k matches { TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT };
 }
 
-fn _kind_set_67(k: i32) -> bool {
+fn _kind_set_60(k: i32) -> bool {
     return k matches { TK_K_CROSS | TK_K_INNER | TK_K_LEFT };
 }
 
-fn _kind_set_68(k: i32) -> bool {
+fn _kind_set_61(k: i32) -> bool {
     return k matches { TK_K_CROSS | TK_K_INNER };
 }
 
-fn _kind_set_69(k: i32) -> bool {
+fn _kind_set_62(k: i32) -> bool {
     return k matches { TK_DIV | TK_MOD | TK_STAR };
 }
 
-fn _kind_set_70(k: i32) -> bool {
+fn _kind_set_63(k: i32) -> bool {
     return k matches { TK_AMP | TK_GT2 | TK_LT2 | TK_PIPE };
 }
 
-fn _kind_set_71(k: i32) -> bool {
+fn _kind_set_64(k: i32) -> bool {
     return k matches { TK_GT | TK_GT_EQ | TK_LT | TK_LT_EQ };
 }
 
-fn _kind_set_72(k: i32) -> bool {
+fn _kind_set_65(k: i32) -> bool {
     return k matches { TK_ASSIGN | TK_EQ | TK_NOT_EQ1 | TK_NOT_EQ2 };
 }
 
-fn _kind_set_73(k: i32) -> bool {
+fn _kind_set_66(k: i32) -> bool {
     return k matches { TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP };
 }
 
