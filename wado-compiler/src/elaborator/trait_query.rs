@@ -21,7 +21,7 @@ use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
-    TraitCheckFrame, TraitContext, trait_params_from_impl,
+    TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
 use super::trait_env::{DefaultArg, ImplMethodHeader, InheritedBound, ViaClause};
@@ -2105,7 +2105,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         candidate: &BoundCandidate,
     ) -> Vec<ProjectionAnswer> {
-        let holder = TraitContext::holder_of(&self.tysys.type_table.borrow(), self_type_id);
         let read_as = ScopedBound::new(
             candidate.bound.clone(),
             candidate.written_self.at(self_type_id, candidate.decl),
@@ -2118,7 +2117,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_args = if at_bound {
                 bound_args.clone()
             } else {
-                self.trait_args_for(self_type_id, holder, *declaring)
+                self.trait_args_for(self_type_id, *declaring)
             };
             // Reached at the bound's own arguments, only what that bound binds
             // answers: another bound on the trait is another instantiation.
@@ -2126,13 +2125,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (true, Some(args)) => self
                     .frame_projection_of_trait(
                         self_type_id,
-                        holder,
                         *declaring,
                         Some(args),
                         &decl.name,
                     )
                     .or_else(|| self.carried_binding(self_type_id, &decl.name)),
-                _ => self.frame_projection(self_type_id, holder, &decl.name),
+                _ => self.frame_projection(self_type_id, &decl.name),
             };
             let answer = known.unwrap_or_else(|| {
                 let open = self.family_params(*declaring, &decl.name);
@@ -2140,7 +2138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     base: self_type_id,
                     trait_args,
                 };
-                self.make_projection_at(site, holder, *declaring, &decl.name, &open)
+                self.make_projection_at(site, *declaring, &decl.name, &open)
             });
             answers.push(ProjectionAnswer::at_any(
                 *declaring,

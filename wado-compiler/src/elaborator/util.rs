@@ -1085,8 +1085,7 @@ pub(super) fn bound_param(table: &TypeTable, id: TypeId) -> Option<TypeParamId> 
     }
 }
 
-/// The name a type carries its trait bounds under, where it carries any: the
-/// [`bound_param`]'s.
+/// The name of the parameter [`bound_param`] answers.
 pub(super) fn bound_param_name(table: &TypeTable, id: TypeId) -> Option<&String> {
     match table.get(id) {
         ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),

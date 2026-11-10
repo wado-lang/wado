@@ -322,11 +322,7 @@ impl SettledAs {
 /// two of a trait's parameters to one type, and each one's bounds hold of it,
 /// so they are taken together rather than one of them picked.
 fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
-    enclosing
-        .bounds_of(type_id)
-        .into_iter()
-        .cloned()
-        .collect()
+    enclosing.bounds_of(type_id).to_vec()
 }
 
 /// The receiver's parameter name, which a default cannot name.

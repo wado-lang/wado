@@ -220,14 +220,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the projection does not know is left out.
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         let tt = self.tysys.type_table.borrow();
-        if let Some(param) = util::bound_param(&tt, ty) {
-            return self
-                .annotate_ctx
-                .trait_ctx
-                .bounds_of_param(&tt, param)
-                .into_iter()
-                .cloned()
-                .collect();
+        if util::bound_param(&tt, ty).is_some() {
+            return self.annotate_ctx.trait_ctx.bounds_reaching(&tt, ty).to_vec();
         }
         let ResolvedType::AssocTypeProjection {
             param_id,
