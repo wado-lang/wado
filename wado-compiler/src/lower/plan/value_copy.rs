@@ -20,13 +20,14 @@ pub mod synthesize;
 
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
-    TypeId,
+    TypeId, TypeParamId,
 };
 use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
@@ -401,11 +402,26 @@ impl<'a> CopyNeeds<'a> {
 /// `TypeParam`s in. Each arg is in the parent frame's terms; frames borrow
 /// per descent, so classification never interns substituted types.
 struct EnvFrame<'a> {
+    /// The declaration `args` instantiate; `None` under a projection, whose
+    /// frame gives only `family`.
+    template: Option<DefId>,
     args: &'a [TypeId],
     /// The arguments a generic associated type's projection gives the
     /// family's own parameters, in the parent frame's terms.
     family: &'a [TypeId],
     parent: Option<&'a EnvFrame<'a>>,
+}
+
+impl EnvFrame<'_> {
+    /// What this frame gives `param`, where `param` is its template's.
+    fn arg(&self, param: TypeParamId) -> Option<TypeId> {
+        let template = self.template?;
+        assert_eq!(
+            param.owner, template,
+            "a member names its template's parameters"
+        );
+        self.args.get(param.index as usize).copied()
+    }
 }
 
 /// Recursion is bounded by variant-payload chains only; past this depth
@@ -436,9 +452,9 @@ fn resolve_param_in_env(
     env: Option<&EnvFrame<'_>>,
     type_table: &TypeTable,
 ) -> Option<TypeId> {
-    if let ResolvedType::TypeParam { index, .. } = type_table.get(type_id) {
+    if let ResolvedType::TypeParam { id, .. } = type_table.get(type_id) {
         let frame = env?;
-        let arg = *frame.args.get(*index as usize)?;
+        let arg = frame.arg(*id)?;
         return resolve_param_in_env(arg, frame.parent, type_table);
     }
     (!type_table.contains_type_param(type_id)).then_some(type_id)
@@ -491,6 +507,7 @@ fn needs_copy_walked(
         // one of its payloads does.
         ResolvedType::Variant { def, type_args } => {
             let frame = EnvFrame {
+                template: Some(*def),
                 args: type_args,
                 family: &[],
                 parent: env,
@@ -513,6 +530,7 @@ fn needs_copy_walked(
         } => match resolve_projection_in_env(*param_id, assoc_name, env, type_table) {
             Some(payload) => {
                 let frame = EnvFrame {
+                    template: None,
                     args: &[],
                     family: args,
                     parent: env,
@@ -533,14 +551,11 @@ fn needs_copy_walked(
         }
         // A bare param with no frame is an unmonomorphized template
         // body — no copy decision applies.
-        ResolvedType::TypeParam { index, .. } => {
-            let i = *index as usize;
-            env.is_some_and(|frame| {
-                frame.args.get(i).is_some_and(|arg| {
-                    needs_copy_in_env(*arg, frame.parent, type_table, depth + 1, walk)
-                })
+        ResolvedType::TypeParam { id, .. } => env.is_some_and(|frame| {
+            frame.arg(*id).is_some_and(|arg| {
+                needs_copy_in_env(arg, frame.parent, type_table, depth + 1, walk)
             })
-        }
+        }),
         // The raw GC array is a value type: assignment / parameter
         // passing / return deep-copies it, like every other value.
         // Its synthesized helper is `array_clone::<T>(&v)` (see

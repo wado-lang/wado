@@ -24,12 +24,78 @@ use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::util;
 use super::{AbstractSelections, Elaborator};
-use crate::defs::DefId;
-use crate::name::{FqTraitName, FqTypeName};
+use crate::defs::{DefId, DefTable};
+use crate::name::{FqTraitName, FqTypeName, repeat_pack_name};
+use crate::resolve::{Resolution, Resolutions};
 use crate::token::Span;
 
+/// A type parameter as the declaration `owner` writes it: a method's `U` and
+/// its impl's `U` are two parameters, whatever a frame calls them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ParamRef {
+    pub(super) owner: Option<DefId>,
+    /// Where a parameter no item owns is written: a generic associated type's
+    /// own, which only its family declares.
+    pub(super) family_decl: Option<ast::AstId>,
+    pub(super) name: String,
+}
+
+impl ParamRef {
+    pub(super) fn of(owner: DefId, name: &str) -> Self {
+        Self {
+            owner: Some(owner),
+            family_decl: None,
+            name: name.to_string(),
+        }
+    }
+
+    /// The parameter `param` declares.
+    pub(super) fn declared(param: &ast::GenericParam, resolutions: &Resolutions) -> Self {
+        Self::of_binder(param.id, &param.name, resolutions)
+    }
+
+    /// The parameter a reference site written `name` resolves to, if it
+    /// resolves to one.
+    pub(super) fn at_site(site: ast::AstId, name: &str, resolutions: &Resolutions) -> Option<Self> {
+        match resolutions.get(site) {
+            Resolution::Binder(binder) => Some(Self::of_binder(binder, name, resolutions)),
+            Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
+        }
+    }
+
+    fn of_binder(binder: ast::AstId, name: &str, resolutions: &Resolutions) -> Self {
+        let owner = resolutions.binder_owner(binder);
+        Self {
+            owner,
+            family_decl: owner.is_none().then_some(binder),
+            name: name.to_string(),
+        }
+    }
+
+    /// `params` paired with `args`, one for one.
+    pub(super) fn space(
+        params: &[ast::GenericParam],
+        args: &[TypeId],
+        resolutions: &Resolutions,
+    ) -> ParamSpace {
+        params
+            .iter()
+            .map(|param| Self::declared(param, resolutions))
+            .zip(args.iter().copied())
+            .collect()
+    }
+
+    /// The parameter as a type name spells it.
+    pub(super) fn binder(&self, defs: &DefTable) -> FqTypeName {
+        match self.owner {
+            Some(owner) => FqTypeName::binder_of(defs, owner, &self.name),
+            None => FqTypeName::binder(&self.name),
+        }
+    }
+}
+
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
-/// and the node that declares it.
+/// and the parameter it stands in for.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct BinderInScope {
     /// Slot in the enclosing item's parameter list.
@@ -37,9 +103,12 @@ pub(super) struct BinderInScope {
     pub(super) type_id: TypeId,
     /// Where the parameter is written, which tells a method's parameter from
     /// the impl receiver's binder of the same letter. `None` for a name no
-    /// parameter declares: `Self`, or one already bound to a concrete type.
-    /// Not what names a binder in a mangle — see [`TraitContext::impl_owner`].
+    /// parameter declares here: `Self`, or one bound to a site's argument for
+    /// an item's parameter, which [`Self::owner`] names instead.
     pub(super) decl: Option<ast::AstId>,
+    /// The declaration whose parameter a binding to a site's argument stands
+    /// in for.
+    pub(super) owner: Option<DefId>,
     /// Declared `affine T`: an argument for it may be move-only.
     pub(super) is_affine: bool,
 }
@@ -51,7 +120,17 @@ impl BinderInScope {
             index,
             type_id,
             decl: Some(param.id),
+            owner: None,
             is_affine: param.is_affine,
+        }
+    }
+
+    /// The parameter `param` bound to a site's argument.
+    pub(super) fn standing_for(index: u32, type_id: TypeId, param: &ParamRef) -> Self {
+        Self {
+            owner: param.owner,
+            decl: param.family_decl,
+            ..Self::undeclared(index, type_id)
         }
     }
 
@@ -63,15 +142,28 @@ impl BinderInScope {
         }
     }
 
+    /// Whether `other` is this same parameter bound again.
+    fn stands_for_same(&self, other: &Self) -> bool {
+        self.type_id == other.type_id && self.decl == other.decl && self.owner == other.owner
+    }
+
     /// A name in scope that no parameter declares — see [`Self::decl`].
     pub(super) fn undeclared(index: u32, type_id: TypeId) -> Self {
         Self {
             index,
             type_id,
             decl: None,
+            owner: None,
             is_affine: false,
         }
     }
+}
+
+/// One binder of a frame: see [`TraitContext::binders`].
+pub(super) struct FrameBinder<'a> {
+    pub(super) type_id: TypeId,
+    pub(super) is_affine: bool,
+    pub(super) bounds: Vec<&'a ScopedBound>,
 }
 
 /// A bound a frame carries, with the chain it came through when it was reached
@@ -296,9 +388,10 @@ pub(super) struct TraitContext {
     /// Type parameters currently in scope. Set when resolving generic structs,
     /// functions, or impl blocks.
     pub(super) type_params: IndexMap<String, BinderInScope>,
-    /// The binders a method's parameter of the same name shadowed. No name
-    /// reaches one, but the body still holds values of it, through `self`.
-    pub(super) shadowed: Vec<(String, BinderInScope)>,
+    /// The binders a method's parameter of the same name shadowed, each with
+    /// the bounds it carried. No name reaches one, but the body still holds
+    /// values of it, through `self`.
+    pub(super) shadowed: Vec<(String, BinderInScope, Vec<ScopedBound>)>,
     /// Trait bounds on type parameters in scope (name → full bounds with assoc
     /// types), each paired with the `Self` its written types mean. Used for
     /// resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
@@ -320,10 +413,6 @@ pub(super) struct TraitContext {
     /// of its calls selected through a declared bound, by the call's node.
     /// See [`Elaborator::abstract_selections`].
     pub(super) abstract_selections: Option<Rc<AbstractSelections>>,
-    /// The `impl` block whose type parameters are in scope, paired with the
-    /// node declaring its receiver binder — what names that binder in a mangle.
-    /// The node, not the spelling: a method parameter may shadow the letter.
-    pub(super) impl_owner: Option<(DefId, Option<ast::AstId>)>,
 }
 
 impl TraitContext {
@@ -332,23 +421,146 @@ impl TraitContext {
     /// the impl's `T` it shadows.
     pub(super) fn affine_params(&self) -> Vec<TypeId> {
         self.binders()
-            .filter(|(_, binder)| binder.is_affine)
-            .map(|(_, binder)| binder.type_id)
+            .into_iter()
+            .filter(|binder| binder.is_affine)
+            .map(|binder| binder.type_id)
             .collect()
     }
 
-    /// Every binder the frame holds, by name, a shadowed one included.
-    pub(super) fn binders(&self) -> impl Iterator<Item = (&String, &BinderInScope)> {
-        self.type_params
+    /// Every binder the frame holds, a shadowed one included, each once with
+    /// the bounds every name reaching it carries. A binder is its type, not its
+    /// name: a callee's parameter bound to the caller's `K` under the letter
+    /// `K` is that same binder, not a second one shadowing it.
+    pub(super) fn binders(&self) -> Vec<FrameBinder<'_>> {
+        let named = self.type_params.iter().map(|(name, binder)| {
+            let bounds = self
+                .type_param_bounds
+                .get(name)
+                .map_or(&[][..], Vec::as_slice);
+            (binder, bounds)
+        });
+        let shadowed = self
+            .shadowed
             .iter()
-            .chain(self.shadowed.iter().map(|(name, binder)| (name, binder)))
+            .map(|(_, binder, bounds)| (binder, bounds.as_slice()));
+        let mut binders: IndexMap<TypeId, FrameBinder<'_>> = IndexMap::default();
+        for (binder, bounds) in named.chain(shadowed) {
+            let held = binders.entry(binder.type_id).or_insert(FrameBinder {
+                type_id: binder.type_id,
+                is_affine: false,
+                bounds: Vec::new(),
+            });
+            held.is_affine |= binder.is_affine;
+            held.bounds.extend(bounds);
+        }
+        binders.into_values().collect()
     }
 
-    /// Bind `name` to `binder`, keeping the binder it shadows.
+    /// The binder whose type is `type_id`, shadowed or not.
+    pub(super) fn binder(&self, type_id: TypeId) -> Option<&BinderInScope> {
+        self.type_params
+            .values()
+            .chain(self.shadowed.iter().map(|(_, binder, _)| binder))
+            .find(|binder| binder.type_id == type_id)
+    }
+
+    /// The binder standing for the parameter the reference `site`, written
+    /// `name`, resolves to: the one declared there, or one bound to a site's
+    /// argument for it. Shadowed or not, the latest frame binding it wins, and
+    /// a site resolving to no parameter has none.
+    pub(super) fn binder_at(
+        &self,
+        resolutions: &Resolutions,
+        site: ast::AstId,
+        name: &str,
+    ) -> Option<&BinderInScope> {
+        let Resolution::Binder(decl) = resolutions.get(site) else {
+            return None;
+        };
+        self.binder_declared_at(resolutions, decl, name)
+    }
+
+    /// The binder the projection at `site`, written `name::Assoc`, projects
+    /// through, as [`Self::binder_at`] finds one.
+    pub(super) fn projection_base_at(
+        &self,
+        resolutions: &Resolutions,
+        site: ast::AstId,
+        name: &str,
+    ) -> Option<&BinderInScope> {
+        let Resolution::Projection(decl) = resolutions.get(site) else {
+            return None;
+        };
+        self.binder_declared_at(resolutions, decl, name)
+    }
+
+    /// The pack a signature minted for `[..element]` where `element` names no
+    /// pack. Found by the element's spelling: the parser mints it, so no site
+    /// resolves to it.
+    pub(super) fn repeat_pack(&self, element: &str) -> Option<&BinderInScope> {
+        self.type_params.get(&repeat_pack_name(element))
+    }
+
+    /// The binder standing for `param`, as [`Self::binder_at`] finds one.
+    pub(super) fn binder_of(
+        &self,
+        resolutions: &Resolutions,
+        param: &ast::GenericParam,
+    ) -> Option<&BinderInScope> {
+        self.binder_declared_at(resolutions, param.id, &param.name)
+    }
+
+    fn binder_declared_at(
+        &self,
+        resolutions: &Resolutions,
+        decl: ast::AstId,
+        name: &str,
+    ) -> Option<&BinderInScope> {
+        let owner = resolutions.binder_owner(decl);
+        let shadowed = self
+            .shadowed
+            .iter()
+            .rev()
+            .filter(|(shadowed, ..)| shadowed == name)
+            .map(|(_, binder, _)| binder);
+        self.type_params
+            .get(name)
+            .into_iter()
+            .chain(shadowed)
+            .find(|binder| {
+                binder.decl == Some(decl) || (binder.owner.is_some() && binder.owner == owner)
+            })
+    }
+
+    /// The bounds the binder whose type is `type_id` carries, shadowed or not.
+    pub(super) fn bounds_of(&self, type_id: TypeId) -> Vec<&ScopedBound> {
+        self.binders()
+            .into_iter()
+            .find(|binder| binder.type_id == type_id)
+            .map_or_else(Vec::new, |binder| binder.bounds)
+    }
+
+    /// Bind `name` to `binder`, keeping the binder it shadows with its bounds.
+    ///
+    /// A binder of the type the name already reaches is a second parameter
+    /// standing for that type: a callee's `K` bound to the caller's `K`, or
+    /// two `fn`-bound parameters of one signature. Both stay reachable by
+    /// identity, and the bounds stay with the type the name still reaches.
     pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
-        if let Some(shadowed) = self.type_params.insert(name.to_string(), binder) {
-            self.shadowed.push((name.to_string(), shadowed));
+        let Some(held) = self.type_params.insert(name.to_string(), binder) else {
+            return;
+        };
+        if held.stands_for_same(&binder) {
+            return;
         }
+        let bounds = if held.type_id == binder.type_id {
+            Vec::new()
+        } else {
+            self.type_param_bounds
+                .shift_remove(name)
+                .unwrap_or_default()
+        };
+        self.shadowed.push((name.to_string(), held, bounds));
     }
 
     /// Unbind every type parameter, for a frame naming its own.
@@ -488,17 +700,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A scope binding a declaration's `params` and no type parameter the
-    /// caller brought: a declaration names its parameters itself.
+    /// A scope binding the `params` declaration `owner` declares and no type
+    /// parameter the caller brought: a declaration names its parameters itself.
     pub(super) fn enter_decl_params_scope(
         &mut self,
+        owner: DefId,
         params: &[ast::GenericParam],
     ) -> TypeParamScope<'_, 'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let ctx = &mut scope.annotate_ctx.trait_ctx;
         ctx.clear_binders();
         ctx.type_param_bounds.clear();
-        scope.register_generic_params(params, 0);
+        scope.register_generic_params(owner, params, 0);
         scope
     }
 
@@ -530,26 +743,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope
     }
 
-    /// Run `body` with `names` bound to `args` and no other type parameter in
-    /// scope, for resolving a type the declaration wrote against its arguments.
+    /// Run `body` with `space` bound and no other type parameter in scope, for
+    /// resolving a type the declaration wrote against its arguments.
     ///
     /// Nothing in `struct Marked<M: Mark = Zero>` means the `Zero` a caller
-    /// happens to declare. A name past `args` stays unbound, so a default
-    /// reaches only the parameters to its left.
+    /// happens to declare. A parameter past the settled arguments stays
+    /// unbound, so a default reaches only the parameters to its left.
     pub(super) fn with_type_param_args<R>(
         &mut self,
-        names: &[String],
-        args: &[TypeId],
+        space: &[(ParamRef, TypeId)],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let binders: IndexMap<String, BinderInScope> = names
+        let binders: IndexMap<String, BinderInScope> = space
             .iter()
-            .zip(args)
             .enumerate()
-            .map(|(slot, (name, &type_id))| {
+            .map(|(slot, (param, type_id))| {
                 (
-                    name.clone(),
-                    BinderInScope::undeclared(slot as u32, type_id),
+                    param.name.clone(),
+                    BinderInScope::standing_for(slot as u32, *type_id, param),
                 )
             })
             .collect();
@@ -565,17 +776,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the enclosing parameters still answer, and a repeated name is shadowed.
     pub(super) fn with_type_params_bound<R>(
         &mut self,
-        names: &[String],
-        args: &[TypeId],
+        space: &[(ParamRef, TypeId)],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let mut scope = self.enter_inherited_type_param_scope();
         let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
-        for (slot, (name, &type_id)) in names.iter().zip(args).enumerate() {
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .bind(name, BinderInScope::undeclared(base + slot as u32, type_id));
+        for (slot, (param, type_id)) in space.iter().enumerate() {
+            let binder = BinderInScope::standing_for(base + slot as u32, *type_id, param);
+            scope.annotate_ctx.trait_ctx.bind(&param.name, binder);
         }
         body(&mut scope)
     }
@@ -822,10 +1030,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx
             .trait_ctx
             .binders()
-            .flat_map(|(name, binder)| {
+            .into_iter()
+            .flat_map(|binder| {
                 let elem = tt
                     .is_type_pack(binder.type_id)
-                    .then(|| tt.make_type_param(name.clone(), binder.index));
+                    .then(|| tt.pack_placeholder(binder.type_id));
                 std::iter::once(binder.type_id).chain(elem)
             })
             .collect()
@@ -859,14 +1068,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
-    /// in the current `trait_ctx`, starting from `offset`. Skips effect params.
-    /// Returns the next free index (i.e. `offset + non_effect_count`).
+    /// Register the generic parameters `owner` declares as `TypeParam` /
+    /// `TypePack` ids in the current `trait_ctx`, starting from `offset`. Skips
+    /// effect params. Returns the next free index (i.e. `offset +
+    /// non_effect_count`).
     ///
     /// Trait bounds attached to each parameter are also recorded in
     /// `type_param_bounds` so trait-method lookups on the parameter work.
     pub(super) fn register_generic_params(
         &mut self,
+        owner: DefId,
         params: &[ast::GenericParam],
         offset: u32,
     ) -> u32 {
@@ -874,9 +1085,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for tp in params.iter().filter(|p| !p.is_effect) {
             // `<F: fn(...)>` binds the parameter directly to the bound's function
             // type: the bound is surface syntax for "F is exactly this
-            // signature". Such params consume no `TypeParam` index slot, keeping
-            // the space dense so `substitute_type_params` — keyed by
-            // `TypeParam.index` — agrees with the signature's slot positions.
+            // signature". Such params take no slot, so a use site's arguments,
+            // which fill only the parameters binding a type, line up with them.
             let fn_bound_sig = if tp.is_pack {
                 None
             } else {
@@ -886,6 +1096,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(sig) => (self.resolve_type(&ast::Type::Function(sig.clone())), false),
                 None => (
                     self.tysys.type_table.borrow_mut().make_declared_param(
+                        owner,
                         tp.name.clone(),
                         idx,
                         tp.is_pack,
@@ -1255,9 +1466,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let ctx = &mut self.annotate_ctx.trait_ctx;
             let binder = BinderInScope::declared(ctx.type_params.len() as u32, resolved_arg, param);
             // The impl's own parameter keeps the name, but the trait's mark
-            // still reaches what it binds.
+            // and bounds still reach what it binds.
             if ctx.type_params.contains_key(&param.name) {
-                ctx.shadowed.push((param.name.clone(), binder));
+                ctx.shadowed.push((param.name.clone(), binder, bounds));
                 continue;
             }
             self.bind_param(&param.name, binder, bounds);

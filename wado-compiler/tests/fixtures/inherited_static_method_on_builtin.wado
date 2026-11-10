@@ -1,0 +1,25 @@
+// A trait's default static method, called through a primitive that adopts the
+// trait, infers its own type parameters from the arguments, as it does
+// through a declared type.
+
+trait Make with () {
+    fn make<U>(u: U) -> U {
+        return u;
+    }
+}
+
+impl Make for i32 {}
+
+struct P {
+    x: i32,
+}
+
+impl Make for P {}
+
+test {
+    assert i32::make(5) == 5;
+    assert P::make("a") == "a";
+}
+
+__DATA__
+{"test": {}}

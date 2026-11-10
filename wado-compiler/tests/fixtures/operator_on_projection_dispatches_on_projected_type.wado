@@ -1,0 +1,37 @@
+// `a.get() == b.get()` compares two `T::Item`s through the projection's own
+// `Eq` bound. With `T = &Owner`, the instance resolved the projection's base
+// to the impl's lowest-index slot rather than the receiver, so `==` compared
+// the wrong type.
+use { println, Stdout } from "core:cli";
+
+trait Has with () {
+    type Item: Eq;
+    fn get(&self) -> Self::Item;
+}
+
+struct Owner {
+    s: String,
+}
+
+impl Has for &Owner {
+    type Item = String;
+    fn get(&self) -> String {
+        return self.s;
+    }
+}
+
+fn same<T: Has>(a: T, b: T) -> bool {
+    return a.get() == b.get();
+}
+
+export fn run() with Stdout {
+    let x = Owner { s: "a" };
+    let y = Owner { s: "a" };
+    let z = Owner { s: "b" };
+    println(`${same(&x, &y)} ${same(&x, &z)}`);
+}
+
+__DATA__
+{
+    "stdout": "true false\n"
+}

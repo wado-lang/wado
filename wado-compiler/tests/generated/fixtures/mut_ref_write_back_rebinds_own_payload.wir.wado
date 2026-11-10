@@ -379,21 +379,24 @@ fn "mut_ref_write_back_rebinds_own_payload.wado/rewrap_by_if_let"(slot) {
 }
 
 fn "mut_ref_write_back_rebinds_own_payload.wado/$test_0_a_payload_read_by_pattern_is_stored_back_through_a_field_reference"() {
-    let $load_0: ref null "mut_ref_write_back_rebinds_own_payload.wado//Inner";
+    let $load_1: ref null "mut_ref_write_back_rebinds_own_payload.wado//Inner";
     let $v0: i32;
     let $write_back_3: ref "core:prelude//$Cell<core:prelude/types.wado/Option<mut_ref_write_back_rebinds_own_payload.wado/Inner>>";
+    let $write_back_before_4: ref null "mut_ref_write_back_rebinds_own_payload.wado//Inner";
     let $sroa_o_inner_17: ref null "mut_ref_write_back_rebinds_own_payload.wado//Inner";
-    "mut_ref_write_back_rebinds_own_payload.wado/bump_by_match"(local.tee $write_back_3(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<mut_ref_write_back_rebinds_own_payload.wado/Inner>>" { value: local.tee $sroa_o_inner_17(ref.null none) }));
-    if ref.eq(local.tee $load_0($write_back_3.value), $sroa_o_inner_17) == 0 {
-        $sroa_o_inner_17 = $load_0;
+    $sroa_o_inner_17 = ref.null none;
+    $write_back_before_4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<mut_ref_write_back_rebinds_own_payload.wado/Inner>>" { value: ref.null none }).value;
+    "mut_ref_write_back_rebinds_own_payload.wado/bump_by_match"($write_back_3);
+    if ref.eq(local.tee $load_1($write_back_3.value), $write_back_before_4) == 0 {
+        $sroa_o_inner_17 = $load_1;
     }
     "mut_ref_write_back_rebinds_own_payload.wado/bump_by_match"(local.tee $write_back_3(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<mut_ref_write_back_rebinds_own_payload.wado/Inner>>" { value: $sroa_o_inner_17 }));
-    if ref.eq(local.tee $load_0($write_back_3.value), $sroa_o_inner_17) == 0 {
-        $sroa_o_inner_17 = $load_0;
+    if ref.eq(local.tee $write_back_before_4($write_back_3.value), $sroa_o_inner_17) == 0 {
+        $sroa_o_inner_17 = $write_back_before_4;
     }
     "mut_ref_write_back_rebinds_own_payload.wado/rewrap_by_if_let"(local.tee $write_back_3(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<mut_ref_write_back_rebinds_own_payload.wado/Inner>>" { value: $sroa_o_inner_17 }));
-    if ref.eq(local.tee $load_0($write_back_3.value), $sroa_o_inner_17) == 0 {
-        $sroa_o_inner_17 = $load_0;
+    if ref.eq(local.tee $write_back_before_4($write_back_3.value), $sroa_o_inner_17) == 0 {
+        $sroa_o_inner_17 = $write_back_before_4;
     }
     if @unlikely(local.tee $v0($inline_core_prelude_types_wado_Option_mut_ref_write_back_rebinds_own_payload_wado_Inner___unwrap_0: block -> ref "mut_ref_write_back_rebinds_own_payload.wado//Inner" {
         if @likely(ref.is_null($sroa_o_inner_17) == 0) {
@@ -796,7 +799,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b96: block {
         l97: loop {
-            break_if b96 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b96 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -820,7 +823,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b100: block {
         l101: loop {
-            break_if b100 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b100 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

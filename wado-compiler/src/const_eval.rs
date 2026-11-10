@@ -218,14 +218,21 @@ impl Value {
         }
     }
 
-    /// Whether the value can be promoted into a pure-value operand. Aggregates
-    /// and sequences cannot: the pool models scalars only.
+    /// Whether the value can be promoted into a pure-value operand. Aggregates,
+    /// sequences and cases carrying a payload cannot: they hold storage, and the
+    /// pool models only what has none.
     #[must_use]
     pub fn is_scalar(&self) -> bool {
-        !matches!(
-            self,
-            Self::Aggregate { .. } | Self::Seq { .. } | Self::Variant { .. }
-        )
+        match self {
+            Self::Aggregate { .. } | Self::Seq { .. } => false,
+            Self::Variant { payload, .. } => payload.is_none(),
+            Self::Int { .. }
+            | Self::Float { .. }
+            | Self::Bool(_)
+            | Self::Char(_)
+            | Self::Null
+            | Self::Unit => true,
+        }
     }
 
     /// Whether one value may stand in for the other — the question a rewrite
@@ -336,8 +343,8 @@ impl Value {
 
     /// Render the value as a NIR-compatible literal repr string.
     ///
-    /// Scalars only. An aggregate has no literal form in NIR but can reach the
-    /// pool, so an arbitrary `Value` must pass [`Self::is_scalar`] first.
+    /// Scalars only, and no case: an aggregate has no literal form in NIR, and a
+    /// case is named through its type, which only the type table spells.
     #[must_use]
     pub fn format_repr(&self) -> String {
         match self {
@@ -348,9 +355,7 @@ impl Value {
             Self::Null => "null".to_string(),
             Self::Unit => "()".to_string(),
             Self::Aggregate { .. } | Self::Seq { .. } | Self::Variant { .. } => {
-                panic!(
-                    "an aggregate, sequence, or variant value has no NIR literal repr; none enters the value pool"
-                )
+                panic!("an aggregate, sequence, or case has no NIR literal repr")
             }
         }
     }
@@ -363,6 +368,20 @@ impl Value {
         let v = op.as_value()?;
         let ty = body.values.type_of(v)?;
         value_kind_to_const(body.values.kind(v), prim_of(ty, type_table))
+    }
+}
+
+/// Whether `value` is what a move leaves in the place it empties, as
+/// `is_moved` reads it: `null`, or the `None` of an `Option` place.
+pub(crate) fn is_moved_marker(value: &Value, types: &TypeTable) -> bool {
+    match value {
+        Value::Null => true,
+        Value::Variant {
+            type_id,
+            case_index,
+            payload: None,
+        } => types.null_case(*type_id) == Some(*case_index),
+        _ => false,
     }
 }
 

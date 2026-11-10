@@ -513,21 +513,7 @@ impl<'a> NirUnparser<'a> {
 
     fn unparse_operand(&mut self, body: &Body, op: Operand) {
         match op {
-            Operand::Value(v) => {
-                // A pure constant renders as its literal; other graph values
-                // (opaques, derived nodes) render as `%id`.
-                if matches!(body.values.kind(v), ValueKind::Unit) {
-                    self.output.push_str("()");
-                } else if let Some(value) =
-                    Value::from_operand(body, op, self.type_table).filter(Value::is_scalar)
-                {
-                    // Scalars only: an aggregate constant has no NIR literal
-                    // form, and `format_repr` panics rather than invent one.
-                    self.output.push_str(&value.format_repr());
-                } else {
-                    self.unparse_value(body, v);
-                }
-            }
+            Operand::Value(v) => self.unparse_value(body, v),
             Operand::Expr(e) => self.unparse_expr(body, e),
         }
     }
@@ -566,7 +552,26 @@ impl<'a> NirUnparser<'a> {
                 self.output
                     .push_str(&self.type_table.mangle_type_arg_for_generic(target));
             }
+            ValueKind::UnitCase {
+                variant_type,
+                case_index,
+            } => {
+                let ResolvedType::Variant { def, .. } = self.type_table.get(variant_type) else {
+                    panic!("a unit case's type is a variant: {variant_type:?}")
+                };
+                let (case_name, ..) = &self
+                    .type_table
+                    .variant_template_cases(*def)
+                    .expect("a variant registers its cases")[case_index as usize];
+                self.output
+                    .push_str(&self.type_table.mangle_type_arg_for_generic(variant_type));
+                self.output.push_str("::");
+                self.output.push_str(case_name);
+            }
+            ValueKind::Unit => self.output.push_str("()"),
             _ => {
+                // A constant renders as its literal; an aggregate has none, and
+                // `format_repr` panics rather than invent one.
                 let op = Operand::Value(v);
                 match Value::from_operand(body, op, self.type_table).filter(Value::is_scalar) {
                     Some(value) => self.output.push_str(&value.format_repr()),
@@ -597,16 +602,13 @@ impl<'a> NirUnparser<'a> {
                 case_name, payload, ..
             } => {
                 let payload = *payload;
-                // Get the variant type name from the type_id
                 let type_name = self.type_table.mangle_type_arg_for_generic(ty);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
-                if let Some(payload_expr) = payload {
-                    self.output.push('(');
-                    self.unparse_operand(body, payload_expr);
-                    self.output.push(')');
-                }
+                self.output.push('(');
+                self.unparse_operand(body, payload);
+                self.output.push(')');
             }
             ExprKind::EnumConstruct { case_name, .. } => {
                 // Get the enum type name from the type_id

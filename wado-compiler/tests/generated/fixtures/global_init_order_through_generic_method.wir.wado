@@ -55,7 +55,13 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
 type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(22)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
+||||||| f6ac4f5a6
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
+=======
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref Array<i64>) -> ref "core:prelude/list.wado//List<i64>";  // TypeId(23)
+>>>>>>> origin/main
 
 type "functype//global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
@@ -246,7 +252,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b27: block {
         l28: loop {
-            break_if b27 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b27 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -268,7 +274,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b31: block {
         l32: loop {
-            break_if b31 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b31 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -341,4 +347,28 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
+<<<<<<< HEAD
+||||||| f6ac4f5a6
+fn "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"() {
+    return global:global_init_order_through_generic_method.wado::SEED.k, "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i64>());
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+    let used: i32;
+    used = builtin::array_len(elements);
+    return struct.new "core:prelude/list.wado//List<i64>" { repr: elements, used: used };
+}
+
+=======
+fn "global_init_order_through_generic_method.wado/global_init_order_through_generic_method.wado/Holder<i64>::new"() {
+    return global:global_init_order_through_generic_method.wado::SEED.k, "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(array.new_fixed<i64>());
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
+    let used: i32;
+    used = builtin::array_len(elements);
+    return struct.new "core:prelude/list.wado//List<i64>" { repr: elements, used: used };
+}
+
+>>>>>>> origin/main
 export fn "global_init_order_through_generic_method.wado/$cm_export__run" as "run"

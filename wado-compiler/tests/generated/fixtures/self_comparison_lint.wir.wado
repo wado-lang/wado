@@ -436,7 +436,7 @@ global global:core:prelude/traits.wado::$const_obj_79: ref "core:prelude/string.
 global global:core:prelude/traits.wado::$const_obj_81: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 };
 
 fn "self_comparison_lint.wado/run"() with Stdout {
-    let $load_2: ref "core:prelude//$Cell<i32>";
+    let $load_4: ref "core:prelude//$Cell<i32>";
     let b_25: i32;
     let c_35: ref "self_comparison_lint.wado//Counter";
     let t: ref "self_comparison_lint.wado//Tally";
@@ -482,10 +482,10 @@ fn "self_comparison_lint.wado/run"() with Stdout {
     c_35.n = 2;
     c_35.n = 3;
     c_35.n = 4;
-    local.tee $load_2(local.tee t(struct.new "self_comparison_lint.wado//Tally" { n: struct.new "core:prelude//$Cell<i32>" { value: 0 } }).n).value = 1;
-    b_25 = $load_2.value;
-    $load_2.value = b_25 + 1;
-    $sroa_$pattern_temp_0_1_14_133 = $load_2.value;
+    local.tee $load_4(local.tee t(struct.new "self_comparison_lint.wado//Tally" { n: struct.new "core:prelude//$Cell<i32>" { value: 0 } }).n).value = 1;
+    b_25 = $load_4.value;
+    $load_4.value = b_25 + 1;
+    $sroa_$pattern_temp_0_1_14_133 = $load_4.value;
     if @unlikely(b_25 == $sroa_$pattern_temp_0_1_14_133) {
         cold_path;
         "self_comparison_lint.wado/run$cold2"(b_25, $sroa_$pattern_temp_0_1_14_133);
@@ -498,15 +498,15 @@ fn "self_comparison_lint.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<self_comparison_lint.wado/Tally>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, b_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self_comparison_lint.wado:40"), used: 28 });
         unreachable;
     }
-    local.tee $load_2(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(local.tee elements(ts_51.repr), 0).n).value = $load_2.value + 1;
-    $sroa_$pattern_temp_0_1_14_133 = $load_2.value;
+    local.tee $load_4(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(local.tee elements(ts_51.repr), 0).n).value = $load_4.value + 1;
+    $sroa_$pattern_temp_0_1_14_133 = $load_4.value;
     if @unlikely(0 >= b_25) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<self_comparison_lint.wado/Tally>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, b_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self_comparison_lint.wado:40"), used: 28 });
         unreachable;
     }
-    local.tee $load_2(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(elements, 0).n).value = $load_2.value + 1;
-    b_25 = $load_2.value;
+    local.tee $load_4(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(elements, 0).n).value = $load_4.value + 1;
+    b_25 = $load_4.value;
     if @unlikely($sroa_$pattern_temp_0_1_14_133 == b_25) {
         cold_path;
         let $mv_arg_3: ref "core:prelude/string.wado//String";
@@ -1198,7 +1198,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b115: block {
         l116: loop {
-            break_if b115 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b115 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -1220,7 +1220,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b119: block {
         l120: loop {
-            break_if b119 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b119 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -1494,7 +1494,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b156: block {
         l157: loop {
-            break_if b156 (((i >= 5) | ((i + 1) >= 5)) | (((i + 1) + 1) >= 5)) | ((((i + 1) + 1) + 1) >= 5);
+            break_if b156 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(5);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -2227,7 +2227,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
     $licm_repr_15 = self.repr;
     b236: block {
         l237: loop {
-            break_if b236 (((start_pos >= self_5) | ((start_pos + 1) >= self_5)) | (((start_pos + 1) + 1) >= self_5)) | ((((start_pos + 1) + 1) + 1) >= self_5);
+            break_if b236 (builtin::i64_extend_i32_s(start_pos) + 3_i64) >= builtin::i64_extend_i32_s(self_5);
             b = builtin::array_get_value<u8>($licm_repr_15, start_pos);
             count = count + ((b & 192) != 128);
             start_pos = start_pos + 1;
@@ -2499,7 +2499,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
             $licm_arith_48 = at + (c * fill_len);
             b267: block {
                 l268: loop {
-                    break_if b267 (((k >= fill_len) | ((k + 1) >= fill_len)) | (((k + 1) + 1) >= fill_len)) | ((((k + 1) + 1) + 1) >= fill_len);
+                    break_if b267 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(fill_len);
                     index_25 = $licm_arith_48 + k;
                     value_26 = builtin::array_get_value<u8>($licm_repr_46, k);
                     builtin::array_set_u8(self, index_25, value_26);

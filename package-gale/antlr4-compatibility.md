@@ -1117,7 +1117,11 @@ the compiled fast path:**
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
    can't be enumerated) routes conservatively. A caller's scan of such a
    rule asks the simulator too, with the parse's caller stack
-   (`Parser.atn`), so the scan ends where the parse will. In a grammar that
+   (`Parser.atn`), so the scan ends where the parse will. Past the end of
+   the rule the parse was entered at, the simulator continues as each call
+   of that rule does, and so on through its callers' callers, as the jar
+   does. It may also end there at the end of the input, which counts only
+   where no caller's continuation reads the `EOF` the grammar writes. In a grammar that
    carries the simulator, every other ambiguity the prediction tree gives up
    on goes to it as well (`ambiguity_routes`). The tournament picks the
    longest scan, and ANTLR4 the lowest alternative the rest of the input
@@ -1167,28 +1171,27 @@ the compiled fast path:**
    the operand's `identifierName singleExpression?`, which the stack says the
    `new` still owes as its arguments. Same test as 3.
 
-Two more sites _would_ belong here on correctness grounds and are left out on
-cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
-in a rule 6 does not reach (fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
-narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
-SQLite's `name+?`). Before the simulator cached its predictions, a prediction
+Under the default, `prediction: "exact"`, the simulator also takes every
+contested decision the static path settles by length: every group decision and
+every `?` `*` `+` whose body and continuation can start on one token
+(`repeat_contested`). That includes an ambiguous greedy `rule?` (fixture
+`ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a narrower
+body that no lookahead separates (`ll_non_greedy_plus_loop.g4`, SQLite's
+`name+?`). Those two are coupled: entering `type_name?` is only right if
+`name+?` can then take the second name, so landing one alone turns an accepted
+input into an error. Before the simulator cached its predictions, a prediction
 per occurrence cost a full closure over the grammar, which took SQLite's
-DDL-heavy benchmark corpus to 155 times as long per parse; neither gating it behind the ambiguous
-lookahead nor bounding the lookahead recovers that. The two are also coupled —
-entering `type_name?` is only right if `name+?` can then take the second name,
-so landing one alone turns an accepted input into an error. The measurements and
-the levers that would make them affordable are in [`perf.md`](./perf.md).
+DDL-heavy benchmark corpus to 155 times as long per parse. The measurements
+are in [`perf.md`](./perf.md).
 
 The simulator's state machine is embedded in the generated parser only
 when a grammar needs it (inspect it with `gale dump --atn`); a grammar
 that needs none carries none and is byte-for-byte unaffected.
 
-These sites are the default, `atn: "auto"`. The `atn` generator option moves
-the line, as "Choosing the simulator" in the [README](./README.md) states.
-`"always"` adds every group decision and every `?` `*` `+` whose body and
-continuation can start on one token (`repeat_contested`), the two sites above
-included. `"never"` leaves 3 and 6 to the tournament and the continuation scan,
-and refuses a grammar that holds 1, 2, 4 or 5.
+`prediction: "longest"` leaves every contested decision, 3 and 6 included, to
+the tournament and the continuation scan, and refuses a grammar that holds 1,
+2, 4 or 5. "Choosing a prediction mode" in the [README](./README.md) lists the
+modes.
 
 ### Known approximation gaps
 
@@ -1222,6 +1225,16 @@ the callee could not. The reason: leaving the callee lands in the caller's loop,
 so every continuation the caller's enter reaches, the callee's reached as well,
 and the callee's all died. So the verdict is recorded for each such caller in
 turn, and a caller with an operator of its own asks the simulator itself.
+
+When every alternative dies, the simulator picks the lowest one that had already
+ended the decision's rule, as the jar does. Where none had, the decision itself
+is a `no viable alternative`, a loop's and a `?`'s as much as a group's: on
+`s : x E ; x : A A A A A A B | A A A A A A ;`, the input `a a a a a a c` enters
+`x`'s second alternative and reports the `c`, while
+`( A A A A A A B | A A A A A A C )* E` reports `a a a a a a e` at the loop. A
+loop or a `?` declines a first token that no alternative takes, since the jar
+reports such a token where it syncs before the loop. A scan reads every miss
+as declining, and fails further on.
 
 Which gaps stay static is a cost decision as much as a correctness one. The
 simulator keeps each prediction for the program's life, as ANTLR4's DFA does,

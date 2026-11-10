@@ -1,0 +1,36 @@
+// A blanket method's own `T` shadows its impl's, yet `Reflect::<Self>` still
+// reflects the impl's `T`. The dispatch looked the subject up by its letter,
+// so it reflected the method's argument instead.
+use { println, Stdout } from "core:cli";
+
+trait Mark with () {}
+
+trait Named with () {
+    fn named<T>(&self, o: T) -> String;
+}
+
+impl<T: Mark> Named for T {
+    #[allow(shadowed_name)]
+    fn named<T>(&self, _o: T) -> String {
+        return Reflect::<Self>::decl_name();
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+struct Other {
+    y: i32,
+}
+
+impl Mark for Point {}
+
+export fn run() with Stdout {
+    println(Point { x: 1 }.named(Other { y: 2 }));
+}
+
+__DATA__
+{
+    "stdout": "Point\n"
+}

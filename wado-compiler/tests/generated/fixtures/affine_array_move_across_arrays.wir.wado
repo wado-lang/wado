@@ -361,26 +361,21 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 fn "affine_array_move_across_arrays.wado/$test_0"() {
     let toks: ref null "Array<affine_array_move_across_arrays.wado/Tok>";
     let rest: ref null "Array<affine_array_move_across_arrays.wado/Tok>";
-    let $moved_3_12: ref null "affine_array_move_across_arrays.wado//Tok";
     let $held_7_16: ref null "affine_array_move_across_arrays.wado//Tok";
-    toks = builtin::array_new<ref null "affine_array_move_across_arrays.wado//Tok">(3);
-    $moved_3_12 = struct.new "affine_array_move_across_arrays.wado//Tok" { id: 1 };
-    if ref.is_null(local.tee $held_7_16(builtin::array_get_value<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 0))) {
-        builtin::array_set<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 0, $moved_3_12);
+    if ref.is_null(local.tee $held_7_16(builtin::array_get_value<ref null "affine_array_move_across_arrays.wado//Tok">(local.tee toks(builtin::array_new<ref null "affine_array_move_across_arrays.wado//Tok">(3)), 0))) {
+        builtin::array_set<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 0, struct.new "affine_array_move_across_arrays.wado//Tok" { id: 1 });
     } else {
         global:affine_array_move_across_arrays.wado::DROPS = global:affine_array_move_across_arrays.wado::DROPS + $held_7_16.id;
         $held_7_16.id = 1;
     }
-    $moved_3_12 = struct.new "affine_array_move_across_arrays.wado//Tok" { id: 10 };
     if ref.is_null(local.tee $held_7_16(builtin::array_get_value<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 1))) {
-        builtin::array_set<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 1, $moved_3_12);
+        builtin::array_set<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 1, struct.new "affine_array_move_across_arrays.wado//Tok" { id: 10 });
     } else {
         global:affine_array_move_across_arrays.wado::DROPS = global:affine_array_move_across_arrays.wado::DROPS + $held_7_16.id;
         $held_7_16.id = 10;
     }
-    $moved_3_12 = struct.new "affine_array_move_across_arrays.wado//Tok" { id: 100 };
     if ref.is_null(local.tee $held_7_16(builtin::array_get_value<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 2))) {
-        builtin::array_set<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 2, $moved_3_12);
+        builtin::array_set<ref null "affine_array_move_across_arrays.wado//Tok">(toks, 2, struct.new "affine_array_move_across_arrays.wado//Tok" { id: 100 });
     } else {
         global:affine_array_move_across_arrays.wado::DROPS = global:affine_array_move_across_arrays.wado::DROPS + $held_7_16.id;
         $held_7_16.id = 100;
@@ -427,7 +422,7 @@ fn "affine_array_move_across_arrays.wado/$drop$Array<affine_array_move_across_ar
     $index_2 = 0;
     b10: block {
         l11: loop {
-            break_if b10 ((($index_2 >= $end_1) | (($index_2 + 1) >= $end_1)) | ((($index_2 + 1) + 1) >= $end_1)) | (((($index_2 + 1) + 1) + 1) >= $end_1);
+            break_if b10 (builtin::i64_extend_i32_s($index_2) + 3_i64) >= builtin::i64_extend_i32_s($end_1);
             if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "affine_array_move_across_arrays.wado//Tok">(value, $index_2))) == 0 {
                 global:affine_array_move_across_arrays.wado::DROPS = global:affine_array_move_across_arrays.wado::DROPS + $slot_3.id;
             }
@@ -876,7 +871,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b108: block {
         l109: loop {
-            break_if b108 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b108 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -900,7 +895,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b112: block {
         l113: loop {
-            break_if b112 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b112 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

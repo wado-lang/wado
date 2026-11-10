@@ -1,0 +1,24 @@
+// A local struct's `Self` field is the impl's type, which in a generic impl
+// names the impl's parameter. The struct is emitted once, so it cannot vary
+// with it: refused at the field rather than left for codegen to crash on.
+struct Foo<T> {
+    v: T,
+}
+
+impl<T> Foo<T> {
+    fn wrap(self) -> i32 {
+        struct L { inner: Self, n: i32 }
+        let l = L { inner: self, n: 3 };
+        return l.n;
+    }
+}
+
+export fn run() {
+    let f = Foo { v: 1 };
+    f.wrap();
+}
+
+__DATA__
+{
+    "compile_error": ":10:20: analysis error: field 'inner' of local struct `L` is `Foo<T>`, which names a type parameter of the enclosing item; declare the parameter on the struct instead"
+}

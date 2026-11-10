@@ -1,0 +1,49 @@
+// A method's own `T` shadows its impl's, yet a field of the impl's `T` still
+// dispatches on what the impl's `T` is. The call recorded its receiver by name
+// alone, so `self.v.sh()` once took the method's `&String` impl, and `-O0`
+// emitted an invalid module for it.
+use { println, Stdout } from "core:cli";
+
+trait Sh with () {
+    fn sh(&self) -> String;
+}
+
+impl Sh for i32 {
+    fn sh(&self) -> String {
+        return "i32";
+    }
+}
+
+impl Sh for String {
+    fn sh(&self) -> String {
+        return "str";
+    }
+}
+
+impl Sh for &String {
+    fn sh(&self) -> String {
+        return "&str";
+    }
+}
+
+struct B<T> {
+    v: T,
+}
+
+impl<T: Sh> B<T> {
+    #[allow(shadowed_name)]
+    fn m<T: Sh>(&self, o: T) -> String {
+        return `${self.v.sh()} ${o.sh()}`;
+    }
+}
+
+export fn run() with Stdout {
+    let s = "x";
+    println(B { v: 1 }.m(&s));
+    println(B { v: 1 }.m("y"));
+}
+
+__DATA__
+{
+    "stdout": "i32 &str\ni32 str\n"
+}

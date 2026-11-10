@@ -369,7 +369,7 @@ fn "variadic_method_own_pack.wado/$test_0_a_method_s_own_pack_is_settled_by_a_tu
         start_29 = 0;
         b3: block {
             l4: loop {
-                break_if b3 (((start_29 >= 7) | ((start_29 + 1) >= 7)) | (((start_29 + 1) + 1) >= 7)) | ((((start_29 + 1) + 1) + 1) >= 7);
+                break_if b3 (builtin::i64_extend_i32_s(start_29) + 3_i64) >= builtin::i64_extend_i32_s(7);
                 if builtin::array_get_value<u8>($load_2, start_29) != builtin::array_get_value<u8>(global:variadic_method_own_pack.wado::$const_obj_1, start_29) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
@@ -433,7 +433,7 @@ fn "variadic_method_own_pack.wado/$test_0_a_method_s_own_pack_is_settled_by_a_tu
         $load_2 = s_11.repr;
         b15: block {
             l16: loop {
-                break_if b15 (((new_used_74 >= start_29) | ((new_used_74 + 1) >= start_29)) | (((new_used_74 + 1) + 1) >= start_29)) | ((((new_used_74 + 1) + 1) + 1) >= start_29);
+                break_if b15 (builtin::i64_extend_i32_s(new_used_74) + 3_i64) >= builtin::i64_extend_i32_s(start_29);
                 if builtin::array_get_value<u8>($load_2, new_used_74) != builtin::array_get_value<u8>(global:variadic_method_own_pack.wado::$const_obj_4, new_used_74) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
                 }
@@ -488,7 +488,7 @@ fn "variadic_method_own_pack.wado/$test_0_a_method_s_own_pack_is_settled_by_a_tu
         start_29 = 0;
         b27: block {
             l28: loop {
-                break_if b27 (((start_29 >= 7) | ((start_29 + 1) >= 7)) | (((start_29 + 1) + 1) >= 7)) | ((((start_29 + 1) + 1) + 1) >= 7);
+                break_if b27 (builtin::i64_extend_i32_s(start_29) + 3_i64) >= builtin::i64_extend_i32_s(7);
                 if builtin::array_get_value<u8>($load_2, start_29) != builtin::array_get_value<u8>(global:variadic_method_own_pack.wado::$const_obj_1, start_29) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__38: 0;
                 }
@@ -552,7 +552,7 @@ fn "variadic_method_own_pack.wado/$test_0_a_method_s_own_pack_is_settled_by_a_tu
         $load_2 = out_179.repr;
         b39: block {
             l40: loop {
-                break_if b39 (((new_used_74 >= start_29) | ((new_used_74 + 1) >= start_29)) | (((new_used_74 + 1) + 1) >= start_29)) | ((((new_used_74 + 1) + 1) + 1) >= start_29);
+                break_if b39 (builtin::i64_extend_i32_s(new_used_74) + 3_i64) >= builtin::i64_extend_i32_s(start_29);
                 if builtin::array_get_value<u8>($load_2, new_used_74) != builtin::array_get_value<u8>(global:variadic_method_own_pack.wado::$const_obj_0, new_used_74) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__48: 0;
                 }
@@ -626,7 +626,7 @@ fn "variadic_method_own_pack.wado/$test_1_a_method_s_own_pack_is_settled_by_the_
         start_25 = 0;
         b52: block {
             l53: loop {
-                break_if b52 (((start_25 >= new_used_24) | ((start_25 + 1) >= new_used_24)) | (((start_25 + 1) + 1) >= new_used_24)) | ((((start_25 + 1) + 1) + 1) >= new_used_24);
+                break_if b52 (builtin::i64_extend_i32_s(start_25) + 3_i64) >= builtin::i64_extend_i32_s(new_used_24);
                 if builtin::array_get_value<u8>($load_4, start_25) != builtin::array_get_value<u8>(global:variadic_method_own_pack.wado::$const_obj_10, start_25) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
                 }
@@ -684,7 +684,7 @@ fn "variadic_method_own_pack.wado/$test_1_a_method_s_own_pack_is_settled_by_the_
         start_25 = 0;
         b64: block {
             l65: loop {
-                break_if b64 (((start_25 >= new_used_24) | ((start_25 + 1) >= new_used_24)) | (((start_25 + 1) + 1) >= new_used_24)) | ((((start_25 + 1) + 1) + 1) >= new_used_24);
+                break_if b64 (builtin::i64_extend_i32_s(start_25) + 3_i64) >= builtin::i64_extend_i32_s(new_used_24);
                 if builtin::array_get_value<u8>($load_4, start_25) != builtin::array_get_value<u8>(global:variadic_method_own_pack.wado::$const_obj_8, start_25) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
                 }
@@ -1034,7 +1034,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b150: block {
         l151: loop {
-            break_if b150 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b150 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1058,7 +1058,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b154: block {
         l155: loop {
-            break_if b154 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b154 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

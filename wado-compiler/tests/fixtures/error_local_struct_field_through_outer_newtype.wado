@@ -1,0 +1,24 @@
+// A local struct's field reaching the enclosing function's parameter through a
+// local newtype names it as surely as one written `T`. The struct is emitted
+// once, so it cannot vary with it: refused at the field rather than left for
+// codegen to crash on.
+use { println, Stdout } from "core:cli";
+
+fn count<T>(x: T) -> i32 {
+    type Items = List<T>;
+    struct Holder {
+        items: Items,
+        n: i32,
+    }
+    let held = Holder { items: [x, x], n: 1 };
+    return held.n + held.items.len();
+}
+
+export fn run() with Stdout {
+    println(`${count(7)} ${count("a")}`);
+}
+
+__DATA__
+{
+    "compile_error": ":10:9: analysis error: field 'items' of local struct `Holder` is `Items`, which names a type parameter of the enclosing item; declare the parameter on the struct instead"
+}

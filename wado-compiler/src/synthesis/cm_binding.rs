@@ -892,7 +892,7 @@ fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) 
         Type::Reference(inner) | Type::MutReference(inner) => collect_named_types(inner, out),
         // Not representable at the CM boundary; a signature carrying one is
         // rejected by `validate_boundary_representable` before this runs.
-        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
+        Type::Function(_) | Type::TypePackSpread(_) | Type::Infer(_) | Type::Error(_) => {}
     }
 }
 

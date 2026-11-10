@@ -390,8 +390,9 @@ global global:coverage_generic.wado::$const_obj_1: ref Array<u8> = array.new_fix
 global global:coverage_generic.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(104, 105, 32);
 global global:core:prelude/format.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
 global global:core:prelude/format.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
-global global:core:prelude/primitive.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/primitive.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
+global global:coverage_generic.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101), used: 8 };
+global global:core:prelude/primitive.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "coverage_generic.wado/$test_0_generic_and_default"() {
     let $load_0: ref Array<u8>;
@@ -426,8 +427,16 @@ fn "coverage_generic.wado/$test_0_generic_and_default"() {
         $sroa_view_repr_461 = out_39.repr;
         b2: block {
             l3: loop {
+<<<<<<< HEAD
                 break_if b2 (((i_33 >= a_end_28) | ((i_33 + 1) >= a_end_28)) | (((i_33 + 1) + 1) >= a_end_28)) | ((((i_33 + 1) + 1) + 1) >= a_end_28);
                 if builtin::array_get_value<u8>($sroa_view_repr_461, i_33) != builtin::array_get_value<u8>(global:coverage_generic.wado::$const_obj_0, i_33) {
+||||||| f6ac4f5a6
+                break_if b2 (((i_33 >= a_end_28) | ((i_33 + 1) >= a_end_28)) | (((i_33 + 1) + 1) >= a_end_28)) | ((((i_33 + 1) + 1) + 1) >= a_end_28);
+                if builtin::array_get_value<u8>($sroa_view_repr_462, i_33) != builtin::array_get_value<u8>(global:coverage_generic.wado::$const_obj_0, i_33) {
+=======
+                break_if b2 (builtin::i64_extend_i32_s(i_33) + 3_i64) >= builtin::i64_extend_i32_s(a_end_28);
+                if builtin::array_get_value<u8>($sroa_view_repr_462, i_33) != builtin::array_get_value<u8>(global:coverage_generic.wado::$const_obj_0, i_33) {
+>>>>>>> origin/main
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_33 = i_33 + 1;
@@ -502,13 +511,11 @@ fn "coverage_generic.wado/$cm_export__$test_0_generic_and_default"() {
 }
 
 fn "coverage_generic.wado/$cm_export__$test_trap_1_traps_after_a_region"() {
-    cold_path;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:coverage_generic.wado::$modules_initialized);
         cold_path;
         "coverage_generic.wado/$initialize_modules$cold0"();
     };
-    cold_path;
     "coverage_generic.wado/check$cold0$dae[n]"();
     unreachable;
     "core:rt/coverage_report"();
@@ -517,7 +524,8 @@ fn "coverage_generic.wado/$cm_export__$test_trap_1_traps_after_a_region"() {
 
 fn "coverage_generic.wado/check$cold0$dae[n]"() {
     "core:rt/coverage_probe$spec6$dae[id]"();
-    "core:rt/panic"(array.new_data<u8>("negative"), 8);
+    let $mv_arg_1: ref "core:prelude/string.wado//String";
+    "core:rt/panic"(local.tee $mv_arg_1(global:coverage_generic.wado::$const_obj_5).repr, $mv_arg_1.used);
     unreachable;
 }
 
@@ -869,7 +877,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b98: block {
         l99: loop {
-            break_if b98 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b98 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -893,7 +901,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b102: block {
         l103: loop {
-            break_if b102 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b102 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -2522,7 +2530,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_5, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_6, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
@@ -2536,7 +2544,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
     let value: u64;
     let offset: i32;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_5, self);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_6, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
 }
 
@@ -2578,7 +2586,7 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self, f) {
-    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(builtin::i64_extend_i32_u(self), f, 16, 0, global:core:prelude/primitive.wado::$const_obj_7);
+    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(builtin::i64_extend_i32_u(self), f, 16, 0, global:core:prelude/primitive.wado::$const_obj_8);
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/string.wado/$tmpl$b145b32c9a586330,i32>::lit$sroa[self.index]"(self, t) {

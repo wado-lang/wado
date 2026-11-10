@@ -244,55 +244,63 @@ You can confirm a rule is ALL(\*)-class with `gale dump` (it prints
 `Ambiguous(...)` for such a decision) and inspect the automaton with
 `gale dump --atn`.
 
-### Choosing the simulator
+### Choosing a prediction mode
 
-The static prediction decides what fixed lookahead can. The `atn` option
-chooses who decides the rest: the runtime simulator, which builds the tree
-ANTLR4 builds, or the longest-match scan tournament, which is faster and can
-build a different one.
+The static prediction decides what fixed lookahead can. Where it meets an
+ambiguity, the `prediction` option chooses who decides: the runtime simulator,
+which builds the tree ANTLR4 builds, or the longest-match scan tournament, which
+is faster and can build a different one.
 
-| `atn`              | A rule's ambiguity  | A group's or a `?` `*` `+`'s ambiguity | A decision only the simulator can make |
-| ------------------ | ------------------- | -------------------------------------- | -------------------------------------- |
-| `"auto"` (default) | simulator           | tournament or a continuation scan      | simulator                              |
-| `"always"`         | simulator           | simulator                              | simulator                              |
-| `"never"`          | tournament          | tournament or a continuation scan      | refused: no parser is built            |
-| `"verify"`         | tournament, checked | tournament, checked                    | simulator                              |
+| `prediction`        | An ambiguity                     | A decision only the simulator can make |
+| ------------------- | -------------------------------- | -------------------------------------- |
+| `"exact"` (default) | simulator                        | simulator                              |
+| `"longest"`         | tournament                       | refused: no parser is built            |
+| `"verify"`          | simulator, beside the tournament | simulator                              |
 
-`"verify"` builds the tree `"never"` builds. Where `"auto"` would hand a
-rule's ambiguity to the simulator, or `"always"` a group's or a `?` `*` `+`'s,
-the parser asks the simulator as well and panics where its answer differs from
-the static pick. So does a left-recursion loop's choice of suffix, in a rule
-whose atom choice `"auto"` routes. The lookahead DFA and LR table `"auto"` reads
-there are checked the same way. A non-greedy `??` `*?` `+?` the static path
-decides is not checked. Where the decision meets a predicate, the simulator is
-handed the predicate's verdict, and what the predicate prints for the check is
-taken back out of the output. A predicate that changes the parser's state
-changes it again for the check, so under `"verify"` it can change the parse. On
-input that has no parse, a check panics where the static path picks otherwise
-than the simulator before the parse fails, and can where both sides are
-recovering. It is for testing the static path against the simulator over real
-inputs, not for use. The generated
-SQLite parser is 1.0 MB under `"never"`, 1.8 MB under `"verify"`, 1.5 MB under
-`"auto"` and 2.9 MB under `"always"` (`gale gen --atn <mode>`).
+`"exact"` builds the tree the ANTLR4 jar builds, on every input; where it does
+not yet is a bug, listed in [`TODO.md`](./TODO.md). The name means only that; it
+is not ANTLR4's `PredictionMode`, which chooses among the simulator's own
+algorithms. The static path keeps a decision only where it is
+proven to pick as the simulator does, and a decision moves to it only by such a
+proof, never because no input was found where the two differ.
 
-Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
-stays with the tournament, and a `?` at a rule's end goes to the simulator when
-the rule asks it anyway. A group's or a `?` `*` `+`'s ambiguity that meets a
-predicate goes to the simulator under `"auto"` as well, since the static path
-cannot weigh the predicate's verdict against what follows. A `?` `*` `+` is
-ambiguous where its body and what follows it can start on one token; where the
-simulator takes it, one at the end of its alternative counts too, since its
-caller's continuation is not known there. The
-decisions only the simulator can make are the `between` shape above, `??`, a
-non-greedy loop's exit no lookahead locates, and a group's choice between its
-empty alternative and another. A lexer rule the lexer simulator matches is not
-affected by `atn`.
+`"longest"` is a dialect: every ambiguity goes to the tournament, which takes the
+longest match, and a grammar with a decision only the simulator can make is
+refused.
+
+`"verify"` builds the tree `"exact"` builds. Wherever `"exact"` asks the
+simulator to settle an ambiguity, the parser also runs the pick `"longest"`
+would make there, and keeps the first decision where the two differ. A parse
+that ends with no syntax error then panics, naming that decision. One that ends
+with a syntax error does not: on input the jar rejects, the simulator's pick is
+a guess at how to fail, and a different pick is not a wrong one. The
+left-recursion loop's choice of suffix, the lookahead DFA and the LR table are
+static shortcuts `"exact"` takes too, and are checked against the simulator the
+same way. A non-greedy `??` `*?` `+?` is not checked, nor is a decision in a
+left-recursive rule the simulator decides as a whole. The pick computed beside
+the simulator's is the one `"longest"` would make within `"exact"`'s parse, so
+where `"longest"` reaches a decision by another path, around a left-recursive
+atom say, its tree can still differ unreported. What the static path's
+predicates print is taken back out of the output, but a predicate that changes
+the parser's state changes it again, so under `"verify"` it can change the
+parse. It is for finding where the tournament departs from ANTLR4 over real
+inputs, not for use.
+
+The generated SQLite parser is 1.0 MB under `"longest"`, 2.9 MB under `"exact"`
+and 3.5 MB under `"verify"` (`gale gen --prediction <mode>`).
+
+A `?` `*` `+` is ambiguous where its body and what follows it can start on one
+token. One at the end of its alternative counts too, since its caller's
+continuation is not known there. The decisions only the simulator can make are
+the `between` shape above, `??`, a non-greedy loop's exit no lookahead locates,
+and a group's choice between its empty alternative and another. A lexer rule the
+lexer simulator matches is not affected by `prediction`.
 
 ```wado
 use { Parser } from "./Grammar.g4" with {
     generator: {
         module: "wado-lang:gale",
-        options: { atn: "never" },
+        options: { prediction: "longest" },
     },
 };
 ```
@@ -422,7 +430,7 @@ wado run package-gale gen --output Grammar_parser.wado Grammar.g4
 # Options:
 #   --output <f>       write the generated parser to <f> instead of stdout
 #   --trace            emit a parser that logs its recursive descent
-#   --atn <mode>       auto (default), always, never or verify (see "Choosing the simulator")
+#   --prediction <m>   exact (default), longest or verify (see "Choosing a prediction mode")
 #   --log-level <lvl>  gale's own threshold: trace, debug, info, warn (default),
 #                      or error. Advisory grammar diagnostics sit at info.
 wado run package-gale gen --trace Grammar.g4

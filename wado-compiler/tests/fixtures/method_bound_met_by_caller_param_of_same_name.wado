@@ -1,0 +1,36 @@
+// A method's bound is met by the caller's parameter of the same letter: the
+// callee's impl `K`, bound to the caller's `K`, is that one parameter and
+// carries its bounds, not a second one shadowing it.
+use { println, Stdout } from "core:cli";
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return *self;
+    }
+}
+
+struct Holder<K> {
+    k: K,
+}
+
+impl<K: Tag> Holder<K> {
+    fn of<Q: Tag>(&self, q: &Q) -> i32 {
+        return q.tag();
+    }
+
+    fn run(&self) -> i32 {
+        return self.of(&self.k);
+    }
+}
+
+export fn run() with Stdout {
+    let h = Holder { k: 41 };
+    println(`${h.run()}`);
+}
+
+__DATA__
+{"stdout": "41\n"}

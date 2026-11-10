@@ -1339,7 +1339,7 @@ fn collect_named_type_sources(
         AstType::Reference(inner) | AstType::MutReference(inner) => {
             collect_named_type_sources(inner, registry, out);
         }
-        AstType::TypePackSpread(_, _) | AstType::Infer(_) | AstType::Error(_) => {}
+        AstType::TypePackSpread(_) | AstType::Infer(_) | AstType::Error(_) => {}
     }
 }
 

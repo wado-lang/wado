@@ -374,11 +374,13 @@ pub enum ExprKind {
         target_fn_type: TypeId,
         closure_module: ModuleSource,
     },
+    /// A case built with its payload. A case without one is a promoted
+    /// [`ValueKind::UnitCase`].
     VariantConstruct {
         variant_type: TypeId,
         case_index: u32,
         case_name: String,
-        payload: Option<Operand>,
+        payload: Operand,
     },
     EnumConstruct {
         enum_type: TypeId,
@@ -845,6 +847,25 @@ impl Body {
                 .values
                 .type_of(v)
                 .expect("promoted operand has no recorded type"),
+        }
+    }
+
+    /// The case `value` builds, with its payload: a variant built in place, or a
+    /// promoted payload-less case.
+    pub fn built_case(&self, value: Operand) -> Option<(u32, Option<Operand>)> {
+        match value {
+            Operand::Value(v) => match self.values.kind(v) {
+                ValueKind::UnitCase { case_index, .. } => Some((*case_index, None)),
+                _ => None,
+            },
+            Operand::Expr(e) => match &self.exprs[e].kind {
+                ExprKind::VariantConstruct {
+                    case_index,
+                    payload,
+                    ..
+                } => Some((*case_index, Some(*payload))),
+                _ => None,
+            },
         }
     }
 
@@ -1351,7 +1372,7 @@ pub trait SubtreeCopy {
                 variant_type,
                 case_index,
                 case_name,
-                payload: payload.map(|p| self.clone_operand(p)),
+                payload: self.clone_operand(payload),
             },
             ExprKind::LabeledBlock {
                 label,
@@ -1834,11 +1855,7 @@ impl Body {
                     }
                 }
                 ExprKind::ClosureToCanonical { functor, .. } => f(functor),
-                ExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(p) = payload {
-                        f(p);
-                    }
-                }
+                ExprKind::VariantConstruct { payload, .. } => f(payload),
                 ExprKind::Switch { scrutinee, .. } => f(scrutinee),
                 ExprKind::PackedArray(_)
                 | ExprKind::Dead
@@ -2111,12 +2128,9 @@ impl Body {
 
     /// Whether some step of the place `e`, its root included, may name storage
     /// rather than hold a value ([`TypeTable::is_reference`]): what it
-    /// reaches the frame need not own. Without a type table, and past a step
-    /// that is no place, every step might be.
-    pub fn place_crosses_reference(&self, e: ExprId, types: Option<&TypeTable>) -> bool {
-        let Some(types) = types else {
-            return true;
-        };
+    /// reaches the frame need not own. Past a step that is no place, every step
+    /// might be.
+    pub fn place_crosses_reference(&self, e: ExprId, types: &TypeTable) -> bool {
         let mut cur = e;
         loop {
             if types.is_reference(self.exprs[cur].type_id) {
@@ -2293,11 +2307,7 @@ impl Body {
                     }
                 }
                 ExprKind::ClosureToCanonical { functor, .. } => f(Slot::Operand(*functor)),
-                ExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(p) = payload {
-                        f(Slot::Operand(*p));
-                    }
-                }
+                ExprKind::VariantConstruct { payload, .. } => f(Slot::Operand(*payload)),
                 ExprKind::LabeledBlock { block, .. } => f(Slot::Node(NodeRef::Block(*block))),
                 ExprKind::Switch {
                     scrutinee,

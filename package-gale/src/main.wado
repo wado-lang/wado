@@ -4,7 +4,7 @@ use { parse } from "core:args";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { GenerateOptions, canonicalize_for_analysis, lower_for_analysis } from "./codegen.wado";
 use { gen_source, load_and_merge, absolute_path_hint } from "./gen_source.wado";
-use { AtnMode } from "./gen_settings.wado";
+use { PredictionMode } from "./gen_settings.wado";
 use { Level, set_log_level } from "core:log";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
@@ -15,7 +15,7 @@ use { render_lexer_dump } from "./lexer_dump.wado";
 // `name_policy` lower-cases the wire tags (`gen` / `dump`).
 struct GenArgs {
     trace: bool = false,
-    atn: AtnMode = AtnMode::Auto,
+    prediction: PredictionMode = PredictionMode::Exact,
     log_level: Option<String> = null,
     output: Option<String> = null,
     /// Highlight query files, each named by its own `--highlights`.
@@ -55,7 +55,7 @@ internal fn gale() -> Result<(), String> with (Stdout, Environment, Preopens) {
     return match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
             apply_log_level(&g.log_level)?;
-            cmd_gen(g.grammars, g.highlights, &g.output, GenerateOptions { trace: g.trace, atn: g.atn });
+            cmd_gen(g.grammars, g.highlights, &g.output, GenerateOptions { trace: g.trace, prediction: g.prediction });
         },
         Ok(Command::Dump(d)) => {
             apply_log_level(&d.log_level)?;
@@ -74,9 +74,9 @@ fn command_name(argv: &List<String>) -> String {
     return "gale";
 }
 
-global USAGE: String = "Usage: gale gen [--trace] [--atn <mode>] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
+global USAGE: String = "Usage: gale gen [--trace] [--prediction <mode>] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
        gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]
-       <mode> is auto, always, never or verify (default auto)
+       <mode> is exact, longest or verify (default exact)
        <level> is trace, debug, info, warn or error (default warn)";
 
 /// Set the process-wide threshold (`core:log` tier 2) from `--log-level`,

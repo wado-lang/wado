@@ -11,15 +11,16 @@ use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand,
     PackedData, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_value_graph::{Side, ValueKind, neutral_int};
+use crate::nir_value_graph::{Side, ValueKind, constant_kind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
+use crate::optimize::arena_query::{shed_marker_calls, unconditional_markers};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
-use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
+use super::{BodySink, CtfeBuiltin, EditSink, Interpreter, Lattice, PatBindings};
 use crate::token::Span;
 use crate::{compiler_trace, hashmap};
 
@@ -66,10 +67,9 @@ impl Interpreter<'_> {
                 None
             };
             if let Some((value, then_block, else_block)) = spliced {
-                if value {
-                    new_stmts.extend(sink.body().blocks[then_block].stmts.clone());
-                } else if let Some(eb) = else_block {
-                    new_stmts.extend(sink.body().blocks[eb].stmts.clone());
+                if let Some(taken) = if value { Some(then_block) } else { else_block } {
+                    self.shed_markers(sink, NodeRef::Block(taken));
+                    new_stmts.extend(sink.body().blocks[taken].stmts.clone());
                 }
                 continue;
             }
@@ -113,6 +113,9 @@ impl Interpreter<'_> {
     /// a fresh literal where the program yields an alias, which `ref.eq` can tell
     /// apart — and so is a leaf under it.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
+        if self.holds_rarity_marker(sink.body(), e) {
+            return false;
+        }
         let node_type = sink.body().exprs[e].type_id;
         if value.is_scalar() {
             if self.type_table.is_reference(node_type) {
@@ -269,18 +272,11 @@ impl Interpreter<'_> {
             Value::Variant {
                 type_id,
                 case_index,
-                payload,
-            } => self.write_variant(
-                sink,
-                existing,
-                *type_id,
-                *case_index,
-                payload.as_deref(),
-                ty,
-                span,
-            ),
+                payload: Some(payload),
+            } => self.write_variant(sink, existing, *type_id, *case_index, payload, ty, span),
+            Value::Variant { type_id, .. } if *type_id != ty => None,
             scalar => {
-                let kind = scalar_kind(scalar, ty)?;
+                let kind = constant_kind(scalar, ty);
                 if let Some(Operand::Value(v)) = existing
                     && sink.body().values.kind(v) == &kind
                     && sink.body().values.type_of(v) == Some(ty)
@@ -458,7 +454,7 @@ impl Interpreter<'_> {
         existing: Option<Operand>,
         type_id: TypeId,
         case_index: u32,
-        payload: Option<&Value>,
+        payload: &Value,
         ty: TypeId,
         span: Span,
     ) -> Option<Operand> {
@@ -481,12 +477,7 @@ impl Interpreter<'_> {
             },
             None => None,
         };
-        let written = match payload {
-            Some(payload) => {
-                Some(self.write_value(sink, previous.flatten(), payload, case.payload, span)?)
-            }
-            None => None,
-        };
+        let written = self.write_value(sink, previous, payload, case.payload, span)?;
         if previous == Some(written) {
             return existing;
         }
@@ -545,7 +536,37 @@ impl Interpreter<'_> {
     /// receiver resolves through it. Env-bound reads belong to
     /// [`Self::flow_fold_value`] instead.
     pub fn const_fold_value(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        if self.holds_rarity_marker(body, e) {
+            return None;
+        }
         self.const_fold_candidate(body, e).filter(Value::is_scalar)
+    }
+
+    /// Whether writing a value over `e` would erase a marker: the interpreter
+    /// runs one as a no-op, so `e` can have a value all the same.
+    fn holds_rarity_marker(&self, body: &Body, e: ExprId) -> bool {
+        !self
+            .unconditional_markers(body, NodeRef::Expr(e))
+            .is_empty()
+    }
+
+    /// The markers that run wherever `root` does. Without the builtin map the
+    /// interpreter cannot run a marker, so no value it finds reaches past one,
+    /// and no branch it collapses is decided past one.
+    fn unconditional_markers(&self, body: &Body, root: NodeRef) -> Vec<ExprId> {
+        let Some(builtins) = self.facts.ctfe_builtins else {
+            return Vec::new();
+        };
+        unconditional_markers(body, root, |f| {
+            matches!(builtins.get(&f), Some(CtfeBuiltin::RarityMarker))
+        })
+    }
+
+    /// Shed the markers of the arm a constant branch takes, as
+    /// [`crate::optimize::arena_query::shed_unconditional_markers`] does.
+    fn shed_markers<S: EditSink>(&self, sink: &mut S, root: NodeRef) {
+        let calls = self.unconditional_markers(sink.body(), root);
+        shed_marker_calls(sink, calls);
     }
 
     fn const_fold_candidate(&mut self, body: &Body, e: ExprId) -> Option<Value> {
@@ -772,6 +793,14 @@ impl Interpreter<'_> {
         };
         if let Lattice::Const(Value::Bool(taken)) = self.operand_to_lattice(sink.body(), condition)
         {
+            let chosen = if taken {
+                Some(then_branch)
+            } else {
+                else_branch
+            };
+            if let Some(branch) = chosen {
+                self.shed_markers(sink, NodeRef::Block(branch));
+            }
             splice_chosen_if_branch(sink, e, taken, then_branch, else_branch);
             return true;
         }
@@ -863,7 +892,10 @@ impl Interpreter<'_> {
             return false;
         }
         let span = match body_op {
-            Operand::Expr(ex) => sink.body().exprs[ex].span,
+            Operand::Expr(ex) => {
+                self.shed_markers(sink, NodeRef::Expr(ex));
+                sink.body().exprs[ex].span
+            }
             Operand::Value(_) => arm.span,
         };
         let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);
@@ -1338,20 +1370,6 @@ fn container_backing<'v>(
         *backing,
         elements.get(..usize::try_from(used as i32).ok()?)?,
     ))
-}
-
-/// The pooled constant a scalar becomes at `ty`. `None` for an aggregate, which
-/// the pool models no operand form for.
-fn scalar_kind(value: &Value, ty: TypeId) -> Option<ValueKind> {
-    Some(match value {
-        Value::Int { value, .. } => ValueKind::Int(*value, ty),
-        Value::Float { value, .. } => ValueKind::Float(value.to_bits(), ty),
-        Value::Bool(b) => ValueKind::Bool(*b),
-        Value::Char(c) => ValueKind::Char(*c),
-        Value::Null => ValueKind::Null,
-        Value::Unit => ValueKind::Unit,
-        Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return None,
-    })
 }
 
 /// The operands a struct literal of `type_id` already holds, in `field_index`

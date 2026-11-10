@@ -1,0 +1,48 @@
+// Two impls on one target each answer `Item` with a parameter their bound
+// projects (`U` from `T: HasOut<Out = U>`), not one the target places. Each
+// `U` is its own impl's, so the answers agree only once the bound projects
+// both at the instance: `i32` for `W<K>`.
+use { println, Stdout } from "core:cli";
+
+trait HasOut with () {
+    type Out;
+}
+
+struct K {}
+
+impl HasOut for K {
+    type Out = i32;
+}
+
+struct W<T> {
+    t: T,
+}
+
+trait First with () {
+    type Item;
+}
+
+trait Second with () {
+    type Item;
+}
+
+impl<T: HasOut<Out = U>, U> First for W<T> {
+    type Item = U;
+}
+
+impl<T: HasOut<Out = U>, U> Second for W<T> {
+    type Item = U;
+}
+
+impl W<K> {
+    fn item(&self) -> Self::Item {
+        return 7;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${W { t: K {} }.item()}`);
+}
+
+__DATA__
+{"stdout": "7\n"}

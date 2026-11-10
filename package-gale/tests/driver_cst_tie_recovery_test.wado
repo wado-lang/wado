@@ -1,9 +1,17 @@
 //! A malformed repeated element and the construct after its loop fail at the
 //! same token. The diagnostic must name the element, although only the
 //! repeat-exit probe parsed it and the parse itself took the construct.
+//!
+//! The probe is the static path's, so this pins `longest`. The jar reports
+//! `x x` as a no-viable-alternative, which `exact` does
+//! (`codegen_test.wado`).
 use tie from "./grammars/tie_recovery.g4"
     with {
-        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_tie_recovery" },
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_tie_recovery",
+            options: { prediction: "longest" },
+        },
     };
 
 test "tie prefers the malformed element over the next construct" {

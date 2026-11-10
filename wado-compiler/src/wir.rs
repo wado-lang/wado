@@ -1767,14 +1767,26 @@ pub enum WirInstr {
 impl WirInstr {
     /// True when the branch `body` is rare in `rarity` throughout: it reaches a
     /// [`WirInstr::Rare`] stating it, which `wir_build` puts where each rare
-    /// run starts, with nothing ahead of it able to leave the branch. Descends
-    /// through transparent grouping (`Block` / `Seq`), so desugarings still
-    /// match.
+    /// run starts, or an `unreachable`, which runs at most once, with nothing
+    /// ahead of it able to leave the branch. A marked arm facing a trapping one
+    /// is then no rarer than it, so it hints neither way. Descends through
+    /// transparent grouping (`Block` / `Seq`), so desugarings still match, and
+    /// counts an `if` each of whose arms is rare, as NIR's `RareRuns` does.
     pub fn is_rare(body: &[Self], rarity: Rarity) -> bool {
         for instr in body {
-            let grouped = matches!(instr, Self::Block { body, .. } | Self::Seq(body)
-                if Self::is_rare(body, rarity));
-            if matches!(instr, Self::Rare(mark) if mark.states(rarity)) || grouped {
+            let grouped = match instr {
+                Self::Block { body, .. } | Self::Seq(body) => Self::is_rare(body, rarity),
+                Self::If {
+                    then_body,
+                    else_body: Some(else_body),
+                    ..
+                } => Self::is_rare(then_body, rarity) && Self::is_rare(else_body, rarity),
+                _ => false,
+            };
+            if matches!(instr, Self::Rare(mark) if mark.states(rarity))
+                || matches!(instr, Self::Unreachable)
+                || grouped
+            {
                 return true;
             }
             if instr.leaves(0) {

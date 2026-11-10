@@ -20,10 +20,7 @@ impl Rule for IdentityCastRule {
         };
         let (inner, target_type) = (*inner, *target_type);
         let source_type = e.body.operand_type(inner);
-        let Some(types) = e.value_graph_type_table() else {
-            return false;
-        };
-        types.share_common_base(source_type, target_type) && e.redirect_expr(id, inner)
+        e.type_table().share_common_base(source_type, target_type) && e.redirect_expr(id, inner)
     }
 }
 

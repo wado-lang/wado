@@ -1229,6 +1229,8 @@ internal struct AtnSim {
     internal state_collapse_to: List<i32> = [],
     internal state_collapse_target: List<bool> = [],
     internal state_call_prec: List<i32>,
+    internal rule_follow_start: List<i32>,
+    internal rule_follow: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1336,11 +1338,30 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
         }
     }
 
+    for let mut r = 0; r < nrules; r += 1 {
+        assert state_kind[2 * r + 1] == ATN_RULE_STOP, "rule r stops at state 2r + 1";
+    }
     let mut state_call_prec = List::filled(nstates, 0);
+    let mut rule_follow_start = List::filled(nrules + 1, 0);
     for let mut j = 0; j < ntrans_total; j += 1 {
         if tr_kind[j] == ATN_TR_RULE {
             assert tr_follow[j] >= 0, "a rule transition returns to a follow state";
             state_call_prec[tr_follow[j]] = tr_prec[j];
+            if tr_label[j] >= 0 {
+                rule_follow_start[tr_label[j] + 1] += 1;
+            }
+        }
+    }
+    for let mut r = 0; r < nrules; r += 1 {
+        rule_follow_start[r + 1] += rule_follow_start[r];
+    }
+    let mut rule_follow = List::filled(rule_follow_start[nrules], 0);
+    let mut next_follow = rule_follow_start;
+    for let mut j = 0; j < ntrans_total; j += 1 {
+        if tr_kind[j] == ATN_TR_RULE && tr_label[j] >= 0 {
+            let r = tr_label[j];
+            rule_follow[next_follow[r]] = tr_follow[j];
+            next_follow[r] += 1;
         }
     }
 
@@ -1362,6 +1383,8 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
         set_words,
         set_bits,
         state_call_prec,
+        rule_follow_start,
+        rule_follow,
     };
 }
 
@@ -1393,9 +1416,11 @@ global ATN_NO_GUARD: i32 = 0;
 global CTX_BOUNDARY: i32 = -3;
 global CTX_UNKNOWN_RETURN: i32 = -4;
 global CTX_HIDDEN_RETURN: i32 = -5;
+global CTX_ANY_CALLER_RETURN: i32 = -6;
 
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
+global CTX_ANY_CALLER: i32 = 2;
 
 global ATN_READS_HIDDEN: i32 = -6;
 internal global ATN_FAILED_ALT: i32 = 1024;
@@ -1404,6 +1429,7 @@ global ATN_PASSED_ACTION: i32 = 2048;
 global ATN_DFA_UNDECIDED: i32 = -7;
 global ATN_DFA_DEAD: i32 = -8;
 global ATN_DFA_START_KEY: i32 = -9;
+global ATN_NOTHING_STARTS: i32 = -10;
 global ATN_DFA_TOKEN_SLOT: i64 = 65536;
 
 global mut ATN_DFA: AtnDfa = AtnDfa::new();
@@ -1715,7 +1741,8 @@ impl CtxArena {
         };
         let empty = arena.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = arena.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
-        assert empty == CTX_EMPTY && unknown == CTX_UNKNOWN, "the bottom and unknown-caller contexts are the arena's first nodes";
+        let any_caller = arena.push(CTX_ANY_CALLER_RETURN, 0, CTX_EMPTY);
+        assert empty == CTX_EMPTY && unknown == CTX_UNKNOWN && any_caller == CTX_ANY_CALLER, "the bottom, unknown-caller and any-caller contexts are the arena's first nodes";
         return arena;
     }
 
@@ -1785,6 +1812,35 @@ impl CtxArena {
             }
         }
         return ctx;
+    }
+
+    fn callers_below(&self, caller: i32) -> List<i32> {
+        let mut below: List<i32> = [];
+        let mut n = caller;
+        while n != CTX_EMPTY && n != CTX_UNKNOWN {
+            assert self.node_len[n] == 1, "a caller stack is a chain";
+            n = self.parent[self.node_start[n]];
+            below.push(n);
+        }
+        return below;
+    }
+
+    fn returns_below(&self, node: i32, caller: i32, below: &mut List<i32>, stays: &mut List<i32>) -> bool {
+        if below.contains(&node) {
+            return true;
+        }
+        if node == caller || node == CTX_EMPTY || node == CTX_UNKNOWN || stays.contains(&node) {
+            return false;
+        }
+        let s = self.node_start[node];
+        for let mut e = s; e < s + self.node_len[node]; e += 1 {
+            if self.ret[e] == CTX_ANY_CALLER_RETURN || self.returns_below(self.parent[e], caller, below, stays) {
+                below.push(node);
+                return true;
+            }
+        }
+        stays.push(node);
+        return false;
     }
 
     fn append_edge(&mut self, return_state: i32, restore_pr: i32, parent: i32) {
@@ -2108,7 +2164,7 @@ fn atn_expand(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut
         return;
     }
     if sim.state_kind[cur.state] == ATN_RULE_STOP {
-        atn_pop(arena, cur, scratch);
+        atn_pop(sim, arena, cur, scratch);
         return;
     }
     let pctx = atn_collapse_into_caller_loop(sim, arena, cur, work, &mut scratch.hidden_alts);
@@ -2205,14 +2261,14 @@ fn atn_edge_collapses(sim: &AtnSim, arena: &CtxArena, e: i32, cur: &AtnConfig) -
     return r >= 0 && sim.state_collapse_to[r] == cur.state && cur.pr >= arena.rpr[e];
 }
 
-fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
+fn atn_pop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
     let s = arena.node_start[cur.pctx];
     let n = arena.node_len[cur.pctx];
     let settled = atn_settled_alt(cur.alt);
     for let mut e = s; e < s + n; e += 1 {
         let r = arena.ret[e];
-        if r == CTX_BOUNDARY {
-            scratch.rset.add(arena, ATN_ACCEPT_EOF, settled, cur.pr, CTX_EMPTY, cur.guard);
+        if r == CTX_BOUNDARY || r == CTX_ANY_CALLER_RETURN {
+            atn_pop_into_callers(sim, arena, cur, scratch);
         } else if r == CTX_UNKNOWN_RETURN {
             scratch.rset.add(arena, cur.state, settled, cur.pr, CTX_UNKNOWN, cur.guard);
         } else if r == CTX_HIDDEN_RETURN {
@@ -2222,6 +2278,16 @@ fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) 
         } else {
             scratch.work.push(AtnConfig { ..*cur, state: r, pctx: arena.parent[e], pr: arena.rpr[e] });
         }
+    }
+}
+
+fn atn_pop_into_callers(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
+    let rule = cur.state / 2;
+    let first = sim.rule_follow_start[rule];
+    let end = sim.rule_follow_start[rule + 1];
+    scratch.rset.add(arena, ATN_ACCEPT_EOF, atn_settled_alt(cur.alt), cur.pr, CTX_EMPTY, cur.guard);
+    for let mut f = first; f < end; f += 1 {
+        scratch.work.push(AtnConfig { ..*cur, state: sim.rule_follow[f], pctx: CTX_ANY_CALLER, pr: 0 });
     }
 }
 
@@ -2282,6 +2348,27 @@ fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
 
 fn atn_resolve(sorted_alts: &List<i32>) -> i32 {
     return if sorted_alts.is_empty() || sorted_alts[0] >= ATN_FAILED_ALT { -1 } else { sorted_alts[0] };
+}
+
+fn atn_dead_end(arena: &CtxArena, configs: &List<AtnConfig>, caller: i32, at_first_token: bool) -> i32 {
+    let alt = atn_finished_alt(arena, configs, caller);
+    return if alt < 0 && at_first_token { ATN_NOTHING_STARTS } else { alt };
+}
+
+fn atn_finished_alt(arena: &CtxArena, configs: &List<AtnConfig>, caller: i32) -> i32 {
+    let mut below = arena.callers_below(caller);
+    let mut stays: List<i32> = [];
+    let mut alts: List<i32> = [];
+    for let c of configs {
+        if alts.contains(&c.alt) {
+            continue;
+        }
+        if c.state == ATN_ACCEPT_EOF || arena.returns_below(c.pctx, caller, &mut below, &mut stays) {
+            alts.push(c.alt);
+        }
+    }
+    alts.sort();
+    return atn_resolve(&alts);
 }
 
 fn atn_one_alt(sorted_alts: &List<i32>) -> bool {
@@ -2473,12 +2560,12 @@ fn atn_walk(
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
     dfa.arena.open_budget();
     let mut s = dfa.start_state(sim, decision, caller, min_prec, &AtnPreds { ..*preds, origin: caller });
-    let mut fallback = -1;
+    let mut live = s;
     let mut pos = start_pos;
     loop {
         let verdict = dfa.state_verdict[s];
         if verdict == ATN_DFA_DEAD {
-            return [fallback, false];
+            return [atn_dead_end(&dfa.arena, &dfa.state_configs[live], caller, pos == start_pos + 1), false];
         }
         if verdict != ATN_DFA_UNDECIDED {
             if verdict != ATN_READS_HIDDEN {
@@ -2486,15 +2573,17 @@ fn atn_walk(
             }
             return [verdict, true];
         }
-        if pos > start_pos {
-            fallback = dfa.state_first[s];
-        }
+        live = s;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let ended = atn_move(sim, &dfa.state_configs[s], eof, eof);
             dfa.arena.push_held_guards(&ended, held);
             let survivors = atn_unique_alts(&ended);
-            return if survivors.is_empty() { [fallback, false] } else { [atn_resolve(&survivors), true] };
+            return if survivors.is_empty() {
+                [atn_dead_end(&dfa.arena, &dfa.state_configs[s], caller, pos == start_pos), false];
+            } else {
+                [atn_resolve(&survivors), true];
+            };
         }
         s = dfa.step(sim, s, token, eof);
         pos += 1;
@@ -2506,7 +2595,6 @@ struct AtnDfa {
     scratch: ClosureScratch,
     state_configs: List<List<AtnConfig>>,
     state_verdict: List<i32>,
-    state_first: List<i32>,
     seeds: AtnKeyLists,
     edges: AtnKeyMap,
     sim_serial: i32,
@@ -2519,7 +2607,6 @@ impl AtnDfa {
             scratch: ClosureScratch::new(),
             state_configs: [],
             state_verdict: [],
-            state_first: [],
             seeds: AtnKeyLists::new(),
             edges: AtnKeyMap::new(),
             sim_serial: 0,
@@ -2606,7 +2693,6 @@ impl AtnDfa {
         let s = self.seeds.add(seeds_from);
         assert s == self.state_configs.len(), "a DFA state is the closure of the seeds it is interned by";
         let alts = atn_unique_alts(&configs);
-        self.state_first.push(atn_resolve(&alts));
         let verdict = self.verdict_of(sim, &configs, alts);
         self.state_verdict.push(verdict);
         self.state_configs.push(configs);
@@ -3321,14 +3407,14 @@ fn scan_continue_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &
             while pos < tokens.len() && tokens[pos] == TK_BREAK {
                 pos += 1;
             }
-            if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { break try_1; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break try_1; }
             pos += 1;
             return pos;
         }
         return -1;
     } else if kind == TK_IF {
         pos = start + 1;
-        while pos < tokens.len() && tokens[pos] == TK_IF && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        while atn_decide_5(atn, tokens, pos, min_prec) == 0 {
             pos += 1;
         }
         return pos;
@@ -3392,12 +3478,16 @@ fn _parse_root__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    let mut _plus_first = true;
-    while !p.recovering && (_plus_first || _kind_set_0(p.peek_kind())) {
-        if !_plus_first {
-            if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        }
-        _plus_first = false;
+    _first_iter: {
+        p.site = 0;
+        p.atn_ret_pending = 11;
+        _parse_continue(p, 0);
+    }
+    loop {
+        if p.recovering { break; }
+        let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
+        if rs_pick_0 < 0 && rs_pick_0 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 != 0 { break; }
         p.site = 0;
         p.atn_ret_pending = 11;
         _parse_continue(p, 0);
@@ -3432,7 +3522,9 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         p.site = 1;
         p.atn_ret_pending = 20;
         _parse_for(p);
-        if p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, min_prec, &[2], &[], |_pred| match _pred { 2 => 1 == 1, _ => unreachable() }) == 0 {
+        let rs_pick_1 = p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, min_prec, &[2], &[], |_pred| match _pred { 2 => 1 == 1, _ => unreachable() });
+        if rs_pick_1 < 0 && rs_pick_1 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_1 == 0 {
             p.site = 2;
             p.atn_ret_pending = 24;
             _parse_for(p);
@@ -3471,18 +3563,9 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         p.expect(TK_IF, &SYNC_3, true);
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                p.scan_gate._scan_edge = p.pos;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens[pos] != TK_IF { break rep_scan; }
-                pos += 1;
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
+            let rs_pick_4 = atn_decide_5(&mut p.atn, &p.kinds, p.pos, min_prec);
+            if rs_pick_4 < 0 && rs_pick_4 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_4 != 0 { break; }
             p.expect(TK_IF, &SYNC_3, true);
         }
         return vals;
@@ -3646,10 +3729,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_BREAK | TK_FOR | TK_IF };
-}
-
-fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_FOR | TK_IF };
 }
 
@@ -3665,6 +3744,30 @@ global SYNC_3: List<i32> = [12];
 global FOLLOW_SETS: List<List<i32>> = [];
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x04\x00\x07\x00\x3d\x00\x06\x00\x00\x00\x02\x00\x04\x00\x06\x00\x0c\x00\x11\x00\x15\x00\x1f\x00\x21\x00\x29\x00\x2e\x00\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x08\x09\x01\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x08\x09\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x01\x01\x07\x06\x09\x07\x01\x01\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x01\x00\x00\x00\x00\x01\x00\x00\x05\x00\x00\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x01\x00\x09\x00\x12\x00\x36\x00\x3a\x00\x0f\x00\x02\x00\x03\x00\x0d\x00\x0b\x00\x0e\x00\x11\x00\x0b\x00\x0a\x00\x10\x00\x14\x00\x1c\x00\x28\x00\x2f\x00\x07\x00\x16\x00\x18\x00\x17\x00\x1b\x00\x07\x00\x17\x00\x13\x00\x1a\x00\x1d\x00\x1e\x00\x1f\x00\x20\x00\x1e\x00\x21\x00\x22\x00\x24\x00\x26\x00\x13\x00\x07\x00\x23\x00\x27\x00\x23\x00\x29\x00\x2a\x00\x2c\x00\x2b\x00\x13\x00\x2d\x00\x2e\x00\x2a\x00\x32\x00\x30\x00\x04\x00\x2f\x00\x33\x00\x35\x00\x31\x00\x34\x00\x38\x00\x06\x00\x07\x00\x37\x00\x3c\x00\x08\x00\x3d\x00\x3b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\xff\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x02\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xff\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x25\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+
+fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_FOR | TK_BREAK | TK_IF => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_5(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_FOR | TK_BREAK | TK_CONTINUE_ => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 5, atn, tokens, pos, TK_EOF, min_prec);
+}
 
 struct ScanGate {
     _scan_edge: i32 = -1,

@@ -1221,7 +1221,7 @@ pub fn walk_type<'ast, V: AstVisitor<'ast>>(v: &mut V, ty: &'ast Type) {
             }
         }
         Type::Reference(t) | Type::MutReference(t) => v.visit_type(t),
-        Type::TypePackSpread(_, _) => {}
+        Type::TypePackSpread(spread) => v.visit_id(spread.id, spread.span),
         Type::Infer(_) => {}
         Type::Error(_) => {}
     }
@@ -2869,7 +2869,7 @@ pub enum Stmt {
     /// `task return expr;` — delivers the async task result without terminating the function.
     /// Only valid inside `export async fn` bodies.
     TaskReturn(TaskReturnStmt),
-    If(IfStmt),
+    If(IfExpr),
     While(WhileStmt),
     For(ForStmt),
     ForOf(ForOfStmt),
@@ -3064,15 +3064,6 @@ impl Condition {
     pub fn is_always_true(&self) -> bool {
         matches!(self, Self::Expr(Expr::Literal(lit)) if matches!(lit.value, Literal::Bool(true)))
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct IfStmt {
-    pub id: AstId,
-    pub condition: Condition,
-    pub then_block: Block,
-    pub else_block: Option<Block>,
-    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -4017,6 +4008,7 @@ pub struct IndexExpr {
     pub unchecked: Option<Span>,
 }
 
+/// An `if`, in expression and in statement position alike.
 #[derive(Debug, Clone)]
 pub struct IfExpr {
     pub id: AstId,
@@ -4289,8 +4281,10 @@ pub enum Type {
     Tuple(Vec<Type>),
     Reference(Box<Type>),
     MutReference(Box<Type>),
-    /// Type pack spread inside a tuple: `..T` in `[i32, ..T, bool]`
-    TypePackSpread(String, Span),
+    /// Type pack spread inside a tuple: `..T` in `[i32, ..T, bool]`. The name
+    /// is a reference site like any other, so the resolver says which
+    /// parameter it spreads.
+    TypePackSpread(NamedType),
     /// Inference placeholder `_` in a type position. Inside a turbofish it
     /// leaves a type-argument slot for inference (`Result<_, MyErr>`);
     /// elsewhere it resolves to the elaborator's unknown type.
@@ -4323,7 +4317,7 @@ impl Type {
                 out.push(g.namespace.clone());
                 out.push(g.name.clone());
             }
-            Type::TypePackSpread(name, _) => out.push(name.clone()),
+            Type::TypePackSpread(spread) => out.push(spread.name.clone()),
             Type::Function(_)
             | Type::Tuple(_)
             | Type::Reference(_)
@@ -4415,7 +4409,11 @@ impl Type {
             Type::Tuple(elems) => Type::Tuple(each(elems, fresh)),
             Type::Reference(inner) => Type::Reference(Box::new(inner.refreshed(fresh))),
             Type::MutReference(inner) => Type::MutReference(Box::new(inner.refreshed(fresh))),
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => self.clone(),
+            Type::TypePackSpread(spread) => Type::TypePackSpread(NamedType {
+                id: fresh(),
+                ..spread.clone()
+            }),
+            Type::Infer(_) | Type::Error(_) => self.clone(),
         }
     }
 
@@ -4434,7 +4432,7 @@ impl Type {
             Type::Named(n) => n.name == name,
             Type::Generic(g) => g.name == name,
             Type::NamespacedGeneric(g) => g.namespace == name || g.name == name,
-            Type::TypePackSpread(spread, _) => spread == name,
+            Type::TypePackSpread(spread) => spread.name == name,
             Type::Function(_)
             | Type::Tuple(_)
             | Type::Reference(_)
@@ -4444,14 +4442,14 @@ impl Type {
         })
     }
 
-    /// Every `..X` this type spells, with where it is written. Exhaustive, as
+    /// Every `..X` this type spells. Exhaustive, as
     /// [`Self::mentioned_names`] is.
     #[must_use]
-    pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
+    pub fn pack_spreads(&self) -> Vec<&NamedType> {
         let mut out = Vec::new();
         self.for_each(&mut |ty| {
-            if let Type::TypePackSpread(name, span) = ty {
-                out.push((name.as_str(), *span));
+            if let Type::TypePackSpread(spread) = ty {
+                out.push(spread);
             }
         });
         out
@@ -4480,11 +4478,11 @@ impl Type {
             Type::Named(t) => Some(t.id),
             Type::Generic(t) => Some(t.id),
             Type::NamespacedGeneric(t) => Some(t.id),
+            Type::TypePackSpread(t) => Some(t.id),
             Type::Function(_)
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _)
             | Type::Infer(_)
             | Type::Error(_) => None,
         }
@@ -4530,7 +4528,7 @@ impl Type {
                 .map_or_else(|| t.return_type.span(), Type::span),
             Type::Tuple(elems) => elems.first().map(Type::span).unwrap_or_default(),
             Type::Reference(inner) | Type::MutReference(inner) => inner.span(),
-            Type::TypePackSpread(_, span) => *span,
+            Type::TypePackSpread(t) => t.span,
             Type::Infer(span) => *span,
             Type::Error(span) => *span,
         }

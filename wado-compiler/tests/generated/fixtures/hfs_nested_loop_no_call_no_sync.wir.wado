@@ -214,9 +214,19 @@ fn "hfs_nested_loop_no_call_no_sync.wado/run"() with Stdout {
             if (local.tee $licm_arith_36(round * 2) >= 0) & (2 <= (8 - $licm_arith_36)) {
                 b4: block {
                     l5: loop {
+<<<<<<< HEAD
                         break_if b4 (((k >= 2) | ((k + 1) >= 2)) | (((k + 1) + 1) >= 2)) | ((((k + 1) + 1) + 1) >= 2);
                         $hfs_hold_267 = $hfs_hold_267 | ($hfs_hold_267 = $licm_arith_36 + k; builtin::array_get_value<u8>(global:hfs_nested_loop_no_call_no_sync.wado::$const_obj_1, $hfs_hold_267) << $hfs_bits_268);
                         $hfs_bits_268 = $hfs_bits_268 + 8;
+||||||| f6ac4f5a6
+                        break_if b4 (((k >= 2) | ((k + 1) >= 2)) | (((k + 1) + 1) >= 2)) | ((((k + 1) + 1) + 1) >= 2);
+                        $hfs_hold_269 = $hfs_hold_269 | ($hfs_hold_269 = $licm_arith_36 + k; builtin::array_get_value<u8>(global:hfs_nested_loop_no_call_no_sync.wado::$const_obj_1, $hfs_hold_269) << $hfs_bits_270);
+                        $hfs_bits_270 = $hfs_bits_270 + 8;
+=======
+                        break_if b4 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(2);
+                        $hfs_hold_269 = $hfs_hold_269 | ($hfs_hold_269 = $licm_arith_36 + k; builtin::array_get_value<u8>(global:hfs_nested_loop_no_call_no_sync.wado::$const_obj_1, $hfs_hold_269) << $hfs_bits_270);
+                        $hfs_bits_270 = $hfs_bits_270 + 8;
+>>>>>>> origin/main
                         k = k + 1;
                         $hfs_hold_267 = $hfs_hold_267 | ($hfs_hold_267 = $licm_arith_36 + k; builtin::array_get_value<u8>(global:hfs_nested_loop_no_call_no_sync.wado::$const_obj_1, $hfs_hold_267) << $hfs_bits_268);
                         $hfs_bits_268 = $hfs_bits_268 + 8;
@@ -508,7 +518,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b53: block {
         l54: loop {
-            break_if b53 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b53 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -530,7 +540,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b57: block {
         l58: loop {
-            break_if b57 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b57 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));

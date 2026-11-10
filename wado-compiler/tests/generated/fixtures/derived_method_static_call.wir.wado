@@ -405,7 +405,7 @@ fn "derived_method_static_call.wado/$test_2_a_generic_type_s_derived_methods_tak
     let $v3: ref null "core:prelude//$Cell<derived_method_static_call.wado/Tree<i32>>";
     let $eq_self_Leaf_2: i32;
     let $eq_other_Leaf_3: i32;
-    if @unlikely($inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_2: block -> bool {
+    if @unlikely($inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_4: block -> bool {
         $v1 = struct.new "core:prelude//$Cell<derived_method_static_call.wado/Tree<i32>>" { value: ref.as_non_null(local.tee $v0(struct.new "derived_method_static_call.wado//Tree<i32>::Leaf" { discriminant: 0, payload_0: 1 })) };
         $v3 = struct.new "core:prelude//$Cell<derived_method_static_call.wado/Tree<i32>>" { value: ref.as_non_null(local.tee $v2(struct.new "derived_method_static_call.wado//Tree<i32>::Leaf" { discriminant: 0, payload_0: 1 })) };
         let $match_scrut_0: ref "derived_method_static_call.wado//Tree<i32>";
@@ -413,15 +413,15 @@ fn "derived_method_static_call.wado/$test_2_a_generic_type_s_derived_methods_tak
             $eq_self_Leaf_2 = ref.cast "derived_method_static_call.wado//Tree<i32>::Leaf"($match_scrut_0).payload_0;
             if ref.test "derived_method_static_call.wado//Tree<i32>::Leaf"(local.tee $match_scrut_0($v3.value)) {
                 $eq_other_Leaf_3 = ref.cast "derived_method_static_call.wado//Tree<i32>::Leaf"($match_scrut_0).payload_0;
-                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_2: $eq_self_Leaf_2 == $eq_other_Leaf_3;
+                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_4: $eq_self_Leaf_2 == $eq_other_Leaf_3;
             } else {
-                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_2: 0;
+                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_4: 0;
             }
         } else {
             if $v3.value.discriminant == 1 {
-                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_2: 1;
+                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_4: 1;
             } else {
-                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_2: 0;
+                break $inline_derived_method_static_call_wado_Tree_i32__core_prelude_traits_wado_Eq__eq_4: 0;
             }
         }
         unreachable;
@@ -820,7 +820,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b90: block {
         l91: loop {
-            break_if b90 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b90 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -844,7 +844,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b94: block {
         l95: loop {
-            break_if b94 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b94 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

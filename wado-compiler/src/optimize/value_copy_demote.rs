@@ -1367,9 +1367,9 @@ fn is_self_derived(
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
             .any(|e| is_self_derived_op(body, *e, tainted, tt, element_accessors)),
-        ExprKind::VariantConstruct { payload, .. } => payload
-            .as_ref()
-            .is_some_and(|p| is_self_derived_op(body, *p, tainted, tt, element_accessors)),
+        ExprKind::VariantConstruct { payload, .. } => {
+            is_self_derived_op(body, *payload, tainted, tt, element_accessors)
+        }
         ExprKind::ClosureToCanonical { functor, .. } => {
             is_self_derived_op(body, *functor, tainted, tt, element_accessors)
         }

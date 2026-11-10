@@ -439,9 +439,19 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
+<<<<<<< HEAD
     b36: block {
         l37: loop {
             break_if b36 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+||||||| f6ac4f5a6
+    b6: block {
+        l7: loop {
+            break_if b6 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+=======
+    b6: block {
+        l7: loop {
+            break_if b6 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
+>>>>>>> origin/main
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -463,9 +473,19 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l39;
         };
     };
+<<<<<<< HEAD
     b40: block {
         l41: loop {
             break_if b40 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+||||||| f6ac4f5a6
+    b10: block {
+        l11: loop {
+            break_if b10 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+=======
+    b10: block {
+        l11: loop {
+            break_if b10 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
+>>>>>>> origin/main
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

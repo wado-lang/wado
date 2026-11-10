@@ -143,7 +143,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/seq_eq<u8>$spec0$dae[a_start
     i = 0;
     b4: block {
         l5: loop {
-            break_if b4 (((i >= a_end) | ((i + 1) >= a_end)) | (((i + 1) + 1) >= a_end)) | ((((i + 1) + 1) + 1) >= a_end);
+            break_if b4 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
             if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
                 return 0;
             }
@@ -193,7 +193,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b15: block {
         l16: loop {
-            break_if b15 (((i >= 8) | ((i + 1) >= 8)) | (((i + 1) + 1) >= 8)) | ((((i + 1) + 1) + 1) >= 8);
+            break_if b15 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(8);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));

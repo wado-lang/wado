@@ -140,7 +140,7 @@ global global:core:prelude/string.wado::$const_obj_10: ref Array<u8> = array.new
 
 fn "affine_drop_generic_impl.wado/run"() with Stdout {
     let $load_0: ref Array<u8>;
-    let $load_32: ref null "affine_drop_generic_impl.wado//Wrap<core:prelude/string.wado/String>";
+    let $load_34: ref null "affine_drop_generic_impl.wado//Wrap<core:prelude/string.wado/String>";
     let c_2: ref "affine_drop_generic_impl.wado//Counter";
     let _w_3: ref null "affine_drop_generic_impl.wado//Wrap<core:prelude/types.wado/Stream<u8>>";
     let self_18: ref null "affine_drop_generic_impl.wado//Wrap<affine_drop_generic_impl.wado/Wrap<core:prelude/string.wado/String>>";
@@ -249,8 +249,8 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(t_107);
     self_18 = struct.new "affine_drop_generic_impl.wado//Wrap<affine_drop_generic_impl.wado/Wrap<core:prelude/string.wado/String>>" { value: struct.new "affine_drop_generic_impl.wado//Wrap<core:prelude/string.wado/String>" { id: 1000 }, id: 0 };
     global:affine_drop_generic_impl.wado::DROPS = global:affine_drop_generic_impl.wado::DROPS;
-    if ref.is_null(local.tee $load_32(self_18.value)) == 0 {
-        global:affine_drop_generic_impl.wado::DROPS = global:affine_drop_generic_impl.wado::DROPS + $load_32.id;
+    if ref.is_null(local.tee $load_34(self_18.value)) == 0 {
+        global:affine_drop_generic_impl.wado::DROPS = global:affine_drop_generic_impl.wado::DROPS + $load_34.id;
     }
     self_18.value = ref.null none;
     t_107 = global:affine_drop_generic_impl.wado::DROPS;
@@ -316,7 +316,7 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
     global:affine_drop_generic_impl.wado::$effect_core:prelude/types.wado/Stream<u8> = struct.new "affine_drop_generic_impl.wado//$Dispatch_core:prelude/types.wado/Stream<u8>" { outer: local.tee $local_0_35(global:affine_drop_generic_impl.wado::$effect_core:prelude/types.wado/Stream<u8>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "affine_drop_generic_impl.wado//$Closure_0" {}, func: ref.func "closure/affine_drop_generic_impl.wado/$closure_wrapper_0" }, op_drop: struct.new "canonical//CanonicalClosure_1" { env: struct.new "affine_drop_generic_impl.wado//$Closure_3" { $capture_0: c_2 }, func: ref.func "closure/affine_drop_generic_impl.wado/$closure_wrapper_1" } };
     _w_3 = struct.new "affine_drop_generic_impl.wado//Wrap<core:prelude/types.wado/Stream<u8>>" { value: rx_24, id: 100 };
     global:affine_drop_generic_impl.wado::DROPS = global:affine_drop_generic_impl.wado::DROPS + 100;
-    if ref.is_null(local.tee rx_24(_w_3.value)) == 0 {
+    if ref.is_null(rx_24) == 0 {
         $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_8: block {
             if ref.is_null(local.tee $local_1_84(global:affine_drop_generic_impl.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
                 global:affine_drop_generic_impl.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_36(ref.as_non_null($local_1_84)).outer;
@@ -476,7 +476,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b47: block {
         l48: loop {
-            break_if b47 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b47 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -498,7 +498,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b51: block {
         l52: loop {
-            break_if b51 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b51 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));

@@ -511,14 +511,9 @@ fn walk_expr_shape(body: &Body, expr: ExprId, site: &UseSite<'_>) -> LeftmostWal
                 walk_children_pure(body, elements.iter().copied(), site),
             )
         }
-        ExprKind::VariantConstruct { payload, .. } => finish_leftmost(
-            body,
-            expr,
-            match *payload {
-                Some(p) => walk_operand_for_leftmost(body, p, site),
-                None => LeftmostWalk::Pure,
-            },
-        ),
+        ExprKind::VariantConstruct { payload, .. } => {
+            finish_leftmost(body, expr, walk_operand_for_leftmost(body, *payload, site))
+        }
         ExprKind::ClosureToCanonical { functor, .. } => {
             finish_leftmost(body, expr, walk_operand_for_leftmost(body, *functor, site))
         }

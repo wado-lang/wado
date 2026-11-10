@@ -12,6 +12,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::infer::unify;
+use super::scope::ParamRef;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::types::TypeError;
 use super::tysys::TypeSystem;
@@ -23,7 +24,7 @@ use crate::elaborator::sem::types::{
     StaticMethodDispatch,
 };
 use crate::elaborator::types::VariantInfo;
-use crate::name::{FqTraitName, mangle_generic_name, written_param_name};
+use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
 use crate::tir;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
@@ -160,9 +161,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         param: &GenericParam,
         self_binding: Option<SelfBinding>,
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
     ) -> Vec<DeclaredBound> {
-        let at_impl = self.tysys.call_site_types(&[], &[], impl_args);
+        // A variable stays named, for the re-check to read its answer; a
+        // parameter is the frame's, and only that frame spells it.
+        let at_impl: Vec<(FqTypeName, FqTypeName)> = {
+            let tt = self.tysys.type_table.borrow();
+            let defs = self.tysys.resolutions.defs();
+            impl_args
+                .iter()
+                .filter(|&&(_, arg)| !tt.contains_rigid_param(arg) && !tt.contains_unknown(arg))
+                .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
+                .collect()
+        };
         param
             .real_bounds()
             .into_iter()
@@ -235,10 +246,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param: &GenericParam,
         type_arg: TypeId,
         self_binding: Option<SelfBinding>,
-        impl_args: &[(String, TypeId)],
+        impl_args: &[(ParamRef, TypeId)],
         span: Span,
     ) {
         let bounds = self.declared_bounds(param, self_binding, impl_args);
+        self.defer_declared_bounds(param, type_arg, bounds, span);
+    }
+
+    /// [`Self::defer_bounds_to_answer`] for `bounds` already declared. A
+    /// settled `type_arg` defers them too where their own arguments name
+    /// variables still to be answered (`T: Pick<U>` with `U` awaiting `1.5`).
+    pub(super) fn defer_declared_bounds(
+        &mut self,
+        param: &GenericParam,
+        type_arg: TypeId,
+        bounds: Vec<DeclaredBound>,
+        span: Span,
+    ) {
         if bounds.is_empty() {
             return;
         }
@@ -382,7 +406,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .annotate_ctx
             .trait_ctx
             .binders()
-            .map(|(_, b)| b.type_id)
+            .into_iter()
+            .map(|binder| binder.type_id)
             .collect();
         self.tysys
             .type_table
@@ -632,11 +657,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if tt.contains_type_param(solution) {
                     return None;
                 }
-                Some(
-                    bounds
-                        .iter()
-                        .map(move |b| (solution, param_name.clone(), b.clone(), *span)),
-                )
+                let tt = &tt;
+                Some(bounds.iter().map(move |b| {
+                    // A bound argument may name a variable too (`T: Pick<U>`
+                    // with `U` awaiting a literal), answered by now.
+                    let trait_ = b.trait_.rewrite_args(&|name| match name.head() {
+                        TypeHead::Infer { var, .. } => Some(tt.fq_type_name(subst[var])),
+                        _ => None,
+                    });
+                    let bound = DeclaredBound {
+                        trait_,
+                        written: b.written.clone(),
+                    };
+                    (solution, param_name.clone(), bound, *span)
+                }))
             })
             .flatten()
             .collect();
@@ -904,6 +938,7 @@ fn sub_closure_captures(
         m.inner_type = sub(tt, m.inner_type, subst);
         m.ref_type = sub(tt, m.ref_type, subst);
     }
+    cc.return_type = sub(tt, cc.return_type, subst);
 }
 
 fn sub_sequence_coercion(

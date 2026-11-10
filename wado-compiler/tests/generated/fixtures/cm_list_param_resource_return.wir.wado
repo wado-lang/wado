@@ -56,7 +56,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-lay
     $licm_repr_25 = entries.repr;
     b1: block {
         l2: loop {
-            break_if b1 ((($entries_i >= 2) | (($entries_i + 1) >= 2)) | ((($entries_i + 1) + 1) >= 2)) | (((($entries_i + 1) + 1) + 1) >= 2);
+            break_if b1 (builtin::i64_extend_i32_s($entries_i) + 3_i64) >= builtin::i64_extend_i32_s(2);
             $entries_addr = $entries_base + ($entries_i * 4);
             $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);

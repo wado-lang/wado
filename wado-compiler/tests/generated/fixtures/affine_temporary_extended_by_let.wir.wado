@@ -353,7 +353,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temporary_extended_by_let.wado/$tmpl$8655094d5327a538,[core:prelude/list.wado/List<i32>,core:prelude/list.wado/List<i32>]>" = fn(ref "affine_temporary_extended_by_let.wado//$tmpl$8655094d5327a538") -> ref "core:prelude/string.wado//String";  // TypeId(108)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i32>) -> [ref Array<i32>, i32];  // TypeId(109)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref Array<i32>) -> [ref Array<i32>, i32];  // TypeId(109)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temporary_extended_by_let.wado/$tmpl$986fb2374fb68f23,[i32,i32,i32,i32,i32,i32,&i32,i32,i32]>" = fn(ref "affine_temporary_extended_by_let.wado//$tmpl$986fb2374fb68f23") -> ref "core:prelude/string.wado//String";  // TypeId(110)
 
@@ -590,7 +590,7 @@ xs[0].n: "), used: 10 }, s9: struct.new "core:prelude/string.wado//String" { rep
         $licm_repr_134 = global:affine_temporary_extended_by_let.wado::$const_obj_0.repr;
         b22: block {
             l23: loop {
-                break_if b22 (((used_102 >= $v7) | ((used_102 + 1) >= $v7)) | (((used_102 + 1) + 1) >= $v7)) | ((((used_102 + 1) + 1) + 1) >= $v7);
+                break_if b22 (builtin::i64_extend_i32_s(used_102) + 3_i64) >= builtin::i64_extend_i32_s($v7);
                 if builtin::array_get_value<i32>($licm_repr_133, used_102) != builtin::array_get_value<i32>($licm_repr_134, used_102) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__46: 0;
                 }
@@ -736,7 +736,7 @@ fn "affine_temporary_extended_by_let.wado/$cm_export__$test_0"() {
 fn "affine_temporary_extended_by_let.wado/$initialize_module"() {
     let $mv_repr_1: ref Array<i32>;
     let $mv_used_2: i32;
-    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>());
+    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(array.new_fixed<i32>());
     global:affine_temporary_extended_by_let.wado::DROPPED = struct.new "core:prelude/list.wado//List<i32>" { repr: $mv_repr_1, used: $mv_used_2 };
 }
 
@@ -1808,7 +1808,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b314: block {
         l315: loop {
-            break_if b314 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b314 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1832,7 +1832,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b318: block {
         l319: loop {
-            break_if b318 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b318 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -2650,7 +2650,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temp
     return $mv_arg_1;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
     let used: i32;
     used = builtin::array_len(elements);
     return elements, used;

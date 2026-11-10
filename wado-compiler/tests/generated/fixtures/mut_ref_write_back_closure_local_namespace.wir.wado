@@ -370,7 +370,7 @@ fn "mut_ref_write_back_closure_local_namespace.wado/$test_0_a_payload_only_refer
         $licm_repr_17 = t.repr;
         b3: block {
             l4: loop {
-                break_if b3 (((i >= $v0) | ((i + 1) >= $v0)) | (((i + 1) + 1) >= $v0)) | ((((i + 1) + 1) + 1) >= $v0);
+                break_if b3 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($v0);
                 if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(global:mut_ref_write_back_closure_local_namespace.wado::$const_obj_0, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
@@ -818,7 +818,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b102: block {
         l103: loop {
-            break_if b102 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b102 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -842,7 +842,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b106: block {
         l107: loop {
-            break_if b106 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b106 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

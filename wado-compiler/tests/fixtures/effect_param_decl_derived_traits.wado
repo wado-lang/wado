@@ -1,0 +1,26 @@
+// An effect parameter takes no type argument, so the impls derived over a
+// declaration carrying one take an argument for each other parameter only.
+use { println, Stdout } from "core:cli";
+use { to_string } from "core:json";
+
+struct Box<effect E, T> { v: T }
+struct Tag<effect E> { n: i32 }
+variant Opt<effect E, T> { No, Yes(T) }
+type Wrap<T, effect E> = List<T>;
+
+export fn run() with Stdout {
+    let b: Box<i32> = Box { v: 3 };
+    let c: Box<i32> = Box { v: 4 };
+    let t = Tag { n: 5 };
+    let o: Opt<i32> = Opt::Yes(6);
+    let w: Wrap<i32> = [7];
+    println(`${b:?} ${b == c} ${b < c} ${to_string(&b).unwrap()}`);
+    println(`${t:?} ${t == Tag { n: 5 }}`);
+    println(`${o:?} ${o == Opt::No}`);
+    println(`${w:?}`);
+}
+
+__DATA__
+{
+    "stdout": "Box { v: 3 } false true {\"v\":3}\nTag { n: 5 } true\nOpt::Yes(6) false\n[7] as Wrap\n"
+}

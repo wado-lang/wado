@@ -14,7 +14,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, deref_to_layers, hold_hole, method_param_offset, transpose_tuple_expr,
+    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -102,7 +102,7 @@ pub fn expand_settled_packs(
     functions: &[Rc<RefCell<TirFunction>>],
 ) {
     mono.current_param_substitution_key = IndexMap::default();
-    mono.current_impl_type_param_count = 0;
+    mono.current_impl_type_params = Vec::new();
     mono.current_impl_receiver = None;
 
     struct SettledPackExpander<'a> {
@@ -121,12 +121,8 @@ pub fn expand_settled_packs(
                         settled_pack: Some(settled),
                         ..
                     } => {
-                        let index = self
-                            .type_table
-                            .borrow()
-                            .param_slot(pack_type_id)
-                            .expect("an expansion names its pack before substitution");
-                        Some(IndexMap::from_iter([(index, settled)]))
+                        let pack = self.type_table.borrow().declared_param(pack_type_id);
+                        Some(TypeArgMap::from_iter([(pack, settled)]))
                     }
                     _ => None,
                 })
@@ -823,24 +819,52 @@ impl Monomorphizer {
             .or(written)
     }
 
-    /// The concrete type a `T^Trait::method` receiver dispatches on: the
-    /// parameter named `T`, else (a synthesised receiver) the lowest slot.
+    /// The concrete type a `T^Trait::method` receiver dispatches on: what
+    /// [`Self::receiver_param_answer`] says, what a projection receiver
+    /// (`T::Item`) binds at the instance, else, for a receiver no call
+    /// recorded, the lowest slot. A recorded receiver `substitution` does not
+    /// fill is left for the substitution that does.
     fn receiver_substitution_tid(
         &self,
         info: &LocalMethodName,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
+        type_table: &TypeTable,
     ) -> Option<TypeId> {
-        if let Some(key) = self
-            .current_param_substitution_key
-            .get(&info.base_struct_name())
-            && let Some(&tid) = substitution.get(key)
-        {
-            return Some(tid);
+        let answer = self.receiver_param_answer(info, substitution);
+        if info.receiver_param.is_some() {
+            return answer;
         }
+        let receiver = info.fq_struct_name();
+        if receiver.projected().is_some() {
+            let bound = |binder: &FqTypeName| self.named_answer(substitution, binder);
+            return Self::type_at_instance(&receiver, &bound, type_table);
+        }
+        answer.or_else(|| {
+            substitution
+                .iter()
+                .min_by_key(|(param, _)| param.index)
+                .map(|(_, &tid)| tid)
+        })
+    }
+
+    /// What `substitution` fills the parameter receiving `info` with: the one
+    /// the call recorded, else the one named so.
+    fn receiver_param_answer(
+        &self,
+        info: &LocalMethodName,
+        substitution: &TypeArgMap,
+    ) -> Option<TypeId> {
+        match info.receiver_param {
+            Some(param) => substitution.get(&param).copied(),
+            None => self.named_answer(substitution, &info.fq_base_struct_name()),
+        }
+    }
+
+    /// What `substitution` fills the current frame's parameter `binder` with.
+    fn named_answer(&self, substitution: &TypeArgMap, binder: &FqTypeName) -> Option<TypeId> {
         substitution
-            .iter()
-            .min_by_key(|(idx, _)| **idx)
-            .map(|(_, &tid)| tid)
+            .get(self.current_param_substitution_key.get(binder)?)
+            .copied()
     }
 
     /// Resolve a `T^Trait::method` static call's dispatch receiver, in order:
@@ -1041,7 +1065,7 @@ impl Monomorphizer {
         let Some(methods) = self.structs.shape_methods.get(&origin).cloned() else {
             return Vec::new();
         };
-        let param_key_by_name = type_table.anon_shape_type_params(origin);
+        let param_key_by_binder = type_table.anon_shape_type_params(origin);
         let subject = type_table.fq_struct_head(StructDef::Anon(shape));
         let mut instances = Vec::new();
         for method in &methods {
@@ -1070,7 +1094,7 @@ impl Monomorphizer {
             instances.push(self.instantiate_with(
                 &method,
                 &params,
-                param_key_by_name.clone(),
+                param_key_by_binder.clone(),
                 identity,
                 type_table,
             ));
@@ -1089,9 +1113,7 @@ impl Monomorphizer {
     ) -> Option<TirFunction> {
         let mangled_name = self.lookup_function_instantiation(key)?.clone();
 
-        // Build substitution map: type param index -> concrete type
-        // Include both method-level type params AND impl block type params
-        let mut substitution: IndexMap<u32, TypeId> = IndexMap::default();
+        let mut substitution = TypeArgMap::default();
 
         // Add impl block type params from key.impl_type_args
         let non_pack_impl_params_count = generic
@@ -1100,6 +1122,7 @@ impl Monomorphizer {
             .filter(|p| !p.is_pack)
             .count();
         for param in &generic.impl_type_params {
+            let id = param.id;
             if param.is_pack && !param.projected {
                 // Read the shape off the declaration, never off `key`:
                 // `InstantiationKey` leaves `method_info` out of its equality
@@ -1108,7 +1131,7 @@ impl Monomorphizer {
                     .method_info
                     .as_ref()
                     .is_some_and(|info| info.receiver.is_declared_type());
-                let before = param.index as usize;
+                let before = id.index as usize;
                 let pack_type = if one_arg_per_param {
                     key.impl_type_args
                         .get(before)
@@ -1128,9 +1151,9 @@ impl Monomorphizer {
                         .collect();
                     type_table.make_tuple(pack_args)
                 };
-                substitution.insert(param.index, pack_type);
-            } else if let Some(&arg) = key.impl_type_args.get(param.index as usize) {
-                substitution.insert(param.index, arg);
+                substitution.insert(id, pack_type);
+            } else if let Some(&arg) = key.impl_type_args.get(id.index as usize) {
+                substitution.insert(id, arg);
             }
         }
         // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) or
@@ -1146,24 +1169,23 @@ impl Monomorphizer {
             }
         }
 
-        let offset = method_param_offset(&generic.impl_type_params);
-        for (param, &arg) in generic.type_params.iter().zip(key.method_type_args.iter()) {
-            substitution.insert(offset + param.index, arg);
-        }
+        let own = generic.type_params.iter().map(|param| param.id);
+        substitution.extend(own.zip(key.method_type_args.iter().copied()));
 
-        // Map each type-param name to its substitution key, so a
-        // `T^Trait::method` receiver resolves by name (the param named
-        // `base_struct_name`) rather than positionally. Built with the same
-        // key rule as `substitution`: impl params by their index, method
-        // params offset past them. Method params are inserted last so an
-        // inner-scope name shadows an impl-level one.
-        let mut param_key_by_name: IndexMap<String, u32> = IndexMap::default();
-        for param in &generic.impl_type_params {
-            param_key_by_name.insert(param.name.clone(), param.index);
-        }
-        for param in &generic.type_params {
-            param_key_by_name.insert(param.name.clone(), offset + param.index);
-        }
+        let param_key_by_binder: IndexMap<FqTypeName, TypeParamId> = generic
+            .impl_type_params
+            .iter()
+            .chain(&generic.type_params)
+            .map(|param| {
+                let declared = type_table.make_declared_param(
+                    param.id.owner,
+                    param.name.clone(),
+                    param.id.index,
+                    param.is_pack,
+                );
+                (type_table.fq_type_name(declared), param.id)
+            })
+            .collect();
 
         // Mangle through `mangle_type_arg_for_generic` so the definition-side
         // struct name matches what call-site rewrites produce. With
@@ -1206,27 +1228,27 @@ impl Monomorphizer {
         Some(self.instantiate_with(
             generic,
             &substitution,
-            param_key_by_name,
+            param_key_by_binder,
             identity,
             type_table,
         ))
     }
 
     /// `generic` with `substitution` applied throughout, under the identity the
-    /// caller gives the instance. `param_key_by_name` resolves a
-    /// `T^Trait::method` receiver to its slot by the parameter's name.
+    /// caller gives the instance. `param_key_by_binder` resolves a
+    /// `T^Trait::method` receiver to its slot by the parameter's binder.
     fn instantiate_with(
         &mut self,
         generic: &TirFunction,
-        substitution: &IndexMap<u32, TypeId>,
-        param_key_by_name: IndexMap<String, u32>,
+        substitution: &TypeArgMap,
+        param_key_by_binder: IndexMap<FqTypeName, TypeParamId>,
         identity: InstanceIdentity,
         type_table: &mut TypeTable,
     ) -> TirFunction {
         // Claims are per instantiation: this function gets its own `locals`
         // table, so no slot it unrolls into is shared with another's.
         self.unrolled_local_claims.borrow_mut().clear();
-        self.current_param_substitution_key = param_key_by_name;
+        self.current_param_substitution_key = param_key_by_binder;
 
         // Substitute types in parameters
         let params: Vec<TirParam> = generic
@@ -1258,7 +1280,7 @@ impl Monomorphizer {
 
         // Clone and substitute types in body
         let mut local_count = generic.local_count;
-        self.current_impl_type_param_count = generic.impl_type_params.len();
+        self.current_impl_type_params = generic.impl_type_params.iter().map(|p| p.id).collect();
         self.current_impl_receiver = generic
             .method_info
             .as_ref()
@@ -1329,7 +1351,7 @@ impl Monomorphizer {
     pub fn substitute_types_in_block(
         &self,
         block: &mut TirBlock,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
@@ -1370,7 +1392,7 @@ impl Monomorphizer {
     fn substitute_types_in_stmt(
         &self,
         stmt: &mut TirStmt,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
@@ -1461,7 +1483,7 @@ impl Monomorphizer {
     fn cast_for_implicit_from(
         &self,
         expr: &TirExpr,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
@@ -1500,7 +1522,7 @@ impl Monomorphizer {
     fn substitute_types_in_expr(
         &self,
         expr: &mut TirExpr,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
@@ -1565,7 +1587,7 @@ impl Monomorphizer {
                                 .map(|&tid| self.substitute_type(tid, substitution, type_table))
                                 .collect::<Vec<_>>(),
                         )
-                    } else if self.current_impl_type_param_count > 0
+                    } else if !self.current_impl_type_params.is_empty()
                         && info.struct_type_args.is_empty()
                         && self.current_impl_receiver.as_ref() == Some(&info.fq_base_struct_name())
                     {
@@ -1576,12 +1598,10 @@ impl Monomorphizer {
                         // The elaborator didn't annotate the bare struct reference with
                         // type args, so we derive them from the outer substitution's
                         // impl-level entries.
-                        let mut sorted_entries: Vec<_> = substitution.iter().collect();
-                        sorted_entries.sort_by_key(|(idx, _)| **idx);
-                        let impl_args: Vec<TypeId> = sorted_entries
+                        let impl_args: Vec<TypeId> = self
+                            .current_impl_type_params
                             .iter()
-                            .take(self.current_impl_type_param_count)
-                            .map(|(_, tid)| **tid)
+                            .map(|param| substitution[param])
                             .collect();
                         (impl_args, vec![])
                     } else {
@@ -1590,9 +1610,8 @@ impl Monomorphizer {
 
                     // Build the new method info with substituted type names.
                     let mut new_info = if info.is_type_param_receiver {
-                        // The struct name is a type parameter (e.g., T^Ord::cmp);
-                        // resolve the concrete receiver by the param's name.
-                        match self.receiver_substitution_tid(&info, substitution) {
+                        // The struct name is a type parameter (e.g., T^Ord::cmp).
+                        match self.receiver_substitution_tid(&info, substitution, type_table) {
                             Some(concrete_tid) => {
                                 let dispatch_tid =
                                     self.type_param_dispatch_tid(concrete_tid, &info, type_table);
@@ -1657,7 +1676,7 @@ impl Monomorphizer {
                     // name stays `S^…` for a user struct named `S`, and skipping
                     // it there leaves the instance unresolved at WIR build.
                     let receiver_tid = self
-                        .receiver_substitution_tid(&info, substitution)
+                        .receiver_substitution_tid(&info, substitution, type_table)
                         .map(|tid| self.type_param_dispatch_tid(tid, &info, type_table));
                     let receiver_is_concrete = receiver_tid.is_some_and(|tid| {
                         !matches!(
@@ -2099,9 +2118,7 @@ impl Monomorphizer {
                         {
                             // Expand type pack: for each concrete type in the pack,
                             // clone the expression and substitute with per-element types.
-                            let pack_index = type_table
-                                .param_slot(pack_type_id)
-                                .expect("an expansion names its pack before substitution");
+                            let pack = type_table.declared_param(pack_type_id);
                             let concrete_pack =
                                 self.substitute_type(pack_type_id, substitution, type_table);
                             let pack_elems = type_table.elem_types_or_self(concrete_pack);
@@ -2115,8 +2132,8 @@ impl Monomorphizer {
                                 ReturnTypeSlots::new(|slot: &mut TypeId| {
                                     *slot = self.substitute_type(*slot, substitution, type_table);
                                     assert!(
-                                        !type_table.contains_type_param_index(*slot, pack_index),
-                                        "return slot still names pack {pack_index}"
+                                        !type_table.mentions_param(*slot, pack),
+                                        "return slot still names pack {pack:?}"
                                     );
                                 })
                                 .visit_expr(&mut elem_call);
@@ -2124,7 +2141,7 @@ impl Monomorphizer {
                                 // This correctly rewrites the static call (T::method → i32::method)
                                 // and the expression's own type (TypePack → i32).
                                 let mut elem_sub = substitution.clone();
-                                elem_sub.insert(pack_index, elem_type);
+                                elem_sub.insert(pack, elem_type);
                                 self.substitute_types_in_expr(
                                     &mut elem_call,
                                     &elem_sub,
@@ -2430,13 +2447,13 @@ impl Monomorphizer {
         &self,
         method_func: &mut FunctionRef,
         info: &LocalMethodName,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) -> bool {
         if !info.is_type_param_receiver {
             return false;
         }
-        let Some(self_tid) = self.receiver_substitution_tid(info, substitution) else {
+        let Some(self_tid) = self.receiver_substitution_tid(info, substitution, type_table) else {
             return false;
         };
         let (ref_kind, inner) = match type_table.get(self_tid) {
@@ -2475,7 +2492,7 @@ impl Monomorphizer {
     fn substituted_method_type_args(
         &self,
         method_func: &FunctionRef,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) -> Vec<TypeId> {
         method_func
@@ -2492,7 +2509,7 @@ impl Monomorphizer {
         &self,
         method_func: &mut FunctionRef,
         info: &LocalMethodName,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) {
         let [pointee] = method_func
@@ -2534,7 +2551,7 @@ impl Monomorphizer {
     fn trait_named_at_instance(
         &self,
         info: LocalMethodName,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &TypeTable,
     ) -> LocalMethodName {
         if !info.is_type_param_receiver {
@@ -2546,10 +2563,7 @@ impl Monomorphizer {
         if !trait_name.args_mention_binder() {
             return info;
         }
-        let bound = |name: &str| -> Option<TypeId> {
-            let key = self.current_param_substitution_key.get(name)?;
-            substitution.get(key).copied()
-        };
+        let bound = |binder: &FqTypeName| self.named_answer(substitution, binder);
         let args: Vec<FqTypeName> = trait_name
             .args()
             .iter()
@@ -2566,7 +2580,7 @@ impl Monomorphizer {
     /// its name.
     fn trait_arg_at_instance(
         arg: &FqTypeName,
-        bound: &impl Fn(&str) -> Option<TypeId>,
+        bound: &impl Fn(&FqTypeName) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> FqTypeName {
         arg.rewrite(&|node| {
@@ -2598,7 +2612,7 @@ impl Monomorphizer {
     /// only once its own base does.
     fn type_at_instance(
         node: &FqTypeName,
-        bound: &impl Fn(&str) -> Option<TypeId>,
+        bound: &impl Fn(&FqTypeName) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
         if !node.args().is_empty() {
@@ -2607,14 +2621,14 @@ impl Monomorphizer {
         if let Some(projected) = node.projected() {
             return Self::family_at_instance(&projected, bound, type_table);
         }
-        bound(node.binder_name()?)
+        bound(node)
     }
 
     /// What the projection `projected` binds at the instance, its own
     /// parameters still open: answered by the impl its trait is reached at.
     fn family_at_instance(
         projected: &Projected<'_>,
-        bound: &impl Fn(&str) -> Option<TypeId>,
+        bound: &impl Fn(&FqTypeName) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
         let base_id = Self::type_at_instance(projected.base, bound, type_table)?;
@@ -2658,14 +2672,10 @@ impl Monomorphizer {
     fn ref_impl_at_instance(
         &self,
         info: &LocalMethodName,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &TypeTable,
     ) -> Option<(LocalMethodName, TemplateId)> {
-        let binder = info.fq_struct_name();
-        let key = self
-            .current_param_substitution_key
-            .get(binder.binder_name()?)?;
-        let bound = *substitution.get(key)?;
+        let bound = self.receiver_param_answer(info, substitution)?;
         RefKind::from_resolved(type_table.get(bound))?;
         let at_bound = info.at_owner(&type_table.fq_type_name(bound));
         let trait_fq = at_bound.trait_name.as_ref()?;
@@ -2698,7 +2708,7 @@ impl Monomorphizer {
         &self,
         method_func: &mut FunctionRef,
         receiver_type_id: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) {
         if substitution.is_empty() {
@@ -3035,7 +3045,7 @@ impl Monomorphizer {
         &self,
         method_func: &mut FunctionRef,
         receiver_type_id: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         call: SubstitutedCall,
     ) {
@@ -3103,7 +3113,7 @@ impl Monomorphizer {
     fn expand_variadic_for_of(
         &self,
         stmt: &mut TirStmt,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
@@ -3132,13 +3142,13 @@ impl Monomorphizer {
         // A mapped pack (`[..Case<T, P>]`) substitutes per element from the
         // source pack element `P_k`, not the mapped tuple element, so read its
         // index and mapped-ness off the pre-substitution type.
-        let (iterable_pack_index, iterable_pack_mapped) = type_table
+        let (iterable_pack, iterable_pack_mapped) = type_table
             .as_tuple_through_ref(iterable.type_id)
             .and_then(|(elems, _)| {
                 elems.iter().find_map(|&e| match type_table.get(e) {
                     ResolvedType::TypePack {
-                        index, mapped_elem, ..
-                    } => Some((Some(*index), mapped_elem.is_some())),
+                        id, mapped_elem, ..
+                    } => Some((Some(*id), mapped_elem.is_some())),
                     _ => None,
                 })
             })
@@ -3159,17 +3169,13 @@ impl Monomorphizer {
                 );
             });
 
-        // The pack index to override per element; fall back to a tuple-valued
+        // The pack to override per element; fall back to a tuple-valued
         // substitution entry when the iterable carries none.
-        let pack_index = iterable_pack_index.or_else(|| {
-            let mut found = None;
-            for (&idx, &tid) in substitution {
-                if tid == iterable_type || type_table.is_tuple(tid) {
-                    found = Some(idx);
-                    break;
-                }
-            }
-            found
+        let pack_index = iterable_pack.or_else(|| {
+            substitution
+                .iter()
+                .find(|&(_, &tid)| tid == iterable_type || type_table.is_tuple(tid))
+                .map(|(&param, _)| param)
         });
 
         // For a mapped pack the override values are the source elements `P_k`;
@@ -3465,8 +3471,7 @@ impl Monomorphizer {
                     // Substitute user body with field type (not pair type)
                     let mut elem_substitution = substitution.clone();
                     elem_substitution.insert(pack_idx, body_pack_type);
-                    elem_substitution
-                        .insert(TypeTable::pack_walk_slot(pack_idx, walk), body_pack_type);
+                    elem_substitution.insert(pack_idx.walk_slot(walk), body_pack_type);
                     let displaced = pack_tuple.map(|t| self.bind_pack_splice(pack_idx, t));
                     self.substitute_types_in_block(
                         &mut user_body,
@@ -3489,8 +3494,7 @@ impl Monomorphizer {
                         .and_then(|es| es.get(i).copied())
                         .unwrap_or(elem_type);
                     elem_substitution.insert(pack_idx, override_ty);
-                    elem_substitution
-                        .insert(TypeTable::pack_walk_slot(pack_idx, walk), override_ty);
+                    elem_substitution.insert(pack_idx.walk_slot(walk), override_ty);
                     self.pin_binding_types(
                         &mut elem_body,
                         binding_local_idx,
@@ -3672,7 +3676,7 @@ impl Monomorphizer {
     fn expand_tuple_comprehension(
         &self,
         expr: &mut TirExpr,
-        substitution: &IndexMap<u32, TypeId>,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
@@ -3707,8 +3711,8 @@ impl Monomorphizer {
             .and_then(|(elems, _)| {
                 elems.iter().find_map(|&e| match type_table.get(e) {
                     ResolvedType::TypePack {
-                        index, mapped_elem, ..
-                    } => Some((Some(*index), mapped_elem.is_some())),
+                        id, mapped_elem, ..
+                    } => Some((Some(*id), mapped_elem.is_some())),
                     _ => None,
                 })
             })
@@ -3913,7 +3917,7 @@ impl Monomorphizer {
                     .and_then(|es| es.get(i).copied())
                     .unwrap_or(elem_type);
                 elem_substitution.insert(pack_idx, source_elem);
-                elem_substitution.insert(TypeTable::pack_walk_slot(pack_idx, walk), source_elem);
+                elem_substitution.insert(pack_idx.walk_slot(walk), source_elem);
                 // Decide this element's bindings before substituting, so a
                 // nested unroll over the same pack cannot re-map a use of them.
                 self.pin_binding_types(&mut elem_body, binding_local_idx, bind_type, type_table);
@@ -4004,19 +4008,15 @@ impl Monomorphizer {
     }
 
     /// The whole tuple a pack stands for. An enclosing unroll pins
-    /// `substitution[index]` to the single element it walks, so a nested unroll
+    /// `substitution[pack]` to the single element it walks, so a nested unroll
     /// over the same pack reads the splice binding — which holds the tuple for
     /// exactly that span — the same way a `[..T]` splice position does.
-    fn pack_source_tuple(
-        &self,
-        index: u32,
-        substitution: &IndexMap<u32, TypeId>,
-    ) -> Option<TypeId> {
+    fn pack_source_tuple(&self, pack: TypeParamId, substitution: &TypeArgMap) -> Option<TypeId> {
         self.pack_splice_bindings
             .borrow()
-            .get(&index)
+            .get(&pack)
             .copied()
-            .or_else(|| substitution.get(&index).copied())
+            .or_else(|| substitution.get(&pack).copied())
     }
 
     /// The type of the value a single-`break` block yields.

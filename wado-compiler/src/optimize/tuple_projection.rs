@@ -31,7 +31,7 @@ impl Rule for TupleProjectionRule {
             return false;
         };
         let elements = elements.clone();
-        let types = e.value_graph_type_table();
+        let types = Some(e.type_table());
         let droppable = elements
             .iter()
             .enumerate()

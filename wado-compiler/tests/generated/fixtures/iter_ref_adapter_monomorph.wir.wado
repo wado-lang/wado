@@ -554,7 +554,7 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
         $sroa_self_repr_57 = result.repr;
         b5: block {
             l6: loop {
-                break_if b5 (((ref_val >= $sroa_self_index_58) | ((ref_val + 1) >= $sroa_self_index_58)) | (((ref_val + 1) + 1) >= $sroa_self_index_58)) | ((((ref_val + 1) + 1) + 1) >= $sroa_self_index_58);
+                break_if b5 (builtin::i64_extend_i32_s(ref_val) + 3_i64) >= builtin::i64_extend_i32_s($sroa_self_index_58);
                 if builtin::array_get_value<i32>($sroa_self_repr_57, ref_val) != builtin::array_get_value<i32>(global:iter_ref_adapter_monomorph.wado::$const_obj_1, ref_val) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__14: 0;
                 }
@@ -637,7 +637,7 @@ fn "iter_ref_adapter_monomorph.wado/$test_1_filter_over_a__list_reference_iterat
         $licm_repr_43 = result.repr;
         b20: block {
             l21: loop {
-                break_if b20 ((($mv$$local_3$1 >= $mv$$local_3$0) | (($mv$$local_3$1 + 1) >= $mv$$local_3$0)) | ((($mv$$local_3$1 + 1) + 1) >= $mv$$local_3$0)) | (((($mv$$local_3$1 + 1) + 1) + 1) >= $mv$$local_3$0);
+                break_if b20 (builtin::i64_extend_i32_s($mv$$local_3$1) + 3_i64) >= builtin::i64_extend_i32_s($mv$$local_3$0);
                 if builtin::array_get_value<i32>($licm_repr_43, $mv$$local_3$1) != builtin::array_get_value<i32>(global:iter_ref_adapter_monomorph.wado::$const_obj_3, $mv$$local_3$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__13: 0;
                 }
@@ -1180,7 +1180,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b141: block {
         l142: loop {
-            break_if b141 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b141 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1204,7 +1204,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b145: block {
         l146: loop {
-            break_if b145 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b145 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

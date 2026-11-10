@@ -273,7 +273,7 @@ impl ClosureDevirtRule {
             target.user_arity,
             "a call through a closure's canonical signature passes one argument per user param"
         );
-        let types = engine.value_graph_type_table();
+        let types = Some(engine.type_table());
         let droppable = args.iter().enumerate().all(|(at, &arg)| {
             target.passes(at) || is_pure_nontrapping_operand_typed(engine.body, arg, types)
         });
@@ -293,8 +293,7 @@ impl ClosureDevirtRule {
         let callee = *callee;
         // Naming the functor's local drops the callee operand, and with it
         // whatever the trace saw through — an inlined helper's writes, say.
-        if !is_pure_nontrapping_operand_typed(engine.body, callee, engine.value_graph_type_table())
-        {
+        if !is_pure_nontrapping_operand_typed(engine.body, callee, Some(engine.type_table())) {
             return None;
         }
         let canonical = resolve_canonical(engine, callee, MAX_DEPTH)?;

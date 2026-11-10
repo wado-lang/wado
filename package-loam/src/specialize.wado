@@ -359,7 +359,7 @@ fn positional_reads(node: &Node, checked: &Checked, axis: i32) -> Option<List<bo
         return null;
     }
     let first_alone = || -> List<bool> {
-        (0..<node.inputs.len()).map(|j| j == 0).collect();
+        return (0..<node.inputs.len()).map(|j| j == 0).collect();
     };
     if is_unary_elementwise(&node.op) || is_binary_elementwise(&node.op) {
         return Option::Some(node.inputs.into_iter().map(|_| true).collect());

@@ -80,7 +80,7 @@ fn "remark_param_gate_read_twice.wado/run"() with Stdout {
             i_12 = 0;
             b4: block {
                 l5: loop {
-                    break_if b4 (((i_12 >= $load_1) | ((i_12 + 1) >= $load_1)) | (((i_12 + 1) + 1) >= $load_1)) | ((((i_12 + 1) + 1) + 1) >= $load_1);
+                    break_if b4 (builtin::i64_extend_i32_s(i_12) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
                     if builtin::array_get_value<u8>($array_clone_dst_2, i_12) != builtin::array_get_value<u8>(global:remark_param_gate_read_twice.wado::$const_obj_2, i_12) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
@@ -128,7 +128,7 @@ fn "remark_param_gate_read_twice.wado/run"() with Stdout {
                 i_12 = 0;
                 b15: block {
                     l16: loop {
-                        break_if b15 (((i_12 >= $load_1) | ((i_12 + 1) >= $load_1)) | (((i_12 + 1) + 1) >= $load_1)) | ((((i_12 + 1) + 1) + 1) >= $load_1);
+                        break_if b15 (builtin::i64_extend_i32_s(i_12) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
                         if builtin::array_get_value<u8>($array_clone_dst_2, i_12) != builtin::array_get_value<u8>(global:remark_param_gate_read_twice.wado::$const_obj_1, i_12) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                         }
@@ -207,7 +207,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b26: block {
         l27: loop {
-            break_if b26 (((i >= 8) | ((i + 1) >= 8)) | (((i + 1) + 1) >= 8)) | ((((i + 1) + 1) + 1) >= 8);
+            break_if b26 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(8);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));

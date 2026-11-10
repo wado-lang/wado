@@ -1100,7 +1100,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b97: block {
         l98: loop {
-            break_if b97 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b97 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1124,7 +1124,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b101: block {
         l102: loop {
-            break_if b101 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b101 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1231,7 +1231,7 @@ fn "sub/wir_xmodule_return_parser.wado/line_col"($mv$chars$repr, $mv$chars$used,
     if pos <= $mv$chars$used {
         b112: block {
             l113: loop {
-                break_if b112 (((i >= pos) | ((i + 1) >= pos)) | (((i + 1) + 1) >= pos)) | ((((i + 1) + 1) + 1) >= pos);
+                break_if b112 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(pos);
                 if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
                     line = line + 1;
                     col = 0;
@@ -1530,9 +1530,9 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_prog"(p) {
             break $inline__parse_prog__inner_7: $qm_e_30;
         }
         multivalue_bind [self_16, $load_3, $match_scrut_0] = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::expect$sroa[return]"(p, 2);
-        drop((if self_16 == 0 -> i32 {
+        drop((if @likely(self_16 == 0) -> i32 {
             $load_3;
-        } else if @unlikely(self_16 == 1) -> i32 {
+        } else if @likely(self_16 == 1) -> i32 {
             cold_path;
             $qm_e_30 = ref.as_non_null($match_scrut_0);
             cold_path;
@@ -1588,9 +1588,9 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
         self_35.used = self_29 + 1;
         let $mv$$vr_15$2: ref null "sub/wir_xmodule_return_parser.wado//ParseError";
         multivalue_bind [self_29, $load_3, $mv$$vr_15$2] = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::expect$sroa[return]"(p, 4);
-        drop((if self_29 == 0 -> i32 {
+        drop((if @likely(self_29 == 0) -> i32 {
             $load_3;
-        } else if @unlikely(self_29 == 1) -> i32 {
+        } else if @likely(self_29 == 1) -> i32 {
             cold_path;
             $qm_e_4 = ref.as_non_null($mv$$vr_15$2);
             cold_path;
@@ -1605,9 +1605,9 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
             return $qm_e_4;
         }
         multivalue_bind [self_29, $load_3, $mv$$vr_15$2] = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::expect$sroa[return]"(p, 5);
-        drop((if self_29 == 0 -> i32 {
+        drop((if @likely(self_29 == 0) -> i32 {
             $load_3;
-        } else if @unlikely(self_29 == 1) -> i32 {
+        } else if @likely(self_29 == 1) -> i32 {
             cold_path;
             $qm_e_4 = ref.as_non_null($mv$$vr_15$2);
             cold_path;
@@ -1624,9 +1624,9 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
         builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_35.repr, self_29, struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt" { discriminant: 5, payload_0: 1 });
         self_35.used = self_29 + 1;
         multivalue_bind [self_29, $load_3, $mv$$vr_15$2] = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::expect$sroa[return]"(p, 0);
-        drop((if self_29 == 0 -> i32 {
+        drop((if @likely(self_29 == 0) -> i32 {
             $load_3;
-        } else if @unlikely(self_29 == 1) -> i32 {
+        } else if @likely(self_29 == 1) -> i32 {
             cold_path;
             $qm_e_4 = ref.as_non_null($mv$$vr_15$2);
             cold_path;

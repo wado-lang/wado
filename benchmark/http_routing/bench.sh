@@ -3,8 +3,8 @@
 # one worker shape per entry in SHAPES. README.md covers the methodology.
 #
 # Overrides: SLICE, ROUNDS, SHAPES, CONNECTIONS_PER_WORKER, OHA_CORE_COUNT,
-# HEADROOM_CHECK, WADO_BIN (an A/B arm), SERVERS (e.g. "wado" alone),
-# REQUEST (e.g. "GET /user" alone).
+# HEADROOM_CHECK, WADO_BIN (an A/B arm), WADO_RUN_FLAGS (appended to
+# `wado serve`), SERVERS (e.g. "wado" alone), REQUEST (e.g. "GET /user" alone).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -151,8 +151,9 @@ start_server() {
   assert_port_free "$(server_url "$key")/status"
   case "$key" in
     wado)
-      "${SERVER_PIN[@]}" "$WADO_BIN" serve -O2 --addr "127.0.0.1:${WADO_PORT}" \
-        --workers "$workers" app.wado >/dev/null 2>&1 &
+      # Unquoted, so the flags split into words.
+      "${SERVER_PIN[@]}" "$WADO_BIN" serve -O2 ${WADO_RUN_FLAGS:-} \
+        --addr "127.0.0.1:${WADO_PORT}" --workers "$workers" app.wado >/dev/null 2>&1 &
       PIDS+=($!)
       ;;
     node)

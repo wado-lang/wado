@@ -188,7 +188,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<from_literal_enum_concrete.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "from_literal_enum_concrete.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(65)
 
-type "functype//from_literal_enum_concrete.wado/from_literal_enum_concrete.wado/DirMap<from_literal_enum_concrete.wado/Direction,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V]>>::from" = fn(ref "Array<[core:prelude/string.wado/String,i32]>") -> [ref "core:prelude/list.wado//List<core:prelude/string.wado/String>", ref "core:prelude/list.wado//List<i32>"];  // TypeId(66)
+type "functype//from_literal_enum_concrete.wado/from_literal_enum_concrete.wado/DirMap<from_literal_enum_concrete.wado/Direction,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V#from_literal_enum_concrete.wado/18]>>::from" = fn(ref "Array<[core:prelude/string.wado/String,i32]>") -> [ref "core:prelude/list.wado//List<core:prelude/string.wado/String>", ref "core:prelude/list.wado//List<i32>"];  // TypeId(66)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>");  // TypeId(67)
 
@@ -250,7 +250,7 @@ fn "from_literal_enum_concrete.wado/run"() with Stdout {
     if ref.is_null(global:from_literal_enum_concrete.wado::$const_obj_1) {
         let $mv_keys_1: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
         let $mv_values_2: ref "core:prelude/list.wado//List<i32>";
-        multivalue_bind [$mv_keys_1, $mv_values_2] = "from_literal_enum_concrete.wado/from_literal_enum_concrete.wado/DirMap<from_literal_enum_concrete.wado/Direction,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V]>>::from"(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 114, 116, 104), used: 5 }, 1: 1 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 111, 117, 116, 104), used: 5 }, 1: 2 }));
+        multivalue_bind [$mv_keys_1, $mv_values_2] = "from_literal_enum_concrete.wado/from_literal_enum_concrete.wado/DirMap<from_literal_enum_concrete.wado/Direction,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V#from_literal_enum_concrete.wado/18]>>::from"(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 114, 116, 104), used: 5 }, 1: 1 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 111, 117, 116, 104), used: 5 }, 1: 2 }));
         global:from_literal_enum_concrete.wado::$const_obj_1 = struct.new "from_literal_enum_concrete.wado//DirMap<from_literal_enum_concrete.wado/Direction,i32>" { keys: $mv_keys_1, values: $mv_values_2 };
     }
     if @unlikely(local.tee self_10(global:from_literal_enum_concrete.wado::$const_obj_1.keys.used) != 2) {
@@ -548,7 +548,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b52: block {
         l53: loop {
-            break_if b52 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b52 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -570,7 +570,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b56: block {
         l57: loop {
-            break_if b56 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b56 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -687,7 +687,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b73: block {
         l74: loop {
-            break_if b73 (((i >= 3) | ((i + 1) >= 3)) | (((i + 1) + 1) >= 3)) | ((((i + 1) + 1) + 1) >= 3);
+            break_if b73 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(3);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -943,7 +943,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<from_litera
     return out_3;
 }
 
-fn "from_literal_enum_concrete.wado/from_literal_enum_concrete.wado/DirMap<from_literal_enum_concrete.wado/Direction,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V]>>::from"(entries) {
+fn "from_literal_enum_concrete.wado/from_literal_enum_concrete.wado/DirMap<from_literal_enum_concrete.wado/Direction,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V#from_literal_enum_concrete.wado/18]>>::from"(entries) {
     let $load_3: i32;
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]>";
     let $match_5: ref null "tuple//[core:prelude/string.wado/String, i32]";

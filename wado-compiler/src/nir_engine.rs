@@ -19,7 +19,7 @@ use crate::nir_arena::{
     PatNode, StmtId, StmtKind, StmtNode, SubtreeCopy, Tracked,
 };
 use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
-use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder};
+use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder, constant_kind};
 use crate::niri::CtfeBuiltinMap;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
@@ -359,10 +359,7 @@ pub struct Engine<'a> {
     /// Which sequence builtin each callee id is. `None` leaves every array
     /// length opaque, which costs a fold rather than correctness.
     ctfe_builtins: Option<&'a CtfeBuiltinMap>,
-    /// Type table for the `ValueGraph` builder's constant folding of pure
-    /// arithmetic. `None` (the default) disables folding. Set via
-    /// [`Engine::set_value_graph_type_table`] before the first value query.
-    vg_type_table: Option<&'a TypeTable>,
+    type_table: &'a TypeTable,
     /// [`FuncId`]s of the diverging panic / `unreachable` builtins, supplied by
     /// `condition_implication` so its bounds-check elimination identifies a
     /// panic block by callee id (not the call node's `FunctionRef`). `None` (the
@@ -426,6 +423,7 @@ impl<'a> Engine<'a> {
         buf: &'a mut EngineBuffers,
         locals: &'a mut Tracked<Vec<NirLocal>>,
         params: &[NirParam],
+        type_table: &'a TypeTable,
     ) -> Self {
         buf.reset_for(body, locals.len());
         let mut engine = Self {
@@ -442,7 +440,7 @@ impl<'a> Engine<'a> {
             receiver_immutable_calls: IndexSet::default(),
             call_writes: IndexMap::default(),
             ctfe_builtins: None,
-            vg_type_table: None,
+            type_table,
             panic_callee_ids: None,
             quiet_callee_ids: None,
             pure_builtin_callees: None,
@@ -484,7 +482,7 @@ impl<'a> Engine<'a> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
-        let tt = self.vg_type_table;
+        let tt = self.type_table;
         let v = match kind {
             // One version-free `ValueId` per local is correct only where the
             // local has one version: a parameter is entry-defined, so its def
@@ -591,7 +589,7 @@ impl<'a> Engine<'a> {
             seeded(&self.params, self.seeds_params),
             &empty,
             &self.alias,
-            self.vg_type_table,
+            self.type_table,
             builder::CallFacts {
                 pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
@@ -656,7 +654,7 @@ impl<'a> Engine<'a> {
             seeded(&self.params, self.seeds_params),
             &empty,
             &self.alias,
-            self.vg_type_table,
+            self.type_table,
             builder::CallFacts {
                 pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
@@ -799,12 +797,6 @@ impl<'a> Engine<'a> {
         self.alias = alias;
     }
 
-    /// Provide the type table so the value graph folds pure arithmetic on
-    /// literal operands (`2 + 3 → 5`). Used by the one build-once construction.
-    pub fn set_value_graph_type_table(&mut self, type_table: &'a TypeTable) {
-        self.vg_type_table = Some(type_table);
-    }
-
     /// Supply the panic / `unreachable` callee ids for `condition_implication`'s
     /// panic-block recognizer. See [`Engine::is_panic_callee`].
     pub fn set_panic_callee_ids(&mut self, ids: &'a IndexSet<FuncId>) {
@@ -851,11 +843,8 @@ impl<'a> Engine<'a> {
             .is_some_and(|s| s.contains(&func_id))
     }
 
-    /// The type table supplied for value-graph folding, if any. Used by
-    /// `store_load_forward` to synthesize a literal `ExprKind` for a folded
-    /// value that has no pre-existing source literal.
-    pub fn value_graph_type_table(&self) -> Option<&'a TypeTable> {
-        self.vg_type_table
+    pub fn type_table(&self) -> &'a TypeTable {
+        self.type_table
     }
 
     /// Build the persisted value graph now, for a caller that has already set
@@ -883,7 +872,7 @@ impl<'a> Engine<'a> {
                 ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
                 writes: &self.call_writes,
             },
-            self.vg_type_table,
+            self.type_table,
         );
         *self.body.value_graph = Some(build);
     }
@@ -943,13 +932,10 @@ impl<'a> Engine<'a> {
     }
 
     /// Whether `local` holds a struct or a cell, looking through a reference.
-    /// `false` without a type table, and for every other shape a `FieldAccess`
-    /// can name — a tuple above all, whose field index means something else
-    /// entirely.
+    /// `false` for every other shape a `FieldAccess` can name — a tuple above
+    /// all, whose field index means something else entirely.
     fn local_is_struct_typed(&self, local: u32) -> bool {
-        let Some(types) = self.vg_type_table else {
-            return false;
-        };
+        let types = self.type_table;
         let Some(l) = self.locals.get(local as usize) else {
             return false;
         };
@@ -1331,20 +1317,17 @@ impl<'a> Engine<'a> {
     /// an aggregate (the pool models pure scalars only) — the caller then keeps
     /// the skeleton form.
     pub fn replace_expr_with_value(&mut self, id: ExprId, value: Value) -> bool {
-        use ValueKind;
+        // `null` and `()` are constants the pool can name, but promoting one is
+        // an extraction question this path does not answer: `()` has no Wasm
+        // representation at all. Keep the skeleton form.
+        if !value.is_scalar() || matches!(value, Value::Null | Value::Unit) {
+            return false;
+        }
         let type_id = self.body.exprs[id].type_id;
-        let kind = match value {
-            Value::Int { value, .. } => ValueKind::Int(value, type_id),
-            Value::Float { value, .. } => ValueKind::Float(value.to_bits(), type_id),
-            Value::Bool(b) => ValueKind::Bool(b),
-            Value::Char(c) => ValueKind::Char(c),
-            // `null` and `()` are constants the pool can name, but promoting
-            // one is an extraction question this path does not answer: `()` has
-            // no Wasm representation at all. Keep the skeleton form.
-            Value::Null | Value::Unit => return false,
-            Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return false,
-        };
-        let vid = self.body.values.alloc_unshared(kind, type_id);
+        let vid = self
+            .body
+            .values
+            .alloc_unshared(constant_kind(&value, type_id), type_id);
         self.redirect_expr(id, Operand::Value(vid))
     }
 
@@ -1665,6 +1648,11 @@ pub trait Rule {
     }
 }
 
+/// The type table of the unit tests that build an engine over a hand-built body.
+#[cfg(test)]
+pub(crate) static TEST_TYPES: std::sync::LazyLock<TypeTable> =
+    std::sync::LazyLock::new(TypeTable::new);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1786,7 +1774,7 @@ mod tests {
             type_id: TypeTable::I32,
             is_mut: true,
         }]);
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         assert!(eng.body_address_taken().contains(&0));
         let cached = eng.alloc_local_like(0);
         assert!(eng.body_address_taken().contains(&cached));
@@ -1803,7 +1791,7 @@ mod tests {
         let mut body = sample_body();
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         assert_eq!(eng.local_bindings(0), 1);
         eng.alloc_pat(
             PatKind::Binding {
@@ -1821,7 +1809,13 @@ mod tests {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         // local 0 is read once (the `return x`) and defined once (the `let`).
         assert_eq!(eng.local_reads(0).len(), 1);
         assert!(eng.local_def(0).is_some());
@@ -1837,7 +1831,13 @@ mod tests {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         // `sample_body` still contains `return x`, so claiming local 0 was
         // elided is exactly the bug the audit exists to catch.
         eng.note_elided_local(0);
@@ -1851,7 +1851,13 @@ mod tests {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         eng.run(&[]);
     }
 
@@ -1861,7 +1867,13 @@ mod tests {
         let root = body.root();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         // Every statement of the root block has the root block as its parent.
         for &s in &eng.body.blocks[root].stmts {
             assert_eq!(eng.parent_of(NodeRef::Stmt(s)), Some(NodeRef::Block(root)));
@@ -1919,7 +1931,13 @@ mod tests {
         {
             let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng = Tracked::new(Vec::new());
-            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+            let mut eng = Engine::new(
+                &mut body,
+                &mut __buf_eng,
+                &mut __locals_eng,
+                &[],
+                &TEST_TYPES,
+            );
             eng.run(&[&FoldAddMulConst]);
         }
         // The let's value is now the promoted constant 12.
@@ -1952,7 +1970,13 @@ mod tests {
         let clone = {
             let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng = Tracked::new(Vec::new());
-            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+            let mut eng = Engine::new(
+                &mut body,
+                &mut __buf_eng,
+                &mut __locals_eng,
+                &[],
+                &TEST_TYPES,
+            );
             eng.clone_expr(original)
         };
         // Only the Binary node is copied: its `1` and `2` are pure-value operands
@@ -2007,7 +2031,13 @@ mod tests {
         {
             let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng = Tracked::new(Vec::new());
-            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+            let mut eng = Engine::new(
+                &mut body,
+                &mut __buf_eng,
+                &mut __locals_eng,
+                &[],
+                &TEST_TYPES,
+            );
             assert!(eng.run(&[&DropUnitStmts]));
         }
         // The `()` statement is gone; the `let` and `return` remain in order.
@@ -2068,7 +2098,7 @@ mod tests {
         {
             let mut buf = EngineBuffers::default();
             let mut locals = Tracked::new(Vec::new());
-            let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+            let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
             assert!(eng.run(&[&DetachLet, &seen]));
         }
         let visits = seen.0.borrow().iter().filter(|&&id| id == add).count();
@@ -2098,7 +2128,13 @@ mod tests {
         });
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         assert!(!eng.is_local_read(0));
 
         // The same body with a trailing `return x` makes local 0 read.
@@ -2112,7 +2148,13 @@ mod tests {
         });
         let mut __buf_eng2 = EngineBuffers::default();
         let mut __locals_eng2 = Tracked::new(Vec::new());
-        let eng2 = Engine::new(&mut body2, &mut __buf_eng2, &mut __locals_eng2, &[]);
+        let eng2 = Engine::new(
+            &mut body2,
+            &mut __buf_eng2,
+            &mut __locals_eng2,
+            &[],
+            &TEST_TYPES,
+        );
         assert!(eng2.is_local_read(0));
     }
 
@@ -2138,7 +2180,13 @@ mod tests {
         {
             let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng = Tracked::new(Vec::new());
-            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+            let mut eng = Engine::new(
+                &mut body,
+                &mut __buf_eng,
+                &mut __locals_eng,
+                &[],
+                &TEST_TYPES,
+            );
             // Before: local 0 is read only by the `x` node.
             assert_eq!(eng.local_reads(0), &[lx]);
             eng.become_expr(add, lx);
@@ -2156,7 +2204,13 @@ mod tests {
         let total = body.exprs.len() + body.stmts.len() + body.blocks.len() + body.pats.len();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         let mut popped = 0;
         while eng.pop().is_some() {
             popped += 1;
@@ -2175,7 +2229,13 @@ mod tests {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         // Drain the worklist seeded at construction so only the freshly
         // `alloc_*`'d nodes remain below.
         while eng.pop().is_some() {}
@@ -2221,7 +2281,7 @@ mod tests {
             span: Span::default(),
         });
         {
-            let eng = Engine::new(&mut big, &mut buffers, &mut locals, &[]);
+            let eng = Engine::new(&mut big, &mut buffers, &mut locals, &[], &TEST_TYPES);
             assert_eq!(
                 eng.parent_of(NodeRef::Expr(add)),
                 Some(NodeRef::Stmt(let_stmt))
@@ -2234,7 +2294,7 @@ mod tests {
         let mut small = mk_body(|_| Vec::new());
         let orphan = e(&mut small, ExprKind::Dead);
         assert_eq!(orphan, add, "the two bodies must collide on expr slot 0");
-        let mut eng = Engine::new(&mut small, &mut buffers, &mut locals, &[]);
+        let mut eng = Engine::new(&mut small, &mut buffers, &mut locals, &[], &TEST_TYPES);
         assert_eq!(eng.parent_of(NodeRef::Expr(orphan)), None);
 
         // Drain the root block seeded at construction, then mint a node while
@@ -2258,7 +2318,13 @@ mod tests {
         let mut body = mk_body(|_| Vec::new());
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
 
         let new_local = eng.alloc_minted_local("y", TypeTable::I32, false);
         assert_eq!(new_local, 0);
@@ -2293,7 +2359,13 @@ mod tests {
         let root = body.root();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         // Fills the memo: nothing in the pool reads `x` yet.
         assert!(!eng.reads_promoted_local(0));
         assert_eq!(eng.promoted_read_count(0), 0);
@@ -2343,7 +2415,13 @@ mod tests {
         });
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
-        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         assert_eq!(eng.local_def(0), first);
     }
 
@@ -2364,7 +2442,13 @@ mod tests {
         });
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, true)]);
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         assert!(eng.local_has_one_version(0));
     }
 
@@ -2393,7 +2477,13 @@ mod tests {
         });
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
         assert!(!eng.local_has_one_version(0));
     }
 
@@ -2417,7 +2507,13 @@ mod tests {
         let root = body.root();
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
-        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng, &[]);
+        let mut eng = Engine::new(
+            &mut body,
+            &mut __buf_eng,
+            &mut __locals_eng,
+            &[],
+            &TEST_TYPES,
+        );
 
         // Allocated detached: the operand names `x`, but nothing reaches it.
         let read = eng.body.values.canonical_local(0, TypeTable::I32);

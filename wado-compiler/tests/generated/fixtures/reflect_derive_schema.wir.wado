@@ -385,7 +385,7 @@ fn "reflect_derive_schema.wado/$test_0_pack_map_over_field_types_expands_per_fie
         $licm_repr_24 = global:reflect_derive_schema.wado::$const_obj_3.repr;
         b3: block {
             l4: loop {
-                break_if b3 (((i_13 >= a_end_8) | ((i_13 + 1) >= a_end_8)) | (((i_13 + 1) + 1) >= a_end_8)) | ((((i_13 + 1) + 1) + 1) >= a_end_8);
+                break_if b3 (builtin::i64_extend_i32_s(i_13) + 3_i64) >= builtin::i64_extend_i32_s(a_end_8);
                 if builtin::array_get_value<u8>($licm_repr_24, i_13) != builtin::array_get_value<u8>(global:reflect_derive_schema.wado::$const_obj_2, i_13) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
@@ -437,7 +437,7 @@ Point { x: 1, y: 2 }.schema(): "), used: 190 }, s1: struct.new "core:prelude/str
         $licm_repr_24 = global:reflect_derive_schema.wado::$const_obj_1.repr;
         b15: block {
             l16: loop {
-                break_if b15 (((i_13 >= a_end_8) | ((i_13 + 1) >= a_end_8)) | (((i_13 + 1) + 1) >= a_end_8)) | ((((i_13 + 1) + 1) + 1) >= a_end_8);
+                break_if b15 (builtin::i64_extend_i32_s(i_13) + 3_i64) >= builtin::i64_extend_i32_s(a_end_8);
                 if builtin::array_get_value<u8>($licm_repr_24, i_13) != builtin::array_get_value<u8>(global:reflect_derive_schema.wado::$const_obj_0, i_13) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
@@ -819,7 +819,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b108: block {
         l109: loop {
-            break_if b108 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b108 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -843,7 +843,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b112: block {
         l113: loop {
-            break_if b112 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b112 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1631,7 +1631,7 @@ fn "reflect_derive_schema.wado/reflect_derive_schema.wado/Mixed^reflect_derive_s
         $licm_repr_27 = out.repr;
         b224: block {
             l225: loop {
-                break_if b224 (((i_14 >= 0) | ((i_14 + 1) >= 0)) | (((i_14 + 1) + 1) >= 0)) | ((((i_14 + 1) + 1) + 1) >= 0);
+                break_if b224 (builtin::i64_extend_i32_s(i_14) + 3_i64) >= builtin::i64_extend_i32_s(0);
                 if builtin::array_get_value<u8>($licm_repr_27, i_14) != builtin::array_get_value<u8>(global:reflect_derive_schema.wado::$const_obj_4, i_14) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
@@ -1678,7 +1678,7 @@ fn "reflect_derive_schema.wado/reflect_derive_schema.wado/Mixed^reflect_derive_s
         $licm_repr_27 = out.repr;
         b236: block {
             l237: loop {
-                break_if b236 (((i_24 >= i_14) | ((i_24 + 1) >= i_14)) | (((i_24 + 1) + 1) >= i_14)) | ((((i_24 + 1) + 1) + 1) >= i_14);
+                break_if b236 (builtin::i64_extend_i32_s(i_24) + 3_i64) >= builtin::i64_extend_i32_s(i_14);
                 if builtin::array_get_value<u8>($licm_repr_27, i_24) != builtin::array_get_value<u8>(global:reflect_derive_schema.wado::$const_obj_4, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
@@ -1746,7 +1746,7 @@ fn "reflect_derive_schema.wado/reflect_derive_schema.wado/Point^reflect_derive_s
         $licm_repr_27 = out.repr;
         b247: block {
             l248: loop {
-                break_if b247 (((i_14 >= 0) | ((i_14 + 1) >= 0)) | (((i_14 + 1) + 1) >= 0)) | ((((i_14 + 1) + 1) + 1) >= 0);
+                break_if b247 (builtin::i64_extend_i32_s(i_14) + 3_i64) >= builtin::i64_extend_i32_s(0);
                 if builtin::array_get_value<u8>($licm_repr_27, i_14) != builtin::array_get_value<u8>(global:reflect_derive_schema.wado::$const_obj_4, i_14) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
@@ -1793,7 +1793,7 @@ fn "reflect_derive_schema.wado/reflect_derive_schema.wado/Point^reflect_derive_s
         $licm_repr_27 = out.repr;
         b259: block {
             l260: loop {
-                break_if b259 (((i_24 >= i_14) | ((i_24 + 1) >= i_14)) | (((i_24 + 1) + 1) >= i_14)) | ((((i_24 + 1) + 1) + 1) >= i_14);
+                break_if b259 (builtin::i64_extend_i32_s(i_24) + 3_i64) >= builtin::i64_extend_i32_s(i_14);
                 if builtin::array_get_value<u8>($licm_repr_27, i_24) != builtin::array_get_value<u8>(global:reflect_derive_schema.wado::$const_obj_4, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }

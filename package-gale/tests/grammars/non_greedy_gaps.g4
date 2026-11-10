@@ -4,7 +4,7 @@
 //   file : .*? (constant .*?)+ EOF ;
 //
 // Parser non-greedy `.*?` and `TOK*?` take a distinct code path in
-// `parser_gen.wado` (`compute_non_greedy_condition`,
+// `parser_gen.wado` (`non_greedy_static_cond`,
 // `gen_repeat_non_greedy`) that no existing driver grammar exercises
 // end-to-end — `ANTLRv4Parser.g4` uses `ARGUMENT_CONTENT*?` but the ANTLR4
 // driver test only tokenizes, never runs the parser.

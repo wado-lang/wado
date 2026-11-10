@@ -22,7 +22,7 @@ use { assemble_grammar } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { diagnostic_level } from "./gir.wado";
-export use { AtnMode } from "./gen_settings.wado";
+export use { PredictionMode } from "./gen_settings.wado";
 use { NoFields, event } from "core:log";
 use { to_snake_case } from "./gen_util.wado";
 use { Deserialize } from "core:serde";
@@ -41,9 +41,9 @@ export struct Options {
     /// e.g. `["statement"]`. Empty is byte-identical. See "Parsing a fragment"
     /// in the README.
     pub fragment_entries: List<String>,
-    /// Which decisions the parser asks the runtime ATN simulator. "Choosing the
-    /// simulator" in the README lists the modes.
-    pub atn: AtnMode = AtnMode::Auto,
+    /// What the parser promises about its tree. "Choosing a prediction mode"
+    /// in the README lists the modes.
+    pub prediction: PredictionMode = PredictionMode::Exact,
 }
 
 impl Deserialize for Options;
@@ -150,7 +150,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         highlight_query,
         trace: req.options.trace,
         fragment_entries: req.options.fragment_entries,
-        atn: req.options.atn,
+        prediction: req.options.prediction,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
     // Log Gale's prediction-strategy diagnostics at the level

@@ -285,7 +285,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c
 
 type "functype//struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "struct_literal_newtype_target.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(91)
 
-type "functype//struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i32>) -> ref "core:prelude/list.wado//List<i32>";  // TypeId(92)
+type "functype//struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i32>^core:prelude/traits.wado/From<Array<T#struct_literal_newtype_target.wado/17>>::from" = fn(ref Array<i32>) -> ref "core:prelude/list.wado//List<i32>";  // TypeId(92)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<struct_literal_newtype_target.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "struct_literal_newtype_target.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(93)
 
@@ -387,7 +387,7 @@ fn "struct_literal_newtype_target.wado/$cm_export__$test_1_a_newtype_over_a_gene
 fn "struct_literal_newtype_target.wado/$cm_export__$test_2_a_generic_struct_built_from_a_plain_sequence_reads_a_literal_as_fields"() {
     let self_10: i32;
     let $mv$c$items: ref "core:prelude/list.wado//List<i32>";
-    multivalue_bind [$mv$c$items] = "struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(5, 6, 7));
+    multivalue_bind [$mv$c$items] = "struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i32>^core:prelude/traits.wado/From<Array<T#struct_literal_newtype_target.wado/17>>::from"(array.new_fixed<i32>(5, 6, 7));
     if @unlikely(local.tee self_10($mv$c$items.used) != 3) {
         cold_path;
         "struct_literal_newtype_target.wado/$test_2_a_generic_struct_built_from_a_plain_sequence_reads_a_literal_as_fields$cold0"(self_10);
@@ -763,7 +763,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b90: block {
         l91: loop {
-            break_if b90 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b90 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -787,7 +787,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b94: block {
         l95: loop {
-            break_if b94 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b94 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1422,7 +1422,7 @@ fn "struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/$tmpl$
     };
 }
 
-fn "struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i32>^core:prelude/traits.wado/From<Array<T>>::from"(a) {
+fn "struct_literal_newtype_target.wado/struct_literal_newtype_target.wado/Bag<i32>^core:prelude/traits.wado/From<Array<T#struct_literal_newtype_target.wado/17>>::from"(a) {
     let items: ref "core:prelude/list.wado//List<i32>";
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let end: i32;

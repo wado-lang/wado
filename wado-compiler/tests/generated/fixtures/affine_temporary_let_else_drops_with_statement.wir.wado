@@ -335,7 +335,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temporary_let_else_drops_with_statement.wado/$tmpl$a76aec12c507eccf,[core:prelude/list.wado/List<core:prelude/string.wado/String>,core:prelude/list.wado/List<core:prelude/string.wado/String>]>" = fn(ref "affine_temporary_let_else_drops_with_statement.wado//$tmpl$a76aec12c507eccf") -> ref "core:prelude/string.wado//String";  // TypeId(109)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> [ref "Array<core:prelude/string.wado/String>", i32];  // TypeId(110)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> [ref "Array<core:prelude/string.wado/String>", i32];  // TypeId(110)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "Array<core:prelude/string.wado/String>", i32, ref "core:prelude/format.wado//Formatter");  // TypeId(111)
 
@@ -561,7 +561,7 @@ fn "affine_temporary_let_else_drops_with_statement.wado/$test_0_a_temporary_a__l
                     $licm_repr_19 = other_74.repr;
                     b22: block {
                         l23: loop {
-                            break_if b22 (((i_82 >= a_end_77) | ((i_82 + 1) >= a_end_77)) | (((i_82 + 1) + 1) >= a_end_77)) | ((((i_82 + 1) + 1) + 1) >= a_end_77);
+                            break_if b22 (builtin::i64_extend_i32_s(i_82) + 3_i64) >= builtin::i64_extend_i32_s(a_end_77);
                             if builtin::array_get_value<u8>($licm_repr_18, i_82) != builtin::array_get_value<u8>($licm_repr_19, i_82) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__spec0_0__$inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                             }
@@ -755,7 +755,7 @@ fn "affine_temporary_let_else_drops_with_statement.wado/$cm_export__$test_2_a_te
 fn "affine_temporary_let_else_drops_with_statement.wado/$initialize_module"() {
     let $mv_repr_1: ref "Array<core:prelude/string.wado/String>";
     let $mv_used_2: i32;
-    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
+    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
     global:affine_temporary_let_else_drops_with_statement.wado::LOG = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: $mv_repr_1, used: $mv_used_2 };
 }
 
@@ -1149,7 +1149,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b134: block {
         l135: loop {
-            break_if b134 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b134 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1173,7 +1173,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b138: block {
         l139: loop {
-            break_if b138 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b138 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1596,7 +1596,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/seq_eq<core:prelude/string.w
                 $licm_repr_19 = other.repr;
                 b188: block {
                     l189: loop {
-                        break_if b188 (((i_14 >= a_end_9) | ((i_14 + 1) >= a_end_9)) | (((i_14 + 1) + 1) >= a_end_9)) | ((((i_14 + 1) + 1) + 1) >= a_end_9);
+                        break_if b188 (builtin::i64_extend_i32_s(i_14) + 3_i64) >= builtin::i64_extend_i32_s(a_end_9);
                         if builtin::array_get_value<u8>($licm_repr_18, i_14) != builtin::array_get_value<u8>($licm_repr_19, i_14) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                         }
@@ -2168,7 +2168,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temp
     return $mv_arg_1;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
     let used: i32;
     used = builtin::array_len(elements);
     return elements, used;

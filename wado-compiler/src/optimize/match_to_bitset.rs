@@ -21,17 +21,13 @@ const BITSET_MIN_MEMBERS: usize = 4;
 /// Words the mask may span; each past the first costs a compare and a `select`.
 const BITSET_MAX_WORDS: u32 = 4;
 
-pub(super) struct MatchToBitsetRule<'t> {
-    type_table: &'t TypeTable,
+pub(super) struct MatchToBitsetRule {
     select_id: FuncId,
 }
 
-impl<'t> MatchToBitsetRule<'t> {
-    pub(super) fn new(type_table: &'t TypeTable, select_id: FuncId) -> Self {
-        Self {
-            type_table,
-            select_id,
-        }
+impl MatchToBitsetRule {
+    pub(super) fn new(select_id: FuncId) -> Self {
+        Self { select_id }
     }
 }
 
@@ -46,7 +42,7 @@ struct Bitset {
     default: bool,
 }
 
-impl Rule for MatchToBitsetRule<'_> {
+impl Rule for MatchToBitsetRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let ExprKind::Match {
             expr: scrutinee,
@@ -59,7 +55,7 @@ impl Rule for MatchToBitsetRule<'_> {
         let scrut_type = engine.body.operand_type(scrutinee);
         // The offset is taken in `i32`, so a wider scrutinee would lose values
         // to the cast.
-        if scrutinee_bits(self.type_table.get(scrut_type)).is_none_or(|bits| bits > 32) {
+        if scrutinee_bits(engine.type_table().get(scrut_type)).is_none_or(|bits| bits > 32) {
             return false;
         }
         let span = engine.body.exprs[id].span;
@@ -237,7 +233,7 @@ impl Build<'_, '_> {
     }
 }
 
-impl MatchToBitsetRule<'_> {
+impl MatchToBitsetRule {
     fn build(
         &self,
         engine: &mut Engine,

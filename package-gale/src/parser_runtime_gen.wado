@@ -12,6 +12,7 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
 use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
+use { ATN_VERIFY_BEGIN, ATN_VERIFY_END } from "./atn_sll.wado";
 
 internal struct RecoverFragmentEntry {
     call: String,
@@ -166,6 +167,10 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     if ctx.plan.lr_frames {
         w.line("lr_frames_reset();");
     }
+    let verify = ctx.settings.prediction.verifies() && ctx.plan.needs_atn;
+    if verify {
+        w.line(`${ATN_VERIFY_BEGIN}();`);
+    }
     w.line("let tokens = tokenize(input);");
     w.line("let mut p = Parser::new(tokens);");
     w.line("p.max_errors = max_errors;");
@@ -177,6 +182,9 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     w.end();
     w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("resolve_positions(&mut p.diagnostics, &p.tokens.src);");
+    if verify {
+        w.line(`${ATN_VERIFY_END}(&p.diagnostics);`);
+    }
     if ctx.settings.emit_actions {
         // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.
         w.line(

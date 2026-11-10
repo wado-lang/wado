@@ -43,7 +43,7 @@ use crate::nir_arena::{
     StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::nir_value_graph::{ValueId, ValueKind, ValuePool, null_kind};
 use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
 use crate::reflect_marker::{BridgeCallee, bridge_callee};
@@ -1793,18 +1793,25 @@ impl FunctionTranslator<'_, '_> {
             // from the pool by the extractor): `Null` → `None`/`ref.null`,
             // string → `seq_literal`, unit → no runtime value.
             TirExprKind::Null => {
+                let types = self.base.type_table.borrow();
                 // At a primitive slot a `ref.null` reaches codegen and fails
                 // Wasm validation, naming an offset rather than this site.
                 assert!(
-                    !matches!(
-                        self.base.type_table.borrow().get(expr.type_id),
-                        ResolvedType::Primitive(_)
-                    ),
+                    !matches!(types.get(expr.type_id), ResolvedType::Primitive(_)),
                     "[lower] `null` typed as a primitive: a synthesized placeholder \
                      at a primitive slot needs a zero of that type, not a reference null"
                 );
-                Some(ValueKind::Null)
+                Some(null_kind(expr.type_id, &types))
             }
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                payload: None,
+                ..
+            } => Some(ValueKind::UnitCase {
+                variant_type: *variant_type,
+                case_index: *case_index,
+            }),
             // String / bytes literals are no longer atomic pool values; they
             // lower to a `StructLiteral` over a packed `Array<u8>` repr in
             // `convert_expr` (`seq_literal`), so they fall through to the
@@ -1884,7 +1891,6 @@ impl FunctionTranslator<'_, '_> {
         pool: &mut ValuePool,
         type_table: &TypeTable,
     ) -> Option<ValueId> {
-        let tt = Some(type_table);
         let v = match &expr.kind {
             TirExprKind::IntLiteral { value, .. } => {
                 pool.alloc_unshared(ValueKind::Int(*value, expr.type_id), expr.type_id)
@@ -1898,18 +1904,18 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Binary { left, op, right } => {
                 let lhs = self.constant_arith_in(left, pool, type_table)?;
                 let rhs = self.constant_arith_in(right, pool, type_table)?;
-                pool.binary_folded(convert_binary_op(*op), lhs, rhs, expr.type_id, tt)
+                pool.binary_folded(convert_binary_op(*op), lhs, rhs, expr.type_id, type_table)
             }
             TirExprKind::Unary { op, expr: inner } => {
                 let operand = self.constant_arith_in(inner, pool, type_table)?;
-                pool.unary_folded(convert_unary_op(*op), operand, expr.type_id, tt)
+                pool.unary_folded(convert_unary_op(*op), operand, expr.type_id, type_table)
             }
             TirExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
                 let operand = self.constant_arith_in(inner, pool, type_table)?;
-                pool.cast_folded(operand, *target_type, tt)
+                pool.cast_folded(operand, *target_type, type_table)
             }
             _ => return None,
         };
@@ -2357,7 +2363,11 @@ impl FunctionTranslator<'_, '_> {
                 variant_type: *variant_type,
                 case_index: *case_index,
                 case_name: case_name.clone(),
-                payload: payload.as_ref().map(|p| self.convert_stored_operand(p)),
+                payload: self.convert_stored_operand(
+                    payload
+                        .as_ref()
+                        .expect("[lower] a payload-less case is a `UnitCase` operand"),
+                ),
             },
             TirExprKind::EnumConstruct {
                 enum_type,
@@ -2676,7 +2686,7 @@ impl FunctionTranslator<'_, '_> {
             variant_type: *variant_type,
             case_index: *case_index,
             case_name: case_name.clone(),
-            payload: Some(self.convert_returned_operand(payload)),
+            payload: self.convert_returned_operand(payload),
         };
         self.alloc_expr(kind, value.type_id, value.span).into()
     }
@@ -3101,11 +3111,9 @@ fn convert_local(local: &TirLocal) -> NirLocal {
 fn convert_type_param(tp: &TirTypeParam) -> NirTypeParam {
     NirTypeParam {
         name: tp.name.clone(),
-        is_effect: tp.is_effect,
         is_pack: tp.is_pack,
         bounds: tp.bounds.clone(),
         default: tp.default,
-        index: tp.index,
     }
 }
 

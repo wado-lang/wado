@@ -10,7 +10,7 @@ use crate::ast::{
     ConditionElement, ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EffectsSource,
     EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt,
     FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt,
+    FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr,
     ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MAX_GENERIC_PARAMS, MatchArm,
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
@@ -3373,24 +3373,36 @@ impl Parser {
     fn parse_if_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
+        let (condition, then_block, else_block, span) =
+            self.parse_if_parts(start_span, Self::parse_if_stmt)?;
+        Ok(Stmt::If(IfExpr {
+            id,
+            condition,
+            then_block,
+            else_block,
+            span,
+        }))
+    }
+
+    /// An `if`'s condition and blocks from its `if` on, and its span. An
+    /// `else if` is a block holding the one statement `else_if` reads.
+    fn parse_if_parts(
+        &mut self,
+        start_span: Span,
+        else_if: fn(&mut Self) -> ParseResult<Stmt>,
+    ) -> ParseResult<(Condition, Block, Option<Block>, Span)> {
         self.expect(&TokenKind::If)?;
         let condition = self.parse_condition(start_span)?;
-
         let then_block = self.parse_block()?;
-
         let else_block = if self.check(&TokenKind::Else) {
             self.advance();
             if self.check(&TokenKind::If) {
-                // `else if` - parse as nested if statement wrapped in a block
                 let block_id = self.alloc_ast_id();
-                let if_stmt = self.parse_if_stmt()?;
-                let span = match &if_stmt {
-                    Stmt::If(s) => s.span,
-                    _ => unreachable!("parse_if_stmt must return Stmt::If"),
-                };
+                let nested = else_if(self)?;
+                let span = nested.span();
                 Some(Block {
                     id: block_id,
-                    stmts: vec![if_stmt],
+                    stmts: vec![nested],
                     span,
                 })
             } else {
@@ -3399,17 +3411,9 @@ impl Parser {
         } else {
             None
         };
-
         let end_span = else_block.as_ref().map_or(&then_block.span, |b| &b.span);
         let span = start_span.merge(end_span);
-
-        Ok(Stmt::If(IfStmt {
-            id,
-            condition,
-            then_block,
-            else_block,
-            span,
-        }))
+        Ok((condition, then_block, else_block, span))
     }
 
     /// Parse an `if`, `while` or `for` condition. Its operands are read at
@@ -5313,37 +5317,15 @@ impl Parser {
     /// Parse if expression: `if condition { expr } else { expr }`
     fn parse_if_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
-        self.expect(&TokenKind::If)?;
-        let condition = self.parse_condition(start_span)?;
-
-        let then_block = self.parse_block()?;
-
-        let else_block = if self.check(&TokenKind::Else) {
-            self.advance();
-            if self.check(&TokenKind::If) {
-                // `else if` - parse as nested if expression wrapped in a block
-                let block_id = self.alloc_ast_id();
-                let if_expr = self.parse_if_expr()?;
-                let span = if_expr.span();
-                Some(Block {
-                    id: block_id,
-                    stmts: vec![Stmt::Expr(ExprStmt {
-                        id: self.alloc_ast_id(),
-                        expr: if_expr,
-                        span,
-                    })],
-                    span,
-                })
-            } else {
-                Some(self.parse_block()?)
-            }
-        } else {
-            None
-        };
-
-        let end_span = else_block.as_ref().map_or(&then_block.span, |b| &b.span);
-        let span = start_span.merge(end_span);
-
+        let (condition, then_block, else_block, span) = self.parse_if_parts(start_span, |p| {
+            let expr = p.parse_if_expr()?;
+            let span = expr.span();
+            Ok(Stmt::Expr(ExprStmt {
+                id: p.alloc_ast_id(),
+                expr,
+                span,
+            }))
+        })?;
         Ok(Expr::If(Box::new(IfExpr {
             id: self.alloc_ast_id(),
             condition,
@@ -5835,7 +5817,8 @@ impl Parser {
                 });
                 return Ok(Type::Error(span));
             }
-            return Ok(Type::TypePackSpread(name, span));
+            let id = self.alloc_ast_id();
+            return Ok(Type::TypePackSpread(NamedType { id, name, span }));
         }
         self.parse_type()
     }
@@ -7134,10 +7117,11 @@ impl Parser {
     ) -> Vec<GenericParam> {
         let mut repeated: Vec<(String, Span)> = Vec::new();
         for ty in params.iter().map(|p| &p.ty).chain(return_type) {
-            for (name, span) in ty.pack_spreads() {
+            for spread in ty.pack_spreads() {
+                let name = &spread.name;
                 let in_scope = self.packs_in_scope(declared).any(|p| p == name);
                 if !in_scope && !repeated.iter().any(|(r, _)| r == name) {
-                    repeated.push((name.to_string(), span));
+                    repeated.push((name.clone(), spread.span));
                 }
             }
         }
