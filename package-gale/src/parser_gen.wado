@@ -2316,6 +2316,9 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         gen_scan_non_greedy_probe_loop(w, re, ctx);
         return;
     }
+    let yields_unless_viable = !re.atn_decides && !re.non_greedy && re.gate_caller_follow && re.body_scannable;
+    let walks_iteration = !scan_iteration_is_proven_token(re, &loop_admits);
+    let again = loop_resumes_first(&re.caller_follow_first, &loop_admits);
     let guard = if re.atn_decides {
         atn_scan_enters(ctx, re.atn_decision, re.non_greedy, &re.atn_asked_kinds, `(${kind_at("tokens", "pos")})`);
     } else if re.non_greedy {
@@ -2328,33 +2331,31 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
             `(${kind_at("tokens", "pos + 1")})`,
             ctx,
         );
-    } else if !re.gate_caller_follow || !re.body_scannable {
+    } else if !yields_unless_viable {
         scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx);
-    } else if repeat_body_implied_by_guard(&re.body, &loop_admits) && re.duties.is_empty() {
-        let again = loop_resumes_first(&re.caller_follow_first, &loop_admits);
-        `${scan_repeat_guard(&loop_admits, "", ctx)} && ${leaf_enters_while_viable(ctx, &again, "tokens", "tokens", "pos")}`;
-    } else {
+    } else if walks_iteration {
         scan_repeat_guard(&loop_admits, "", ctx);
+    } else {
+        `${scan_repeat_guard(&loop_admits, "", ctx)} && ${leaf_enters_while_viable(
+            ctx,
+            &again,
+            "tokens",
+            "tokens",
+            "pos",
+        )}`;
     };
     if guard == "false" {
         return;
     }
     w.begin(`while ${guard}`);
     gen_scan_iteration(w, re, &loop_admits, ctx, true);
-    if scan_loops_while_viable(re, &loop_admits) {
-        let again = loop_resumes_first(&re.caller_follow_first, &loop_admits);
+    // The scan's twin of `gen_caller_follow_gate`, once the iteration it
+    // walked from `sp` has an end to ask about.
+    if yields_unless_viable && walks_iteration {
         let resumes = continuation_resumes_at(ctx, &again, "tokens", "tokens", "pos");
         gen_scan_rewind_break(w, ctx, "sp", `${follow_yields_call("tokens", "sp")} && !${resumes}`);
     }
     w.end();
-}
-
-/// The scan's twin of `gen_caller_follow_gate`, for a greedy loop whose
-/// iteration `gen_scan_iteration` marks at `sp`: one it walks rather than one
-/// token the guard proves.
-fn scan_loops_while_viable(re: &ScanRepeatElement, loop_admits: &Admits) -> bool {
-    return re.gate_caller_follow && re.body_scannable && !re.atn_decides && !re.non_greedy
-        && !(repeat_body_implied_by_guard(&re.body, loop_admits) && re.duties.is_empty());
 }
 
 /// The scan's twin of `enters_while_viable`, for a body longer than the one
@@ -2381,13 +2382,19 @@ fn gen_scan_yield_unless_resumed<S: AsStrSlice>(
     w.end();
 }
 
-/// One scanned iteration: take the token the guard already proved, or scan the
-/// body and rewind where it fails. A loop also leaves where it cannot advance.
-fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admits, ctx: &mut EmitContext, looping: bool) {
+/// Whether an iteration is the one token the guard already proved, owing
+/// nothing past it, so `gen_scan_iteration` takes it without marking `sp`.
+fn scan_iteration_is_proven_token(re: &ScanRepeatElement, admits: &Admits) -> bool {
     // `duties.is_empty()`, never the fields it holds: skipping a duty here is
     // what let `A* A`'s scan eat both tokens and score -1 for input the parse
     // accepts, and the next duty added would repeat it.
-    if repeat_body_implied_by_guard(&re.body, admits) && re.duties.is_empty() {
+    return repeat_body_implied_by_guard(&re.body, admits) && re.duties.is_empty();
+}
+
+/// One scanned iteration: take the token the guard already proved, or scan the
+/// body and rewind where it fails. A loop also leaves where it cannot advance.
+fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admits, ctx: &mut EmitContext, looping: bool) {
+    if scan_iteration_is_proven_token(re, admits) {
         // The guard proved one kind, so the step either moves or stays on EOF,
         // where a loop would come round to the same token forever.
         let advance = scan_advance(&admits_kinds(admits), ctx);
@@ -6611,7 +6618,13 @@ fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitC
     }
     w.begin(`if ${yields}`);
     let end = gen_scan_guard_with_prefix(w, &rep_op.scan_body, ctx, nc, "iter_scan_pos", "iter_scan", false);
-    let resumes = continuation_resumes_at(ctx, &loop_resumes_first(&rep_op.caller_follow_first, &rep_op.body_admits), "&p.kinds", "p.kinds", &end);
+    let resumes = continuation_resumes_at(
+        ctx,
+        &loop_resumes_first(&rep_op.caller_follow_first, &rep_op.body_admits),
+        "&p.kinds",
+        "p.kinds",
+        &end,
+    );
     w.line(`if ${end} < 0 || !${resumes} { break; }`);
     w.end();
 }

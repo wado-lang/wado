@@ -170,7 +170,11 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
         // `greedy_optional_inner_follow` hands the continuation down: whole to
         // a `?`, and to a loop as the other reading beside its next iteration.
         Repeat(rep) => !rep.non_greedy && (element_consumes_follow_arg(&rep.element) || loops_over_group(rep)),
-        Group(g) => if let Some(inner) = transparent_inner(g) { element_consumes_follow_arg(inner) } else { false },
+        Group(g) => if let Some(inner) = transparent_inner(g) {
+            element_consumes_follow_arg(inner);
+        } else {
+            false;
+        },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
     };
 }
@@ -253,7 +257,11 @@ fn rule_ref_snake(elem: &Element) -> Option<String> {
         RuleRef(r) => Option::Some(r.snake_name),
         Label(lab) => rule_ref_snake(&lab.element),
         Repeat(rep) => rule_ref_snake(&rep.element),
-        Group(g) => if let Some(inner) = transparent_inner(g) { rule_ref_snake(inner) } else { null },
+        Group(g) => if let Some(inner) = transparent_inner(g) {
+            rule_ref_snake(inner);
+        } else {
+            null;
+        },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => null,
     };
 }
@@ -3468,7 +3476,7 @@ fn lower_simple_cst_group(
             fields: [],
             prefix_self_ref_min_prec: 0,
         });
-        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_NO_FOLLOW, follow_arg, false);
+        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_UNREAD_FOLLOW, follow_arg, false);
         scan_bodies.push(alt_scan_body(alt, [call], ctx));
     }
     let owner = DiagnosticOwner {
@@ -3489,7 +3497,7 @@ fn lower_simple_cst_group(
 
 /// A SimpleCst alt is one bare `RuleRef`, reaching none of the arms that read
 /// `lower_scan_element`'s per-position follow — so both paths pass one value.
-global SIMPLE_CST_NO_FOLLOW: List<i32> = [];
+global SIMPLE_CST_UNREAD_FOLLOW: List<i32> = [];
 
 fn lower_simple_cst_scan_group(
     alts: &List<Alternative>,
@@ -3501,7 +3509,7 @@ fn lower_simple_cst_scan_group(
     let mut bodies: List<ScanBody> = [];
     for let alt of alts {
         let follow_arg = simple_cst_alt_follow_arg(ctx, alt, outer_suffix);
-        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_NO_FOLLOW, follow_arg, false);
+        let call = lower_scan_element(&alt.elements[0], ctx, &SIMPLE_CST_UNREAD_FOLLOW, follow_arg, false);
         bodies.push(alt_scan_body(alt, [call], ctx));
     }
     return scan_group_element(bodies, alts, outer_follow, follow_is_exact, ctx);

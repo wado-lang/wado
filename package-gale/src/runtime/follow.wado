@@ -23,7 +23,7 @@ internal global FOLLOW_OPEN_SET_SHIFT: i64 = 49;
 
 global FOLLOW_OPEN_ID_MASK: i64 = 0x7FFF;
 
-global FOLLOW_OPEN_UNION_BASE: i64 = 128;
+global FOLLOW_OPEN_UNION_BASE: i64 = FOLLOW_ID_MASK + 1;
 
 internal fn follow_open_mark(cont: i64) -> i64 {
     return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
@@ -52,7 +52,9 @@ struct FollowOpenUnions {
     joined: HashMap<i64, i64>,
 }
 
-global mut FOLLOW_OPEN_UNIONS: FollowOpenUnions = FollowOpenUnions { members: [], joined: HashMap::with_seed(FOLLOW_SEED) };
+global mut FOLLOW_OPEN_UNIONS: FollowOpenUnions = FollowOpenUnions { members: [], joined: HashMap::with_seed(
+    FOLLOW_SEED,
+) };
 
 fn follow_open_union(a: i64, b: i64) -> i64 {
     let key = i64::min(a, b) | i64::max(a, b) << 16;
@@ -79,7 +81,7 @@ fn follow_open_members(id: i64) -> [i64, i64] {
     if id >= FOLLOW_OPEN_UNION_BASE {
         return FOLLOW_OPEN_UNIONS.members[(id - FOLLOW_OPEN_UNION_BASE) as i32];
     }
-    return if id < 64 { [1 << id, 0] } else { [0, 1 << (id - 64)] };
+    return if id < 64 { [1 << id, 0] } else { [0, 1 << id - 64] };
 }
 
 internal fn follow_open_with(cont: i64, open: i64) -> i64 {
@@ -102,7 +104,7 @@ internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
 
 internal global FOLLOW_LINK_ID: i64 = 127;
 
-global FOLLOW_CONT_BITS: i64 = 48;
+internal global FOLLOW_CONT_BITS: i64 = 48;
 
 global FOLLOW_INDEX_BITS: i64 = 7;
 
@@ -206,7 +208,8 @@ fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bo
         return follow_open_member_has(id, kind, sets, unknown_has);
     }
     let [low, high] = follow_open_members(id);
-    return follow_open_word_has(low, 0, kind, sets, unknown_has) || follow_open_word_has(high, 64, kind, sets, unknown_has);
+    return follow_open_word_has(low, 0, kind, sets, unknown_has)
+        || follow_open_word_has(high, 64, kind, sets, unknown_has);
 }
 
 fn follow_open_word_has(word: i64, base: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {

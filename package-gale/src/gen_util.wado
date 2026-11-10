@@ -2,7 +2,7 @@ use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { comment_end, ident_end, scan_closed_string } from "./g4/scan.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
-use { FOLLOW_LINK_ID } from "./runtime/follow.wado";
+use { FOLLOW_LINK_ID, FOLLOW_CONT_BITS, FOLLOW_SLOT_BITS as RUNTIME_SLOT_BITS } from "./runtime/follow.wado";
 
 /// Open an `if` arm, or chain it onto the arm already open.
 pub fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, chained: bool, cond: S) {
@@ -95,9 +95,9 @@ pub fn dedup_name<S: AsStrSlice>(base: S, counts: &mut List<[String, i32]>) -> S
 /// spells it in constants and a rule carries one parameter. What a shift would
 /// push past the last slot moves to the runtime's link table, and a
 /// `FOLLOW_LINK_ID` slot stands for it, so composing loses no reading.
-pub global FOLLOW_SLOT_BITS: i32 = 8;
+pub global FOLLOW_SLOT_BITS: i32 = RUNTIME_SLOT_BITS as i32;
 
-pub global FOLLOW_CONT_SLOTS: i32 = 6;
+pub global FOLLOW_CONT_SLOTS: i32 = (FOLLOW_CONT_BITS / RUNTIME_SLOT_BITS) as i32;
 
 pub global FOLLOW_MAX_POSITION_ID: i32 = FOLLOW_LINK_ID as i32 - 1;
 
