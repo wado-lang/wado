@@ -174,7 +174,7 @@ impl BinderInScope {
 
 /// A binder's identity: see [`BinderInScope::key`]. Two parameters standing
 /// for one type are two binders, each bounded by what it declares.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct BinderKey {
     type_id: TypeId,
     index: u32,
@@ -184,7 +184,7 @@ pub(super) struct BinderKey {
 
 /// Whose bounds answer for a type: the binder a written name reaches, or the
 /// type itself, which answers to every bound in force on it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 pub(super) enum BoundsOf {
     Binder(BinderKey),
     Type(TypeId),

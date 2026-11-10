@@ -161,9 +161,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declare the same associated-type name.
     fn bound_declaring_assoc_type(&self, of: BoundsOf, assoc_name: &str) -> Option<DefId> {
         let bounds = self.frame_bounds(of);
-        self.tysys
-            .trait_env
-            .bound_declaring_assoc_type(&bounds, assoc_name, &self.tysys.resolutions)
+        self.tysys.trait_env.bound_declaring_assoc_type(
+            &bounds,
+            assoc_name,
+            &self.tysys.resolutions,
+        )
     }
 
     /// The identity an impl header names: the trait, plus the arguments it
@@ -1632,13 +1634,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A frame that binds `Self::X` answers with the binding, one
             // that does not with the projection — which is built from
             // `assoc`'s own bounds, so a pair already on the walk recurses.
-            let answer = self.frame_projection(BoundsOf::Type(base), &assoc).or_else(|| {
-                self.unless_on_walk(
-                    |scope| &mut scope.assoc_binding_stack,
-                    (base, assoc.clone()),
-                    |e| e.make_frame_projection(base, &assoc),
-                )
-            })?;
+            let answer = self
+                .frame_projection(BoundsOf::Type(base), &assoc)
+                .or_else(|| {
+                    self.unless_on_walk(
+                        |scope| &mut scope.assoc_binding_stack,
+                        (base, assoc.clone()),
+                        |e| e.make_frame_projection(base, &assoc),
+                    )
+                })?;
             Some((name, answer))
         }));
         answered
