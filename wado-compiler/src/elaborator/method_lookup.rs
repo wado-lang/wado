@@ -37,8 +37,7 @@ use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{
-    BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written,
-    receiver_as_written,
+    BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
 };
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
@@ -2628,7 +2627,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 env.blanket_of_block(def)
                     .is_some_and(|b| matches!(b.receiver, BlanketReceiver::Value))
             });
-        let blankets: Vec<&ImplHeader> = blankets.iter().map(|def| &env.impl_headers[def]).collect();
+        let blankets: Vec<&ImplHeader> =
+            blankets.iter().map(|def| &env.impl_headers[def]).collect();
         let heads: Vec<&ImplHeader> = heads.iter().map(|def| &env.impl_headers[def]).collect();
         let receiver = self.tysys.type_id_to_string(receiver);
         if let [first, _, ..] = blankets.as_slice() {
@@ -2688,7 +2688,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::AmbiguousHeadImpls {
             trait_name: format!("{head}<{}>", args.join(", ")),
             receiver: self.tysys.type_id_to_string(receiver),
-            headers: tied.iter().map(|&i| header_as_written(header_of(i))).collect(),
+            headers: tied
+                .iter()
+                .map(|&i| header_as_written(header_of(i)))
+                .collect(),
             span,
         });
     }

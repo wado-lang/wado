@@ -215,13 +215,25 @@ fn blanket_template_name(
     .to_mangled_name()
 }
 
-/// Whether `template`'s block keys its instance by its trait arguments too
-/// ([`TypeTable::impl_key_trait_args`]), so a call through a bound appends the
-/// bound's.
-fn keyed_by_trait_args(template: Option<&TemplateId>, type_table: &TypeTable) -> bool {
-    template
-        .and_then(TemplateId::block)
-        .is_some_and(|block| !type_table.impl_key_trait_args(block).is_empty())
+/// The key of the instance a call through a bound reaches at `receiver`, where
+/// `template`'s block keys its instances by its trait arguments too
+/// ([`TypeTable::impl_key_trait_args`]): the receiver's arguments, then the
+/// bound's trait arguments `info` carries.
+fn trait_keyed_impl_args(
+    template: Option<&TemplateId>,
+    receiver: TypeId,
+    info: &LocalMethodName,
+    type_table: &TypeTable,
+) -> Option<Vec<TypeId>> {
+    let block = template.and_then(TemplateId::block)?;
+    if type_table.impl_key_trait_args(block).is_empty() {
+        return None;
+    }
+    let mut args = type_table
+        .generic_type_args(type_table.peel_refs(receiver))
+        .unwrap_or_default();
+    args.extend_from_slice(&info.trait_type_args);
+    Some(args)
 }
 
 /// The call `method` of `trait_name` names through the universal `&T`
@@ -1761,12 +1773,17 @@ impl Monomorphizer {
                                 &resolved_module,
                                 type_table,
                             );
-                            let mut impl_type_arg_tids: Vec<TypeId> = type_table
-                                .generic_type_args(concrete_type_id)
-                                .unwrap_or_default();
-                            if keyed_by_trait_args(template.as_ref(), type_table) {
-                                impl_type_arg_tids.extend_from_slice(&info.trait_type_args);
-                            }
+                            let impl_type_arg_tids = trait_keyed_impl_args(
+                                template.as_ref(),
+                                concrete_type_id,
+                                &info,
+                                type_table,
+                            )
+                            .unwrap_or_else(|| {
+                                type_table
+                                    .generic_type_args(concrete_type_id)
+                                    .unwrap_or_default()
+                            });
                             // A generic-instance receiver
                             // (`List<i32>^Default::default`) must queue its impl
                             // instantiation even with no method type args of its
@@ -2992,10 +3009,9 @@ impl Monomorphizer {
         // instead means the type has no impl of its own, so nothing else queues
         // that instance.
         let served_by_receiver_scan = receiver_has_type_args && blanket_module.is_none();
-        let monomorph_info = if keyed_by_trait_args(template.as_ref(), type_table) {
-            let recv_inner = type_table.peel_refs(receiver_type_id);
-            let mut impl_type_args = type_table.generic_type_args(recv_inner).unwrap_or_default();
-            impl_type_args.extend_from_slice(&new_info.trait_type_args);
+        let monomorph_info = if let Some(impl_type_args) =
+            trait_keyed_impl_args(template.as_ref(), receiver_type_id, &new_info, type_table)
+        {
             Some(MonomorphInfo {
                 generic_name: old_func_name,
                 impl_type_args,

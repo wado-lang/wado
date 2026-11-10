@@ -6622,7 +6622,12 @@ impl TypeTable {
     pub fn impl_slots(&mut self, def: DefId, key: &[TypeId]) -> TypeArgMap {
         let mut slots = IndexMap::default();
         let target = self.impl_target(def);
-        let positions: Vec<TypeId> = target.args.iter().chain(&target.trait_args).copied().collect();
+        let positions: Vec<TypeId> = target
+            .args
+            .iter()
+            .chain(&target.trait_args)
+            .copied()
+            .collect();
         for (&declared, &concrete) in positions.iter().zip(key) {
             if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
                 for (slot, ty) in bound {

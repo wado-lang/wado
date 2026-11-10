@@ -216,7 +216,10 @@ mod tests {
         }
 
         fn opening_trait_args(mut self) -> Self {
-            self.0.last_mut().expect("a candidate to arm").opens_trait_args = true;
+            self.0
+                .last_mut()
+                .expect("a candidate to arm")
+                .opens_trait_args = true;
             self
         }
 

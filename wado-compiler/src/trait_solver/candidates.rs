@@ -103,20 +103,22 @@ pub fn instance_candidates(
         .into_iter()
         .map(|arg| arg.filter(|arg| !matches!(arg, SolverType::Param(_) | SolverType::Pack(_))))
         .collect();
-    collect(program, &Env::default(), ty, &[trait_], &asked, |t, _| t == trait_)
-        .in_scope
-        .into_iter()
-        .filter(|c| {
-            answers_named_args(
-                program,
-                &program.impls()[&c.impl_],
-                &levels[c.depth as usize],
-                ty,
-                &c.trait_args,
-                args,
-            )
-        })
-        .collect()
+    collect(program, &Env::default(), ty, &[trait_], &asked, |t, _| {
+        t == trait_
+    })
+    .in_scope
+    .into_iter()
+    .filter(|c| {
+        answers_named_args(
+            program,
+            &program.impls()[&c.impl_],
+            &levels[c.depth as usize],
+            ty,
+            &c.trait_args,
+            args,
+        )
+    })
+    .collect()
 }
 
 /// The written `Ord` impl whose `cmp` the `==` that `c` answers on `receiver`

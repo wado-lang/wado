@@ -2976,13 +2976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_id: subject,
                     declaring_trait: Some(trait_),
                 };
-                self.enforce_type_arg_bounds(
-                    &params,
-                    &type_args,
-                    &[],
-                    Some(implementing),
-                    span,
-                );
+                self.enforce_type_arg_bounds(&params, &type_args, &[], Some(implementing), span);
             }
             Owed::BoundArgs { bound, subject } => {
                 let trait_ = self
