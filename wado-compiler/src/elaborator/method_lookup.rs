@@ -36,7 +36,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
-use super::synth::{ArgClass, ArgProbe};
+use super::synth::{ArgClass, ArgProbe, KeyedAccess};
 use super::trait_env::{
     BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
 };
@@ -3256,30 +3256,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The key type of every `IndexValue` and `IndexRef` impl a read of the
-    /// container may dispatch to.
-    pub(super) fn index_read_key_types(
+    /// The key type of every impl `access` on the container may dispatch to:
+    /// `IndexValue` and `IndexRef` for a read, `IndexAssign` and `IndexRefMut`
+    /// for a write.
+    pub(super) fn index_key_types(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
+        access: KeyedAccess,
     ) -> Vec<TypeId> {
-        let by_value = self.indexing_trait_impls(
-            struct_name,
-            base_type_id,
-            CompilerItem::IndexValue,
-            "index_value",
-            None,
-        );
-        let by_ref = self.indexing_trait_impls(
-            struct_name,
-            base_type_id,
-            CompilerItem::IndexRef,
-            "index_ref",
-            None,
-        );
-        by_value
-            .into_iter()
-            .chain(by_ref)
+        let serving: &[(CompilerItem, &str)] = match access {
+            KeyedAccess::Read => &[
+                (CompilerItem::IndexValue, "index_value"),
+                (CompilerItem::IndexRef, "index_ref"),
+            ],
+            KeyedAccess::Write => &[
+                (CompilerItem::IndexAssign, "index_assign"),
+                (CompilerItem::IndexRefMut, "index_ref_mut"),
+            ],
+        };
+        serving
+            .iter()
+            .flat_map(|&(item, method)| {
+                self.indexing_trait_impls(struct_name, base_type_id, item, method, None)
+            })
             .filter_map(|info| info.index_type)
             .collect()
     }
@@ -3815,7 +3815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_block,
             mut return_type,
             self_kind,
-            param_types,
+            mut param_types,
             param_is_mut: method_param_is_mut,
             owner,
             cm_name: _,
@@ -3970,7 +3970,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.settle_trait_arg_slots(
                 block,
                 &inferred_impl_slots,
-                &mut param_types.clone(),
+                &mut param_types,
                 &args,
                 &mut return_type,
                 method_call.span,

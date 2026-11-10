@@ -25,7 +25,7 @@ use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
-use super::synth::ArgClass;
+use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -2184,11 +2184,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return false;
                 }
                 let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
-                this.index_key_type(receiver, class).is_some_and(|key| {
-                    this.receiver_waits(receiver, "index_value", index.span, |this, def| {
-                        this.impl_takes_key(def, key)
+                this.index_key_type(receiver, class, KeyedAccess::Read)
+                    .is_some_and(|key| {
+                        this.receiver_waits(receiver, "index_value", index.span, |this, def| {
+                            this.impl_takes_key(def, key)
+                        })
                     })
-                })
             },
             |this, receiver, ctx| this.resolve_index_of(index, receiver, ctx, access, &key_class),
         )
@@ -2264,16 +2265,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.
             let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
-            let expected_key = self.index_key_type(expr_type, key_class).or_else(|| {
-                self.index_lookup_or_newtype_base(
-                    &struct_name,
-                    base_type_id,
-                    &lookup_name,
-                    lookup_type_id,
-                    |s, n, t| s.find_index_value_trait_impl(n, t, None),
-                )
-                .and_then(|(i, _)| i.index_type)
-            });
+            let expected_key = self
+                .index_key_type(expr_type, key_class, KeyedAccess::Read)
+                .or_else(|| {
+                    self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_value_trait_impl(n, t, None),
+                    )
+                    .and_then(|(i, _)| i.index_type)
+                });
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)

@@ -23,6 +23,7 @@ use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
+use super::synth::KeyedAccess;
 use super::trait_query::primitive_has_operator;
 use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
 use super::typecheck::widens;
@@ -1371,7 +1372,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // The impl is the one at the key a read of `c[i]` selects.
         let key_class = self.synthesize_arg_class(transposition.i, ctx);
-        let key = self.index_key_type(container_type, &key_class);
+        let key = self.index_key_type(container_type, &key_class, KeyedAccess::Read);
         let Some((info, _)) = lookup(self, key) else {
             return no_index_swap(self, key);
         };
@@ -1684,7 +1685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // The impl is the one at the key's type, as a read's is.
                     let key_class = self.synthesize_arg_class(&index_expr.index, ctx);
                     let key_type = self
-                        .index_key_type(indexed_type, &key_class)
+                        .index_key_type(indexed_type, &key_class, KeyedAccess::Write)
                         .or_else(|| lookup(self, None).and_then(|(info, _)| info.index_type));
                     let index_type = self.resolve_expr(&index_expr.index, ctx, key_type);
                     let assign_info = lookup(self, Some(index_type));
@@ -1723,8 +1724,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Ok(WritePlace::IndexAssign { output_type });
                     }
                     // Where no `IndexRefMut` writes through instead, an
-                    // `IndexAssign` impl missing only its bound says why.
-                    if self
+                    // `IndexAssign` impl missing only its bound says why, and
+                    // one at another key says the key is the mismatch.
+                    let writes_through = self
                         .index_lookup_or_newtype_base(
                             &struct_name,
                             base_type_id,
@@ -1732,23 +1734,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             lookup_type_id,
                             Elaborator::find_index_mut_trait_impl,
                         )
-                        .is_none()
-                        && self.report_unmet_trait_impl_bound(
+                        .is_some();
+                    if !writes_through {
+                        if self.report_unmet_trait_impl_bound(
                             base_type_id,
                             &[CompilerItem::IndexAssign],
                             Some(index_type),
                             target_ast.span(),
-                        )
-                    {
-                        return Err(());
-                    }
-                    // An impl at another key says the key is the mismatch.
-                    if let Some((info, _)) = lookup(self, None)
-                        && let Some(key) = info.index_type
-                        && key != index_type
-                    {
-                        self.typecheck(index_type, key, index_expr.index.span());
-                        return Err(());
+                        ) {
+                            return Err(());
+                        }
+                        if let Some((info, _)) = lookup(self, None)
+                            && let Some(key) = info.index_type
+                            && key != index_type
+                        {
+                            self.typecheck(index_type, key, index_expr.index.span());
+                            return Err(());
+                        }
                     }
                 }
             }

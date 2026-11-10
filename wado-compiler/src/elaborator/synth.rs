@@ -53,6 +53,13 @@ pub(super) enum ArgClass {
 /// Why synthesis produced no type. A closed set: the judgement matches on every
 /// `ast::Expr` variant with no wildcard arm, so a new expression form must
 /// either get a rule or name the reason it has none.
+/// Which impls a subscript's key is typed for ([`Elaborator::index_key_type`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum KeyedAccess {
+    Read,
+    Write,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum OpaqueReason {
     /// A closure whose parameter or return types are unannotated: the
@@ -778,7 +785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         let key_class = self.synth(&index.index, scope);
-        let Some(key) = self.index_key_type(container, &key_class) else {
+        let Some(key) = self.index_key_type(container, &key_class, KeyedAccess::Read) else {
             // Which impl answers depends on the key's type, so an unpinned key
             // leaves the element type unknown.
             return ArgClass::Opaque(OpaqueReason::Inference);
@@ -805,19 +812,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type a subscript key on `container` really elaborates to. A numeric
-    /// literal takes the key type of the one read impl admitting it, as a
-    /// literal argument takes its parameter's, and its default type without
-    /// exactly one. `resolve_index` and synthesis both read the key here, so
-    /// they answer for the same impl.
-    pub(super) fn index_key_type(&mut self, container: TypeId, key: &ArgClass) -> Option<TypeId> {
+    /// literal takes the key type of the one impl serving `access` that admits
+    /// it, as a literal argument takes its parameter's, and its default type
+    /// without exactly one. `resolve_index` and synthesis both read the key
+    /// here, so they answer for the same impl.
+    pub(super) fn index_key_type(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+    ) -> Option<TypeId> {
         match key {
             ArgClass::Exact(t) => Some(*t),
             ArgClass::IntLit => Some(
-                self.literal_index_key(container, key)
+                self.literal_index_key(container, key, access)
                     .unwrap_or(TypeTable::I32),
             ),
             ArgClass::FloatLit => Some(
-                self.literal_index_key(container, key)
+                self.literal_index_key(container, key, access)
                     .unwrap_or(TypeTable::F64),
             ),
             ArgClass::StrLit => Some(self.get_string_struct_type()),
@@ -826,7 +838,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn literal_index_key(&mut self, container: TypeId, key: &ArgClass) -> Option<TypeId> {
+    fn literal_index_key(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+    ) -> Option<TypeId> {
         let base = self.tysys.get_base_type(container);
         let name = self.tysys.struct_name_for_type(base)?;
         let (lookup_name, lookup_type) = self.tysys.newtype_base_lookup(&name, base);
@@ -835,7 +852,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base,
             &lookup_name,
             lookup_type,
-            |s, n, t| Some(s.index_read_key_types(n, t)).filter(|keys| !keys.is_empty()),
+            |s, n, t| Some(s.index_key_types(n, t, access)).filter(|keys| !keys.is_empty()),
         )?;
         keys.retain(|&k| self.class_admits(k, key));
         let first = *keys.first()?;
