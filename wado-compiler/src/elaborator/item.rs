@@ -2883,12 +2883,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
 
         if abstract_selections.is_some() {
-            scope.annotate_ctx.trait_ctx.self_trait_args = scope
+            let written = scope
                 .tysys
                 .signatures
                 .impl_sig(impl_def)
                 .trait_type_args
                 .clone();
+            scope.annotate_ctx.trait_ctx.self_trait_args = written;
         }
         scope.annotate_ctx.trait_ctx.abstract_selections = abstract_selections;
 

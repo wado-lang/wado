@@ -1836,7 +1836,7 @@ impl Monomorphizer {
                             });
                             let new_monomorph = match trait_slots {
                                 Some(impl_type_args) => Some(MonomorphInfo {
-                                    generic_name: old_func_name.clone(),
+                                    generic_name: old_func_name,
                                     impl_type_args,
                                     method_type_args: new_monomorph
                                         .map(|m| m.method_type_args)
