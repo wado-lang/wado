@@ -625,6 +625,48 @@ names the call after the link of the receiver's chain the winner answers at. It
 holds no selection rule of its own, so an instance runs the body the order
 selected rather than one a second walk found.
 
+### One resolution for every call form
+
+Every call that reaches a trait method asks one question: does `Self: Trait<Args>` hold, through which impl, and with which value for each of that impl's parameters. The
+call forms differ only in how much of the question they write. `recv.m()`,
+`Type::m(recv)`, `Trait::m(recv)`, `Type::m` as a value, an operator, an index, a
+call through a bound, a default method's call, and `?`'s `From` are all the same question.
+
+Answering it in three steps (select the impl, bind its parameters, name the
+instance) separately per form is what lets the forms disagree. An impl parameter
+that only the trait's arguments determine (`impl<T> Put<T> for X`) showed this.
+The method call bound it, while the static call, the default method and the
+nested generic call each left it unbound, and the defect surfaced in codegen
+as a parameter nothing substituted. The design removes the per-form steps:
+
+1. A call records its trait reference: the trait declaration, `Self`, and the
+   trait's arguments. An argument the call does not write is an inference
+   variable, and the call's argument types settle it.
+2. One resolver answers the reference. `candidates` and `rank` choose the impl,
+   and `impl_answers` returns a value for every impl parameter, whether the
+   target or the trait's arguments bind it. Selecting among a trait's argument
+   lists (WEP 2026-07-31) is that same question, asked once the arguments are
+   settled. It is not a ranking of its own.
+3. One function names the instance from the impl block and that substitution,
+   in parameter order. No call form builds a key from the receiver's arguments
+   and appends the rest.
+4. Monomorphization substitutes the instance's frame into the recorded reference
+   and asks the same resolver, so a call in a generic body reaches the impl its
+   instance's types select, by the rule its elaboration used.
+5. Creating an instance asserts that every impl parameter is bound. A parameter
+   left unbound is then a compiler bug reported where it arises, not an
+   unsubstituted parameter reaching codegen two phases later.
+
+A matrix of fixtures holds every call form to the same answer, one form per
+fixture over one shared set of impls.
+
+## Roadmap
+
+- [ ] Every call form records its trait reference and asks the one resolver,
+  and the per-form selection, binding and keying are deleted. Done when each
+  form's `impl_param_from_trait_arg_*` fixture passes and an unbound impl
+  parameter is an assertion at instance creation.
+
 ## Known gaps
 
 ### Scope does not gate a call through a bound
@@ -646,15 +688,6 @@ A function type carries its effects to the solver as their declarations. An
 effect binder declares nothing, so `fn() with E` and `fn() with F` are one type
 there. What it admits is a bound
 naming one binder's function type answered by an impl naming another's.
-
-### A parameter only the trait's arguments name is never bound
-
-The specification determines an impl's parameters from the receiver and the
-trait's arguments, but only the target binds one. `impl<T> Tr<T> for X` answers
-no `X: Tr<i64>`: the solver leaves `T` unbound, so the written argument never
-matches, and monomorphization names no instance for it either
-(`impl_param_bound_by_trait_arg.wado`). A program relying on it is rejected,
-never miscompiled.
 
 ### A projection off a trait parameter keeps the impl's method parameter
 
@@ -685,16 +718,26 @@ unbounded value blanket. The orphan rule still runs over the AST:
 - [ ] Moving it needs each declaration's module and the package boundary, which
   `Program` does not carry yet.
 
-### The other dispatch paths do not share the order
+### The call forms do not share one resolution yet
 
 `Type::m(args)` scans the receiver's trait impls current-module-first and takes
 the first that declares the method, with value blankets on a separate fallback
-behind it; operators and indexing filter by operand type and report
-unique-or-error; a bound in a generic body takes the first bound declaring the
+behind it. Operators and indexing filter by operand type and report
+unique-or-error. A bound in a generic body takes the first bound declaring the
 name. They share which impls reach the receiver, and nothing after that. Ranks
 0-3 exist on none of them; they agree with the order only by coincidence of scan
-order. Each path holds a different amount of the call: a receiver type, an
-operand class, a bound list.
+order.
+
+A method call, an operator, an index assignment and a call through a bound bind
+a parameter only the trait's arguments determine
+(`impl_param_from_trait_arg_instances.wado`). The other forms fail at it:
+
+- [ ] `X::put(&x, v)` and a default method's call reach codegen with the
+  parameter unbound.
+- [ ] `Put::put(&x, v)` finds no method, and a blanket
+  `impl<S: Mark, T: Show> Put<T> for S` checks `T`'s bound against `S`.
+- [ ] `IndexValue<I>` with `I` free, and `From<S>` reached by `?`, are refused
+  as unsupported.
 
 ### Specificity is refused, and now has a named cost
 

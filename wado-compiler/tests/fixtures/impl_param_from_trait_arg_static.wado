@@ -1,0 +1,36 @@
+// `Type::m(recv, v)` binds an impl parameter only the trait reference names,
+// as the method form does: `X::put(&x, 7 as i64)` reaches
+// `impl<T: Show> Put<T> for X` at `T = i64`.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+struct X {}
+
+impl<T: Show> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.show();
+    }
+}
+
+test {
+    let x = X {};
+    assert X::put(&x, 7 as i64) == "i64 7";
+    assert X::put(&x, "s") == "string s";
+}

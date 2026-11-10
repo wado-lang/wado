@@ -1,0 +1,40 @@
+// A trait's default method, called on an impl whose parameter only the trait
+// reference names, runs with that parameter bound: `x.twice(7 as i64)` calls
+// `put` at `T = i64` from inside the default body.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+
+    fn twice(&self, v: T) -> String {
+        return `${self.put(v)}+${self.put(v)}`;
+    }
+}
+
+struct X {}
+
+impl<T: Show> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.show();
+    }
+}
+
+test {
+    let x = X {};
+    assert x.twice(7 as i64) == "i64 7+i64 7";
+    assert x.twice("s") == "string s+string s";
+}

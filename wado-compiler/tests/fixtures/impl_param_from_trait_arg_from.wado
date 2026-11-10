@@ -1,0 +1,40 @@
+// `impl<S: Show> From<S> for Failure` binds `S` from what is converted: an
+// explicit `Failure::from("s")`, and the `i64` error `?` converts.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+struct Failure {
+    reason: String,
+}
+
+impl<S: Show> From<S> for Failure {
+    fn from(value: S) -> Failure {
+        return Failure { reason: value.show() };
+    }
+}
+
+fn fails() -> Result<i32, i64> {
+    return Err(7);
+}
+
+fn converts() -> Result<i32, Failure> {
+    return Ok(fails()?);
+}
+
+test {
+    assert Failure::from("s").reason == "string s";
+    assert converts().unwrap_err().reason == "i64 7";
+}
