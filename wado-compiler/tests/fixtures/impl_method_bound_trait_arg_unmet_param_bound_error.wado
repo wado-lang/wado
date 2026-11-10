@@ -1,0 +1,27 @@
+// An impl method's own bounds owe their trait arguments' parameter bounds as a
+// free function's do: `S: Tr<U>` in `impl Z` names `Tr` at `U`, which
+// `Tr<T: Q>` needs to implement `Q`. The method frame bound its parameters by
+// a loop of its own, which never asked.
+
+trait Q with () {
+    fn q() -> i32;
+}
+
+trait P with () {}
+
+trait Tr<T: Q> with () {
+    fn run(&self) -> i32;
+}
+
+struct Z {}
+
+impl Z {
+    fn m<U: P, S: Tr<U>>(&self, s: S) -> i32 {
+        return s.run();
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":19:19: analysis error: type 'U' does not implement trait 'Q' required by bound on 'T'"}

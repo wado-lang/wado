@@ -2693,14 +2693,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         subject: TypeId,
         span: Span,
     ) {
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        let params = trait_env.trait_type_params(trait_);
-        if !params
-            .iter()
-            .any(|p| p.bounds.iter().any(ast::TraitBound::names_a_trait))
-        {
+        if !self.bounds_its_params(trait_) {
             return;
         }
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let params = trait_env.trait_type_params(trait_);
         // A position left to its default owes nothing here: the trait's own
         // declaration answers for its defaults.
         let type_args: Vec<TypeId> = args_per_param(
@@ -2722,11 +2719,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
+    /// Whether `trait_` puts a trait bound on any of its parameters, so a
+    /// reference to it owes its arguments something.
+    fn bounds_its_params(&self, trait_: DefId) -> bool {
+        self.tysys
+            .trait_env
+            .trait_type_params(trait_)
+            .iter()
+            .any(|p| p.bounds.iter().any(ast::TraitBound::names_a_trait))
+    }
+
     /// [`Self::check_trait_ref_arg_bounds`] for each of `bounds`, on the type
     /// its parameter binds. Every parameter is bound first, since a bound may
     /// name one declared after its own.
     pub(super) fn check_bound_trait_args(&mut self, bounds: Vec<(ScopedBound, TypeId)>) {
         for (bound, subject) in bounds {
+            if !self
+                .trait_decl_of(&bound)
+                .is_some_and(|trait_| self.bounds_its_params(trait_))
+            {
+                continue;
+            }
             self.owe_bounds(OwedBounds {
                 span: bound.span,
                 owed: Owed::BoundArgs { bound, subject },
@@ -2989,10 +3002,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             Owed::BoundArgs { bound, subject } => {
-                if let Some(trait_) = self.trait_decl_of(&bound) {
-                    let written = self.bound_args_where_written(&bound, &ParamSpace::new());
-                    self.check_trait_ref_arg_bounds(trait_, &written, subject, span);
-                }
+                let trait_ = self
+                    .trait_decl_of(&bound)
+                    .expect("only a bound naming a trait is owed");
+                let written = self.bound_args_where_written(&bound, &ParamSpace::new());
+                self.check_trait_ref_arg_bounds(trait_, &written, subject, span);
             }
             Owed::TraitRefs {
                 type_arg,

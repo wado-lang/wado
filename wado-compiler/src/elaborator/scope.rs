@@ -1211,8 +1211,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Register the generic parameters `owner` declares as `TypeParam` /
     /// `TypePack` ids in the current `trait_ctx`, starting from `offset`. Skips
-    /// effect params. Returns the next free index (i.e. `offset +
-    /// non_effect_count`).
+    /// effect params. Returns each parameter that took a slot, in slot order,
+    /// with the type it binds; the next free slot is `offset` past them.
     ///
     /// Trait bounds attached to each parameter are recorded with its binder so
     /// trait-method lookups on the parameter work.
@@ -1221,8 +1221,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         owner: DefId,
         params: &[ast::GenericParam],
         offset: u32,
-    ) -> u32 {
+    ) -> Vec<(String, TypeId)> {
         let mut idx = offset;
+        let mut slotted = Vec::new();
         let mut owed = Vec::new();
         for tp in params.iter().filter(|p| !p.is_effect) {
             // `<F: fn(...)>` binds the parameter directly to the bound's function
@@ -1250,11 +1251,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             owed.extend(bounds.iter().map(|bound| (bound.clone(), type_id)));
             self.bind_param(&tp.name, BinderInScope::declared(idx, type_id, tp), bounds);
             if consumed_index {
+                slotted.push((tp.name.clone(), type_id));
                 idx += 1;
             }
         }
         self.check_bound_trait_args(owed);
-        idx
+        slotted
     }
 
     /// What `Self` means at this frame: the type it stands for and the trait

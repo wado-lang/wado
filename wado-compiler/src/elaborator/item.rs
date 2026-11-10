@@ -976,7 +976,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
     ) -> MethodFrame {
-        let mut type_param_list = Vec::new();
         let method_def = self.tysys.def_at(func.id);
         let impl_type_params = self.enter_impl_frame(
             impl_def,
@@ -998,51 +997,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             })
             .collect();
 
-        let offset = method_param_offset(&impl_type_params) as usize;
-        let mut next_idx = offset as u32;
-        for param in &func.type_params {
-            if param.is_effect {
-                continue;
-            }
-            let idx = next_idx;
-            let fn_bound_sig = if param.is_pack {
-                None
-            } else {
-                param.bounds.iter().find_map(|b| b.fn_signature.as_ref())
-            };
-            let (type_id, consumed_index) = match fn_bound_sig {
-                Some(sig) => (self.resolve_type(&ast::Type::Function(sig.clone())), false),
-                None => (
-                    self.tysys.type_table.borrow_mut().make_declared_param(
-                        method_def,
-                        param.name.clone(),
-                        idx,
-                        param.is_pack,
-                    ),
-                    true,
-                ),
-            };
-            let bounds = ScopedBound::pin_declared(param, self.self_binding());
-            self.bind_param(
-                &param.name,
-                BinderInScope::declared(idx, type_id, param),
-                bounds,
-            );
-            // Only push *real* type params (TypeParam-ids) into the
-            // inference cache list. Eagerly-resolved fn-bound params have a
-            // concrete Function type and aren't generics anymore.
-            if fn_bound_sig.is_none() {
-                type_param_list.push((param.name.clone(), type_id));
-            }
-            if consumed_index {
-                next_idx += 1;
-            }
-        }
-
+        // Only the parameters taking a slot reach the inference cache: an
+        // `fn`-bound one is its concrete signature, no generic.
+        let method_type_params = self.register_generic_params(
+            method_def,
+            &func.type_params,
+            method_param_offset(&impl_type_params),
+        );
         MethodFrame {
             impl_type_params,
             declaring_type_params,
-            method_type_params: type_param_list,
+            method_type_params,
         }
     }
 }
@@ -1862,7 +1827,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(declaring),
             )],
         );
-        let next_slot = scope.register_generic_params(trait_def, type_params, 1);
+        let slotted = scope.register_generic_params(trait_def, type_params, 1);
+        let next_slot = 1 + u32::try_from(slotted.len()).expect("fewer than 2^32 parameters");
         (scope, self_slot, next_slot)
     }
 
