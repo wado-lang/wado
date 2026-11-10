@@ -1232,7 +1232,9 @@ is a `no viable alternative`, a loop's and a `?`'s as much as a group's: on
 `s : x E ; x : A A A A A A B | A A A A A A ;`, the input `a a a a a a c` enters
 `x`'s second alternative and reports the `c`, while
 `( A A A A A A B | A A A A A A C )* E` reports `a a a a a a e` at the loop. A
-scan reads the miss as declining, and fails further on.
+loop or a `?` declines a first token that no alternative takes, since the jar
+reports such a token where it syncs before the loop. A scan reads every miss
+as declining, and fails further on.
 
 Which gaps stay static is a cost decision as much as a correctness one. The
 simulator keeps each prediction for the program's life, as ANTLR4's DFA does,

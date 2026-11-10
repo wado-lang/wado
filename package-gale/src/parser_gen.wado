@@ -5452,7 +5452,9 @@ fn atn_repeat_pick(ctx: &mut EmitContext, site: i32, non_greedy: bool, side: Pic
 
 /// Whether the parse enters repeat `site`, asking the simulator only about
 /// `asked` (`RepeatOp.atn_asked_kinds`). The pick is bound first: a pick of
-/// neither edge is a no-viable-alternative, as the jar reports it.
+/// neither edge is a no-viable-alternative, as the jar reports it, except on a
+/// token no alternative takes, which the jar reports where it syncs before the
+/// repeat and the recovery after a declined repeat reports here.
 fn atn_parse_enters(
     w: &mut CodeWriter,
     ctx: &mut EmitContext,
@@ -5467,7 +5469,7 @@ fn atn_parse_enters(
     } else {
         w.line(`let ${pick} = if ${ctx.kind_negate_check_str(asked, &PEEK_KIND)} { ${enter} } else { ${call} };`);
     }
-    w.line(`if ${pick} < 0 { ${NO_VIABLE_HERE} }`);
+    w.line(`if ${pick} < 0 && ${pick} != ATN_NOTHING_STARTS { ${NO_VIABLE_HERE} }`);
     return `${pick} == ${enter}`;
 }
 

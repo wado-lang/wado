@@ -5203,6 +5203,26 @@ WS : [ \\t\\r\\n]+ -> skip ;
     assert got == "a and b => (expression (expression a) and (expression b))\nnot a or b => (expression (expression not (expression a)) or (expression b))\na => (expression a)\n";
 }
 
+test "a loop whose first token no alternative takes is left to the recovery after it" {
+    // The jar reports such a token where it syncs before the loop, not as a
+    // no-viable-alternative at it. A fragment's first token passes that sync,
+    // so the loop must decline it for the fragment to be reached.
+    let src = gen_with("grammar P;
+s : inner* outer* EOF ;
+inner : H '!' A ;
+outer : H B ;
+stmt : Q E ;
+A : 'a' ; B : 'b' ; E : 'e' ; H : '#' ; Q : 'q' ;
+WS : ' ' -> skip ;
+", &GenerateOptions {
+        fragment_entries: ["stmt"],
+    }).source;
+    let got = run_beside(src, "let r = parse(\"q e\");
+println(`${to_string_tree(&r)} ${r.diagnostics[0].code:?}`);
+").stdout;
+    assert got == "(s (<error> (stmt q e))) DiagnosticCode::UnexpectedToken\n";
+}
+
 test "a simulator walk that dies picks the alternative that finished the rule, or none" {
     // Each decision reads past depth 5, so exact asks the simulator. The jar:
     // `x` takes its second alternative, which had ended `x`, and `s` reports
