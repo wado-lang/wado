@@ -27,7 +27,7 @@
 //!   help with frequent shapes are allowed; they must not consult
 //!   the original grammar.
 //! * Stable across runs — every collection that influences generated
-//!   identifiers (kind-set ids, follow-mask ids, group indices,
+//!   identifiers (kind-set ids, follow-site ids, group indices,
 //!   field-name dedup counters) is laid out by `lower` in
 //!   deterministic order.
 //!
@@ -802,8 +802,7 @@ pub struct LiteralOp {
 }
 
 /// How a `RuleCall` supplies the runtime FOLLOW continuation to the
-/// callee, replacing the per-(rule, mask) `__follow_<id>` variant
-/// selection.
+/// callee.
 pub variant FollowArg {
     /// Non-repair call: emit passes nothing, and the callee's defaulted
     /// unknown continuation disables its tail-greedy gate.
@@ -831,9 +830,8 @@ pub struct RuleCallOp {
     pub target_name: String,
     /// `to_snake_case(target_name)` cached at lowering.
     pub target_snake: String,
-    /// Runtime FOLLOW continuation passed to the callee. See `FollowArg`.
-    /// Replaces the `variant_id` / `__follow_<id>` mechanism: the mask is
-    /// threaded as data at runtime rather than baked into a cloned callee.
+    /// Runtime FOLLOW continuation passed to the callee, threaded as data
+    /// rather than baked into a cloned callee. See `FollowArg`.
     pub follow_arg: FollowArg,
     /// `Some(p)` when the call should pass `p` as the `min_prec`
     /// argument. Set for self-recursive calls inside prefix LR alts.
@@ -1078,7 +1076,7 @@ pub struct RepeatOp {
     /// caller's continuation can collide with another iteration. The
     /// gate is inert when the runtime `follow` is empty (non-repair
     /// callers), so it is sound to emit unconditionally at such
-    /// positions. The mask arrives at runtime via the `follow` argument
+    /// positions. The continuation arrives at runtime via the `follow` argument
     /// the caller threads in.
     pub gate_caller_follow: bool,
     /// Surface `RepeatElement.atn_decision` id: the decision site a non-greedy

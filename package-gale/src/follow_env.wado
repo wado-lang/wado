@@ -51,17 +51,13 @@ impl FollowSet {
 /// * `rule_follow` — per-rule classical FOLLOW set, computed by
 ///   the worklist fixed point in [`compute_rule_follow`].
 ///
-/// The continuation-site registry — the distinct-site table consumed by
-/// codegen to emit `FOLLOW_TABLES` — is intentionally NOT populated
-/// here. Lower's element walks (the only walker that needs to know every
-/// site's per-call-site `caller_follow`) mint registry entries directly
-/// via `LowerContext::intern_follow_site`, so there is one authoritative
-/// element-walking pass that both builds the IR and registers sites.
-/// Duplicating that walk in `FollowEnv::build` to pre-populate the registry
-/// would only re-derive
-/// what lower is already about to compute — and would have to be kept
-/// in lock-step with lower's per-shape handling, which is the kind of
-/// drift surface this project deliberately avoids.
+/// The continuation-site registry, from which codegen emits `FOLLOW_TABLES`,
+/// is not populated here. Lower's element walks are the only walker that knows
+/// every call site's `caller_follow`, and they mint registry entries directly
+/// via `LowerContext::intern_follow_site`. One pass then both builds the IR and
+/// registers sites. Populating it in `FollowEnv::build` would re-derive what
+/// lower is about to compute, and would have to track lower's per-shape
+/// handling.
 pub struct FollowEnv {
     /// Token kinds the rule may *greedily* consume at tail position
     /// (Optional/Star/Plus elements with no required successor in the
@@ -425,7 +421,7 @@ fn accumulate_first_bits(analysis: &mut GrammarAnalysis, elem: &Element, bits: &
     }
 }
 
-/// The longest string `rule_input_end` follows, as deep as a FOLLOW mask reads.
+/// The longest string `rule_input_end` follows, as deep as the FOLLOW gate reads.
 global INPUT_END_MAX_LEN: i32 = 4;
 
 /// For each rule `R`, the strings `r` of one to `INPUT_END_MAX_LEN` tokens for

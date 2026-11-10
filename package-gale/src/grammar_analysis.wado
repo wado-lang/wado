@@ -539,9 +539,7 @@ impl GrammarAnalysis {
     /// single-token). Nullable or multi-token elements halt accumulation — the
     /// caller gets a shorter (but always sound) sequence.
     ///
-    /// Thin wrapper around [`position_first_sets_from`] with `start = 0` —
-    /// the generic form supports computing FIRST sets at an arbitrary
-    /// suffix offset (the multi-token follow-mask path).
+    /// [`position_first_sets_from`] with `start = 0`.
     pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> List<List<i32>> {
         return self.position_first_sets_from(&alt.elements, 0, max_depth);
     }
@@ -848,8 +846,7 @@ impl GrammarAnalysis {
     /// Returns FIRST sets indexed by INPUT TOKEN position relative to the
     /// suffix starting at `elements[start..]`. Generalises
     /// [`alt_position_first_sets`] by accepting an arbitrary `start`
-    /// offset — used by the multi-token follow-mask path to read out a
-    /// caller's K-token continuation prefix at a `RuleRef` call site.
+    /// offset.
     ///
     /// Halts (returns a shorter sequence) at the first nullable or
     /// multi-token element — preserving the input-offset alignment that
@@ -1202,8 +1199,7 @@ impl GrammarAnalysis {
     }
 
     /// Per-call-site caller-FOLLOW for the element at index `i` in
-    /// `elements`. Single source of truth for the `FollowArg` mask
-    /// `lower` builds at each `RuleRef` site (`compute_follow_arg`).
+    /// `elements`: the static FOLLOW `lower` reads at each position.
     ///
     /// Three cases:
     ///

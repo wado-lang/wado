@@ -94,10 +94,10 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSe
 /// Emit the runtime FOLLOW tables: `FOLLOW_TABLES` holds every distinct
 /// position set once, as a row of `stride` bitset words (all ones for a
 /// position that admits any kind), and each site the emitted code names as a
-/// row. The row opens with the set its readings can
-/// start with and whether one is empty (`set << 1 | empty`), which turns most
-/// queries away at one test, then each reading as a header (`len << 1 | ends`)
-/// and its positions' set indices. `FOLLOW_SITE_<id>` is the row's 1-based
+/// row. The row opens with the set its readings can start with and whether one
+/// is empty (`set << 1 | empty`), which turns most queries away at one test,
+/// then each reading as a header (`len << 1 | ends`) and its positions' set
+/// indices. `FOLLOW_SITE_<id>` is the row's 1-based
 /// number, so a continuation is a scalar a call site composes with a shift, and
 /// a rule takes one parameter rather than a row of slots.
 pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {

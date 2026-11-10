@@ -865,8 +865,8 @@ the slots moves to a per-parse link table, so no frame is lost. The parameter
 is pruned entirely when a grammar has no such gate — gate-free grammars carry no
 `follow` at all (it also costs a stack slot per recursive scan frame,
 which overflowed the wasm stack on a deep-recursion grammar). Because the
-mask is data threaded at runtime, each rule is emitted exactly once,
-with no per-(rule, mask) clones.
+continuation is data threaded at runtime, each rule is emitted exactly once,
+with no per-(rule, continuation) clones.
 
 The static FOLLOW + k-prefix path always has edges — a decidability
 limit, not a tuning gap. Beyond it, the runtime ATN simulator (next
