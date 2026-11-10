@@ -7783,7 +7783,7 @@ mod tests {
     /// asks whether it covers every instance of that head.
     fn covers(table: &mut TypeTable, whole: TypeId, args: Vec<TypeId>) -> bool {
         let block = DefId::for_test(1);
-        table.record_impl_target(block, whole, args, vec![]);
+        table.record_impl_target(block, whole, args, vec![], vec![]);
         table.impl_covers_every_instance(block)
     }
 
