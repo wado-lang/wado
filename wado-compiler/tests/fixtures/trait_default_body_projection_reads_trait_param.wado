@@ -1,0 +1,101 @@
+// In a trait's default body, `Self::Next` carries the bounds its declaration
+// writes, those naming the trait's own parameters included: there they are the
+// parameters the body is written over, which each impl fills.
+use { println, Stdout } from "core:cli";
+
+trait Back with () {
+    fn name() -> String;
+}
+
+struct Host {}
+
+struct Guest {}
+
+impl Back for Host {
+    fn name() -> String {
+        return "host";
+    }
+}
+
+impl Back for Guest {
+    fn name() -> String {
+        return "guest";
+    }
+}
+
+trait Shown<G: Back> with () {
+    type Next: Shown<G>;
+    fn next(&self) -> Self::Next;
+    fn shown(&self) -> String;
+
+    fn onward(&self) -> String {
+        return self.next().shown();
+    }
+}
+
+impl<G: Back> Shown<G> for i32 {
+    type Next = i32;
+
+    fn next(&self) -> i32 {
+        return *self + 1;
+    }
+
+    fn shown(&self) -> String {
+        return `${*self} on ${G::name()}`;
+    }
+}
+
+trait Scaled<U> with () {
+    type Part: Scaled<U>;
+    fn part(&self) -> Self::Part;
+    fn scale(&self) -> U;
+
+    fn part_scale(&self) -> U {
+        return self.part().scale();
+    }
+}
+
+struct Leaf {
+    n: i64,
+}
+
+struct Pair {
+    left: Leaf,
+}
+
+impl Scaled<i64> for Leaf {
+    type Part = Leaf;
+
+    fn part(&self) -> Leaf {
+        return *self;
+    }
+
+    fn scale(&self) -> i64 {
+        return self.n * 10;
+    }
+}
+
+impl Scaled<i64> for Pair {
+    type Part = Leaf;
+
+    fn part(&self) -> Leaf {
+        return self.left;
+    }
+
+    fn scale(&self) -> i64 {
+        return 0;
+    }
+}
+
+export fn run() with Stdout {
+    let v: i32 = 1;
+    println(Shown::<Host>::onward(&v));
+    println(Shown::<Guest>::onward(&v));
+    let p = Pair { left: Leaf { n: 4 } };
+    println(`${p.part_scale()}`);
+}
+
+__DATA__
+{
+  "stdout": "2 on host\n2 on guest\n40\n"
+}
