@@ -1742,6 +1742,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         return Err(());
                     }
+                    // An impl at another key says the key is the mismatch.
+                    if let Some((info, _)) = lookup(self, None)
+                        && let Some(key) = info.index_type
+                        && key != index_type
+                    {
+                        self.typecheck(index_type, key, index_expr.index.span());
+                        return Err(());
+                    }
                 }
             }
         }

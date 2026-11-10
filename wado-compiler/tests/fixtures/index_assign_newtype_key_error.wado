@@ -1,0 +1,15 @@
+// A newtype is not its base: `c[k] = v` with a `Name` key on a map keyed by
+// `String` reports the key's mismatch, as a call taking `String` would, rather
+// than a missing impl.
+use { TreeMap } from "core:collections";
+
+type Name = String;
+
+export fn run() {
+    let mut map: TreeMap<String, i32> = {};
+    let n: Name = "a";
+    map[n] = 1;
+}
+
+__DATA__
+{"compile_error": ":11:9: analysis error: type mismatch: expected 'String', found 'Name'"}
