@@ -6,10 +6,11 @@
 //! target, where a struct pattern binds or tests it, and where a reference to
 //! it is taken, which is a `FieldAccess` too. A call to a body-less function
 //! whose declaration lets it read everything its arguments reach, as
-//! `builtin::black_box` does, reads every field of the structs they reach. A
-//! literal's slot for the field
-//! and an assignment to it name it without reading it: what they hold is read
-//! only if the field is. So liveness is a least fixed point. Every field starts
+//! `builtin::black_box` does, reads every field of the structs they reach.
+//!
+//! A literal's slot for the field and an assignment to it name it without
+//! reading it: what they hold is read only if the field is. So liveness is a
+//! least fixed point. Every field starts
 //! dead, and the operands its slots and assignments hold are walked once it
 //! turns live. A copy that reads each field only to build another, such as a
 //! `$value_copy$S` helper, keeps none of them alive by itself.
