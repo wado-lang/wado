@@ -1033,6 +1033,8 @@ internal struct AtnSim {
     internal state_collapse_to: List<i32> = [],
     internal state_collapse_target: List<bool> = [],
     internal state_call_prec: List<i32>,
+    internal rule_follow_start: List<i32>,
+    internal rule_follow: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1140,11 +1142,30 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
         }
     }
 
+    for let mut r = 0; r < nrules; r += 1 {
+        assert state_kind[2 * r + 1] == ATN_RULE_STOP, "rule r stops at state 2r + 1";
+    }
     let mut state_call_prec = List::filled(nstates, 0);
+    let mut rule_follow_start = List::filled(nrules + 1, 0);
     for let mut j = 0; j < ntrans_total; j += 1 {
         if tr_kind[j] == ATN_TR_RULE {
             assert tr_follow[j] >= 0, "a rule transition returns to a follow state";
             state_call_prec[tr_follow[j]] = tr_prec[j];
+            if tr_label[j] >= 0 {
+                rule_follow_start[tr_label[j] + 1] += 1;
+            }
+        }
+    }
+    for let mut r = 0; r < nrules; r += 1 {
+        rule_follow_start[r + 1] += rule_follow_start[r];
+    }
+    let mut rule_follow = List::filled(rule_follow_start[nrules], 0);
+    let mut next_follow = rule_follow_start;
+    for let mut j = 0; j < ntrans_total; j += 1 {
+        if tr_kind[j] == ATN_TR_RULE && tr_label[j] >= 0 {
+            let r = tr_label[j];
+            rule_follow[next_follow[r]] = tr_follow[j];
+            next_follow[r] += 1;
         }
     }
 
@@ -1166,6 +1187,8 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
         set_words,
         set_bits,
         state_call_prec,
+        rule_follow_start,
+        rule_follow,
     };
 }
 

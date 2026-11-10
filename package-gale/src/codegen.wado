@@ -56,7 +56,7 @@ use {
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
-use { AtnMode, GenSettings } from "./gen_settings.wado";
+use { GenSettings, PredictionMode } from "./gen_settings.wado";
 use { push_unique } from "./list_util.wado";
 use { LowerContext } from "./lower_context.wado";
 use { plan_parser } from "./parser_plan.wado";
@@ -69,7 +69,6 @@ use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { HashMap, HashSet } from "core:collections";
 use {
-    ATN_VERIFIED,
     SllExplorer,
     SllForest,
     gen_atn_verified_fn,
@@ -96,8 +95,8 @@ pub struct GenerateOptions {
     /// Rule names a fragment is a sequence of, for tooling; empty is
     /// byte-identical.
     pub fragment_entries: List<String> = [],
-    /// Which decisions the parser asks the runtime ATN simulator; see `AtnMode`.
-    pub atn: AtnMode = AtnMode::Auto,
+    /// What the parser promises about its tree; see `PredictionMode`.
+    pub prediction: PredictionMode = PredictionMode::Exact,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus every
@@ -271,7 +270,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let mut diagnostics = Diagnostics {};
     let ActionContext { settings, lexer_members, parser_members } = install_action_context(
         grammar,
-        GenSettings { atn: options.atn, trace: options.trace, fragment_entries: options.fragment_entries },
+        GenSettings {
+            prediction: options.prediction,
+            trace: options.trace,
+            fragment_entries: options.fragment_entries,
+        },
         &mut diagnostics,
     );
     // Read off the `.g4` bodies, which staging is about to translate away.
@@ -559,19 +562,16 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
 }
 
 /// Emit the decision functions the kept code calls, in decision order, and the
-/// check `atn: "verify"` routes them through.
+/// check `prediction: "verify"` routes them through.
 fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &HashSet<String>) {
     let eof = ctx.analysis.eof_kind_id();
     let mut explorer = SllExplorer::new(atn, eof);
-    let verify = ctx.settings.atn.verifies();
-    let mut verified = used.contains(ATN_VERIFIED);
+    let verify = ctx.settings.prediction.verifies();
     let mut forest = SllForest::new(atn.num_tokens);
     let mut starts: List<[i32, i32]> = [];
     for let d of 0..<atn.decision_state.len() {
         if used.contains(sll_decide_fn_name(d)) {
-            let dfa = explorer.explore(d);
-            verified = verified || verify && dfa.decides();
-            starts.push([d, forest.add(&dfa)]);
+            starts.push([d, forest.add(&explorer.explore(d))]);
         }
     }
     for let [d, start] of starts {
@@ -585,7 +585,7 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
             gen_lr_decide_fn(w, d, &lr_table(&sim, d, atn.num_tokens, eof), &ctx.analysis, ctx.plan.emit_follow);
         }
     }
-    if verified {
+    if verify {
         gen_atn_verified_fn(w);
     }
 }

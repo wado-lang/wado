@@ -619,9 +619,8 @@ pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_sc
         let own = !met_site.foreign && met_site.rule_index == rule;
         let site = if own { ctx.predicate_site() } else { *met_site };
         let cond = if in_scan {
-            scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site).map(|c| scan_answered_at_edge(
-                &ctx.settings,
-                &c,
+            scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, &site).map(|c| ctx.scan_gate_cond(
+                scan_answered_at_edge(&ctx.settings, &c),
             ));
         } else {
             predicate_condition_for(a, &ctx.settings, &ctx.analysis, &site);
@@ -699,28 +698,22 @@ pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alterna
 /// dispatches by the grammar-order predicate chain (interchangeable), or routes
 /// through the runtime ATN — where the simulator asks the predicates guarding
 /// the viable alternatives and closes the edges of the false ones instead.
-fn collect_gated_alts(
-    node: &PredictionNode,
-    alts: &List<Alternative>,
-    rule: &ParserRule,
-    ctx: &EmitContext,
-    out: &mut List<i32>,
-) {
+fn collect_gated_alts(node: &PredictionNode, alts: &List<Alternative>, ctx: &EmitContext, out: &mut List<i32>) {
     match *node {
         Leaf(idx) => {
             if ctx.alt_has_gate(&alts[idx]) {
                 out.push(idx);
             }
         },
-        Consume(c) => collect_gated_alts(&c.child, alts, rule, ctx, out),
+        Consume(c) => collect_gated_alts(&c.child, alts, ctx, out),
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_gated_alts(&branch.child, alts, rule, ctx, out);
+                collect_gated_alts(&branch.child, alts, ctx, out);
             }
         },
         Ambiguous(a) => {
             if ambiguous_group_predicate_gated(&a.alts, alts, ctx)
-                || ambiguous_group_atn_predicate_gated(&a, alts, rule, ctx) {
+                || ambiguous_group_atn_predicate_gated(&a, alts, ctx) {
                 for let idx of &a.alts {
                     out.push(*idx);
                 }
@@ -732,13 +725,8 @@ fn collect_gated_alts(
 /// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
 /// gateable predicate — so the simulator asks its predicates rather than an
 /// inline dispatch chain.
-fn ambiguous_group_atn_predicate_gated(
-    a: &AmbiguousNode,
-    alts: &List<Alternative>,
-    rule: &ParserRule,
-    ctx: &EmitContext,
-) -> bool {
-    return ctx.ambiguous_routes_via_atn(a, &rule.name) && ambiguous_group_has_gate(&a.alts, alts, ctx);
+fn ambiguous_group_atn_predicate_gated(a: &AmbiguousNode, alts: &List<Alternative>, ctx: &EmitContext) -> bool {
+    return ctx.ambiguous_routes_via_atn(a) && ambiguous_group_has_gate(&a.alts, alts, ctx);
 }
 
 /// Record every alt-initial predicate a dispatch site will gate, so
@@ -776,7 +764,7 @@ pub fn mark_gated_predicates(
                 end_follow,
             );
             let mut gated: List<i32> = [];
-            collect_gated_alts(&tree, &rule.alternatives, rule, ctx, &mut gated);
+            collect_gated_alts(&tree, &rule.alternatives, ctx, &mut gated);
             for let idx of &gated {
                 mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
             }

@@ -1,6 +1,5 @@
 //! Static call-graph FOLLOW analysis. `settle_rule_follow` settles it into the
-//! `RuleFollow` lowering and emit read, whose `at_end_conflict_routes` decides
-//! whether an at-end multi-alt conflict must route through the ATN.
+//! `RuleFollow` lowering and emit read.
 //!
 //! The `rule_follow` fixed point represents each rule's FOLLOW set as a u64
 //! bitset over token-kind ids (`Element::kind_id`): union is a word-wise OR
@@ -151,14 +150,13 @@ impl RuleFollow {
         return follow;
     }
 
-    /// Whether an at-end conflict over `branch_tokens` in `rule_name` must route
-    /// to the simulator: a caller may continue on one of them, or FOLLOW is not
-    /// known exactly.
-    pub fn at_end_conflict_routes<S: AsStrSlice>(&self, rule_name: S, branch_tokens: &List<i32>) -> bool {
+    /// Whether a caller of `rule_name` may continue on one of `kinds`. True
+    /// where FOLLOW is not known exactly.
+    pub fn caller_may_continue_on<S: AsStrSlice>(&self, rule_name: S, kinds: &List<i32>) -> bool {
         let Some(follow) = self.kinds.get_ref_str(rule_name) else {
             return true;
         };
-        return sets_overlap(branch_tokens, follow);
+        return sets_overlap(kinds, follow);
     }
 
     /// Whether an `EOF` the grammar writes may follow `rule_name`. The FOLLOW
