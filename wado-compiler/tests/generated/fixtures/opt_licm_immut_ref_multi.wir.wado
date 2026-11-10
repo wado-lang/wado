@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -47,12 +46,10 @@ struct core:prelude/string.wado//StrSlice {  // TypeId(4)
 
 struct opt_licm_immut_ref_multi.wado//Config {  // TypeId(5)
     mut threshold: i32,
-    mut scale: i32,
 }
 
 struct opt_licm_immut_ref_multi.wado//Stats {  // TypeId(6)
     mut count: i32,
-    mut total: i32,
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(7)
@@ -198,8 +195,8 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref "opt_licm_immut_ref_multi.wado//Config">(struct.new "opt_licm_immut_ref_multi.wado//Config" { threshold: black_box(10), scale: 2 })));
-    used_19 = builtin::array_len(local.tee elements_18(array.new_fixed<ref "opt_licm_immut_ref_multi.wado//Stats">(struct.new "opt_licm_immut_ref_multi.wado//Stats" { count: black_box(5), total: 0 })));
+    used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref "opt_licm_immut_ref_multi.wado//Config">(struct.new "opt_licm_immut_ref_multi.wado//Config" { threshold: black_box(10) })));
+    used_19 = builtin::array_len(local.tee elements_18(array.new_fixed<ref "opt_licm_immut_ref_multi.wado//Stats">(struct.new "opt_licm_immut_ref_multi.wado//Stats" { count: black_box(5) })));
     if @unlikely(0 >= used_17) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<opt_licm_immut_ref_multi.wado/Config>^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"(0, used_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_licm_immut_ref_multi.wado:35"), used: 32 });
@@ -596,7 +593,7 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail"(t) {

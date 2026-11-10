@@ -30,6 +30,8 @@ export fn run() {
     let probe: String = builtin::black_box("bb");
     assert t.lookup(&probe) matches { Some(1) };
     assert t.lookup(&"zzz") matches { None };
+    // Compares bytes, so dead field elimination keeps `StrSlice::repr`.
+    assert probe.as_str_slice() == "bb";
 }
 
 __DATA__

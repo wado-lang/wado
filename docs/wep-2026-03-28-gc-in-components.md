@@ -79,6 +79,8 @@ Wado structs compile to `(ref (struct (field ...) ...))`. The CM GC proposal map
 
 **Action:** When emitting CM-boundary struct types, use packed storage types (`i8` for bool/u8/s8, `i16` for u16/s16). This only affects types that appear in WASI function signatures, not internal Wado types.
 
+The optimizer removes a struct field no code reads (`nir/dead_field`). In linear memory mode that is safe at the boundary, since lift and lower read offsets off the WIT record. In GC mode a boundary record's GC type is its WIT layout, so such a struct must keep every field.
+
 ### 1.3 Arrays / Lists: Already Aligned
 
 Wado's `List<T>` is `(ref (array (mut T')))`. The proposal maps `list<T>` to the same structure.

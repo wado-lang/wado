@@ -9,12 +9,10 @@ struct core:prelude/string.wado//String {  // TypeId(0)
 
 struct opt_licm_call_writes_ref_field.wado//P {  // TypeId(1)
     mut x: i32,
-    mut y: i32,
 }
 
 struct opt_licm_call_writes_ref_field.wado//Outer {  // TypeId(2)
     mut inner: ref "opt_licm_call_writes_ref_field.wado//P",
-    mut pad: i32,
 }
 
 struct opt_licm_call_writes_ref_field.wado//$Closure_0 {  // TypeId(3)
@@ -182,14 +180,14 @@ fn "opt_licm_call_writes_ref_field.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_18 = "opt_licm_call_writes_ref_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_18);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_19, message_5.repr, message_5.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_18);
-    g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_licm_call_writes_ref_field.wado//$Closure_0" { $capture_0: local.tee p(struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1, y: 0 }) }, func: ref.func "closure/opt_licm_call_writes_ref_field.wado/$closure_wrapper_0" };
+    g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_licm_call_writes_ref_field.wado//$Closure_0" { $capture_0: local.tee p(struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1 }) }, func: ref.func "closure/opt_licm_call_writes_ref_field.wado/$closure_wrapper_0" };
     message_5 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_call_writes_ref_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_call_writes_ref_field.wado/through_closure"(p, g));
     $sroa_$pattern_temp_0_0_13_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_19 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_18 = "opt_licm_call_writes_ref_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_18);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_19, message_5.repr, message_5.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_18);
-    p = local.tee o(struct.new "opt_licm_call_writes_ref_field.wado//Outer" { inner: struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1, y: 0 }, pad: 0 }).inner;
+    p = local.tee o(struct.new "opt_licm_call_writes_ref_field.wado//Outer" { inner: struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1 } }).inner;
     message_5 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_call_writes_ref_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_call_writes_ref_field.wado/through_container"(o, p));
     $sroa_$pattern_temp_0_0_13_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_19 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
@@ -213,7 +211,7 @@ fn "opt_licm_call_writes_ref_field.wado/$cm_export__run"() {
 }
 
 fn "opt_licm_call_writes_ref_field.wado/$initialize_modules$cold0"() {
-    global:opt_licm_call_writes_ref_field.wado::G = struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1, y: 0 };
+    global:opt_licm_call_writes_ref_field.wado::G = struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1 };
     global:opt_licm_call_writes_ref_field.wado::$modules_initialized = 1;
 }
 

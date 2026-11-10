@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -786,7 +785,7 @@ fn "core:prelude/primitive.wado/fmt_float_special$spec0$spec0$sroa[f.buf]"(f, is
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative) {
@@ -1493,7 +1492,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wasm_name_c
     let $sroa_slot_176: bool;
     let $sroa_slot_177: bool;
     let $sroa_slot_178: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    let $sroa_view_repr_943: ref Array<u8>;
+    let $sroa_view_repr_942: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -1546,14 +1545,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wasm_name_c
         }
         "core:prelude/fpfmt.wado/write_decimal"(out_3, bits_347, $sroa_slot_176, $sroa_slot_178);
     };
-    $sroa_view_repr_943 = global:core:prelude/string.wado::$const_obj_37;
+    $sroa_view_repr_942 = global:core:prelude/string.wado::$const_obj_37;
     if @unlikely(local.tee $sroa_slot_176(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $sroa_slot_176);
     }
     $sroa_slot_177 = out_3.used;
     out_3.used = $sroa_slot_176;
-    builtin::array_copy<u8>(local.tee $load_9(out_3.repr), $sroa_slot_177, $sroa_view_repr_943, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_9(out_3.repr), $sroa_slot_177, $sroa_view_repr_942, 0, 1);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__52: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {

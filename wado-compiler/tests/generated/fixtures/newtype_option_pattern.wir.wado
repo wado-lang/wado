@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -214,11 +213,11 @@ fn "newtype_option_pattern.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_0_13_23: i32;
     let $sroa_$pattern_temp_0_1_14_24: i32;
     let out_73: ref "core:prelude/string.wado//String";
-    let $sroa_view_repr_107_177: ref Array<u8>;
+    let $sroa_view_repr_106_176: ref Array<u8>;
     out_73 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
-    $sroa_view_repr_107_177 = global:newtype_option_pattern.wado::$const_obj_3;
+    $sroa_view_repr_106_176 = global:newtype_option_pattern.wado::$const_obj_3;
     out_73.used = 7;
-    builtin::array_copy<u8>(out_73.repr, 0, $sroa_view_repr_107_177, 0, 7);
+    builtin::array_copy<u8>(out_73.repr, 0, $sroa_view_repr_106_176, 0, 7);
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(3.14159, out_73);
     $inline_core_prelude_string_wado_String__format_newtype_option_pattern_wado__tmpl_26d41f5bef10ff35__newtype_option_pattern_wado_Radians___spec0_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_newtype_option_pattern_wado__tmpl_26d41f5bef10ff35__newtype_option_pattern_wado_Radians___spec0_spec0_dae_t__0__$inline_core_prelude_string_wado_String__internal_push_view_35;
@@ -231,15 +230,15 @@ fn "newtype_option_pattern.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_23 = "newtype_option_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_23);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_107_177(builtin::array_new<u8>(12)), 0, global:newtype_option_pattern.wado::$const_obj_2, 0, 11);
-    builtin::array_set_u8($sroa_view_repr_107_177, 11, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_24, $sroa_view_repr_107_177);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_106_176(builtin::array_new<u8>(12)), 0, global:newtype_option_pattern.wado::$const_obj_2, 0, 11);
+    builtin::array_set_u8($sroa_view_repr_106_176, 11, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_24, $sroa_view_repr_106_176);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_24);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_23);
     out_73 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-    $sroa_view_repr_107_177 = global:newtype_option_pattern.wado::$const_obj_1;
+    $sroa_view_repr_106_176 = global:newtype_option_pattern.wado::$const_obj_1;
     out_73.used = 9;
-    builtin::array_copy<u8>(out_73.repr, 0, $sroa_view_repr_107_177, 0, 9);
+    builtin::array_copy<u8>(out_73.repr, 0, $sroa_view_repr_106_176, 0, 9);
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(6.28318, out_73);
     $inline_core_prelude_string_wado_String__format_newtype_option_pattern_wado__tmpl_26d41f5bef10ff35__newtype_option_pattern_wado_Radians___spec1_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_35: block {
         break $inline_core_prelude_string_wado_String__format_newtype_option_pattern_wado__tmpl_26d41f5bef10ff35__newtype_option_pattern_wado_Radians___spec1_spec0_dae_t__1__$inline_core_prelude_string_wado_String__internal_push_view_35;
@@ -965,7 +964,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative) {
