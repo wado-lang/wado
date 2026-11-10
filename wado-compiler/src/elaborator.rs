@@ -258,8 +258,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
         let owner = self.tysys.resolutions.defs().def_at(impl_block.id);
-        let mut binders = Vec::new();
-        for param in &impl_block.type_params {
+        // What each of the block's parameters binds, by position; `None` for
+        // one bound below or taking no slot.
+        let mut bound_to = vec![None; impl_block.type_params.len()];
+        for (at, param) in impl_block.type_params.iter().enumerate() {
             let Some(slot) = slots.of_name(&param.name) else {
                 continue;
             };
@@ -278,7 +280,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 scope::BinderInScope::declared(slot, type_id, param),
                 Vec::new(),
             );
-            binders.push((param, type_id));
+            bound_to[at] = Some(type_id);
         }
         // A bound writing no `Self` is in force before the signatures are
         // bound, which may project off it: `F: fn mut(I::Item) -> U`. A
@@ -286,21 +288,21 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         let (early, late): (Vec<_>, Vec<_>) = impl_block
             .type_params
             .iter()
-            .filter(|param| param.fills_impl_slot())
-            .partition(|param| {
+            .enumerate()
+            .filter(|(_, param)| param.fills_impl_slot())
+            .partition(|(_, param)| {
                 (param.is_pack || !param.has_fn_bound())
                     && !param.bounds.iter().any(ast::TraitBound::writes_self)
             });
         let mut owed = Vec::new();
-        let mut owe = |param: &ast::GenericParam, bounds: &[scope::ScopedBound]| {
-            let bound_to = binders.iter().find(|(p, _)| std::ptr::eq(*p, param));
-            if let Some(&(_, type_id)) = bound_to {
+        let mut owe = |at: usize, bounds: &[scope::ScopedBound]| {
+            if let Some(type_id) = bound_to[at] {
                 owed.extend(bounds.iter().map(|bound| (bound.clone(), type_id)));
             }
         };
-        for param in early {
+        for (at, param) in early {
             let bounds = self.scoped_bounds(param);
-            owe(param, &bounds);
+            owe(at, &bounds);
             self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.bind_fn_bound_params(&impl_block.type_params);
@@ -311,9 +313,9 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             this.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref())
         });
         self.set_self_binding(implementing);
-        for param in late {
+        for (at, param) in late {
             let bounds = self.scoped_bounds(param);
-            owe(param, &bounds);
+            owe(at, &bounds);
             self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.release_bounds_here(held);
