@@ -842,8 +842,8 @@ fn run_optimization_passes(
     descriptor_cache: &mut dce::DescriptorCache,
     exec: &Arc<Executor>,
 ) {
-    // Before anything prices a body, so a literal no longer carries what no
-    // code reads when `nir/inline` weighs the function building it.
+    // So `nir/inline` weighs a function by literals that carry only what some
+    // code reads.
     run_pass("nir/dead_field", project, profiler, |p| {
         dead_field::remove_dead_fields(p, exec)
     });

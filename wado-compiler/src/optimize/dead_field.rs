@@ -26,7 +26,6 @@ use std::ops::ControlFlow;
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::minted_name;
 use crate::nir::{FuncId, NirLocal, StructInstance, struct_instance};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
@@ -36,7 +35,7 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
-use crate::tir::{GlobalInit, TypeId};
+use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 
 use super::bounds::Proofs;
@@ -61,12 +60,12 @@ pub(super) fn remove_dead_fields(project: &mut NirPackage, exec: &Executor) -> b
         effects: &summaries.effects,
         proofs: &no_proofs,
     };
-    let live = live_fields(project, types, &summaries, global_calls);
+    let field_slot = FieldSlot::of_package(project);
+    let live = live_fields(project, types, field_slot, &summaries, global_calls);
     let renumbering = renumber(project, types, &live);
     if renumbering.is_empty() {
         return false;
     }
-    let field_slot = FieldSlot::of_package(project);
     let rewrite = |calls| Rewrite {
         types,
         calls,
@@ -81,8 +80,7 @@ pub(super) fn remove_dead_fields(project: &mut NirPackage, exec: &Executor) -> b
         }
     }
     for global in &mut project.globals {
-        let (GlobalInit::Direct(init) | GlobalInit::Deferred(init)) = &mut global.init;
-        rewrite(global_calls).body(init.body_mut(), None);
+        rewrite(global_calls).body(global.init.slot_expr_mut().body_mut(), None);
     }
     for decl in &mut project.structs {
         let Some(map) = decl.instance().and_then(|i| renumbering.get(&i)) else {
@@ -145,12 +143,13 @@ enum Owner {
 fn live_fields(
     project: &NirPackage,
     types: &TypeTable,
+    field_slot: FieldSlot,
     summaries: &FnSummaries,
     global_calls: CallFacts,
 ) -> IndexSet<FieldKey> {
     let mut liveness = Liveness {
         types,
-        field_slot: FieldSlot::of_package(project),
+        field_slot,
         live: IndexSet::default(),
         held: IndexMap::default(),
         pending: Vec::new(),
@@ -366,7 +365,10 @@ impl FieldSlot {
         let index = body
             .operand_const_int(index.expr)
             .expect("`field_slot` takes a constant field index");
-        Some((holder.expr, u32::try_from(index).expect("a field index fits u32")))
+        Some((
+            holder.expr,
+            u32::try_from(index).expect("a field index fits u32"),
+        ))
     }
 }
 
@@ -626,25 +628,10 @@ impl Rewrite<'_> {
             let Some(mut field) = renumbered(field) else {
                 continue;
             };
-            let type_id = body.operand_type(field.value);
-            let index = NirLocal::push_minted(locals, "dead_field_slot", type_id, false);
-            let name = minted_name("dead_field_slot", index);
-            stmts.push(body.stmts.push(StmtNode {
-                kind: StmtKind::Let {
-                    name: name.clone(),
-                    local_index: index,
-                    is_mut: false,
-                    type_id,
-                    value: field.value,
-                    skip_value_copy: true,
-                },
-                span,
-            }));
-            field.value = Operand::Expr(body.exprs.push(ExprNode {
-                kind: ExprKind::Local { index, name },
-                type_id,
-                span,
-            }));
+            let (bind, read) =
+                NirLocal::bind_minted(locals, body, "dead_field_slot", field.value, true, span);
+            stmts.push(bind);
+            field.value = Operand::Expr(read);
             kept.push(field);
         }
         let type_id = body.exprs[e].type_id;
@@ -666,15 +653,26 @@ impl Rewrite<'_> {
         body.exprs[e].kind = ExprKind::plain_block(block, type_id, "dead_field");
     }
 
-    /// Drop a removed field from a struct pattern, which names it only with a
-    /// wildcard, and renumber the rest.
+    /// Drop a removed field from a struct pattern and renumber the rest.
     fn pattern(&self, body: &mut Body, p: PatId) {
-        let PatKind::Struct { struct_type, .. } = &body.pats[p].kind else {
+        let PatKind::Struct {
+            struct_type,
+            fields,
+            ..
+        } = &body.pats[p].kind
+        else {
             return;
         };
         let Some(map) = self.map(*struct_type).map(<[_]>::to_vec) else {
             return;
         };
+        for field in fields {
+            assert!(
+                map[field.field_index as usize].is_some()
+                    || matches!(body.pats[field.pattern].kind, PatKind::Wildcard),
+                "a pattern that binds or tests a field reads it"
+            );
+        }
         let PatKind::Struct {
             fields, has_rest, ..
         } = &mut body.pats[p].kind
