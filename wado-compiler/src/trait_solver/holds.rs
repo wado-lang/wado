@@ -361,18 +361,21 @@ impl Query<'_> {
         if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
             return None;
         }
-        // An argument binds only what it settles: whether the impl answers at
-        // the arguments asked is [`answers_args`]'s to decide.
+        // The arguments asked bind together or not at all: one the impl's own
+        // refutes would leave the rest binding an impl that answers nothing,
+        // and it would outrank one that does. Whether the impl answers at them
+        // is [`answers_args`]'s to decide.
         let written = program.per_param(def.trait_, &def.trait_args);
         let asked = program.per_param(def.trait_, args);
-        for (written, asked) in written.iter().zip(&asked) {
-            let (Some(written), Some(asked)) = (written, asked) else {
-                continue;
-            };
-            let mut trial = (bindings.clone(), deferred.clone());
-            if match_target(written, asked, &mut trial.0, &mut trial.1) {
-                (bindings, deferred) = trial;
+        let mut trial = (bindings.clone(), deferred.clone());
+        let all_match = written.iter().zip(&asked).all(|pair| match pair {
+            (Some(written), Some(asked)) => {
+                match_target(written, asked, &mut trial.0, &mut trial.1)
             }
+            _ => true,
+        });
+        if all_match {
+            (bindings, deferred) = trial;
         }
         if !self.bound_through_projections(&mut deferred, &mut bindings)
             || self.projections_refuted(&deferred, &bindings)

@@ -95,6 +95,24 @@ impl<T: Tag, G: Back> Named<G> for T {
     }
 }
 
+trait Duo<A, B> with () {
+    fn duo(&self) -> String;
+}
+
+// Asked at `Duo<Guest, Host>`, the first argument refutes this impl, so the
+// second binds nothing and the blanket answers.
+impl<G: Back> Duo<Host, G> for i32 {
+    fn duo(&self) -> String {
+        return `exact on ${G::name()}`;
+    }
+}
+
+impl<T: Tag, A, B> Duo<A, B> for T {
+    fn duo(&self) -> String {
+        return "blanket";
+    }
+}
+
 fn show<G: Back, V: Shown<G>>(v: &V) -> String {
     return v.shown();
 }
@@ -125,6 +143,8 @@ export fn run() with Stdout {
     println(Named::<Host>::named(&v));
     println(Named::<Guest>::named(&v));
     println(named::<Guest, i32>(&v));
+    println(Duo::<Host, Guest>::duo(&v));
+    println(Duo::<Guest, Host>::duo(&v));
     let w = Wrap::<String> { v: "w" };
     println(Shown::<Host>::shown(&w));
     println(show::<Guest, Wrap<String>>(&w));
@@ -132,5 +152,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\n1 relayed on guest\ntagged on host\ntagged on guest\ntagged on guest\nw in host\nw in guest\n"
+  "stdout": "1 on host\n1 on guest\n1 on host\n1 on guest\n1 on guest\n1 on guest, 1 on guest\nmade on host\nmade on guest\n1 relayed on guest\ntagged on host\ntagged on guest\ntagged on guest\nexact on guest\nblanket\nw in host\nw in guest\n"
 }
