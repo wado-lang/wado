@@ -1429,6 +1429,7 @@ global ATN_PASSED_ACTION: i32 = 2048;
 global ATN_DFA_UNDECIDED: i32 = -7;
 global ATN_DFA_DEAD: i32 = -8;
 global ATN_DFA_START_KEY: i32 = -9;
+global ATN_NOTHING_STARTS: i32 = -10;
 global ATN_DFA_TOKEN_SLOT: i64 = 65536;
 
 global mut ATN_DFA: AtnDfa = AtnDfa::new();
@@ -2349,6 +2350,11 @@ fn atn_resolve(sorted_alts: &List<i32>) -> i32 {
     return if sorted_alts.is_empty() || sorted_alts[0] >= ATN_FAILED_ALT { -1 } else { sorted_alts[0] };
 }
 
+fn atn_dead_end(arena: &CtxArena, configs: &List<AtnConfig>, caller: i32, at_first_token: bool) -> i32 {
+    let alt = atn_finished_alt(arena, configs, caller);
+    return if alt < 0 && at_first_token { ATN_NOTHING_STARTS } else { alt };
+}
+
 fn atn_finished_alt(arena: &CtxArena, configs: &List<AtnConfig>, caller: i32) -> i32 {
     let mut below = arena.callers_below(caller);
     let mut stays: List<i32> = [];
@@ -2559,7 +2565,7 @@ fn atn_walk(
     loop {
         let verdict = dfa.state_verdict[s];
         if verdict == ATN_DFA_DEAD {
-            return [atn_finished_alt(&dfa.arena, &dfa.state_configs[live], caller), false];
+            return [atn_dead_end(&dfa.arena, &dfa.state_configs[live], caller, pos == start_pos + 1), false];
         }
         if verdict != ATN_DFA_UNDECIDED {
             if verdict != ATN_READS_HIDDEN {
@@ -2574,7 +2580,7 @@ fn atn_walk(
             dfa.arena.push_held_guards(&ended, held);
             let survivors = atn_unique_alts(&ended);
             return if survivors.is_empty() {
-                [atn_finished_alt(&dfa.arena, &dfa.state_configs[s], caller), false];
+                [atn_dead_end(&dfa.arena, &dfa.state_configs[s], caller, pos == start_pos), false];
             } else {
                 [atn_resolve(&survivors), true];
             };
@@ -3480,7 +3486,7 @@ fn _parse_root__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_0 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 < 0 && rs_pick_0 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         if rs_pick_0 != 0 { break; }
         p.site = 0;
         p.atn_ret_pending = 11;
@@ -3517,7 +3523,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         p.atn_ret_pending = 20;
         _parse_for(p);
         let rs_pick_1 = p.atn.predict(&ATN_SIM, 2, &p.kinds, p.pos, TK_EOF, min_prec, &[2], &[], |_pred| match _pred { 2 => 1 == 1, _ => unreachable() });
-        if rs_pick_1 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_1 < 0 && rs_pick_1 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         if rs_pick_1 == 0 {
             p.site = 2;
             p.atn_ret_pending = 24;
@@ -3558,7 +3564,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         loop {
             if p.recovering { break; }
             let rs_pick_4 = atn_decide_5(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if rs_pick_4 < 0 { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_4 < 0 && rs_pick_4 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
             if rs_pick_4 != 0 { break; }
             p.expect(TK_IF, &SYNC_3, true);
         }
