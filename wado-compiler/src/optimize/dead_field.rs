@@ -23,6 +23,8 @@
 
 use std::ops::ControlFlow;
 
+use cranelift_entity::EntityRef;
+
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -145,9 +147,21 @@ fn live_fields(
             .and_then(|def| types.compiler_type_item(def))
             .is_some_and(CompilerItem::has_backend_layout)
     });
+    let reads_all_reached = project
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| {
+            let f = f.borrow();
+            f.body.is_none() && project.builtin_declarations.reads_all_reached(&*f)
+        })
+        .map(|(i, _)| FuncId::new(i))
+        .collect();
     let mut liveness = Liveness {
         types,
         field_slot,
+        reads_all_reached,
+        handed: IndexSet::default(),
         live: pinned
             .filter_map(|decl| Some((decl.instance()?, &decl.fields)))
             .flat_map(|(instance, fields)| fields.iter().map(move |f| (instance.clone(), f.index)))
@@ -175,17 +189,41 @@ fn live_fields(
             liveness.walk(owner, body, calls(owner), NodeRef::Block(body.root()));
         });
     }
-    while let Some((owner, operand)) = liveness.pending.pop() {
-        with_body(owner, &mut |body| {
-            liveness.walk_operand(owner, body, calls(owner), operand);
-        });
+    loop {
+        while let Some((owner, operand)) = liveness.pending.pop() {
+            with_body(owner, &mut |body| {
+                liveness.walk_operand(owner, body, calls(owner), operand);
+            });
+        }
+        let reached: Vec<FieldKey> = project
+            .structs
+            .iter()
+            .filter_map(|decl| Some((decl.instance()?, decl)))
+            .filter(|(instance, decl)| {
+                decl.fields
+                    .iter()
+                    .any(|f| !liveness.live.contains(&(instance.clone(), f.index)))
+                    && liveness.reaches(instance)
+            })
+            .flat_map(|(instance, decl)| decl.fields.iter().map(move |f| (instance.clone(), f.index)))
+            .collect();
+        if reached.is_empty() {
+            return liveness.live;
+        }
+        for key in reached {
+            liveness.read(key);
+        }
     }
-    liveness.live
 }
 
 struct Liveness<'t> {
     types: &'t TypeTable,
     field_slot: FieldSlot,
+    /// The body-less functions a call to which may read everything its
+    /// arguments reach.
+    reads_all_reached: IndexSet<FuncId>,
+    /// The types of the arguments handed to those calls.
+    handed: IndexSet<TypeId>,
     live: IndexSet<FieldKey>,
     /// What each dead field's slots and assignments hold, walked once it lives.
     held: IndexMap<FieldKey, Vec<(Owner, Operand)>>,
@@ -194,6 +232,18 @@ struct Liveness<'t> {
 }
 
 impl Liveness<'_> {
+    /// Whether an argument handed to a call that may read everything it reaches
+    /// reaches a struct of `instance`.
+    fn reaches(&self, (def, args): &StructInstance) -> bool {
+        let object = self
+            .types
+            .find_struct_instance(*def, args)
+            .expect("a concrete struct declaration has its type");
+        self.handed
+            .iter()
+            .any(|&ty| self.types.reaches_object_data(ty, self.types.object_kind(object)))
+    }
+
     fn read(&mut self, key: FieldKey) {
         if self.live.insert(key.clone())
             && let Some(held) = self.held.swap_remove(&key)
@@ -312,6 +362,10 @@ impl Liveness<'_> {
                     && let Some(key) = self.key(body, holder, field_index)
                 {
                     self.read(key);
+                }
+                if self.reads_all_reached.contains(func_id) {
+                    self.handed
+                        .extend(args.iter().map(|arg| body.operand_type(arg.expr)));
                 }
                 return false;
             }

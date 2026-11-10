@@ -2742,6 +2742,16 @@ impl TypeTable {
         self.reaches_in(ty, Reach::Object(kind), None, &mut IndexSet::default())
     }
 
+    /// Whether a value of `ty` holds, at any depth of its data, an object of
+    /// `kind`: what a callee handed one may read without running other code.
+    /// A function's captures and a resource's state are behind code of their
+    /// own. A type whose members are not registered may hold anything, so it
+    /// does.
+    #[must_use]
+    pub fn reaches_object_data(&self, ty: TypeId, kind: TypeId) -> bool {
+        self.reaches_in(ty, Reach::Data(kind), None, &mut IndexSet::default())
+    }
+
     /// Whether `ty`, as written inside the template `frame` instantiates,
     /// reaches `target`. `walked` holds what the walk is already inside, which
     /// adds nothing.
@@ -2763,7 +2773,7 @@ impl TypeTable {
             return true;
         };
         let ty = self.representation_head(ty);
-        if let Reach::Object(kind) = target
+        if let Reach::Object(kind) | Reach::Data(kind) = target
             && self.object_kind(ty) == kind
         {
             return true;
@@ -2779,7 +2789,7 @@ impl TypeTable {
                 matches!(self.get(kind), ResolvedType::BuiltinArray(array_elem)
                     if *array_elem == elem)
             };
-            return matches!(target, Reach::Object(kind) if backs(kind))
+            return matches!(target, Reach::Object(kind) | Reach::Data(kind) if backs(kind))
                 || self.reaches_in(elem, target, frame, walked);
         }
         let (template, members): (Option<(DefId, Vec<TypeId>)>, Vec<TypeId>) = match self.get(ty) {
@@ -2828,9 +2838,10 @@ impl TypeTable {
             ResolvedType::Newtype { base_type, .. } => {
                 return self.reaches_in(*base_type, target, frame, walked);
             }
-            ResolvedType::Function { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::TypeParam { .. }
+            ResolvedType::Function { .. } | ResolvedType::Resource { .. } => {
+                return !matches!(target, Reach::Data(_));
+            }
+            ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
@@ -7422,6 +7433,10 @@ enum Reach {
     MutRef,
     /// An object of this [`TypeTable::object_kind`].
     Object(TypeId),
+    /// An object of this kind among the value's data, which a reader reaches
+    /// without running code: a function's captures and a resource's state are
+    /// reached only by the code behind them.
+    Data(TypeId),
 }
 
 /// An answer about each type, computed once. Valid while the facts the answer

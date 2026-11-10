@@ -3167,6 +3167,15 @@ impl DeclarationTable<BuiltinDeclaration> {
             .is_none_or(|d| matches!(d.facts.side_effect, SideEffect::Opaque))
     }
 
+    /// Whether a call to the body-less `call` may read everything its arguments
+    /// reach: nothing declares it, its effects or storage are `opaque` or
+    /// `black_box`, or its storage is `copies_args`.
+    pub fn reads_all_reached<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into()).is_none_or(|d| {
+            d.facts.is_opaque() || matches!(d.facts.storage, Storage::Opaque | Storage::CopiesArgs)
+        })
+    }
+
     /// Whether another task may run before a call to the body-less `call`
     /// returns, and read or write anything held elsewhere: nothing declares
     /// it, as for a Component Model import, or it declares `suspend`.

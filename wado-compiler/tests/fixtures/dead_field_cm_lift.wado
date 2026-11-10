@@ -6,7 +6,7 @@
 use { SystemClock } from "wasi:clocks";
 
 export fn run() with SystemClock {
-    let now = builtin::black_box(SystemClock::now());
+    let now = SystemClock::now();
     assert now.nanoseconds < 1_000_000_000 as u32;
 }
 
