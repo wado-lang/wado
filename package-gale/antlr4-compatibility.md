@@ -861,8 +861,8 @@ its rule behind. A frame names a site: the ways the rest of that rule can
 begin, up to the gate's depth, each marked by whether the rule ends there and
 the next frame takes over. A loop's body continues into the loop again, so
 another iteration and the exit are both readings of one site. What overflows
-the slots moves to a per-parse link table, so no frame is lost. The parameter is pruned
-entirely when a grammar has no such gate — gate-free grammars carry no
+the slots moves to a per-parse link table, so no frame is lost. The parameter
+is pruned entirely when a grammar has no such gate — gate-free grammars carry no
 `follow` at all (it also costs a stack slot per recursive scan frame,
 which overflowed the wasm stack on a deep-recursion grammar). Because the
 mask is data threaded at runtime, each rule is emitted exactly once,

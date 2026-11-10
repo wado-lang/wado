@@ -93,8 +93,8 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSe
 
 /// Emit the runtime FOLLOW tables: `FOLLOW_TABLES` holds every distinct
 /// position set once, as a row of `stride` bitset words (all ones for a
-/// position that admits any kind), and each site the
-/// emitted code names as a row. The row opens with the set its readings can
+/// position that admits any kind), and each site the emitted code names as a
+/// row. The row opens with the set its readings can
 /// start with and whether one is empty (`set << 1 | empty`), which turns most
 /// queries away at one test, then each reading as a header (`len << 1 | ends`)
 /// and its positions' set indices. `FOLLOW_SITE_<id>` is the row's 1-based
@@ -130,20 +130,15 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
         assert starts.len() - 1 <= FOLLOW_SITE_LIMIT, "the sites must fit a continuation slot";
         names.push(`global ${name}: i64 = ${starts.len() - 1};`);
     }
-    let stride = ((ctx.analysis.token_kind_count() - 1) >> 5) + 1;
+    let stride = (ctx.analysis.token_kind_count() - 1 >> 5) + 1;
     let mut rendered: List<String> = [];
     for let set of &sets {
-        if set.is_empty() {
-            for let _ of 0..<stride {
-                rendered.push("-1");
-            }
-            continue;
-        }
         let words = kind_bitset_words(set);
         assert words.len() <= stride;
         rendered.extend(&words);
+        let fill = if set.is_empty() { "-1" } else { "0" };
         for let _ of words.len()..<stride {
-            rendered.push("0");
+            rendered.push(fill);
         }
     }
     w.line(`global ${FOLLOW_TABLES}: FollowTables = FollowTables {`);

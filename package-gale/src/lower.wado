@@ -78,7 +78,7 @@ use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { LowerContext, LowerMarks } from "./lower_context.wado";
-use { GrammarAnalysis, close_over_callers, is_nullable } from "./grammar_analysis.wado";
+use { GrammarAnalysis, close_over_callers, elements_from, is_nullable } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { FOLLOW_SITE_DEPTH } from "./table_registry.wado";
 use { readings_are_empty, readings_end } from "./readings.wado";
@@ -195,30 +195,17 @@ global NO_OUTER_SUFFIX: List<Element> = [];
 /// then what follows the group holding it, up to the end of the rule. Inside
 /// `(OR names? OR) body` the continuation of `names?` is `OR body`, and only
 /// the first half is in the list the group walks. Inside a loop, what follows
-/// is the loop again (`loop_rest`).
+/// is the loop again (`repeat_body_suffix`).
 fn follow_elements_of(elements: &List<Element>, outer_suffix: &List<Element>) -> List<Element> {
-    if outer_suffix.is_empty() {
-        return *elements;
-    }
     let mut out = *elements;
-    for let elem of outer_suffix {
-        out.push(*elem);
-    }
-    return out;
-}
-
-fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
-    let mut out: List<Element> = [];
-    for let mut i = start; i < elements.len(); i += 1 {
-        out.push(elements[i]);
-    }
+    out.extend(outer_suffix);
     return out;
 }
 
 /// The runtime FOLLOW argument a call at index `i` in `elements` supplies to
 /// its callee: the rest of the rule past it, `elements[i+1..]`, as a
-/// continuation site. Instead of cloning the callee per continuation (the
-/// retired `__follow_<id>` variant mechanism), the caller threads it as data.
+/// continuation site the caller threads as data, so no callee is cloned per
+/// continuation.
 fn compute_follow_arg(ctx: &mut LowerContext, elements: &List<Element>, i: i32) -> FollowArg {
     return forwarding_into(ctx, &elements[i], follow_arg_for(ctx, elements, i));
 }
@@ -272,7 +259,10 @@ fn continuation_arg(ctx: &mut LowerContext, elements: &List<Element>, from: i32)
     if readings_are_empty(&readings) {
         return FollowArg::Forward;
     }
-    return FollowArg::Site(FollowSite { id: ctx.intern_follow_site(&readings), ends: readings_end(&readings) });
+    return FollowArg::Site(FollowSite {
+        id: ctx.intern_follow_site(&readings),
+        ends: readings_end(&readings),
+    });
 }
 
 /// What a repeat's body continues into: a `?` runs it once, so what follows
@@ -281,17 +271,18 @@ fn repeat_body_suffix(rep: &RepeatElement, outer_suffix: &List<Element>) -> List
     if rep.kind matches { Optional } {
         return *outer_suffix;
     }
-    let mut rest: List<Element> = [Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star })];
-    for let elem of outer_suffix {
-        rest.push(*elem);
-    }
-    return rest;
+    return follow_elements_of(&[Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star })], outer_suffix);
 }
 
 /// What a repeat's body is told about its own continuation, `body_suffix`
 /// being `repeat_body_suffix`. A `?` passes its own arg down; a loop body's
 /// call reads the loop.
-fn repeat_body_follow(ctx: &mut LowerContext, rep: &RepeatElement, follow_arg: FollowArg, body_suffix: &List<Element>) -> FollowArg {
+fn repeat_body_follow(
+    ctx: &mut LowerContext,
+    rep: &RepeatElement,
+    follow_arg: FollowArg,
+    body_suffix: &List<Element>,
+) -> FollowArg {
     if rep.kind matches { Optional } {
         return follow_arg;
     }
@@ -332,9 +323,9 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
 )) -> LoweredGrammar {
     // The continuation sites the per-rule walk below interns at each `RuleRef`
     // are the ones emit names, and `gen_follow_tables` emits a row for each
-    // site emitted code names. Caches (first /
-    // nullable / single-token / scannable / tail-greedy) survive across the
-    // lower-then-emit boundary and only get computed once.
+    // site emitted code names. Caches (first / nullable / single-token /
+    // scannable / tail-greedy) survive across the lower-then-emit boundary and
+    // only get computed once.
     let mut parser_rules: List<Rule> = [];
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx));

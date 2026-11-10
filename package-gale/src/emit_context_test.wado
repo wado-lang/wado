@@ -31,7 +31,12 @@ fn ids(ctx: &mut EmitContext, names: List<String>) -> List<i32> {
 /// The id a site reading one `kind` interns as.
 fn intern_site(ctx: &mut EmitContext, kind: String) -> i32 {
     let kinds = ids(ctx, [kind]);
-    return ctx.tables.intern_follow_site([Reading { kinds: [kinds], ends: true }]);
+    return ctx.tables.intern_follow_site([
+        Reading {
+            kinds: [kinds],
+            ends: true,
+        },
+    ]);
 }
 
 test "an empty set is not a condition until the site says what it admits" {

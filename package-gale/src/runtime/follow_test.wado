@@ -75,7 +75,7 @@ test "a continuation deeper than the slots reads through its link" {
     for let _ of 0..<8 {
         cont = follow_push(1, cont);
     }
-    assert cont >> (FOLLOW_SLOT_BITS * 6) == 0;
+    assert cont >> FOLLOW_SLOT_BITS * 6 == 0;
     assert follow_yields(&kinds([B]), 0, cont, &t, EOF_KIND);
     assert !follow_yields(&kinds([C]), 0, cont, &t, EOF_KIND);
 }

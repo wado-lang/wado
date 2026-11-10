@@ -26,7 +26,10 @@ pub fn readings_empty(k: i32) -> List<Reading> {
 /// The one reading of a single position admitting `kinds`.
 pub fn readings_of_position(kinds: List<i32>, k: i32) -> List<Reading> {
     let mut out: List<Reading> = [];
-    readings_add(&mut out, Reading { kinds: [kinds], ends: true }, k);
+    readings_add(&mut out, Reading {
+        kinds: [kinds],
+        ends: true,
+    }, k);
     return out;
 }
 
@@ -76,9 +79,7 @@ pub fn reading_then(out: &mut List<Reading>, head: &Reading, tail: &List<Reading
 {
     for let t of tail {
         let mut kinds = head.kinds;
-        for let position of &t.kinds {
-            kinds.push(*position);
-        }
+        kinds.extend(&t.kinds);
         readings_add(out, Reading { kinds, ends: t.ends }, k);
     }
 }

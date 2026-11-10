@@ -6680,7 +6680,11 @@ fn follow_arg_expr(ctx: &mut EmitContext, arg: &FollowArg) -> String {
         Forward => follow_forward_args(),
         Site(site) => {
             let site_ref = ctx.follow_site_ref(site.id);
-            if site.ends { follow_pushed(site_ref) } else { site_ref }
+            if site.ends {
+                follow_pushed(site_ref);
+            } else {
+                site_ref;
+            }
         },
     };
 }

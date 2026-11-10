@@ -9,9 +9,30 @@ test "a site interns once whatever order its kinds were found in" {
     let mut ctx = LowerContext::new(GrammarAnalysis::new(&rules), GenSettings {});
     let names: List<String> = ["TK_X", "TK_Y", "TK_Z"];
     let k = ctx.analysis.token_ids_of(&names);
-    let s1: List<Reading> = [Reading { kinds: [[k[0], k[1]]], ends: true }];
-    let s1_reordered: List<Reading> = [Reading { kinds: [[k[1], k[0]]], ends: true }];
-    let s2: List<Reading> = [Reading { kinds: [[k[2]]], ends: true }];
+    let s1: List<Reading> = [
+        Reading {
+            kinds: [
+                [k[0], k[1]],
+            ],
+            ends: true,
+        },
+    ];
+    let s1_reordered: List<Reading> = [
+        Reading {
+            kinds: [
+                [k[1], k[0]],
+            ],
+            ends: true,
+        },
+    ];
+    let s2: List<Reading> = [
+        Reading {
+            kinds: [
+                [k[2]],
+            ],
+            ends: true,
+        },
+    ];
     assert ctx.intern_follow_site(&s1) == 0;
     assert ctx.intern_follow_site(&s2) == 1;
     assert ctx.intern_follow_site(&s1_reordered) == 0;
