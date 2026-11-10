@@ -820,44 +820,36 @@ impl Monomorphizer {
     }
 
     /// The concrete type a `T^Trait::method` receiver dispatches on: what
-    /// [`Self::receiver_param_answer`] says, what a projection receiver
-    /// (`T::Item`) binds at the instance, else, for a receiver no call
-    /// recorded, the lowest slot. A recorded receiver `substitution` does not
-    /// fill is left for the substitution that does.
+    /// `substitution` fills the slot the call recorded with, or what a
+    /// projection receiver (`T::Item`) binds at the instance. A receiver
+    /// `substitution` does not fill is left for the substitution that does,
+    /// and a blanket's receiver for its `MonomorphInfo`, which carries it.
     fn receiver_substitution_tid(
         &self,
         info: &LocalMethodName,
         substitution: &TypeArgMap,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
-        let answer = self.receiver_param_answer(info, substitution);
+        if !info.is_type_param_receiver {
+            return None;
+        }
         if info.receiver_param.is_some() {
-            return answer;
+            return self.receiver_param_answer(info, substitution);
         }
         let receiver = info.fq_struct_name();
-        if receiver.projected().is_some() {
-            let bound = |binder: &FqTypeName| self.named_answer(substitution, binder);
-            return Self::type_at_instance(&receiver, &bound, type_table);
-        }
-        answer.or_else(|| {
-            substitution
-                .iter()
-                .min_by_key(|(param, _)| param.index)
-                .map(|(_, &tid)| tid)
-        })
+        receiver.projected()?;
+        let bound = |binder: &FqTypeName| self.named_answer(substitution, binder);
+        Self::type_at_instance(&receiver, &bound, type_table)
     }
 
-    /// What `substitution` fills the parameter receiving `info` with: the one
-    /// the call recorded, else the one named so.
+    /// What `substitution` fills the slot the call receiving `info` recorded
+    /// with.
     fn receiver_param_answer(
         &self,
         info: &LocalMethodName,
         substitution: &TypeArgMap,
     ) -> Option<TypeId> {
-        match info.receiver_param {
-            Some(param) => substitution.get(&param).copied(),
-            None => self.named_answer(substitution, &info.fq_base_struct_name()),
-        }
+        substitution.get(&info.receiver_param?).copied()
     }
 
     /// What `substitution` fills the current frame's parameter `binder` with.

@@ -6699,7 +6699,8 @@ impl<'a> Reify<'a> {
         let mut method_info = generic.with_type_args(&arg_names, &[]);
         method_info.is_type_param_receiver = facts.type_param_receiver;
         if facts.type_param_receiver {
-            method_info.receiver_param = self.tysys.type_table.borrow().type_param_id(target_type);
+            method_info.receiver_param =
+                self.tysys.type_table.borrow().substitution_slot(target_type);
         }
         let monomorph_info = (!facts.impl_type_args.is_empty()).then(|| MonomorphInfo {
             generic_name: generic.to_mangled_name(),

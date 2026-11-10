@@ -1163,16 +1163,11 @@ impl TypeTable {
     }
 
     fn collect_type_params(&self, id: TypeId, found: &mut TypeArgMap) {
-        match self.get(id) {
-            ResolvedType::TypeParam { id: param, .. }
-            | ResolvedType::TypePack { id: param, .. } => {
-                found.insert(*param, id);
+        match self.substitution_slot(id) {
+            Some(slot) => {
+                found.insert(slot, id);
             }
-            // Its walk's unroll answers it, at the walk's slot.
-            ResolvedType::PackElement { pack, walk } => {
-                found.insert(self.pack_id(*pack).walk_slot(*walk), id);
-            }
-            _ => {
+            None => {
                 self.any_constituent(id, &mut |t| {
                     self.collect_type_params(t, found);
                     false
@@ -2288,6 +2283,15 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { id, .. } | ResolvedType::TypePack { id, .. } => Some(*id),
             _ => None,
+        }
+    }
+
+    /// The slot a substitution fills `id` under: a parameter's or a pack's
+    /// own, and a pack element's walk slot, which unrolling its walk fills.
+    pub fn substitution_slot(&self, id: TypeId) -> Option<TypeParamId> {
+        match self.get(id) {
+            ResolvedType::PackElement { pack, walk } => Some(self.pack_id(*pack).walk_slot(*walk)),
+            _ => self.type_param_id(id),
         }
     }
 
@@ -5692,7 +5696,7 @@ impl TypeTable {
     /// awaits substitution, and the parameter it is.
     pub fn mark_receiver(&self, info: &mut name::LocalMethodName, receiver: TypeId) {
         info.is_type_param_receiver = self.receiver_head_awaits_substitution(receiver);
-        info.receiver_param = self.type_param_id(receiver);
+        info.receiver_param = self.substitution_slot(receiver);
     }
 
     /// Whether a receiver of type `id` names no dispatch head until

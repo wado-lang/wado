@@ -2430,7 +2430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_info.is_type_param_receiver = resolved.is_type_param_receiver;
         if resolved.is_type_param_receiver {
             let table = self.tysys.type_table.borrow();
-            method_info.receiver_param = table.type_param_id(table.peel_refs(receiver));
+            method_info.receiver_param = table.substitution_slot(table.peel_refs(receiver));
         }
 
         // Only a *concrete* block's function lives in the block's module: a

@@ -5803,7 +5803,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .type_param_id(type_param_type_id);
+                .substitution_slot(type_param_type_id);
             if !method_type_arg_names.is_empty() {
                 method_info.method_type_args = method_type_arg_names;
             }
