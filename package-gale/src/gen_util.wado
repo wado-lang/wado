@@ -2,6 +2,7 @@ use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { comment_end, ident_end, scan_closed_string } from "./g4/scan.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
+use { FOLLOW_LINK_ID } from "./runtime/follow.wado";
 
 /// Open an `if` arm, or chain it onto the arm already open.
 pub fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, chained: bool, cond: S) {
@@ -91,12 +92,14 @@ pub fn dedup_name<S: AsStrSlice>(base: S, counts: &mut List<[String, i32]>) -> S
 /// A continuation is one `i64`: `FOLLOW_CONT_SLOTS` positions of
 /// `FOLLOW_SLOT_BITS`, each holding a 1-based `FOLLOW_SETS` index and a bit
 /// saying it opens a fresh reading. Composition is a shift, so a call site
-/// spells it in constants and a rule carries one parameter.
+/// spells it in constants and a rule carries one parameter. What a shift would
+/// push past the last slot moves to the runtime's link table, and a
+/// `FOLLOW_LINK_ID` slot stands for it, so composing loses no reading.
 pub global FOLLOW_SLOT_BITS: i32 = 8;
 
-pub global FOLLOW_CONT_SLOTS: i32 = 7;
+pub global FOLLOW_CONT_SLOTS: i32 = 6;
 
-pub global FOLLOW_MAX_POSITION_ID: i32 = 127;
+pub global FOLLOW_MAX_POSITION_ID: i32 = FOLLOW_LINK_ID as i32 - 1;
 
 /// The whole continuation forwarded unmoved.
 pub fn follow_forward_args() -> String {
@@ -136,16 +139,10 @@ pub fn follow_alternative<S: AsStrSlice, S1: AsStrSlice>(prefix: S, positions: i
 
 /// `cont` with one more reading the slots cannot hold, `open` being
 /// `follow_open_set` of the kinds it starts with or a bare
-/// `FOLLOW_OPEN_READING`. One field holds one set, so two different sets
-/// widen to any kind.
+/// `FOLLOW_OPEN_READING`. The open field names one set, or a union of them
+/// the runtime interns, so a reading added to another keeps both.
 pub fn follow_opened<S: AsStrSlice, S1: AsStrSlice>(cont: S, open: S1) -> String {
     return `follow_open_with(${cont}, ${open})`;
-}
-
-/// `cont`, which shifts the forwarded continuation `shift` bits, with what that
-/// pushes past the last slot standing as an open reading of `spill`'s head.
-pub fn follow_spilled<S: AsStrSlice, S1: AsStrSlice>(cont: S, shift: i32, spill: S1) -> String {
-    return `follow_spill(${cont}, ${FOLLOW_PARAM}, ${shift}, ${spill})`;
 }
 
 /// A `follow_yields` call on the forwarded continuation.

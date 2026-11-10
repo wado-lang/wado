@@ -170,8 +170,18 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
         // `greedy_optional_inner_follow` hands the continuation down: whole to
         // a `?`, and to a loop as the other reading beside its next iteration.
         Repeat(rep) => !rep.non_greedy && (element_consumes_follow_arg(&rep.element) || loops_over_group(rep)),
-        TokenRef(_) | Literal(_) | Group(_) | Wildcard(_) | Not(_) => false,
+        Group(g) => if let Some(inner) = transparent_inner(g) { element_consumes_follow_arg(inner) } else { false },
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
     };
+}
+
+/// The one element a Transparent group `(e)` wraps, which sits where the group
+/// does and so continues as it does.
+fn transparent_inner(g: &GroupElement) -> Option<&Element> {
+    if classify_group(&g.alternatives) matches { Transparent } {
+        return Option::Some(&g.alternatives[0].elements[0]);
+    }
+    return null;
 }
 
 fn loops_over_group(rep: &RepeatElement) -> bool {
@@ -243,7 +253,8 @@ fn rule_ref_snake(elem: &Element) -> Option<String> {
         RuleRef(r) => Option::Some(r.snake_name),
         Label(lab) => rule_ref_snake(&lab.element),
         Repeat(rep) => rule_ref_snake(&rep.element),
-        TokenRef(_) | Literal(_) | Group(_) | Wildcard(_) | Not(_) => null,
+        Group(g) => if let Some(inner) = transparent_inner(g) { rule_ref_snake(inner) } else { null },
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => null,
     };
 }
 
@@ -264,7 +275,7 @@ fn continuation_arg(ctx: &mut LowerContext, elements: &List<Element>, from: i32)
         if exit matches { NoFollow } {
             return exit;
         }
-        return FollowArg::AltMask(caller_loop(ctx, loop_mask, exit));
+        return FollowArg::AltMask(CallerLoop { loop_mask, exit });
     }
     let mut visiting: List<String> = [];
     let [deep, consumed] = ctx.analysis.deep_position_first_sets_from(elements, from, FOLLOW_MASK_MAX_K, &mut visiting);
@@ -363,51 +374,14 @@ fn loop_tail_follow(ctx: &mut LowerContext, rep: &RepeatElement, exit: FollowArg
         return Option::Some(exit);
     }
     if let Some(loop_mask) = iteration {
-        return Option::Some(FollowArg::AltMask(caller_loop(ctx, loop_mask, exit)));
+        return Option::Some(FollowArg::AltMask(CallerLoop { loop_mask, exit }));
     }
     let mut visiting: List<String> = [];
     let first = ctx.analysis.first_of_element(&rep.element, &mut visiting);
     let Some(loop_mask) = ctx.intern_follow_mask(&[first]) else {
         return null;
     };
-    return Option::Some(FollowArg::OpenLoop(caller_loop(ctx, loop_mask, exit)));
-}
-
-fn caller_loop(ctx: &mut LowerContext, loop_mask: i32, exit: FollowArg) -> CallerLoop {
-    let mut heads = ctx.tables.follow_mask_head(loop_mask);
-    let spill = if continuation_heads_into(ctx, &exit, &mut heads) { ctx.intern_follow_mask(&[heads]) } else { null };
-    return CallerLoop { loop_mask, exit, spill };
-}
-
-/// Adds to `heads` every kind `arg`'s continuation can start with, answering
-/// whether they are all known. What the current rule was called with starts
-/// with a kind of its FOLLOW.
-fn continuation_heads_into(ctx: &mut LowerContext, arg: &FollowArg, heads: &mut List<i32>) -> bool {
-    return match arg {
-        NoFollow | ForwardOpen(None) => false,
-        Forward => forwarded_heads_into(ctx, heads),
-        ForwardOpen(Some(first)) => {
-            heads.extend(&ctx.tables.follow_mask_head(*first));
-            forwarded_heads_into(ctx, heads);
-        },
-        Mask(id) | Combined(id) => {
-            heads.extend(&ctx.tables.follow_mask_head(*id));
-            true;
-        },
-        AltMask(le) | OpenLoop(le) => {
-            heads.extend(&ctx.tables.follow_mask_head(le.loop_mask));
-            continuation_heads_into(ctx, &le.exit, heads);
-        },
-    };
-}
-
-fn forwarded_heads_into(ctx: &mut LowerContext, heads: &mut List<i32>) -> bool {
-    let rule = ctx.current_rule_name();
-    if !ctx.follow.is_exact(&rule) {
-        return false;
-    }
-    heads.extend(&ctx.follow.for_probe(&rule));
-    return true;
+    return Option::Some(FollowArg::OpenLoop(CallerLoop { loop_mask, exit }));
 }
 
 /// What a repeat body's tail `Forward` call is retargeted to, or `null` where
@@ -1924,6 +1898,7 @@ fn lower_scan_element(
             &g,
             ctx,
             outer_follow,
+            follow_arg,
             follow_is_exact,
             gate_caller_follow,
             outer_suffix,
@@ -1940,6 +1915,7 @@ fn lower_scan_group(
     g: &GroupElement,
     ctx: &mut LowerContext,
     outer_follow: &List<i32>,
+    follow_arg: FollowArg,
     follow_is_exact: bool,
     enclosing_at_tail: bool = true,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
@@ -1947,16 +1923,17 @@ fn lower_scan_group(
     let alts = &g.alternatives;
     match classify_group(alts) {
         Transparent => {
-            // The wrapper adds nothing, so the outer follow, its exactness and
-            // the enclosing suffix pass through — the parse side reads them
-            // here too (invariant 9). A predicate on the alternative is what
-            // keeps the wrapper: its body is where the scan answers it.
+            // The wrapper adds nothing, so the outer follow, its FollowArg and
+            // gate, its exactness and the enclosing suffix pass through — the
+            // parse side reads them here too (invariant 9). A predicate on the
+            // alternative is what keeps the wrapper: its body is where the scan
+            // answers it.
             let walk = lower_scan_element(
                 &alts[0].elements[0],
                 ctx,
                 outer_follow,
-                FollowArg::NoFollow,
-                false,
+                follow_arg,
+                enclosing_at_tail,
                 follow_is_exact,
                 outer_suffix,
             );
@@ -2320,7 +2297,13 @@ fn lower_scan_repeat(
                         gate_caller_follow,
                         outer_suffix,
                     );
-                    return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx, plain);
+                    return lower_scan_optional_lookahead_group(
+                        &g.alternatives[0],
+                        ctx,
+                        plain,
+                        gate_caller_follow,
+                        outer_suffix,
+                    );
                 }
             }
         }
@@ -2594,6 +2577,8 @@ fn lower_scan_optional_lookahead_group(
     alt: &Alternative,
     ctx: &mut LowerContext,
     as_repeat: ScanRepeatElement,
+    enclosing_at_tail: bool,
+    outer_suffix: &List<Element>,
 ) -> ScanElement {
     let shapes = compute_shapes_for_alt(&alt.elements);
     let mut sigs: List<List<List<i32>>> = [];
@@ -2608,7 +2593,7 @@ fn lower_scan_optional_lookahead_group(
             continue;
         }
         sigs.push(sig);
-        bodies.push(lower_scan_shape_body(shape, alt, ctx));
+        bodies.push(lower_scan_shape_body(shape, alt, enclosing_at_tail, outer_suffix, ctx));
     }
     let scan_guarded = shape_signatures_collide(&sigs);
     return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
@@ -2629,51 +2614,50 @@ fn lower_scan_optional_lookahead_group(
 /// The shape clears `alt`'s predicates as `alt_scan_body` does. One
 /// placed before an element the shape leaves out runs before the next element
 /// it keeps.
-fn lower_scan_shape_body(shape: &List<i32>, alt: &Alternative, ctx: &mut LowerContext) -> ScanBody {
+///
+/// Each element continues into the rest of the shape and then `outer_suffix`,
+/// as in a group body, so a call it makes hears the shape's own continuation:
+/// `= expression` without its optional `else block` ends where the rule does.
+fn lower_scan_shape_body(
+    shape: &List<i32>,
+    alt: &Alternative,
+    enclosing_at_tail: bool,
+    outer_suffix: &List<Element>,
+    ctx: &mut LowerContext,
+) -> ScanBody {
     let elements = &alt.elements;
-    let mut body_elems: List<ScanElement> = [];
+    let mut shape_elements: List<Element> = [];
     let mut gates = scan_gates_for(alt, ctx);
     assert !gates.iter_ref().any(|g| g.step matches { Assign(_) }), "a write inside a group is never simulated";
     let mut placed = 0;
     for let mut k = 0; k < shape.len(); k += 1 {
         let idx = shape[k];
         while placed < gates.len() && gates[placed].before_index <= idx {
-            gates[placed].before_index = body_elems.len();
+            gates[placed].before_index = shape_elements.len();
             placed += 1;
         }
         let actual = surface_unwrap_optional(&elements[idx]);
-        // Empty follow at lower time — the shape body is consumed
-        // as a labeled block, and emit handles per-position fail via
-        // `break <shape_label>;`. Per-element follow within the
-        // shape doesn't affect the scan emit.
-        let empty_follow: List<i32> = [];
-        if let Group(g) = actual {
-            if g.alternatives.len() == 1 && g.alternatives[0].actions.is_empty() {
-                for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
-                    body_elems.push(
-                        lower_scan_element(
-                            &g.alternatives[0].elements[j],
-                            ctx,
-                            &empty_follow,
-                            FollowArg::NoFollow,
-                            false,
-                        ),
-                    );
-                }
-                continue;
-            }
+        if let Group(g) = actual && g.alternatives.len() == 1 && g.alternatives[0].actions.is_empty() {
+            shape_elements.extend(&g.alternatives[0].elements);
+        } else {
+            shape_elements.push(*actual);
         }
-        body_elems.push(lower_scan_element(
-            actual,
-            ctx,
-            &empty_follow,
-            FollowArg::NoFollow,
-            false,
-        ));
     }
     while placed < gates.len() {
-        gates[placed].before_index = body_elems.len();
+        gates[placed].before_index = shape_elements.len();
         placed += 1;
+    }
+    let mut body_elems: List<ScanElement> = [];
+    for let mut i = 0; i < shape_elements.len(); i += 1 {
+        body_elems.push(lower_alt_scan_element(
+            &shape_elements,
+            i,
+            ctx,
+            false,
+            enclosing_at_tail,
+            &NO_PROBE_RULE,
+            outer_suffix,
+        ));
     }
     return ScanBody { elements: body_elems, gates, gate_cond: ctx.alt_scan_gate_conditions(alt) };
 }
@@ -3010,6 +2994,7 @@ fn lower_op<S: AsStrSlice>(
                 ctx,
                 group_counter,
                 outer_follow,
+                follow_arg,
                 follow_is_exact,
                 gate_caller_follow,
                 outer_suffix,
@@ -3054,6 +3039,7 @@ fn lower_group_op<S: AsStrSlice>(
     ctx: &mut LowerContext,
     group_counter: &mut i32,
     outer_follow: &List<i32>,
+    follow_arg: FollowArg,
     follow_is_exact: bool,
     enclosing_at_tail: bool = true,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
@@ -3068,7 +3054,9 @@ fn lower_group_op<S: AsStrSlice>(
                 ctx,
                 group_counter,
                 outer_follow,
+                follow_arg,
                 follow_is_exact,
+                enclosing_at_tail,
                 outer_suffix,
             );
         },
@@ -3137,18 +3125,14 @@ fn lower_transparent_group<S: AsStrSlice>(
     ctx: &mut LowerContext,
     group_counter: &mut i32,
     outer_follow: &List<i32>,
+    follow_arg: FollowArg,
     follow_is_exact: bool,
+    gate_caller_follow: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     // A Transparent group adds nothing between the inner and the outer alt, so
-    // `outer_follow`, its exactness and the enclosing suffix pass through
-    // verbatim.
-    //
-    // TODO(redesign): forward the outer position's FollowArg/gate through
-    // the transparent wrapper so `(RuleRef)` / `(e)*` at a rule tail still
-    // gates on the caller's continuation. Conservative `NoFollow`/`false`
-    // for now (a transparent-wrapped tail is greedy, the pre-repair
-    // behaviour); thread once `lower_group_op` carries the two args.
+    // `outer_follow`, the position's FollowArg and gate, its exactness and the
+    // enclosing suffix pass through verbatim.
     let inner = &alt.elements[0];
     let inner_op = lower_op(
         inner,
@@ -3157,8 +3141,8 @@ fn lower_transparent_group<S: AsStrSlice>(
         ctx,
         group_counter,
         outer_follow,
-        FollowArg::NoFollow,
-        false,
+        follow_arg,
+        gate_caller_follow,
         follow_is_exact,
         outer_suffix,
     );
@@ -3170,7 +3154,7 @@ fn lower_transparent_group<S: AsStrSlice>(
         fields: [],
         prefix_self_ref_min_prec: 0,
     };
-    let walk = lower_scan_element(inner, ctx, outer_follow, FollowArg::NoFollow, false, false, outer_suffix);
+    let walk = lower_scan_element(inner, ctx, outer_follow, follow_arg, gate_caller_follow, false, outer_suffix);
     // `dispatch` is meaningless for a one-alt Transparent group:
     // emit recognises `GroupShape::Transparent` and skips the
     // dispatch step, running the body unconditionally. The empty
@@ -3767,6 +3751,8 @@ fn lower_repeat_op<S: AsStrSlice>(
                 body_elem,
                 body_has_field,
                 &owner,
+                gate_caller_follow,
+                &inner_suffix,
                 ctx,
             );
         }
@@ -3991,10 +3977,12 @@ fn pick_optional_specialised(
     inner: &Element,
     body_has_field: bool,
     owner: &DiagnosticOwner,
+    enclosing_at_tail: bool,
+    outer_suffix: &List<Element>,
     ctx: &mut LowerContext,
 ) -> Option<RepeatStrategy> {
     let k_token = try_optional_k_token_lookahead(inner, ctx);
-    let shape = try_optional_shape_lookahead(inner, ctx);
+    let shape = try_optional_shape_lookahead(inner, enclosing_at_tail, outer_suffix, ctx);
     let scan_guard = try_optional_scan_guard(inner, ctx);
     if body_has_field {
         if let Some(s) = k_token {
@@ -4116,7 +4104,12 @@ fn shape_optional_count_exceeds_cap(elements: &List<Element>) -> bool {
 /// guards each on the per-position kind set computed from
 /// `ctx.first_of_element`. Returns `null` for other inner shapes or when
 /// there are more than `MAX_SHAPE_OPTIONALS` nullable sub-elements.
-fn try_optional_shape_lookahead(inner: &Element, ctx: &mut LowerContext) -> Option<RepeatStrategy> {
+fn try_optional_shape_lookahead(
+    inner: &Element,
+    enclosing_at_tail: bool,
+    outer_suffix: &List<Element>,
+    ctx: &mut LowerContext,
+) -> Option<RepeatStrategy> {
     if let Group(g) = inner {
         if g.alternatives.len() != 1 {
             return null;
@@ -4158,7 +4151,7 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut LowerContext) -> Opti
             shape_entries.push(OptionalLookaheadShape {
                 positions: *shape,
                 sig: sig,
-                scan_body: lower_scan_shape_body(shape, &g.alternatives[0], ctx),
+                scan_body: lower_scan_shape_body(shape, &g.alternatives[0], enclosing_at_tail, outer_suffix, ctx),
             });
         }
         if shape_entries.is_empty() {

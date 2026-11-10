@@ -2541,7 +2541,7 @@ c < b as L < i > > d ; => (s (e (n c) < (n b as (t L < (t i) >)) > (n d)) ;)
 
 global DEEP_TAIL_GROUP_OPTIONAL_G4: String = "
 grammar T;
-s : e ';' EOF ;
+s : e ';' EOF | 'k' e ID ';' EOF ;
 e : a ('||' a)* ;
 a : c ('&&' c)* ;
 c : x (('<' | '>' | '==') x)* ;
@@ -2554,15 +2554,80 @@ WS : ' ' -> skip ;
 ";
 
 // The same decision five loops deep, as in Wado's precedence levels: the loops'
-// readings push the `;` that ends `e` past the continuation's last slot, and
-// `t` still enters where the `;` resumes after the type arguments.
+// readings push what follows `e` past the continuation's last slot, and `t`
+// enters exactly where that, read from the actual caller, resumes after the
+// type arguments. Only the `k` caller resumes on an `ID`.
 test "a tail group optional enters while entering stays viable under deep loops" {
-    let inputs: List<String> = ["c == b as L < i > ;", "c == b as L < i > d ;", "c == b as L < i > || d ;"];
+    let inputs: List<String> = [
+        "c == b as L < i > ;", "c == b as L < i > d ;", "c == b as L < i > || d ;", "k c == b as L < i > d ;",
+    ];
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         let got = parses(DEEP_TAIL_GROUP_OPTIONAL_G4, "s", inputs, &GenerateOptions { prediction });
         assert got == "c == b as L < i > ; => (s (e (a (c (x (m (n c))) == (x (m (n b as (t L < (t i) >))))))) ;)
 c == b as L < i > d ; => (s (e (a (c (x (m (n c))) == (x (m (n b as (t L)))) < (x (m (n i))) > (x (m (n d)))))) ;)
 c == b as L < i > || d ; => (s (e (a (c (x (m (n c))) == (x (m (n b as (t L < (t i) >)))))) || (a (c (x (m (n d)))))) ;)
+k c == b as L < i > d ; => (s k (e (a (c (x (m (n c))) == (x (m (n b as (t L < (t i) >))))))) d ;)
+", got;
+    }
+}
+
+global SHAPE_TAIL_GROUP_OPTIONAL_G4: String = "
+grammar T;
+s : '{' (st ';')* st? '}' EOF ;
+st : 'let' ID ('=' e ('else' ID)?)? ;
+e : n (('<' | '>' | '==') n)* ;
+n : ID ('as' t)* ;
+t : ID ('<' t '>')? ;
+ID : [a-zA-Z]+ ;
+WS : ' ' -> skip ;
+";
+
+// The loop in `s` scans `st ';'` to choose between another iteration and
+// `st? '}'`, and that scan walks `st`'s optional one shape at a time. Each
+// shape's `e` hears what follows it in the shape, so `t` enters the type
+// arguments where the `;` or the `else` resumes after them.
+test "a tail group optional inside an optional's shape scan hears the shape's continuation" {
+    let inputs: List<String> = [
+        "{ let a = c == b as L < i > ; }", "{ let a = c == b as L < i > else d ; }", "{ let a = c == b as L < i > d ; }",
+    ];
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let got = parses(SHAPE_TAIL_GROUP_OPTIONAL_G4, "s", inputs, &GenerateOptions { prediction });
+        assert got == "{ let a = c == b as L < i > ; } => (s { (st let a = (e (n c) == (n b as (t L < (t i) >)))) ; })
+{ let a = c == b as L < i > else d ; } => (s { (st let a = (e (n c) == (n b as (t L < (t i) >))) else d) ; })
+{ let a = c == b as L < i > d ; } => (s { (st let a = (e (n c) == (n b as (t L)) < (n i) > (n d))) ; })
+", got;
+    }
+}
+
+global NESTED_OPEN_TAILS_G4: String = "
+grammar T;
+s : '{' (st ';')* st? '}' EOF ;
+st : 'let' ID ('=' e ('else' blk)?)? ;
+e : m et ;
+et : ('||' m)* ;
+m : u mt ;
+mt : ('/' u)* ;
+u : 'if' ID blk ('else' blk)? | ID ;
+blk : '{' ID '}' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+// `u` hears both `mt` and `et` as readings that may start where it ends, each
+// known only by its first kinds. Holding both, the `else` belongs to the `if`
+// wherever one of them resumes after it.
+test "nested optional tails each stay a reading of the continuation" {
+    let inputs: List<String> = [
+        "{ let a = if c { x } else { y } / z ; }", "{ let a = if c { x } else { y } || z ; }",
+        "{ let a = if c { x } else { y } ; }", "{ let a = b else { y } ; }", "{ let a = if c { x } else { y } }",
+    ];
+    for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
+        let got = parses(NESTED_OPEN_TAILS_G4, "s", inputs, &GenerateOptions { prediction });
+        assert got == "{ let a = if c { x } else { y } / z ; } => (s { (st let a = (e (m (u if c (blk { x }) else (blk { y })) (mt / (u z))) et)) ; })
+{ let a = if c { x } else { y } || z ; } => (s { (st let a = (e (m (u if c (blk { x }) else (blk { y })) mt) (et || (m (u z) mt)))) ; })
+{ let a = if c { x } else { y } ; } => (s { (st let a = (e (m (u if c (blk { x }) else (blk { y })) mt) et)) ; })
+{ let a = b else { y } ; } => (s { (st let a = (e (m (u b) mt) et) else (blk { y })) ; })
+{ let a = if c { x } else { y } } => (s { (st let a = (e (m (u if c (blk { x }) else (blk { y })) mt) et)) })
 ", got;
     }
 }
@@ -4036,7 +4101,9 @@ B : 'b' ;
 ");
     assert out.contains("scan_gate: ScanGate = ScanGate {}");
     assert out.contains("fn scan_r(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,");
-    assert !out.contains("global mut");
+    for let line of out.lines() {
+        assert !(line.starts_with("global") && line.contains("ScanGate")), line;
+    }
 }
 
 // The LR dispatch launches a scan three ways (branch call, prebound fallback, ATN

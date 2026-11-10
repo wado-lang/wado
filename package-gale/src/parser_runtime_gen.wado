@@ -167,6 +167,9 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     if ctx.plan.lr_frames {
         w.line("lr_frames_reset();");
     }
+    if ctx.plan.emit_follow {
+        w.line("follow_links_reset();");
+    }
     let verify = ctx.settings.prediction.verifies() && ctx.plan.needs_atn;
     if verify {
         w.line(`${ATN_VERIFY_BEGIN}();`);

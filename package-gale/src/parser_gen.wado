@@ -33,8 +33,6 @@ use {
     follow_composed,
     follow_alternative,
     follow_opened,
-    follow_spilled,
-    FOLLOW_SLOT_BITS,
     follow_admits_call,
     follow_exit_viable_call,
     follow_resumes_call,
@@ -6613,40 +6611,6 @@ fn gen_iter_caller_follow_gate<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &Repea
 /// `RuleCall` per its `FollowArg`. Passed as the callee's `follow`
 /// parameter (parse and scan share the spelling — both bind `follow`).
 fn follow_arg_expr(ctx: &mut EmitContext, arg: &FollowArg) -> String {
-    let composed = follow_arg_composed(ctx, arg);
-    let AltMask(le) | OpenLoop(le) = arg else {
-        return composed;
-    };
-    let Some(spill) = le.spill else {
-        return composed;
-    };
-    let Some(shift) = forwarded_shift(ctx, arg) else {
-        return composed;
-    };
-    if shift == 0 {
-        return composed;
-    }
-    return follow_spilled(&composed, shift, ctx.follow_mask_ref(spill));
-}
-
-/// How far `arg` shifts the forwarded continuation when it opens a reading of
-/// its own, `null` where it does not: behind a `Combined` prefix its slots are
-/// positions, not readings.
-fn forwarded_shift(ctx: &EmitContext, arg: &FollowArg) -> Option<i32> {
-    return match arg {
-        Forward | ForwardOpen(_) => Option::Some(0),
-        AltMask(le) => {
-            let Some(inner) = forwarded_shift(ctx, &le.exit) else {
-                return null;
-            };
-            Option::Some(inner + ctx.tables.follow_mask_positions(le.loop_mask) * FOLLOW_SLOT_BITS);
-        },
-        OpenLoop(le) => forwarded_shift(ctx, &le.exit),
-        NoFollow | Mask(_) | Combined(_) => null,
-    };
-}
-
-fn follow_arg_composed(ctx: &mut EmitContext, arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "0",
         Forward => follow_forward_args(),
@@ -6656,8 +6620,7 @@ fn follow_arg_composed(ctx: &mut EmitContext, arg: &FollowArg) -> String {
         ),
         Mask(id) => ctx.follow_mask_ref(*id),
         // The caller's continuation shifts along behind the new head, starting
-        // where the head stops constraining. What that pushes past the last
-        // slot begins at a depth the gate does not read.
+        // where the head stops constraining.
         Combined(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.tables.follow_mask_positions(*id), false),
         // Same, and what follows the loop opens a fresh reading: the loop
         // iteration and it are alternatives, not a sequence.
@@ -6670,10 +6633,10 @@ fn follow_arg_composed(ctx: &mut EmitContext, arg: &FollowArg) -> String {
                     &follow_composed(loop_ref, positions, true),
                     &follow_open_set_expr(ctx, first),
                 ),
-                _ => follow_alternative(loop_ref, positions, follow_arg_composed(ctx, &le.exit)),
+                _ => follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit)),
             }
         },
-        OpenLoop(le) => follow_opened(&follow_arg_composed(ctx, &le.exit), &follow_open_set_expr(ctx, Option::Some(
+        OpenLoop(le) => follow_opened(&follow_arg_expr(ctx, &le.exit), &follow_open_set_expr(ctx, Option::Some(
             le.loop_mask,
         ))),
     };
