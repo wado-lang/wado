@@ -619,22 +619,9 @@ impl TraitContext {
         self.binder_declared_at(resolutions, decl, name)
     }
 
-    /// The binder the projection at `site`, written `name::Assoc`, projects
-    /// through, as [`Self::binder_at`] finds one.
-    pub(super) fn projection_base_at(
-        &self,
-        resolutions: &Resolutions,
-        site: ast::AstId,
-        name: &str,
-    ) -> Option<&BinderInScope> {
-        let Resolution::Projection(decl) = resolutions.get(site) else {
-            return None;
-        };
-        self.binder_declared_at(resolutions, decl, name)
-    }
-
     /// The binder the name written at `site` reaches, whether the site names
-    /// it or projects through it.
+    /// it or projects through it (`name::Assoc`), as [`Self::binder_at`] finds
+    /// one.
     pub(super) fn binder_reached_at(
         &self,
         resolutions: &Resolutions,
@@ -766,6 +753,14 @@ pub(super) struct Scope {
     /// The binders whose bound closure is being built right now, since
     /// `T: Uses<T::Item>` asks for it again while it is built.
     pub(super) bound_closure_stack: IndexSet<TypeId>,
+    /// The bounds, by the type they bound and the trait they name, whose
+    /// arguments are being read right now, since `T: Conv<T::Out>` asks for
+    /// them again while they are read.
+    pub(super) bound_args_stack: IndexSet<(TypeId, DefId)>,
+    /// The projections, by base and associated type, being checked for
+    /// ambiguity right now, since telling two bounds apart reads arguments
+    /// that may project the same name.
+    pub(super) ambiguity_stack: IndexSet<(TypeId, String)>,
     /// The numeric literals the arguments being resolved hold at one of their
     /// call's open variables, one entry per call nested in another's argument,
     /// innermost last. See [`PendingLiterals`].

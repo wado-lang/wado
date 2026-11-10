@@ -1,0 +1,39 @@
+// `Conv<T::Item>`'s argument is answered by another bound, `Src<Item = i32>`.
+// Reading a bound's arguments held its base on the walk that guards against
+// `T: Conv<T::Out>` asking for itself, so `T::Item` went unanswered there:
+// the written `T::Out` reached `Conv<<T as Src>::Item>` while `t.out()`
+// reached `Conv<i32>`, two types for one projection.
+
+trait Src with () {
+    type Item;
+}
+
+trait Conv<X> with () {
+    type Out;
+    fn out(&self) -> Self::Out;
+}
+
+struct S {}
+
+impl Src for S {
+    type Item = i32;
+}
+
+impl Conv<i32> for S {
+    type Out = String;
+    fn out(&self) -> String {
+        return "o";
+    }
+}
+
+fn f<T: Src<Item = i32> + Conv<T::Item>>(t: T) -> i32 {
+    let _o: T::Out = t.out();
+    return 1;
+}
+
+test {
+    assert f(S {}) == 1;
+}
+
+__DATA__
+{"test": {}}

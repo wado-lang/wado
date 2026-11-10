@@ -204,27 +204,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> bool {
         let bounds = self.frame_bounds(of);
-        let declaring: Vec<&ScopedBound> = bounds
+        let declaring: Vec<(&ScopedBound, DefId)> = bounds
             .iter()
-            .filter(|bound| {
-                self.trait_decl_of(bound)
-                    .is_some_and(|decl| self.tysys.trait_env.declares_assoc_type(&decl, assoc_name))
+            .filter_map(|bound| {
+                let decl = self.trait_decl_of(bound)?;
+                let declares = self.tysys.trait_env.declares_assoc_type(&decl, assoc_name);
+                declares.then_some((bound, decl))
             })
             .collect();
         if declaring.len() < 2 {
             return false;
         }
         // Bounds a frame took from several binders may state one trait twice;
-        // it answers one way.
+        // it answers one way. Only bounds on one trait can be that, so only
+        // theirs have their arguments read.
+        let decls: Vec<DefId> = declaring.iter().map(|&(_, decl)| decl).collect();
         let mut traits_seen: Vec<TraitRef> = Vec::new();
         let declaring: Vec<&ScopedBound> = declaring
             .into_iter()
-            .filter(|bound| {
-                let trait_ref = self.trait_ref_where_written(bound);
+            .filter(|&(bound, decl)| {
+                if decls.iter().filter(|&&other| other == decl).count() < 2 {
+                    return true;
+                }
+                let trait_ref = self.trait_ref_where_written(bound, decl);
                 let fresh = !traits_seen.contains(&trait_ref);
                 traits_seen.push(trait_ref);
                 fresh
             })
+            .map(|(bound, _)| bound)
             .collect();
         if declaring.len() < 2 {
             return false;
@@ -517,12 +524,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 family,
             });
         }
-        if self.report_ambiguous_assoc_type(
-            of,
-            &namespaced.namespace,
-            &namespaced.name,
-            namespaced.span,
-        ) {
+        // Telling two bounds on one trait apart reads their arguments, which
+        // may project this name again; that ask reports nothing, since this
+        // one reports what it finds.
+        let ambiguous = self.unless_on_walk(
+            |scope| &mut scope.ambiguity_stack,
+            (base_type_id, namespaced.name.clone()),
+            |e| {
+                Some(e.report_ambiguous_assoc_type(
+                    of,
+                    &namespaced.namespace,
+                    &namespaced.name,
+                    namespaced.span,
+                ))
+            },
+        );
+        if ambiguous == Some(true) {
             return None;
         }
         let declared = self.bound_declaring_assoc_type(of, &namespaced.name);
@@ -852,7 +869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || self
                 .annotate_ctx
                 .trait_ctx
-                .projection_base_at(&self.tysys.resolutions, namespaced.id, ns)
+                .binder_reached_at(&self.tysys.resolutions, namespaced.id, ns)
                 .is_some()
     }
 
@@ -1126,12 +1143,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         out.push((bound, Vec::new()));
                         continue;
                     };
-                    let written: Vec<TypeId> = e.in_bound_frame(&bound, &ParamSpace::new(), |e| {
-                        bound
-                            .type_args
-                            .iter()
-                            .map(|ty| e.resolve_type(ty))
-                            .collect()
+                    let written = e.in_bound_frame(&bound, &ParamSpace::new(), |e| {
+                        e.written_bound_args(&bound.bound)
                     });
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
@@ -1218,18 +1231,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.with_type_params_bound(space, |e| e.under_self_binding(binding, body))
     }
 
-    /// The trait `scoped` names, its arguments read where it was written.
-    fn trait_ref_where_written(&mut self, scoped: &ScopedBound) -> TraitRef {
-        let decl = self
-            .trait_decl_of(scoped)
-            .expect("a bound that declares an associated type names a trait");
+    /// `scoped`, which names `decl`, with its arguments read where it was
+    /// written.
+    fn trait_ref_where_written(&mut self, scoped: &ScopedBound, decl: DefId) -> TraitRef {
         let args = self.in_bound_frame(scoped, &scoped.space, |e| {
-            scoped
-                .bound
-                .type_args
-                .iter()
-                .map(|arg| e.resolve_type(arg))
-                .collect()
+            e.written_bound_args(&scoped.bound)
         });
         TraitRef::new(decl, args)
     }
@@ -1391,15 +1397,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find(|(bound, _)| self.trait_decl_of(bound) == Some(owner))
         {
             // Reading the bound's arguments may ask for this projection again
-            // (`T: Conv<T::Out>`); that ask leaves the arguments unsaid, as a
-            // re-entrant ask for the bound closure does.
+            // (`T: Conv<T::Out>`); that ask leaves the arguments unsaid. One
+            // another bound answers (`T::Item` under `Src<Item = i32>`) is not
+            // that ask, so the walk holds the trait as well as the base.
             let held_under = {
                 let table = self.tysys.type_table.borrow();
                 self.annotate_ctx.trait_ctx.bounded_type(&table, base)
             };
             return self.unless_on_walk(
-                |scope| &mut scope.bound_closure_stack,
-                held_under,
+                |scope| &mut scope.bound_args_stack,
+                (held_under, owner),
                 |e| e.bound_trait_args(base, &bound, &space, owner),
             );
         }

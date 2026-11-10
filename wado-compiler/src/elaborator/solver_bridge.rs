@@ -2658,13 +2658,16 @@ pub(super) enum Ordered {
 /// Where the binder a [`TypeHead::Binder`] names sits among `binders` (a
 /// scope's [`binder_types`]): the one spelled with that head, which carries
 /// the declaration owning the parameter as well as its name.
-fn place_head<'a>(
-    binders: &'a [TypeId],
-    table: &'a TypeTable,
-) -> impl Fn(&TypeHead) -> Option<ParamKind> + 'a {
+fn place_head(binders: &[TypeId], table: &TypeTable) -> impl Fn(&TypeHead) -> Option<ParamKind> {
+    let heads: Vec<TypeHead> = binders
+        .iter()
+        .map(|&binder| table.fq_type_name(binder).head().clone())
+        .collect();
     move |head| {
-        position_among(binders, |binder| table.fq_type_name(binder).head() == head)
-            .map(ParamKind::Type)
+        let at = heads.iter().position(|held| held == head)?;
+        Some(ParamKind::Type(
+            u32::try_from(at).expect("fewer than 2^32 params"),
+        ))
     }
 }
 
