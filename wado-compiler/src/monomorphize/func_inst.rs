@@ -1179,6 +1179,15 @@ impl Monomorphizer {
                 substitution.entry(slot).or_insert(ty);
             }
         }
+        for param in &generic.impl_type_params {
+            assert!(
+                substitution.contains_key(&param.id),
+                "instance `{mangled_name}` leaves impl parameter `{}` ({:?}) unbound: {:?}",
+                param.name,
+                param.id,
+                key.impl_type_args,
+            );
+        }
 
         let own = generic.type_params.iter().map(|param| param.id);
         substitution.extend(own.zip(key.method_type_args.iter().copied()));
@@ -1551,6 +1560,20 @@ impl Monomorphizer {
         if matches!(expr.kind, TirExprKind::VariadicTupleComprehension { .. }) {
             self.expand_tuple_comprehension(expr, substitution, type_table, local_count, locals);
             return;
+        }
+
+        // What the call recorded about its instance is written in this
+        // template's frame, whether or not the callee's name mentions it.
+        if let TirExprKind::Call { func, .. } = &mut expr.kind
+            && let Some(recorded) = func.monomorph_info.as_mut()
+        {
+            for arg in recorded
+                .impl_type_args
+                .iter_mut()
+                .chain(&mut recorded.method_type_args)
+            {
+                *arg = self.substitute_type(*arg, substitution, type_table);
+            }
         }
 
         match &mut expr.kind {

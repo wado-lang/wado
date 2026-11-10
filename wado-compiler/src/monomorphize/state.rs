@@ -430,8 +430,30 @@ impl Monomorphizer {
             // Normal: append type args: "List" → "List<i32>"
             method_info.receiver().mangle(&impl_arg_names)
         };
-        let mangled_struct =
-            MethodName::format_struct_with_trait(&receiver, method_info.trait_name.as_ref());
+        // A blanket names its receiver alone, so a parameter only its trait's
+        // arguments settle is named in the trait segment, or every argument
+        // list would name one instance.
+        let trait_name = method_info.trait_name.clone().map(|trait_name| {
+            if !is_blanket {
+                return trait_name;
+            }
+            let args = trait_name
+                .args()
+                .iter()
+                .map(|arg| {
+                    impl_type_params
+                        .iter()
+                        .find(|p| {
+                            arg.binder_name() == Some(p.name.as_str())
+                                && type_table.impl_trait_arg_slots(p.id.owner).contains(&p.id)
+                        })
+                        .and_then(|p| key.impl_type_args.get(p.id.index as usize))
+                        .map_or_else(|| arg.clone(), |&ty| type_table.fq_type_name(ty))
+                })
+                .collect();
+            trait_name.with_args(args)
+        });
+        let mangled_struct = MethodName::format_struct_with_trait(&receiver, trait_name.as_ref());
 
         // Build method name: transform<i64> (using method type args)
         let method_arg_names: Vec<String> = key

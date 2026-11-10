@@ -1,5 +1,7 @@
 //! Method call and static method call resolution.
 
+use std::sync::Arc;
+
 use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
@@ -49,6 +51,7 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
+use crate::synthesis::template::blanket_impl_args_with;
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -1109,9 +1112,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // monomorph_info maps from the concrete name back to the template.
             let binder = blanket_binder.unwrap_or_else(|| FqTypeName::binder(blanket_param));
             let generic_name = MethodName::format_local(&binder, trait_name.as_ref(), method_name);
+            // Keyed by its parameters in order, where a trait argument settles
+            // one the receiver does not.
+            let impl_type_args = match dispatched_impl_block {
+                Some(block) if !inferred_impl_slots.is_empty() => {
+                    let settled = inferred_impl_slots
+                        .iter()
+                        .map(|(&slot, &var)| (slot, self.apply_infer_holes(var)))
+                        .collect();
+                    let trait_env = Arc::clone(&self.tysys.trait_env);
+                    let blanket = trait_env
+                        .blanket_of_block(block)
+                        .expect("a match through a blanket names its block");
+                    blanket_impl_args_with(
+                        &trait_env,
+                        blanket,
+                        base_type_id,
+                        settled,
+                        &mut self.tysys.type_table.borrow_mut(),
+                    )
+                    .expect("the receiver and the trait arguments settle every blanket slot")
+                }
+                _ => vec![base_type_id],
+            };
             Some(MonomorphInfo {
                 generic_name,
-                impl_type_args: vec![base_type_id],
+                impl_type_args,
                 method_type_args: method_type_args.clone(),
                 is_blanket: true,
             })
@@ -3596,23 +3622,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
         let receiver_fq = concrete_head.unwrap_or(actual_struct_fq);
-        self.enforce_static_block_bounds(self.tysys.block_of(&method_ref), impl_type_args, span);
+        let block = self.tysys.block_of(&method_ref);
+        self.enforce_static_block_bounds(block, impl_type_args, span);
 
         let mut return_type = resolution.return_type;
+        let mut callee_params = resolution.params;
+        let instance_args = self.static_instance_args(
+            block,
+            impl_type_args,
+            &mut callee_params.param_types,
+            args,
+            &mut return_type,
+            span,
+        );
         self.retype_static_to_newtype(
             &self.impl_target(struct_name),
-            self.tysys.block_of(&method_ref),
+            block,
             impl_type_args,
             std::slice::from_mut(&mut return_type),
         );
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
-        let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {
+        let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             Some(MonomorphInfo {
                 generic_name: final_mangled_name.clone(),
-                impl_type_args: impl_type_args.to_vec(),
+                impl_type_args: instance_args,
                 method_type_args: method_type_args.to_vec(),
                 is_blanket: false,
             })
@@ -3636,10 +3672,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         let cm_name = callee_sig.as_ref().and_then(|sig| sig.cm_name.clone());
 
-        // From the resolution that named the callee. Asking again by the base's
-        // bare name asks the *caller's* frame, which an alias leaves without
-        // that name at all.
-        let callee_params = resolution.params;
         // No signature answered: there is no default to resolve, and the
         // declaring module stands in.
         let defaults_module = callee_params
@@ -3718,6 +3750,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         return_type
+    }
+}
+
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// What a static call's instance is keyed by: the receiver's arguments,
+    /// then the trait arguments keying `block`, the slots only those name
+    /// inferred from `args` into `params` and `return_type`.
+    pub(super) fn static_instance_args(
+        &mut self,
+        block: Option<DefId>,
+        receiver_args: &[TypeId],
+        params: &mut [TypeId],
+        args: &[TypeId],
+        return_type: &mut TypeId,
+        span: Span,
+    ) -> Vec<TypeId> {
+        let Some(block) = block else {
+            return receiver_args.to_vec();
+        };
+        let inferred = self.infer_trait_arg_slots(block, params, args, return_type, span);
+        if inferred.is_empty() {
+            return receiver_args.to_vec();
+        }
+        self.impl_instance_args(block, receiver_args.to_vec(), &inferred)
     }
 }
 
@@ -3904,26 +3960,6 @@ impl TypeSystem {
             || name.to_string(),
             |def| self.resolutions.defs().name(def).to_string(),
         )
-    }
-
-    /// Whether this is an impl block parameter only the argument can fill, as
-    /// in a blanket impl, so its unsubstituted spelling must not be mangled.
-    pub(super) fn param_filled_by_block(
-        &self,
-        header: &ImplHeader,
-        sig: &MethodSig,
-        param: TypeId,
-    ) -> bool {
-        if header.type_params.is_empty() {
-            return false;
-        }
-        let table = self.type_table.borrow();
-        match table.get(table.peel_refs(param)) {
-            ResolvedType::TypeParam { id, name } | ResolvedType::TypePack { id, name, .. } => {
-                sig.declaring_impl == Some(id.owner) && !header.ty.mentions(name)
-            }
-            _ => false,
-        }
     }
 }
 

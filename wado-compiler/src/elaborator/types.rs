@@ -4830,6 +4830,14 @@ pub(super) struct IndexingTraitInfo {
     /// How to spell the receiver in the dispatched method's name — the base for
     /// a block with parameters, the instantiation for one written at a type.
     pub(super) receiver: FqTypeName,
+    /// The `impl` block that matched.
+    pub(super) impl_def: DefId,
+    /// What the key settled the block's slots to, where only the trait
+    /// arguments name one (`I` in `impl<I: Show> IndexValue<I> for T`); the
+    /// call owes their bounds. Empty otherwise.
+    pub(super) trait_arg_slots: TypeArgMap,
+    /// The instance key, where the receiver alone does not determine it.
+    pub(super) instance_args: Option<Vec<TypeId>>,
 }
 
 /// Info about an operator trait implementation

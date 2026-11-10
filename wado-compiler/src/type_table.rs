@@ -6529,8 +6529,9 @@ impl TypeTable {
         trait_args: Vec<TypeId>,
         projections: Vec<ImplProjection>,
     ) {
-        let determined: IndexSet<TypeParamId> = args
-            .iter()
+        // The whole target, since a value blanket's receiver is a parameter no
+        // head argument names.
+        let determined: IndexSet<TypeParamId> = std::iter::once(&whole)
             .chain(projections.iter().map(|p| &p.pattern))
             .flat_map(|&ty| self.type_params_in(ty))
             .collect();

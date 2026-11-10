@@ -1059,20 +1059,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// What the arguments are checked against for a body the block wrote: its
-    /// parameters past any receiver, unless only the argument can fill one.
-    pub(super) fn written_selector(&self, header: &ImplHeader, sig: &MethodSig) -> Selector {
+    /// parameters past any receiver. A block parameter only the trait's
+    /// arguments name stays a slot there, which admits by shape.
+    pub(super) fn written_selector(sig: &MethodSig) -> Selector {
         let first = sig.first_value_param().min(sig.decl.param_types.len());
-        let params = &sig.decl.param_types[first..];
-        if params.is_empty() {
-            return Selector::Absent;
+        match &sig.decl.param_types[first..] {
+            [] => Selector::Absent,
+            params => Selector::Params(params.to_vec()),
         }
-        if params
-            .iter()
-            .any(|&param| self.param_filled_by_block(header, sig, param))
-        {
-            return Selector::Blanket;
-        }
-        Selector::Params(params.to_vec())
     }
 
     /// What an `impl` block offers for `method_name`: the body it wrote, else the trait
@@ -1093,7 +1087,7 @@ impl TypeSystem {
                 method_id: method.def,
                 kind: CandidateKind::of(sig.self_kind),
                 origin: CandidateOrigin::Written,
-                selector: self.written_selector(header, sig),
+                selector: Self::written_selector(sig),
             });
         }
         self.inherited_offer(trait_decl, impl_def, method_name)

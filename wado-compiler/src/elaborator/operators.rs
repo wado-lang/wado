@@ -1400,7 +1400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ctx = &mut ctx.enter_scope();
         let name = minted_name("da", ctx.fresh_serial());
         let _local_index = ctx.add_local(name, j_type, false, None);
-        let function_ref = self.indexing_function_ref(&info, "index_swap");
+        let function_ref = self.indexing_function_ref(&info, "index_swap", assign.span);
         self.sem.types.index_swap_dispatch.insert(
             assign.id,
             OperatorDispatch {
@@ -1672,15 +1672,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // For newtypes, resolve the base type name for trait impl lookup
                     let (lookup_name, lookup_type_id) =
                         self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-                    let assign_info = self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        Elaborator::find_index_assign_trait_impl,
-                    );
-                    let key_type = assign_info.as_ref().and_then(|(info, _)| info.index_type);
+                    let lookup = |this: &mut Self, key: Option<TypeId>| {
+                        this.index_lookup_or_newtype_base(
+                            &struct_name,
+                            base_type_id,
+                            &lookup_name,
+                            lookup_type_id,
+                            |s, n, t| s.find_index_assign_trait_impl(n, t, key),
+                        )
+                    };
+                    // The impl is the one at the key's type, as a read's is.
+                    let key_class = self.synthesize_arg_class(&index_expr.index, ctx);
+                    let key_type = self
+                        .index_key_type(indexed_type, &key_class)
+                        .or_else(|| lookup(self, None).and_then(|(info, _)| info.index_type));
                     let index_type = self.resolve_expr(&index_expr.index, ctx, key_type);
+                    let assign_info = lookup(self, Some(index_type));
 
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
                     if let Some(expected) = self.tysys.pointee_of(index_type) {
@@ -1689,7 +1696,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     if let Some((trait_info, _)) = assign_info {
                         let output_type = trait_info.output_type;
-                        let func = self.indexing_function_ref(&trait_info, "index_assign");
+                        let func = self.indexing_function_ref(
+                            &trait_info,
+                            "index_assign",
+                            index_expr.span,
+                        );
 
                         // Record the
                         // resolved `IndexAssign` dispatch keyed by
@@ -2278,38 +2289,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A slot only the impl's trait arguments determine (`R` in
         // `impl<R> Eq<R> for Tag`) is the operand's to settle.
-        let inferred = match (resolved.impl_def, args.first()) {
-            (Some(block), Some(&(_, span))) => {
-                Some((block, self.mint_trait_arg_slots(block), span))
-            }
-            _ => None,
-        };
         let mut referents: Vec<TypeId> = resolved
             .param_types
             .iter()
-            .map(|&param| {
-                let param = match &inferred {
-                    Some((_, slots, _)) if !slots.is_empty() => self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .substitute_type_params(param, slots),
-                    _ => param,
-                };
-                self.tysys.through_ref(param)
-            })
+            .map(|&param| self.tysys.through_ref(param))
             .collect();
-        if let Some((block, slots, span)) = &inferred {
-            let operands: Vec<TypeId> = args.iter().map(|&(arg, _)| arg).collect();
-            self.settle_trait_arg_slots(
-                *block,
-                slots,
-                &mut referents,
-                &operands,
-                &mut return_type,
-                *span,
-            );
-        }
+        let inferred = match (resolved.impl_def, args.first()) {
+            (Some(block), Some(&(_, span))) => {
+                let operands: Vec<TypeId> = args.iter().map(|&(arg, _)| arg).collect();
+                let slots = self.infer_trait_arg_slots(
+                    block,
+                    &mut referents,
+                    &operands,
+                    &mut return_type,
+                    span,
+                );
+                Some((block, slots))
+            }
+            _ => None,
+        };
 
         // Per argument, decide whether the parameter is by reference, compute the
         // logical expected type, and delegate to the same `typecheck` helper
@@ -2348,26 +2346,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((kind, header)) => self.ref_impl_function(kind, header, resolved, receiver),
             None => self.operator_impl_function(resolved, receiver),
         };
-        if let Some((block, slots, _)) = inferred
+        if let Some((block, slots)) = inferred
             && !slots.is_empty()
         {
-            let mut impl_type_args = self
+            let positions = self
                 .tysys
                 .impl_position_args(receiver_head)
                 .unwrap_or_default();
-            let mut impl_slots = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .impl_slots(block, &impl_type_args);
-            impl_slots.extend(slots);
-            let trait_args = self
-                .tysys
-                .signatures
-                .impl_sig(block)
-                .instantiate_slots(&self.tysys.type_table, &impl_slots)
-                .trait_type_args;
-            impl_type_args.extend(self.trait_args_keying(Some(block), &trait_args));
+            let impl_type_args = self.impl_instance_args(block, positions, &slots);
             function_ref.monomorph_info = Some(MonomorphInfo {
                 generic_name: function_ref.name.clone(),
                 impl_type_args,

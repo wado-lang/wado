@@ -1022,6 +1022,18 @@ pub(crate) fn blanket_impl_args(
     receiver: TypeId,
     tt: &mut TypeTable,
 ) -> Option<Vec<TypeId>> {
+    blanket_impl_args_with(trait_env, blanket, receiver, TypeArgMap::default(), tt)
+}
+
+/// [`blanket_impl_args`] at a call that also settled `known`: the slots only
+/// the blanket's trait arguments name.
+pub(crate) fn blanket_impl_args_with(
+    trait_env: &TraitEnv,
+    blanket: &BlanketImpl,
+    receiver: TypeId,
+    known: TypeArgMap,
+    tt: &mut TypeTable,
+) -> Option<Vec<TypeId>> {
     // A blanket's slots are its parameters in declaration order, so a
     // source's position is its slot.
     let sources = trait_env.blanket_param_sources(blanket);
@@ -1029,22 +1041,18 @@ pub(crate) fn blanket_impl_args(
         owner: blanket.def,
         index,
     };
-    let mut slots: TypeArgMap = sources
-        .iter()
-        .zip(0..)
-        .filter(|(source, _)| matches!(source, BlanketParamSource::Receiver))
-        .map(|(_, index)| (slot(index), receiver))
-        .collect();
+    let mut slots = known;
+    slots.extend(
+        sources
+            .iter()
+            .zip(0..)
+            .filter(|(source, _)| matches!(source, BlanketParamSource::Receiver))
+            .map(|(_, index)| (slot(index), receiver)),
+    );
     tt.project_impl_slots(blanket.def, &mut slots);
-    sources
-        .iter()
-        .zip(0..)
-        .map(|(source, index)| match source {
-            BlanketParamSource::Unresolved => None,
-            BlanketParamSource::Receiver | BlanketParamSource::Projection => {
-                slots.get(&slot(index)).copied()
-            }
-        })
+    (0..)
+        .take(sources.len())
+        .map(|index| slots.get(&slot(index)).copied())
         .collect()
 }
 

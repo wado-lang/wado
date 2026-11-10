@@ -663,9 +663,10 @@ fixture over one shared set of impls.
 ## Roadmap
 
 - [ ] Every call form records its trait reference and asks the one resolver,
-  and the per-form selection, binding and keying are deleted. Done when each
-  form's `impl_param_from_trait_arg_*` fixture passes and an unbound impl
-  parameter is an assertion at instance creation.
+  and the per-form selection, binding and keying are deleted. Each form's
+  `impl_param_from_trait_arg_*` fixture passes, and an unbound impl parameter
+  is an assertion at instance creation. Done when no call form selects, binds
+  or keys an instance by a step of its own.
 
 ## Known gaps
 
@@ -728,16 +729,12 @@ name. They share which impls reach the receiver, and nothing after that. Ranks
 0-3 exist on none of them; they agree with the order only by coincidence of scan
 order.
 
-A method call, an operator, an index assignment and a call through a bound bind
-a parameter only the trait's arguments determine
-(`impl_param_from_trait_arg_instances.wado`). The other forms fail at it:
-
-- [ ] `X::put(&x, v)` and a default method's call reach codegen with the
-  parameter unbound.
-- [ ] `Put::put(&x, v)` finds no method, and a blanket
-  `impl<S: Mark, T: Show> Put<T> for S` checks `T`'s bound against `S`.
-- [ ] `IndexValue<I>` with `I` free, and `From<S>` reached by `?`, are refused
-  as unsupported.
+Every form binds a parameter only the trait's arguments determine, and owes its
+bounds at the call (`impl_param_from_trait_arg_*.wado`). The forms reach that
+through shared steps (`infer_trait_arg_slots`, `impl_instance_args`), not yet
+through one resolver, and the instance keys still differ by form: a head impl's
+is its target's positions followed by its keyed trait arguments, and a value
+blanket's is its parameters in order.
 
 ### Specificity is refused, and now has a named cost
 

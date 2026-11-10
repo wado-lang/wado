@@ -4,6 +4,7 @@ use super::scope::{BinderInScope, ParamRef, ScopedBound, trait_params_from_impl}
 use super::trait_env::ImplTargetKey;
 use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
 use super::type_resolution::ParamSpace;
+use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -61,6 +62,13 @@ use crate::unparse::binary_op_str;
 pub(super) enum ImplKind {
     Inherent,
     Trait,
+}
+
+/// Which of an impl block's bounds a call owes ([`Elaborator::defer_impl_bounds`]).
+#[derive(Clone, Copy)]
+enum OwedBounds {
+    Open,
+    All,
 }
 
 /// The values [`TypeSystem::is_replace_on_assign_place_type`] answers for, which
@@ -1267,6 +1275,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// parameter or an argument of its bound is still open, once they are
     /// answered.
     pub(super) fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
+        self.defer_impl_bounds(def, slots, span, OwedBounds::Open);
+    }
+
+    /// The bounds impl `def` places on `slots`, owed by the call at `span`:
+    /// the `Open` ones awaiting their answer, or `All` where selecting the
+    /// block checked none, as for a slot only its trait arguments determine.
+    fn defer_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span, owed: OwedBounds) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
         let names = ImplParamSlots::of(&header.ty, &header.type_params);
@@ -1283,14 +1298,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             let bounds = self.declared_bounds(param, None, &impl_args);
-            let open = self.awaits_pending_call(*arg) || {
+            let owes = matches!(owed, OwedBounds::All) || self.awaits_pending_call(*arg) || {
                 let tt = self.tysys.type_table.borrow();
                 self.awaits_report(&tt, *arg)
                     || bounds
                         .iter()
                         .any(|b| self.annotate_ctx.trait_awaits_pending_call(&tt, &b.trait_))
             };
-            if open {
+            if owes {
                 self.defer_declared_bounds(param, *arg, bounds, span);
             }
         }
@@ -1347,7 +1362,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             *param = self.apply_infer_holes(*param);
         }
         *return_type = self.apply_infer_holes(*return_type);
-        self.defer_open_impl_bounds(block, inferred, span);
+        self.defer_impl_bounds(block, inferred, span, OwedBounds::All);
+    }
+
+    /// [`Self::mint_trait_arg_slots`] into a call's `params` and `return_type`,
+    /// settled against its `args`. Answers what stands for each slot.
+    pub(super) fn infer_trait_arg_slots(
+        &mut self,
+        block: DefId,
+        params: &mut [TypeId],
+        args: &[TypeId],
+        return_type: &mut TypeId,
+        span: Span,
+    ) -> TypeArgMap {
+        let inferred = self.mint_trait_arg_slots(block);
+        if inferred.is_empty() {
+            return inferred;
+        }
+        {
+            let mut table = self.tysys.type_table.borrow_mut();
+            for param in params.iter_mut() {
+                *param = table.substitute_type_params(*param, &inferred);
+            }
+            *return_type = table.substitute_type_params(*return_type, &inferred);
+        }
+        self.settle_trait_arg_slots(block, &inferred, params, args, return_type, span);
+        inferred
+    }
+
+    /// What `block`'s instance is keyed by: the receiver's `positions`, then
+    /// the trait arguments that key it, read with `inferred` standing for the
+    /// slots only they name.
+    pub(super) fn impl_instance_args(
+        &self,
+        block: DefId,
+        positions: Vec<TypeId>,
+        inferred: &TypeArgMap,
+    ) -> Vec<TypeId> {
+        let mut slots = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .impl_slots(block, &positions);
+        slots.extend(inferred.iter().map(|(&slot, &ty)| (slot, ty)));
+        let trait_args = self
+            .tysys
+            .signatures
+            .impl_sig(block)
+            .instantiate_slots(&self.tysys.type_table, &slots)
+            .trait_type_args;
+        let mut args = positions;
+        args.extend(self.trait_args_keying(Some(block), &trait_args));
+        args
+    }
+
+    /// Whether a match's trait arguments, their open slots solved against
+    /// `pinned`, are `pinned`.
+    fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
+        trait_args.len() == pinned.len()
+            && trait_args.iter().zip(pinned).all(|(&arg, &want)| {
+                self.solve_infer_holes_against(arg, want);
+                self.apply_infer_holes(arg) == want
+            })
     }
 
     /// `trait_args`, answered, where they key `block`'s instance
@@ -2113,10 +2189,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.logger.has_errors() || named.is_empty() || !found_traits.is_empty(),
             "the order names {order:?} for `{receiver_display}`.{method_name}(), and none yields a match"
         );
-        // A turbofish on a qualified call pins one argument list; the trait
-        // itself the order already kept to.
-        if let Some(args) = required_trait.and_then(|wanted| wanted.args.as_ref()) {
-            found_traits.retain(|m| &m.trait_args == args);
+        // A turbofish on a qualified call pins one argument list, settling a
+        // block parameter only that list names; the trait itself the order
+        // already kept to.
+        if let Some(pinned) = required_trait.and_then(|wanted| wanted.args.as_ref()) {
+            found_traits.retain(|m| self.trait_args_settle_to(&m.trait_args, pinned));
         }
         // Rank 3, which the order decided: the report only names what it found.
         match &order {
@@ -3065,17 +3142,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if plain.is_empty() { pairs } else { plain }
     }
 
+    /// Find an `IndexAssign` impl for a type, at `expected_index_type` where
+    /// given.
     pub(super) fn find_index_assign_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
+        expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
             CompilerItem::IndexAssign,
             "index_assign",
-            None,
+            expected_index_type,
         )
     }
 
@@ -3098,15 +3178,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The `method` of the impl `info` found, as a dispatch names it.
     pub(super) fn indexing_function_ref(
-        &self,
+        &mut self,
         info: &IndexingTraitInfo,
         method: &str,
+        span: Span,
     ) -> FunctionRef {
+        self.defer_impl_bounds(info.impl_def, &info.trait_arg_slots, span, OwedBounds::All);
+        let name = MethodName::format_local(&info.receiver, Some(&info.trait_name), method);
         FunctionRef {
             module_source: info.impl_module_source.clone(),
-            name: MethodName::format_local(&info.receiver, Some(&info.trait_name), method),
             template: Some(self.tysys.signatures.declared_template(info.method_def)),
-            monomorph_info: None,
+            monomorph_info: info.instance_args.clone().map(|impl_type_args| MonomorphInfo {
+                generic_name: name.clone(),
+                impl_type_args,
+                method_type_args: vec![],
+                is_blanket: false,
+            }),
+            name,
             method_info: Some(LocalMethodName::new(
                 info.receiver.clone(),
                 Some(info.trait_name.clone()),
@@ -3461,6 +3549,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // is set.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
+                // A slot only the key names (`I` in `impl<I> IndexValue<I> for
+                // T`) is the key's to settle, so such a block answers only a
+                // subscript whose key is known.
+                let block = impl_ref.0;
+                let slotted = !s.tysys.type_table.borrow().impl_trait_arg_slots(block).is_empty();
+                let (impl_sig, trait_arg_slots) = if slotted {
+                    let key: Vec<TypeId> =
+                        concrete_type_args.iter().copied().chain(expected_index_type).collect();
+                    let slots = s.tysys.type_table.borrow_mut().impl_slots(block, &key);
+                    let settled = s
+                        .tysys
+                        .signatures
+                        .impl_sig(block)
+                        .instantiate_slots(&s.tysys.type_table, &slots);
+                    if expected_index_type.is_none()
+                        || settled.trait_type_args.first().copied() != expected_index_type
+                    {
+                        return None;
+                    }
+                    (Cow::Owned(settled), slots)
+                } else {
+                    (Cow::Borrowed(impl_sig), TypeArgMap::default())
+                };
                 let index_type = impl_sig.trait_type_args.first().copied();
                 if let Some(expected_idx_type) = expected_index_type
                     && let Some(resolved_trait_idx) = index_type
@@ -3498,6 +3609,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
+                let instance_args = (!trait_arg_slots.is_empty()).then(|| {
+                    let mut args = concrete_type_args.clone();
+                    args.extend(s.trait_args_keying(Some(block), &impl_sig.trait_type_args));
+                    args
+                });
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,
                     output_type: assoc_type,
@@ -3506,6 +3622,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_module_source: impl_source,
                     index_type,
                     receiver,
+                    impl_def: block,
+                    trait_arg_slots,
+                    instance_args,
                 })
             },
         )

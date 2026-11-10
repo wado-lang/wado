@@ -2341,7 +2341,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                let func = self.indexing_function_ref(&trait_info, index_method);
+                let func = self.indexing_function_ref(&trait_info, index_method, index.span);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2376,7 +2376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let func = self.indexing_function_ref(&trait_info, "index_value");
+                let func = self.indexing_function_ref(&trait_info, "index_value", index.span);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2450,7 +2450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
-                Elaborator::find_index_assign_trait_impl,
+                |s, n, t| s.find_index_assign_trait_impl(n, t, None),
             )
             .and_then(|(i, _)| i.index_type)
         })
@@ -5488,8 +5488,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .expect("a `From` impl names its trait"),
             None => from.clone(),
         };
-        // A generic block's function is instantiated at the target's arguments.
-        let impl_type_args = impl_def
+        // A generic block's function is instantiated at the target's arguments,
+        // then at the source the trait reference names where only it settles a
+        // slot (`S` in `impl<S> From<S> for Failure`).
+        let mut impl_type_args = impl_def
             .filter(|def| !self.tysys.trait_env.impl_headers[def].is_concrete())
             .and_then(|_| {
                 self.tysys
@@ -5498,6 +5500,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .nominal_type_args(target_type)
             })
             .unwrap_or_default();
+        impl_type_args.extend(self.trait_args_keying(impl_def, &[from_type]));
         let type_param_receiver = impl_def.is_none();
         // Through a bound the trait's own method is the callee, whose edges
         // keep every impl live until monomorphization picks one.
