@@ -4849,7 +4849,6 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     prefix_scan: Option<ScanElement>,
     asks_caller: bool,
     probe_viable: &List<i32>,
-    definite: bool = false,
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(`${label}:`);
@@ -4861,52 +4860,36 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     for let se of continuation {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx, definite);
+    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx);
     w.end();
 }
 
 /// The probe's verdict once its scan has matched: the match itself short of the
-/// rule's tail; at the tail, the threaded mask and any stamped FOLLOW admitting the position.
-///
-/// `definite` asks the mask for the caller's whole known continuation rather
-/// than its first token. A loop ending its rule has nothing of its own left to
-/// scan, so one token of the caller is all that would stand behind a decline:
-/// `paraContent NL NL` would give up the `\n` of `\n EOF` to a `para` that
-/// cannot finish either way.
+/// rule's tail; at the tail, whether the caller can go on at the position. A
+/// rule that reads its continuation asks it, which every entry and call
+/// supplies; any other asks the rule's classical FOLLOW.
 fn emit_probe_verdict<S: AsStrSlice>(
     w: &mut CodeWriter,
     asks_caller: bool,
     probe_viable: &List<i32>,
     verdict: S,
     ctx: &mut EmitContext,
-    definite: bool = false,
 ) {
     if !asks_caller {
         assert probe_viable.is_empty(), "a FOLLOW is stamped only on a probe reaching the rule's tail";
         w.line(`${verdict} = true;`);
         return;
     }
-    let mask = if !ctx.current_rule_reads_follow() {
-        "true";
-    } else if definite {
-        follow_exit_viable_call("tokens", "pos");
-    } else {
-        follow_admits_call("tokens", "pos");
-    };
-    if probe_viable.is_empty() {
-        if mask == "true" {
-            w.line(`${verdict} = true;`);
-        } else {
-            w.line(`if ${mask} { ${verdict} = true; }`);
-        }
+    if ctx.current_rule_reads_follow() {
+        w.line(`if ${follow_admits_call("tokens", "pos")} { ${verdict} = true; }`);
         return;
     }
-    // The mask says yes wherever a call site left it empty; the FOLLOW is what
-    // still says no there, and conjoining only moves a verdict to "iterate".
+    if probe_viable.is_empty() {
+        w.line(`${verdict} = true;`);
+        return;
+    }
     w.line("let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    let viable = ctx.kind_check_str(probe_viable, "probe_kind");
-    let cond = if mask == "true" { viable } else { `${and_operand(viable)} && ${and_operand(mask)}` };
-    w.line(`if ${cond} { ${verdict} = true; }`);
+    w.line(`if ${ctx.kind_check_str(probe_viable, "probe_kind")} { ${verdict} = true; }`);
 }
 
 /// Whether each iteration of a greedy `*` / `+` scans its whole body and commits
