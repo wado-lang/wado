@@ -6520,7 +6520,7 @@ pub struct ImplProjection {
 }
 
 /// What an impl target binds at a receiver's arguments.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TargetBinding {
     /// The type each of the target's parameters takes.
     pub slots: TypeArgMap,
@@ -6721,20 +6721,33 @@ impl TypeTable {
             let Some(&source) = slots.get(&projection.source) else {
                 continue;
             };
-            let Some(concrete) = self.resolve_trait_assoc_type_of_instance(
+            let concrete = match self.resolve_trait_assoc_type_of_instance(
                 source,
                 &projection.trait_,
                 None,
                 &projection.assoc,
-            ) else {
-                continue;
+            ) {
+                Some(concrete) => {
+                    self.register_assoc_type_resolution(
+                        source,
+                        TraitRef::bare(projection.trait_),
+                        projection.assoc.clone(),
+                        concrete,
+                    );
+                    concrete
+                }
+                // A caller's own parameter names no member yet: the slot holds
+                // the projection off it, which its instance reads.
+                None if self.type_param_id(source).is_some() => self.make_assoc_type_projection(
+                    source,
+                    projection.trait_,
+                    None,
+                    projection.assoc,
+                    Vec::new(),
+                    Vec::new(),
+                ),
+                None => continue,
             };
-            self.register_assoc_type_resolution(
-                source,
-                TraitRef::bare(projection.trait_),
-                projection.assoc,
-                concrete,
-            );
             if let Some(bound) = self.bind_projection_pattern(projection.pattern, concrete) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
@@ -6941,12 +6954,17 @@ impl TypeTable {
         // A projection, written inside an `<F: fn(...)>` signature or as a
         // block's target, is its base's binding's, which the solver checks
         // once the base is bound. One still standing off a parameter names no
-        // type yet, so the same projection meets it part for part.
+        // type yet, so the same projection binds what its parts agree on; a
+        // part that disagrees leaves the answer to the solver, as two
+        // projections can still name one type.
         if matches!(self.get(written), ResolvedType::AssocTypeProjection { .. }) {
-            return match self.projection_parts(written, concrete) {
-                Some((written, concrete)) => self.bind_all(&written, &concrete, open, binding),
-                None => true,
-            };
+            if let Some((written, concrete)) = self.projection_parts(written, concrete) {
+                let mut trial = binding.clone();
+                if self.bind_all(&written, &concrete, open, &mut trial) {
+                    *binding = trial;
+                }
+            }
+            return true;
         }
         if let Some(agrees) =
             self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, open, binding))
@@ -6965,8 +6983,9 @@ impl TypeTable {
         written == concrete
     }
 
-    /// The base and arguments of `a` and of `b` where both project one
-    /// associated type of one trait at as many arguments; `None` otherwise.
+    /// The base, trait arguments and arguments of `a` and of `b` where both
+    /// project one associated type of one trait at as many of each; `None`
+    /// otherwise. Trait arguments one side leaves unwritten are not compared.
     fn projection_parts(&self, a: TypeId, b: TypeId) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
         let (
             ResolvedType::AssocTypeProjection {
@@ -6974,6 +6993,7 @@ impl TypeTable {
                 assoc_name: name_a,
                 args: args_a,
                 owning_trait: trait_a,
+                trait_args: trait_args_a,
                 ..
             },
             ResolvedType::AssocTypeProjection {
@@ -6981,22 +7001,28 @@ impl TypeTable {
                 assoc_name: name_b,
                 args: args_b,
                 owning_trait: trait_b,
+                trait_args: trait_args_b,
                 ..
             },
         ) = (self.get(a), self.get(b))
         else {
             return None;
         };
-        (name_a == name_b && trait_a == trait_b && args_a.len() == args_b.len()).then(|| {
+        let (trait_args_a, trait_args_b) = match (trait_args_a, trait_args_b) {
+            (Some(x), Some(y)) => (x.as_slice(), y.as_slice()),
+            _ => (&[][..], &[][..]),
+        };
+        let alike = name_a == name_b
+            && trait_a == trait_b
+            && args_a.len() == args_b.len()
+            && trait_args_a.len() == trait_args_b.len();
+        let parts = |base: TypeId, trait_args: &[TypeId], args: &[TypeId]| -> Vec<TypeId> {
+            [base].into_iter().chain(trait_args.iter().copied()).chain(args.iter().copied()).collect()
+        };
+        alike.then(|| {
             (
-                [*base_a]
-                    .into_iter()
-                    .chain(args_a.iter().copied())
-                    .collect(),
-                [*base_b]
-                    .into_iter()
-                    .chain(args_b.iter().copied())
-                    .collect(),
+                parts(*base_a, trait_args_a, args_a),
+                parts(*base_b, trait_args_b, args_b),
             )
         })
     }

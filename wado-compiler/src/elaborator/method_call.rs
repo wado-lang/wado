@@ -1132,7 +1132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     is_blanket: false,
                 })
             }
-        } else if !impl_slot_args.is_empty() {
+        } else if keyed_by_slots {
             Some(MonomorphInfo {
                 generic_name: MethodName::format_local(&base_struct_name, None, method_name),
                 impl_type_args: impl_slot_args,

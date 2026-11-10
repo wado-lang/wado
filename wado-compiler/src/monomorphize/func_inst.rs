@@ -2763,8 +2763,10 @@ impl Monomorphizer {
 
         // A block written for a projection (`impl<G, E> Tr<G> for G::Of<E>`)
         // is named by the slots the call recorded, which the receiver, once
-        // substituted, no longer shows.
-        if let Some(block) = method_func.template.as_ref().and_then(TemplateId::block)
+        // substituted, no longer shows. Its receiver is left unmarked exactly
+        // where the elaborator recorded every slot.
+        if !info.is_type_param_receiver
+            && let Some(block) = method_func.template.as_ref().and_then(TemplateId::block)
             && matches!(
                 type_table.get(type_table.impl_target_whole(block)),
                 ResolvedType::AssocTypeProjection { .. }
