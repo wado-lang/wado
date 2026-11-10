@@ -16,6 +16,8 @@ test "a view's contract tests its own start" {
     let s: String = "abcdef";
     let indices: List<[i32, char]> = s.as_str_slice().slice(2, 5).char_indices().collect();
     assert indices.len() == 3;
+    assert indices[0].0 == 0 && indices[0].1 == 'c';
+    assert indices[2].0 == 2 && indices[2].1 == 'e';
 }
 
 test "an unchecked slice beside it" {
