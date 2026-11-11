@@ -1660,7 +1660,8 @@ impl ProgramArgument {
             Input => self.ident,
             Cache => `cache.${self.ident}`,
             Length => `lengths.${self.ident}`,
-            Weight => `model.weights.${self.ident}`,
+            // `erased_fields` passes the weights whole.
+            Weight => unreachable(),
         };
     }
 

@@ -154,7 +154,6 @@ impl Names {
         return Result::Ok(());
     }
 
-    /// `tensor`'s identifier, which `of` minted.
     internal fn get(&self, tensor: &String) -> String
         contract self.idents.contains_key(*tensor), "a name the module spells is one `Names::of` was given"
     {
@@ -308,8 +307,8 @@ impl Symbols {
         return self.used.contains(*symbol);
     }
 
-    /// Each symbol `other`, a copy of these spelling some anew, spelled, as
-    /// these spelled it: so these bind it.
+    /// Marks what `other` spelled as spelled here, so these bind it. `other`
+    /// is a copy of these with some symbols spelled anew.
     internal fn use_what(&mut self, other: &Symbols) {
         for let symbol of other.used {
             self.used.insert(symbol);
