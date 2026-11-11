@@ -5345,6 +5345,24 @@ WS : ' ' -> skip ;
     assert got == "y z => (a y z)\ny z y => (a y (b z (a y)))\ny z y z => (a y (b z (a y z)))\ny z y z z => (a y (b z (a y z z)))\n";
 }
 
+test "a loop the caller's continuation may start keeps looping where the iteration parses" {
+    // `;` starts both another iteration of `l`'s loop and the next `l` in `s`.
+    // The jar loops wherever the iteration parses, and the parse tries the
+    // iteration itself rather than scanning it first and parsing it again.
+    let grammar = "grammar L;
+s : l* EOF ;
+l : ';'* x (';'+ x)* ';'* ;
+x : X | X '(' X ')' ;
+X : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    let got = parses(grammar, "s", ["a;b", "a;;b;", "a;", "a(b);c;;", ";a;b(c)"], &LONGEST);
+    assert got == "a;b => (s (l (x a) ; (x b)))\na;;b; => (s (l (x a) ; ; (x b) ;))\na; => (s (l (x a) ;))\na(b);c;; => (s (l (x a ( b )) ; (x c) ; ;))\n;a;b(c) => (s (l ; (x a) ; (x b ( c ))))\n";
+    let source = longest_source(grammar);
+    assert source.contains("let sp_yielded = follow_yields(");
+    assert !source.contains("iter_scan");
+}
+
 // `expression` calls only itself, so every continuation past its end comes
 // back to it, and none reads the end of the input.
 test "exact ends a directly entered rule that only calls itself at the end of the input" {

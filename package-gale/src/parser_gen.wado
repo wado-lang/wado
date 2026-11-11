@@ -6578,15 +6578,20 @@ fn gen_caller_follow_gate<S: AsStrSlice = String>(
     }
     w.begin(`if ${yields}`);
     let end = gen_scan_guard_with_prefix(w, &rep_op.scan_body, ctx, nc, "iter_scan_pos", "iter_scan", false);
-    let resumes = continuation_resumes_at(
+    w.line(`if ${end} < 0 || !${iteration_resumes_at(rep_op, ctx, &end)} { break; }`);
+    w.end();
+}
+
+/// Whether the loop's continuation, short of the caller or through it, is
+/// known to start where an iteration ends at `end`.
+fn iteration_resumes_at<S: AsStrSlice>(rep_op: &RepeatOp, ctx: &mut EmitContext, end: S) -> String {
+    return continuation_resumes_at(
         ctx,
         &loop_resumes_first(&rep_op.caller_follow_first, &rep_op.body_admits),
         "&p.kinds",
         "p.kinds",
-        &end,
+        end,
     );
-    w.line(`if ${end} < 0 || !${resumes} { break; }`);
-    w.end();
 }
 
 /// What may start where a loop's iteration ends, short of the caller: the rest
@@ -7052,7 +7057,7 @@ fn gen_rep_speculative_iteration(
     if guard != "true" {
         w.line(`if ${negate_cond(&guard)} { break; }`);
     }
-    gen_caller_follow_gate(w, rep_op, ctx, nc);
+    let yielded = gen_speculative_follow_gate(w, rep_op, nc);
     let pending = dedup_name("sp_pending", nc);
     w.line(`let ${pending} = p.pending;`);
     let mark = Speculation::begin(w, dedup_name("sp", nc));
@@ -7061,12 +7066,20 @@ fn gen_rep_speculative_iteration(
     w.begin(`if p.recovering || p.pos <= ${mark.pos}`);
     mark.rewind(w);
     if let Some([_, gate]) = rep_probe(rep_op, ctx) {
-        w.line(`if ${negate_cond(&gate)} { p.pending = ${pending}; }`);
+        let keeps_probe = if let Some(y) = &yielded { `${y} || ${negate_cond(&gate)}` } else { negate_cond(&gate) };
+        w.line(`if ${keeps_probe} { p.pending = ${pending}; }`);
     } else {
         w.line(`p.pending = ${pending};`);
     }
     w.line("break;");
     w.end();
+    if let Some(y) = &yielded {
+        w.begin(`if ${y} && !${iteration_resumes_at(rep_op, ctx, "p.pos")}`);
+        mark.rewind(w);
+        w.line(`p.pending = ${pending};`);
+        w.line("break;");
+        w.end();
+    }
     if rep_op.duties.is_empty() {
         return;
     }
@@ -7085,6 +7098,24 @@ fn gen_rep_speculative_iteration(
         `p.b.truncate(${mark.cp}); p.pending = ${pending}; break;`,
     );
     w.line(`p.pos = ${end};`);
+}
+
+/// `gen_caller_follow_gate` for a speculative iteration, whose own parse finds
+/// where the iteration ends instead of a scan. Returns the local holding
+/// whether the caller's continuation starts at the iteration, for the parse's
+/// end to settle, or none where the gate asks nothing more.
+fn gen_speculative_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, nc: &mut List<[String, i32]>) -> Option<String> {
+    if !rep_op.gate_caller_follow {
+        return null;
+    }
+    let yields = follow_yields_call("&p.kinds", "p.pos");
+    if !rep_op.body_scannable {
+        w.line(`if ${yields} { break; }`);
+        return null;
+    }
+    let yielded = dedup_name("sp_yielded", nc);
+    w.line(`let ${yielded} = ${yields};`);
+    return Option::Some(yielded);
 }
 
 /// A parse under `speculating`, as the locals that put the parser back.
