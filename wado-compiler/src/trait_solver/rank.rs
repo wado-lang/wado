@@ -33,6 +33,9 @@ pub struct Candidate {
     /// and so on.
     pub depth: u32,
     pub generality: Generality,
+    /// Whether the impl writes a parameter among the trait's arguments
+    /// (`impl<R> Eq<R> for Tag`), covering every argument list it admits.
+    pub opens_trait_args: bool,
     /// Whether the impl's target is a bare pack (`impl<..T> Tr for [..T]`).
     pub is_variadic: bool,
 }
@@ -70,21 +73,32 @@ pub fn rank(candidates: &[Candidate]) -> Selection {
     drop_variadic_where_non_variadic_exists(candidates, &mut live);
     keep_shallowest(candidates, &mut live);
     keep_least_general(candidates, &mut live);
+    keep_written_trait_args(candidates, &mut live);
     classify(candidates, live)
 }
 
 /// Rank 0. Within one trait at one argument list, a variadic impl yields to a
 /// non-variadic one.
 fn drop_variadic_where_non_variadic_exists(candidates: &[Candidate], live: &mut Vec<usize>) {
+    yield_at_one_argument_list(candidates, live, |c| c.is_variadic);
+}
+
+/// Drop each candidate `yields` marks where one it does not mark answers the
+/// same trait at the same argument list.
+fn yield_at_one_argument_list(
+    candidates: &[Candidate],
+    live: &mut Vec<usize>,
+    yields: impl Fn(&Candidate) -> bool,
+) {
     let covered: Vec<(TraitDeclId, &[SolverType])> = live
         .iter()
         .map(|&i| &candidates[i])
-        .filter(|c| !c.is_variadic)
+        .filter(|c| !yields(c))
         .map(|c| (c.trait_, c.trait_args.as_slice()))
         .collect();
     live.retain(|&i| {
         let c = &candidates[i];
-        !c.is_variadic
+        !yields(c)
             || !covered
                 .iter()
                 .any(|(trait_, args)| *trait_ == c.trait_ && *args == c.trait_args.as_slice())
@@ -107,6 +121,13 @@ fn keep_least_general(candidates: &[Candidate], live: &mut Vec<usize>) {
         return;
     };
     live.retain(|&i| candidates[i].generality == least);
+}
+
+/// Rank 2 over the trait's arguments. At one argument list, an impl writing
+/// them (`impl Eq<String> for Tag`) defines the exact function and one writing
+/// a parameter there (`impl<R> Eq<R> for Tag`) only covers it.
+fn keep_written_trait_args(candidates: &[Candidate], live: &mut Vec<usize>) {
+    yield_at_one_argument_list(candidates, live, |c| c.opens_trait_args);
 }
 
 /// Rank 3. What survives is one answer, or one of the shapes the caller
@@ -167,6 +188,7 @@ mod tests {
                 trait_args: vec![],
                 depth,
                 generality,
+                opens_trait_args: false,
                 is_variadic,
             });
             self
@@ -190,6 +212,14 @@ mod tests {
 
         fn with_args(mut self, args: Vec<SolverType>) -> Self {
             self.0.last_mut().expect("a candidate to arm").trait_args = args;
+            self
+        }
+
+        fn opening_trait_args(mut self) -> Self {
+            self.0
+                .last_mut()
+                .expect("a candidate to arm")
+                .opens_trait_args = true;
             self
         }
 
@@ -348,6 +378,34 @@ mod tests {
         let candidates = Build::new()
             .variadic(TR)
             .with_args(vec![arg(I32)])
+            .concrete(TR, 0)
+            .with_args(vec![arg(STRING)])
+            .done();
+        assert_eq!(rank(&candidates), Selection::Overloaded(vec![0, 1]));
+    }
+
+    /// `impl Eq<String> for Tag` beside `impl<R> Eq<R> for Tag`, asked at
+    /// `String`: the one writing the argument answers.
+    #[test]
+    fn rank2_prefers_written_trait_args_at_one_argument_list() {
+        let candidates = Build::new()
+            .concrete(TR, 0)
+            .with_args(vec![arg(STRING)])
+            .opening_trait_args()
+            .concrete(TR, 0)
+            .with_args(vec![arg(STRING)])
+            .done();
+        assert_eq!(rank(&candidates), Selection::One(1));
+    }
+
+    /// Only one argument list is covered: at another, the open impl is an
+    /// overload beside the written one.
+    #[test]
+    fn open_trait_args_at_another_argument_list_stay_an_overload() {
+        let candidates = Build::new()
+            .concrete(TR, 0)
+            .with_args(vec![arg(I32)])
+            .opening_trait_args()
             .concrete(TR, 0)
             .with_args(vec![arg(STRING)])
             .done();

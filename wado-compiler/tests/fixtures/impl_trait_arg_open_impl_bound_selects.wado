@@ -1,0 +1,90 @@
+// Of two impls each leaving the trait's argument to the call, the one whose
+// bound rejects what the call settles the argument to does not reach the
+// call, so the other answers it alone, through a method, a subscript and a
+// static, and an impl writing the argument outranks both.
+trait A with () {
+    fn a(&self) -> String;
+}
+
+trait B with () {
+    fn b(&self) -> String;
+}
+
+struct OnlyA {}
+
+impl A for OnlyA {
+    fn a(&self) -> String {
+        return "a";
+    }
+}
+
+struct OnlyB {}
+
+impl B for OnlyB {
+    fn b(&self) -> String {
+        return "b";
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+struct X {}
+
+impl<T: A> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.a();
+    }
+}
+
+impl<T: B> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.b();
+    }
+}
+
+impl<I: A> IndexValue<I> for X {
+    type Output = String;
+
+    fn index_value(&self, index: I) -> String {
+        return `[${index.a()}]`;
+    }
+}
+
+impl<J: B> IndexValue<J> for X {
+    type Output = String;
+
+    fn index_value(&self, index: J) -> String {
+        return `[${index.b()}]`;
+    }
+}
+
+trait Mk<T> with () {
+    fn mk(v: T) -> String;
+}
+
+impl<T: A> Mk<T> for X {
+    fn mk(v: T) -> String {
+        return `mk ${v.a()}`;
+    }
+}
+
+impl<T: B> Mk<T> for X {
+    fn mk(v: T) -> String {
+        return `mk ${v.b()}`;
+    }
+}
+
+impl Mk<OnlyA> for X {
+    fn mk(v: OnlyA) -> String {
+        return "written";
+    }
+}
+
+test {
+    let x = X {};
+    assert x.put(OnlyA {}) == "a" && x.put(OnlyB {}) == "b";
+    assert x[OnlyA {}] == "[a]" && x[OnlyB {}] == "[b]";
+    assert X::mk(OnlyA {}) == "written" && X::mk(OnlyB {}) == "mk b";
+}

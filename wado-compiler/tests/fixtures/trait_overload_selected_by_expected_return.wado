@@ -1,0 +1,55 @@
+// Where the arguments leave several of a receiver's impls of one trait, the
+// type the context expects of the result selects among them, as an annotated
+// argument does: on a method call, a static call, and a call through bounds.
+
+trait Mk<T> with () {
+    fn mk() -> T;
+    fn get(&self) -> T;
+}
+
+struct X {}
+
+impl Mk<i32> for X {
+    fn mk() -> i32 {
+        return 1;
+    }
+
+    fn get(&self) -> i32 {
+        return 2;
+    }
+}
+
+impl Mk<String> for X {
+    fn mk() -> String {
+        return "mk";
+    }
+
+    fn get(&self) -> String {
+        return "get";
+    }
+}
+
+fn through_bounds<T: Mk<i32> + Mk<String>>(t: &T) -> i32 {
+    let s: String = t.get();
+    let n: i32 = T::mk();
+    return n + s.len();
+}
+
+test "a method call" {
+    let x = X {};
+    let n: i32 = x.get();
+    let s: String = x.get();
+    assert n == 2;
+    assert s == "get";
+}
+
+test "a static call" {
+    let n: i32 = X::mk();
+    let s: String = X::mk();
+    assert n == 1;
+    assert s == "mk";
+}
+
+test "a call through bounds" {
+    assert through_bounds(&X {}) == 4;
+}

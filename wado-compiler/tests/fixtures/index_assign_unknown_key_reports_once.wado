@@ -1,0 +1,12 @@
+// A key that does not resolve is its own error: the write reports no impl
+// missing at the error type behind it.
+test {
+    let mut arr: List<i32> = [1, 2];
+    arr[nope] = 3;
+}
+
+__DATA__
+{
+    "compile_error": "unknown identifier 'nope'",
+    "compile_errors_not_contains": ["IndexAssign"]
+}

@@ -1,0 +1,37 @@
+// A call through a subscript receiver settles an impl parameter only the
+// trait reference names, as any other call does.
+use { println, Stdout } from "core:cli";
+
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+trait Put<T> with () {
+    fn put(&mut self, v: T) -> String;
+}
+
+struct X {
+    n: i32,
+}
+
+impl<T: Show> Put<T> for X {
+    fn put(&mut self, v: T) -> String {
+        self.n += 1;
+        return `${self.n} ${v.show()}`;
+    }
+}
+
+export fn run() with Stdout {
+    let mut xs: List<X> = [X { n: 0 }];
+    println(xs[0].put(7 as i64));
+    println(xs[0].put(8 as i64));
+}
+
+__DATA__
+{"stdout": "1 i64 7\n2 i64 8\n"}

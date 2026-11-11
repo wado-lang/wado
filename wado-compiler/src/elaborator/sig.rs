@@ -614,15 +614,7 @@ impl ImplSig {
         if positions == 0 || receiver_args.len() < positions {
             return None;
         }
-        let mut slots = table.impl_slots(self.def, &receiver_args[..positions]);
-        for (index, &arg) in (positions as u32..).zip(&receiver_args[positions..]) {
-            let slot = TypeParamId {
-                owner: self.def,
-                index,
-            };
-            slots.entry(slot).or_insert(arg);
-        }
-        Some(slots)
+        Some(table.impl_spelled_slots(self.def, receiver_args))
     }
 }
 

@@ -16,7 +16,8 @@ use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias, split_namespace_member,
+    DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias, repeat_pack_name,
+    split_namespace_member,
 };
 use crate::symbol::{GlobalSymbol, Symbol, SymbolKind, SymbolTable};
 use crate::tir::EffectRef;
@@ -116,6 +117,9 @@ pub struct Resolutions {
     /// Each `impl` block's reference site for the head of the type it is for,
     /// keyed by the block, where that type has a head.
     impl_heads: IndexMap<AstId, AstId>,
+    /// Each `..X` site repeating the non-pack `X`, keyed by the site, and the
+    /// pack its signature minted for the repetition's length.
+    repeat_packs: IndexMap<AstId, AstId>,
 }
 
 /// What every module can see, by layer.
@@ -297,6 +301,7 @@ impl Resolutions {
         let mut fn_bound_binders = IndexMap::default();
         let mut binder_owners = IndexMap::default();
         let mut impl_heads = IndexMap::default();
+        let mut repeat_packs = IndexMap::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
                 module: module_source,
@@ -315,6 +320,7 @@ impl Resolutions {
                 fn_bound_binders: &mut fn_bound_binders,
                 binder_owners: &mut binder_owners,
                 impl_heads: &mut impl_heads,
+                repeat_packs: &mut repeat_packs,
                 derived_names: Vec::new(),
                 pattern_site: PatternSite::Test,
                 pattern_names: None,
@@ -340,7 +346,15 @@ impl Resolutions {
             fn_bound_binders,
             binder_owners,
             impl_heads,
+            repeat_packs,
         }
+    }
+
+    /// The pack the signature minted for the `..X` written at `site`, where
+    /// `X` names no pack and the spread repeats it.
+    #[must_use]
+    pub fn repeat_pack(&self, site: AstId) -> Option<AstId> {
+        self.repeat_packs.get(&site).copied()
     }
 
     /// The declaration `Self` stands for inside the `impl` block `impl_`: the
@@ -734,6 +748,7 @@ struct Resolver<'a> {
     fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
     binder_owners: &'a mut IndexMap<AstId, DefId>,
     impl_heads: &'a mut IndexMap<AstId, AstId>,
+    repeat_packs: &'a mut IndexMap<AstId, AstId>,
     /// Items declared inside the function body being walked, innermost block
     /// last. Filled as the walk passes each declaration, because a local item
     /// is visible only after it — like a `let`, and unlike a module-level
@@ -1502,8 +1517,14 @@ impl AstVisitor<'_> for Resolver<'_> {
 
     fn visit_type(&mut self, ty: &Type) {
         match ty {
-            Type::Named(named) | Type::TypePackSpread(named) => {
-                self.record_name(named.id, &named.name);
+            Type::Named(named) => self.record_name(named.id, &named.name),
+            Type::TypePackSpread(spread) => {
+                self.record_name(spread.id, &spread.name);
+                // The parser mints the pack under a name no source spells, so
+                // only this walk can tie the spread to it.
+                if let Some(pack) = self.binder(&repeat_pack_name(&spread.name)) {
+                    self.repeat_packs.insert(spread.id, pack);
+                }
             }
             Type::Generic(generic) => {
                 self.record_name(generic.id, &generic.name);

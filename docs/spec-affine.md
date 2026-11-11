@@ -168,7 +168,8 @@ test {
 
 A type parameter or an associated type without the mark may be copied. An
 affine argument for one, or an `impl` binding an affine type to one, is an error
-naming it (`AFFINE_ARGUMENT`).
+naming it (`AFFINE_ARGUMENT`). A trait's parameter is one too: `impl Tr<Conn>`
+and a bound `S: Tr<Conn>` are errors under `trait Tr<T>`.
 
 <!-- {"fixture":"affine_argument_for_unmarked_param.wado"} -->
 
@@ -188,7 +189,10 @@ method restates every `affine` its trait's method declares, since a call
 through the trait may hand it an affine argument.
 
 An `impl` whose type parameter is unmarked does not apply to an affine
-argument, so its methods are not found on that instance.
+argument, so its methods are not found on that instance. A trait's mark does
+not reach the parameter an `impl` binds to it: under `trait Sink<affine U>`,
+`impl<U> Sink<U>` may copy its `U`, and a call handing it an affine one is the
+error.
 
 <!-- {"fixture":"affine_argument_misses_unmarked_impl.wado"} -->
 

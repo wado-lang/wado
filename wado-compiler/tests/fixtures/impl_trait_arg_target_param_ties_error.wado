@@ -1,0 +1,31 @@
+// `T` in `Tr<T>` is the target's, so `impl<T> Tr<T> for Wrap<T>` writes its
+// trait argument at `Wrap<i32>` as much as `impl<U> Tr<i32> for Wrap<U>` does:
+// the two tie rather than one covering the other.
+struct Wrap<T> {
+    v: T,
+}
+
+trait Tr<A> with () {
+    fn m(&self, a: A) -> String;
+}
+
+impl<T> Tr<T> for Wrap<T> {
+    fn m(&self, a: T) -> String {
+        return "same";
+    }
+}
+
+impl<U> Tr<i32> for Wrap<U> {
+    fn m(&self, a: i32) -> String {
+        return "i32";
+    }
+}
+
+test {
+    let w = Wrap { v: 1 };
+    let a: i32 = 2;
+    assert w.m(a) == "i32";
+}
+
+__DATA__
+{"compile_error": ":27:12: analysis error: ambiguous impls of 'Tr' for 'Wrap<i32>'"}

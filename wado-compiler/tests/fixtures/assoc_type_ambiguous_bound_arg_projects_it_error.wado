@@ -1,0 +1,20 @@
+// `T::Out` is ambiguous between `Conv` and `Other`, and `Conv`'s argument
+// projects `T::Out` itself. Telling apart two bounds on one trait reads their
+// arguments, so the check asked for `T::Out` again from inside its own ask and
+// overflowed the stack. Two bounds on different traits need no arguments read.
+
+trait Conv<X> with () {
+    type Out;
+}
+
+trait Other with () {
+    type Out;
+}
+
+fn f<T: Conv<T::Out> + Other>(_t: T) -> i32 {
+    let _x: Option<T::Out> = null;
+    return 1;
+}
+
+__DATA__
+{"compile_error": ":14:14: analysis error: ambiguous associated type 'T::Out': declared by 'Conv<T::Out>' and 'Other'; pin each to a type parameter of its own, e.g. 'T: Conv<T::Out, Out = P> + Other<Out = Q>', and write that parameter"}

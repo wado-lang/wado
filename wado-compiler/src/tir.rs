@@ -2310,6 +2310,16 @@ pub fn solve_row(
     out
 }
 
+/// Impl block `owner`'s slots filled by `args`, one per slot in slot order:
+/// the inverse of [`impl_args_in_slot_order`].
+#[must_use]
+pub fn slots_from_impl_args(owner: DefId, args: &[TypeId]) -> TypeArgMap {
+    (0..)
+        .zip(args)
+        .map(|(index, &ty)| (TypeParamId { owner, index }, ty))
+        .collect()
+}
+
 /// What fills each of impl block `owner`'s first `count` slots, in slot order:
 /// `slots` at a parameter's, else the receiver's argument at a position the
 /// target writes concretely. `None` where a slot is unfilled, which no

@@ -619,14 +619,14 @@ fail. `TryFrom` returns a `Result`, and its failure is an `Error`:
 <!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-pub affine trait From<T> with () {
+pub affine trait From<affine T> with () {
     /// Converts a value of type `T` into `Self`.
     fn from(value: T) -> Self;
 }
 
 /// Fallible conversion trait. `Err: Error`, so a caller reaching the failure
 /// through the bound can always report its reason.
-pub affine trait TryFrom<T> with () {
+pub affine trait TryFrom<affine T> with () {
     type Err: Error;
 
     /// Attempts to convert a value of type `T` into `Self`.

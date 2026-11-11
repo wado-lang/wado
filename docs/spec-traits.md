@@ -219,7 +219,10 @@ blanket impls. They are ranked:
    the receiver (`impl Tag for Box_<i32>`) comes first, then one written for its
    head (`impl<T> Tag for Box_<T>`), then a value blanket
    (`impl<T: Bound> Tr for T`). A blanket names no type at all, only a condition
-   the receiver meets. See [Specific Impls Win](#specific-impls-win).
+   the receiver meets. At one argument list, an impl writing the trait's
+   arguments (`impl Eq<String> for Tag`) comes before one writing a parameter
+   there (`impl<R> Eq<R> for Tag`). See
+   [Specific Impls Win](#specific-impls-win).
 
 A candidate's level is the level it is selected at. An impl whose target is the
 newtype sits at the newtype's level and one targeting the base at the base's. A
@@ -688,6 +691,33 @@ test {
 
 The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
 
+### Trait Arguments Meet the Trait's Parameter Bounds
+
+A trait reference's arguments must meet the bounds the trait puts on its parameters, with `Self` standing for the implementing or bounded type. This holds of an `impl` header and of a bound alike. As in Rust, nothing implies those bounds onto the arguments: an impl parameter has only the bounds the impl writes, so it restates what the trait needs.
+
+<!-- {"fixture":"impl_trait_arg_unmet_param_bound_error.wado"} -->
+
+```wado
+trait Q with () {
+    type QOut;
+    fn q() -> i32;
+}
+
+trait P with () {}
+
+trait Tr<T: Q> with () {
+    fn run(&self) -> i32;
+}
+
+struct X {}
+
+impl<U: P> Tr<U> for X {  // ERROR: type 'U' does not implement trait 'Q'
+    fn run(&self) -> i32 {
+        return 1;
+    }
+}
+```
+
 ### Trait Bounds
 
 Type parameters can have trait bounds that constrain what types can be used:
@@ -937,6 +967,33 @@ instantiation takes the general one. Declaration order does not matter. This is
 the generality rank of [The Order](#the-order), which also puts either of these
 above a value blanket (`impl<T: Bound> Tag for T`).
 
+The trait's arguments are read the same way. An impl writing them wins over one
+leaving a parameter there, at the argument list both reach, whether a call names
+the trait through an operator, a method or a bound:
+
+<!-- {"fixture":"impl_trait_arg_specific_wins.wado"} -->
+
+```wado
+impl Eq<String> for Tag { fn eq(&self, other: &String) -> bool { return self.name == *other; } }      // specific — wins for String
+impl<R: Text> Eq<R> for Tag { fn eq(&self, other: &R) -> bool { return self.name == other.text(); } } // general
+
+fn same<A: Eq<U>, U>(a: A, u: U) -> bool {
+    return a == u;
+}
+
+test {
+    let t = Tag { name: "x" };
+    let s: String = "x";
+    assert t == "x" && t == Name { s: "x" } && t != Name { s: "y" };
+    assert t.eq(&s) && !t.eq(&Name { s: "y" });
+    assert same(t, "x") && same(t, Name { s: "x" });
+}
+```
+
+Two impls that both leave the argument to the call cover the same function
+wherever both bounds hold, and nothing ranks them, so a call reaching both
+reports as two head impls do ([Ambiguity](#ambiguity)).
+
 This holds only for a trait impl, where the trait gives both methods one
 signature. An inherent impl carries no such contract, so two inherent blocks
 that reach a common receiver may not both define one method name:
@@ -1057,10 +1114,34 @@ test {
 }
 ```
 
+So does the type the context expects of the call's result, once the arguments
+have narrowed the set: a `let` annotation, a parameter, a return. It selects as
+an annotated argument does, on a method call, a static call, and a call through
+bounds, and it never overrides the arguments: where no survivor returns that
+type, selection proceeds as if the context expected nothing.
+
+<!-- {"fixture":"trait_overload_selected_by_expected_return.wado"} -->
+
+```wado
+test "a static call" {
+    let n: i32 = X::mk();
+    let s: String = X::mk();
+    assert n == 1;
+    assert s == "mk";
+}
+```
+
 This is deliberate: letting the literal's default type decide would make
 adding an `impl Take<i32>` silently retarget every existing call that meant
 `Take<i64>`. The error names each argument that came up empty and why, so it
 says whether an annotation would fix the call.
+
+An impl that leaves a trait argument to the call (`impl<T: Show> Take<T> for bool`) joins the set too. It names the list the argument's type fixes, so an
+`i64` argument reaches `Take<i64>` through it and through `impl Take<i64> for bool` alike. An argument whose type the call does not pin fixes no list, and the
+impl names every list the argument could take: a bare literal reaches several
+through it, and stays ambiguous beside the written impl as it does beside
+another width. An operator's right operand and a subscript's key select as an
+argument does.
 
 Survivors naming one trait instantiation are ranked as any candidates are, which
 is where [Specific Impls Win](#specific-impls-win) applies. Survivors naming
@@ -1192,9 +1273,11 @@ and no written `Eq` gets its `Eq` from `cmp`, not from its members:
 `a == b` is `a.cmp(&b) == Ordering::Equal`. A type with a written `Eq` derives
 no `Ord`, so a use that needs one is a compile error until `cmp` is written
 too. A newtype writing `eq` alone inherits no `Ord` from its base either, and a
-newtype over it none from it. Only `Eq<Self>` counts here; an `Eq<Rhs>` for
-another type has no `Ord` to agree with, and leaves `Eq<Self>` to derive as if
-it were not written.
+newtype over it none from it. Only an impl naming `Eq<Self>` counts here, and
+one leaving the argument open (`impl<R: Show> Eq<R> for Tag`) names it, as
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists) says. An
+`Eq<Rhs>` for another type has no `Ord` to agree with, and leaves `Eq<Self>` to
+derive as if it were not written.
 [Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what holds when
 both are written.
 

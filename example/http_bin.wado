@@ -150,7 +150,7 @@ fn method_name(m: Method) -> String {
 fn headers_to_map(headers: &Headers) -> TreeMap<String, String> {
     let mut map: TreeMap<String, String> = {};
     for let [name, value] of headers.copy_all() {
-        map[name] = String::from_utf8_lossy(value);
+        map[name as String] = String::from_utf8_lossy(value);
     }
     return map;
 }

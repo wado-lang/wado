@@ -1,0 +1,19 @@
+// A `&mut` subscript reaches an `IndexRefMut<I>` generic in its key, for a
+// method call on the element and an assignment into it alike.
+
+trait Key with () { fn at(&self) -> i32; }
+impl Key for i32 { fn at(&self) -> i32 { return *self; } }
+struct Cell { n: i32 }
+impl Cell { fn bump(&mut self) { self.n += 1; } }
+struct C { cells: List<Cell> }
+impl<I: Key> IndexRefMut<I> for C {
+    type Output = Cell;
+    fn index_ref_mut(&mut self, index: I) -> &mut Cell { return &mut self.cells[index.at()]; }
+}
+test {
+    let mut c = C { cells: [Cell { n: 1 }] };
+    c[0].bump();
+    assert c.cells[0].n == 2;
+    c[0].n = 7;
+    assert c.cells[0].n == 7;
+}

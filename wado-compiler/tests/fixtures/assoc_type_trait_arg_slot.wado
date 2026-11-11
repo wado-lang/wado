@@ -1,0 +1,8 @@
+// An associated type written with a slot only the trait argument fills
+// answers at the argument a bound names.
+
+trait Tr<T> with () { type Out; fn out(&self, t: T) -> Self::Out; }
+struct Host {}
+impl<T> Tr<T> for Host { type Out = T; fn out(&self, t: T) -> T { return t; } }
+fn via<H: Tr<i32>>(h: H) -> H::Out { return h.out(5); }
+test { let v: i32 = via(Host {}); assert v == 5; }

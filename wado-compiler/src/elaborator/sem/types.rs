@@ -729,8 +729,11 @@ pub(crate) struct FromCallFacts {
     /// The `From<…>` the callee's name carries: as the selected block writes
     /// it, or as the `?` asks it where no block is selected.
     pub(crate) trait_name: FqTraitName,
-    /// The target's arguments a generic block is instantiated at; empty for
-    /// a concrete one.
+    /// The target's arguments at a generic block, which the callee's name
+    /// carries; empty for a concrete one.
+    pub(crate) receiver_args: Vec<TypeId>,
+    /// What a generic block's instance is keyed by: `receiver_args`, or every
+    /// slot where the trait arguments name one the target does not.
     pub(crate) impl_type_args: Vec<TypeId>,
 }
 

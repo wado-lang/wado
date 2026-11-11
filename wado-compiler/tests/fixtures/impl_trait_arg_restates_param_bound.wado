@@ -1,0 +1,45 @@
+// An impl restating the bound its trait argument needs, `impl<U: P + Q>
+// Tr<U> for W<U>`, reaches `Q`'s methods and associated types on `U` through
+// that bound of its own.
+
+trait Q with () {
+    type QOut;
+    fn q() -> i32;
+}
+
+trait P with () {}
+
+trait Tr<T: Q> with () {
+    fn run(&self) -> i32;
+}
+
+struct W<T> {}
+
+struct Y {}
+
+impl Q for Y {
+    type QOut = i32;
+    fn q() -> i32 {
+        return 7;
+    }
+}
+
+impl P for Y {}
+
+impl<U: P + Q> Tr<U> for W<U> {
+    fn run(&self) -> i32 {
+        let _o: Option<U::QOut> = null;
+        return U::q();
+    }
+}
+
+fn run_at<U: Q, S: Tr<U>>(s: S) -> i32 {
+    return s.run();
+}
+
+test {
+    assert run_at::<Y, W<Y>>(W::<Y> {}) == 7;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,36 @@
+// A trait's `affine U` does not reach the parameter an impl binds to it: the
+// impl's own declaration decides. `impl<U> Sink<U>` may copy `v`, since an
+// unmarked parameter keeps the impl off an affine argument instead.
+affine struct Conn {
+    n: i32,
+}
+
+impl Drop for Conn {
+    fn drop(self) {}
+}
+
+trait Sink<affine U> with () {
+    fn put(&mut self, v: U) -> i32;
+}
+
+struct S {}
+
+impl<U> Sink<U> for S {
+    fn put(&mut self, v: U) -> i32 {
+        let _a = v;
+        let _b = v;
+        return 0;
+    }
+}
+
+export fn run() {
+    let mut s = S {};
+    let _copied = s.put(1);
+    let _moved = s.put(Conn { n: 1 });
+}
+
+__DATA__
+{
+    "compile_error": ":29:18: analysis error: affine type 'Conn' given for 'U', which may be copied; `affine U` would admit it",
+    "compile_error_codes": ["AFFINE_ARGUMENT"]
+}

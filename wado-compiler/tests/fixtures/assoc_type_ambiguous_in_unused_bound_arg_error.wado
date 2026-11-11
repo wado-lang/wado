@@ -1,0 +1,21 @@
+// A bound's arguments are well-formed or the bound is an error, whether or not
+// anything reads them: `T::Out` in `Conv<T::Out>` is ambiguous between `Conv`
+// and `Other` though nothing else names it. Skipping the arguments of a bound
+// whose trait puts no bound on its parameters accepted this.
+
+trait Conv<X> with () {
+    type Out;
+}
+
+trait Other with () {
+    type Out;
+}
+
+fn f<T: Conv<T::Out> + Other>(_t: T) -> i32 {
+    return 1;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":14:14: analysis error: ambiguous associated type 'T::Out'"}

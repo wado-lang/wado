@@ -1334,8 +1334,8 @@ pub trait LenientFromStr with () {
 
 // Value-to-value conversion. `Err: Error` for the same reason FromStr's is.
 // The stdlib impls all use `ConvertError`.
-pub affine trait From<T> with () { fn from(value: T) -> Self; }
-pub affine trait TryFrom<T> with () {
+pub affine trait From<affine T> with () { fn from(value: T) -> Self; }
+pub affine trait TryFrom<affine T> with () {
     type Err: Error;
     fn try_from(value: T) -> Result<Self, Self::Err>;
 }

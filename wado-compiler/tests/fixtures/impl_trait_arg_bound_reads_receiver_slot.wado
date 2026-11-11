@@ -1,0 +1,10 @@
+// A bound on a slot the trait argument fills reads the slots the receiver
+// fills: `B: Rel<A>` asks `Key: Rel<i32>` on `Boxed<i32>`.
+
+trait Rel<A> with () { fn rel(&self) -> i32; }
+struct Key { k: i32 }
+impl Rel<i32> for Key { fn rel(&self) -> i32 { return self.k; } }
+trait Put<B> with () { fn put(&self, b: B) -> i32; }
+struct Boxed<A> { a: A }
+impl<A, B: Rel<A>> Put<B> for Boxed<A> { fn put(&self, b: B) -> i32 { return b.rel(); } }
+test { let bx = Boxed { a: 1 }; assert bx.put(Key { k: 5 }) == 5; }

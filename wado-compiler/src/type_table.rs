@@ -32,7 +32,8 @@ use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
     RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr,
     TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId,
-    is_open_row, positional_substitution, projection_arguments, range_item, solve_row,
+    is_open_row, positional_substitution, projection_arguments, range_item, slots_from_impl_args,
+    solve_row,
 };
 
 #[derive(Debug, Clone)]
@@ -1163,16 +1164,11 @@ impl TypeTable {
     }
 
     fn collect_type_params(&self, id: TypeId, found: &mut TypeArgMap) {
-        match self.get(id) {
-            ResolvedType::TypeParam { id: param, .. }
-            | ResolvedType::TypePack { id: param, .. } => {
-                found.insert(*param, id);
+        match self.substitution_slot(id) {
+            Some(slot) => {
+                found.insert(slot, id);
             }
-            // Its walk's unroll answers it, at the walk's slot.
-            ResolvedType::PackElement { pack, walk } => {
-                found.insert(self.pack_id(*pack).walk_slot(*walk), id);
-            }
-            _ => {
+            None => {
                 self.any_constituent(id, &mut |t| {
                     self.collect_type_params(t, found);
                     false
@@ -2305,6 +2301,15 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { id, .. } | ResolvedType::TypePack { id, .. } => Some(*id),
             _ => None,
+        }
+    }
+
+    /// The slot a substitution fills `id` under: a parameter's or a pack's
+    /// own, and a pack element's walk slot, which unrolling its walk fills.
+    pub fn substitution_slot(&self, id: TypeId) -> Option<TypeParamId> {
+        match self.get(id) {
+            ResolvedType::PackElement { pack, walk } => Some(self.pack_id(*pack).walk_slot(*walk)),
+            _ => self.type_param_id(id),
         }
     }
 
@@ -4295,8 +4300,10 @@ impl TypeTable {
         {
             return Some(resolved);
         }
-        let type_args = self.nominal_type_args(concrete_id)?;
         let decl = self.decl_of_type(concrete_id)?;
+        // A declaration taking no parameters is no instance, and its impls
+        // read no arguments off it.
+        let type_args = self.nominal_type_args(concrete_id).unwrap_or_default();
         let answers = self.answers_reaching(
             self.generic_assoc_type_defs.get(&GenericAssocTypeKey {
                 target_decl: decl,
@@ -4309,9 +4316,14 @@ impl TypeTable {
         // A generic impl records the arguments it writes, which may read its
         // own parameters (`impl<T> Mix<T> for G<T>`), so each is compared at
         // the instance's arguments, defaults filled as `wanted`'s are.
+        // A slot only the trait reference binds (`T` in `impl<T> Tr<T> for
+        // Host`) is read off `wanted`.
         let reached = trait_args.and_then(|wanted| {
-            answers.0.iter().find(|entry| {
-                let slots = self.entry_slots_mut(entry, decl, &type_args);
+            answers.0.iter().find_map(|entry| {
+                let mut slots = self.entry_slots_mut(entry, decl, &type_args);
+                if let Some(def) = entry.impl_def {
+                    self.bind_impl_slots_asked(def, wanted, concrete_id, &mut slots);
+                }
                 let at = TraitRef::new(
                     *trait_key,
                     entry
@@ -4322,13 +4334,13 @@ impl TypeTable {
                 );
                 self.filled_trait_args(&at, concrete_id)
                     .is_some_and(|filled| filled == wanted)
+                    .then(|| self.substitute_type_params(entry.answer, &slots))
             })
         });
-        let entry = match reached {
-            Some(entry) => entry,
-            None => answers.bare_entry()?,
+        if reached.is_some() {
+            return reached;
         }
-        .clone();
+        let entry = answers.bare_entry()?.clone();
         let slots = self.entry_slots_mut(&entry, decl, &type_args);
         Some(self.substitute_type_params(entry.answer, &slots))
     }
@@ -5720,7 +5732,7 @@ impl TypeTable {
     /// awaits substitution, and the parameter it is.
     pub fn mark_receiver(&self, info: &mut name::LocalMethodName, receiver: TypeId) {
         info.is_type_param_receiver = self.receiver_head_awaits_substitution(receiver);
-        info.receiver_param = self.type_param_id(receiver);
+        info.receiver_param = self.substitution_slot(receiver);
     }
 
     /// Whether a receiver of type `id` names no dispatch head until
@@ -5806,6 +5818,22 @@ impl TypeTable {
         // `T` mentions `T` as well as the pack repeating it.
         self.any_constituent(id, &mut |t| {
             self.collect_type_params_in(t, params);
+            false
+        });
+    }
+
+    /// The parameters matching `id` against a type binds: those
+    /// [`Self::type_params_in`] finds outside any projection, which names no
+    /// type to match until its base is bound.
+    fn type_params_matched_in(&self, id: TypeId, params: &mut IndexSet<TypeParamId>) {
+        if matches!(self.get(id), ResolvedType::AssocTypeProjection { .. }) {
+            return;
+        }
+        if let Some(param) = self.type_param_id(id) {
+            params.insert(param);
+        }
+        self.any_constituent(id, &mut |t| {
+            self.type_params_matched_in(t, params);
             false
         });
     }
@@ -6504,6 +6532,9 @@ struct ImplTarget {
     /// The arguments the block's trait reference writes, empty for an
     /// inherent block.
     trait_args: Vec<TypeId>,
+    /// The slots only `trait_args` determine (`G` in `impl<G: Back> Shown<G>
+    /// for i32`), each the call's to bind or infer.
+    trait_arg_slots: Vec<TypeParamId>,
 }
 
 /// Slots of an impl block that a bound determines rather than its target:
@@ -6550,6 +6581,23 @@ impl TypeTable {
         projections: Vec<ImplProjection>,
         trait_args: Vec<TypeId>,
     ) {
+        // The whole target, since a value blanket's receiver is a parameter no
+        // head argument names. One only under a projection there (`G` in
+        // `Pair<G::Two<i32>>`) is the trait reference's to bind.
+        let mut determined = IndexSet::default();
+        self.type_params_matched_in(whole, &mut determined);
+        determined.extend(
+            projections
+                .iter()
+                .flat_map(|p| self.type_params_in(p.pattern)),
+        );
+        let trait_arg_slots: Vec<TypeParamId> = trait_args
+            .iter()
+            .flat_map(|&ty| self.type_params_in(ty))
+            .filter(|slot| slot.owner == def && !determined.contains(slot))
+            .collect::<IndexSet<_>>()
+            .into_iter()
+            .collect();
         self.impl_targets.insert(
             def,
             ImplTarget {
@@ -6557,29 +6605,30 @@ impl TypeTable {
                 args,
                 projections,
                 trait_args,
+                trait_arg_slots,
             },
         );
     }
 
-    /// Whether impl block `def`'s trait reference names a parameter its target
-    /// does not: `G` in `impl<G: Back> Shown<G> for i32`, or any in a
-    /// projection target, `impl<G: Back> Shown<G> for G::T`. Only a call's
-    /// trait arguments set one, so its instances differ by them alone.
+    /// The slots of impl block `def` only its trait arguments determine: `G`
+    /// in `impl<G: Back> Shown<G> for i32`, or one the target names only under
+    /// a projection, `impl<G: Back> Shown<G> for G::T`.
+    pub fn impl_trait_arg_slots(&self, def: DefId) -> &[TypeParamId] {
+        &self.impl_target(def).trait_arg_slots
+    }
+
+    /// Whether impl block `def` has a slot only its trait arguments determine
+    /// ([`Self::impl_trait_arg_slots`]). Its instances differ by them alone, so
+    /// one is keyed by every slot in slot order rather than by the receiver's
+    /// arguments.
     pub fn impl_trait_sets_params(&self, def: DefId) -> bool {
-        let target = self.impl_target(def);
-        let in_target = if matches!(
-            self.get(target.whole),
-            ResolvedType::AssocTypeProjection { .. }
-        ) {
-            IndexSet::default()
-        } else {
-            self.type_params_in(target.whole)
-        };
-        target.trait_args.iter().any(|&arg| {
-            self.type_params_in(arg)
-                .iter()
-                .any(|param| param.owner == def && !in_target.contains(param))
-        })
+        !self.impl_trait_arg_slots(def).is_empty()
+    }
+
+    /// The arguments impl block `def`'s trait reference writes, empty for an
+    /// inherent block.
+    pub fn impl_trait_args(&self, def: DefId) -> &[TypeId] {
+        &self.impl_target(def).trait_args
     }
 
     /// Impl block `def`'s target head at `head_args`; `None` where the target
@@ -6631,6 +6680,40 @@ impl TypeTable {
         slots
     }
 
+    /// The slots impl block `def`'s target binds at `receiver`: its positions
+    /// at the link of the receiver's newtype chain the target declares, or, a
+    /// target naming no declaration (a value blanket's parameter), the
+    /// receiver whole.
+    pub fn impl_receiver_slots(&mut self, def: DefId, receiver: TypeId) -> TypeArgMap {
+        let Some(decl) = self.impl_target_decl(def) else {
+            let mut slots = TypeArgMap::default();
+            self.bind_each_into(&[self.impl_target_whole(def)], &[receiver], &mut slots);
+            self.project_impl_slots(def, &mut slots);
+            return slots;
+        };
+        if self.impl_target_args(def).is_empty() {
+            return self.impl_slots(def, &[]);
+        }
+        let args = self
+            .args_at_decl(receiver, decl)
+            .expect("a receiver reaches the declaration its impl targets");
+        self.impl_slots(def, &args)
+    }
+
+    /// The slots of impl block `def` a spelled list fills: its target's
+    /// positions as [`Self::impl_slots`] reads them, then the slots past them
+    /// by index.
+    pub fn impl_spelled_slots(&mut self, def: DefId, spelled: &[TypeId]) -> TypeArgMap {
+        let positions = self.impl_target_args(def).len().min(spelled.len());
+        let mut slots = self.impl_slots(def, &spelled[..positions]);
+        for (index, &arg) in (positions as u32..).zip(&spelled[positions..]) {
+            slots
+                .entry(TypeParamId { owner: def, index })
+                .or_insert(arg);
+        }
+        slots
+    }
+
     /// Bind each of `written` against the one in `concrete` at its position
     /// into `slots`, keeping a slot already filled.
     pub fn bind_each_into(&self, written: &[TypeId], concrete: &[TypeId], slots: &mut TypeArgMap) {
@@ -6646,20 +6729,19 @@ impl TypeTable {
     /// Impl block `def`'s receiver and trait arguments at the instance `args`
     /// key, one argument per slot in slot order.
     pub fn impl_instance_at(&mut self, def: DefId, args: &[TypeId]) -> (TypeId, Vec<TypeId>) {
-        let slots: TypeArgMap = args
-            .iter()
-            .zip(0..)
-            .map(|(&ty, index)| (TypeParamId { owner: def, index }, ty))
-            .collect();
+        let slots = slots_from_impl_args(def, args);
         let receiver = self.substitute_type_params(self.impl_target_whole(def), &slots);
-        let trait_args = self
-            .impl_target(def)
+        (receiver, self.impl_trait_args_at(def, &slots))
+    }
+
+    /// The arguments impl block `def`'s trait reference writes, at `slots`.
+    pub fn impl_trait_args_at(&mut self, def: DefId, slots: &TypeArgMap) -> Vec<TypeId> {
+        self.impl_target(def)
             .trait_args
             .clone()
             .into_iter()
-            .map(|arg| self.substitute_type_params(arg, &slots))
-            .collect();
-        (receiver, trait_args)
+            .map(|arg| self.substitute_type_params(arg, slots))
+            .collect()
     }
 
     /// Fill the slots of impl block `def` its trait reference binds from the

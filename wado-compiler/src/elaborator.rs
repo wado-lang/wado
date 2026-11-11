@@ -263,22 +263,15 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
         let owner = self.tysys.resolutions.defs().def_at(impl_block.id);
-        for param in &impl_block.type_params {
+        // What each of the block's parameters binds, by position; `None` for
+        // one taking no slot.
+        let mut bound_to = vec![None; impl_block.type_params.len()];
+        for (at, param) in impl_block.type_params.iter().enumerate() {
             let Some(slot) = slots.of_name(&param.name) else {
                 continue;
             };
             // `<F: fn(...)>` is its signature, as a function's is: bound below.
             if !param.is_pack && param.has_fn_bound() {
-                continue;
-            }
-            // A name the enclosing frame already numbered keeps that number;
-            // renumbering it here would give one parameter two indices.
-            if self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(&param.name)
-            {
                 continue;
             }
             let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
@@ -292,18 +285,34 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 scope::BinderInScope::declared(slot, type_id, param),
                 Vec::new(),
             );
+            bound_to[at] = Some(type_id);
         }
         // A bound writing no `Self` is in force before the signatures are
-        // bound, which may project off it: `F: fn mut(I::Item) -> U`.
+        // bound, which may project off it: `F: fn mut(I::Item) -> U`. A
+        // signature's own bounds wait for it to be bound.
         let (early, late): (Vec<_>, Vec<_>) = impl_block
             .type_params
             .iter()
-            .partition(|param| !param.bounds.iter().any(ast::TraitBound::writes_self));
-        for param in early {
+            .enumerate()
+            .filter(|(_, param)| param.fills_impl_slot())
+            .partition(|(_, param)| {
+                (param.is_pack || !param.has_fn_bound())
+                    && !param.bounds.iter().any(ast::TraitBound::writes_self)
+            });
+        let mut owed = Vec::new();
+        let owe = |owed: &mut Vec<_>, bound_to: Option<TypeId>, bounds: &[scope::ScopedBound]| {
+            if let Some(type_id) = bound_to {
+                owed.extend(bounds.iter().map(|bound| (bound.clone(), type_id)));
+            }
+        };
+        for (at, param) in early {
             let bounds = self.scoped_bounds(param);
-            self.add_param_bounds(&param.name, bounds);
+            owe(&mut owed, bound_to[at], &bounds);
+            self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
-        self.bind_fn_bound_params(&impl_block.type_params);
+        for (at, signature) in self.bind_fn_bound_params(&impl_block.type_params) {
+            bound_to[at] = Some(signature);
+        }
         // Between the names and the rest of their bounds: the target is
         // resolved from the names, and a bound's `Self::Assoc` projects off the
         // target. What the target owes is asked once the bounds are in force.
@@ -311,11 +320,13 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             this.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref())
         });
         self.set_self_binding(implementing);
-        for param in late {
+        for (at, param) in late {
             let bounds = self.scoped_bounds(param);
-            self.add_param_bounds(&param.name, bounds);
+            owe(&mut owed, bound_to[at], &bounds);
+            self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.release_bounds_here(held);
+        self.check_bound_trait_args(owed);
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -2017,11 +2028,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             type_id: target_type_id,
             declaring_trait,
         });
-        let is_concrete = !self
-            .tysys
-            .type_table
-            .borrow()
-            .contains_type_param(target_type_id);
         // The header names one instantiation whatever it binds, so the
         // arguments are resolved once rather than per associated type.
         let impl_trait_ref = impl_block
@@ -2029,6 +2035,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .as_ref()
             .zip(trait_name.and_then(FqTraitName::canonical))
             .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
+        // A slot only the trait reference names (`T` in `impl<T> Tr<T> for
+        // Host`) leaves the header generic over a concrete target.
+        let is_concrete = {
+            let tt = self.tysys.type_table.borrow();
+            std::iter::once(target_type_id)
+                .chain(impl_trait_ref.iter().flat_map(|r| r.args.iter().copied()))
+                .all(|ty| !tt.contains_type_param(ty))
+        };
         for (name, type_id) in self.bind_impl_assoc_types(impl_block) {
             let Some(trait_ref) = impl_trait_ref.clone() else {
                 continue;

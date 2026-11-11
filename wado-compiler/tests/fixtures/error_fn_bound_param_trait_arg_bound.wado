@@ -1,0 +1,17 @@
+// A parameter bounded by a function type and a trait still owes the trait's
+// parameter bounds on the arguments it writes, on an impl and a function alike.
+use { println } from "core:cli";
+trait Q {}
+trait Tr<T: Q> { fn get(&self) -> i32; }
+struct Bad {}
+struct Holder<F> { f: F }
+impl<F: fn(i32) -> i32 + Tr<Bad>> Holder<F> {
+    fn call(&self) -> i32 { return (self.f)(1); }
+}
+fn generic<F: fn(i32) -> i32 + Tr<Bad>>(f: F) -> i32 { return f(1); }
+export fn run() {
+    println("ok");
+}
+
+__DATA__
+{"compile_error":":8:26: analysis error: type 'Bad' does not implement trait 'Q' required by bound on 'T'; 11:32: type 'Bad' does not implement trait 'Q' required by bound on 'T'"}

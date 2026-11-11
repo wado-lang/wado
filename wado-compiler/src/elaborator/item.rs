@@ -478,10 +478,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     fn saved_param_bounds(&self, name: &str) -> Vec<String> {
         self.saved()
-            .type_param_bounds
-            .get(name)
-            .map(|bounds| bounds.iter().map(|b| b.name.clone()).collect())
-            .unwrap_or_default()
+            .bounds_named(name)
+            .iter()
+            .map(|b| b.name.clone())
+            .collect()
     }
 
     /// `impl<T> Trait for Foo<T>` — the target's arguments name the impl's
@@ -658,9 +658,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 
     /// Enter an `impl` block's own frame: its target type parameters bound
-    /// into the positional slots the block is abstract over, the enclosing
-    /// bounds restored, the trait reference's parameters bound to the impl's
-    /// arguments, and `Self` set to the impl target.
+    /// into the positional slots the block is abstract over, the trait
+    /// reference's parameters bound to the impl's arguments, and `Self` set to
+    /// the impl target.
     ///
     /// The one definition of an impl's slot numbering. A method frame is this
     /// plus the method's own parameters, numbered past these slots.
@@ -693,9 +693,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 _ => Vec::new(),
             }
         };
-
-        let saved_bounds = self.saved().type_param_bounds.clone();
-        self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
 
         // Before the trait's parameters, since `impl<T> From<T> for ByAny`
         // spells both `T`: binding the trait's first claims the name for an
@@ -784,6 +781,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .trait_type
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
+        if let (Some(trait_), Some(trait_type)) = (trait_decl, &impl_block.trait_type) {
+            scope.check_trait_ref_arg_bounds(trait_, &trait_type_args, target, trait_type.span());
+        }
+        // `impl Tr for X` under `trait Tr<U = Self>` implements `Tr<X>`, the
+        // instantiation `Tr<X>` names: one list, whichever way it is spelled.
+        let trait_type_args = trait_decl
+            .and_then(|trait_| scope.trait_args_at(trait_, target, &trait_type_args))
+            .unwrap_or(trait_type_args);
 
         if let [source] = trait_type_args[..]
             && trait_decl.is_some()
@@ -977,7 +982,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
     ) -> MethodFrame {
-        let mut type_param_list = Vec::new();
         let method_def = self.tysys.def_at(func.id);
         let impl_type_params = self.enter_impl_frame(
             impl_def,
@@ -999,51 +1003,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             })
             .collect();
 
-        let offset = method_param_offset(&impl_type_params) as usize;
-        let mut next_idx = offset as u32;
-        for param in &func.type_params {
-            if param.is_effect {
-                continue;
-            }
-            let idx = next_idx;
-            let fn_bound_sig = if param.is_pack {
-                None
-            } else {
-                param.bounds.iter().find_map(|b| b.fn_signature.as_ref())
-            };
-            let (type_id, consumed_index) = match fn_bound_sig {
-                Some(sig) => (self.resolve_type(&ast::Type::Function(sig.clone())), false),
-                None => (
-                    self.tysys.type_table.borrow_mut().make_declared_param(
-                        method_def,
-                        param.name.clone(),
-                        idx,
-                        param.is_pack,
-                    ),
-                    true,
-                ),
-            };
-            let bounds = ScopedBound::pin_declared(param, self.self_binding());
-            self.bind_param(
-                &param.name,
-                BinderInScope::declared(idx, type_id, param),
-                bounds,
-            );
-            // Only push *real* type params (TypeParam-ids) into the
-            // inference cache list. Eagerly-resolved fn-bound params have a
-            // concrete Function type and aren't generics anymore.
-            if fn_bound_sig.is_none() {
-                type_param_list.push((param.name.clone(), type_id));
-            }
-            if consumed_index {
-                next_idx += 1;
-            }
-        }
-
+        // Only the parameters taking a slot reach the inference cache: an
+        // `fn`-bound one is its concrete signature, no generic.
+        let method_type_params = self.register_generic_params(
+            method_def,
+            &func.type_params,
+            method_param_offset(&impl_type_params),
+        );
         MethodFrame {
             impl_type_params,
             declaring_type_params,
-            method_type_params: type_param_list,
+            method_type_params,
         }
     }
 }
@@ -1863,7 +1833,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(declaring),
             )],
         );
-        let next_slot = scope.register_generic_params(trait_def, type_params, 1);
+        let slotted = scope.register_generic_params(trait_def, type_params, 1);
+        let next_slot = 1 + u32::try_from(slotted.len()).expect("fewer than 2^32 parameters");
         (scope, self_slot, next_slot)
     }
 
@@ -2634,7 +2605,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn resolve_function(&mut self, func: &Function) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.clear_binders();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.clear_bounds();
         scope.sem.decls.clear_fn_local_items();
 
         scope.reject_second_effect_param(&func.type_params);
@@ -3073,7 +3044,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 impl TypeSystem {
     /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag for
     /// [i32, i32]`): every target argument pins a position (`arg_pins`), a
-    /// parameter of `type_params` an `fn` bound fixes among them.
+    /// parameter of `type_params` an `fn` bound fixes among them. A parameter
+    /// the target never names (`S` in `impl<S> From<S> for Bx<i32>`) leaves
+    /// the block generic, one instance per argument the trait reference takes.
     pub(super) fn impl_is_concrete_instantiation(
         &self,
         impl_ty: &ast::Type,
@@ -3082,7 +3055,12 @@ impl TypeSystem {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
-        !args.is_empty() && args.iter().all(|a| self.arg_pins(a, type_params))
+        !args.is_empty()
+            && args.iter().all(|a| self.arg_pins(a, type_params))
+            && type_params
+                .iter()
+                .filter(|param| param.fills_impl_slot())
+                .all(|param| args.iter().any(|a| a.mentions(&param.name)))
     }
 }
 

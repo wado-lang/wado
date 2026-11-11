@@ -1,0 +1,61 @@
+// A literal settles no trait argument: `impl<T: Show> Put<T>` covers every
+// width `7` admits, so the written `Put<i64>` beside it is not chosen for it.
+// Adding an impl must not retarget a call that compiled before.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+impl Mark for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+impl Show for i32 {
+    fn show(&self) -> String {
+        return `i32 ${*self}`;
+    }
+}
+
+struct X {}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+impl Put<i64> for X {
+    fn put(&self, v: i64) -> String {
+        return `written ${v}`;
+    }
+}
+
+impl<T: Show> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.show();
+    }
+}
+
+test {
+    let x = X {};
+    assert x.put(7 as i64) == "written 7";
+    assert x.put(7 as i32) == "i32 7";
+    assert x.put(7) == "?";
+}
+
+__DATA__
+{"compile_error": ":57:12: analysis error: ambiguous call to 'put': the arguments do not select between 'Put<i64>' and 'Put<T>'"}

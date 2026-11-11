@@ -135,12 +135,10 @@ fn bound_answers(
         .args_reaching(bound, trait_, subject)
         .iter()
         .any(|args| {
-            let args = program.per_param(Some(trait_), args);
+            let args = program.args_at(trait_, args, subject);
             wanted.iter().enumerate().all(|(i, want)| {
-                want.as_ref().is_none_or(|want| {
-                    let given = args.get(i).and_then(Option::as_ref);
-                    program.arg_at(trait_, given, i, subject).as_ref() == Some(want)
-                })
+                want.as_ref()
+                    .is_none_or(|want| args.get(i).and_then(Option::as_ref) == Some(want))
             })
         })
 }
@@ -310,7 +308,10 @@ impl Query<'_> {
                 if subject.is_some() && program.not_inherited.contains(&id) {
                     return None;
                 }
-                let answer = self.impl_answers(id, def, ty, args)?;
+                // A default reads `Self` as the type asked about, which a
+                // newtype inheriting this impl is.
+                let asked = program.args_at(trait_, args, subject.unwrap_or(ty));
+                let answer = self.impl_answers(id, def, ty, &asked)?;
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
                 if !answers_args(program, def, ty, subject, &answer.trait_args, args) {
@@ -338,16 +339,17 @@ impl Query<'_> {
             })
     }
 
-    /// Whether one impl applies to `ty` asked at the trait arguments `args`:
-    /// its target and its trait reference match, and every bound holds of what
-    /// the match bound. A parameter only the trait reference names, as `G` in
+    /// Whether one impl applies to `ty`: its target and its trait reference
+    /// match, and every bound holds of what the match bound. `asked` is what
+    /// the question writes at each of the trait's parameters, `None` where it
+    /// leaves one open. A parameter only the trait reference names, as `G` in
     /// `impl<G: Back> Shown<G> for G::T`, is bound by the arguments asked.
     fn impl_answers(
         &mut self,
         id: ImplId,
         def: &ImplDef,
         ty: &SolverType,
-        args: &[SolverType],
+        asked: &[Option<SolverType>],
     ) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
@@ -361,21 +363,28 @@ impl Query<'_> {
         if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
             return None;
         }
-        // The arguments asked bind together or not at all: one the impl's own
-        // refutes would leave the rest binding an impl that answers nothing,
-        // and it would outrank one that does. Whether the impl answers at them
-        // is [`answers_args`]'s to decide.
-        let written = program.per_param(def.trait_, &def.trait_args);
-        let asked = program.per_param(def.trait_, args);
-        let mut trial = (bindings.clone(), deferred.clone());
-        let all_match = written.iter().zip(&asked).all(|pair| match pair {
-            (Some(written), Some(asked)) => {
-                match_target(written, asked, &mut trial.0, &mut trial.1)
+        // A parameter the trait reference alone determines, `impl<U> Tr<U>
+        // for X`, is what the bound asks at its position.
+        let offered = program.per_param(def.trait_, &def.trait_args);
+        let mut left_to_the_call = vec![false; def.params.len()];
+        for (at, offer) in offered.iter().enumerate() {
+            let Some(offer) = offer else {
+                continue;
+            };
+            match asked.get(at).and_then(Option::as_ref) {
+                Some(ask) => {
+                    if !match_target(offer, ask, &mut bindings, &mut deferred) {
+                        return None;
+                    }
+                }
+                // A selection asking no argument there leaves what only that
+                // argument names to the call's own inference.
+                None => {
+                    for (index, open) in left_to_the_call.iter_mut().enumerate() {
+                        *open |= offer.mentions_param(index as u32);
+                    }
+                }
             }
-            _ => true,
-        });
-        if all_match {
-            (bindings, deferred) = trial;
         }
         if !self.bound_through_projections(&mut deferred, &mut bindings)
             || self.projections_refuted(&deferred, &bindings)
@@ -427,7 +436,10 @@ impl Query<'_> {
             // parameter, and is bound at monomorphization with its bound
             // (WEP 2026-03-14).
             let Some(binding) = bindings[index].clone() else {
-                if param.bounds.is_empty() || pins_on(index).next().is_some() {
+                if param.bounds.is_empty()
+                    || pins_on(index).next().is_some()
+                    || left_to_the_call[index]
+                {
                     continue;
                 }
                 return None;
@@ -896,7 +908,7 @@ pub(super) fn impl_applies(
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
-    args: &[SolverType],
+    asked: &[Option<SolverType>],
 ) -> Option<Vec<SolverType>> {
     Some(
         Query {
@@ -906,7 +918,7 @@ pub(super) fn impl_applies(
             member_next: false,
             at_itself: Some(ty.clone()),
         }
-        .impl_answers(id, def, ty, args)?
+        .impl_answers(id, def, ty, asked)?
         .trait_args,
     )
 }
@@ -1035,25 +1047,36 @@ fn answers_args_by(
     subject: Option<&SolverType>,
     written: &[SolverType],
     args: &[SolverType],
-    fits: impl Fn(&SolverType, &SolverType) -> bool,
+    mut fits: impl FnMut(&SolverType, &SolverType) -> bool,
 ) -> bool {
-    let written = program.per_param(def.trait_, written);
-    let args = program.per_param(def.trait_, args);
     // A `Self` default lowers to the impl's target, which the match bound to
     // `ty` — and to the newtype a peeled question was asked at, which the
     // inherited impl also spells `Self`.
     let selves: Vec<SolverType> = [Some(ty), subject].into_iter().flatten().cloned().collect();
-    let said = |i: usize, given: Option<&SolverType>| match given {
-        Some(given) => vec![given.clone()],
-        None => match program.default_arg(def, i) {
-            Some(default) if default == def.target => selves.clone(),
-            Some(default) => vec![default],
-            None => Vec::new(),
-        },
+    // Each side fills its own defaults, so one reading an earlier argument
+    // (`B = A`) reads that side's.
+    let said = |args: &[SolverType]| -> Vec<Vec<SolverType>> {
+        let given = program.per_param(def.trait_, args);
+        let filled = match def.trait_ {
+            Some(trait_) => program.filled(trait_, given.clone(), &def.target),
+            None => given.clone(),
+        };
+        given
+            .iter()
+            .chain(std::iter::repeat(&None))
+            .zip(filled)
+            .map(|(given, filled)| match (given, filled) {
+                (Some(given), _) => vec![given.clone()],
+                (None, Some(default)) if default == def.target => selves.clone(),
+                (None, Some(default)) => vec![default],
+                (None, None) => Vec::new(),
+            })
+            .collect()
     };
-    (0..written.len().max(args.len())).all(|i| {
-        let asks = said(i, args.get(i).and_then(Option::as_ref));
-        let offered = said(i, written.get(i).and_then(Option::as_ref));
+    let (asked, offered) = (said(args), said(written));
+    (0..asked.len().max(offered.len())).all(|i| {
+        let asks = asked.get(i).map_or(&[][..], Vec::as_slice);
+        let offered = offered.get(i).map_or(&[][..], Vec::as_slice);
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
         asks.is_empty()
@@ -1089,9 +1112,28 @@ fn all_fit(asked: &[SolverType], offered: &[SolverType]) -> bool {
 }
 
 /// Whether the impl answers its trait at the declared defaults, as a derived
-/// impl does: `impl Eq for D`, not `impl Eq<String> for D`.
+/// impl does: `impl Eq for D` and `impl<R> Eq<R> for D`, whose `R` the default
+/// binds, but not `impl Eq<String> for D`.
 pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
-    answers_args(program, def, &def.target, None, &def.trait_args, &[])
+    // The target's own parameters stand for themselves; only one the trait
+    // arguments alone name is free to take the default.
+    let mut bindings: Vec<Option<Binding>> = (0..def.params.len())
+        .map(|index| {
+            let index = u32::try_from(index).expect("fewer than 2^32 impl parameters");
+            def.target
+                .mentions_param(index)
+                .then_some(Binding::One(SolverType::Param(index)))
+        })
+        .collect();
+    answers_args_by(
+        program,
+        def,
+        &def.target,
+        None,
+        &def.trait_args,
+        &[],
+        |default, written| match_target(written, default, &mut bindings, &mut Vec::new()),
+    )
 }
 
 /// What reading a deferred projection through its bound base came to.
@@ -1282,6 +1324,27 @@ mod tests {
             holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[decl(I32)]),
             None
         );
+    }
+
+    /// An impl leaving the argument open answers a bare bound at the default
+    /// it binds: `impl<R: Alpha> Eq<R> for Point` answers `Point: Eq` where
+    /// `Point: Alpha`.
+    #[test]
+    fn an_open_impl_answers_a_bare_bound_at_the_default() {
+        let open = |target| ImplDef {
+            trait_args: vec![SolverType::Param(0)],
+            params: vec![ParamDef::bounded(vec![ALPHA])],
+            ..concrete(EQ, target)
+        };
+        let mut p = Builder::default()
+            .concrete(ALPHA, decl(POINT))
+            .impl_(open(decl(POINT)))
+            .impl_(open(decl(I32)))
+            .build();
+        p.traits.entry(EQ).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        let ask = |ty| holds_with_args(&p, &Env::default(), &decl(ty), EQ, &[]);
+        assert_eq!(ask(POINT), Some(Holds::default()));
+        assert_eq!(ask(I32), None);
     }
 
     /// The bound writing the argument answers it, and only it.

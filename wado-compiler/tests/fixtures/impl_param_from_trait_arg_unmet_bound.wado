@@ -1,0 +1,32 @@
+// A bound on an impl parameter only the trait reference names is the call's
+// to meet: `x.put(true)` settles `T = bool`, which `T: Show` refuses at the
+// call, not inside the impl's body.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+struct X {}
+
+impl<T: Show> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.show();
+    }
+}
+
+export fn run() {
+    let x = X {};
+    let _shown = x.put(true);
+}
+
+__DATA__
+{"compile_error": ":28:18: analysis error: type 'bool' does not implement trait 'Show' required by bound on 'T'"}

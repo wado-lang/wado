@@ -1,5 +1,7 @@
 //! Method call and static method call resolution.
 
+use std::sync::Arc;
+
 use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
@@ -12,11 +14,10 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
-    TupleSlot, TypeId,
+    TupleSlot, TypeId, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use std::sync::Arc;
 
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
@@ -28,7 +29,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
-use super::scope::{ParamRef, ScopedBound};
+use super::scope::{BoundsOf, ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
@@ -36,7 +37,7 @@ use super::synth::ArgClass;
 use super::trait_query::{DerivedAt, OnBoundTrait, SelfBinding};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, RealTypeParams, TypeError};
 use super::tysys::TypeSystem;
-use super::{AbstractSelection, Elaborator};
+use super::{AbstractSelection, Elaborator, util};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -50,6 +51,7 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
+use crate::synthesis::template::blanket_impl_args;
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -220,16 +222,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the declaration only spells them. A binding reading a trait parameter
     /// the projection does not know is left out.
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
-        if let Some(name) = self.tysys.binder_name(ty) {
-            return self
-                .annotate_ctx
-                .trait_ctx
-                .type_param_bounds
-                .get(&name)
-                .cloned()
-                .unwrap_or_default();
-        }
         let tt = self.tysys.type_table.borrow();
+        if util::bound_param(&tt, ty).is_some() {
+            return self.annotate_ctx.trait_ctx.bounds(&tt, BoundsOf::Type(ty));
+        }
         let ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
@@ -445,7 +441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The handle argument-directed selection classifies through (WEP
         // 2026-07-31). Constructing it costs nothing: a class is synthesized
         // only if the candidate set turns out to be an overload set.
-        let mut probe = ArgProbe::new(args_ast, ctx);
+        let mut probe = ArgProbe::new(args_ast, ctx, expected_type);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -623,7 +619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 trait_name = Some(trait_match.trait_name.with_args(names));
                 info.impl_slot_args = Vec::new();
-                info.bound_trait_args = asked;
+                info.trait_args = asked;
                 method_info = Some(info);
             } else {
                 matched_impl_decl = trait_match.impl_struct_fq.head().def();
@@ -709,8 +705,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+            inferred_impl_slots,
             impl_slot_args,
-            bound_trait_args,
+            trait_args,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -1019,7 +1016,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // before inference is what lets `h.two_method<T>(1 as i64, 2 as i32)`
         // report that `T` cannot be both — and what keeps a generic method's
         // own slots, opaque until solved, out of the comparison.
-        let substituted_param_types: Vec<TypeId> = if method_type_args.is_empty() {
+        let mut substituted_param_types: Vec<TypeId> = if method_type_args.is_empty() {
             expected_param_types.clone()
         } else {
             expected_param_types
@@ -1027,6 +1024,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
                 .collect()
         };
+        if let Some(block) = dispatched_impl_block {
+            self.settle_trait_arg_slots(
+                block,
+                &slots_from_impl_args(block, &impl_slot_args),
+                &inferred_impl_slots,
+                &mut substituted_param_types,
+                &args,
+                &mut return_type,
+                span,
+            );
+        }
         if !method_type_args.is_empty() {
             self.recoerce_literal_args(args_ast, &mut args, &substituted_param_types);
         }
@@ -1138,6 +1146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The block's slots name the instance, so the receiver, a projection
         // included, waits on no substitution to pick one.
         let keyed_by_slots = !impl_slot_args.is_empty();
+        let trait_args = self.apply_infer_holes_each(&trait_args);
 
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
@@ -1168,7 +1177,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if keyed_by_slots {
             Some(MonomorphInfo {
                 generic_name: MethodName::format_local(&base_struct_name, None, method_name),
-                impl_type_args: impl_slot_args,
+                impl_type_args: self.apply_infer_holes_each(&impl_slot_args),
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
@@ -1178,9 +1187,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // monomorph_info maps from the concrete name back to the template.
             let binder = blanket_binder.unwrap_or_else(|| FqTypeName::binder(blanket_param));
             let generic_name = MethodName::format_local(&binder, trait_name.as_ref(), method_name);
+            // Keyed by its parameters in order, where a trait argument settles
+            // one the receiver does not.
+            let impl_type_args = match dispatched_impl_block {
+                Some(block) if self.tysys.type_table.borrow().impl_trait_sets_params(block) => {
+                    let trait_env = Arc::clone(&self.tysys.trait_env);
+                    let blanket = trait_env
+                        .blanket_of_block(block)
+                        .expect("a match through a blanket names its block");
+                    blanket_impl_args(
+                        &trait_env,
+                        blanket,
+                        base_type_id,
+                        &trait_args,
+                        &mut self.tysys.type_table.borrow_mut(),
+                    )
+                    .expect("the receiver and the trait arguments settle every blanket slot")
+                }
+                _ => vec![base_type_id],
+            };
             Some(MonomorphInfo {
                 generic_name,
-                impl_type_args: vec![base_type_id],
+                impl_type_args,
                 method_type_args: method_type_args.clone(),
                 is_blanket: true,
             })
@@ -1219,10 +1247,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
-        method_info.trait_type_args = bound_trait_args;
+        // A receiver that is a type parameter is dispatched again at each
+        // instance, and the trait arguments set the slots of the block found
+        // there that only they name.
+        method_info.trait_type_args = trait_args;
 
-        // A bound on a parameter answers from no block, so its instance decides
-        // the template.
         let template = match (dispatched_method_def, dispatched_impl_block) {
             (Some(def), Some(block)) => Some(TemplateId::in_block(def, block)),
             (Some(_), None) => None,
@@ -1889,6 +1918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         key: struct_key_for_lookup.as_ref(),
                         ty: Some(target_type_id),
                         required_trait,
+                        expected_return: expected_type,
                         ..StaticReceiver::of(&recv_name)
                     },
                     &static_call.method,
@@ -1921,6 +1951,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &name,
                     &arg_types,
                     required_trait,
+                    expected_type,
                 )
             }
             _ => StaticLookup::NotStatic,
@@ -2454,6 +2485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type: Some(target_type_id),
                 method_args: &method_type_args,
                 required_trait,
+                expected_return: expected_type,
                 ..StaticQuery::of(&struct_name, &static_call.method)
             },
             static_call.span,
@@ -2470,7 +2502,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_call.method,
         );
 
-        let return_type = resolution.return_type;
+        let mut return_type = resolution.return_type;
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -2517,13 +2549,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 declaration.map(|def| self.tysys.signatures.declared_template(def)),
             ),
         };
-        self.enforce_static_block_bounds(block, &struct_type_args, static_call.span);
-        let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
+        let instance_args = self.static_instance_args(
+            block,
+            &struct_type_args,
+            &mut param_types,
+            &args,
+            &mut return_type,
+            static_call.span,
+        );
+        let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             Some(MonomorphInfo {
                 generic_name,
-                impl_type_args: struct_type_args.clone(),
+                impl_type_args: instance_args,
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
@@ -3153,7 +3192,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A newtype offering nothing of its own answers with its base's impls,
         // as the resolution does, so the survey reads them there.
         if survey.candidates.is_empty()
-            && survey.blanket_trait.is_none()
             && let key = self.static_receiver_key(struct_name, recv.key)
             && let Some((base_key, base_name)) = self.newtype_base_target(&key)
         {
@@ -3167,16 +3205,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.report_unmatched_static_arg(base_recv, method_name, &base_arg_types, span);
         }
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
-        if let Some(trait_name) = survey.blanket_trait {
-            let _ = self.emit(TypeError::UnsupportedBlanketInstantiation {
-                trait_name,
-                receiver: struct_name.to_string(),
-                method: method_name.to_string(),
-                arg_type: spelled,
-                span,
-            });
-            return true;
-        }
         // The trait the first candidate names. Where several traits supply the
         // name the call is an overload, reported before it reaches here.
         let Some(trait_name) = survey.candidates.first().map(|c| c.trait_name.clone()) else {
@@ -3301,12 +3329,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if classes.iter().all(|c| matches!(c, ArgClass::Opaque(_))) {
             return ArgPreselect::Pass;
         }
-        let admitted: Vec<ArgCandidate> = self
+        let mut admitted: Vec<ArgCandidate> = self
             .static_arg_survey(recv, method_name)
             .candidates
             .into_iter()
             .filter(|c| self.params_admit(&c.params, classes))
             .collect();
+        if let Some(expected) = recv.expected_return {
+            self.narrow_to_expected_return(&mut admitted, expected, |c| c.return_type);
+        }
+        // An impl leaving a slot to the call is told from another by the
+        // arguments' types, which the resolution reads once they are
+        // elaborated; only a numeric literal, whose width it would choose,
+        // leaves that question open.
+        if let [_, _, ..] = admitted.as_slice()
+            && !classes.iter().any(ArgClass::leaves_width_open)
+            && admitted.iter().any(|c| {
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .impl_trait_sets_params(c.block)
+            })
+        {
+            return ArgPreselect::Pass;
+        }
         match admitted.as_slice() {
             [] => ArgPreselect::Pass,
             [only] => ArgPreselect::Selected(only.params.clone()),
@@ -3390,8 +3436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let params = match offer.selector {
                 Selector::Absent => continue,
                 Selector::Blanket => {
-                    survey.blanket_trait.get_or_insert_with(trait_name);
-                    continue;
+                    unreachable!("a block offers the body it wrote or inherits, never a blanket's")
                 }
                 Selector::Params(params) => params,
             };
@@ -3400,6 +3445,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if survey.candidates.iter().any(|c| c.params == params) {
                 continue;
             }
+            let return_type = match recv.ty {
+                Some(receiver) => self
+                    .tysys
+                    .at_receiver(impl_def, receiver, offer.return_type),
+                None => offer.return_type,
+            };
             let table = self.tysys.type_table.borrow();
             // The parameters as the impl's own frame resolved them, so a
             // private or aliased name means what the impl wrote.
@@ -3407,7 +3458,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             survey.candidates.push(ArgCandidate {
                 spelling,
                 params,
+                return_type,
                 trait_name: trait_name(),
+                block: impl_def,
             });
         }
         survey
@@ -3501,6 +3554,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_args: &[TypeId],
         call_id: AstId,
         span: Span,
+        expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let qualified_struct_name = self.qualified_receiver_name(struct_name);
@@ -3599,6 +3653,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type: newtype_dispatch.as_ref().map(|(newtype, _, _)| *newtype),
                 receiver_args: impl_type_args,
                 method_args: method_type_args,
+                expected_return: expected_type,
                 ..StaticQuery::of(struct_name, method_name)
             },
             span,
@@ -3656,23 +3711,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
         let receiver_fq = concrete_head.unwrap_or(actual_struct_fq);
-        self.enforce_static_block_bounds(self.tysys.block_of(&method_ref), impl_type_args, span);
-
+        let block = self.tysys.block_of(&method_ref);
         let mut return_type = resolution.return_type;
+        let mut callee_params = resolution.params;
+        let instance_args = self.static_instance_args(
+            block,
+            impl_type_args,
+            &mut callee_params.param_types,
+            args,
+            &mut return_type,
+            span,
+        );
         self.retype_static_to_newtype(
             &self.impl_target(struct_name),
-            self.tysys.block_of(&method_ref),
+            block,
             impl_type_args,
             std::slice::from_mut(&mut return_type),
         );
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
-        let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {
+        let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             Some(MonomorphInfo {
                 generic_name: final_mangled_name.clone(),
-                impl_type_args: impl_type_args.to_vec(),
+                impl_type_args: instance_args,
                 method_type_args: method_type_args.to_vec(),
                 is_blanket: false,
             })
@@ -3696,10 +3759,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         let cm_name = callee_sig.as_ref().and_then(|sig| sig.cm_name.clone());
 
-        // From the resolution that named the callee. Asking again by the base's
-        // bare name asks the *caller's* frame, which an alias leaves without
-        // that name at all.
-        let callee_params = resolution.params;
         // No signature answered: there is no default to resolve, and the
         // declaring module stands in.
         let defaults_module = callee_params
@@ -3965,26 +4024,6 @@ impl TypeSystem {
             |def| self.resolutions.defs().name(def).to_string(),
         )
     }
-
-    /// Whether this is an impl block parameter only the argument can fill, as
-    /// in a blanket impl, so its unsubstituted spelling must not be mangled.
-    pub(super) fn param_filled_by_block(
-        &self,
-        header: &ImplHeader,
-        sig: &MethodSig,
-        param: TypeId,
-    ) -> bool {
-        if header.type_params.is_empty() {
-            return false;
-        }
-        let table = self.type_table.borrow();
-        match table.get(table.peel_refs(param)) {
-            ResolvedType::TypeParam { id, name } | ResolvedType::TypePack { id, name, .. } => {
-                sig.declaring_impl == Some(id.owner) && !header.ty.mentions(name)
-            }
-            _ => false,
-        }
-    }
 }
 
 /// What [`Elaborator::preselect_static_args`] settled about a static call,
@@ -4039,7 +4078,10 @@ pub(super) enum ArgPreselect {
 pub(super) struct ArgCandidate {
     pub(super) spelling: String,
     pub(super) params: Vec<TypeId>,
+    /// Its result at the receiver.
+    return_type: TypeId,
     pub(super) trait_name: String,
+    block: DefId,
 }
 
 /// A parameter or argument list as one spelling: the type alone where there is
@@ -4075,6 +4117,9 @@ pub(super) struct StaticReceiver<'a> {
     pub(super) args: &'a [TypeId],
     /// The trait a qualified spelling names; only its impls answer.
     pub(super) required_trait: Option<DefId>,
+    /// What the call's context expects of its result, which selects among
+    /// the impls the arguments leave as an annotated argument does.
+    pub(super) expected_return: Option<TypeId>,
 }
 
 impl<'a> StaticReceiver<'a> {
@@ -4086,6 +4131,7 @@ impl<'a> StaticReceiver<'a> {
             ty: None,
             args: &[],
             required_trait: None,
+            expected_return: None,
         }
     }
 }
@@ -4094,7 +4140,4 @@ impl<'a> StaticReceiver<'a> {
 #[derive(Default)]
 pub(super) struct StaticArgSurvey {
     pub(super) candidates: Vec<ArgCandidate>,
-    /// The trait of a blanket impl among them, which admits every argument and
-    /// is therefore no alternative to list.
-    pub(super) blanket_trait: Option<String>,
 }

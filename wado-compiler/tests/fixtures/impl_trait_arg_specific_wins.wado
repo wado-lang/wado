@@ -1,0 +1,42 @@
+// An impl writing the trait's arguments wins over one leaving a parameter
+// there, as one written for an instantiation of the target does. It answers
+// through an operator, a method call and a bound alike.
+
+trait Text with () {
+    fn text(&self) -> String;
+}
+
+impl Text for String {
+    fn text(&self) -> String {
+        return "generic";
+    }
+}
+
+struct Name {
+    s: String,
+}
+
+impl Text for Name {
+    fn text(&self) -> String {
+        return self.s;
+    }
+}
+
+struct Tag {
+    name: String,
+}
+
+impl Eq<String> for Tag { fn eq(&self, other: &String) -> bool { return self.name == *other; } }      // specific — wins for String
+impl<R: Text> Eq<R> for Tag { fn eq(&self, other: &R) -> bool { return self.name == other.text(); } } // general
+
+fn same<A: Eq<U>, U>(a: A, u: U) -> bool {
+    return a == u;
+}
+
+test {
+    let t = Tag { name: "x" };
+    let s: String = "x";
+    assert t == "x" && t == Name { s: "x" } && t != Name { s: "y" };
+    assert t.eq(&s) && !t.eq(&Name { s: "y" });
+    assert same(t, "x") && same(t, Name { s: "x" });
+}

@@ -25,7 +25,7 @@ use crate::name::{
     FqTraitName, FqTypeName, minted_name, unalias_namespace_member, written_param_name,
 };
 use crate::resolve::{Resolution, Resolutions};
-use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId};
+use crate::tir::{ResolvedType, StructDef, TirLocal, TypeArgMap, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -471,6 +471,18 @@ pub enum SigPosition {
     Return,
 }
 
+/// The form of a call left ambiguous among a trait's argument lists, which
+/// decides what can settle it: only a call with a receiver can pin the trait.
+#[derive(Debug, Clone, Copy)]
+pub enum OverloadedCallForm {
+    /// A method call or a subscript.
+    Receiver,
+    /// `Type::f(…)`, where the result type is the other way to select.
+    Static,
+    /// `Type::f()`, where the result type is the only way to select.
+    StaticNullary,
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -886,6 +898,7 @@ pub enum TypeError {
         /// What each argument contributed to selection, in argument order.
         /// Empty when the call never reached argument-directed selection.
         arguments: Vec<String>,
+        form: OverloadedCallForm,
         span: Span,
     },
 
@@ -934,19 +947,6 @@ pub enum TypeError {
         /// How to spell the receiver, rendered (`value`, `&value`,
         /// `&mut value`).
         spelled: String,
-        span: Span,
-    },
-
-    /// A static reachable only through a blanket impl generic in the
-    /// parameter it declares (`impl<T: Display> From<T> for Wrapper`).
-    /// Selecting the instantiation from the argument's type is phase-4 work
-    /// (WEP 2026-07-31); until then the call is rejected rather than reaching
-    /// WIR build unresolved.
-    UnsupportedBlanketInstantiation {
-        trait_name: String,
-        receiver: String,
-        method: String,
-        arg_type: String,
         span: Span,
     },
 
@@ -2181,26 +2181,32 @@ impl TypeError {
                 method,
                 traits,
                 arguments,
+                form,
                 span,
-            } => (
-                Code::AmbiguousCandidate,
-                append_reason_chain(
-                    format!(
-                        "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
-                        traits
-                            .iter()
-                            .map(|t| format!("'{t}'"))
-                            .collect::<Vec<_>>()
-                            .join(" and "),
-                        traits
-                            .first()
-                            .map(|t| t.replacen('<', "::<", 1))
-                            .expect("ambiguity reported with no candidate traits")
+            } => {
+                let remedy = match form {
+                    OverloadedCallForm::Receiver => {
+                        let first = traits.first().expect("ambiguity reported with no candidate traits");
+                        format!(
+                            "annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
+                            first.replacen('<', "::<", 1)
+                        )
+                    }
+                    OverloadedCallForm::Static => "annotate an argument (e.g. '42 as i64') or the result".to_string(),
+                    OverloadedCallForm::StaticNullary => "annotate the result (e.g. 'let v: i32 = …')".to_string(),
+                };
+                (
+                    Code::AmbiguousCandidate,
+                    append_reason_chain(
+                        format!(
+                            "ambiguous call to '{method}': the arguments do not select between {}; {remedy}",
+                            traits.iter().map(|t| format!("'{t}'")).collect::<Vec<_>>().join(" and "),
+                        ),
+                        arguments,
                     ),
-                    arguments,
-                ),
-                *span,
-            ),
+                    *span,
+                )
+            }
             TypeError::NoMatchingOverload {
                 method,
                 traits,
@@ -2402,19 +2408,6 @@ impl TypeError {
                         .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
-                ),
-                *span,
-            ),
-            TypeError::UnsupportedBlanketInstantiation {
-                trait_name,
-                receiver,
-                method,
-                arg_type,
-                span,
-            } => (
-                Code::TraitDeclInvalid,
-                format!(
-                    "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
                 ),
                 *span,
             ),
@@ -3491,14 +3484,19 @@ pub(super) struct MethodInfo {
     /// against them. Empty where the block declares none, or where the lookup
     /// answers from no block at all.
     pub(super) impl_type_bindings: Vec<DefaultTypeBinding>,
+    /// The block's parameters only its trait reference names that the call's
+    /// trait arguments left open (`T` in `impl<T> Tr<T> for X`), each a
+    /// variable the call infers.
+    pub(super) inferred_impl_slots: TypeArgMap,
     /// Every slot of the matched block in slot order, where its trait reference
     /// binds one the receiver does not show (`G` in `impl<G: Back> Shown<G> for
-    /// i32`): the instance keys on these. Empty where the receiver shows all.
+    /// i32`), an inferred one as its variable: the instance keys on these.
+    /// Empty where the receiver shows all.
     pub(super) impl_slot_args: Vec<TypeId>,
-    /// The arguments a bound names for the trait it dispatches through, which
-    /// set the slots of the impl answering it at an instance. Empty where the
-    /// call answers from a block.
-    pub(super) bound_trait_args: Vec<TypeId>,
+    /// The arguments of the trait reference the call reaches the method
+    /// through: the matched block's, or the bound's it dispatches on, which
+    /// set the slots of the impl answering it at an instance.
+    pub(super) trait_args: Vec<TypeId>,
 }
 
 impl MethodInfo {
@@ -3525,8 +3523,9 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: None,
             impl_type_bindings: Vec::new(),
+            inferred_impl_slots: TypeArgMap::default(),
             impl_slot_args: Vec::new(),
-            bound_trait_args: Vec::new(),
+            trait_args: Vec::new(),
         }
     }
 }
@@ -4852,6 +4851,14 @@ impl<'a> TypeLookup<'a> {
     }
 }
 
+/// An impl a subscript may dispatch to, as a numeric literal key reads it.
+pub(super) struct KeyCandidate {
+    /// The key it takes; `None` where it leaves the key to the subscript.
+    pub(super) key: Option<TypeId>,
+    pub(super) trait_name: FqTraitName,
+    pub(super) method: &'static str,
+}
+
 /// A matched `IndexRef` / `IndexRefMut` / `IndexValue` / `IndexAssign` impl.
 /// One shape for all four: they differ only in the trait probed and the method
 /// name it declares, both of which the caller named to find this.
@@ -4874,6 +4881,19 @@ pub(super) struct IndexingTraitInfo {
     /// How to spell the receiver in the dispatched method's name — the base for
     /// a block with parameters, the instantiation for one written at a type.
     pub(super) receiver: FqTypeName,
+    /// The `impl` block that matched.
+    pub(super) impl_def: DefId,
+    /// What the key settled the block's slots to, where only the trait
+    /// arguments name one (`I` in `impl<I: Show> IndexValue<I> for T`); the
+    /// call owes their bounds. Empty otherwise.
+    pub(super) trait_arg_slots: TypeArgMap,
+    /// The instance key, where the receiver alone does not determine it.
+    pub(super) instance_args: Option<Vec<TypeId>>,
+    /// The container the subscript reaches the impl through.
+    pub(super) container: TypeId,
+    /// The other blocks that leave the key to the subscript and reach it too:
+    /// nothing ranks them against `impl_def`, so the dispatch reports them.
+    pub(super) tied_with: Vec<DefId>,
 }
 
 /// Info about an operator trait implementation
@@ -4935,6 +4955,10 @@ pub(super) struct ResolvedTraitMethod {
     /// concrete type. Propagated into `LocalMethodName::is_type_param_receiver`
     /// so monomorphization substitutes it correctly.
     pub(super) is_type_param_receiver: bool,
+    /// The arguments of the trait reference a bound dispatches through, which
+    /// key the instance where the answering block's parameters come from them;
+    /// empty where an impl answers.
+    pub(super) bound_trait_args: Vec<TypeId>,
 }
 
 impl ResolvedTraitMethod {
@@ -4959,6 +4983,7 @@ impl ResolvedTraitMethod {
             return_type: info.return_type,
             param_types: info.param_types,
             is_type_param_receiver: true,
+            bound_trait_args: info.trait_args,
         }
     }
 
@@ -4985,6 +5010,7 @@ impl ResolvedTraitMethod {
             return_type: info.output_type,
             param_types: info.rhs_type.into_iter().collect(),
             is_type_param_receiver: false,
+            bound_trait_args: Vec::new(),
         }
     }
 }

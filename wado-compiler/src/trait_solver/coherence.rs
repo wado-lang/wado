@@ -80,7 +80,17 @@ fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
         .map(|p| (set(&p.bounds), set(&p.pins)))
         .collect();
     let mut trait_args = def.trait_args.clone();
-    trait_args.extend((trait_args.len()..).map_while(|i| program.default_arg(def, i)));
+    let filled = program.filled(
+        trait_,
+        program.per_param(Some(trait_), &def.trait_args),
+        &def.target,
+    );
+    trait_args.extend(
+        filled
+            .into_iter()
+            .skip(trait_args.len())
+            .map_while(|arg| arg),
+    );
     Some((trait_, trait_args, def.target.clone(), conditions))
 }
 

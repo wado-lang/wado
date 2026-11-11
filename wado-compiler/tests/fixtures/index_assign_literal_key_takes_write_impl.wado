@@ -1,0 +1,20 @@
+// A literal key in `c[k] = v` takes the key of the impl that writes, as a read
+// takes the reading impl's: `Sink` offers no read, so `3` is the `i64` its
+// `IndexAssign` takes rather than the default `i32`.
+struct Sink {
+    last: i64,
+}
+
+impl IndexAssign<i64> for Sink {
+    type Output = i64;
+
+    fn index_assign(&mut self, i: i64, v: i64) {
+        self.last = i + v;
+    }
+}
+
+test {
+    let mut s = Sink { last: 0 };
+    s[3] = 4;
+    assert s.last == 7;
+}

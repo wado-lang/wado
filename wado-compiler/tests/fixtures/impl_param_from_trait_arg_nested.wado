@@ -1,0 +1,59 @@
+// A slot nested in the trait reference (`U` in `Put<List<U>>`) keys the
+// instance by what it settles to: each element type gets its own body, on a
+// value blanket and on a declared receiver alike.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+impl Mark for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+impl<S: Mark, U: Show> Put<List<U>> for S {
+    fn put(&self, v: List<U>) -> String {
+        return `${self.mark()} ${v[0].show()}`;
+    }
+}
+
+test {
+    let a: List<i64> = [7];
+    let b: List<String> = ["s"];
+    assert true.put(a) == "1 i64 7";
+    assert true.put(b) == "1 string s";
+}
+
+struct X {}
+
+impl<U: Show> Put<List<U>> for X {
+    fn put(&self, v: List<U>) -> String {
+        return `0 ${v[0].show()}`;
+    }
+}
+
+test "declared receiver" {
+    let a: List<i64> = [7];
+    let b: List<String> = ["s"];
+    assert X {}.put(a) == "0 i64 7";
+    assert X {}.put(b) == "0 string s";
+}

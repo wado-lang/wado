@@ -23,6 +23,7 @@ use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
+use super::synth::KeyedAccess;
 use super::trait_query::primitive_has_operator;
 use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
 use super::typecheck::widens;
@@ -1371,7 +1372,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // The impl is the one at the key a read of `c[i]` selects.
         let key_class = self.synthesize_arg_class(transposition.i, ctx);
-        let key = self.index_key_type(container_type, &key_class);
+        let key = self.index_key_type_at(
+            container_type,
+            &key_class,
+            KeyedAccess::Read,
+            transposition.i.span(),
+        );
         let Some((info, _)) = lookup(self, key) else {
             return no_index_swap(self, key);
         };
@@ -1400,7 +1406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ctx = &mut ctx.enter_scope();
         let name = minted_name("da", ctx.fresh_serial());
         let _local_index = ctx.add_local(name, j_type, false, None);
-        let function_ref = self.indexing_function_ref(&info, "index_swap");
+        let function_ref = self.indexing_function_ref(&info, "index_swap", assign.span);
         self.sem.types.index_swap_dispatch.insert(
             assign.id,
             OperatorDispatch {
@@ -1672,15 +1678,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // For newtypes, resolve the base type name for trait impl lookup
                     let (lookup_name, lookup_type_id) =
                         self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-                    let assign_info = self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        Elaborator::find_index_assign_trait_impl,
-                    );
-                    let key_type = assign_info.as_ref().and_then(|(info, _)| info.index_type);
+                    let lookup = |this: &mut Self, key: Option<TypeId>| {
+                        this.index_lookup_or_newtype_base(
+                            &struct_name,
+                            base_type_id,
+                            &lookup_name,
+                            lookup_type_id,
+                            |s, n, t| s.find_index_assign_trait_impl(n, t, key),
+                        )
+                    };
+                    // The impl is the one at the key's type, as a read's is.
+                    let key_class = self.synthesize_arg_class(&index_expr.index, ctx);
+                    let key_type = self
+                        .index_key_type_at(
+                            indexed_type,
+                            &key_class,
+                            KeyedAccess::Write,
+                            index_expr.index.span(),
+                        )
+                        .or_else(|| lookup(self, None).and_then(|(info, _)| info.index_type));
                     let index_type = self.resolve_expr(&index_expr.index, ctx, key_type);
+                    if index_type == TypeTable::ERROR {
+                        return Err(());
+                    }
+                    let assign_info = lookup(self, Some(index_type));
 
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
                     if let Some(expected) = self.tysys.pointee_of(index_type) {
@@ -1689,7 +1710,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     if let Some((trait_info, _)) = assign_info {
                         let output_type = trait_info.output_type;
-                        let func = self.indexing_function_ref(&trait_info, "index_assign");
+                        let func = self.indexing_function_ref(
+                            &trait_info,
+                            "index_assign",
+                            index_expr.span,
+                        );
 
                         // Record the
                         // resolved `IndexAssign` dispatch keyed by
@@ -1712,24 +1737,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Ok(WritePlace::IndexAssign { output_type });
                     }
                     // Where no `IndexRefMut` writes through instead, an
-                    // `IndexAssign` impl missing only its bound says why.
-                    if self
+                    // `IndexAssign` impl missing only its bound says why, and
+                    // one at another key says the key is the mismatch.
+                    let writes_through = self
                         .index_lookup_or_newtype_base(
                             &struct_name,
                             base_type_id,
                             &lookup_name,
                             lookup_type_id,
-                            Elaborator::find_index_mut_trait_impl,
+                            |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
                         )
-                        .is_none()
-                        && self.report_unmet_trait_impl_bound(
+                        .is_some();
+                    if !writes_through {
+                        if self.report_unmet_trait_impl_bound(
                             base_type_id,
                             &[CompilerItem::IndexAssign],
                             Some(index_type),
                             target_ast.span(),
-                        )
-                    {
-                        return Err(());
+                        ) {
+                            return Err(());
+                        }
+                        if let Some((info, _)) = lookup(self, None)
+                            && let Some(key) = info.index_type
+                            && key != index_type
+                        {
+                            // A key assignable to the impl's (`!`) still
+                            // reaches no impl at its own type.
+                            if self.tysys.typecheck(index_type, key).is_err() {
+                                self.typecheck(index_type, key, index_expr.index.span());
+                            } else {
+                                let _ = self.emit(TypeError::MissingTraitImpl {
+                                    type_name: self.tysys.type_id_to_string(base_type_id),
+                                    trait_name: format!(
+                                        "IndexAssign<{}>",
+                                        self.tysys.type_id_to_string(index_type)
+                                    ),
+                                    span: index_expr.index.span(),
+                                });
+                            }
+                            return Err(());
+                        }
                     }
                 }
             }
@@ -2268,12 +2315,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // An impl read on a link below the receiver answers in the receiver's
         // type, as a method call does (WEP 2026-01-29).
-        let return_type = match resolved.impl_type_id {
+        let mut return_type = match resolved.impl_type_id {
             Some(link) if link != receiver_head => {
                 self.tysys
                     .substitute_newtype_in_type(resolved.return_type, link, receiver_head)
             }
             _ => resolved.return_type,
+        };
+
+        // A slot only the impl's trait arguments determine (`R` in
+        // `impl<R> Eq<R> for Tag`) is the operand's to settle.
+        let mut referents: Vec<TypeId> = resolved
+            .param_types
+            .iter()
+            .map(|&param| self.tysys.through_ref(param))
+            .collect();
+        let instance_args = match (resolved.impl_def, args.first()) {
+            (Some(block), Some(&(_, span))) => {
+                let operands: Vec<TypeId> = args.iter().map(|&(arg, _)| arg).collect();
+                let given = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .impl_receiver_slots(block, receiver_head);
+                self.slot_instance_args(
+                    block,
+                    given,
+                    &mut referents,
+                    &operands,
+                    &mut return_type,
+                    span,
+                )
+            }
+            _ => None,
         };
 
         // Per argument, decide whether the parameter is by reference, compute the
@@ -2282,7 +2356,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // apply identical `check_assignable` rules and cannot diverge. Mismatches
         // accumulate in the logger rather than early-returning, as method calls do.
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
-        for (&(arg, arg_span), &param_ty) in args.iter().zip(resolved.param_types.iter()) {
+        for ((&(arg, arg_span), &param_ty), &referent) in
+            args.iter().zip(resolved.param_types.iter()).zip(&referents)
+        {
             let wrap = self.tysys.type_table.borrow().is_reference(param_ty);
             // For a `&Self` parameter the "value-level" expected type is the
             // receiver's type, preserving newtype identity when an impl on the
@@ -2291,7 +2367,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // *different* referent, and that one is what the operand must
             // match. A by-value parameter is itself the expected type.
             let expected = if wrap {
-                let referent = self.tysys.through_ref(param_ty);
                 // A trait spelled with an argument (`Add<Feet>`) declares a
                 // referent of its own. A bare `Add` declares `&Self`, which a
                 // variadic `impl Ord for [..T]` resolves to a shape the operand
@@ -2302,16 +2377,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && referent != receiver_head;
                 if declares_rhs { referent } else { receiver }
             } else {
-                param_ty
+                referent
             };
             self.typecheck_into_callee(arg, expected, arg_span);
             wrap_flags.push(wrap);
         }
 
-        let function_ref = match self.ref_impl_of(resolved) {
+        let mut function_ref = match self.ref_impl_of(resolved) {
             Some((kind, header)) => self.ref_impl_function(kind, header, resolved, receiver),
             None => self.operator_impl_function(resolved, receiver),
         };
+        if let Some(impl_type_args) = instance_args {
+            function_ref.monomorph_info = Some(MonomorphInfo {
+                generic_name: function_ref.name.clone(),
+                impl_type_args,
+                method_type_args: vec![],
+                is_blanket: false,
+            });
+        }
 
         // When the operator-dispatch request carries a source AST id in
         // `origin`, record the dispatch decision so reify can re-emit the
@@ -2430,8 +2513,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_info.is_type_param_receiver = resolved.is_type_param_receiver;
         if resolved.is_type_param_receiver {
             let table = self.tysys.type_table.borrow();
-            method_info.receiver_param = table.type_param_id(table.peel_refs(receiver));
+            method_info.receiver_param = table.substitution_slot(table.peel_refs(receiver));
         }
+        method_info.trait_type_args = self.apply_infer_holes_each(&resolved.bound_trait_args);
 
         // Only a *concrete* block's function lives in the block's module: a
         // generic block's instance is materialised in the receiver type's,
