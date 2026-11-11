@@ -1425,14 +1425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.enforce_static_block_bounds(block, positions, span);
         block
             .and_then(|block| {
-                self.slot_instance_args(
-                    block,
-                    positions.to_vec(),
-                    params,
-                    args,
-                    return_type,
-                    span,
-                )
+                self.slot_instance_args(block, positions.to_vec(), params, args, return_type, span)
             })
             .unwrap_or_else(|| positions.to_vec())
     }

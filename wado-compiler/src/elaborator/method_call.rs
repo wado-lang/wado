@@ -2430,7 +2430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_call.method,
         );
 
-        let return_type = resolution.return_type;
+        let mut return_type = resolution.return_type;
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -2477,7 +2477,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 declaration.map(|def| self.tysys.signatures.declared_template(def)),
             ),
         };
-        let mut return_type = return_type;
         let instance_args = self.static_instance_args(
             block,
             &struct_type_args,

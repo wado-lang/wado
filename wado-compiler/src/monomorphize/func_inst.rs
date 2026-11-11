@@ -237,7 +237,8 @@ fn trait_keyed_impl_args(
     type_table: &TypeTable,
 ) -> Option<Vec<TypeId>> {
     let block = template.and_then(TemplateId::block)?;
-    if type_table.impl_key_trait_args(block).is_empty() || trait_env.blanket_of_block(block).is_some()
+    if type_table.impl_key_trait_args(block).is_empty()
+        || trait_env.blanket_of_block(block).is_some()
     {
         return None;
     }

@@ -884,7 +884,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ArgClass::FloatLit => TypeTable::F64,
             ArgClass::StrLit => return (Some(self.get_string_struct_type()), None),
             ArgClass::BytesLit => {
-                return (Some(self.tysys.type_table.borrow_mut().make_byte_list()), None);
+                return (
+                    Some(self.tysys.type_table.borrow_mut().make_byte_list()),
+                    None,
+                );
             }
             ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => return (None, None),
         };

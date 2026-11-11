@@ -1115,10 +1115,8 @@ adding an `impl Take<i32>` silently retarget every existing call that meant
 `Take<i64>`. The error names each argument that came up empty and why, so it
 says whether an annotation would fix the call.
 
-An impl that leaves a trait argument to the call (`impl<T: Show> Take<T> for
-bool`) joins the set too. It names the list the argument's type fixes, so an
-`i64` argument reaches `Take<i64>` through it and through `impl Take<i64> for
-bool` alike. An argument whose type the call does not pin fixes no list, and the
+An impl that leaves a trait argument to the call (`impl<T: Show> Take<T> for bool`) joins the set too. It names the list the argument's type fixes, so an
+`i64` argument reaches `Take<i64>` through it and through `impl Take<i64> for bool` alike. An argument whose type the call does not pin fixes no list, and the
 impl names every list the argument could take: a bare literal reaches several
 through it, and stays ambiguous beside the written impl as it does beside
 another width. An operator's right operand and a subscript's key select as an
@@ -1254,9 +1252,11 @@ and no written `Eq` gets its `Eq` from `cmp`, not from its members:
 `a == b` is `a.cmp(&b) == Ordering::Equal`. A type with a written `Eq` derives
 no `Ord`, so a use that needs one is a compile error until `cmp` is written
 too. A newtype writing `eq` alone inherits no `Ord` from its base either, and a
-newtype over it none from it. Only `Eq<Self>` counts here; an `Eq<Rhs>` for
-another type has no `Ord` to agree with, and leaves `Eq<Self>` to derive as if
-it were not written.
+newtype over it none from it. Only an impl naming `Eq<Self>` counts here, and
+one leaving the argument open (`impl<R: Show> Eq<R> for Tag`) names it, as
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists) says. An
+`Eq<Rhs>` for another type has no `Ord` to agree with, and leaves `Eq<Self>` to
+derive as if it were not written.
 [Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what holds when
 both are written.
 
