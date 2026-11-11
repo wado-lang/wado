@@ -1162,18 +1162,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let written = e.bound_args_where_written(&bound, &ParamSpace::new());
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
-                    let closure = e.tysys.trait_env.supertrait_closure(&decl).to_vec();
                     out.push((bound, at_decl));
-                    for inherited in closure {
-                        let space = e.inherited_space(decl, &args, &inherited.via, binder);
-                        // An inherited clause is written in `decl`'s own space,
-                        // where `Self` is the bounded type — `binder` here.
-                        let self_binding = SelfBinding {
-                            type_id: binder,
-                            declaring_trait: Some(decl),
-                        };
-                        out.push((ScopedBound::new(inherited.bound, Some(self_binding)), space));
-                    }
+                    let inherited = e.inherited_clauses(decl, &args, binder);
+                    out.extend(
+                        inherited
+                            .into_iter()
+                            .map(|(_, clause, space)| (clause, space)),
+                    );
                 }
                 Some(out)
             },
@@ -1455,22 +1450,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(args) = self.bound_trait_args(base, bound, space, decl) else {
             return Vec::new();
         };
-        let closure = self.tysys.trait_env.supertrait_closure(&decl).to_vec();
-        closure
-            .iter()
-            .filter(|inherited| inherited.decl == trait_)
-            .filter_map(|inherited| {
-                let at = self.inherited_space(decl, &args, &inherited.via, base);
-                // Written in `decl`'s own space, where `Self` is the subject.
-                let clause = ScopedBound::new(
-                    inherited.bound.clone(),
-                    Some(SelfBinding {
-                        type_id: base,
-                        declaring_trait: Some(decl),
-                    }),
-                );
-                let written = self.bound_args_where_written(&clause, &at);
+        self.inherited_clauses(decl, &args, base)
+            .into_iter()
+            .filter(|(inherited, _, _)| *inherited == trait_)
+            .filter_map(|(_, clause, space)| {
+                let written = self.bound_args_where_written(&clause, &space);
                 self.trait_args_at(trait_, base, &written)
+            })
+            .collect()
+    }
+
+    /// Each clause `decl` inherits, with the trait it names and the space it
+    /// is written in, `decl` reached at `args` on `subject`. A clause is
+    /// written in its declaring trait, where `Self` is `subject`.
+    fn inherited_clauses(
+        &mut self,
+        decl: DefId,
+        args: &[TypeId],
+        subject: TypeId,
+    ) -> Vec<(DefId, ScopedBound, ParamSpace)> {
+        let closure = self.tysys.trait_env.supertrait_closure(&decl).to_vec();
+        let self_binding = SelfBinding {
+            type_id: subject,
+            declaring_trait: Some(decl),
+        };
+        closure
+            .into_iter()
+            .map(|inherited| {
+                let space = self.inherited_space(decl, args, &inherited.via, subject);
+                let clause = ScopedBound::new(inherited.bound, Some(self_binding));
+                (inherited.decl, clause, space)
             })
             .collect()
     }
