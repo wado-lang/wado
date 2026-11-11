@@ -606,8 +606,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         param_is_mut: Vec<bool>,
     ) {
-        let mut method_info =
-            LocalMethodName::new(self.binder_of(subject), Some(reflect_trait_name), method);
+        let receiver = self.tysys.type_table.borrow().fq_type_name(subject);
+        let mut method_info = LocalMethodName::new(receiver, Some(reflect_trait_name), method);
         method_info.is_type_param_receiver = true;
         method_info.receiver_param = self.tysys.type_table.borrow().substitution_slot(subject);
 

@@ -1142,55 +1142,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> FqTypeName {
-        if self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .contains_key(written)
-        {
-            return self.binder_in_scope(written);
+        if let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(written) {
+            return self.tysys.type_table.borrow().fq_type_name(binder.type_id);
         }
         match self.decl_key_or_local(written) {
             Some(def) => FqTypeName::of_head(self.tysys.resolutions.defs(), def),
             // A name that reaches no declaration at all: it names a shape or
             // nothing, and the writing module is the only vantage left.
             None => FqTypeName::shape(&self.current_module_source, written),
-        }
-    }
-
-    /// The binder `written` names in the current type-param scope, owned by the
-    /// item declaring it. Matched on the binding, not the spelling — a method
-    /// parameter may shadow the receiver's letter (#1932).
-    pub(super) fn binder_in_scope(&self, written: &str) -> FqTypeName {
-        let binder = self.annotate_ctx.trait_ctx.type_params.get(written);
-        self.binder_named(binder, written)
-    }
-
-    /// [`Self::binder_in_scope`] for the binder `binder` is, which `Self`
-    /// reaches even where a method parameter shadows its letter.
-    pub(super) fn binder_of(&self, binder: TypeId) -> FqTypeName {
-        let name = self
-            .tysys
-            .binder_name(binder)
-            .expect("a binder is a type parameter");
-        self.binder_named(self.annotate_ctx.trait_ctx.binder(binder), &name)
-    }
-
-    fn binder_named(&self, binder: Option<&scope::BinderInScope>, name: &str) -> FqTypeName {
-        let table = self.tysys.type_table.borrow();
-        match binder {
-            Some(binder)
-                if matches!(
-                    table.get(binder.type_id),
-                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                ) =>
-            {
-                table.fq_type_name(binder.type_id)
-            }
-            other => panic!(
-                "PROBE binder_named fallback {name}: {:?}",
-                other.map(|b| table.get(b.type_id))
-            ),
         }
     }
 
