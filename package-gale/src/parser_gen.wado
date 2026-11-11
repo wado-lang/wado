@@ -2353,7 +2353,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     if yields_unless_viable && walks_iteration {
         let resumes = continuation_resumes_at(ctx, &re.after_iteration, "tokens", "tokens", "pos");
         let yielded = repeat_continuation_yields(ctx, &re.exit, "tokens", "sp");
-        gen_scan_rewind_break(w, ctx, "sp", `!${resumes} && ${yielded}`);
+        gen_scan_rewind_break(w, ctx, "sp", `${yielded} && !${resumes}`);
     }
     w.end();
 }
@@ -2390,7 +2390,7 @@ fn gen_scan_yield_unless_resumed<S: AsStrSlice>(
 ) {
     let resumes = continuation_resumes_at(ctx, &re.after_iteration, "tokens", "tokens", "pos");
     let yielded = repeat_continuation_yields(ctx, &re.exit, "tokens", &start);
-    w.begin(`if pos != ${start} && !${resumes} && ${yielded}`);
+    w.begin(`if pos != ${start} && ${yielded} && !${resumes}`);
     gen_scan_rewind(w, ctx, &start);
     w.end();
 }
@@ -6432,7 +6432,7 @@ fn optional_entry_yielding<S: AsStrSlice>(
     };
     let resumes = continuation_resumes_at(ctx, &r.after_iteration, "&p.kinds", "p.kinds", &scan_pos);
     let yields = repeat_continuation_yields(ctx, &r.exit, "&p.kinds", "p.pos");
-    w.line(`${verdict} = ${scan_pos} >= 0 && (${resumes} || !${yields});`);
+    w.line(`${verdict} = ${scan_pos} >= 0 && (!${yields} || ${resumes});`);
     w.end();
     return verdict;
 }
@@ -6575,7 +6575,8 @@ fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 ) -> String {
     let end = `${pos} + 1`;
     let resumes = continuation_resumes_at(ctx, after_iteration, &tokens, stream, &end);
-    return `(${resumes} || !${repeat_continuation_yields(ctx, exit, tokens, pos)})`;
+    let yields = repeat_continuation_yields(ctx, exit, tokens, pos);
+    return `(!${yields} || ${resumes})`;
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy loop's iteration entry,
