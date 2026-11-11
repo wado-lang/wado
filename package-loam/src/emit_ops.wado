@@ -2,7 +2,7 @@
 //! them.
 
 use { HashMap } from "core:collections";
-use { EmitError, Operands, Symbols, axis_list } from "./emit_symbols.wado";
+use { EmitError, Operands, Symbols, axis_list, float_literal } from "./emit_symbols.wado";
 use { fill_of } from "./fold.wado";
 use { Elements, KERNEL_ELEMENT, Node, case_named, settled, trailing_axes } from "./graph.wado";
 use { BACKEND_PARAM } from "./idents.wado";
@@ -454,7 +454,7 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
     let axis = settled(concat_axis(node, shapes[node.outputs[0]].rank()));
     let element = checked.primitives[node.outputs[0]];
     let past = shapes[node.inputs[0]];
-    if let Symbolic(length) = past.axes[axis].extent && symbols.grown.into_iter().any(|g| length == Poly::symbol(&g)) {
+    if let Symbolic(length) = past.axes[axis].extent && symbols.grows(&length) {
         assert node.inputs.len() == 2, "a past grows by one part";
         let into = `backend.relabeled::<${element}, [${axis_list(&past)}], [${out}]>(${exprs.reference(&node.inputs[0])})`;
         let types = `${element}, [${out}], [${axis_list(&shapes[node.inputs[1]])}]`;
@@ -668,23 +668,6 @@ fn element_literal(elements: &Elements) -> String {
         // A tensor attribute holds numbers.
         Symbolic(_) => unreachable(),
     };
-}
-
-/// A constant as an expression the generated source spells. Wado has no
-/// literal for a non-finite float, and a mask is written with `-inf`.
-internal fn float_literal(value: f32) -> String {
-    if value.is_nan() {
-        return "f32::NAN";
-    }
-    if value == f32::INFINITY {
-        return "f32::INFINITY";
-    }
-    if value == f32::NEG_INFINITY {
-        return "-f32::INFINITY";
-    }
-    // The shortest round-tripping form of a float can be an integer, so the
-    // cast is what makes it a float.
-    return `${value} as f32`;
 }
 
 /// The axes of `Gemm`'s matrix product, which its bias may rename where they

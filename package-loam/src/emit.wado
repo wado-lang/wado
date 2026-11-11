@@ -5,7 +5,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { Deserialize } from "core:serde";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
-use { built_call, built_split, float_literal } from "./emit_ops.wado";
+use { built_call, built_split } from "./emit_ops.wado";
 use {
     Carrier,
     Grown,
@@ -14,6 +14,7 @@ use {
     Symbols,
     axis_list,
     capacity_key,
+    float_literal,
     symbol_carriers,
     symbol_key,
 } from "./emit_symbols.wado";
@@ -202,9 +203,7 @@ impl Prepared {
         );
         let mut symbols = held_symbols.padded(&self.padded, &self.padded_grown(), &self.conditions, &self.names);
         if let Some(r) = rows {
-            symbols.rows = Option::Some(r.name);
-            symbols.counting = r.extent.poly().symbols();
-            symbols.idents[SLOTS] = "slots";
+            symbols.along_rows(r.name, r.extent.poly().symbols());
         }
         let mut source = CodeWriter::with_capacity(8192);
         let read = emit_build(
@@ -650,7 +649,7 @@ fn emit_build(
     crossing: &Crossing,
     conditions: &List<String>,
 ) -> Result<List<String>, EmitError> {
-    let idents = symbols.idents;
+    let spelled = symbols;
     let axes = if symbols.per_row() { "[Slots]" } else { "[]" };
     w.line("/// The graph's pass, each operation added to the graph `backend` builds,");
     w.line("/// over inputs it holds.");
@@ -659,7 +658,7 @@ fn emit_build(
         let mut lengths = StructSpec::new(LENGTHS, Vis::Pub);
         lengths.add_generic(HOLDS_BOUND);
         for let symbol of read {
-            lengths.add_pub_field(idents[symbol], `${BACKEND_PARAM}::Tensor<i64, ${axes}>`);
+            lengths.add_pub_field(spelled.ident(&symbol), `${BACKEND_PARAM}::Tensor<i64, ${axes}>`);
         }
         w.blank();
         w.line("/// The valid length of each length the inputs pad to a capacity, their");
@@ -895,7 +894,7 @@ fn prepared_entry(
         moving.extend(&owed.into_iter().map(|o| o.0.symbol).collect());
         for let symbol of moving {
             if moves_a_step(&symbol, &r.symbol, owed)? {
-                end.idents[symbol] = `(${symbols.idents[symbol]} + ${r.spelled})`;
+                end.spell_as(&symbol, `(${symbols.ident(&symbol)} + ${r.spelled})`);
             }
         }
         at_end = Option::Some(end);
@@ -903,9 +902,7 @@ fn prepared_entry(
     lines.extend(&checks_at(checked, &mut symbols, &mut at_end)?);
     lines.extend(&branch_checks(graph, checked, names, conditions, &mut symbols, &mut at_end)?);
     if let Some(end) = &at_end {
-        for let symbol of end.used {
-            symbols.used.insert(symbol);
-        }
+        symbols.use_what(end);
     }
     // Each `If` on an input takes its branch on the host, so the program holds
     // the one branch, at lengths it holds at.
@@ -943,9 +940,7 @@ fn prepared_entry(
         arguments.push("&cache");
     }
     // A capacity reads its length, and an unpadded symbol is its own capacity.
-    for let symbol of capacities.used {
-        symbols.used.insert(symbol);
-    }
+    symbols.use_what(&capacities);
     // What the program takes, in the order `recorded` makes its parameters:
     // the inputs and the cache, whose extents are the shape class, then the
     // lengths and the weights.
@@ -972,7 +967,7 @@ fn prepared_entry(
         };
         let mut fields: List<String> = [];
         for let symbol of *read {
-            let ident = symbols.idents[symbol];
+            let ident = symbols.ident(&symbol);
             let host = symbols.spell(&Poly::symbol(&symbol))?;
             let data = match &apart {
                 None => `[${host}]`,
@@ -994,7 +989,7 @@ fn prepared_entry(
         lines.push(`let lengths = ${LENGTHS}::<${BACKEND_PARAM}> { ${fields.join(", ")} };`);
         arguments.push("&lengths");
         // A program holds as many rows of lengths as it was recorded with.
-        class.push(`backend.extents_of(&lengths.${symbols.idents[read[0]]})`);
+        class.push(`backend.extents_of(&lengths.${symbols.ident(&read[0])})`);
     }
     let first_weight = taken_args.len();
     for let weight of weight_names(graph, kept) {
@@ -1544,9 +1539,7 @@ fn emit_least_extents(
             capacities.spell_shape(&checked.shapes[a.tensor])?;
         });
     }
-    for let symbol of capacities.used {
-        symbols.used.insert(symbol);
-    }
+    symbols.use_what(&capacities);
     w.blank();
     w.line("/// The extents `recorded` takes where each length an input carries is 1, as");
     w.line("/// `compute` pads them to their capacities.");
@@ -1618,7 +1611,7 @@ fn at_capacities(
             lines.push(
                 `let ${capacity} = capacity_of(to_extent(${symbols.spell(&Poly::symbol(&symbol))?}${own_more})) as i64;`,
             );
-            capacities.idents[symbol] = capacity;
+            capacities.spell_as(&symbol, capacity);
             continue;
         };
         let present = `capacity_of(to_extent(${symbols.spell(&g.present)?}${more})) as i64`;
@@ -1626,7 +1619,7 @@ fn at_capacities(
             Some([1, rest]) => `let ${capacity} = ${present} - (${capacities.spell(&rest)?});`,
             _ => `let ${capacity} = ${present};`,
         });
-        capacities.idents[symbol] = capacity;
+        capacities.spell_as(&symbol, capacity);
     }
     return Result::Ok(capacities);
 }
@@ -2024,17 +2017,15 @@ fn emit_entry(
     for let tensor of returned.into_iter().chain(crossing.pairs.into_iter().map(|p| p.1)) {
         exprs.unlifted(&tensor);
     }
-    let read: List<String> = symbols.order.into_iter().filter(|s| symbols.read.contains(s)).collect();
+    let read = symbols.read_lengths();
     // The rows a tensor each row's lengths computed holds, as many as the lengths do.
-    if symbols.used.contains(SLOTS) {
-        symbols.sources[SLOTS] = `backend.extents_of(&lengths.${symbols.idents[read[0]]})[0] as i64`;
-        symbols.requires[SLOTS] = [];
-        symbols.order.push(SLOTS);
+    if symbols.uses(&SLOTS) {
+        symbols.bind_slots(`backend.extents_of(&lengths.${symbols.ident(&read[0])})[0] as i64`);
     }
     if !read.is_empty() {
         entry.add_param("lengths", `&${LENGTHS}<${BACKEND_PARAM}>`);
     }
-    if !symbols.chosen.is_empty() {
+    if symbols.chooses() {
         entry.add_param("chosen", `&${CHOSEN}`);
     }
     let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
@@ -2050,9 +2041,9 @@ fn emit_entry(
     }
     let mut owed: List<String> = [];
     // A tensor each row's lengths computed holds as many rows as each length.
-    if symbols.used.contains(SLOTS) {
+    if symbols.uses(&SLOTS) {
         for let symbol of read.into_iter().skip(1) {
-            let field = `lengths.${symbols.idents[symbol]}`;
+            let field = `lengths.${symbols.ident(&symbol)}`;
             owed.push(
                 wado`refuse(extents_mismatch(&backend.extents_of(&${field}), "${field}", ["Slots"], [to_extent(slots)]));`,
             );
@@ -2371,7 +2362,7 @@ fn lifted_call(
     symbols: &mut Symbols,
     opset: Option<i64>,
 ) -> Result<Option<String>, EmitError> {
-    let Some(rows) = symbols.rows else {
+    let Some(rows) = symbols.rows() else {
         return Result::Ok(null);
     };
     let shapes = &checked.shapes;
@@ -2649,7 +2640,7 @@ fn branch_block(
     let types: List<String> = node.outputs.into_iter().map(|o| prepared_type(checked, &o)).collect();
     let yielded = if types.len() == 1 { types[0] } else { `[${types.join(", ")}]` };
     let axes = axis_list(&checked.shapes[node.inputs[0]]);
-    let opening = match symbols.chosen.get(node.inputs[0]) {
+    let opening = match symbols.chosen_branch(&node.inputs[0]) {
         Some(chosen) => `branched::<${BACKEND_PARAM}, [${axes}], ${yielded}>(backend, ${condition}, ${chosen}, || {`,
         None => `backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`,
     };

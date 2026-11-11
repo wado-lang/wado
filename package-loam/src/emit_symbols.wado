@@ -1,12 +1,14 @@
 //! What every part of the module `emit` writes shares: the errors that stop
-//! it, the identifiers it mints, and the lengths only the run knows.
+//! it, the identifiers it mints, the lengths only the run knows, what each
+//! tensor is called inside `build`, and how an axis list and a float constant
+//! are spelled.
 
 use { HashMap, HashSet } from "core:collections";
 use { Extent, Solved, solved } from "./extent.wado";
 use { Graph } from "./graph.wado";
 use { BACKEND_PARAM, MAP, is_bound, module_idents } from "./idents.wado";
 use { Lowers, Op, Poly } from "./poly.wado";
-use { RowRefusal } from "./rows.wado";
+use { RowRefusal, SLOTS } from "./rows.wado";
 use { Shape } from "./shape.wado";
 
 /// A boundary tensor of an element type no kernel holds.
@@ -152,8 +154,11 @@ impl Names {
         return Result::Ok(());
     }
 
-    internal fn get(&self, tensor: &String) -> String {
-        return self.idents.get(*tensor).unwrap();
+    /// `tensor`'s identifier, which `of` minted.
+    internal fn get(&self, tensor: &String) -> String
+        contract self.idents.contains_key(*tensor), "a name the module spells is one `Names::of` was given"
+    {
+        return self.idents[*tensor];
     }
 }
 
@@ -262,31 +267,99 @@ impl Operands {
 /// The lengths only the run knows, each bound in `build` or `compute` from the
 /// first input axis that carries it, once something spells it.
 internal struct Symbols {
-    internal idents: HashMap<String, String>,
-    internal sources: HashMap<String, String>,
+    idents: HashMap<String, String>,
+    sources: HashMap<String, String>,
     /// The symbols in the order they are bound, each after those its source reads.
-    internal order: List<String>,
-    internal requires: HashMap<String, List<String>>,
-    internal used: HashSet<String>,
+    order: List<String>,
+    requires: HashMap<String, List<String>>,
+    used: HashSet<String>,
     /// Each padded symbol's valid length, as `build` reads it from `lengths`.
     /// Its extent in the inputs is the capacity.
     lengths: HashMap<String, String> = HashMap::new(),
     /// The padded symbols something read the value of.
-    internal read: HashSet<String> = HashSet::new(),
+    read: HashSet<String> = HashSet::new(),
     /// Each padded symbol a past grows along, whose past `build` takes at the
     /// present's capacity.
-    internal grown: HashSet<String> = HashSet::new(),
+    grown: HashSet<String> = HashSet::new(),
     /// Each `If` condition the host holds, and the field of `chosen` naming the
     /// branch `build` takes on it.
-    internal chosen: HashMap<String, String> = HashMap::new(),
+    chosen: HashMap<String, String> = HashMap::new(),
     /// The axis the rows of a batch run along, where each row holds lengths of
     /// its own: a valid length is then a value of `[Slots]`, one per row.
-    internal rows: Option<String> = null,
+    rows: Option<String> = null,
     /// The symbols that count the rows, whose valid length no row holds apart.
-    internal counting: List<String> = [],
+    counting: List<String> = [],
 }
 
 impl Symbols {
+    /// The identifier `symbol` is bound to.
+    internal fn ident(&self, symbol: &String) -> String {
+        return self.idents[*symbol];
+    }
+
+    /// `symbol` spelled as `spelled` from here on, in place of its binding.
+    internal fn spell_as(&mut self, symbol: &String, spelled: String) {
+        assert self.idents.contains_key(*symbol), "a symbol spelled anew is one the inputs bind";
+        self.idents[*symbol] = spelled;
+    }
+
+    /// Whether something spelled `symbol`.
+    internal fn uses(&self, symbol: &String) -> bool {
+        return self.used.contains(*symbol);
+    }
+
+    /// Each symbol `other`, a copy of these spelling some anew, spelled, as
+    /// these spelled it: so these bind it.
+    internal fn use_what(&mut self, other: &Symbols) {
+        for let symbol of other.used {
+            self.used.insert(symbol);
+        }
+    }
+
+    /// The padded symbols something read the value of, in the order they are bound.
+    internal fn read_lengths(&self) -> List<String> {
+        return self.order.into_iter().filter(|s| self.read.contains(s)).collect();
+    }
+
+    /// Whether `build` takes a branch on some condition the host holds.
+    internal fn chooses(&self) -> bool {
+        return !self.chosen.is_empty();
+    }
+
+    /// The field of `chosen` naming the branch `build` takes on `condition`,
+    /// where the host holds it.
+    internal fn chosen_branch(&self, condition: &String) -> Option<String> {
+        return self.chosen.get(*condition);
+    }
+
+    /// Whether `p` is a padded symbol a past grows along.
+    internal fn grows(&self, p: &Poly) -> bool {
+        return self.grown.into_iter().any(|g| *p == Poly::symbol(&g));
+    }
+
+    /// The axis the rows of a batch run along, where each row holds lengths of
+    /// its own.
+    internal fn rows(&self) -> Option<String> {
+        return self.rows;
+    }
+
+    /// These with each row holding lengths of its own along `rows`, whose
+    /// extent the symbols `counting` give, the rows bound as `slots`.
+    internal fn along_rows(&mut self, rows: String, counting: List<String>) {
+        self.rows = Option::Some(rows);
+        self.counting = counting;
+        self.idents[SLOTS] = "slots";
+    }
+
+    /// The rows bound from `source`, which reads no other symbol, where
+    /// something spelled them.
+    internal fn bind_slots(&mut self, source: String) {
+        assert self.uses(&SLOTS), "the rows are bound where something spells them";
+        self.sources[SLOTS] = source;
+        self.requires[SLOTS] = [];
+        self.order.push(SLOTS);
+    }
+
     /// The symbols `carriers` bind, each read from its input's extent as
     /// `extent` spells it, given the input's identifier and the axis.
     internal fn of(carriers: &List<Carrier>, names: &Names, extent: fn(&String, i32) -> String) -> Symbols {
@@ -593,6 +666,22 @@ fn value_of(host: String) -> String {
 
 /// The names of `shape`'s axes, as a turbofish lists them.
 internal fn axis_list(shape: &Shape) -> String {
-    let names: List<String> = shape.axes.into_iter().map(|a| a.name).collect();
-    return names.join(", ");
+    return shape.names().join(", ");
+}
+
+/// A constant as an expression the generated source spells. Wado has no
+/// literal for a non-finite float, and a mask is written with `-inf`.
+internal fn float_literal(value: f32) -> String {
+    if value.is_nan() {
+        return "f32::NAN";
+    }
+    if value == f32::INFINITY {
+        return "f32::INFINITY";
+    }
+    if value == f32::NEG_INFINITY {
+        return "-f32::INFINITY";
+    }
+    // The shortest round-tripping form of a float can be an integer, so the
+    // cast is what makes it a float.
+    return `${value} as f32`;
 }
