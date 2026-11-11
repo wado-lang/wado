@@ -304,10 +304,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class
     }
 
-    /// Narrow `candidates` to those whose return type takes `expected`, what
-    /// the call's context asks of its result, where any does. It selects as an
-    /// annotated argument does; a context none meets is the mismatch's to
-    /// report.
+    /// Narrow `candidates` to those whose result `expected`, what the call's
+    /// context asks of it, takes, where any does: the result flows into the
+    /// context as an argument flows into a parameter. A result the call has
+    /// yet to settle may become anything. A context none meets is the
+    /// mismatch's to report.
     pub(super) fn narrow_to_expected_return<C>(
         &self,
         candidates: &mut Vec<C>,
@@ -317,8 +318,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if candidates.len() < 2 || !self.tysys.type_table.borrow().is_concrete(expected) {
             return;
         }
-        let class = ArgClass::Exact(expected);
-        let takes = |c: &C| self.class_admits(return_of(c), &class);
+        let takes = |c: &C| {
+            let result = return_of(c);
+            !self.tysys.type_table.borrow().is_concrete(result)
+                || self.class_admits(expected, &ArgClass::Exact(result))
+        };
         if candidates.iter().any(takes) {
             candidates.retain(takes);
         }

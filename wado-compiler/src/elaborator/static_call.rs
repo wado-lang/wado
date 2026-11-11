@@ -128,6 +128,8 @@ pub(super) struct StaticOffer {
     pub(super) kind: CandidateKind,
     pub(super) origin: CandidateOrigin,
     pub(super) selector: Selector,
+    /// The declaration's result, written in the block's own frame.
+    pub(super) return_type: TypeId,
 }
 
 /// Which kind of declaration a candidate is. What shadows it and which
@@ -245,6 +247,9 @@ struct Candidate {
     kind: CandidateKind,
     origin: CandidateOrigin,
     selector: Selector,
+    /// The declaration's result, written in the frame of the block declaring
+    /// it.
+    return_type: TypeId,
 }
 
 /// Narrow to the candidates the rule prefers, where any of them qualifies.
@@ -378,7 +383,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let resolved =
-            match self.select_candidate(candidates, arg_types, &declaring_args, expected_return) {
+            match self.select_candidate(
+                candidates,
+                arg_types,
+                &declaring_args,
+                receiver_type,
+                expected_return,
+            ) {
                 Selection::One(candidate) => self.callee_of_candidate(
                     (receiver_name, &key),
                     method_name,
@@ -453,6 +464,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match self.newtype_base_target(&key) {
             Some((base_key, base_name)) => {
                 let (base_type, base_arg_types) = self.at_newtype_base(receiver_type, arg_types);
+                let (_, base_expected) =
+                    self.at_newtype_base(receiver_type, expected_return.as_slice());
                 let mut lookup = self.resolve_static_callee(StaticQuery {
                     receiver_key: Some(&base_key),
                     arg_types: &base_arg_types,
@@ -460,6 +473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_args,
                     method_args,
                     required_trait,
+                    expected_return: base_expected.first().copied(),
                     ..StaticQuery::of(&base_name, method_name)
                 });
                 if let (StaticLookup::Found(callee), Some(receiver_type)) =
@@ -923,6 +937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         mut candidates: Vec<Candidate>,
         arg_types: &[TypeId],
         declaring_args: &[TypeId],
+        receiver_type: Option<TypeId>,
         expected_return: Option<TypeId>,
     ) -> Selection {
         // The receiver's own declaration shadows an inherited one of the same
@@ -957,11 +972,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         candidates.retain(|c| self.selector_admits(&c.selector, c.kind.own_args(arg_types)));
         if let Some(expected) = expected_return {
             self.narrow_to_expected_return(&mut candidates, expected, |c| {
-                let sig = self.tysys.signatures.method_sig(c.method_id);
-                sig.expect("a candidate names a declared method")
-                    .decl
-                    .return_type
-                    .unwrap_or(TypeTable::UNIT)
+                let block = match &c.supply {
+                    Some(supply) => Some(supply.impl_def),
+                    None => self
+                        .tysys
+                        .signatures
+                        .method_sig(c.method_id)
+                        .and_then(|sig| sig.declaring_impl),
+                };
+                match (block, receiver_type) {
+                    (Some(block), Some(receiver)) => {
+                        self.tysys.at_receiver(block, receiver, c.return_type)
+                    }
+                    _ => c.return_type,
+                }
             });
         }
         // Among what the arguments admit, the earlier origin outranks: the
@@ -1123,26 +1147,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .trait_env
                     .fq_trait_of_impl(header, &self.tysys.resolutions)?;
                 let trait_decl = self.tysys.signatures.impl_trait(impl_def)?;
-                let build = |method_id, kind, origin, selector| Candidate {
+                let offer =
+                    self.tysys
+                        .impl_static_offer(header, impl_def, trait_decl, method_name)?;
+                Some(Candidate {
                     supply: Some(TraitSupply {
                         impl_def,
                         trait_decl,
                         trait_name,
                     }),
-                    method_id,
-                    kind,
-                    origin,
-                    selector,
-                };
-                let offer =
-                    self.tysys
-                        .impl_static_offer(header, impl_def, trait_decl, method_name)?;
-                Some(build(
-                    offer.method_id,
-                    offer.kind,
-                    offer.origin,
-                    offer.selector,
-                ))
+                    method_id: offer.method_id,
+                    kind: offer.kind,
+                    origin: offer.origin,
+                    selector: offer.selector,
+                    return_type: offer.return_type,
+                })
             })
             .collect()
     }
@@ -1180,6 +1199,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: CandidateKind::Static,
                     origin: CandidateOrigin::Blanket,
                     selector: Selector::Blanket,
+                    return_type: self
+                        .tysys
+                        .signatures
+                        .method_sig(method_id)?
+                        .decl
+                        .return_type
+                        .unwrap_or(TypeTable::UNIT),
                 })
             })
             .collect()
@@ -1275,6 +1301,7 @@ impl TypeSystem {
                 kind: CandidateKind::of(sig.self_kind),
                 origin: CandidateOrigin::Written,
                 selector: Self::written_selector(sig),
+                return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
             });
         }
         self.inherited_offer(trait_decl, impl_def, method_name)
@@ -1308,6 +1335,7 @@ impl TypeSystem {
                 Some([]) | None => Selector::Absent,
                 Some(params) => Selector::Params(params.to_vec()),
             },
+            return_type: instantiated.return_type,
         })
     }
 
@@ -1321,6 +1349,7 @@ impl TypeSystem {
             kind: CandidateKind::of(sig.self_kind),
             origin: CandidateOrigin::Own,
             selector: Selector::Absent,
+            return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
         })
     }
 
@@ -1343,21 +1372,28 @@ impl TypeSystem {
     /// then the block's trait arguments at the receiver's own. Without those,
     /// a default leaves them open and every argument reaches every block.
     pub(super) fn trait_frame_at(&self, impl_def: DefId, receiver: TypeId) -> Vec<TypeId> {
-        let mut table = self.type_table.borrow_mut();
-        let receiver_args = table
-            .impl_target_decl(impl_def)
-            .and_then(|decl| table.args_at_decl(receiver, decl))
-            .unwrap_or_default();
-        let slots = table.impl_slots(impl_def, &receiver_args);
         std::iter::once(receiver)
             .chain(
                 self.signatures
                     .impl_sig(impl_def)
                     .trait_type_args
                     .iter()
-                    .map(|&arg| table.substitute_type_params(arg, &slots)),
+                    .map(|&arg| self.at_receiver(impl_def, receiver, arg)),
             )
             .collect()
+    }
+
+    /// `ty`, written in block `impl_def`, with each slot the block's target
+    /// places taking `receiver`'s argument there. A slot the target does not
+    /// place stays open.
+    pub(super) fn at_receiver(&self, impl_def: DefId, receiver: TypeId, ty: TypeId) -> TypeId {
+        let mut table = self.type_table.borrow_mut();
+        let receiver_args = table
+            .impl_target_decl(impl_def)
+            .and_then(|decl| table.args_at_decl(receiver, decl))
+            .unwrap_or_default();
+        let slots = table.impl_slots(impl_def, &receiver_args);
+        table.substitute_type_params(ty, &slots)
     }
 
     /// [`Self::trait_frame_at`] the block's own target, its parameters open as

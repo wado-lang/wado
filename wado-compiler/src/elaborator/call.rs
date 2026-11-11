@@ -1780,6 +1780,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 StaticReceiver {
                     key: Some(&self.impl_target_at(receiver_site, &recv_name)),
                     ty: rewritten_receiver,
+                    expected_return: expected_type,
                     ..StaticReceiver::of(&recv_name)
                 },
                 &method_name,

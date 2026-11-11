@@ -1918,6 +1918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         key: struct_key_for_lookup.as_ref(),
                         ty: Some(target_type_id),
                         required_trait,
+                        expected_return: expected_type,
                         ..StaticReceiver::of(&recv_name)
                     },
                     &static_call.method,
@@ -3328,12 +3329,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if classes.iter().all(|c| matches!(c, ArgClass::Opaque(_))) {
             return ArgPreselect::Pass;
         }
-        let admitted: Vec<ArgCandidate> = self
+        let mut admitted: Vec<ArgCandidate> = self
             .static_arg_survey(recv, method_name)
             .candidates
             .into_iter()
             .filter(|c| self.params_admit(&c.params, classes))
             .collect();
+        if let Some(expected) = recv.expected_return {
+            self.narrow_to_expected_return(&mut admitted, expected, |c| c.return_type);
+        }
         // An impl leaving a slot to the call is told from another by the
         // arguments' types, which the resolution reads once they are
         // elaborated; only a numeric literal, whose width it would choose,
@@ -3441,6 +3445,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if survey.candidates.iter().any(|c| c.params == params) {
                 continue;
             }
+            let return_type = match recv.ty {
+                Some(receiver) => self.tysys.at_receiver(impl_def, receiver, offer.return_type),
+                None => offer.return_type,
+            };
             let table = self.tysys.type_table.borrow();
             // The parameters as the impl's own frame resolved them, so a
             // private or aliased name means what the impl wrote.
@@ -3448,6 +3456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             survey.candidates.push(ArgCandidate {
                 spelling,
                 params,
+                return_type,
                 trait_name: trait_name(),
                 block: impl_def,
             });
@@ -4067,6 +4076,8 @@ pub(super) enum ArgPreselect {
 pub(super) struct ArgCandidate {
     pub(super) spelling: String,
     pub(super) params: Vec<TypeId>,
+    /// Its result at the receiver.
+    return_type: TypeId,
     pub(super) trait_name: String,
     block: DefId,
 }
@@ -4104,6 +4115,9 @@ pub(super) struct StaticReceiver<'a> {
     pub(super) args: &'a [TypeId],
     /// The trait a qualified spelling names; only its impls answer.
     pub(super) required_trait: Option<DefId>,
+    /// What the call's context expects of its result, which selects among
+    /// the impls the arguments leave as an annotated argument does.
+    pub(super) expected_return: Option<TypeId>,
 }
 
 impl<'a> StaticReceiver<'a> {
@@ -4115,6 +4129,7 @@ impl<'a> StaticReceiver<'a> {
             ty: None,
             args: &[],
             required_trait: None,
+            expected_return: None,
         }
     }
 }
