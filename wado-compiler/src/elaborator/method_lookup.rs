@@ -2731,7 +2731,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|(n, &t)| (n.clone(), t)),
             );
 
-        let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
         // The block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
         let blanket_binder = is_blanket_type_param.then(|| {
@@ -2830,7 +2829,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ..MethodInfo::of_sig(&method_sig, instantiated)
                 },
                 impl_module_source: impl_module_source.clone(),
-                blanket_type_param: blanket_type_param.clone(),
                 blanket_binder: blanket_binder.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
@@ -2883,7 +2881,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
-                    blanket_type_param,
                     blanket_binder,
                     impl_struct_fq,
                     is_blanket_ref_impl,
@@ -3053,7 +3050,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let concrete: Vec<usize> = found_traits
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.blanket_type_param.is_none())
+            .filter(|(_, m)| m.blanket_binder.is_none())
             .map(|(i, _)| i)
             .collect();
         let mut classes: Vec<ArgClass> = Vec::new();

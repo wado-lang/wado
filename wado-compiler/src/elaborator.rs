@@ -75,7 +75,7 @@ use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
 use crate::name::{DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias};
-use crate::resolve::Resolution;
+use crate::resolve::{Resolution, head_site};
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId};
 use crate::tir::{ResolvedType, StructDef};
@@ -1142,27 +1142,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> FqTypeName {
-        self.qualified_receiver_name_owned(written, None)
-    }
-
-    /// [`Self::qualified_receiver_name`] for a receiver written inside the
-    /// `impl` block `owner` identifies — a blanket's receiver, which that
-    /// block names.
-    pub(super) fn qualified_receiver_name_owned(
-        &self,
-        written: &str,
-        owner: Option<DefId>,
-    ) -> FqTypeName {
         if self
             .annotate_ctx
             .trait_ctx
             .type_params
             .contains_key(written)
         {
-            return match owner {
-                Some(def) => FqTypeName::binder_of(self.tysys.resolutions.defs(), def, written),
-                None => self.binder_in_scope(written),
-            };
+            return self.binder_in_scope(written);
         }
         match self.decl_key_or_local(written) {
             Some(def) => FqTypeName::of_head(self.tysys.resolutions.defs(), def),
@@ -1193,21 +1179,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn binder_named(&self, binder: Option<&scope::BinderInScope>, name: &str) -> FqTypeName {
         let table = self.tysys.type_table.borrow();
         match binder {
-            Some(binder) if matches!(table.get(binder.type_id), ResolvedType::TypeParam { .. }) => {
+            Some(binder)
+                if matches!(
+                    table.get(binder.type_id),
+                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                ) =>
+            {
                 table.fq_type_name(binder.type_id)
             }
-            _ => FqTypeName::binder(name),
+            other => panic!(
+                "PROBE binder_named fallback {name}: {:?}",
+                other.map(|b| table.get(b.type_id))
+            ),
         }
     }
 
     /// The name an `impl` block's receiver registers under. One block, one
     /// name: two spellings of it register two templates.
     pub(super) fn impl_receiver_name(&self, impl_block: &ImplBlock) -> FqTypeName {
-        self.receiver_name_of_impl(
-            &impl_block.ty,
-            &impl_block.type_params,
-            self.tysys.resolutions.defs().def_at(impl_block.id),
-        )
+        self.receiver_name_of_impl(&impl_block.ty, &impl_block.type_params)
     }
 
     /// [`Self::impl_receiver_name`] from the block's parts. A `&X` block names
@@ -1217,7 +1207,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         impl_ty: &ast::Type,
         type_params: &[ast::GenericParam],
-        owner: DefId,
     ) -> FqTypeName {
         // A function type's name is its whole signature, `mut` and effects
         // included, as `TypeTable::fn_receiver_name` spells a call's receiver.
@@ -1234,7 +1223,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
             }
         }
-        self.qualified_receiver_name_owned(&self.get_type_name(impl_ty), Some(owner))
+        let resolutions = &self.tysys.resolutions;
+        match head_site(impl_ty).map(|site| resolutions.get(site)) {
+            Some(Resolution::Def(def)) => FqTypeName::of_head(resolutions.defs(), def),
+            Some(Resolution::Binder(binder)) => {
+                trait_env::written_binder(binder, &self.get_type_name(impl_ty), resolutions)
+            }
+            // A builtin shape, or a head that names nothing: the writing
+            // module is the only vantage left.
+            Some(Resolution::Projection(_) | Resolution::Unresolved) | None => {
+                FqTypeName::shape(&self.current_module_source, &self.get_type_name(impl_ty))
+            }
+        }
     }
 
     /// The declaration `ns::Name` reaches from this module.
@@ -2095,16 +2095,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Snapshot the resolution facts, which `reify_impl` reads back verbatim.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
-            // Two names, two uses. `reify_impl_default_methods` recomputes a
-            // default method's name from `qualified_struct_name`, so it must be
-            // what this block's methods are recorded under — owned, or the
-            // block writes two templates. `receiver` keys `method_info` against
-            // receivers built elsewhere, so it stays plain.
+            // `reify_impl_default_methods` recomputes a default method's name
+            // from `qualified_struct_name`, so it must be what this block's
+            // methods are recorded under, or the block writes two templates.
             let qualified_struct_name = scope.impl_receiver_name(impl_block);
-            let receiver = match (&impl_block.ty, RefKind::from_ast(&impl_block.ty)) {
-                (_, Some(kind)) => Receiver::of_ref_impl(kind, &qualified_struct_name),
-                (ast::Type::Function(_), None) => Receiver::Type(qualified_struct_name.clone()),
-                (_, None) => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
+            let receiver = match RefKind::from_ast(&impl_block.ty) {
+                Some(kind) => Receiver::of_ref_impl(kind, &qualified_struct_name),
+                None => Receiver::Type(qualified_struct_name.clone()),
             };
             let is_ref_impl = receiver.ref_kind().is_some();
             // Concrete type args of the impl's trait reference

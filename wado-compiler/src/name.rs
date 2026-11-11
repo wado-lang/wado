@@ -3711,11 +3711,11 @@ impl FqTypeName {
         })
     }
 
-    /// The pack `name` spread in a tuple (`..T` in `[..T]`): any run of the
-    /// tuple's elements, none included.
+    /// The pack `name` the item `def` declares, spread in a tuple (`..T` in
+    /// `[..T]`): any run of the tuple's elements, none included.
     #[must_use]
-    pub fn pack_spread(name: &str) -> Self {
-        Self::binder(&type_pack_name(name))
+    pub fn pack_spread(defs: &DefTable, def: DefId, name: &str) -> Self {
+        Self::binder_of(defs, def, &type_pack_name(name))
     }
 
     /// Whether this is a [`Self::pack_spread`].

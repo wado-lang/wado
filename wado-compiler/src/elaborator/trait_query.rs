@@ -3837,7 +3837,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_args: vec![],
             method_info,
             impl_module_source,
-            blanket_type_param: None,
             blanket_binder: None,
             impl_struct_fq,
             is_blanket_ref_impl: false,

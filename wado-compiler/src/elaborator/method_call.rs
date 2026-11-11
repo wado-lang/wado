@@ -491,7 +491,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info: Option<MethodInfo> = None;
         let mut trait_name: Option<FqTraitName> = None;
         let mut trait_impl_module_source: Option<ModuleSource> = None;
-        let mut blanket_type_param: Option<String> = None;
         let mut blanket_binder: Option<FqTypeName> = None;
         let mut trait_impl_struct_name: Option<FqTypeName> = None;
         let mut matched_impl_decl: Option<DefId> = None;
@@ -541,7 +540,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 info.owner = owner;
                 method_info = Some(info);
                 trait_impl_module_source = Some(trait_match.impl_module_source);
-                blanket_type_param = trait_match.blanket_type_param;
                 blanket_binder = trait_match.blanket_binder;
             }
         }
@@ -605,7 +603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // bound does: on the receiver, to the trait at those arguments,
             // dispatched there. It keeps the blanket's block, which the body
             // is checked against and the instance's impl must agree with.
-            if trait_match.blanket_type_param.is_some()
+            if trait_match.blanket_binder.is_some()
                 && self
                     .tysys
                     .type_table
@@ -646,7 +644,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 method_info = Some(info);
                 trait_impl_module_source = Some(trait_match.impl_module_source);
-                blanket_type_param = trait_match.blanket_type_param;
                 blanket_binder = trait_match.blanket_binder;
             }
         }
@@ -1181,11 +1178,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
-        } else if let Some(ref blanket_param) = blanket_type_param {
-            // For blanket impls, the template function uses the type param name (e.g., "I").
-            // The call site uses the concrete receiver (e.g., "ListIter<i32>").
-            // monomorph_info maps from the concrete name back to the template.
-            let binder = blanket_binder.unwrap_or_else(|| FqTypeName::binder(blanket_param));
+        } else if let Some(binder) = blanket_binder {
+            // The template is named by the blanket's binder, the call site by
+            // the concrete receiver; monomorph_info maps one to the other.
             let generic_name = MethodName::format_local(&binder, trait_name.as_ref(), method_name);
             // Keyed by its parameters in order, where a trait argument settles
             // one the receiver does not.

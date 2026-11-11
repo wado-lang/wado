@@ -5471,18 +5471,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let type_param = match tt.get(target_type) {
-            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
-            _ => None,
-        };
+        let type_param = matches!(tt.get(target_type), ResolvedType::TypeParam { .. })
+            .then(|| tt.fq_type_name(target_type));
         drop(tt);
 
         let (impl_def, module_source) = self.find_from_impl(target_type, from);
-        let target_receiver = match (impl_def, &type_param) {
+        let target_receiver = match (impl_def, type_param) {
             (Some(def), _) => {
                 self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type)
             }
-            (None, Some(name)) => self.binder_in_scope(name),
+            (None, Some(binder)) => binder,
             (None, None) => unreachable!(
                 "the caller checked `From` holds, which for a type that is no parameter selects a block"
             ),

@@ -6375,6 +6375,17 @@ impl TypeTable {
                 name,
                 ..
             } => FqTypeName::binder_of_family(&self.defs, *owning_trait, assoc_name, name),
+            ResolvedType::TypePack {
+                id,
+                name,
+                mapped_elem,
+            } => {
+                let pack = FqTypeName::pack_spread(&self.defs, id.owner, name);
+                match mapped_elem {
+                    Some(element) => pack.with_args(args_of(&[*element])),
+                    None => pack,
+                }
+            }
             ResolvedType::Tuple(elems) => FqTypeName::tuple(args_of(elems)),
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(ARRAY_TYPE_NAME)
                 .with_args(vec![self.fq_type_name_spelled_in(*elem, arg_rows)]),
@@ -6420,9 +6431,10 @@ impl TypeTable {
             ResolvedType::Unknown | ResolvedType::Error => {
                 FqTypeName::unresolved(&self.mangle_type_name(id))
             }
-            // Shapes that name no declaration — packs, `Unknown`. They carry no
-            // module, so the mangled spelling is already their whole identity.
-            _ => FqTypeName::builtin(&self.mangle_type_name(id)),
+            ResolvedType::PackElement { pack, walk } => {
+                let (pack, name) = self.pack_parts(*pack);
+                FqTypeName::binder_of(&self.defs, pack.owner, &pack_element_name(&name, *walk))
+            }
         }
     }
 
