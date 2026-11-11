@@ -2066,7 +2066,7 @@ fn lower_scan_repeat(
     if !rep.non_greedy {
         if let Optional = rep.kind {
             if let Group(g) = peel_labels(&rep.element) {
-                if g.alternatives.len() == 1 && shape_lookahead_fits(&g.alternatives[0], ctx) {
+                if optional_takes_shapes(peel_labels(&rep.element), element_has_field(&rep.element), ctx) {
                     let plain = lower_scan_plain_repeat(
                         rep,
                         ctx,
@@ -3790,25 +3790,13 @@ fn pick_optional_specialised(
     outer_suffix: &List<Element>,
     ctx: &mut LowerContext,
 ) -> Option<RepeatStrategy> {
-    let k_token = try_optional_k_token_lookahead(inner, ctx);
-    let shape = try_optional_shape_lookahead(inner, enclosing_at_tail, outer_suffix, ctx);
-    let scan_guard = try_optional_scan_guard(inner, ctx);
-    if body_has_field {
-        if let Some(s) = k_token {
-            return Option::Some(s);
-        }
-        if let Some(s) = shape {
-            return Option::Some(s);
-        }
-    } else {
-        if let Some(s) = shape {
-            return Option::Some(s);
-        }
-        if let Some(s) = k_token {
-            return Option::Some(s);
-        }
+    if optional_takes_shapes(inner, body_has_field, ctx) {
+        return Option::Some(optional_shape_lookahead(inner, enclosing_at_tail, outer_suffix, ctx));
     }
-    if let Some(s) = scan_guard {
+    if let Some(s) = try_optional_k_token_lookahead(inner, ctx) {
+        return Option::Some(s);
+    }
+    if let Some(s) = try_optional_scan_guard(inner, ctx) {
         warn_optional_scan_guard(owner, ctx);
         return Option::Some(s);
     }
@@ -3890,32 +3878,42 @@ fn collect_optional_entry_signature(inner: &Element, ctx: &mut LowerContext) -> 
 /// (2^n) is worthwhile: 8 gives at most 256 shapes.
 global MAX_SHAPE_OPTIONALS: i32 = 8;
 
-/// Try to materialise an `OptionalShapeLookahead` strategy. Fires
-/// when the inner is a single-alt Group with at least one nested
-/// Optional Repeat — emit enumerates 2^n shapes (longest-first) and
+/// Whether a greedy `?` over `inner` decides by shape lookahead, on the parse
+/// and the scan alike. A body with a field of its own prefers its k-token
+/// lookahead and parses its nested optionals in turn, so its scan walks them in
+/// turn too: a scan choosing a shape the parse never chose can end where the
+/// parse does not.
+fn optional_takes_shapes(inner: &Element, body_has_field: bool, ctx: &mut LowerContext) -> bool {
+    let Group(g) = inner else {
+        return false;
+    };
+    if g.alternatives.len() != 1 || !shape_lookahead_fits(&g.alternatives[0], ctx) {
+        return false;
+    }
+    return !body_has_field || collect_optional_entry_signature(inner, ctx).is_empty();
+}
+
+/// The `OptionalShapeLookahead` strategy of an `inner` that
+/// `optional_takes_shapes`: emit enumerates 2^n shapes (longest-first) and
 /// guards each on the per-position kind set computed from
-/// `ctx.first_of_element`. Returns `null` for other inner shapes, or where
-/// `shape_lookahead_fits` refuses the alternative.
-fn try_optional_shape_lookahead(
+/// `ctx.first_of_element`.
+fn optional_shape_lookahead(
     inner: &Element,
     enclosing_at_tail: bool,
     outer_suffix: &List<Element>,
     ctx: &mut LowerContext,
-) -> Option<RepeatStrategy> {
-    if let Group(g) = inner {
-        if g.alternatives.len() != 1 || !shape_lookahead_fits(&g.alternatives[0], ctx) {
-            return null;
-        }
-        let shapes = lookahead_shapes(&g.alternatives[0], enclosing_at_tail, outer_suffix, ctx);
-        let signatures = shapes.iter_ref().map(|s| s.sig).collect();
-        return Option::Some(RepeatStrategy::OptionalShapeLookahead(
-            OptionalShapeLookaheadStrategy {
-                shapes,
-                scan_guarded: shape_signatures_collide(&signatures),
-            },
-        ));
-    }
-    return null;
+) -> RepeatStrategy {
+    let Group(g) = inner else {
+        unreachable();
+    };
+    let shapes = lookahead_shapes(&g.alternatives[0], enclosing_at_tail, outer_suffix, ctx);
+    let signatures = shapes.iter_ref().map(|s| s.sig).collect();
+    return RepeatStrategy::OptionalShapeLookahead(
+        OptionalShapeLookaheadStrategy {
+            shapes,
+            scan_guarded: shape_signatures_collide(&signatures),
+        },
+    );
 }
 
 /// Resolve the greedy Repeat strategy: a specialised Optional
@@ -4166,8 +4164,12 @@ fn repeat_continuations(
     return [exit, continuation_arg(ctx, &follow_elements_of(&[again], &rest), 0)];
 }
 
-/// The repeat an alternative's element is, through its labels.
+/// The repeat an alternative's element is, through its labels and the
+/// transparent groups (`(a*)`) that lower to it.
 fn repeat_at(elem: &Element) -> &RepeatElement {
+    if let Group(g) = elem && let Some(inner) = transparent_inner(g) {
+        return repeat_at(inner);
+    }
     return match elem {
         Repeat(rep) => rep,
         Label(lab) => repeat_at(&lab.element),
