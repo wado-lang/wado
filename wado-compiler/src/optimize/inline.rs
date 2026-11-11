@@ -3704,7 +3704,11 @@ fn build_inlined_labeled_block(
         && let StmtKind::Expr(tail) = caller.stmts[last].kind
         && ![TypeTable::UNIT, TypeTable::NEVER].contains(&caller.operand_type(tail))
     {
-        let unit = Operand::Value(caller.values.unit());
+        let unit = Operand::Value(
+            caller
+                .values
+                .alloc_unshared(ValueKind::Unit, TypeTable::UNIT),
+        );
         block_stmts.push(caller.stmts.push(StmtNode {
             kind: StmtKind::Expr(unit),
             span: call_span,
