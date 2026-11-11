@@ -1,0 +1,55 @@
+// A pack a later-settled owner answers is held to its bound's associated-type
+// equality element by element: `Good::Item` is `i32`, `Bad::Item` is `bool`.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Good {
+    v: i32,
+}
+
+impl Holder for Good {
+    type Item = i32;
+    fn empty() -> Good {
+        return Good { v: 1 };
+    }
+}
+
+struct Bad {
+    v: i32,
+}
+
+impl Holder for Bad {
+    type Item = bool;
+    fn empty() -> Bad {
+        return Bad { v: 2 };
+    }
+}
+
+struct Pair {
+    good: Good,
+    bad: Bad,
+}
+
+fn made<T, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Holder<Item = i32>>(_t: T) -> S {
+    return ReflectStruct::<S>::from_fields([for let f of ReflectStruct::<S>::members() { made_at(&f) }]);
+}
+
+fn made_at<S, F: Holder>(_field: &StructField<S, F>) -> F {
+    return F::empty();
+}
+
+fn fallback() -> [i32, Pair] {
+    return [0, Pair { good: Good { v: 0 }, bad: Bad { v: 0 } }];
+}
+
+test "the element whose Item is not i32" {
+    let [_n, _p] = match builtin::black_box(true) {
+        true => [3, made(1)],
+        false => fallback(),
+    };
+}
+
+__DATA__
+{"compile_error": ":49:21: analysis error: type 'Bad' does not satisfy the associated type 'Holder::Item = i32': it is 'bool'"}
