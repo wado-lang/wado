@@ -116,8 +116,9 @@ impl FuncInstState {
     }
 }
 
-/// Collects generic instantiations and generates concrete types. It has no
-/// current module: each `FunctionRef::module_source` names its own (issue #1110).
+/// Collects generic instantiations and generates concrete types. A callee's
+/// module is never the current one: each `FunctionRef::module_source` names
+/// its own (issue #1110).
 pub(super) struct Monomorphizer {
     pub structs: StructInstState,
     pub functions: FuncInstState,
@@ -141,7 +142,8 @@ pub(super) struct Monomorphizer {
     /// [`MAX_INSTANCE_TYPE_DEPTH`] or grown past [`MAX_INSTANCE_TYPE_SIZE`],
     /// which is left uninstantiated.
     pub expanding: Option<ExpandingTemplate>,
-    /// The module of the function being instantiated.
+    /// The module of the function whose body is being substituted, where a
+    /// diagnostic on that body lands.
     pub instantiating_module: Option<ModuleSource>,
     /// The calls a generic body was checked against a value blanket for that
     /// an impl written for the instance answers instead.

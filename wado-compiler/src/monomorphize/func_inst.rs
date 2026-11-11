@@ -155,6 +155,7 @@ pub fn expand_settled_packs(
         };
         let mut local_count = func.local_count;
         let mut locals = std::mem::take(&mut func.locals);
+        mono.instantiating_module = Some(func.module_source.clone());
         SettledPackExpander {
             mono,
             type_table: type_table_rc,

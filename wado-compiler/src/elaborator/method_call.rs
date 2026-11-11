@@ -607,7 +607,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // names its type, where an impl written for that type outranks it.
             // So a call naming the trait's arguments goes as one through a
             // bound does: on the receiver, to the trait at those arguments,
-            // dispatched there.
+            // dispatched there. It keeps the blanket's block, which the body
+            // is checked against and the instance's impl must agree with.
             if trait_match.blanket_type_param.is_some()
                 && self
                     .tysys
