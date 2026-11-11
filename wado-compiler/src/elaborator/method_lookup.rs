@@ -4140,12 +4140,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_call.span,
         );
 
-        let container_fq = index_mut_info.receiver.clone();
-        let mangled_index_mut_name = MethodName::format_local(
-            &container_fq,
-            Some(&index_mut_info.trait_name),
-            "index_ref_mut",
-        );
+        let function_ref =
+            self.indexing_function_ref(&index_mut_info, "index_ref_mut", index_expr.span);
 
         // IndexMut returns &mut Output
         let mut_ref_output_type = self
@@ -4164,21 +4160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_operator_dispatch(
             index_expr.id,
             OperatorDispatch {
-                function_ref: FunctionRef {
-                    module_source: index_mut_info.impl_module_source.clone(),
-                    name: mangled_index_mut_name,
-                    template: Some(
-                        self.tysys
-                            .signatures
-                            .declared_template(index_mut_info.method_def),
-                    ),
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        container_fq,
-                        Some(index_mut_info.trait_name.clone()),
-                        "index_ref_mut".to_string(),
-                    )),
-                },
+                function_ref,
                 method_def: Some(index_mut_info.method_def),
                 self_kind: index_mut_info.self_kind,
                 arg_ref_wraps: vec![false],

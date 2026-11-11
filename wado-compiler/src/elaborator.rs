@@ -2028,11 +2028,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             type_id: target_type_id,
             declaring_trait,
         });
-        let is_concrete = !self
-            .tysys
-            .type_table
-            .borrow()
-            .contains_type_param(target_type_id);
         // The header names one instantiation whatever it binds, so the
         // arguments are resolved once rather than per associated type.
         let impl_trait_ref = impl_block
@@ -2040,6 +2035,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .as_ref()
             .zip(trait_name.and_then(FqTraitName::canonical))
             .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
+        // A slot only the trait reference names (`T` in `impl<T> Tr<T> for
+        // Host`) leaves the header generic over a concrete target.
+        let is_concrete = {
+            let tt = self.tysys.type_table.borrow();
+            std::iter::once(target_type_id)
+                .chain(impl_trait_ref.iter().flat_map(|r| r.args.iter().copied()))
+                .all(|ty| !tt.contains_type_param(ty))
+        };
         for (name, type_id) in self.bind_impl_assoc_types(impl_block) {
             let Some(trait_ref) = impl_trait_ref.clone() else {
                 continue;

@@ -4300,8 +4300,10 @@ impl TypeTable {
         {
             return Some(resolved);
         }
-        let type_args = self.nominal_type_args(concrete_id)?;
         let decl = self.decl_of_type(concrete_id)?;
+        // A declaration taking no parameters is no instance, and its impls
+        // read no arguments off it.
+        let type_args = self.nominal_type_args(concrete_id).unwrap_or_default();
         let answers = self.answers_reaching(
             self.generic_assoc_type_defs.get(&GenericAssocTypeKey {
                 target_decl: decl,

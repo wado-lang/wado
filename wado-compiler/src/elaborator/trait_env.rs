@@ -1475,6 +1475,25 @@ impl TraitEnv {
         })
     }
 
+    /// `written` with each argument it leaves out filled by `trait_`'s
+    /// default, `Self` read as `self_type`; `None` where one has none.
+    pub(crate) fn args_with_defaults(
+        &self,
+        trait_: DefId,
+        written: &[name::FqTypeName],
+        self_type: &name::FqTypeName,
+    ) -> Option<Vec<name::FqTypeName>> {
+        let params = self.decl_header_of(&trait_)?.default_args.len();
+        (0..params.max(written.len()))
+            .map(|i| {
+                written
+                    .get(i)
+                    .cloned()
+                    .or_else(|| self.default_arg_at(trait_, i, self_type))
+            })
+            .collect()
+    }
+
     /// The trait's declared default at `index`, `Self` read as `target`.
     fn default_arg_at(
         &self,

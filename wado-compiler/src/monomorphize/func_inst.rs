@@ -1704,7 +1704,7 @@ impl Monomorphizer {
                             Some(concrete_tid) => {
                                 let dispatch_tid =
                                     self.type_param_dispatch_tid(concrete_tid, &info, type_table);
-                                info.at_owner(&type_table.fq_type_name(dispatch_tid))
+                                self.named_at_link(&info, concrete_tid, dispatch_tid, type_table)
                             }
                             None => info.clone(),
                         }
@@ -2738,6 +2738,35 @@ impl Monomorphizer {
         shorter().unwrap_or(info)
     }
 
+    /// `info` named at `link`, the link of `receiver`'s newtype chain whose
+    /// impl answers. An argument the call leaves to a `Self` default means
+    /// `receiver` there, which the link's name alone would read as the link:
+    /// `impl Tr<N> for Base` answers `N: Tr` and is named `Tr<N>`.
+    fn named_at_link(
+        &self,
+        info: &LocalMethodName,
+        receiver: TypeId,
+        link: TypeId,
+        type_table: &TypeTable,
+    ) -> LocalMethodName {
+        let at_link = info.at_owner(&type_table.fq_type_name(link));
+        if link != receiver
+            && let Some(trait_fq) = at_link.trait_name.as_ref()
+            && let Some(trait_) = self.functions.trait_env.trait_def_of_fq(trait_fq)
+            && let Some(filled) = self.functions.trait_env.args_with_defaults(
+                trait_,
+                trait_fq.args(),
+                &type_table.fq_type_name(receiver),
+            )
+        {
+            let spelled = at_link.with_trait_type_args(&filled);
+            if self.impl_written_trait_args(&spelled).is_some() {
+                return self.named_by_impl(spelled);
+            }
+        }
+        self.named_by_impl(at_link)
+    }
+
     /// The trait arguments the impl on `info`'s receiver answering its trait
     /// writes, its own parameters left standing.
     fn impl_written_trait_args(&self, info: &LocalMethodName) -> Option<&[FqTypeName]> {
@@ -2917,12 +2946,12 @@ impl Monomorphizer {
             } else if let Some(link) = info.trait_name.as_ref().and_then(|trait_name| {
                 written_newtype_link(&self.functions.trait_env, trait_name, inner, type_table)
             }) {
-                self.named_by_impl(info.at_owner(&type_table.fq_type_name(link)))
+                self.named_at_link(&info, inner, link, type_table)
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.representation_head(inner);
-                self.named_by_impl(info.at_owner(&type_table.fq_type_name(resolved_inner)))
+                self.named_at_link(&info, inner, resolved_inner, type_table)
             }
         } else if needs_struct_type_args {
             // Resolve through newtypes so the receiver matches the TraitEnv key
