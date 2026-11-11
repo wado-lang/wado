@@ -998,6 +998,7 @@ internal global FOLLOW_CONT_BITS: i64 = 60;
 internal struct FollowTables {
     internal stride: i32,
     internal sets: List<i32>,
+    internal heads: List<i32>,
     internal starts: List<i32>,
     internal readings: List<i32>,
 }
@@ -1075,6 +1076,7 @@ fn follow_reads(
     eof_kind: i32,
 ) -> bool {
     let mut c = cont;
+    let kind = follow_kind_at(tokens, pos + depth, eof_kind);
     loop {
         let site = c & FOLLOW_ID_MASK;
         if site == 0 {
@@ -1085,11 +1087,8 @@ fn follow_reads(
             continue;
         }
         let rest = c >> FOLLOW_SLOT_BITS;
-        let readings = &tables.readings;
-        let mut at = tables.starts[site as i32 - 1];
-        let end = tables.starts[site as i32];
-        let heads = readings[at];
-        if !follow_set_has(tables, heads >> 1, follow_kind_at(tokens, pos + depth, eof_kind)) {
+        let heads = tables.heads[site as i32 - 1];
+        if !follow_set_has(tables, heads >> 1, kind) {
             if heads & 1 == 0 {
                 return false;
             }
@@ -1099,7 +1098,9 @@ fn follow_reads(
         if depth + 1 >= budget {
             return true;
         }
-        at += 1;
+        let readings = &tables.readings;
+        let mut at = tables.starts[site as i32 - 1];
+        let end = tables.starts[site as i32];
         while at < end {
             let len = readings[at] >> 1;
             let mut matched = 0;
@@ -4218,8 +4219,9 @@ global SYNC_4: List<i32> = [2];
 global FOLLOW_TABLES: FollowTables = FollowTables {
     stride: 1,
     sets: [128, 16],
-    starts: [0, 3, 6, 12, 18],
-    readings: [0, 3, 0, 2, 3, 1, 0, 8, 0, 0, 0, 0, 2, 8, 1, 0, 0, 0],
+    heads: [0, 2, 0, 2],
+    starts: [0, 2, 4, 9, 14],
+    readings: [3, 0, 3, 1, 8, 0, 0, 0, 0, 8, 1, 0, 0, 0],
 };
 global FOLLOW_SITE_0: i64 = 1;
 global FOLLOW_SITE_1: i64 = 2;
