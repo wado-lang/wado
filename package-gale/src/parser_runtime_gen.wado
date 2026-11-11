@@ -165,20 +165,28 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     // would suppress every diagnostic and let a broken parse report `ok()`, so
     // reject it up front.
     w.line("assert max_errors >= 1;");
+    // A predicate or action may run a parse of its own; each keeps its state
+    // apart from the one it runs inside.
     if ctx.plan.lr_frames {
-        w.line("lr_frames_reset();");
+        w.line("let lr_outer = lr_frames_enter();");
     }
     if ctx.plan.emit_follow {
-        w.line("follow_links_reset();");
+        w.line("let follow_outer = follow_links_enter();");
     }
     let verify = ctx.settings.prediction.verifies() && ctx.plan.needs_atn;
     if verify {
-        w.line(`${ATN_VERIFY_BEGIN}();`);
+        w.line(`let verify_outer = ${ATN_VERIFY_BEGIN}();`);
     }
     w.line("let tokens = tokenize(input);");
     w.line("let mut p = Parser::new(tokens);");
     w.line("p.max_errors = max_errors;");
     w.line("entry(&mut p);");
+    if ctx.plan.lr_frames {
+        w.line("lr_frames_leave(lr_outer);");
+    }
+    if ctx.plan.emit_follow {
+        w.line("follow_links_leave(follow_outer);");
+    }
     // The parser is infallible: a failure leaves `p.recovering` set and the
     // deepest error in `p.pending`, surfaced here as one diagnostic.
     w.begin("if p.recovering && p.diagnostics.len() < max_errors");
@@ -187,7 +195,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("resolve_positions(&mut p.diagnostics, &p.tokens.src);");
     if verify {
-        w.line(`${ATN_VERIFY_END}(&p.diagnostics);`);
+        w.line(`${ATN_VERIFY_END}(&p.diagnostics, verify_outer);`);
     }
     if ctx.settings.emit_actions {
         // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.

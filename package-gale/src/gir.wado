@@ -745,7 +745,7 @@ pub variant Op {
     /// `match_any` at runtime).
     Wildcard(WildcardOp),
     /// `~ X` set complement. `kinds` is the resolved exclusion set
-    /// (`lower::collect_excluded_kinds`); emit produces
+    /// (`GrammarAnalysis::excluded_kinds`); emit produces
     /// `p.expect_not(...)` over it.
     Excluded(ExcludedOp),
     /// `e?` / `e*` / `e+`. `strategy` selects the loop shape; emit
@@ -1052,6 +1052,13 @@ pub struct RepeatOp {
     /// positions. The continuation arrives at runtime via the `follow` argument
     /// the caller threads in.
     pub gate_caller_follow: bool,
+    /// Where `gate_caller_follow` holds, the continuation read where the repeat
+    /// exits (the rest of the rule, then the caller's), and where one
+    /// iteration ends (a loop's own next iteration first). A gate yields only
+    /// where `exit` parses `FOLLOW_MAX_DEPTH` tokens, and enters while
+    /// `after_iteration` still parses that deep past the body.
+    pub exit: FollowArg = FollowArg::NoFollow,
+    pub after_iteration: FollowArg = FollowArg::NoFollow,
     /// Surface `RepeatElement.atn_decision` id: the decision site a non-greedy
     /// `??` predicts its enter/skip at. -1 when sites were not assigned.
     pub atn_decision: i32 = -1,
@@ -1355,6 +1362,10 @@ pub struct ScanRepeatElement {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
+    /// Scan-side mirror of `RepeatOp.exit`.
+    pub exit: FollowArg = FollowArg::NoFollow,
+    /// Scan-side mirror of `RepeatOp.after_iteration`.
+    pub after_iteration: FollowArg = FollowArg::NoFollow,
     /// Mirrors `RepeatOp.non_greedy`.
     pub non_greedy: bool,
     /// Mirror `RepeatOp`'s, so a non-greedy loop the two tokens decide enters

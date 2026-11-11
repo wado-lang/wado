@@ -1086,7 +1086,8 @@ pub fn atn_shadow_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// What records a static pick that differs from the simulator's.
 pub global ATN_SHADOW: String = "atn_shadow";
 
-/// What a parse calls before it starts and once it has ended.
+/// What a parse calls before it starts and once it has ended. The first hands
+/// back the state of a parse this one runs inside, which the second restores.
 pub global ATN_VERIFY_BEGIN: String = "atn_verify_begin";
 pub global ATN_VERIFY_END: String = "atn_verify_end";
 
@@ -1105,14 +1106,17 @@ pub global ATN_VERIFY_END: String = "atn_verify_end";
 pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
     w.line("global mut ATN_MISMATCH: String = \"\";");
     w.blank();
-    w.begin(`fn ${ATN_VERIFY_BEGIN}()`);
+    w.begin(`fn ${ATN_VERIFY_BEGIN}() -> String`);
+    w.line("let outer = ATN_MISMATCH;");
     w.line("ATN_MISMATCH = \"\";");
+    w.line("return outer;");
     w.end();
     w.blank();
-    w.begin(`fn ${ATN_VERIFY_END}(diagnostics: &List<Diagnostic>)`);
+    w.begin(`fn ${ATN_VERIFY_END}(diagnostics: &List<Diagnostic>, outer: String)`);
     w.begin("if diagnostics.is_empty() && !ATN_MISMATCH.is_empty()");
     w.line("panic(`prediction verify: ${ATN_MISMATCH}`);");
     w.end();
+    w.line("ATN_MISMATCH = outer;");
     w.end();
     w.blank();
     w.begin(

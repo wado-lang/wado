@@ -356,6 +356,32 @@ impl GrammarAnalysis {
         return self.token_kinds.len();
     }
 
+    /// The exclusion set of a `~ X` element: `~ TOKEN` / `~ 'lit'` excludes one
+    /// kind, `~ ( A | B | C )` one per alternative, each a single `TokenRef` or
+    /// `Literal`. Other inner shapes (`~ rule`, `~ ( a b )`) name no token set.
+    pub fn excluded_kinds(&mut self, inner: &Element) -> List<i32> {
+        return match inner {
+            TokenRef(_) | Literal(_) => [self.terminal_kind(inner)],
+            Group(g) => {
+                let mut kinds: List<i32> = [];
+                for let alt of &g.alternatives {
+                    assert alt.elements.len() == 1 && alt.elements[0] matches { TokenRef(_) | Literal(_) },
+                        "a `~` group's alternative is a single token or literal";
+                    kinds.push(self.terminal_kind(&alt.elements[0]));
+                }
+                kinds;
+            },
+            _ => panic("a `~` names a token, a literal, or a group of them"),
+        };
+    }
+
+    /// The kinds a `.` or `~ X` takes: every kind but EOF, less what `~` excludes.
+    fn open_position_kinds(&mut self, elem: &Element) -> List<i32> {
+        let excluded: List<i32> = if let Not(ne) = elem { self.excluded_kinds(&ne.element) } else { [] };
+        let eof = self.eof_kind;
+        return (0..<self.token_kind_count()).filter(|k| k != eof && !excluded.contains(&k)).collect();
+    }
+
     /// The `TK_*` name of kind `id`.
     pub fn token_name(&self, id: i32) -> String {
         return self.token_kinds.name_of(id);
@@ -685,7 +711,7 @@ impl GrammarAnalysis {
     ) -> List<Reading> {
         return match elem {
             TokenRef(_) | Literal(_) => readings_of_position([self.terminal_kind(elem)], k),
-            Wildcard(_) | Not(_) => readings_of_position([], k),
+            Wildcard(_) | Not(_) => readings_of_position(self.open_position_kinds(elem), k),
             Label(lab) => self.readings_of_element(&lab.element, k, visiting, cycled),
             RuleRef(r) => self.readings_of_rule(&r.name, k, visiting, cycled),
             Group(g) => self.readings_of_alternatives(&g.alternatives, k, visiting, cycled),

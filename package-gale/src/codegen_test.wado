@@ -3233,6 +3233,39 @@ GT : '>' ;
     assert src.contains("pub fn token_start(&self, i: i32) -> i32"), "and token positions";
 }
 
+// Eight levels of `e` push past the continuation's slots, so the `X?` after `y`
+// reads its caller's through the link table, after the predicate ran a parse
+// of its own.
+test "a parse a predicate runs leaves the continuation of the parse it runs inside" {
+    let grammar = "grammar N;
+options { superClass = NBase; language = Wado; }
+s : e EOF ;
+e : A e X? | { this.nest() }? Y ;
+t : X ;
+A : 'a' ; X : 'x' ; Y : 'y' ; WS : ' ' -> skip ;
+";
+    let items = `${SHOW_FN}
+struct Nesting {}
+
+impl NBase for Nesting {
+    fn nest(&self, p: &Parser) -> bool {
+        let mut inner = Nesting {};
+        with NBase => &mut inner do {
+            let _ = parse_t(\"x\");
+        }
+        resume true;
+    }
+}
+`;
+    let body = "let mut base = Nesting {};
+with NBase => &mut base do {
+    show(\"a a a a a a a a y x x\", parse_s(\"a a a a a a a a y x x\"));
+}
+";
+    let got = run_beside(gen_with(grammar, &LONGEST).source, body, items).stdout;
+    assert got == "a a a a a a a a y x x => (s (e a (e a (e a (e a (e a (e a (e a (e a (e y) x) x))))))))\n";
+}
+
 test "a parser base call whose argument has no evident type is refused" {
     let src = "grammar C;
 options { superClass = PBase; language = Wado; }
@@ -7660,4 +7693,45 @@ test "reads_only_scan_gate_fields: a constant, with no fields at all" {
 
 test "reads_only_scan_gate_fields: a call on the recognizer" {
     assert !reads_only_scan_gate_fields("pred_3(p)", &["no_struct"]);
+}
+
+// The caller reads three tokens past `a`, so a token after the body that the
+// continuation could start with does not show it still parses there.
+test "a tail repeat takes a token only where the continuation still parses past it, at its full depth" {
+    let tokens = "X : 'x' ; Y : 'y' ; B : 'b' ; WS : ' ' -> skip ;\n";
+    for let body of ["X?", "X*"] {
+        let got = parses(`grammar R;\ns : a X X Y EOF ;\na : ${body} ;\n${tokens}`, "s", ["xxy", "xxxy"], &LONGEST);
+        assert got == "xxy => (s a x x y)\nxxxy => (s (a x) x x y)\n", `${body}: ${got}`;
+    }
+    let got = parses(`grammar R;\ns : a X X Y EOF ;\na : X* ;\n${tokens}`, "s", ["xxxxy"], &LONGEST);
+    assert got == "xxxxy => (s (a x x) x x y)\n";
+    for let body of ["X?", "X*"] {
+        let got = parses(
+            `grammar R;\ns : t EOF ;\nt : a X X Y | a X B ;\na : ${body} ;\n${tokens}`,
+            "s",
+            ["xxy", "xb", "xxb"],
+            &LONGEST,
+        );
+        assert got == "xxy => (s (t a x x y))\nxb => (s (t a x b))\nxxb => (s (t (a x) x b))\n", `${body}: ${got}`;
+    }
+}
+
+// `.` takes any token but the end of the input, so the caller's `. EOF` cannot
+// start at the last token's end, and a shape opening on `.` is still a shape.
+test "a wildcard takes every kind but EOF, in a continuation and in a shape" {
+    let tokens = "X : 'x' ; A : 'a' ; B : 'b' ; WS : ' ' -> skip ;\n";
+    assert parses(`grammar R;\ns : a . EOF ;\na : X? ;\n${tokens}`, "s", ["x", "xx"], &LONGEST)
+        == "x => (s a x)\nxx => (s (a x) x)\n";
+    assert parses(`grammar R;\ns : r EOF ;\nr : (A? .)? ;\n${tokens}`, "s", ["b", "ab", "x"], &LONGEST)
+        == "b => (s (r b))\nab => (s (r a b))\nx => (s (r x))\n";
+    assert parses(`grammar R;\ns : r EOF ;\nr : (. A?)? ;\n${tokens}`, "s", ["b", "ba"], &LONGEST)
+        == "b => (s (r b))\nba => (s (r b a))\n";
+}
+
+// Every shape of `(t A?)?` decides like any other optional: the caller's `X`
+// starting at `x` does not stop the shape `t` that leaves it a parse.
+test "a shape optional enters where its caller's continuation still parses after it" {
+    let grammar = "grammar R;\ns : r X? EOF ;\nr : (t A?)? ;\nt : X ;\nX : 'x' ; A : 'a' ; WS : ' ' -> skip ;\n";
+    let got = parses(grammar, "s", ["x", "xx", "xa"], &LONGEST);
+    assert got == "x => (s (r (t x)))\nxx => (s (r (t x)) x)\nxa => (s (r (t x) a))\n";
 }

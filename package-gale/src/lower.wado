@@ -1655,7 +1655,7 @@ fn lower_scan_element(
         }),
         Wildcard(_) => ScanElement::Wildcard,
         Not(ne) => ScanElement::Excluded(ScanExcludedElement {
-            kinds: collect_excluded_kinds(&ne.element, &mut ctx.analysis),
+            kinds: ctx.analysis.excluded_kinds(&ne.element),
         }),
         Label(lab) => lower_scan_element(
             &lab.element,
@@ -2066,10 +2066,7 @@ fn lower_scan_repeat(
     if !rep.non_greedy {
         if let Optional = rep.kind {
             if let Group(g) = peel_labels(&rep.element) {
-                if g.alternatives.len() == 1
-                    && has_nested_optional_in_alt(&g.alternatives[0])
-                    && !alt_has_variable_repeat(&g.alternatives[0])
-                    && !shape_optional_count_exceeds_cap(&g.alternatives[0].elements) {
+                if g.alternatives.len() == 1 && shape_lookahead_fits(&g.alternatives[0], ctx) {
                     let plain = lower_scan_plain_repeat(
                         rep,
                         ctx,
@@ -2189,6 +2186,8 @@ fn rebind_scan_repeat_caller_follow(
             atn_asked_kinds: stamps.atn_asked_kinds,
             caller_follow_kinds: stamps.continuation.caller_follow_kinds,
             duties: stamps.duties,
+            exit: stamps.exit,
+            after_iteration: stamps.after_iteration,
         };
     };
     if let Repeat(re) = se {
@@ -2292,13 +2291,25 @@ fn lower_alt_scan_element(
 /// True iff any element in the alt is an Optional Repeat (possibly
 /// wrapped in a `Label`). Drives the scan-side OptionalLookahead
 /// trigger via `surface_is_optional_repeat`.
-fn has_nested_optional_in_alt(alt: &Alternative) -> bool {
-    return alt.elements.iter_ref().any(|elem| surface_is_optional_repeat(elem));
-}
-
-/// True when any element of `alt` contains a variable-length repeat.
-fn alt_has_variable_repeat(alt: &Alternative) -> bool {
-    return alt.elements.iter_ref().any(|elem| surface_contains_variable_repeat(elem));
+/// Whether a `?` over the single alternative `alt` decides by shape lookahead,
+/// for the parse and the scan alike. It needs a nested optional to enumerate,
+/// no variable-length repeat (two shapes would collapse to one signature, as in
+/// `( arm (',' arm)* ','? )`), at most `MAX_SHAPE_OPTIONALS` nullable elements,
+/// and a signature for every shape that selects something: a shape opening on
+/// `.` has none (`(A? .)?`), and dropping it would never enter it.
+fn shape_lookahead_fits(alt: &Alternative, ctx: &mut LowerContext) -> bool {
+    let elements = &alt.elements;
+    if !elements.iter_ref().any(|elem| surface_is_optional_repeat(elem))
+        || elements.iter_ref().any(|elem| surface_contains_variable_repeat(elem))
+        || shape_optional_count_exceeds_cap(elements) {
+        return false;
+    }
+    for let shape of &compute_shapes_for_alt(elements) {
+        if !shape.is_empty() && shape_lookahead_signature_for_alt(shape, elements, ctx).is_empty() {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn surface_is_optional_repeat(elem: &Element) -> bool {
@@ -2747,7 +2758,7 @@ fn lower_op<S: AsStrSlice>(
         Not(ne) => {
             let base = not_element_field_name(&ne.element);
             Op::Excluded(ExcludedOp {
-                kinds: collect_excluded_kinds(&ne.element, &mut ctx.analysis),
+                kinds: ctx.analysis.excluded_kinds(&ne.element),
                 field: dedup_name(&base, name_counts),
                 dedup_base: base,
             });
@@ -3900,34 +3911,10 @@ fn try_optional_shape_lookahead(
     ctx: &mut LowerContext,
 ) -> Option<RepeatStrategy> {
     if let Group(g) = inner {
-        if g.alternatives.len() != 1 {
+        if g.alternatives.len() != 1 || !shape_lookahead_fits(&g.alternatives[0], ctx) {
             return null;
         }
         let elements = &g.alternatives[0].elements;
-        // A variable-length repeat breaks fixed shape enumeration (two
-        // shapes collapse to one signature), so fall back to the scan
-        // guard. `( arm (',' arm)* ','? )` is the canonical case.
-        for let elem of elements {
-            if surface_contains_variable_repeat(elem) {
-                return null;
-            }
-        }
-        let mut has_nested = false;
-        for let elem of elements {
-            if surface_is_optional_repeat(elem) {
-                has_nested = true;
-                break;
-            }
-        }
-        if !has_nested {
-            return null;
-        }
-        // Shape enumeration is 2^n; cap it so a pathological alt with many
-        // independent optionals neither blows up compile time nor overflows
-        // `1 << n` (i32). Past the cap, fall back to the scan-guard strategy.
-        if shape_optional_count_exceeds_cap(elements) {
-            return null;
-        }
         let shapes = compute_shapes_for_alt(elements);
         let mut shape_entries: List<OptionalLookaheadShape> = [];
         let mut signatures: List<List<List<i32>>> = [];
@@ -4160,6 +4147,8 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         atn_asked_kinds: stamps.atn_asked_kinds,
         caller_follow_kinds: stamps.continuation.caller_follow_kinds,
         duties: stamps.duties,
+        exit: stamps.exit,
+        after_iteration: stamps.after_iteration,
     };
 }
 
@@ -4175,6 +4164,42 @@ struct RepeatExitStamps {
     atn_decides: bool,
     atn_asked_kinds: List<i32>,
     duties: IterationDuties,
+    exit: FollowArg,
+    after_iteration: FollowArg,
+}
+
+/// What a gated repeat's gate reads where it exits and where one iteration
+/// ends, as `RepeatOp.exit` and `RepeatOp.after_iteration` say. Sites are
+/// interned only where the gate reads them.
+fn repeat_continuations(
+    kind: RepeatKind,
+    gate_caller_follow: bool,
+    alt_elements: &List<Element>,
+    index: i32,
+    outer_suffix: &List<Element>,
+    ctx: &mut LowerContext,
+) -> [FollowArg, FollowArg] {
+    if !gate_caller_follow {
+        return [FollowArg::NoFollow, FollowArg::NoFollow];
+    }
+    let rest = follow_elements_of(&elements_from(alt_elements, index + 1), outer_suffix);
+    let exit = continuation_arg(ctx, &rest, 0);
+    if kind matches { Optional } {
+        return [exit, exit];
+    }
+    let again = Element::Repeat(RepeatElement { ..*repeat_at(&alt_elements[index]), kind: RepeatKind::Star });
+    return [exit, continuation_arg(ctx, &follow_elements_of(&[again], &rest), 0)];
+}
+
+/// The repeat an alternative's element is, through its labels.
+fn repeat_at(elem: &Element) -> &RepeatElement {
+    return match elem {
+        Repeat(rep) => rep,
+        Label(lab) => repeat_at(&lab.element),
+        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => {
+            panic("a repeat's exit stamps are read at the repeat");
+        },
+    };
 }
 
 /// The tokens a loop the simulator decides needs asking about: those that
@@ -4198,7 +4223,7 @@ fn atn_asked_kinds(
     };
     let refused = match peel_labels(&rep.element) {
         Wildcard(_) => [] as List<i32>,
-        Not(ne) => collect_excluded_kinds(&ne.element, &mut ctx.analysis),
+        Not(ne) => ctx.analysis.excluded_kinds(&ne.element),
         _ => {
             return [];
         },
@@ -4241,6 +4266,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     } else if contested {
         ctx.mark_asks_simulator("a repeat whose body and continuation can start on one token");
     }
+    let [exit, after_iteration] = repeat_continuations(kind, gate_caller_follow, alt_elements, index, outer_suffix, ctx);
     let mut static_scan = || lower_continuation_scan(
         non_greedy,
         kind,
@@ -4251,6 +4277,8 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
         rule_name,
     );
     return RepeatExitStamps {
+        exit,
+        after_iteration,
         continuation: if by_atn || contested { ContinuationScan {} } else { static_scan() },
         shadow: if shadowed { Option::Some(static_scan()) } else { null },
         continuation_contested: optional_continuation_contested(
@@ -4819,31 +4847,3 @@ fn rebind_group_shape<S: AsStrSlice, S1: AsStrSlice>(shape: GroupShape, new_fiel
     };
 }
 
-/// Resolve the exclusion set for a `~ X` element.
-///
-/// * `~ TOKEN` / `~ 'lit'` — single-token complement, the simple case.
-/// * `~ ( A | B | C )` — multi-token complement; each alt must be a
-///   single `TokenRef` or `Literal`.
-///
-/// Other inner shapes (`~ rule`, `~ ( a b )`) name no token set for
-/// `p.expect_not(...)` to exclude.
-fn collect_excluded_kinds(inner: &Element, analysis: &mut GrammarAnalysis) -> List<i32> {
-    return match inner {
-        TokenRef(_) | Literal(_) => [analysis.terminal_kind(inner)],
-        Group(g) => collect_excluded_kinds_from_group(g, analysis),
-        _ => panic(
-            "collect_excluded_kinds: unsupported inner shape (only TokenRef / Literal / single-token-alts Group are valid)",
-        ),
-    };
-}
-
-fn collect_excluded_kinds_from_group(g: &GroupElement, analysis: &mut GrammarAnalysis) -> List<i32> {
-    let mut kinds: List<i32> = [];
-    for let alt of &g.alternatives {
-        assert alt.elements.len() == 1, "collect_excluded_kinds: ~ Group alt must be a single token / literal";
-        let elem = &alt.elements[0];
-        assert elem matches { TokenRef(_) | Literal(_) }, "collect_excluded_kinds: ~ Group alt must be a single token / literal";
-        kinds.push(analysis.terminal_kind(elem));
-    }
-    return kinds;
-}

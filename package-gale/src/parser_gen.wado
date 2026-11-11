@@ -32,11 +32,9 @@ use {
     and_operand,
     follow_pushed,
     follow_admits_call,
-    follow_resumes_call,
     follow_forward_args,
+    follow_query,
     lr_cont_forward,
-    follow_yields_call,
-    follow_yields_call_if,
     rule_kind_const,
     open_chain_arm,
 } from "./gen_util.wado";
@@ -2245,7 +2243,11 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     // Stop the scan where the caller's continuation matches, or the tournament
     // picking the calling rule's alt over-counts this Repeat. Inert when
     // `follow` is empty; mirrors the parse side.
-    let caller_follow_gate = follow_yields_call_if(re.gate_caller_follow, "tokens", "pos");
+    let caller_follow_gate = if re.gate_caller_follow {
+        repeat_continuation_yields(ctx, &re.exit, "tokens", "pos");
+    } else {
+        String::new();
+    };
 
     // A body matching nothing has no iteration to scan — once here, not once
     // per arm, so an arm added later cannot miss it.
@@ -2295,7 +2297,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         let yield_gate = if leaf_enters || call_enters { String::new() } else { caller_follow_gate };
         let mut guard = scan_repeat_guard_excluding(&effective, &excluded, &yield_gate, ctx);
         if leaf_enters {
-            guard = `${guard} && ${leaf_enters_while_viable(ctx, &re.caller_follow_first, "tokens", "tokens", "pos")}`;
+            guard = `${guard} && ${leaf_enters_while_viable(ctx, &re.exit, &re.after_iteration, "tokens", "tokens", "pos")}`;
         }
         w.begin(`if ${guard}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
@@ -2317,7 +2319,6 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     }
     let yields_unless_viable = !re.atn_decides && !re.non_greedy && re.gate_caller_follow && re.body_scannable;
     let walks_iteration = !scan_iteration_is_proven_token(re, &loop_admits);
-    let again = loop_resumes_first(&re.caller_follow_first, &loop_admits);
     let guard = if re.atn_decides {
         atn_scan_enters(ctx, re.atn_decision, re.non_greedy, &re.atn_asked_kinds, `(${kind_at("tokens", "pos")})`);
     } else if re.non_greedy {
@@ -2337,7 +2338,8 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     } else {
         `${scan_repeat_guard(&loop_admits, "", ctx)} && ${leaf_enters_while_viable(
             ctx,
-            &again,
+            &re.exit,
+            &re.after_iteration,
             "tokens",
             "tokens",
             "pos",
@@ -2351,8 +2353,9 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     // The scan's twin of `gen_caller_follow_gate`, once the iteration it
     // walked from `sp` has an end to ask about.
     if yields_unless_viable && walks_iteration {
-        let resumes = continuation_resumes_at(ctx, &again, "tokens", "tokens", "pos");
-        gen_scan_rewind_break(w, ctx, "sp", `!${resumes} && ${follow_yields_call("tokens", "sp")}`);
+        let resumes = continuation_resumes_at(ctx, &re.after_iteration, "tokens", "tokens", "pos");
+        let yielded = repeat_continuation_yields(ctx, &re.exit, "tokens", "sp");
+        gen_scan_rewind_break(w, ctx, "sp", `!${resumes} && ${yielded}`);
     }
     w.end();
 }
@@ -2376,8 +2379,9 @@ fn gen_scan_yield_unless_resumed<S: AsStrSlice>(
     start: S,
     ctx: &mut EmitContext,
 ) {
-    let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
-    w.begin(`if pos != ${start} && !${resumes} && ${follow_yields_call("tokens", &start)}`);
+    let resumes = continuation_resumes_at(ctx, &re.after_iteration, "tokens", "tokens", "pos");
+    let yielded = repeat_continuation_yields(ctx, &re.exit, "tokens", &start);
+    w.begin(`if pos != ${start} && !${resumes} && ${yielded}`);
     gen_scan_rewind(w, ctx, &start);
     w.end();
 }
@@ -4225,7 +4229,6 @@ fn gen_group_body(
                 &g.scan_group.alts,
                 ctx,
                 nc,
-                false,
             );
             gen_group_shadow(w, dec, &var, &winner, lines, ctx);
         }
@@ -4951,7 +4954,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
             if let Some(branches) = op_group_alt_decision(g, ctx) {
-                let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
+                let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc);
                 w.line(`if ${best} <= p.pos { break; }`);
                 gen_iteration_duties(w, &r.duties, &r.body_admits, &best, &Refusable::Always, false, ctx, nc);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
@@ -5187,9 +5190,9 @@ fn gen_op_optional_shape_lookahead(
     } else {
         panic("gen_op_optional_shape_lookahead: shape lookahead is only valid on single-alt Group bodies");
     };
-    let conditions = gen_shape_entry_conditions(w, s, ctx, nc);
+    let conditions = shape_arm_conditions(w, r, s, ctx, nc, follow_gate);
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
-        open_chain_arm(w, ei > 0, &gate_cond_with_caller_follow(&conditions[ei], follow_gate));
+        open_chain_arm(w, ei > 0, &conditions[ei]);
         for let idx of &s.shapes[ei].positions {
             gen_op(w, unwrap_optional_op(&body_ops[*idx]), ctx, nc);
         }
@@ -5346,7 +5349,7 @@ fn gen_op_repeat_optional_group(
         },
         OptionalShapeLookahead(s) => {
             assert rep_op.body_shape matches { StorableGroup }, "a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`";
-            gen_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, follow_gate);
+            gen_op_optional_with_shape_lookahead_storable(w, rep_op, g_op, g_elem, s, ctx, name_counts, follow_gate);
         },
         OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
@@ -5403,7 +5406,8 @@ fn gen_decided_optional_group(
     follow_gate: bool,
 ) -> [String, String] {
     let viable = follow_gate && enters_while_viable(r);
-    let [winner, best] = gen_group_decide(w, branches, &g.scan_group.alts, ctx, nc, follow_gate && !viable);
+    let yields_to = if follow_gate && !viable { Option::Some(r.exit) } else { null };
+    let [winner, best] = gen_group_decide(w, branches, &g.scan_group.alts, ctx, nc, yields_to);
     let enters = optional_entry_yielding(w, r, `${best} >= 0`, Option::Some(best), viable, ctx, nc);
     return [winner, enters];
 }
@@ -5518,22 +5522,10 @@ fn atn_prec_arg(ctx: &EmitContext) -> String {
     return if ctx.plan.lr_loop_entry_decision(ctx.cursor.current_rule_index()) >= 0 { "min_prec" } else { "0" };
 }
 
-/// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
-/// yield gate: `!follow_yields(...) && cond` when the Repeat is
-/// tail-position (`gate_caller_follow`), so the Optional fires only when
-/// the caller's continuation does NOT claim the upcoming tokens; the
-/// unchanged `cond` otherwise.
-fn gate_cond_with_caller_follow<S: AsStrSlice>(cond: S, gate_caller_follow: bool) -> String {
-    if gate_caller_follow {
-        return `${and_operand(cond)} && !${caller_follow_yields()}`;
-    }
-    return cond.to_string();
-}
-
-/// The runtime test that the caller's continuation claims the tokens ahead,
-/// so a tail-position repeat must yield rather than take them.
-fn caller_follow_yields() -> String {
-    return follow_yields_call("&p.kinds", "p.pos");
+/// The runtime test that what follows a tail-position repeat claims the tokens
+/// ahead, so the repeat must yield rather than take them.
+fn repeat_exit_yields(ctx: &mut EmitContext, exit: &FollowArg) -> String {
+    return repeat_continuation_yields(ctx, exit, "&p.kinds", "p.pos");
 }
 
 /// Shared body of every storable-Optional + Group arm: emit a single
@@ -5875,6 +5867,7 @@ fn close_call_capture(w: &mut CodeWriter, span_field: &Option<String>) {
 /// field list).
 fn gen_op_optional_with_shape_lookahead_storable(
     w: &mut CodeWriter,
+    rep_op: &RepeatOp,
     g_op: &GroupOp,
     g_elem: &GroupElement,
     s: &OptionalShapeLookaheadStrategy,
@@ -5892,16 +5885,14 @@ fn gen_op_optional_with_shape_lookahead_storable(
     // the present elements append to the builder, so the
     // `Option<T>` shape selection collapses to a plain `if cond { … } else if
     // … ` statement — no struct, no absent-field decls, no `null` else.
-    let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
+    let conditions = shape_arm_conditions(w, rep_op, s, ctx, name_counts, gate_caller_follow);
     // The shape twin of `optional_entry_test`: the alternative is the same one
     // in every shape, so its gate joins each shape's own condition.
     let gate = alt_gate_and_suffix(alt, ctx);
     let outer_choice = ctx.cursor.enter_group_body(false);
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
-        // Every shape's entry yields to the caller when its continuation claims
-        // the lookahead.
-        open_chain_arm(w, ei > 0, `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`);
+        open_chain_arm(w, ei > 0, `${conditions[ei]}${gate}`);
         let mut nc: List<[String, i32]> = [];
         for let mut i = 0; i < elements.len(); i += 1 {
             // The actions are the alternative's, not the skipped element's, so
@@ -6349,7 +6340,14 @@ fn gen_leaf_optional_enters(
     if rep_op.body_shape matches { LeafOther } {
         let entry = body_guard_cond(rep_op, ctx);
         let enters = if rep_op.gate_caller_follow {
-            `${entry} && ${leaf_enters_while_viable(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", "p.pos")}`;
+            `${entry} && ${leaf_enters_while_viable(
+                ctx,
+                &rep_op.exit,
+                &rep_op.after_iteration,
+                "&p.kinds",
+                "p.kinds",
+                "p.pos",
+            )}`;
         } else {
             entry;
         };
@@ -6407,49 +6405,68 @@ fn optional_entry_yielding<S: AsStrSlice>(
         return entry.to_string();
     }
     if !enters_while_viable(r) {
-        return gate_cond_with_caller_follow(entry, true);
+        return `${and_operand(entry)} && !${repeat_exit_yields(ctx, &r.exit)}`;
     }
     let verdict = dedup_name("opt_enter", nc);
     w.line(`let mut ${verdict}: bool = ${entry};`);
     let lr_suffix = *ctx.cursor.lr_continuation();
+    let exit_admits = repeat_exit_admits(ctx, &r.exit, "&p.kinds", "p.pos");
     let contested = if lr_suffix.is_empty() {
-        follow_admits_call("&p.kinds", "p.pos");
+        exit_admits;
     } else {
-        `(${follow_admits_call("&p.kinds", "p.pos")} || ${ctx.kind_check_str(&lr_suffix, "p.peek_kind()")})`;
+        `(${exit_admits} || ${ctx.kind_check_str(&lr_suffix, "p.peek_kind()")})`;
     };
     w.begin(`if ${verdict} && ${contested}`);
     let scan_pos = match end {
         Some(e) => e,
         None => gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, "opt_scan_pos", "opt_scan", false),
     };
-    let resumes = continuation_resumes_at(ctx, &r.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
-    w.line(`${verdict} = ${scan_pos} >= 0 && (${resumes} || !${follow_yields_call("&p.kinds", "p.pos")});`);
+    let resumes = continuation_resumes_at(ctx, &r.after_iteration, "&p.kinds", "p.kinds", &scan_pos);
+    let yields = repeat_continuation_yields(ctx, &r.exit, "&p.kinds", "p.pos");
+    w.line(`${verdict} = ${scan_pos} >= 0 && (${resumes} || !${yields});`);
     w.end();
     return verdict;
 }
 
-/// Whether what follows a tail-reaching repeat is known to start at `at`: the
-/// rest of its own alternative, which is nullable there, the LR suffix loop
-/// around an atom, or the caller. A caller that passed on no continuation
-/// counts as none: what it resumes with is unknown, so it cannot overturn the
-/// continuation that yields (Rust's `a::T {`, whose `::` the path keeps).
-/// `tokens` is the token array as the runtime takes it and `stream` the same
-/// array indexed directly.
+/// Whether a gated repeat's continuation `cont` (its `exit` or
+/// `after_iteration`) parses `FOLLOW_MAX_DEPTH` tokens from `pos`.
+fn repeat_continuation_yields<S: AsStrSlice, S1: AsStrSlice>(
+    ctx: &mut EmitContext,
+    cont: &FollowArg,
+    tokens: S,
+    pos: S1,
+) -> String {
+    assert !(cont matches { NoFollow }), "a gated repeat knows what follows it";
+    return follow_query("follow_yields", tokens, pos, &follow_arg_expr(ctx, cont));
+}
+
+/// Whether a gated repeat's `exit` can start at `pos`.
+fn repeat_exit_admits<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, exit: &FollowArg, tokens: S, pos: S1) -> String {
+    assert !(exit matches { NoFollow }), "a gated repeat knows what follows it";
+    return follow_query("follow_admits", tokens, pos, &follow_arg_expr(ctx, exit));
+}
+
+/// Whether what follows a tail-reaching repeat's iteration still parses from
+/// `at`: `after_iteration` to `FOLLOW_MAX_DEPTH` tokens, or the LR suffix loop
+/// around an atom, which `follow` does not carry. A caller that passed on no
+/// continuation counts as none: what it resumes with is unknown, so it cannot
+/// overturn the continuation that yields (Rust's `a::T {`, whose `::` the path
+/// keeps). `tokens` is the token array as the runtime takes it and `stream`
+/// the same array indexed directly.
 fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &mut EmitContext,
-    local_first: &List<i32>,
+    after_iteration: &FollowArg,
     tokens: S,
     stream: S1,
     at: S2,
 ) -> String {
-    let caller_resumes = follow_resumes_call(tokens, at);
-    let mut kinds = *local_first;
-    dedup_append_arr(&mut kinds, ctx.cursor.lr_continuation());
-    if kinds.is_empty() {
-        return caller_resumes;
+    let resumes = repeat_continuation_yields(ctx, after_iteration, tokens, &at);
+    let lr_suffix = *ctx.cursor.lr_continuation();
+    if lr_suffix.is_empty() {
+        return resumes;
     }
     let kind = `(${kind_at(stream, &at)})`;
-    return `(${ctx.kind_check_str(&kinds, &kind)} || ${caller_resumes})`;
+    return `(${ctx.kind_check_str(&lr_suffix, &kind)} || ${resumes})`;
 }
 
 /// Whether the continuation scan decides this greedy `?`. Any body: a token contests a
@@ -6536,14 +6553,15 @@ fn gen_optional_present<S: AsStrSlice>(
 /// none starts after it. The scan side emits the same condition.
 fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &mut EmitContext,
-    local_first: &List<i32>,
+    exit: &FollowArg,
+    after_iteration: &FollowArg,
     tokens: S,
     stream: S1,
     pos: S2,
 ) -> String {
     let end = `${pos} + 1`;
-    let resumes = continuation_resumes_at(ctx, local_first, &tokens, stream, &end);
-    return `(${resumes} || !${follow_yields_call(tokens, pos)})`;
+    let resumes = continuation_resumes_at(ctx, after_iteration, &tokens, stream, &end);
+    return `(${resumes} || !${repeat_continuation_yields(ctx, exit, tokens, pos)})`;
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy loop's iteration entry,
@@ -6564,7 +6582,7 @@ fn gen_caller_follow_gate<S: AsStrSlice = String>(
     nc: &mut List<[String, i32]>,
     entry: S = "true",
 ) {
-    let Some(yields) = caller_follow_yield_test(w, rep_op, entry) else {
+    let Some(yields) = caller_follow_yield_test(w, rep_op, ctx, entry) else {
         return;
     };
     w.begin(`if ${yields}`);
@@ -6577,15 +6595,17 @@ fn gen_caller_follow_gate<S: AsStrSlice = String>(
 /// a gate to settle by where the iteration ends. None where the loop has no
 /// gate, or where its body cannot be walked and the loop has already been told
 /// to stop wherever the continuation starts.
-fn caller_follow_yield_test<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, entry: S) -> Option<String> {
+fn caller_follow_yield_test<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    ctx: &mut EmitContext,
+    entry: S,
+) -> Option<String> {
     if !rep_op.gate_caller_follow {
         return null;
     }
-    let yields = if entry.as_str_slice() == "true" {
-        follow_yields_call("&p.kinds", "p.pos");
-    } else {
-        `${and_operand(entry)} && ${follow_yields_call("&p.kinds", "p.pos")}`;
-    };
+    let exit_yields = repeat_exit_yields(ctx, &rep_op.exit);
+    let yields = if entry.as_str_slice() == "true" { exit_yields } else { `${and_operand(entry)} && ${exit_yields}` };
     if !rep_op.body_scannable {
         w.line(`if ${yields} { break; }`);
         return null;
@@ -6596,21 +6616,7 @@ fn caller_follow_yield_test<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp
 /// Whether the loop's continuation, short of the caller or through it, is
 /// known to start where an iteration ends at `end`.
 fn iteration_resumes_at<S: AsStrSlice>(rep_op: &RepeatOp, ctx: &mut EmitContext, end: S) -> String {
-    return continuation_resumes_at(
-        ctx,
-        &loop_resumes_first(&rep_op.caller_follow_first, &rep_op.body_admits),
-        "&p.kinds",
-        "p.kinds",
-        end,
-    );
-}
-
-/// What may start where a loop's iteration ends, short of the caller: the rest
-/// of its alternative, or another iteration.
-fn loop_resumes_first(local_first: &List<i32>, body_admits: &Admits) -> List<i32> {
-    let mut kinds = *local_first;
-    dedup_append_arr(&mut kinds, &admits_enumerated(body_admits));
-    return kinds;
+    return continuation_resumes_at(ctx, &rep_op.after_iteration, "&p.kinds", "p.kinds", end);
 }
 
 /// The same gate where a `+`'s mandatory first iteration shares the loop body:
@@ -6797,7 +6803,7 @@ fn gen_loop_static_enters(
             null;
         };
         if let Some(branches) = decided && let Group(g) = &r.body {
-            let [_, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
+            let [_, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc);
             w.line(`if ${best} <= p.pos { break; }`);
             gen_iteration_duties(w, &r.duties, &r.body_admits, &best, &Refusable::Always, false, ctx, nc);
         } else {
@@ -6822,7 +6828,7 @@ fn gen_op_optional_static_enters(
 ) -> String {
     let follow_gate = ctx.current_rule_reads_follow() && r.gate_caller_follow;
     if let OptionalShapeLookahead(s) = &r.strategy {
-        return any_shape_enters(w, s, ctx, nc, follow_gate);
+        return any_shape_enters(w, r, s, ctx, nc, follow_gate);
     }
     if r.strategy matches { OptionalScanGuard }
         && let Group(g) = &r.body
@@ -6856,7 +6862,7 @@ fn gen_group_optional_static_enters(
             let lookahead = gen_lookahead_condition(ctx, &s.sig);
             optional_entry_yielding(w, r, lookahead, null, follow_gate, ctx, nc);
         },
-        OptionalShapeLookahead(s) => any_shape_enters(w, s, ctx, nc, follow_gate),
+        OptionalShapeLookahead(s) => any_shape_enters(w, r, s, ctx, nc, follow_gate),
         OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 let [_, enters] = gen_decided_optional_group(w, r, &decision.branches, g_op, ctx, nc, follow_gate);
@@ -6874,14 +6880,35 @@ fn gen_group_optional_static_enters(
 /// Whether any shape of `s` enters here.
 fn any_shape_enters(
     w: &mut CodeWriter,
+    r: &RepeatOp,
     s: &OptionalShapeLookaheadStrategy,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
     follow_gate: bool,
 ) -> String {
-    let conditions: List<String> = gen_shape_entry_conditions(w, s, ctx, nc).into_iter().map(
-        |c| gate_cond_with_caller_follow(&c, follow_gate),
-    ).collect();
+    let conditions = gen_shape_entry_conditions(w, s, ctx, nc);
+    return optional_entry_yielding(w, r, any_of(&conditions), null, follow_gate, ctx, nc);
+}
+
+/// Each shape's entry condition, once the caller's continuation has its say
+/// on entering the `?` at all, as `optional_entry_yielding` gives it.
+fn shape_arm_conditions(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    s: &OptionalShapeLookaheadStrategy,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+    follow_gate: bool,
+) -> List<String> {
+    let conditions = gen_shape_entry_conditions(w, s, ctx, nc);
+    if !follow_gate {
+        return conditions;
+    }
+    let enters = optional_entry_yielding(w, r, any_of(&conditions), null, true, ctx, nc);
+    return conditions.into_iter().map(|c| `${and_operand(&enters)} && ${and_operand(&c)}`).collect();
+}
+
+fn any_of(conditions: &List<String>) -> String {
     return if conditions.is_empty() { "false" } else { `(${conditions.join(") || (")})` };
 }
 
@@ -7068,7 +7095,7 @@ fn gen_rep_speculative_iteration(
     if guard != "true" {
         w.line(`if ${negate_cond(&guard)} { break; }`);
     }
-    let yielded = gen_speculative_follow_gate(w, rep_op, nc);
+    let yielded = gen_speculative_follow_gate(w, rep_op, ctx, nc);
     let pending = dedup_name("sp_pending", nc);
     w.line(`let ${pending} = p.pending;`);
     let mark = Speculation::begin(w, dedup_name("sp", nc));
@@ -7117,8 +7144,13 @@ fn gen_rep_speculative_iteration(
 /// where the iteration ends instead of a scan. Returns the local holding
 /// whether the caller's continuation starts at the iteration, for the parse's
 /// end to settle, or none where the gate asks nothing more.
-fn gen_speculative_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, nc: &mut List<[String, i32]>) -> Option<String> {
-    let Some(yields) = caller_follow_yield_test(w, rep_op, "true") else {
+fn gen_speculative_follow_gate(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+) -> Option<String> {
+    let Some(yields) = caller_follow_yield_test(w, rep_op, ctx, "true") else {
         return null;
     };
     let yielded = dedup_name("sp_yielded", nc);
@@ -7395,7 +7427,7 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     // No gate break: every branch of the decision carries the gate the loop
     // would test, so a predicate the decision already answered is not asked
     // a second time.
-    let [winner, best] = gen_group_decide(w, &decision.branches, &g_op.scan_group.alts, ctx, name_counts, false);
+    let [winner, best] = gen_group_decide(w, &decision.branches, &g_op.scan_group.alts, ctx, name_counts);
     // Every iteration may decline, and one that consumed nothing would come
     // round at the same position forever.
     if plus_flag.is_empty() {
@@ -7816,14 +7848,14 @@ fn op_group_alt_decision(g: &GroupOp, ctx: &EmitContext) -> Option<List<Decision
 /// Decide a group, as `[winner, best]`: which alternative, and how far it
 /// scanned (each `-1` where there is no answer). A caller that may decline
 /// the group reads `best`; one at a required position reads `winner` and
-/// commits. `follow_gate` wraps the scans in the caller-FOLLOW yield test.
+/// commits. `yields_to` wraps the scans in the yield test of a repeat's exit.
 fn gen_group_decide(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
     scan_alts: &List<ScanBody>,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
-    follow_gate: bool,
+    yields_to: Option<FollowArg> = null,
 ) -> [String, String] {
     let winner_var = dedup_name("gd_winner", name_counts);
     let best_var = dedup_name("gd_best", name_counts);
@@ -7832,8 +7864,8 @@ fn gen_group_decide(
     // `best` is a position a scan reached, so it carries the gate it reached it
     // under: whoever runs from there — the reserve does — must not invent one.
     gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
-    if follow_gate {
-        w.begin(`if !${caller_follow_yields()}`);
+    if let Some(exit) = &yields_to {
+        w.begin(`if !${repeat_exit_yields(ctx, exit)}`);
     }
     // One read of the lookahead for the whole chain, where it tests it at all.
     let kind_expr = if decision_reads_lookahead(branches) {
@@ -7853,7 +7885,7 @@ fn gen_group_decide(
         }
     }
     close_decision_chain(w, branches);
-    if follow_gate {
+    if yields_to matches { Some(_) } {
         w.end();
     }
     return [winner_var, best_var];
