@@ -72,16 +72,24 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
 
     // (param_idx, shadow_local_idx, original_type_id, name)
     let mut shadowed_params: Vec<(u32, u32, TypeId, String)> = Vec::new();
-    let mut effective_address_taken = address_taken.clone();
+    let mut effective_address_taken: IndexSet<u32> = address_taken.keys().copied().collect();
     let mut cells = IndexSet::default();
 
-    for &local_idx in &address_taken {
-        let local_type_id = func.locals[local_idx as usize].type_id;
+    for (&local_idx, &read_type) in &address_taken {
+        let is_param = local_idx < param_count;
+        // A parameter's cell holds what `&param` reads, which is not its
+        // declaration in a clone specialized to a closure literal: that param
+        // is a `&$Closure_N`, and `&param` a `&fn(...)` of the canonical value.
+        let local_type_id = if is_param {
+            read_type
+        } else {
+            func.locals[local_idx as usize].type_id
+        };
         if !type_table.is_boxed_reference_target(local_type_id) {
             continue;
         }
         let cell = type_table.make_mut_ref(local_type_id);
-        if local_idx < param_count {
+        if is_param {
             let shadow_idx = func.local_count;
             func.local_count += 1;
             let name = func.params[local_idx as usize].name.clone();
@@ -151,11 +159,12 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
     cells
 }
 
-/// The recorded address-taken locals whose `&` the body still takes. A
-/// rewrite after the record may fold one away, as a receiver's `*&r` folds
-/// to `r`, and boxing that local would cost a box nothing reads through.
-fn still_taken(func: &TirFunction) -> IndexSet<u32> {
-    struct Taken(IndexSet<u32>);
+/// The recorded address-taken locals whose `&` the body still takes, each with
+/// the type the body reads it at. A rewrite after the record may fold one away,
+/// as a receiver's `*&r` folds to `r`, and boxing that local would cost a box
+/// nothing reads through.
+fn still_taken(func: &TirFunction) -> IndexMap<u32, TypeId> {
+    struct Taken(IndexMap<u32, TypeId>);
     impl TirRefVisitor for Taken {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Unary {
@@ -164,20 +173,19 @@ fn still_taken(func: &TirFunction) -> IndexSet<u32> {
             } = &expr.kind
                 && let TirExprKind::Local { index, .. } = inner.kind
             {
-                self.0.insert(index);
+                self.0.insert(index, inner.type_id);
             }
             self.walk_expr_in_frame(expr);
         }
     }
     let Some(body) = &func.body else {
-        return IndexSet::default();
+        return IndexMap::default();
     };
-    let mut taken = Taken(IndexSet::default());
+    let mut taken = Taken(IndexMap::default());
     taken.visit_block(body);
     func.address_taken_locals
         .iter()
-        .copied()
-        .filter(|local| taken.0.contains(local))
+        .filter_map(|local| Some((*local, *taken.0.get(local)?)))
         .collect()
 }
 
