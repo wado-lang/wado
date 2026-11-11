@@ -75,21 +75,15 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
     let mut effective_address_taken: IndexSet<u32> = address_taken.keys().copied().collect();
     let mut cells = IndexSet::default();
 
-    for (&local_idx, &read_type) in &address_taken {
-        let is_param = local_idx < param_count;
-        // A parameter's cell holds what `&param` reads, which is not its
-        // declaration in a clone specialized to a closure literal: that param
-        // is a `&$Closure_N`, and `&param` a `&fn(...)` of the canonical value.
-        let local_type_id = if is_param {
-            read_type
-        } else {
-            func.locals[local_idx as usize].type_id
-        };
+    // A cell holds what `&local` reads, which is not the declaration of a
+    // param in a clone specialized to a closure literal: that param is a
+    // `&$Closure_N`, and `&param` a `&fn(...)` of the canonical value.
+    for (&local_idx, &local_type_id) in &address_taken {
         if !type_table.is_boxed_reference_target(local_type_id) {
             continue;
         }
         let cell = type_table.make_mut_ref(local_type_id);
-        if is_param {
+        if local_idx < param_count {
             let shadow_idx = func.local_count;
             func.local_count += 1;
             let name = func.params[local_idx as usize].name.clone();
@@ -173,7 +167,8 @@ fn still_taken(func: &TirFunction) -> IndexMap<u32, TypeId> {
             } = &expr.kind
                 && let TirExprKind::Local { index, .. } = inner.kind
             {
-                self.0.insert(index, inner.type_id);
+                let read = *self.0.entry(index).or_insert(inner.type_id);
+                assert_eq!(read, inner.type_id, "every `&local` reads one type");
             }
             self.walk_expr_in_frame(expr);
         }
