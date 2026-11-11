@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794402809857,
+  "lastUpdate": 1794422656862,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76617,6 +76617,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4bdda145771a13a8e97f45ddfb2535568be2d4ae"
         },
         "date": 1794402808716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 429302,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "233e615d428f3fdaa9ab9972ba8bda6940371578",
+          "message": "Merge pull request #2609 from wado-lang/claude/emi-fix-20261112\n\nfix(EMI): three miscompiles the EMI campaign found on main",
+          "timestamp": "2026-11-12T03:23:23+09:00",
+          "tree_id": "4ffcb4abd2f6a5047d9317517e057fb3eec49e74",
+          "url": "https://github.com/wado-lang/wado/commit/233e615d428f3fdaa9ab9972ba8bda6940371578"
+        },
+        "date": 1794422655701,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
