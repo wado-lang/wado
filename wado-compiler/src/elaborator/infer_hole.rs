@@ -50,8 +50,8 @@ pub(crate) struct InferHoleTable {
     /// there, so an unsolved hole inside one reports nothing more. Recorded
     /// where a check reads the table, so behind a cell.
     mismatches: std::cell::RefCell<Vec<DiagnosticSpan>>,
-    /// Slots an associated-type equality binds to a deferred owner, answered
-    /// the moment the owner is.
+    /// The associated-type equalities of deferred owners, settled the moment
+    /// the owner is answered.
     links: Vec<ProjectionLink>,
 }
 
