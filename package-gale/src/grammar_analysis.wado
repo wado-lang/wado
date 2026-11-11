@@ -554,10 +554,8 @@ impl GrammarAnalysis {
 
     /// Per rule, what follows it where a parse enters it directly, at most `k`
     /// tokens deep: whatever follows a call of it, read on through the caller's
-    /// own entry, and the end of the input after a rule no uncalled rule
-    /// reaches by calls. The jar reads an entered rule's end that way: a rule
-    /// with no caller ends the input, and so does one whose callers all sit in
-    /// a cycle that never returns out of it. Being the first rule changes
+    /// own entry, and the end of the input where `entry_ends_input` says. The
+    /// jar reads an entered rule's end that way; being the first rule changes
     /// nothing.
     pub fn entry_readings(&mut self, k: i32) -> List<List<Reading>> {
         let rule_count = self.parser_rules().len();
@@ -1775,7 +1773,8 @@ struct EntrySite {
 }
 
 /// Per rule, whether the input end follows it where it is entered: it has no
-/// caller, or no rule without one reaches it by calls.
+/// caller, or its callers all sit in a cycle that no rule without a caller
+/// reaches by calls, so no caller ever returns out of it.
 fn entry_ends_input(sites: &List<EntrySite>, rule_count: i32) -> List<bool> {
     let mut called = List::<bool>::filled(rule_count, false);
     for let s of sites {

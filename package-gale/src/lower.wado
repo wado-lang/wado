@@ -374,7 +374,8 @@ fn entry_follow_sites(grammar: &Grammar, ctx: &mut LowerContext) -> List<i32> {
     }
     let entry = ctx.analysis.entry_readings(FOLLOW_SITE_DEPTH);
     for let ri of 0..<grammar.parser_rules.len() {
-        if !entry[ri].is_empty() && ctx.marks.follow_rule_snakes.contains_str(&grammar.parser_rules[ri].snake_name) {
+        assert !entry[ri].is_empty(), "every rule's entry reads on to the input end or a caller";
+        if ctx.marks.follow_rule_snakes.contains_str(&grammar.parser_rules[ri].snake_name) {
             sites[ri] = ctx.intern_follow_site(&entry[ri]);
         }
     }
