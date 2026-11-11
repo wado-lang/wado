@@ -1147,7 +1147,7 @@ impl Monomorphizer {
                 .method_info
                 .as_ref()
                 .expect("a shape's synthesized method names its receiver")
-                .with_substituted_struct_name(&subject);
+                .at_owner(&subject);
             let name = info.to_mangled_name();
             if !self
                 .functions
@@ -1296,7 +1296,7 @@ impl Monomorphizer {
                     ..named
                 }
             } else if is_blanket && !impl_type_arg_names.is_empty() {
-                info.with_substituted_struct_name(&impl_type_arg_names[0])
+                info.at_owner(&impl_type_arg_names[0])
             } else {
                 info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
             }
@@ -1704,9 +1704,7 @@ impl Monomorphizer {
                             Some(concrete_tid) => {
                                 let dispatch_tid =
                                     self.type_param_dispatch_tid(concrete_tid, &info, type_table);
-                                info.with_substituted_struct_name(
-                                    &type_table.fq_type_name(dispatch_tid),
-                                )
+                                info.at_owner(&type_table.fq_type_name(dispatch_tid))
                             }
                             None => info.clone(),
                         }
@@ -1735,7 +1733,7 @@ impl Monomorphizer {
                     // A type-param receiver's name takes its method type args
                     // substituted too (R → FixedReader in a default trait method
                     // body calling Self::read::<R>(r)):
-                    // with_substituted_struct_name replaces only the struct name.
+                    // at_owner replaces only the receiver.
                     if info.is_type_param_receiver && !sub_method_type_args.is_empty() {
                         new_info.method_type_args = sub_method_type_args
                             .iter()
@@ -2912,7 +2910,7 @@ impl Monomorphizer {
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
             let candidate = self
-                .named_by_impl(info.with_substituted_struct_name(&type_table.fq_type_name(inner)));
+                .named_by_impl(info.at_owner(&type_table.fq_type_name(inner)));
             if self.functions.has_impl(&candidate)
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
@@ -2920,16 +2918,12 @@ impl Monomorphizer {
             } else if let Some(link) = info.trait_name.as_ref().and_then(|trait_name| {
                 written_newtype_link(&self.functions.trait_env, trait_name, inner, type_table)
             }) {
-                self.named_by_impl(
-                    info.with_substituted_struct_name(&type_table.fq_type_name(link)),
-                )
+                self.named_by_impl(info.at_owner(&type_table.fq_type_name(link)))
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.representation_head(inner);
-                self.named_by_impl(
-                    info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner)),
-                )
+                self.named_by_impl(info.at_owner(&type_table.fq_type_name(resolved_inner)))
             }
         } else if needs_struct_type_args {
             // Resolve through newtypes so the receiver matches the TraitEnv key
@@ -2937,7 +2931,7 @@ impl Monomorphizer {
             let recv_inner = type_table.peel_refs(receiver_type_id);
             let resolved_recv = type_table.representation_head(recv_inner);
             let mut new_info =
-                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_recv));
+                info.at_owner(&type_table.fq_type_name(resolved_recv));
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref receiver (`&` / `&mut`) so that the monomorphizer selects the
             // correct generic function template ("&List^IntoIterator::into_iter" instead

@@ -1815,41 +1815,22 @@ impl LocalMethodName {
         }
     }
 
-    /// Create a version with the struct name directly substituted (not wrapped with type args).
-    /// Used when the struct name is a type parameter (e.g., `T^Ord::cmp` → `i32^Ord::cmp`).
-    ///
-    /// `resolved` is the receiver the parameter resolved to; the instantiated
-    /// spelling and the base head both come from it, so they cannot disagree —
-    /// passing them as two separate strings is how they used to.
+    /// This method named at the concrete `receiver`: a type parameter's
+    /// answer (`T^Ord::cmp` → `i32^Ord::cmp`), or what an `impl` block writes.
+    /// A `&X` receiver is the reference to `X`'s head, carrying `X`'s
+    /// arguments, so the reference kind survives for dispatch to read.
     #[must_use]
-    pub fn with_substituted_struct_name(&self, resolved: &FqTypeName) -> Self {
+    pub fn at_owner(&self, receiver: &FqTypeName) -> Self {
+        let (head, args) = match receiver.split_reference() {
+            Some((kind, pointee)) => (Receiver::RefTo(kind, pointee.head_only()), pointee.args().to_vec()),
+            None => (Receiver::Type(receiver.head_only()), receiver.args().to_vec()),
+        };
         Self {
-            receiver: Receiver::Type(resolved.head_only()),
-            struct_type_args: resolved.args().to_vec(),
-            trait_name: self.trait_name.clone(),
-            trait_type_args: self.trait_type_args.clone(),
-            method_name: self.method_name.clone(),
-            method_type_args: self.method_type_args.clone(),
+            receiver: head,
+            struct_type_args: args,
             is_type_param_receiver: false,
             receiver_param: None,
-            is_ref_impl: self.is_ref_impl,
-            cm_name: self.cm_name.clone(),
-        }
-    }
-
-    /// This method named at the receiver one concrete `impl` block writes. A
-    /// `&X` owner is the reference to `X`'s head, carrying `X`'s arguments.
-    #[must_use]
-    pub fn at_owner(&self, owner: &FqTypeName) -> Self {
-        match owner.split_reference() {
-            Some((kind, pointee)) => Self {
-                receiver: Receiver::RefTo(kind, pointee.head_only()),
-                struct_type_args: pointee.args().to_vec(),
-                is_type_param_receiver: false,
-                receiver_param: None,
-                ..self.clone()
-            },
-            None => self.with_substituted_struct_name(owner),
+            ..self.clone()
         }
     }
 
