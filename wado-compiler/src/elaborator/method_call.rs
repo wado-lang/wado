@@ -3331,6 +3331,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(|c| self.params_admit(&c.params, classes))
             .collect();
+        // An impl leaving a slot to the call is told from another by the
+        // arguments' types, which the resolution reads once they are
+        // elaborated; only a numeric literal, whose width it would choose,
+        // leaves that question open.
+        if let [_, _, ..] = admitted.as_slice()
+            && !classes.iter().any(ArgClass::leaves_width_open)
+            && admitted.iter().any(|c| {
+                !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_trait_arg_slots(c.block)
+                    .is_empty()
+            })
+        {
+            return ArgPreselect::Pass;
+        }
         match admitted.as_slice() {
             [] => ArgPreselect::Pass,
             [only] => ArgPreselect::Selected(only.params.clone()),
@@ -3431,6 +3448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 spelling,
                 params,
                 trait_name: trait_name(),
+                block: impl_def,
             });
         }
         survey
@@ -4047,6 +4065,7 @@ pub(super) struct ArgCandidate {
     pub(super) spelling: String,
     pub(super) params: Vec<TypeId>,
     pub(super) trait_name: String,
+    block: DefId,
 }
 
 /// A parameter or argument list as one spelling: the type alone where there is

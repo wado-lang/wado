@@ -7,13 +7,14 @@ use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::name::FqTraitName;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeArgMap, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_call::{MethodSignatureFacts, StaticReceiver};
+use super::method_lookup::narrow_to_reaching;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
@@ -103,6 +104,13 @@ pub(super) enum StaticLookup {
         receiver: String,
         traits: Vec<DefId>,
     },
+    /// Impls of one trait each leaving a slot to the call reach it at
+    /// `trait_args`, and nothing ranks them. The call site reports them.
+    Tied {
+        receiver: String,
+        blocks: Vec<DefId>,
+        trait_args: Vec<TypeId>,
+    },
     NotStatic,
 }
 
@@ -177,6 +185,12 @@ enum Selection {
     Ambiguous(Vec<String>),
     /// One trait, several impls, and no argument to tell them apart.
     Overloaded,
+    /// Impls each leaving a slot to the call reach it at `trait_args`, their
+    /// bounds all holding there.
+    Tied {
+        blocks: Vec<DefId>,
+        trait_args: Vec<TypeId>,
+    },
     None,
 }
 
@@ -238,6 +252,7 @@ impl StaticLookup {
             Self::Overloaded { .. }
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
+            | Self::Tied { .. }
             | Self::NotStatic => None,
         }
     }
@@ -248,7 +263,9 @@ impl StaticLookup {
         match self {
             Self::Found(callee) => callee.return_type,
             Self::Overloaded { return_type } => *return_type,
-            Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::NotStatic => TypeTable::UNKNOWN,
+            Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::Tied { .. } | Self::NotStatic => {
+                TypeTable::UNKNOWN
+            }
         }
     }
 
@@ -261,6 +278,7 @@ impl StaticLookup {
             Self::Overloaded { .. }
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
+            | Self::Tied { .. }
             | Self::NotStatic => (CalleeParams::default(), false),
         }
     }
@@ -341,7 +359,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
             });
         }
-        let resolved = match self.select_candidate(candidates, arg_types) {
+        let resolved = match self.select_candidate(candidates, arg_types, &declaring_args) {
             Selection::One(candidate) => self.callee_of_candidate(
                 (receiver_name, &key),
                 method_name,
@@ -357,6 +375,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // type, and the call site's own preselect is what reads the
             // argument.
             Selection::Overloaded => return self.overloaded_callee(&key, method_name),
+            Selection::Tied { blocks, trait_args } => {
+                return StaticLookup::Tied {
+                    receiver: receiver_name.to_string(),
+                    blocks,
+                    trait_args,
+                };
+            }
             Selection::None => None,
         };
         if let Some(resolved) = resolved {
@@ -818,6 +843,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 span,
             },
+            StaticLookup::Tied {
+                receiver,
+                blocks,
+                trait_args,
+            } => {
+                self.report_blocks_tied(blocks, trait_args, receiver, span);
+                return true;
+            }
             StaticLookup::Found(_) | StaticLookup::Overloaded { .. } | StaticLookup::NotStatic => {
                 return false;
             }
@@ -828,7 +861,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The rules, applied once to every candidate whatever rung produced it.
     /// Their order is the design, not an implementation detail.
-    fn select_candidate(&self, mut candidates: Vec<Candidate>, arg_types: &[TypeId]) -> Selection {
+    fn select_candidate(
+        &self,
+        mut candidates: Vec<Candidate>,
+        arg_types: &[TypeId],
+        declaring_args: &[TypeId],
+    ) -> Selection {
         // The receiver's own declaration shadows an inherited one of the same
         // kind: a receiver-less declaration beside an instance one is no
         // alternative, since different argument lists reach them.
@@ -871,12 +909,85 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(best) = candidates.iter().map(|c| c.origin).min() {
             candidates.retain(|c| c.origin == best);
         }
+        if let Some(tied) = self.rank_slot_leaving_impls(&mut candidates, arg_types, declaring_args)
+        {
+            return tied;
+        }
         match candidates.len() {
             0 => Selection::None,
             1 => Selection::One(Box::new(candidates.remove(0))),
             // One trait, several impls, and no argument that separated them.
             _ => Selection::Overloaded,
         }
+    }
+
+    /// The rule a method call's selection applies, over the static
+    /// `candidates` the arguments admit, once their types are known: an impl
+    /// writing the trait's arguments defines the function the call names and
+    /// one leaving a slot to the call only covers it, and of the latter only
+    /// those whose bounds hold where the arguments settle the slots reach it.
+    /// Several still reaching it are the tie returned.
+    fn rank_slot_leaving_impls(
+        &self,
+        candidates: &mut Vec<Candidate>,
+        arg_types: &[TypeId],
+        declaring_args: &[TypeId],
+    ) -> Option<Selection> {
+        let leaves_slot = |c: &Candidate| {
+            c.supply.as_ref().is_some_and(|s| {
+                !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_trait_arg_slots(s.impl_def)
+                    .is_empty()
+            })
+        };
+        let settled_by_args = |c: &Candidate| match (&c.selector, c.kind) {
+            (Selector::Params(params), CandidateKind::Static) => params.len() <= arg_types.len(),
+            (Selector::Absent, _) => true,
+            (Selector::Params(_) | Selector::Blanket, _) => false,
+        };
+        if !candidates.iter().any(leaves_slot) || !candidates.iter().all(settled_by_args) {
+            return None;
+        }
+        prefer(candidates, |c| !leaves_slot(c));
+        if candidates.len() < 2 || !candidates.iter().all(leaves_slot) {
+            return None;
+        }
+        let blocks: Vec<DefId> = candidates
+            .iter()
+            .map(|c| c.supply.as_ref().expect("a slot-leaving candidate").impl_def)
+            .collect();
+        let mut settled: Vec<TypeArgMap> = candidates
+            .iter()
+            .zip(&blocks)
+            .map(|(c, &block)| {
+                let mut table = self.tysys.type_table.borrow_mut();
+                let mut slots = table.impl_slots(block, declaring_args);
+                if let Selector::Params(params) = &c.selector {
+                    table.bind_each_into(params, arg_types, &mut slots);
+                }
+                slots
+            })
+            .collect();
+        let mut reaching: Vec<usize> = (0..candidates.len()).collect();
+        narrow_to_reaching(&mut reaching, |&i| self.slot_bounds_hold(blocks[i], &settled[i]));
+        if let [first, _, ..] = reaching.as_slice() {
+            let slots = settled.swap_remove(*first);
+            let mut table = self.tysys.type_table.borrow_mut();
+            let written = table.impl_trait_args(blocks[*first]).to_vec();
+            return Some(Selection::Tied {
+                blocks: reaching.iter().map(|&i| blocks[i]).collect(),
+                trait_args: written
+                    .into_iter()
+                    .map(|arg| table.substitute_type_params(arg, &slots))
+                    .collect(),
+            });
+        }
+        let kept = candidates.swap_remove(reaching[0]);
+        *candidates = vec![kept];
+        None
     }
 
     /// Whether the arguments reach these parameters, each against the one it is

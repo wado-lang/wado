@@ -57,6 +57,17 @@ use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
 use crate::resolve::Resolution;
 use crate::unparse::binary_op_str;
 
+/// Keep the `candidates`, each leaving a slot to the call, that `reaches`: two
+/// such impls cover one function only where both bounds hold. Where none does
+/// the call is an error either way, and the first reports the bound it misses.
+pub(super) fn narrow_to_reaching<T>(candidates: &mut Vec<T>, reaches: impl Fn(&T) -> bool) {
+    if candidates.iter().any(&reaches) {
+        candidates.retain(reaches);
+    } else {
+        candidates.truncate(1);
+    }
+}
+
 /// Which impls [`Elaborator::open_receiver_candidates`] reads.
 #[derive(Clone, Copy)]
 pub(super) enum ImplKind {
@@ -1160,11 +1171,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         let receiver_args = self.bounded_at_answer(receiver_args);
-        if let Some(block) = block
-            && let Some(unmet) =
-                self.tysys
-                    .unmet_impl_bound(&self.annotate_ctx, block, None, Some(&receiver_args))
-        {
+        let Some(block) = block else {
+            return;
+        };
+        let unmet = self
+            .tysys
+            .unmet_impl_bound(&self.annotate_ctx, block, None, Some(&receiver_args))
+            .or_else(|| {
+                // A list past the receiver's positions spells the slots only
+                // the trait arguments name, whose bounds no position reaches.
+                let mut table = self.tysys.type_table.borrow_mut();
+                if !table.impl_trait_sets_params(block) {
+                    return None;
+                }
+                let slots = table.impl_spelled_slots(block, &receiver_args);
+                drop(table);
+                self.tysys.unmet_slot_bound(&self.annotate_ctx, block, &slots)
+            });
+        if let Some(unmet) = unmet {
             self.report_unmet(unmet, span);
         }
     }
@@ -1369,9 +1393,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+    /// Solve the variables `found`'s parameters name against the arguments
+    /// whose types the call already knows.
+    fn settle_slots_from_classes(&mut self, found: &TraitMethodMatch, classes: &[ArgClass]) {
+        for (&param, class) in found.method_info.param_types.iter().zip(classes) {
+            if let ArgClass::Exact(arg) = class
+                && self.type_has_infer_hole(param)
+            {
+                self.solve_infer_holes_against(param, *arg);
+            }
+        }
+    }
+
+    /// Whether `block`'s bounds hold at `slots`, a slot the use has not
+    /// settled yet read as holding.
+    pub(super) fn slot_bounds_hold(&self, block: DefId, slots: &TypeArgMap) -> bool {
+        let settled: TypeArgMap = slots
+            .iter()
+            .map(|(&slot, &arg)| (slot, self.apply_infer_holes(arg)))
+            .filter(|&(_, arg)| !self.type_has_infer_hole(arg))
+            .collect();
+        self.tysys
+            .unmet_slot_bound(&self.annotate_ctx, block, &settled)
+            .is_none()
+    }
+
     /// Solve the variables [`Self::mint_trait_arg_slots`] gave `block` against
     /// the arguments the call passes, read them out of the call's types, and
-    /// owe the block's bounds on what they settle to.
+    /// owe the block's bounds on what they settle to. One nothing settles is
+    /// the call's to report: no spelling at the call can name it.
     pub(super) fn settle_trait_arg_slots(
         &mut self,
         block: DefId,
@@ -1393,6 +1443,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             *param = self.apply_infer_holes(*param);
         }
         *return_type = self.apply_infer_holes(*return_type);
+        let env = Arc::clone(&self.tysys.trait_env);
+        let owner = format!("of `{}`", header_as_written(impl_header(&env, &ImplBlockRef(block))));
+        let names = self.impl_param_slots(block);
+        for (slot, &var) in inferred {
+            let name = names
+                .name_of(slot.index)
+                .expect("a trait-argument slot is one of its block's parameters");
+            self.attach_infer_var_blame(var, span, name.to_string(), owner.clone());
+        }
         self.defer_impl_bounds(block, inferred, span, OwedBounds::All);
     }
 
@@ -2861,19 +2920,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         found: &[TraitMethodMatch],
         tied: &[usize],
-        classes: &[ArgClass],
         receiver: TypeId,
         span: Span,
     ) {
-        let first = &found[tied[0]];
-        for (&param, class) in first.method_info.param_types.iter().zip(classes) {
-            if let ArgClass::Exact(arg) = class
-                && self.type_has_infer_hole(param)
-            {
-                self.solve_infer_holes_against(param, *arg);
-            }
-        }
-        let trait_args = self.apply_infer_holes_each(&first.trait_args);
+        let trait_args = self.apply_infer_holes_each(&found[tied[0]].trait_args);
         let blocks: Vec<DefId> = tied
             .iter()
             .map(|&i| {
@@ -2883,16 +2933,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a match leaving a slot to the call is read off its block")
             })
             .collect();
-        self.report_blocks_tied(&blocks, &trait_args, receiver, span);
+        let receiver = self.tysys.type_id_to_string(receiver);
+        self.report_blocks_tied(&blocks, &trait_args, &receiver, span);
     }
 
     /// Report impl `blocks` of one trait, each leaving a slot to the call, as
     /// all reaching it at `trait_args` on `receiver`.
-    fn report_blocks_tied(
+    pub(super) fn report_blocks_tied(
         &mut self,
         blocks: &[DefId],
         trait_args: &[TypeId],
-        receiver: TypeId,
+        receiver: &str,
         span: Span,
     ) {
         let args: Vec<String> = trait_args
@@ -2905,7 +2956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default();
         let _ = self.emit(TypeError::AmbiguousHeadImpls {
             trait_name: format!("{head}<{}>", args.join(", ")),
-            receiver: self.tysys.type_id_to_string(receiver),
+            receiver: receiver.to_string(),
             headers: blocks
                 .iter()
                 .map(|block| header_as_written(&env.impl_headers[block]))
@@ -3021,11 +3072,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !classes.iter().any(ArgClass::leaves_width_open) {
                     admitted.retain(writes_trait_args);
                 }
-            } else if let ([first, _, ..], Some(receiver)) = (admitted.as_slice(), receiver) {
+            } else if let ([_, _, ..], Some(receiver)) = (admitted.as_slice(), receiver) {
+                for &i in &admitted {
+                    self.settle_slots_from_classes(&found_traits[i], &classes);
+                }
+                narrow_to_reaching(&mut admitted, |&i| {
+                    let info = &found_traits[i].method_info;
+                    let block = info
+                        .impl_block
+                        .expect("a match leaving a slot to the call is read off its block");
+                    let slots = (0..)
+                        .zip(&info.impl_slot_args)
+                        .map(|(index, &arg)| (TypeParamId { owner: block, index }, arg))
+                        .collect();
+                    self.slot_bounds_hold(block, &slots)
+                });
                 // Two impls each leaving a slot to the call cover the same
-                // function, and no argument can tell them apart.
-                self.report_impls_tied_at_call(&found_traits, &admitted, &classes, receiver, span);
-                return Some(found_traits.swap_remove(*first));
+                // function where both bounds hold, and no argument can tell
+                // them apart.
+                if let [first, _, ..] = admitted.as_slice() {
+                    self.report_impls_tied_at_call(&found_traits, &admitted, receiver, span);
+                    return Some(found_traits.swap_remove(*first));
+                }
             }
             // Unique-or-error: exactly one admitted candidate wins. No ranking
             // — a literal admits every numeric width, so it never selects
@@ -3334,7 +3402,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .chain(info.tied_with.iter().copied())
                 .collect();
             let key: Vec<TypeId> = info.index_type.into_iter().collect();
-            self.report_blocks_tied(&blocks, &key, info.container, span);
+            let container = self.tysys.type_id_to_string(info.container);
+            self.report_blocks_tied(&blocks, &key, &container, span);
         }
         self.defer_impl_bounds(info.impl_def, &info.trait_arg_slots, span, OwedBounds::All);
         let name = MethodName::format_local(&info.receiver, Some(&info.trait_name), method);
@@ -3732,6 +3801,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(written) = impls.iter().position(|i| i.trait_arg_slots.is_empty()) {
             return Some(impls.swap_remove(written));
         }
+        narrow_to_reaching(&mut impls, |i| {
+            self.slot_bounds_hold(i.impl_def, &i.trait_arg_slots)
+        });
         let mut impls = impls.into_iter();
         let mut pick = impls.next()?;
         pick.tied_with = impls.map(|i| i.impl_def).collect();

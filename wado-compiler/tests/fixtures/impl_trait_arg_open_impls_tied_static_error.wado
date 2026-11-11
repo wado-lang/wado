@@ -1,0 +1,54 @@
+// A static call reaches the impls each leaving the trait's argument to it as a
+// method call does: where both bounds hold they tie, and where neither does
+// the first reports the bound it misses.
+use { println, Stdout } from "core:cli";
+
+trait A with () {
+    fn a(&self) -> i32;
+}
+
+trait B with () {
+    fn b(&self) -> i32;
+}
+
+struct Both {}
+
+impl A for Both {
+    fn a(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl B for Both {
+    fn b(&self) -> i32 {
+        return 2;
+    }
+}
+
+struct Neither {}
+
+trait Mk<T> with () {
+    fn mk(v: T) -> i32;
+}
+
+struct X {}
+
+impl<T: A> Mk<T> for X {
+    fn mk(v: T) -> i32 {
+        return v.a();
+    }
+}
+
+impl<T: B> Mk<T> for X {
+    fn mk(v: T) -> i32 {
+        return v.b();
+    }
+}
+
+export fn run() with Stdout {
+    println(`${X::mk(Both {})}`);
+    println(`${X::mk(Neither {})}`);
+}
+
+__DATA__
+{"compile_errors_contains": [":49:16: analysis error: ambiguous impls of 'Mk<Both>' for 'X': 'impl<T: A> Mk<T> for X' and 'impl<T: B> Mk<T> for X' both reach it, and nothing ranks them", ":50:16: analysis error: type 'Neither' does not implement trait 'A' required by bound on 'T'"], "compile_error_count": 2}

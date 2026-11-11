@@ -2620,9 +2620,6 @@ impl Monomorphizer {
         if !info.is_type_param_receiver {
             return info;
         }
-        for arg in &mut info.trait_type_args {
-            *arg = self.substitute_type(*arg, substitution, type_table);
-        }
         let Some(trait_name) = info.trait_name.as_ref() else {
             return info;
         };

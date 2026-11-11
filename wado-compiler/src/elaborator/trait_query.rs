@@ -2521,49 +2521,16 @@ impl TypeSystem {
     ) -> Option<UnmetImplBound> {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
-        let type_params = &header.type_params;
-        if type_params
+        if header
+            .type_params
             .iter()
             .all(|p| p.bounds.is_empty() && p.is_affine)
         {
             return None;
         }
-
-        // The bound's own site says which trait it names and what it writes for
-        // that trait's parameters, so the check compares declarations rather
-        // than the spelling the impl header happened to write.
-        let bounds_map: IndexMap<&str, (bool, Vec<FqTraitName>)> = type_params
-            .iter()
-            .map(|p| {
-                (
-                    p.name.as_str(),
-                    (
-                        p.is_affine,
-                        p.bounds
-                            .iter()
-                            .filter_map(|b| self.bound_written(b))
-                            .collect(),
-                    ),
-                )
-            })
-            .collect();
         let affine_params = ctx.trait_ctx.affine_params();
-        // A bound may name another of the block's parameters (`U: Uses<T>`),
-        // which means what the receiver settles that one to.
-        let unmet = |param: &str, type_arg: TypeId, at: &[(FqTypeName, FqTypeName)]| {
-            let (is_affine, bounds) = bounds_map.get(param)?;
-            let missing = if !*is_affine && self.is_affine(type_arg, &affine_params) {
-                UnmetKind::Affine
-            } else {
-                let bounds: Vec<FqTraitName> =
-                    bounds.iter().map(|bound| spelled_at(bound, at)).collect();
-                UnmetKind::Trait(self.unmet_bound(ctx, type_arg, &bounds)?.clone())
-            };
-            Some(UnmetImplBound {
-                param: param.to_string(),
-                type_arg,
-                missing,
-            })
+        let unmet = |param: &str, type_arg: TypeId| {
+            self.unmet_param_bound(ctx, header, param, type_arg, &affine_params, &[])
         };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
@@ -2572,7 +2539,7 @@ impl TypeSystem {
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
             let pointee = receiver.and_then(|id| self.pointee_of(id))?;
-            return unmet(inner.name.as_str(), pointee, &[]);
+            return unmet(inner.name.as_str(), pointee);
         }
         // An existence or bounds check that threaded no positions has nothing
         // to compare against.
@@ -2581,22 +2548,8 @@ impl TypeSystem {
         // `&Container<T>` reads the pointee's arguments, as its positions do.
         let impl_ty = header.ty.referent();
         if let ast::Type::Generic(_) = impl_ty {
-            let names = ImplParamSlots::of(&header.ty, type_params);
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
-            let at: Vec<(FqTypeName, FqTypeName)> = {
-                let tt = self.type_table.borrow();
-                slots
-                    .iter()
-                    .filter_map(|(slot, &arg)| {
-                        let name = names.name_of(slot.index)?;
-                        let binder = ParamRef::of(def, name).binder(self.resolutions.defs());
-                        Some((binder, tt.fq_type_name(arg)))
-                    })
-                    .collect()
-            };
-            return slots
-                .iter()
-                .find_map(|(slot, &type_arg)| unmet(names.name_of(slot.index)?, type_arg, &at));
+            return self.unmet_slot_bound(ctx, def, &slots);
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
@@ -2609,10 +2562,73 @@ impl TypeSystem {
                 };
                 type_args
                     .iter()
-                    .find_map(|&type_arg| unmet(name.as_str(), type_arg, &[]))
+                    .find_map(|&type_arg| unmet(name.as_str(), type_arg))
             });
         }
         None
+    }
+
+    /// The first bound or kind of `def`'s parameters that `slots`, what a use
+    /// settles them to, misses.
+    pub(super) fn unmet_slot_bound(
+        &self,
+        ctx: &Scope,
+        def: DefId,
+        slots: &TypeArgMap,
+    ) -> Option<UnmetImplBound> {
+        let trait_env = self.trait_env.clone();
+        let header = &trait_env.impl_headers[&def];
+        let names = ImplParamSlots::of(&header.ty, &header.type_params);
+        // A bound may name another of the block's parameters (`U: Uses<T>`),
+        // which means what the use settles that one to.
+        let at: Vec<(FqTypeName, FqTypeName)> = {
+            let tt = self.type_table.borrow();
+            slots
+                .iter()
+                .filter_map(|(slot, &arg)| {
+                    let name = names.name_of(slot.index)?;
+                    let binder = ParamRef::of(def, name).binder(self.resolutions.defs());
+                    Some((binder, tt.fq_type_name(arg)))
+                })
+                .collect()
+        };
+        let affine_params = ctx.trait_ctx.affine_params();
+        slots.iter().find_map(|(slot, &type_arg)| {
+            let param = names.name_of(slot.index)?;
+            self.unmet_param_bound(ctx, header, param, type_arg, &affine_params, &at)
+        })
+    }
+
+    /// The bound or kind `header`'s parameter `param` places that `type_arg`
+    /// misses. The bound's own site says which trait it names and what it
+    /// writes for that trait's parameters, so the check compares declarations
+    /// rather than the spelling the impl header happened to write.
+    fn unmet_param_bound(
+        &self,
+        ctx: &Scope,
+        header: &ImplHeader,
+        param: &str,
+        type_arg: TypeId,
+        affine_params: &[TypeId],
+        at: &[(FqTypeName, FqTypeName)],
+    ) -> Option<UnmetImplBound> {
+        let declared = header.type_params.iter().find(|p| p.name == param)?;
+        let missing = if !declared.is_affine && self.is_affine(type_arg, affine_params) {
+            UnmetKind::Affine
+        } else {
+            let bounds: Vec<FqTraitName> = declared
+                .bounds
+                .iter()
+                .filter_map(|b| self.bound_written(b))
+                .map(|bound| spelled_at(&bound, at))
+                .collect();
+            UnmetKind::Trait(self.unmet_bound(ctx, type_arg, &bounds)?.clone())
+        };
+        Some(UnmetImplBound {
+            param: param.to_string(),
+            type_arg,
+            missing,
+        })
     }
 }
 
