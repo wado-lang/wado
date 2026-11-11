@@ -125,12 +125,12 @@ pub fn fitted_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], Field
     fits: &List<List<[i32, i32]>>,
 ) -> S with _ {
     return ReflectStruct::<S>::from_fields(
-        [for let f of ReflectStruct::<S>::members() { fitted_at(g, &f.get(s), &fits[f.index()]) }],
+        [for let f of ReflectStruct::<S>::members() { fitted_at(g, f.get(s), &fits[f.index()]) }],
     );
 }
 
-fn fitted_at<affine G: Graph, F: Field<G>>(g: &mut G, field: &F, fits: &List<[i32, i32]>) -> F with _ {
-    let mut out = *field;
+fn fitted_at<affine G: Graph, F: Field<G>>(g: &mut G, field: F, fits: &List<[i32, i32]>) -> F with _ {
+    let mut out = field;
     for let [axis, extent] of *fits {
         out = out.fitted(g, axis, extent);
     }
