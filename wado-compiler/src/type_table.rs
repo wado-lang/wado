@@ -32,7 +32,8 @@ use crate::tir::{
     AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
     RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr,
     TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId,
-    is_open_row, positional_substitution, projection_arguments, range_item, solve_row,
+    is_open_row, positional_substitution, projection_arguments, range_item, slots_from_impl_args,
+    solve_row,
 };
 
 #[derive(Debug, Clone)]
@@ -6726,7 +6727,7 @@ impl TypeTable {
     /// Impl block `def`'s receiver and trait arguments at the instance `args`
     /// key, one argument per slot in slot order.
     pub fn impl_instance_at(&mut self, def: DefId, args: &[TypeId]) -> (TypeId, Vec<TypeId>) {
-        let slots = crate::tir::slots_from_impl_args(def, args);
+        let slots = slots_from_impl_args(def, args);
         let receiver = self.substitute_type_params(self.impl_target_whole(def), &slots);
         (receiver, self.impl_trait_args_at(def, &slots))
     }
