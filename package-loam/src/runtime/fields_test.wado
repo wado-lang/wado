@@ -1,0 +1,49 @@
+use { Graph } from "./hlo.wado";
+use { erased_fields, recorded_fields, restored_fields } from "./fields.wado";
+use { Any, Recorder, Value } from "./recorded.wado";
+use { Cpu, Holds, Tensor } from "./tensor.wado";
+
+struct X {}
+struct Y {}
+
+struct Pair<affine G: Holds> {
+    a: G::Tensor<f32, [X]>,
+    b: G::Tensor<i64, [X, Y]>,
+}
+
+fn pair() -> Pair<Cpu> {
+    return Pair::<Cpu> {
+        a: Tensor { data: [1.5], extents: [1] },
+        b: Tensor { data: [1, 2, 3, 4, 5, 6], extents: [2, 3] },
+    };
+}
+
+test "erasing walks the fields in their order" {
+    let erased = erased_fields(&Cpu {}, &pair());
+    assert erased.len() == 2;
+    assert erased[0] matches { F32(_) } && erased[1] matches { I64(_) };
+}
+
+test "restoring builds the struct back from an offset" {
+    let g = Cpu {};
+    let mut held: List<Any<Cpu>> = [Any::Bool(Tensor { data: [true], extents: [1] })];
+    held.extend(&erased_fields(&g, &pair()));
+    let back: Pair<Cpu> = restored_fields(&g, &held, 1);
+    assert back.a.data == [1.5] && back.b.extents == [2, 3];
+}
+
+test "recording makes a parameter of each field's extents" {
+    let mut r = Recorder::new();
+    let recorded: Pair<Recorder> = recorded_fields(&mut r, &[[9], [1], [2, 3]], 1);
+    assert recorded.a.id != recorded.b.id;
+    assert r.extents_of(&recorded.a) == [1] && r.extents_of(&recorded.b) == [2, 3];
+}
+
+// A caller generic over the backend, as the generated code is.
+fn round_trip<affine G: Graph>(g: &G, p: &Pair<G>) -> Pair<G> {
+    return restored_fields(g, &erased_fields(g, p), 0);
+}
+
+test "a caller generic over the backend" {
+    assert round_trip(&Cpu {}, &pair()).b.data == [1, 2, 3, 4, 5, 6];
+}

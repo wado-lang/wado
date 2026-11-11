@@ -27,7 +27,6 @@ use {
     DECODE_ROWS,
     DECODED,
     DECODED_TYPE,
-    KEPT,
     LEAST_EXTENTS,
     LENGTHS,
     MAP,
@@ -424,8 +423,8 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// `build` adds its operations to: a backend may own device resources.
 global GRAPH_BOUND: String = `affine ${BACKEND_PARAM}: Graph`;
 
-/// The same parameter where code only holds tensors: `Cache`, `Passed` and
-/// `Kept`'s functions, which a recording graph serves too.
+/// The same parameter where code only holds tensors: `Cache` and `Passed`,
+/// which a recording graph serves too.
 global HOLDS_BOUND: String = `affine ${BACKEND_PARAM}: Holds`;
 
 /// `Params` over the backend.
@@ -475,36 +474,7 @@ fn emit_weights(
     w.line("/// The graph's initializers as tensors of the graph `build` adds operations to.");
     params.emit(w);
     emit_constructor(w, graph, checked, held, placement);
-    if !kept.is_empty() {
-        emit_kept(w, checked, names, kept);
-    }
     emit_embedded_data(w, graph);
-}
-
-/// `Kept`, one function per `kept` literal keeping it on the backend, which
-/// `Params::held` calls.
-fn emit_kept(w: &mut CodeWriter, checked: &Checked, names: &Names, kept: &List<String>) {
-    w.blank();
-    w.line("/// The folded tensors `Params` holds, which no symbol enters.");
-    StructSpec::new(KEPT).emit(w);
-    w.blank();
-    ImplSpec::new(KEPT).emit_begin(w);
-    for let tensor of kept {
-        FnSpec::new(names.get(tensor)).add_generic(HOLDS_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
-            prepared_type(checked, tensor),
-        ).add_effect("_").emit_begin(w);
-        w.line(`return ${kept_literal(checked, tensor)};`);
-        w.end();
-    }
-    w.end();
-}
-
-/// The `Params` fields of the `kept` literals.
-fn emit_kept_fields(w: &mut CodeWriter, names: &Names, kept: &List<String>) {
-    for let tensor of kept {
-        let ident = names.get(tensor);
-        w.line(`${ident}: ${KEPT}::${ident}(backend),`);
-    }
 }
 
 /// A tensor as the backend holds it: in the primitive the graph computes in.
@@ -748,7 +718,7 @@ fn emit_compute(
         ];
     };
     arguments.push("&model.weights");
-    let [erased, erased_weights] = erased_arguments(&taken_args, first_weight);
+    let erased = erased_arguments(&taken_args, first_weight);
     let results = if crossing.several() {
         let mut fields: List<String> = [];
         for let [at, output] of returned.into_iter().enumerate() {
@@ -766,7 +736,7 @@ fn emit_compute(
         lines.push(
             `let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${record}, || [${erased.join(
                 ", ",
-            )}], || [${erased_weights.join(", ")}]) {`,
+            )}], || ${ERASED_WEIGHTS}) {`,
         );
         lines.push(`    Some(results) => ${results},`);
         lines.push(`    None => build(${arguments.join(", ")}),`);
@@ -824,7 +794,7 @@ fn emit_compute(
     w.end();
     emit_recorded(w, names, &taken_args, first_weight, &returned, crossing, !chosen.is_empty(), false);
     emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args, per_row)?;
-    emit_held(w, graph, checked, names, kept, first_weight, least);
+    emit_held(w, graph, checked, kept, first_weight, least);
     return Result::Ok(());
 }
 
@@ -1188,7 +1158,7 @@ fn emit_decode(
     class.push("backend.extents_of(&decoding.tokens)");
     class.push("backend.extents_of(&decoding.position)");
     let taken = entry.taken_args;
-    let [erased, erased_weights] = erased_arguments(&taken, entry.first_weight);
+    let erased = erased_arguments(&taken, entry.first_weight);
     let chosen_argument = if chooses { ", &chosen" } else { "" };
     lines.push(
         `let [tokens, cache] = match model.programs.run(backend, [${class.join(
@@ -1198,7 +1168,7 @@ fn emit_decode(
     lines.push(`    let mut all: List<Any<${BACKEND_PARAM}>> = [${erased.join(", ")}];`);
     lines.push("    all.extend(&decoding.erased(backend));");
     lines.push("    return all;");
-    lines.push(`}, || [${erased_weights.join(", ")}]) {`);
+    lines.push(`}, || ${ERASED_WEIGHTS}) {`);
     lines.push(
         `    Some(results) => [i64_of::<${BACKEND_PARAM}, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(
             checked,
@@ -1623,7 +1593,6 @@ fn emit_held(
     w: &mut CodeWriter,
     graph: &Graph,
     checked: &Checked,
-    names: &Names,
     kept: &List<String>,
     first: i32,
     least: String,
@@ -1638,19 +1607,18 @@ fn emit_held(
         "load",
         "fn(i32) -> Result<Any<Cpu>, Er> with _",
     ).set_return_type(`Result<${PARAMS_TYPE}, Er>`).add_effect("_").emit_begin(w);
-    let count = graph.initializers.len();
-    w.line(
-        `let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`,
-    );
-    w.begin(`return Result::Ok(${PARAMS}`);
-    for let [at, vi] of graph.initializers.into_iter().enumerate() {
-        let axes = axis_list(&checked.shapes[vi.name]);
-        w.line(
-            `${names.get(&vi.name)}: ${checked.primitives[vi.name]}_of::<${BACKEND_PARAM}, [${axes}]>(backend, &weights[${at}]),`,
-        );
+    let count = graph.initializers.len() + kept.len();
+    if kept.is_empty() {
+        w.line(`let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`);
+    } else {
+        w.begin(`let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, |at| match at`);
+        for let [k, tensor] of kept.into_iter().enumerate() {
+            w.line(`${graph.initializers.len() + k} => Result::Ok(${kept_literal(checked, tensor)}),`);
+        }
+        w.line("_ => load(at),");
+        w.end_with(")?;");
     }
-    emit_kept_fields(w, names, kept);
-    w.end_with(");");
+    w.line("return Result::Ok(restored_fields(backend, &weights, 0));");
     w.end();
     w.end();
 }
@@ -1774,13 +1742,13 @@ fn cache_from_results(checked: &Checked, names: &Names, crossing: &Crossing, fir
     return `${CACHE}::<${BACKEND_PARAM}> { ${fields.join(", ")} }`;
 }
 
-/// `taken` as the program takes it: all up to `first_weight`, then the weights.
-fn erased_arguments(taken: &List<ProgramArgument>, first_weight: i32) -> [List<String>, List<String>] {
-    return [
-        taken.into_iter().take(first_weight).map(|a| a.erased()).collect(),
-        taken.into_iter().skip(first_weight).map(|a| a.erased()).collect(),
-    ];
+/// `taken` up to `first_weight` as the program takes it.
+fn erased_arguments(taken: &List<ProgramArgument>, first_weight: i32) -> List<String> {
+    return taken.into_iter().take(first_weight).map(|a| a.erased()).collect();
 }
+
+/// The weights as the program takes them.
+global ERASED_WEIGHTS: String = "erased_fields(backend, &model.weights)";
 
 /// The case of `Any` holding an element of `primitive`.
 fn any_case(primitive: &String) -> String {
@@ -1857,7 +1825,6 @@ fn emit_recorded(
     for let [crossed, ty, local] of [
         [Crossed::Cache, CACHE, "cache"],
         [Crossed::Length, LENGTHS, "lengths"],
-        [Crossed::Weight, PARAMS, "weights"],
     ] as List<[Crossed, String, String]> {
         let mut fields: List<String> = [];
         for let [at, a] of taken.into_iter().enumerate() {
@@ -1865,19 +1832,19 @@ fn emit_recorded(
                 fields.push(`${a.ident}: ${a.parameter(&extents_at(at))}`);
             }
         }
-        if crossed matches { Weight } {
-            if decoding {
-                w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, sampler);`);
-            }
-            if chooses {
-                arguments.push("chosen");
-            }
-        }
-        if !fields.is_empty() || crossed matches { Weight } {
+        if !fields.is_empty() {
             w.line(`let ${local} = ${ty}::<Recorder> { ${fields.join(", ")} };`);
             arguments.push(`&${local}`);
         }
     }
+    if decoding {
+        w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, sampler);`);
+    }
+    if chooses {
+        arguments.push("chosen");
+    }
+    w.line(`let weights: ${PARAMS}<Recorder> = recorded_fields(recorder, extents, ${extents_at(first_weight)});`);
+    arguments.push("&weights");
     if decoding {
         arguments.push("&decoding");
     }
@@ -2970,13 +2937,13 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
     return Result::Ok(`backend.upload(${host_literal(checked, tensor, data, extents)})`);
 }
 
-/// A folded tensor that no symbol enters, held by the backend for every pass:
-/// one `build` would otherwise rebuild and upload on each call, as large as
-/// the context where it is a mask.
+/// A folded tensor that no symbol enters on the host, which the backend keeps
+/// among the weights for every pass: one `build` would otherwise rebuild and
+/// upload on each call, as large as the context where it is a mask.
 fn kept_literal(checked: &Checked, tensor: &String) -> String {
     let extents = static_extents(&checked.shapes[*tensor]).expect("a kept literal's shape is static");
     let data = constant_elements(&checked.known[*tensor].elements);
-    return `backend.keep(${host_literal(checked, tensor, data, `${extents}`)})`;
+    return `host_of(${host_literal(checked, tensor, data, `${extents}`)})`;
 }
 
 /// The folded tensors in `literals` that no symbol enters, which `Params`
