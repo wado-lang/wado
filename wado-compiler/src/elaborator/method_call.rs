@@ -602,17 +602,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&mut probe),
             )
         {
-            matched_impl_decl = trait_match.impl_struct_fq.head().def();
-            if trait_match.impl_struct_fq.head() != self.tysys.fq_receiver_head(base_type_id).head()
-            {
-                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-            }
-            trait_name = Some(trait_match.trait_name);
             let mut info = trait_match.method_info;
             // A blanket answers a parameter's call only until the instance
             // names its type, where an impl written for that type outranks it.
             // So a call naming the trait's arguments goes as one through a
-            // bound does: to the trait at those arguments, dispatched there.
+            // bound does: on the receiver, to the trait at those arguments,
+            // dispatched there.
             if trait_match.blanket_type_param.is_some()
                 && self
                     .tysys
@@ -625,12 +620,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let tt = self.tysys.type_table.borrow();
                     asked.iter().map(|&arg| tt.fq_type_name(arg)).collect()
                 };
-                trait_name = trait_name.map(|name| name.head_only().with_args(names));
+                trait_name = Some(trait_match.trait_name.with_args(names));
                 info.impl_block = None;
                 info.impl_slot_args = Vec::new();
                 info.bound_trait_args = asked;
                 method_info = Some(info);
             } else {
+                matched_impl_decl = trait_match.impl_struct_fq.head().def();
+                if trait_match.impl_struct_fq.head()
+                    != self.tysys.fq_receiver_head(base_type_id).head()
+                {
+                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
+                }
+                trait_name = Some(trait_match.trait_name);
                 // A newtype inherits a trait impl its base wrote, and the impl
                 // spells `Self` as that base. Name the link the impl sits on, so
                 // the signature re-types to the receiver the way an inherited
@@ -815,6 +817,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .substitute_newtype_in_type(*ty, base_type_id, newtype_id);
             }
+        }
+        // A slot projected off the caller's parameter (`P::Out`) reads as the
+        // caller's bounds say it is.
+        for ty in expected_param_types
+            .iter_mut()
+            .chain(std::iter::once(&mut return_type))
+        {
+            *ty = self.answer_frame_projections(*ty);
         }
 
         let impl_args = settled_impl_args(&impl_type_bindings);

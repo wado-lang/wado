@@ -1,0 +1,64 @@
+// A blanket's trait-qualified call on a receiver that is a projection off the
+// caller's parameter (`H::Item`) dispatches on what the projection names at
+// the instance, not on its base `H`.
+use { println, Stdout } from "core:cli";
+
+trait Back with () {
+    fn name() -> String;
+}
+
+struct Host {}
+
+impl Back for Host {
+    fn name() -> String {
+        return "host";
+    }
+}
+
+trait Left with () {
+    type Out;
+}
+
+struct Count {}
+
+impl Left for Count {
+    type Out = i32;
+}
+
+trait Defaulted<G: Back> with () {
+    fn defaulted(&self) -> String;
+}
+
+impl<T: Left<Out = X>, X: Default + Display, G: Back> Defaulted<G> for T {
+    fn defaulted(&self) -> String {
+        return `[${X::default()}] on ${G::name()}`;
+    }
+}
+
+trait Holder with () {
+    type Item: Left<Out = i32>;
+    fn item(&self) -> Self::Item;
+}
+
+struct Counts {}
+
+impl Holder for Counts {
+    type Item = Count;
+    fn item(&self) -> Count {
+        return Count {};
+    }
+}
+
+fn through<H: Holder>(h: &H) -> String {
+    let i = h.item();
+    return Defaulted::<Host>::defaulted(&i);
+}
+
+export fn run() with Stdout {
+    println(through(&Counts {}));
+}
+
+__DATA__
+{
+  "stdout": "[0] on host\n"
+}
