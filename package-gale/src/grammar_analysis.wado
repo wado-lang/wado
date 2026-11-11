@@ -568,30 +568,41 @@ impl GrammarAnalysis {
         }
         let mut input_end: List<Reading> = [];
         readings_add(&mut input_end, Reading { kinds: List::filled(k, [self.eof_kind_id()]), ends: false }, k);
+        let mut sites_of_caller = List::<List<i32>>::filled(rule_count, []);
+        for let [si, s] of sites.iter_ref().enumerate() {
+            sites_of_caller[s.caller].push(si);
+        }
         let mut entry: List<List<Reading>> = [];
-        for let ends_input of entry_ends_input(&sites, rule_count) {
+        for let ends_input of entry_ends_input(&sites, &sites_of_caller) {
             entry.push(if ends_input { input_end } else { [] });
         }
-        loop {
-            let mut changed = false;
-            for let s of &sites {
-                let mut grown = entry[s.callee];
-                for let r of &s.readings {
-                    if r.ends {
-                        reading_then(&mut grown, r, &entry[s.caller], k);
-                    } else {
-                        readings_add(&mut grown, *r, k);
-                    }
+        for let s of &sites {
+            for let r of &s.readings {
+                if !r.ends {
+                    readings_add(&mut entry[s.callee], *r, k);
                 }
-                if grown != entry[s.callee] {
-                    entry[s.callee] = grown;
-                    changed = true;
-                }
-            }
-            if !changed {
-                return entry;
             }
         }
+        let mut queued = List::<bool>::filled(rule_count, true);
+        let mut pending: List<i32> = (0..<rule_count).collect();
+        while let Some(caller) = pending.pop() {
+            queued[caller] = false;
+            let tail = entry[caller];
+            for let si of &sites_of_caller[caller] {
+                let s = &sites[*si];
+                let mut grew = false;
+                for let r of &s.readings {
+                    if r.ends {
+                        grew = reading_then(&mut entry[s.callee], r, &tail, k) || grew;
+                    }
+                }
+                if grew && !queued[s.callee] {
+                    queued[s.callee] = true;
+                    pending.push(s.callee);
+                }
+            }
+        }
+        return entry;
     }
 
     /// Each call in `elements`, followed by `suffix`, with the readings of what
@@ -1775,7 +1786,8 @@ struct EntrySite {
 /// Per rule, whether the input end follows it where it is entered: it has no
 /// caller, or its callers all sit in a cycle that no rule without a caller
 /// reaches by calls, so no caller ever returns out of it.
-fn entry_ends_input(sites: &List<EntrySite>, rule_count: i32) -> List<bool> {
+fn entry_ends_input(sites: &List<EntrySite>, sites_of_caller: &List<List<i32>>) -> List<bool> {
+    let rule_count = sites_of_caller.len();
     let mut called = List::<bool>::filled(rule_count, false);
     for let s of sites {
         called[s.callee] = true;
@@ -1789,10 +1801,11 @@ fn entry_ends_input(sites: &List<EntrySite>, rule_count: i32) -> List<bool> {
         }
     }
     while let Some(caller) = pending.pop() {
-        for let s of sites {
-            if s.caller == caller && !reached[s.callee] {
-                reached[s.callee] = true;
-                pending.push(s.callee);
+        for let si of &sites_of_caller[caller] {
+            let callee = sites[*si].callee;
+            if !reached[callee] {
+                reached[callee] = true;
+                pending.push(callee);
             }
         }
     }

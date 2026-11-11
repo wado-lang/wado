@@ -4,7 +4,8 @@
 //! ends there merge, so a site holds at most `2k + 1` of them however many ways
 //! its elements derive.
 
-use { union_kind_arrays } from "./token_kinds.wado";
+use { dedup_append_arr } from "./list_util.wado";
+use { bits_set, bits_test } from "./token_kinds.wado";
 
 /// One way a sequence begins: the kinds at each position, and whether the
 /// sequence ends right after them, so that what follows it is read next. A
@@ -34,35 +35,72 @@ pub fn readings_of_position(kinds: List<i32>, k: i32) -> List<Reading> {
 }
 
 /// Add `reading` to `out`, cut at `k` positions, merged into the reading of
-/// its length and ending where there is one.
-pub fn readings_add(out: &mut List<Reading>, reading: Reading, k: i32) {
-    let mut r = reading;
-    if r.kinds.len() >= k {
-        r.kinds.truncate(k);
-        r.ends = false;
-    }
+/// its length and ending where there is one. Whether `out` grew.
+pub fn readings_add(out: &mut List<Reading>, reading: Reading, k: i32) -> bool {
+    return readings_add_joined(out, &reading.kinds, &[], reading.ends, k);
+}
+
+/// `readings_add` of the reading `head`'s positions then `tail`'s make, built
+/// only where no reading of its length and ending is there to absorb it.
+fn readings_add_joined(
+    out: &mut List<Reading>,
+    head: &List<List<i32>>,
+    tail: &List<List<i32>>,
+    ends: bool,
+    k: i32,
+) -> bool {
+    let len = i32::min(head.len() + tail.len(), k);
+    let key = reading_key(len, ends && len < k);
     let mut at = 0;
-    while at < out.len() && reading_key(&out[at]) < reading_key(&r) {
+    while at < out.len() && reading_key(out[at].kinds.len(), out[at].ends) < key {
         at += 1;
     }
-    if at < out.len() && reading_key(&out[at]) == reading_key(&r) {
-        for let mut i = 0; i < r.kinds.len(); i += 1 {
-            out[at].kinds[i] = union_position(&out[at].kinds[i], &r.kinds[i]);
+    if at < out.len() && reading_key(out[at].kinds.len(), out[at].ends) == key {
+        let mut grew = false;
+        for let i of 0..<len {
+            let from = if i < head.len() { &head[i] } else { &tail[i - head.len()] };
+            grew = position_absorb(&mut out[at].kinds[i], from) || grew;
         }
-        return;
+        return grew;
     }
-    out.insert(at, r);
+    let mut kinds: List<List<i32>> = [];
+    for let i of 0..<len {
+        kinds.push(if i < head.len() { head[i] } else { tail[i - head.len()] });
+    }
+    out.insert(at, Reading { kinds, ends: ends && len < k });
+    return true;
 }
 
-fn reading_key(r: &Reading) -> i32 {
-    return r.kinds.len() * 2 + if r.ends { 1 } else { 0 };
+fn reading_key(len: i32, ends: bool) -> i32 {
+    return len * 2 + if ends { 1 } else { 0 };
 }
 
-fn union_position(a: &List<i32>, b: &List<i32>) -> List<i32> {
-    if a.is_empty() || b.is_empty() {
-        return [];
+/// Widen `into` to admit what `from` admits. Whether it grew. Past a few
+/// kinds a side, membership is a bit test rather than a scan of `into`.
+fn position_absorb(into: &mut List<i32>, from: &List<i32>) -> bool {
+    if into.is_empty() {
+        return false;
     }
-    return union_kind_arrays(a, b);
+    if from.is_empty() {
+        into.clear();
+        return true;
+    }
+    let before = into.len();
+    if before * from.len() <= 64 {
+        dedup_append_arr(into, from);
+        return into.len() != before;
+    }
+    let mut held: List<u64> = [];
+    for let i of 0..<before {
+        bits_set(&mut held, into[i]);
+    }
+    for let id of from {
+        if !bits_test(&held, *id) {
+            bits_set(&mut held, *id);
+            into.push(*id);
+        }
+    }
+    return into.len() != before;
 }
 
 /// Every reading of `from`, cut at `k`.
@@ -73,15 +111,15 @@ pub fn readings_union_into(out: &mut List<Reading>, from: &List<Reading>, k: i32
 }
 
 /// `head`'s reading, then `tail`'s, cut at `k`. A head reading that ends
-/// continues into `tail`.
-pub fn reading_then(out: &mut List<Reading>, head: &Reading, tail: &List<Reading>, k: i32)
+/// continues into `tail`. Whether `out` grew.
+pub fn reading_then(out: &mut List<Reading>, head: &Reading, tail: &List<Reading>, k: i32) -> bool
     contract head.ends
 {
+    let mut grew = false;
     for let t of tail {
-        let mut kinds = head.kinds;
-        kinds.extend(&t.kinds);
-        readings_add(out, Reading { kinds, ends: t.ends }, k);
+        grew = readings_add_joined(out, &head.kinds, &t.kinds, t.ends, k) || grew;
     }
+    return grew;
 }
 
 /// Whether some reading continues into what follows the sequence.
