@@ -1147,7 +1147,10 @@ impl Monomorphizer {
         // A declared target's key is its positions, then the trait arguments
         // that key it, read structurally: a slot nested in either (`T` in
         // `Pair<List<T>, i32>`, `U` in `Put<List<U>>`) is no key position.
-        if one_arg_per_param && let Some(block) = generic.impl_origin {
+        if one_arg_per_param
+            && !generic.impl_type_params.is_empty()
+            && let Some(block) = generic.impl_origin
+        {
             let positions = &key.impl_type_args[..type_table.impl_key_len(block)];
             substitution = type_table.impl_slots(block, positions);
         }
