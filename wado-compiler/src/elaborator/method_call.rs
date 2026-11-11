@@ -1102,6 +1102,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mangled_method_name =
             MethodName::format_local(&receiver_struct_name, trait_name.as_ref(), method_name);
+        // The block's slots name the instance, so the receiver, a projection
+        // included, waits on no substitution to pick one.
+        let keyed_by_slots = !impl_slot_args.is_empty();
 
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
@@ -1129,7 +1132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     is_blanket: false,
                 })
             }
-        } else if !impl_slot_args.is_empty() {
+        } else if keyed_by_slots {
             Some(MonomorphInfo {
                 generic_name: MethodName::format_local(&base_struct_name, None, method_name),
                 impl_type_args: impl_slot_args,
@@ -1175,10 +1178,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
-        self.tysys
-            .type_table
-            .borrow()
-            .mark_receiver(&mut method_info, base_type_id);
+        if !keyed_by_slots {
+            self.tysys
+                .type_table
+                .borrow()
+                .mark_receiver(&mut method_info, base_type_id);
+        }
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
         method_info.trait_type_args = bound_trait_args;

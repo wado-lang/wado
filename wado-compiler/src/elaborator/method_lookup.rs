@@ -2351,15 +2351,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A parameter only the trait reference names, or only a projection in
         // the target (`G`, `E` in `impl<G: Back, E> Shown<G> for G::Of<E>`),
-        // is bound by the arguments the call names.
+        // is bound by the arguments the call names, or by a receiver that is
+        // that projection off the caller's own parameter (`G::Of<f32>`).
         let mut impl_slot_args = Vec::new();
-        if let (Some(asked), Some(receiver)) = (asked, receiver_type_id) {
+        if let Some(receiver) = receiver_type_id
+            && (asked.is_some()
+                || scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_targets_projection(impl_ref.0))
+        {
             let mut slots = Self::frame_slots(&scope, impl_ref.0);
-            scope
-                .tysys
-                .type_table
-                .borrow_mut()
-                .bind_impl_slots_asked(impl_ref.0, asked, receiver, &mut slots);
+            scope.tysys.type_table.borrow_mut().bind_impl_slots_asked(
+                impl_ref.0,
+                asked.unwrap_or_default(),
+                receiver,
+                &mut slots,
+            );
             if Self::bind_from_slots(&mut scope, header, &param_slots, impl_ref.0, &slots) {
                 impl_slot_args = impl_args_in_slot_order(
                     impl_ref.0,
