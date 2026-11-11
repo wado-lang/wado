@@ -126,5 +126,5 @@ Answer a review, human or bot, with the `code-review-response` skill.
 Turn the PR back into a draft while you answer a review, so nobody merges a
 branch that is still changing. Run `gh pr ready --undo <N>` before the first
 fix, and `gh pr ready <N>` once the fixes are pushed and the reply is posted.
-A PR that was already a draft stays one: someone made it a draft, and only
-they mark it ready.
+A PR that was already a draft stays one: whoever made it a draft marks it
+ready.
