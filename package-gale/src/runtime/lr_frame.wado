@@ -11,15 +11,12 @@ internal global LR_LOOP_REST: i32 = -1;
 
 global mut LR_FRAMES: List<LrFrame> = [];
 
-/// Start an empty LR frame table and return the enclosing parse's frames
-/// for restoration with `lr_frames_leave`.
 internal fn lr_frames_enter() -> List<LrFrame> {
     let outer = LR_FRAMES;
     LR_FRAMES = [];
     return outer;
 }
 
-/// Restore the enclosing parse's LR frames, discarding the current frames.
 internal fn lr_frames_leave(outer: List<LrFrame>) {
     LR_FRAMES = outer;
 }

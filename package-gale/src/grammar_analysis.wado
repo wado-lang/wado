@@ -358,8 +358,7 @@ impl GrammarAnalysis {
 
     /// The exclusion set of a `~ X` element: `~ TOKEN` / `~ 'lit'` excludes one
     /// kind, `~ ( A | B | C )` one per alternative, each a single `TokenRef` or
-    /// `Literal`. Panics for other inner shapes, including `~ rule` and
-    /// `~ ( a b )`.
+    /// `Literal`.
     pub fn excluded_kinds(&mut self, inner: &Element) -> List<i32> {
         return match inner {
             TokenRef(_) | Literal(_) => [self.terminal_kind(inner)],
@@ -675,8 +674,6 @@ impl GrammarAnalysis {
         }
     }
 
-    /// Read the suffix starting at element index `from`, up to `k` tokens.
-    /// An index at or past the end contributes the empty reading.
     fn readings_of_elements(
         &mut self,
         elements: &List<Element>,
