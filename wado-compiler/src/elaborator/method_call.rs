@@ -2804,9 +2804,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report an argument list a static method's signature cannot accept,
     /// returning `false` once a diagnostic was emitted. Shared by the three
     /// spellings that reach one: `Type::method(…)`, `Type::<T>::method(…)` and
-    /// `ns::Type::method(…)`. A parameter still carrying a type param belongs
-    /// to a blanket's pack, which the call site cannot pin: it counts toward
-    /// arity but its type is not compared.
+    /// `ns::Type::method(…)`. A parameter still carrying a type param the
+    /// caller does not declare belongs to a blanket's pack, which the call
+    /// site cannot pin: it counts toward arity but its type is not compared.
     pub(super) fn check_static_call_args(
         &mut self,
         param_types: &[TypeId],
@@ -2832,8 +2832,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return false;
         }
+        let scope = self.scope_type_param_ids();
         for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
-            if self.tysys.type_table.borrow().contains_type_param(expected) {
+            if !self
+                .tysys
+                .type_table
+                .borrow()
+                .type_params_all_in(expected, &scope)
+            {
                 continue;
             }
             self.typecheck_arg(*arg, expected, arg_sites[i]);
