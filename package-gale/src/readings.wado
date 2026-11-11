@@ -5,7 +5,7 @@
 //! its elements derive.
 
 use { dedup_append_arr } from "./list_util.wado";
-use { bits_set, bits_test } from "./token_kinds.wado";
+use { append_ids, bits_set } from "./token_kinds.wado";
 
 /// One way a sequence begins: the kinds at each position, and whether the
 /// sequence ends right after them, so that what follows it is read next. A
@@ -50,7 +50,8 @@ fn readings_add_joined(
     k: i32,
 ) -> bool {
     let len = i32::min(head.len() + tail.len(), k);
-    let key = reading_key(len, ends && len < k);
+    let ends = ends && len < k;
+    let key = reading_key(len, ends);
     let mut at = 0;
     while at < out.len() && reading_key(out[at].kinds.len(), out[at].ends) < key {
         at += 1;
@@ -67,7 +68,7 @@ fn readings_add_joined(
     for let i of 0..<len {
         kinds.push(if i < head.len() { head[i] } else { tail[i - head.len()] });
     }
-    out.insert(at, Reading { kinds, ends: ends && len < k });
+    out.insert(at, Reading { kinds, ends });
     return true;
 }
 
@@ -75,8 +76,7 @@ fn reading_key(len: i32, ends: bool) -> i32 {
     return len * 2 + if ends { 1 } else { 0 };
 }
 
-/// Widen `into` to admit what `from` admits. Whether it grew. Past a few
-/// kinds a side, membership is a bit test rather than a scan of `into`.
+/// Widen `into` to admit what `from` admits. Whether it grew.
 fn position_absorb(into: &mut List<i32>, from: &List<i32>) -> bool {
     if into.is_empty() {
         return false;
@@ -94,12 +94,7 @@ fn position_absorb(into: &mut List<i32>, from: &List<i32>) -> bool {
     for let i of 0..<before {
         bits_set(&mut held, into[i]);
     }
-    for let id of from {
-        if !bits_test(&held, *id) {
-            bits_set(&mut held, *id);
-            into.push(*id);
-        }
-    }
+    append_ids(into, &mut held, from);
     return into.len() != before;
 }
 

@@ -566,8 +566,9 @@ impl GrammarAnalysis {
                 self.collect_entry_sites(&elements, &[], caller, k, &mut sites);
             }
         }
-        let mut input_end: List<Reading> = [];
-        readings_add(&mut input_end, Reading { kinds: List::filled(k, [self.eof_kind_id()]), ends: false }, k);
+        let input_end: List<Reading> = [
+            Reading { kinds: List::filled(k, [self.eof_kind_id()]), ends: false },
+        ];
         let mut sites_of_caller = List::<List<i32>>::filled(rule_count, []);
         for let [si, s] of sites.iter_ref().enumerate() {
             sites_of_caller[s.caller].push(si);
@@ -1809,11 +1810,7 @@ fn entry_ends_input(sites: &List<EntrySite>, sites_of_caller: &List<List<i32>>) 
             }
         }
     }
-    let mut ends = List::<bool>::filled(rule_count, false);
-    for let ri of 0..<rule_count {
-        ends[ri] = !called[ri] || !reached[ri];
-    }
-    return ends;
+    return (0..<rule_count).map(|ri| !called[ri] || !reached[ri]).collect();
 }
 
 global READINGS_MAX_BUDGET: i32 = 16;

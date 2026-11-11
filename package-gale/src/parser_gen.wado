@@ -7074,7 +7074,12 @@ fn gen_rep_speculative_iteration(
     let mark = Speculation::begin(w, dedup_name("sp", nc));
     gen_repeat_iteration(w, body, rep_op, inner, ctx, GroupEntry::Looped(String::new()));
     mark.end(w);
-    w.begin(`if p.recovering || p.pos <= ${mark.pos}`);
+    let or_ends_off_continuation = if let Some(y) = &yielded {
+        ` || ${y} && !${iteration_resumes_at(rep_op, ctx, "p.pos")}`;
+    } else {
+        "";
+    };
+    w.begin(`if p.recovering || p.pos <= ${mark.pos}${or_ends_off_continuation}`);
     mark.rewind(w);
     if let Some([_, gate]) = rep_probe(rep_op, ctx) {
         let keeps_probe = if let Some(y) = &yielded {
@@ -7088,13 +7093,6 @@ fn gen_rep_speculative_iteration(
     }
     w.line("break;");
     w.end();
-    if let Some(y) = &yielded {
-        w.begin(`if ${y} && !${iteration_resumes_at(rep_op, ctx, "p.pos")}`);
-        mark.rewind(w);
-        w.line(`p.pending = ${pending};`);
-        w.line("break;");
-        w.end();
-    }
     if rep_op.duties.is_empty() {
         return;
     }
