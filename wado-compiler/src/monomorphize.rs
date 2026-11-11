@@ -24,7 +24,7 @@ use crate::elaborator::TypeError;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, TypeHead};
+use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, TypeHead, display_fn_type};
 use crate::prelower_reach::{
     Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, init_types, type_head,
 };
@@ -361,6 +361,62 @@ impl Monomorphization {
             span: template.span,
         };
         Some((template.module_source.clone(), error.into()))
+    }
+
+    /// The error refusing the first call whose outranking impl gives it other
+    /// types than the blanket its generic body was checked against, with the
+    /// module holding the call. Read once every instance exists.
+    pub fn outranked_disagreement(&self, flat: &FlatPackage) -> Option<(ModuleSource, Diagnostic)> {
+        let tt = flat.type_table.borrow();
+        let signature = |params: &[TypeId], returns: TypeId| {
+            let params: Vec<String> = params.iter().map(|&param| tt.name(param)).collect();
+            display_fn_type(false, &params, &tt.name(returns), false, &[])
+        };
+        self.monomorphizer
+            .outranked_calls
+            .borrow()
+            .iter()
+            .find_map(|call| {
+                let written = flat
+                    .functions
+                    .iter()
+                    .map(|f| f.borrow())
+                    .find(|f| {
+                        f.name == call.callee.name && f.module_source == call.callee.module_source
+                    })
+                    .expect("an outranking impl's instance exists once monomorphization ends");
+                let written_params: Vec<TypeId> =
+                    written.params.iter().map(|p| p.type_id).collect();
+                // A receiver passed apart from the arguments is not compared,
+                // so the blanket's side shows the written one's.
+                let unchecked = written_params.len() - call.args.len();
+                if written_params[unchecked..] == call.args && written.return_type == call.returns {
+                    return None;
+                }
+                let checked_params: Vec<TypeId> = written_params[..unchecked]
+                    .iter()
+                    .chain(&call.args)
+                    .copied()
+                    .collect();
+                let info = call
+                    .callee
+                    .method_info
+                    .as_ref()
+                    .expect("an outranked call is a trait method call");
+                let error = TypeError::OutrankedBlanketDisagrees {
+                    receiver: info.fq_struct_name().to_display(),
+                    trait_name: info
+                        .trait_name
+                        .as_ref()
+                        .expect("an outranked call names its trait")
+                        .to_display(),
+                    method: info.method_name.clone(),
+                    written: signature(&written_params, written.return_type),
+                    checked: signature(&checked_params, call.returns),
+                    span: call.span,
+                };
+                Some((call.module_source.clone(), error.into()))
+            })
     }
 
     /// Instantiate, then elaborate the new instances' drops, until the drop

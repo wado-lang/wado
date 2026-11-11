@@ -12,8 +12,8 @@ use crate::monomorphize::{Pool, Templates};
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::written_impl_at;
 use crate::tir::{
-    InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeArgMap, TypeId,
-    TypeParamId,
+    FunctionRef, InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeArgMap,
+    TypeId, TypeParamId,
 };
 use crate::token::Span;
 use crate::type_table::{AnonStructId, ReceiverAssocTypes, TypeTable};
@@ -141,6 +141,21 @@ pub(super) struct Monomorphizer {
     /// [`MAX_INSTANCE_TYPE_DEPTH`] or grown past [`MAX_INSTANCE_TYPE_SIZE`],
     /// which is left uninstantiated.
     pub expanding: Option<ExpandingTemplate>,
+    /// The module of the function being instantiated.
+    pub instantiating_module: Option<ModuleSource>,
+    /// The calls a generic body was checked against a value blanket for that
+    /// an impl written for the instance answers instead.
+    pub outranked_calls: RefCell<Vec<OutrankedCall>>,
+}
+
+/// A call an impl outranking the blanket it was checked against answers: the
+/// types the body gave it, which that impl's must be.
+pub(super) struct OutrankedCall {
+    pub module_source: ModuleSource,
+    pub span: Span,
+    pub callee: FunctionRef,
+    pub args: Vec<TypeId>,
+    pub returns: TypeId,
 }
 
 /// How deep an instance's type arguments may nest. A template calling itself
@@ -192,6 +207,8 @@ impl Monomorphizer {
             pack_splice_bindings: RefCell::new(IndexMap::default()),
             unrolled_local_claims: RefCell::new(IndexSet::default()),
             expanding: None,
+            instantiating_module: None,
+            outranked_calls: RefCell::new(Vec::new()),
         }
     }
 

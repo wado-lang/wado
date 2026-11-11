@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -22,7 +23,7 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
 
 use super::call_instance::{named_at_trait_args, open_slots};
-use super::state::Monomorphizer;
+use super::state::{Monomorphizer, OutrankedCall};
 use super::{Templates, Unrewritten, module_source_for_trait_impl};
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
@@ -822,6 +823,44 @@ impl Monomorphizer {
             .or(written)
     }
 
+    /// The value blanket a generic body checked `call` against, which an impl
+    /// written for an instance outranks.
+    fn checked_blanket(&self, call: &FunctionRef) -> Option<DefId> {
+        call.template
+            .as_ref()
+            .and_then(TemplateId::block)
+            .filter(|&block| self.functions.trait_env.blanket_of_block(block).is_some())
+    }
+
+    /// Record `call` where an impl other than the blanket `checked_against`
+    /// answers it now, with the types the body gave it: the `args` it passes,
+    /// as the callee's last parameters, and what it `returns`.
+    fn note_outranked(
+        &self,
+        checked_against: Option<DefId>,
+        call: &FunctionRef,
+        args: impl Iterator<Item = TypeId>,
+        returns: TypeId,
+        span: Span,
+    ) {
+        let Some(blanket) = checked_against else {
+            return;
+        };
+        if call.template.as_ref().and_then(TemplateId::block) == Some(blanket) {
+            return;
+        }
+        self.outranked_calls.borrow_mut().push(OutrankedCall {
+            module_source: self
+                .instantiating_module
+                .clone()
+                .expect("a call is substituted inside an instance"),
+            span,
+            callee: call.clone(),
+            args: args.collect(),
+            returns,
+        });
+    }
+
     /// Point `call` at the instance `info` names, its block's arguments
     /// `impl_type_args` and its own `method_type_args`, both at this instance.
     fn rename_to_instance(
@@ -1286,6 +1325,7 @@ impl Monomorphizer {
         // table, so no slot it unrolls into is shared with another's.
         self.unrolled_local_claims.borrow_mut().clear();
         self.current_param_substitution_key = param_key_by_binder;
+        self.instantiating_module = Some(generic.module_source.clone());
 
         // Substitute types in parameters
         let params: Vec<TirParam> = generic
@@ -1579,6 +1619,7 @@ impl Monomorphizer {
             return;
         }
 
+        let (returns, span) = (expr.type_id, expr.span);
         match &mut expr.kind {
             TirExprKind::VariadicTupleComprehension { .. } => unreachable!("expanded above"),
             TirExprKind::Call {
@@ -1589,6 +1630,7 @@ impl Monomorphizer {
                 for type_arg in type_args.iter_mut() {
                     *type_arg = self.substitute_type(*type_arg, substitution, type_table);
                 }
+                let checked_against = self.checked_blanket(call_func);
                 // A static method call carries method_info; substitute the type
                 // args embedded in its mangled name too.
                 let is_static_method = call_func.method_info.is_some();
@@ -1892,7 +1934,7 @@ impl Monomorphizer {
                         );
                     }
                 }
-                for arg in args {
+                for arg in &mut *args {
                     self.substitute_types_in_expr(
                         &mut arg.expr,
                         substitution,
@@ -1901,6 +1943,13 @@ impl Monomorphizer {
                         locals,
                     );
                 }
+                self.note_outranked(
+                    checked_against,
+                    call_func,
+                    args.iter().map(|arg| arg.expr.type_id),
+                    returns,
+                    span,
+                );
             }
             TirExprKind::Call {
                 func: method_func,
@@ -1941,11 +1990,19 @@ impl Monomorphizer {
                     }
                 });
 
+                let checked_against = self.checked_blanket(method_func);
                 self.resolve_method_call_substitution(
                     method_func,
                     receiver.type_id,
                     substitution,
                     type_table,
+                );
+                self.note_outranked(
+                    checked_against,
+                    method_func,
+                    args.iter().map(|arg| arg.expr.type_id),
+                    returns,
+                    span,
                 );
                 // A type parameter bound to a reference dispatches to its
                 // pointee's impl, which takes the receiver with the layers the

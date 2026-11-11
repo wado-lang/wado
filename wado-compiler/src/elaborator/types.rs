@@ -528,6 +528,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An impl written for an instance answers a call its generic body was
+    /// checked against a value blanket for, at another signature.
+    OutrankedBlanketDisagrees {
+        receiver: String,
+        trait_name: String,
+        method: String,
+        written: String,
+        checked: String,
+        span: Span,
+    },
+
     /// A type parameter's `= Default` names a parameter declared at or after
     /// its own slot, which no argument has settled yet.
     ForwardTypeParamDefault {
@@ -1806,6 +1817,22 @@ impl TypeError {
                 format!(
                     "'{name}' reaches itself through a type argument built over its own type \
                      parameter, so each instance needs a larger one and they never end"
+                ),
+                *span,
+            ),
+            TypeError::OutrankedBlanketDisagrees {
+                receiver,
+                trait_name,
+                method,
+                written,
+                checked,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "at this instance '{receiver}' answers '{trait_name}' with its own impl, \
+                     outranking the blanket impl the generic body was checked against, and its \
+                     '{method}' is '{written}' where the blanket's is '{checked}'"
                 ),
                 *span,
             ),

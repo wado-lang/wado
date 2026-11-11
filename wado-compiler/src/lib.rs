@@ -2469,6 +2469,10 @@ fn build_after_load<H: CompilerHost>(
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
         bind_monomorphized(&mut flat, &mut mono, logger)?;
+        if let Some((module, diagnostic)) = mono.outranked_disagreement(&flat) {
+            let _ = logger.error_in(&module, diagnostic);
+            return Err(Bail);
+        }
         mono.finish(&mut flat);
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }

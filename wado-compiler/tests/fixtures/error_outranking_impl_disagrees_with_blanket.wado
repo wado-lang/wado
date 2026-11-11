@@ -1,0 +1,50 @@
+// A generic body is checked against the blanket answering its call, and an
+// impl written for an instance outranks that blanket there. Where the written
+// impl's associated type differs, the body would run at a signature it was
+// not checked at, so the instance is refused.
+use { println, Stdout } from "core:cli";
+
+trait Left with () {
+    type Out;
+}
+
+struct Unit {}
+
+impl Left for Unit {
+    type Out = i32;
+}
+
+trait Get with () {
+    type R: Display;
+    fn get(&self) -> Self::R;
+}
+
+impl<T: Left<Out = X>, X: Default + Display> Get for T {
+    type R = X;
+    fn get(&self) -> X {
+        return X::default();
+    }
+}
+
+impl Get for Unit {
+    type R = String;
+    fn get(&self) -> String {
+        return "unit";
+    }
+}
+
+fn shown<P: Left<Out = i32>>(p: &P) -> String {
+    // error: at this instance 'Unit' answers 'Get' with its own impl,
+    // outranking the blanket impl the generic body was checked against, and
+    // its 'get' is 'fn(&Unit) -> String' where the blanket's is
+    // 'fn(&Unit) -> i32'
+    let v = p.get();
+    return `${v}`;
+}
+
+export fn run() with Stdout {
+    println(shown(&Unit {}));
+}
+
+__DATA__
+{"compile_error": "at this instance 'Unit' answers 'Get' with its own impl, outranking the blanket impl the generic body was checked against, and its 'get' is 'fn(&Unit) -> String' where the blanket's is 'fn(&Unit) -> i32'"}
