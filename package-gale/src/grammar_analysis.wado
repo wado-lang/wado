@@ -701,7 +701,9 @@ impl GrammarAnalysis {
             if tails[left] matches { None } {
                 tails[left] = Option::Some(self.readings_of_elements(elements, from + 1, left, visiting, cycled));
             }
-            let Some(tail) = &tails[left] else { unreachable(); };
+            let Some(tail) = &tails[left] else {
+                unreachable();
+            };
             reading_then(&mut out, h, tail, k);
         }
         return out;

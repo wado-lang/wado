@@ -8051,7 +8051,8 @@ fn gen_group_scan_dispatch(
     let winner_var = if let Some(var) = decided {
         var;
     } else {
-        gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts, unrefused_fallback(sorted_group, refusable));
+        let fallback = unrefused_fallback(sorted_group, refusable);
+        gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts, fallback);
     };
     if refusable {
         w.begin(`if ${winner_var} < 0`);
@@ -8925,7 +8926,9 @@ fn emit_scan_tournament_winner<S: AsStrSlice>(
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         let scan = alt_scan_call(fallback, ctx, "_sd_tokens", "_sd_pos", CallForm::Return);
         ctx.cursor.note_ref(&scan.callee);
-        w.line(`let _sd_p_${fallback} = if ${others.join(" || ")} { ${scan.callee}(${scan.args.join(", ")}) } else { -1 };`);
+        w.line(
+            `let _sd_p_${fallback} = if ${others.join(" || ")} { ${scan.callee}(${scan.args.join(", ")}) } else { -1 };`,
+        );
     }
     if ctx.settings.trace {
         let rlit = wado`"${rule_display.to_string()}"`;
