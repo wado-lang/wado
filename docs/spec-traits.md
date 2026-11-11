@@ -990,14 +990,6 @@ Two impls that both leave the argument to the call cover the same function
 wherever both bounds hold, and nothing ranks them, so a call reaching both
 reports as two head impls do ([Ambiguity](#ambiguity)).
 
-Only an argument whose type the call pins puts the written impl first. A
-numeric literal could take any width the open impl covers, so it selects
-neither, as it selects none of several written widths
-([One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Beside
-`impl Put<i64> for X` and `impl<T: Show> Put<T> for X`, `x.put(7)` is ambiguous
-and `x.put(7 as i64)` takes the written impl. An operator's right operand and a
-subscript key are read the same way.
-
 This holds only for a trait impl, where the trait gives both methods one
 signature. An inherent impl carries no such contract, so two inherent blocks
 that reach a common receiver may not both define one method name:
@@ -1122,6 +1114,15 @@ This is deliberate: letting the literal's default type decide would make
 adding an `impl Take<i32>` silently retarget every existing call that meant
 `Take<i64>`. The error names each argument that came up empty and why, so it
 says whether an annotation would fix the call.
+
+An impl that leaves a trait argument to the call (`impl<T: Show> Take<T> for
+bool`) joins the set too. It names the list the argument's type fixes, so an
+`i64` argument reaches `Take<i64>` through it and through `impl Take<i64> for
+bool` alike. An argument whose type the call does not pin fixes no list, and the
+impl names every list the argument could take: a bare literal reaches several
+through it, and stays ambiguous beside the written impl as it does beside
+another width. An operator's right operand and a subscript's key select as an
+argument does.
 
 Survivors naming one trait instantiation are ranked as any candidates are, which
 is where [Specific Impls Win](#specific-impls-win) applies. Survivors naming
