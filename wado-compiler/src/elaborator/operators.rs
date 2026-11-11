@@ -1745,7 +1745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             base_type_id,
                             &lookup_name,
                             lookup_type_id,
-                            Elaborator::find_index_mut_trait_impl,
+                            |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
                         )
                         .is_some();
                     if !writes_through {
@@ -2333,13 +2333,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let instance_args = match (resolved.impl_def, args.first()) {
             (Some(block), Some(&(_, span))) => {
                 let operands: Vec<TypeId> = args.iter().map(|&(arg, _)| arg).collect();
-                let positions = self
+                let given = self
                     .tysys
-                    .impl_position_args(receiver_head)
-                    .unwrap_or_default();
+                    .type_table
+                    .borrow_mut()
+                    .impl_receiver_slots(block, receiver_head);
                 self.slot_instance_args(
                     block,
-                    positions,
+                    given,
                     &mut referents,
                     &operands,
                     &mut return_type,

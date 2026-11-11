@@ -5491,28 +5491,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .expect("a `From` impl names its trait"),
             None => from.clone(),
         };
-        // A generic block's function is instantiated at the target's arguments,
+        // A generic block's function is instantiated at what the target binds,
         // and at every slot where the source the trait reference names settles
         // one only it names (`S` in `impl<S> From<S> for Failure`).
-        let positions = impl_def
-            .filter(|def| !self.tysys.trait_env.impl_headers[def].is_concrete())
-            .and_then(|_| {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .nominal_type_args(target_type)
-            })
-            .unwrap_or_default();
         let impl_type_args = match impl_def {
             Some(def) if self.tysys.type_table.borrow().impl_trait_sets_params(def) => {
-                let mut asked = TypeArgMap::default();
-                {
-                    let tt = self.tysys.type_table.borrow();
+                let (given, asked) = {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let mut asked = TypeArgMap::default();
                     tt.bind_each_into(tt.impl_trait_args(def), &[from_type], &mut asked);
-                }
-                self.impl_instance_args(def, positions, &asked)
+                    (tt.impl_receiver_slots(def, target_type), asked)
+                };
+                self.impl_instance_args(def, given, &asked)
             }
-            _ => positions,
+            Some(def) if !self.tysys.trait_env.impl_headers[&def].is_concrete() => self
+                .tysys
+                .receiver_args_at_impl(Some(target_type), &[], impl_def)
+                .unwrap_or_default(),
+            _ => Vec::new(),
         };
         let type_param_receiver = impl_def.is_none();
         // Through a bound the trait's own method is the callee, whose edges

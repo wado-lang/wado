@@ -310,7 +310,9 @@ impl Query<'_> {
                 if subject.is_some() && program.not_inherited.contains(&id) {
                     return None;
                 }
-                let asked = program.args_at(trait_, args, ty);
+                // A default reads `Self` as the type asked about, which a
+                // newtype inheriting this impl is.
+                let asked = program.args_at(trait_, args, subject.unwrap_or(ty));
                 let answer = self.impl_answers(id, def, ty, &asked)?;
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.

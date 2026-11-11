@@ -4313,9 +4313,14 @@ impl TypeTable {
         // A generic impl records the arguments it writes, which may read its
         // own parameters (`impl<T> Mix<T> for G<T>`), so each is compared at
         // the instance's arguments, defaults filled as `wanted`'s are.
+        // A slot only the trait reference binds (`T` in `impl<T> Tr<T> for
+        // Host`) is read off `wanted`.
         let reached = trait_args.and_then(|wanted| {
-            answers.0.iter().find(|entry| {
-                let slots = self.entry_slots_mut(entry, decl, &type_args);
+            answers.0.iter().find_map(|entry| {
+                let mut slots = self.entry_slots_mut(entry, decl, &type_args);
+                if let Some(def) = entry.impl_def {
+                    self.bind_impl_slots_asked(def, wanted, concrete_id, &mut slots);
+                }
                 let at = TraitRef::new(
                     *trait_key,
                     entry
@@ -4326,13 +4331,13 @@ impl TypeTable {
                 );
                 self.filled_trait_args(&at, concrete_id)
                     .is_some_and(|filled| filled == wanted)
+                    .then(|| self.substitute_type_params(entry.answer, &slots))
             })
         });
-        let entry = match reached {
-            Some(entry) => entry,
-            None => answers.bare_entry()?,
+        if reached.is_some() {
+            return reached;
         }
-        .clone();
+        let entry = answers.bare_entry()?.clone();
         let slots = self.entry_slots_mut(&entry, decl, &type_args);
         Some(self.substitute_type_params(entry.answer, &slots))
     }
@@ -6670,6 +6675,26 @@ impl TypeTable {
         self.bind_each_into(self.impl_target_args(def), receiver_args, &mut slots);
         self.project_impl_slots(def, &mut slots);
         slots
+    }
+
+    /// The slots impl block `def`'s target binds at `receiver`: its positions
+    /// at the link of the receiver's newtype chain the target declares, or, a
+    /// target naming no declaration (a value blanket's parameter), the
+    /// receiver whole.
+    pub fn impl_receiver_slots(&mut self, def: DefId, receiver: TypeId) -> TypeArgMap {
+        let Some(decl) = self.impl_target_decl(def) else {
+            let mut slots = TypeArgMap::default();
+            self.bind_each_into(&[self.impl_target_whole(def)], &[receiver], &mut slots);
+            self.project_impl_slots(def, &mut slots);
+            return slots;
+        };
+        if self.impl_target_args(def).is_empty() {
+            return self.impl_slots(def, &[]);
+        }
+        let args = self
+            .args_at_decl(receiver, decl)
+            .expect("a receiver reaches the declaration its impl targets");
+        self.impl_slots(def, &args)
     }
 
     /// The slots of impl block `def` a spelled list fills: its target's

@@ -264,7 +264,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
         let owner = self.tysys.resolutions.defs().def_at(impl_block.id);
         // What each of the block's parameters binds, by position; `None` for
-        // one bound below or taking no slot.
+        // one taking no slot.
         let mut bound_to = vec![None; impl_block.type_params.len()];
         for (at, param) in impl_block.type_params.iter().enumerate() {
             let Some(slot) = slots.of_name(&param.name) else {
@@ -300,17 +300,19 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                     && !param.bounds.iter().any(ast::TraitBound::writes_self)
             });
         let mut owed = Vec::new();
-        let mut owe = |at: usize, bounds: &[scope::ScopedBound]| {
-            if let Some(type_id) = bound_to[at] {
+        let owe = |owed: &mut Vec<_>, bound_to: Option<TypeId>, bounds: &[scope::ScopedBound]| {
+            if let Some(type_id) = bound_to {
                 owed.extend(bounds.iter().map(|bound| (bound.clone(), type_id)));
             }
         };
         for (at, param) in early {
             let bounds = self.scoped_bounds(param);
-            owe(at, &bounds);
+            owe(&mut owed, bound_to[at], &bounds);
             self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
-        self.bind_fn_bound_params(&impl_block.type_params);
+        for (at, signature) in self.bind_fn_bound_params(&impl_block.type_params) {
+            bound_to[at] = Some(signature);
+        }
         // Between the names and the rest of their bounds: the target is
         // resolved from the names, and a bound's `Self::Assoc` projects off the
         // target. What the target owes is asked once the bounds are in force.
@@ -320,7 +322,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         self.set_self_binding(implementing);
         for (at, param) in late {
             let bounds = self.scoped_bounds(param);
-            owe(at, &bounds);
+            owe(&mut owed, bound_to[at], &bounds);
             self.annotate_ctx.trait_ctx.add_bounds(&param.name, bounds);
         }
         self.release_bounds_here(held);

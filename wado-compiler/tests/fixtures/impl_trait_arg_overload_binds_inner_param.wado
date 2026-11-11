@@ -1,0 +1,14 @@
+// Selecting among a receiver's `Put<T>` impls reads an argument through a
+// slot left to the call: `Boxed<i32>` takes `Put<Boxed<T>>`.
+
+trait Put<T> with () { fn put(&self, t: T) -> i32; }
+struct X {}
+struct Boxed<T> { v: T }
+impl<T> Put<Boxed<T>> for X { fn put(&self, t: Boxed<T>) -> i32 { return 1; } }
+impl Put<i32> for X { fn put(&self, t: i32) -> i32 { return 2; } }
+test {
+    let x = X {};
+    let b: Boxed<i32> = Boxed { v: 1 };
+    assert x.put(b) == 1;
+    assert x.put(3 as i32) == 2;
+}

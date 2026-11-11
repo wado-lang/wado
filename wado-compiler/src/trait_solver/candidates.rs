@@ -188,7 +188,7 @@ fn collect(
                 opens_trait_args: def
                     .trait_args
                     .iter()
-                    .any(|arg| arg.mentions(&|p| !def.target.mentions(&|q| q == p))),
+                    .any(|arg| arg.mentions(&|p| !def.target.binds(&|q| q == p))),
                 is_variadic: is_variadic(&def.target),
             };
             if in_scope.contains(&trait_) {

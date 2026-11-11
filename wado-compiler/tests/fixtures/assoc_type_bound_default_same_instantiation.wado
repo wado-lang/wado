@@ -1,0 +1,8 @@
+// `Tr` and `Tr<Y>` under `trait Tr<U = Self>` name one instantiation, so
+// `Y::Item` is not ambiguous between them.
+
+trait Tr<U = Self> with () { type Item; fn item(&self) -> Self::Item; }
+struct X {}
+impl Tr for X { type Item = i32; fn item(&self) -> i32 { return 3; } }
+fn f<Y: Tr + Tr<Y>>(y: Y) -> Y::Item { return y.item(); }
+test { assert f(X {}) == 3; }

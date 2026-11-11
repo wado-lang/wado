@@ -1714,6 +1714,11 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
+    /// The module that wrote impl block `block`.
+    pub(crate) fn impl_block_module(&self, block: DefId) -> &ModuleSource {
+        &self.impl_headers[&block].module
+    }
+
     /// [`Self::impl_module_for`] restricted to fully concrete blocks: only
     /// their function lives in the block's module, a generic one's in the receiver's.
     pub(crate) fn concrete_impl_module_for(

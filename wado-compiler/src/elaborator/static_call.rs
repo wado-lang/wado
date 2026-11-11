@@ -91,9 +91,12 @@ pub(super) enum StaticLookup {
     Found(Box<StaticCallee>),
     /// One trait, several impls, and no argument to separate them. Nothing is
     /// picked, so there is no identity to mangle and no list to check; the
-    /// return type still answers where every candidate agrees.
+    /// return type still answers where every candidate agrees. Once the
+    /// arguments are elaborated, the call site reports `traits`, each impl's
+    /// trait reference; none at `!`, where no impl answers.
     Overloaded {
         return_type: TypeId,
+        traits: Vec<String>,
     },
     /// Several traits supply the name, which no argument can separate. The
     /// spelling names none of them and the call site reports it.
@@ -141,6 +144,15 @@ impl CandidateKind {
             ast::SelfKind::Value | ast::SelfKind::Ref | ast::SelfKind::MutRef => Self::Instance,
         }
     }
+
+    /// The call's arguments a declaration of this kind reads against its own
+    /// parameters: past the receiver for a receiver-taking one.
+    fn own_args(self, arg_types: &[TypeId]) -> &[TypeId] {
+        match self {
+            Self::Static => arg_types,
+            Self::Instance => arg_types.get(1..).unwrap_or_default(),
+        }
+    }
 }
 
 /// Where the body a candidate names is written, in the order that outranks.
@@ -183,8 +195,9 @@ enum Selection {
     /// Several traits supply the name, which no argument separates: impls of
     /// different traits share no contract.
     Ambiguous(Vec<String>),
-    /// One trait, several impls, and no argument to tell them apart.
-    Overloaded,
+    /// One trait, several impls, and no argument to tell them apart: each
+    /// impl's trait reference, spelled.
+    Overloaded(Vec<String>),
     /// Impls each leaving a slot to the call reach it at `trait_args`, their
     /// bounds all holding there.
     Tied {
@@ -262,7 +275,7 @@ impl StaticLookup {
     pub(super) fn return_type(&self) -> TypeId {
         match self {
             Self::Found(callee) => callee.return_type,
-            Self::Overloaded { return_type } => *return_type,
+            Self::Overloaded { return_type, .. } => *return_type,
             Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::Tied { .. } | Self::NotStatic => {
                 TypeTable::UNKNOWN
             }
@@ -374,7 +387,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // list to check. `i32::from(b)` names one `From` impl per source
             // type, and the call site's own preselect is what reads the
             // argument.
-            Selection::Overloaded => return self.overloaded_callee(&key, method_name),
+            Selection::Overloaded(traits) => {
+                // At `!` every blanket reaches the receiver and none answers:
+                // the call traps once monomorphized, so nothing is left to pick.
+                let on_never = receiver_type
+                    .is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
+                let traits = if on_never { Vec::new() } else { traits };
+                return self.overloaded_callee(&key, method_name, traits);
+            }
             Selection::Tied { blocks, trait_args } => {
                 return StaticLookup::Tied {
                     receiver: receiver_name.to_string(),
@@ -859,6 +879,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
+    /// [`Self::report_unanswered_static`] once the arguments are elaborated,
+    /// where impls they leave unseparated are reported too: nothing is left to
+    /// pick one, and the call would be mangled with no trait segment.
+    pub(super) fn report_unresolved_static(
+        &mut self,
+        lookup: &StaticLookup,
+        method_name: &str,
+        arg_types: &[TypeId],
+        span: Span,
+    ) -> bool {
+        let StaticLookup::Overloaded { traits, .. } = lookup else {
+            return self.report_unanswered_static(lookup, method_name, span);
+        };
+        if traits.is_empty() {
+            return false;
+        }
+        let classes: Vec<ArgClass> = arg_types.iter().map(|&ty| self.class_of_type(ty)).collect();
+        let _ = self.emit(TypeError::AmbiguousTraitArguments {
+            method: method_name.to_string(),
+            traits: traits.clone(),
+            arguments: self.tysys.describe_arg_classes(&classes),
+            span,
+        });
+        true
+    }
+
     /// The rules, applied once to every candidate whatever rung produced it.
     /// Their order is the design, not an implementation detail.
     fn select_candidate(
@@ -896,13 +942,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the impl declares rather than the trait it names. Where they start
         // follows from the kind: a receiver-taking declaration has the receiver
         // at argument zero, so its own parameters begin at argument one.
-        candidates.retain(|c| {
-            let args = match c.kind {
-                CandidateKind::Static => arg_types,
-                CandidateKind::Instance => arg_types.get(1..).unwrap_or_default(),
-            };
-            self.selector_admits(&c.selector, args)
-        });
+        candidates.retain(|c| self.selector_admits(&c.selector, c.kind.own_args(arg_types)));
         // Among what the arguments admit, the earlier origin outranks: the
         // receiver's own before a written body, a written body before an
         // inherited one.
@@ -917,7 +957,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             0 => Selection::None,
             1 => Selection::One(Box::new(candidates.remove(0))),
             // One trait, several impls, and no argument that separated them.
-            _ => Selection::Overloaded,
+            _ => Selection::Overloaded(
+                candidates
+                    .iter()
+                    .filter_map(|c| Some(c.supply.as_ref()?.trait_name.to_display()))
+                    .collect(),
+            ),
         }
     }
 
@@ -941,10 +986,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .impl_trait_sets_params(s.impl_def)
             })
         };
-        let settled_by_args = |c: &Candidate| match (&c.selector, c.kind) {
-            (Selector::Params(params), CandidateKind::Static) => params.len() <= arg_types.len(),
-            (Selector::Absent, _) => true,
-            (Selector::Params(_) | Selector::Blanket, _) => false,
+        let settled_by_args = |c: &Candidate| match &c.selector {
+            Selector::Params(params) => params.len() <= c.kind.own_args(arg_types).len(),
+            Selector::Absent => true,
+            Selector::Blanket => false,
         };
         if !candidates.iter().any(leaves_slot) || !candidates.iter().all(settled_by_args) {
             return None;
@@ -969,7 +1014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut table = self.tysys.type_table.borrow_mut();
                 let mut slots = table.impl_slots(block, declaring_args);
                 if let Selector::Params(params) = &c.selector {
-                    table.bind_each_into(params, arg_types, &mut slots);
+                    table.bind_each_into(params, c.kind.own_args(arg_types), &mut slots);
                 }
                 slots
             })
@@ -1017,7 +1062,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The resolution for a name several declarations answer to, which only an
     /// argument separates. No list comes with it, and the return type only
     /// where every candidate agrees.
-    fn overloaded_callee(&self, key: &ImplTargetKey, method_name: &str) -> StaticLookup {
+    fn overloaded_callee(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        traits: Vec<String>,
+    ) -> StaticLookup {
         let mut returns = self
             .qualified_method_decl_ids(key, method_name)
             .filter_map(|def| self.tysys.signatures.method_sig(def))
@@ -1028,6 +1078,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(TypeTable::UNKNOWN);
         StaticLookup::Overloaded {
             return_type: agreed,
+            traits,
         }
     }
 

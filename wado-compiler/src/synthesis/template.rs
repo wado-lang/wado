@@ -637,6 +637,20 @@ pub(crate) fn answering_link(
     answering_instance(trait_env, trait_name, receiver, tt).map(|(link, _)| link)
 }
 
+/// The module of the block the order selects for `receiver: trait_name`,
+/// where it selects a block: the module its function is instantiated in.
+pub(crate) fn answering_block_module(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<ModuleSource> {
+    match answering_instance(trait_env, trait_name, receiver, tt)?.1 {
+        InstanceBody::Block(block) => Some(trait_env.impl_block_module(block).clone()),
+        InstanceBody::EqFromCmp(_) | InstanceBody::Supplied => None,
+    }
+}
+
 fn answering_instance(
     trait_env: &TraitEnv,
     trait_name: &FqTraitName,

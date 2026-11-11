@@ -27,7 +27,7 @@ use super::state::{Monomorphizer, OutrankedCall};
 use super::{Templates, Unrewritten, module_source_for_trait_impl};
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
-    blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
+    answering_block_module, blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
     ranked_ref_blanket, ranked_value_blanket, ref_blanket_instance, trait_call_template,
     written_impl_at, written_newtype_link,
 };
@@ -1742,6 +1742,9 @@ impl Monomorphizer {
                             .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
                     }
+                    if info.is_type_param_receiver {
+                        new_info = self.named_by_impl(new_info);
+                    }
                     let new_func_name = new_info.to_mangled_name();
 
                     // Each branch is gated on its own precondition, not on
@@ -1797,8 +1800,23 @@ impl Monomorphizer {
                             let concrete_impl_module = self
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
-                            let concrete_module =
-                                concrete_impl_module.or(blanket_module).or(receiver_module);
+                            // The block the order selects names its own
+                            // module, a block on a reference (`impl<T> Tr for
+                            // &Holder<T>`) included, which no receiver indexes.
+                            let concrete_module = new_info
+                                .trait_name
+                                .as_ref()
+                                .and_then(|tn| {
+                                    answering_block_module(
+                                        &self.functions.trait_env,
+                                        tn,
+                                        concrete_type_id,
+                                        type_table,
+                                    )
+                                })
+                                .or(concrete_impl_module)
+                                .or(blanket_module)
+                                .or(receiver_module);
                             let method_type_arg_tids = sub_method_type_args;
                             // Generics have a defined home module by construction:
                             // either the trait-impl block's module, or — for

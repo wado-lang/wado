@@ -10,7 +10,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, TypeArgMap, TypeId, range_item};
+use crate::tir::{ResolvedType, TypeId, range_item};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -1105,7 +1105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A type carrying an unsolved inference hole is *not* closed even though
     /// it names a constructor: `let Some(b) = opt` binds `b` at `?` until the
     /// argument position pins it.
-    fn class_of_type(&self, type_id: TypeId) -> ArgClass {
+    pub(super) fn class_of_type(&self, type_id: TypeId) -> ArgClass {
         if type_id == TypeTable::UNKNOWN || type_id == TypeTable::ERROR {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         }
@@ -1183,19 +1183,10 @@ impl TypeSystem {
     fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
         let mut bindings = IndexMap::default();
         unify(&self.type_table, param, arg, &mut bindings);
-        // A binding dropped here leaves that slot spelled as it was written, so
-        // the parameter can never equal the argument.
-        let substitution: TypeArgMap = {
-            let tt = self.type_table.borrow();
-            bindings
-                .iter()
-                .filter_map(|(&slot, &filled)| Some((tt.type_param_id(slot)?, filled)))
-                .collect()
-        };
         let filled = self
             .type_table
             .borrow_mut()
-            .substitute_type_params(param, &substitution);
+            .replace_subterms(param, &bindings);
         param_takes(&self.type_table.borrow(), filled, arg)
     }
 

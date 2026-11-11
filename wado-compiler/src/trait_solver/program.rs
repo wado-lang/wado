@@ -84,6 +84,19 @@ impl SolverType {
         }
     }
 
+    /// Whether matching `self` against a type binds a parameter or pack
+    /// satisfying `pred`. A projection binds none: its base settles only
+    /// through another slot (`G` in `G::Of<E>`).
+    #[must_use]
+    pub fn binds(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
+        match self {
+            Self::Param(_) | Self::Pack(_) => pred(self),
+            Self::AnyRow | Self::Projection { .. } => false,
+            Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.binds(pred)),
+            Self::Ref { inner, .. } => inner.binds(pred),
+        }
+    }
+
     /// Whether `self` or a type within it instantiates a declaration
     /// satisfying `pred`.
     #[must_use]

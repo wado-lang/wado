@@ -2719,9 +2719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let params = trait_env.trait_type_params(trait_);
-        // A position left to its default owes nothing here: the trait's own
-        // declaration answers for its defaults.
-        let type_args: Vec<TypeId> = args_per_param(
+        let written: Vec<TypeId> = args_per_param(
             written,
             params.len(),
             params.iter().position(|p| p.is_pack),
@@ -2730,6 +2728,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .into_iter()
         .map_while(|arg| arg)
         .collect();
+        // A default may read `Self`, so it owes its bounds where it is filled:
+        // `impl Tr for X` under `trait Tr<T: Q = Self>` owes `X: Q`. A position
+        // with no default is the arity check's to report.
+        let Some(type_args) = self.trait_args_at(trait_, subject, &written) else {
+            return;
+        };
         if !self.args_owe_anything(params.iter().copied(), &type_args) {
             return;
         }

@@ -14,7 +14,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
-    TupleSlot, TypeId,
+    TupleSlot, TypeId, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -1027,6 +1027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(block) = dispatched_impl_block {
             self.settle_trait_arg_slots(
                 block,
+                &slots_from_impl_args(block, &impl_slot_args),
                 &inferred_impl_slots,
                 &mut substituted_param_types,
                 &args,

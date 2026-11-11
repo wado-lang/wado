@@ -784,6 +784,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         if let (Some(trait_), Some(trait_type)) = (trait_decl, &impl_block.trait_type) {
             scope.check_trait_ref_arg_bounds(trait_, &trait_type_args, target, trait_type.span());
         }
+        // `impl Tr for X` under `trait Tr<U = Self>` implements `Tr<X>`, the
+        // instantiation `Tr<X>` names: one list, whichever way it is spelled.
+        let trait_type_args = trait_decl
+            .and_then(|trait_| scope.trait_args_at(trait_, target, &trait_type_args))
+            .unwrap_or(trait_type_args);
 
         if let [source] = trait_type_args[..]
             && trait_decl.is_some()

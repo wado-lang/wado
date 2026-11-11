@@ -12,7 +12,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::scope::{BoundsOf, FamilySite, ParamRef, ScopedBound};
+use super::scope::{BinderInScope, BoundsOf, FamilySite, ParamRef, ScopedBound};
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -217,7 +217,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Bounds a frame took from several binders may state one trait twice;
         // it answers one way. Only bounds on one trait can be that, so only
-        // theirs have their arguments read.
+        // theirs have their arguments read, each with its defaults filled:
+        // `Tr` and `Tr<T>` under `trait Tr<U = Self>` are one instantiation.
         let decls: Vec<DefId> = declaring.iter().map(|&(_, decl)| decl).collect();
         let mut traits_seen: Vec<TraitRef> = Vec::new();
         let declaring: Vec<&ScopedBound> = declaring
@@ -226,7 +227,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if decls.iter().filter(|&&other| other == decl).count() < 2 {
                     return true;
                 }
-                let args = self.bound_args_where_written(bound, &bound.space);
+                let written = self.bound_args_where_written(bound, &bound.space);
+                // One naming no type is reported where it is written.
+                let Some(args) = self.trait_args_at(decl, of.base(), &written) else {
+                    return true;
+                };
                 let trait_ref = TraitRef::new(decl, args);
                 let fresh = !traits_seen.contains(&trait_ref);
                 traits_seen.push(trait_ref);
@@ -353,7 +358,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .self_type
                 .expect("a `Self::X` naming a binding is read where `Self` is bound");
         }
-        trait_ctx.type_params[&namespaced.namespace].type_id
+        self.projected_binder(namespaced)
+            .expect("`projects` reached the binder")
+            .type_id
+    }
+
+    /// The binder `namespaced`'s namespace reaches at its own site, not by its
+    /// spelling: a trait parameter replayed under an outer one of its name
+    /// shadows it only where the replay is written.
+    fn projected_binder(&self, namespaced: &NamespacedGenericType) -> Option<&BinderInScope> {
+        self.annotate_ctx.trait_ctx.binder_reached_at(
+            &self.tysys.resolutions,
+            namespaced.id,
+            &namespaced.namespace,
+        )
     }
 
     /// The arguments `namespaced` writes for its associated type's own
@@ -466,7 +484,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
-        let binder = self.annotate_ctx.trait_ctx.type_params[&namespaced.namespace];
+        let binder = *self
+            .projected_binder(namespaced)
+            .expect("`projects` reached the binder");
         self.project_off(BoundsOf::Binder(binder.key()), namespaced)
     }
 
@@ -866,12 +886,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// than naming a namespace's member.
     fn projects(&self, namespaced: &NamespacedGenericType) -> bool {
         let ns = &namespaced.namespace;
-        ns == "Self"
-            || self
-                .annotate_ctx
-                .trait_ctx
-                .binder_reached_at(&self.tysys.resolutions, namespaced.id, ns)
-                .is_some()
+        ns == "Self" || self.projected_binder(namespaced).is_some()
     }
 
     fn resolve_named_type_at(
@@ -1441,8 +1456,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         written: &[TypeId],
     ) -> Option<Vec<TypeId>> {
         let Some(frame) = self.trait_frame(owner) else {
-            // An interface or a resource takes no arguments.
-            return Some(Vec::new());
+            // An interface or a resource declares no defaults to fill.
+            return Some(written.to_vec());
         };
         if written.len() > frame.params.len() {
             return None;

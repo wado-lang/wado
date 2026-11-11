@@ -1,0 +1,18 @@
+// A blanket `From` impl over two parameters is an orphan, reported as one
+// rather than reached by `?`.
+trait Show with () { fn show(&self) -> String; }
+impl Show for i64 { fn show(&self) -> String { return `i64 ${*self}`; } }
+trait Mk with () { fn mk(s: String) -> Self; }
+struct Failure { reason: String }
+impl Mk for Failure { fn mk(s: String) -> Failure { return Failure { reason: s }; } }
+impl<S: Show, T: Mk> From<S> for T {
+    fn from(value: S) -> T { return T::mk(value.show()); }
+}
+fn fails() -> Result<i32, i64> { return Err(7); }
+fn converts() -> Result<i32, Failure> { return Ok(fails()?); }
+test {
+    assert converts().unwrap_err().reason == "i64 7";
+}
+
+__DATA__
+{"compile_error":":8:1: analysis error: orphan rule violation: cannot implement foreign trait `From` for foreign type `T`"}

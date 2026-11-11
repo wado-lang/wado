@@ -1193,9 +1193,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// bind yet to that function type, as [`Self::register_generic_params`]
     /// does: such a parameter is the signature, filling no slot, so its index
     /// is never read. An impl's placed nowhere in its target is bound by
-    /// nothing else.
-    pub(super) fn bind_fn_bound_params(&mut self, params: &[ast::GenericParam]) {
-        for param in params.iter().filter(|p| !p.is_pack && !p.is_effect) {
+    /// nothing else. Returns each one bound, by its position in `params`, with
+    /// its type.
+    pub(super) fn bind_fn_bound_params(
+        &mut self,
+        params: &[ast::GenericParam],
+    ) -> Vec<(usize, TypeId)> {
+        let mut bound = Vec::new();
+        for (at, param) in params.iter().enumerate() {
+            if param.is_pack || param.is_effect {
+                continue;
+            }
             let index = self.annotate_ctx.trait_ctx.type_params.len() as u32;
             let Some(sig) = param.bounds.iter().find_map(|b| b.fn_signature.as_ref()) else {
                 continue;
@@ -1214,7 +1222,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 BinderInScope::declared(index, type_id, param),
                 Vec::new(),
             );
+            bound.push((at, type_id));
         }
+        bound
     }
 
     /// Register the generic parameters `owner` declares as `TypeParam` /

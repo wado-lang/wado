@@ -1,0 +1,10 @@
+// A trait parameter's default `Self` owes the parameter's bound, as the
+// written argument does: `impl Tr for X` owes `X: Q`.
+trait Q with () {}
+trait Tr<T: Q = Self> with () { fn get(&self) -> i32; }
+struct X {}
+impl Tr for X { fn get(&self) -> i32 { return 1; } }
+test { assert X {}.get() == 1; }
+
+__DATA__
+{"compile_error":":6:6: analysis error: type 'X' does not implement trait 'Q' required by bound on 'T'"}
