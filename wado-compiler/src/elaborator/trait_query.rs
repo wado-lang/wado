@@ -3166,14 +3166,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether two types differ exactly when their ids do: each names only
-    /// this frame's own parameters, which are rigid here, and no projection,
-    /// which may still be answered as either side.
+    /// this frame's own parameters, which are rigid here, no projection, which
+    /// may still be answered as either side, and nothing undecided.
     pub(super) fn decides_equality(&self, a: TypeId, b: TypeId) -> bool {
         let scope = self.scope_type_param_ids();
         let tt = self.tysys.type_table.borrow();
-        [a, b]
-            .iter()
-            .all(|&t| tt.type_params_all_in(t, &scope) && !tt.contains_assoc_type_projection(t))
+        [a, b].iter().all(|&t| {
+            tt.type_params_all_in(t, &scope)
+                && !tt.contains_assoc_type_projection(t)
+                && !tt.contains_undecided(t)
+        })
     }
 
     /// The arguments `bound` reaches `trait_` on `type_arg` at, resolved in
