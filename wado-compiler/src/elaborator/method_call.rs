@@ -629,10 +629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 info.impl_block = None;
                 info.impl_slot_args = Vec::new();
                 info.bound_trait_args = asked;
-                blanket_type_param = None;
-                blanket_binder = None;
                 method_info = Some(info);
-                trait_impl_module_source = None;
             } else {
                 // A newtype inherits a trait impl its base wrote, and the impl
                 // spells `Self` as that base. Name the link the impl sits on, so
