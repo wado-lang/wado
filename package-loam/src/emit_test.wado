@@ -228,7 +228,7 @@ test "the pasts and the presents they pair with are one Cache, which build takes
     assert !out.contains("pub present_key");
     assert out.contains("    pub Y: Tensor<f32, [");
     assert out.contains(
-        "return Outputs { Y: resized(&backend.download(&Y), [1, to_extent(dim_N), 2]), cache: Cache::<Bk> { past_key: fitted::<Bk, f32, [",
+        "return Outputs { Y: resized(&backend.download(&Y), [1, to_extent(dim_N), 2]), cache: fitted_fields(backend, &cache, &[[[1, ",
     );
 }
 
@@ -238,7 +238,7 @@ test "compute keeps the cache it is given through the pass it begins" {
     let computed = compute_of(&out);
     assert computed.contains("cache: &Cache<Bk>, model: &mut Model<Bk>) -> Outputs<Bk> with _ {");
     assert out.contains("pub struct Outputs<affine Bk: Holds> {");
-    assert computed.find("cache.retain(backend);").unwrap() < computed.find("backend.begin();").unwrap();
+    assert computed.find("retain_fields(backend, cache);").unwrap() < computed.find("backend.begin();").unwrap();
     assert !computed.contains("input_mismatch(past_key");
     assert computed.contains("let Passed { Y, cache } = match model.programs.run(");
 }
@@ -247,12 +247,7 @@ test "an empty cache holds no position along the past's length, and zeros of eve
     let out = generate(decoder("past_key", "present_key")).unwrap();
 
     assert out.contains("    pub fn empty(backend: &mut Bk) -> Cache<Bk> with _ {");
-    assert out.contains("past_key: backend.upload(&Tensor::<f32, [");
-    assert out.contains("]> { data: [], extents: [1, 0, 2] }),");
-    assert out.contains("]> { data: List::<f32>::filled(3, 0 as f32), extents: [3] }),");
-    assert out.contains(
-        "    pub fn retain(&self, backend: &mut Bk) with _ {\n        backend.retain(&self.past_key);\n        backend.retain(&self.past_state);\n    }",
-    );
+    assert out.contains("        return zeroed_fields(backend, &[[1, 0, 2], [3]]);");
 }
 
 test "past_key_values pairs with present, the one irregular spelling" {
@@ -297,8 +292,7 @@ decoder (float[B, N, 2] X, float[B, P, 2] past_key, float[B, 3] past_state, int6
     let out = generate(source).unwrap();
 
     assert out.contains("    pub fn empty(backend: &mut Bk, dim_B: i32) -> Cache<Bk> with _ {");
-    assert out.contains("]> { data: [], extents: [dim_B, 0, 2] }),");
-    assert out.contains("]> { data: List::<f32>::filled(dim_B * 3, 0 as f32), extents: [dim_B, 3] }),");
+    assert out.contains("        return zeroed_fields(backend, &[[dim_B, 0, 2], [dim_B, 3]]);");
 }
 
 test "an output that is a graph input is downloaded into the outputs" {
@@ -1412,13 +1406,13 @@ test "compute holds a cache at the capacity of the total, its past's length what
     assert computed.contains("let capacity_P = capacity_of(to_extent(dim_P + dim_S)) as i64 - (capacity_S);");
     assert computed.split("\"P must not be negative\"").count() == 2;
     assert computed.contains(
-        "fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P + capacity_S))",
+        "fitted_fields(backend, cache, &[[[2, to_extent(capacity_P + capacity_S)]], [[2, to_extent(capacity_P + capacity_S)]]])",
     );
     // A device releases the pass before at `begin`, but for the cache it retains.
     let begun = computed.find("backend.begin();").unwrap();
-    assert computed.find("cache.retain(backend);").unwrap() < begun;
+    assert computed.find("retain_fields(backend, cache);").unwrap() < begun;
     assert begun < computed.find("let Q = ").unwrap();
-    assert begun < computed.find("fitted::<Bk").unwrap();
+    assert begun < computed.find("fitted_fields(").unwrap();
 }
 
 test "what a padded length owes is checked at the length, by compute, and not at the capacity, by build" {

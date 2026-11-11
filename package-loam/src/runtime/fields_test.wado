@@ -1,5 +1,12 @@
-use { Graph } from "./hlo.wado";
-use { erased_fields, recorded_fields, restored_fields } from "./fields.wado";
+use { Graph, Slots } from "./hlo.wado";
+use {
+    erased_fields,
+    fitted_fields,
+    recorded_fields,
+    restored_fields,
+    written_fields,
+    zeroed_fields,
+} from "./fields.wado";
 use { Any, Recorder, Value } from "./recorded.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 
@@ -63,4 +70,41 @@ fn round_trip<affine G: Graph>(g: &G, p: &Pair<G>) -> Pair<G> {
 
 test "a caller generic over the backend" {
     assert round_trip(&Cpu {}, &pair()).b.data == [1, 2, 3, 4, 5, 6];
+}
+
+test "zeroing gives each field its own extents" {
+    let zeroed: Pair<Cpu> = zeroed_fields(&mut Cpu {}, &[
+        [2],
+        [1, 3],
+    ]);
+    assert zeroed.a.data == [0.0, 0.0] && zeroed.b.data == [0, 0, 0] && zeroed.b.extents == [1, 3];
+}
+
+test "fitting cuts and grows each field along its own axes" {
+    let fitted: Pair<Cpu> = fitted_fields(&mut Cpu {}, &pair(), &[
+        [
+            [0, 3],
+        ],
+        [
+            [0, 1],
+            [1, 2],
+        ],
+    ]);
+    assert fitted.a.data == [1.5, 0.0, 0.0];
+    assert fitted.b.data == [1, 2] && fitted.b.extents == [1, 2];
+}
+
+test "writing puts the rows of one into another, fitted to its extents" {
+    let mut g = Cpu {};
+    let into: Pair<Cpu> = zeroed_fields(&mut g, &[
+        [1],
+        [3, 4],
+    ]);
+    let at = Tensor::<i64, [Slots]> {
+        data: [0],
+        extents: [1],
+    };
+    let written: Pair<Cpu> = written_fields(&mut g, &into, &pair(), &[0, 1], &at);
+    assert written.a.data == [1.5];
+    assert written.b.data == [1, 2, 3, 0, 4, 5, 6, 0, 0, 0, 0, 0];
 }

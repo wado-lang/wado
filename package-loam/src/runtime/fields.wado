@@ -1,17 +1,27 @@
 //! The walks the runtime makes over a struct the generator writes, every field
 //! of which is a tensor: erasing it into a program's arguments, building it
-//! back from a program's results, and recording it as parameters.
+//! back from a program's results, recording it as parameters, and the cache's
+//! own steps.
 
-use { Graph } from "./hlo.wado";
+use { Graph, Slots, fitted, written_at } from "./hlo.wado";
 use { Any, Erasable, Recorder, Untyped, Value } from "./recorded.wado";
-use { Element } from "./tensor.wado";
+use { Element, Tensor, element_count } from "./tensor.wado";
 
 /// A tensor of the graph `G` builds, as a field of a generated struct.
-pub affine trait Field<affine G: Graph> with () {
+pub affine trait Field<affine G: Graph> with _ {
     /// The field as a program takes it.
-    fn erased(&self, g: &G) -> Any<G>;
+    fn erased(&self, g: &G) -> Any<G> with ();
     /// The field from what a program returned, which must be of its element.
-    fn restored(g: &G, a: &Any<G>) -> Self;
+    fn restored(g: &G, a: &Any<G>) -> Self with ();
+    /// Zeros of `extents`.
+    fn zeros(g: &mut G, extents: &List<i32>) -> Self;
+    /// Keeps the field through the next `g.begin()`.
+    fn retained(&self, g: &mut G);
+    /// The field with `axis` cut or grown to `extent`.
+    fn fitted(&self, g: &mut G, axis: i32, extent: i32) -> Self;
+    /// The field with `from`, fitted along `axis` to its own extent there,
+    /// written over the rows `at` names.
+    fn written(&self, g: &mut G, from: &Self, axis: i32, at: &G::Tensor<i64, [Slots]>) -> Self;
 }
 
 impl<affine G: Graph, E: Erasable, Axes> Field<G> for G::Tensor<E, Axes> {
@@ -21,6 +31,31 @@ impl<affine G: Graph, E: Erasable, Axes> Field<G> for G::Tensor<E, Axes> {
 
     fn restored(g: &G, a: &Any<G>) -> G::Tensor<E, Axes> {
         return g.relabeled::<E, Untyped, Axes>(E::of_any::<G>(a));
+    }
+
+    fn zeros(g: &mut G, extents: &List<i32>) -> G::Tensor<E, Axes> with _ {
+        let data = List::<E>::filled(element_count(extents), E::from_i64(0));
+        return g.upload(&Tensor::<E, Axes> { data, extents: *extents });
+    }
+
+    fn retained(&self, g: &mut G) with _ {
+        g.retain::<E, Axes>(self);
+    }
+
+    fn fitted(&self, g: &mut G, axis: i32, extent: i32) -> G::Tensor<E, Axes> with _ {
+        return fitted::<G, E, Axes>(g, self, axis, extent);
+    }
+
+    fn written(
+        &self,
+        g: &mut G,
+        from: &G::Tensor<E, Axes>,
+        axis: i32,
+        at: &G::Tensor<i64, [Slots]>,
+    ) -> G::Tensor<E, Axes> with _ {
+        let extent = g.extents_of(self)[axis];
+        let fitted = fitted::<G, E, Axes>(g, from, axis, extent);
+        return written_at::<G, E, Axes, Axes>(g, self, &fitted, 0, at, null);
     }
 }
 
@@ -59,6 +94,61 @@ pub fn restored_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], Fie
 
 fn restored_at<affine G: Graph, S, F: Field<G>>(g: &G, a: &Any<G>, _field: &StructField<S, F>) -> F {
     return F::restored(g, a);
+}
+
+/// An `S` of zeros, each field of the extents `extents` holds for it.
+pub fn zeroed_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Field<G>>(
+    g: &mut G,
+    extents: &List<List<i32>>,
+) -> S with _ {
+    return ReflectStruct::<S>::from_fields(
+        [for let f of ReflectStruct::<S>::members() { zeroed_at(g, &extents[f.index()], &f) }],
+    );
+}
+
+fn zeroed_at<affine G: Graph, S, F: Field<G>>(g: &mut G, extents: &List<i32>, _field: &StructField<S, F>) -> F with _ {
+    return F::zeros(g, extents);
+}
+
+/// Keeps each of `s`'s fields through the next `g.begin()`.
+pub fn retain_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F]>, ..F: Field<G>>(g: &mut G, s: &S) with _ {
+    for let f of ReflectStruct::<S>::members() {
+        f.get(s).retained(g);
+    }
+}
+
+/// `s` with each field cut or grown along each `[axis, extent]` of `fits`
+/// holds for it.
+pub fn fitted_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Field<G>>(
+    g: &mut G,
+    s: &S,
+    fits: &List<List<[i32, i32]>>,
+) -> S with _ {
+    return ReflectStruct::<S>::from_fields(
+        [for let f of ReflectStruct::<S>::members() { fitted_at(g, &f.get(s), &fits[f.index()]) }],
+    );
+}
+
+fn fitted_at<affine G: Graph, F: Field<G>>(g: &mut G, field: &F, fits: &List<[i32, i32]>) -> F with _ {
+    let mut out = *field;
+    for let [axis, extent] of *fits {
+        out = out.fitted(g, axis, extent);
+    }
+    return out;
+}
+
+/// `into` with each field's rows `at` names written from `from`'s, fitted
+/// along the axis `axes` holds for it.
+pub fn written_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Field<G>>(
+    g: &mut G,
+    into: &S,
+    from: &S,
+    axes: &List<i32>,
+    at: &G::Tensor<i64, [Slots]>,
+) -> S with _ {
+    return ReflectStruct::<S>::from_fields(
+        [for let f of ReflectStruct::<S>::members() { f.get(into).written(g, &f.get(from), axes[f.index()], at) }],
+    );
 }
 
 /// An `S` recorded as parameters of the extents `extents` holds from `at` on,

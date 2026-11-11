@@ -705,7 +705,7 @@ fn emit_compute(
     if room matches { Some(_) } {
         compute.add_param("room", "i32");
     }
-    let Entry { lines: mut lines, symbols: mut symbols, arguments: mut arguments, taken_args, first_weight, class, chosen, fitted_cache } = entry;
+    let Entry { lines: mut lines, symbols: mut symbols, arguments: mut arguments, taken_args, first_weight, class, chosen, cache_fits } = entry;
     // `build` and `recorded` take the branches where they take the lengths.
     let [record, least] = if chosen.is_empty() {
         [RECORDED, `${RECORDED}(recorder, &${LEAST_EXTENTS}())`];
@@ -725,7 +725,7 @@ fn emit_compute(
             fields.push(`${names.get(&output)}: ${typed_result(checked, &output, at)}`);
         }
         if has_cache {
-            fields.push(`cache: ${cache_from_results(checked, names, crossing, returned.len())}`);
+            fields.push(`cache: ${cache_from_results(returned.len())}`);
         }
         `${PASSED} { ${fields.join(", ")} }`;
     } else {
@@ -761,7 +761,7 @@ fn emit_compute(
         }
         if has_cache {
             idents.push("cache");
-            fields.push(`cache: ${fitted_cache}`);
+            fields.push(`cache: fitted_fields(backend, &cache, ${cache_fits})`);
         }
         bind_run(`${PASSED} { ${idents.join(", ")} }`);
         lines.push(`return ${OUTPUTS} { ${fields.join(", ")} };`);
@@ -825,7 +825,7 @@ struct EntryContext {
 /// What an entry has made by the time it can run its program: its `lines`, the
 /// lengths, what `build` is passed, what the program takes, its weights from
 /// `first_weight` on, what tells its programs apart, the fields of `chosen`,
-/// and the cache at the capacities.
+/// and what `fitted_fields` fits the cache to the capacities by.
 struct Entry {
     lines: List<String>,
     symbols: Symbols,
@@ -834,7 +834,7 @@ struct Entry {
     first_weight: i32,
     class: List<String>,
     chosen: List<String>,
-    fitted_cache: String,
+    cache_fits: String,
 }
 
 /// The lengths of an entry whose rows each decode at a past of their own: the
@@ -926,7 +926,7 @@ fn prepared_entry(
     let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names, room)?;
     // The cache was computed before the pass this call begins.
     if has_cache {
-        lines.push("cache.retain(backend);");
+        lines.push("retain_fields(backend, cache);");
     }
     lines.push("backend.begin();");
     let mut arguments: List<String> = ["backend"];
@@ -937,9 +937,9 @@ fn prepared_entry(
         arguments.push(`&${ident}`);
     }
     // The cache at the capacities, both as the pass takes it and as it returns it.
-    let fitted_cache = fitted_at_capacities(checked, names, crossing, owed, padded, &mut capacities)?;
+    let cache_fits = fits_at_capacities(crossing, owed, padded, &mut capacities)?;
     if has_cache {
-        lines.push(`let cache = ${fitted_cache};`);
+        lines.push(`let cache = fitted_fields(backend, cache, ${cache_fits});`);
         arguments.push("&cache");
     }
     // A capacity reads its length, and an unpadded symbol is its own capacity.
@@ -1008,7 +1008,7 @@ fn prepared_entry(
         first_weight,
         class,
         chosen,
-        fitted_cache,
+        cache_fits,
     });
 }
 
@@ -1161,7 +1161,7 @@ fn emit_decode(
     let erased = erased_arguments(&taken, entry.first_weight);
     let chosen_argument = if chooses { ", &chosen" } else { "" };
     lines.push(
-        `let [tokens, cache] = match model.programs.run(backend, [${class.join(
+        `let [tokens, cache]: [${BACKEND_PARAM}::Tensor<i64, [Slots, Picks]>, ${CACHE}<${BACKEND_PARAM}>] = match model.programs.run(backend, [${class.join(
             ", ",
         )}], |recorder, extents| ${RECORDED_DECODED}(recorder, extents, &sampler${chosen_argument}), || {`,
     );
@@ -1170,12 +1170,7 @@ fn emit_decode(
     lines.push("    return all;");
     lines.push(`}, || ${ERASED_WEIGHTS}) {`);
     lines.push(
-        `    Some(results) => [i64_of::<${BACKEND_PARAM}, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(
-            checked,
-            names,
-            crossing,
-            1,
-        )}],`,
+        `    Some(results) => [i64_of::<${BACKEND_PARAM}, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(1)}],`,
     );
     lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
     lines.push("};");
@@ -1247,7 +1242,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     let EntryContext { graph, checked, names, crossing, owed, .. } = *context;
     let bk = BACKEND_PARAM;
     let mut empties: List<String> = [];
-    let mut writes: List<String> = [];
+    let mut grown_axes: List<String> = [];
     for let [past, _] of crossing.pairs {
         let shape = checked.shapes[past];
         let Some([g, _]) = owed.into_iter().find(|o| o.0.past == past) else {
@@ -1271,17 +1266,8 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
             };
             extents.push(extent);
         }
-        let ident = names.get(&past);
-        let primitive = checked.primitives[past];
-        let typed = `${bk}, ${primitive}, [${axis_list(&shape)}]`;
-        empties.push(
-            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::filled(${extents.join(
-                " * ",
-            )}, ${zero_of(&primitive)}), extents: [${extents.join(", ")}] }),`,
-        );
-        writes.push(
-            `self.cache.${ident} = written_at::<${bk}, ${primitive}, [${axis_list(&shape)}], [${axis_list(&shape)}]>(backend, &self.cache.${ident}, &fitted::<${typed}>(backend, &passed.cache.${ident}, ${grown}, self.capacity), 0, &at, null);`,
-        );
+        empties.push(`[${extents.join(", ")}]`);
+        grown_axes.push(`${grown}`);
     }
     let taken: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
     let mut place_params: List<String> = [];
@@ -1331,11 +1317,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
         `    assert capacity_of(slots) == slots && capacity_of(capacity) == capacity, "a slot count and a capacity are each one capacity_of gives";`,
     );
     w.line(`    return ${REQUESTS} {`);
-    w.line(`        cache: ${CACHE} {`);
-    for let line of empties {
-        w.line(`            ${line}`);
-    }
-    w.line("        },");
+    w.line(`        cache: zeroed_fields(backend, &[${empties.join(", ")}]),`);
     w.line("        pasts: List::<i64>::filled(slots, 0),");
     w.line("        tokens: List::<i64>::filled(slots, 0),");
     w.line("        active: List::<bool>::filled(slots, false),");
@@ -1350,14 +1332,12 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
         `pub fn place(&mut self, backend: &mut ${bk}, slot: i32, ${place_params.join(", ")}, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> i64 with _ {`,
     );
     w.line(`    assert !self.active[slot], "a request is placed in an empty slot";`);
-    w.line("    self.cache.retain(backend);");
+    w.line("    retain_fields(backend, &self.cache);");
     w.line(`    let passed = compute(backend, ${compute_args.join(", ")}, &${CACHE}::empty(backend, 1), 0, model);`);
     w.line(`    let past = ${mask}.extents[1] as i64;`);
     w.line(`    assert past < self.capacity as i64, "a prompt leaves its slot a position for its steps";`);
     w.line(`    let at = shared::<${bk}>(backend, &scalar::<${bk}, i64>(backend, slot as i64));`);
-    for let line of writes {
-        w.line(`    ${line}`);
-    }
+    w.line(`    self.cache = written_fields(backend, &self.cache, &passed.cache, &[${grown_axes.join(", ")}], &at);`);
     w.line(`    let token = sampling.first_tokens(&passed.${logits}, past)[0];`);
     w.line("    self.pasts[slot] = past;");
     w.line("    self.tokens[slot] = token;");
@@ -1421,7 +1401,8 @@ fn emit_decoded(
     let mut start: List<String> = [];
     let mut carried: List<ProgramArgument> = [];
     let mut build_arguments: List<String> = ["backend"];
-    let mut cache_fields: List<String> = [];
+    // Where the cache starts among what a step carries: past the inputs it carries.
+    let mut first_cached = 0;
     for let a of *taken {
         if a.crossed matches { Input } {
             decoded.add_param(a.ident, `&${bk}::Tensor<${a.element}, ${a.axes}>`);
@@ -1435,11 +1416,9 @@ fn emit_decoded(
         } else {
             continue;
         }
-        let now = a.taken_from("state", carried.len());
-        if a.crossed matches { Cache } {
-            cache_fields.push(`${a.ident}: ${now}`);
-        } else {
-            build_arguments.push(`&${now}`);
+        if a.crossed matches { Input } {
+            build_arguments.push(`&${a.taken_from("state", carried.len())}`);
+            first_cached += 1;
         }
         carried.push(a);
     }
@@ -1465,7 +1444,7 @@ fn emit_decoded(
     w.line(`let mut start: List<Any<${bk}>> = [${start.join(", ")}];`);
     w.line("start.extend(&decoding.carried(backend));");
     w.line("let last = backend.repeated(&decoding.steps, &start, |step, state| {");
-    w.line(`    let held = ${CACHE}::<${bk}> { ${cache_fields.join(", ")} };`);
+    w.line(`    let held: ${CACHE}<${bk}> = restored_fields(backend, state, ${first_cached});`);
     if !read.is_empty() {
         let mut fields: List<String> = [];
         for let symbol of *read {
@@ -1509,15 +1488,9 @@ fn emit_decoded(
     w.line("    returned.extend(&next.carried(backend));");
     w.line("    return returned;");
     w.line("});");
-    let mut last_fields: List<String> = [];
-    for let [k, a] of carried.into_iter().enumerate() {
-        if a.crossed matches { Cache } {
-            last_fields.push(`${a.ident}: ${a.taken_from("last", k)}`);
-        }
-    }
-    w.line(`return [i64_of::<${bk}, [Slots, Picks]>(backend, &last[${count}]), ${CACHE}::<${bk}> { ${last_fields.join(
-        ", ",
-    )} }];`);
+    w.line(
+        `return [i64_of::<${bk}, [Slots, Picks]>(backend, &last[${count}]), restored_fields(backend, &last, ${first_cached})];`,
+    );
     w.end();
     return Result::Ok(());
 }
@@ -1727,12 +1700,8 @@ fn typed_result(checked: &Checked, tensor: &String, at: i32) -> String {
 }
 
 /// The `Cache` the program's results hold from `first` on.
-fn cache_from_results(checked: &Checked, names: &Names, crossing: &Crossing, first: i32) -> String {
-    let mut fields: List<String> = [];
-    for let [k, [past, _]] of crossing.pairs.into_iter().enumerate() {
-        fields.push(`${names.get(&past)}: ${typed_result(checked, &past, first + k)}`);
-    }
-    return `${CACHE}::<${BACKEND_PARAM}> { ${fields.join(", ")} }`;
+fn cache_from_results(first: i32) -> String {
+    return `restored_fields(backend, &results, ${first})`;
 }
 
 /// `taken` up to `first_weight` as the program takes it.
@@ -1815,20 +1784,21 @@ fn emit_recorded(
             arguments.push(`&${a.ident}`);
         }
     }
-    for let [crossed, ty, local] of [
-        [Crossed::Cache, CACHE, "cache"],
-        [Crossed::Length, LENGTHS, "lengths"],
-    ] as List<[Crossed, String, String]> {
-        let mut fields: List<String> = [];
-        for let [at, a] of taken.into_iter().enumerate() {
-            if a.crossed == crossed {
-                fields.push(`${a.ident}: ${a.parameter(&extents_at(at))}`);
-            }
+    if crossing.has_cache() {
+        // The cache follows the inputs.
+        let first_cache = taken.into_iter().filter(|a| a.crossed matches { Input }).count();
+        w.line(`let cache: ${CACHE}<Recorder> = recorded_fields(recorder, extents, ${first_cache});`);
+        arguments.push("&cache");
+    }
+    let mut lengths: List<String> = [];
+    for let [at, a] of taken.into_iter().enumerate() {
+        if a.crossed matches { Length } {
+            lengths.push(`${a.ident}: ${a.parameter(&extents_at(at))}`);
         }
-        if !fields.is_empty() {
-            w.line(`let ${local} = ${ty}::<Recorder> { ${fields.join(", ")} };`);
-            arguments.push(`&${local}`);
-        }
+    }
+    if !lengths.is_empty() {
+        w.line(`let lengths = ${LENGTHS}::<Recorder> { ${lengths.join(", ")} };`);
+        arguments.push("&lengths");
     }
     if decoding {
         w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, sampler);`);
@@ -1954,11 +1924,9 @@ fn solved_in(owed: &List<Condition>, symbol: &String, grown: &List<Grown>) -> Op
     return null;
 }
 
-/// `Cache { .. }` of the fields of `cache`, each grown axis whose length is
-/// padded fitted to its present's capacity.
-fn fitted_at_capacities(
-    checked: &Checked,
-    names: &Names,
+/// The fits `fitted_fields` takes for the cache: each grown axis whose length
+/// is padded, to its present's capacity.
+fn fits_at_capacities(
     crossing: &Crossing,
     owed: &List<[Grown, Option<Poly>]>,
     padded: &List<String>,
@@ -1966,19 +1934,15 @@ fn fitted_at_capacities(
 ) -> Result<String, EmitError> {
     let mut fields: List<String> = [];
     for let [past, _] of crossing.pairs {
-        let ident = names.get(&past);
-        let mut field = `cache.${ident}`;
-        let typed = `${checked.primitives[past]}, [${axis_list(&checked.shapes[past])}]`;
+        let mut fits: List<String> = [];
         for let [g, _] of *owed {
-            if g.past != past || !padded.contains(&g.symbol) {
-                continue;
+            if g.past == past && padded.contains(&g.symbol) {
+                fits.push(`[${g.axis}, ${capacities.spell_extent(&g.present)?}]`);
             }
-            let capacity = capacities.spell_extent(&g.present)?;
-            field = `fitted::<${BACKEND_PARAM}, ${typed}>(backend, &${field}, ${g.axis}, ${capacity})`;
         }
-        fields.push(`${ident}: ${field}`);
+        fields.push(`[${fits.join(", ")}]`);
     }
-    return Result::Ok(`${CACHE}::<${BACKEND_PARAM}> { ${fields.join(", ")} }`);
+    return Result::Ok(`&[${fields.join(", ")}]`);
 }
 
 /// What crosses a pass's boundary beside its inputs and weights, which every
@@ -2129,55 +2093,30 @@ fn emit_entry(
     return Result::Ok(read);
 }
 
-/// `Cache`, one field per pair, each held under its past's axes; its `empty`,
-/// the state before the first pass, which takes the length of each axis the
-/// graph leaves open; and its `retain`.
+/// `Cache`, one field per pair, each held under its past's axes, and its
+/// `empty`, the state before the first pass, which takes the length of each
+/// axis the graph leaves open.
 fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Checked, names: &Names) {
     let mut cache = StructSpec::new(CACHE, Vis::Pub);
     cache.add_generic(HOLDS_BOUND);
     let mut opened: List<String> = [];
     let mut empties: List<String> = [];
-    let mut retains: List<String> = [];
     for let [past, present] of *pairs {
-        let ident = names.get(&past);
-        cache.add_pub_field(ident, prepared_type(checked, &past));
-        let shape = checked.shapes[past];
+        cache.add_pub_field(names.get(&past), prepared_type(checked, &past));
         let mut extents: List<String> = [];
-        let mut empty = false;
-        let mut fixed = 1;
-        let mut open: List<String> = [];
-        for let [i, axis] of shape.axes.into_iter().enumerate() {
-            let Symbolic(p) = axis.extent else {
-                extents.push(`${axis.static_extent()}`);
-                fixed *= axis.static_extent();
-                continue;
-            };
-            // The past's length grows into the present's, and an empty cache
-            // holds none of it.
-            if checked.shapes[present].axes[i].name != axis.name {
-                extents.push("0");
-                empty = true;
-                continue;
-            }
-            let length = open_length(&p, names, &mut opened);
-            extents.push(length);
-            open.push(length);
+        for let [i, axis] of checked.shapes[past].axes.into_iter().enumerate() {
+            extents.push(match axis.extent {
+                Symbolic(p) => if checked.shapes[present].axes[i].name != axis.name {
+                    // The past's length grows into the present's, and an empty
+                    // cache holds none of it.
+                    "0";
+                } else {
+                    open_length(&p, names, &mut opened);
+                },
+                _ => `${axis.static_extent()}`,
+            });
         }
-        let primitive = checked.primitives[past];
-        let data = if empty {
-            "[]";
-        } else {
-            if fixed != 1 || open.is_empty() {
-                open.push(`${fixed}`);
-            }
-            `List::<${primitive}>::filled(${open.join(" * ")}, ${zero_of(&primitive)})`;
-        };
-        empties.push(
-            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: [${extents.join(
-                ", ",
-            )}] }),`,
-        );
-        retains.push(`backend.retain(&self.${ident});`);
+        empties.push(`[${extents.join(", ")}]`);
     }
     let mut params: List<String> = [`backend: &mut ${BACKEND_PARAM}`];
     for let length of opened {
@@ -2189,23 +2128,12 @@ fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Chec
     cache.emit(w);
     w.blank();
     let mut held = ImplSpec::new(`${CACHE}<${BACKEND_PARAM}>`);
-    held.add_generic(HOLDS_BOUND);
+    held.add_generic(GRAPH_BOUND);
     held.emit_begin(w);
     w.line("/// The state before the first pass: no position along a past's length,");
     w.line("/// and zeros of every other state.");
     w.line(`pub fn empty(${params.join(", ")}) -> ${CACHE}<${BACKEND_PARAM}> with _ {`);
-    w.line(`    return ${CACHE} {`);
-    for let line of empties {
-        w.line(`        ${line}`);
-    }
-    w.line("    };");
-    w.line("}");
-    w.blank();
-    w.line("/// Keeps the cache through the next `backend.begin()`.");
-    w.line(`pub fn retain(&self, backend: &mut ${BACKEND_PARAM}) with _ {`);
-    for let line of retains {
-        w.line(`    ${line}`);
-    }
+    w.line(`    return zeroed_fields(backend, &[${empties.join(", ")}]);`);
     w.line("}");
     w.end();
 }
@@ -2225,11 +2153,6 @@ fn open_length(p: &Poly, names: &Names, opened: &mut List<String>) -> String {
         spelled[symbol] = `(${ident} as i64)`;
     }
     return `to_extent(${p.spelled(&spelled)})`;
-}
-
-/// A zero of `primitive`, as an empty state holds.
-fn zero_of(primitive: &String) -> String {
-    return if *primitive == "bool" { "false" } else { `0 as ${*primitive}` };
 }
 
 /// The struct `pass` returns a graph's several outputs in, each as the
