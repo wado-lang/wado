@@ -1295,7 +1295,11 @@ impl AstVisitor<'_> for Resolver<'_> {
                     let def = self.defs.def_at(t.id);
                     self.record(t.id, &t.name, Resolution::Def(def));
                     for assoc in &t.associated_types {
-                        self.note_family(FamilyTrait::Declared(def), &assoc.name, &assoc.type_params);
+                        self.note_family(
+                            FamilyTrait::Declared(def),
+                            &assoc.name,
+                            &assoc.type_params,
+                        );
                         self.family_params.insert(
                             (def, assoc.name.clone()),
                             assoc.type_params.iter().map(|p| p.name.clone()).collect(),

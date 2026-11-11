@@ -640,7 +640,7 @@ impl DeclaredDefaults {
         Self {
             binders: params
                 .iter()
-                .map(|param| ParamRef::declared(param, resolutions).binder(resolutions.defs()))
+                .map(|param| ParamRef::declared(param, resolutions).binder(resolutions))
                 .collect(),
             defaults: params
                 .iter()

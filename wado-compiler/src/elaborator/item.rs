@@ -2842,8 +2842,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The receiver is named by the module that declares it — the written
         // name alone is not an identity. `display_name` below stays bare: it is
         // what diagnostics show, not what the registry keys on.
-        let qualified_struct_name =
-            scope.receiver_name_of_impl(impl_type, impl_declared_params);
+        let qualified_struct_name = scope.receiver_name_of_impl(impl_type, impl_declared_params);
         let mangled_name = MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
 
         // Diagnostics show the written name, not the registry key.

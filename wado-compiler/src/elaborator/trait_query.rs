@@ -1679,8 +1679,8 @@ impl TypeSystem {
                 .filter(|param| !param.is_pack)
                 .filter_map(|param| {
                     let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
-                    let binder = ParamRef::declared(param, &self.resolutions)
-                        .binder(self.resolutions.defs());
+                    let binder =
+                        ParamRef::declared(param, &self.resolutions).binder(&self.resolutions);
                     (!table.awaits_inference(arg)).then(|| (binder, table.fq_type_name(arg)))
                 })
                 .collect();
@@ -2569,7 +2569,7 @@ impl TypeSystem {
                 .iter()
                 .filter_map(|(slot, &arg)| {
                     let name = names.name_of(slot.index)?;
-                    let binder = ParamRef::of(def, name).binder(self.resolutions.defs());
+                    let binder = ParamRef::of(def, name).binder(&self.resolutions);
                     Some((binder, tt.fq_type_name(arg)))
                 })
                 .collect()
@@ -3856,13 +3856,12 @@ impl TypeSystem {
         impl_args: &[(ParamRef, TypeId)],
     ) -> Vec<(FqTypeName, FqTypeName)> {
         let tt = self.type_table.borrow();
-        let defs = self.resolutions.defs();
         // A pack spells no one type; its binder stays, and the bound with it.
         ParamRef::space(params, type_args, &self.resolutions)
             .iter()
             .chain(impl_args)
             .filter(|(_, arg)| !tt.any_type_pack(*arg, &|_| true))
-            .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
+            .map(|(param, arg)| (param.binder(&self.resolutions), tt.fq_type_name(*arg)))
             .collect()
     }
 

@@ -3700,9 +3700,9 @@ impl FqTypeName {
         })
     }
 
-    /// A binder known only by its spelling (a pack member `F`, a name a
-    /// synthesized template writes). Use [`Self::binder_of`] for a parameter an
-    /// item declares — that one has an identity beyond its spelling.
+    /// A binder known only by its spelling (a name a synthesized template
+    /// writes). Use [`Self::binder_of`] for a parameter an item declares — that
+    /// one has an identity beyond its spelling.
     #[must_use]
     pub fn binder(name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {

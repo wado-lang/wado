@@ -167,11 +167,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // parameter is the frame's, and only that frame spells it.
         let at_impl: Vec<(FqTypeName, FqTypeName)> = {
             let tt = self.tysys.type_table.borrow();
-            let defs = self.tysys.resolutions.defs();
+            let resolutions = &self.tysys.resolutions;
             impl_args
                 .iter()
                 .filter(|&&(_, arg)| !tt.contains_rigid_param(arg) && !tt.contains_unknown(arg))
-                .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
+                .map(|(param, arg)| (param.binder(resolutions), tt.fq_type_name(*arg)))
                 .collect()
         };
         param

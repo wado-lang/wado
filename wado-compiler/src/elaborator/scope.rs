@@ -19,13 +19,13 @@ use crate::type_table::TypeTable;
 
 use super::coercion::PendingLiterals;
 use super::sem::decls::PendingBounds;
-use super::trait_env::{InheritedBound, ViaClause};
+use super::trait_env::{InheritedBound, ViaClause, written_binder};
 use super::trait_query::SelfBinding;
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::util;
 use super::{AbstractSelections, Elaborator};
-use crate::defs::{DefId, DefTable};
+use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName, repeat_pack_name};
 use crate::resolve::{Resolution, Resolutions};
 use crate::token::Span;
@@ -87,10 +87,11 @@ impl ParamRef {
     }
 
     /// The parameter as a type name spells it.
-    pub(super) fn binder(&self, defs: &DefTable) -> FqTypeName {
-        match self.owner {
-            Some(owner) => FqTypeName::binder_of(defs, owner, &self.name),
-            None => FqTypeName::binder(&self.name),
+    pub(super) fn binder(&self, resolutions: &Resolutions) -> FqTypeName {
+        match (self.owner, self.family_decl) {
+            (Some(owner), _) => FqTypeName::binder_of(resolutions.defs(), owner, &self.name),
+            (None, Some(decl)) => written_binder(decl, &self.name, resolutions),
+            (None, None) => unreachable!("`{}` names no item's parameter or family's", self.name),
         }
     }
 }

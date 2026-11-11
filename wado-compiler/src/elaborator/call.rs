@@ -5824,7 +5824,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // callee is minted per instantiation.
             let trait_module = found_trait.module().cloned();
             let mut method_info = LocalMethodName::new(
-                self.tysys.type_table.borrow().fq_type_name(type_param_type_id),
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .fq_type_name(type_param_type_id),
                 Some(found_trait),
                 method_name.to_string(),
             );

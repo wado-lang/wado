@@ -1137,10 +1137,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// An fq name names its subject by the module that declares it, so a
     /// declared type is qualified through the same canonical key the impl
-    /// index uses. A type parameter is a template's own binder and a
-    /// builtin shape has no declaring module in any mangle, so both stay bare
-    /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
-    /// the same type on the consuming side.
+    /// index uses, and a type parameter by the item declaring it.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> FqTypeName {
         if let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(written) {
             return self.tysys.type_table.borrow().fq_type_name(binder.type_id);

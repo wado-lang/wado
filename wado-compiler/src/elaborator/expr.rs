@@ -5471,12 +5471,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let type_param = matches!(tt.get(target_type), ResolvedType::TypeParam { .. })
+        let param_binder = matches!(tt.get(target_type), ResolvedType::TypeParam { .. })
             .then(|| tt.fq_type_name(target_type));
         drop(tt);
 
         let (impl_def, module_source) = self.find_from_impl(target_type, from);
-        let target_receiver = match (impl_def, type_param) {
+        let target_receiver = match (impl_def, param_binder) {
             (Some(def), _) => {
                 self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type)
             }

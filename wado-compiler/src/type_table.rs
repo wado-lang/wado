@@ -7020,7 +7020,11 @@ impl TypeTable {
         self.matched_type_params(written, concrete).is_some()
     }
 
-    fn matched_type_params(&self, written: &[TypeId], concrete: &[TypeId]) -> Option<TargetBinding> {
+    fn matched_type_params(
+        &self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+    ) -> Option<TargetBinding> {
         let mut binding = TargetBinding::default();
         self.bind_all(written, concrete, &|_| false, &mut binding)
             .then_some(binding)
@@ -7125,7 +7129,11 @@ impl TypeTable {
         let Some(end) = elements.len().checked_sub(after).filter(|&end| end >= at) else {
             return Some(false);
         };
-        let ends: Vec<TypeId> = elements[..at].iter().chain(&elements[end..]).copied().collect();
+        let ends: Vec<TypeId> = elements[..at]
+            .iter()
+            .chain(&elements[end..])
+            .copied()
+            .collect();
         // A neighbour takes one element, and a spread in the receiver stands
         // for any number of them.
         if ends.iter().any(|&e| self.is_type_pack(e)) {
