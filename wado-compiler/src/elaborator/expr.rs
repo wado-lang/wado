@@ -5494,6 +5494,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A generic block's function is instantiated at what the target binds,
         // and at every slot where the source the trait reference names settles
         // one only it names (`S` in `impl<S> From<S> for Failure`).
+        let receiver_args = match impl_def {
+            Some(def) if !self.tysys.trait_env.impl_headers[&def].is_concrete() => self
+                .tysys
+                .receiver_args_at_impl(Some(target_type), &[], impl_def)
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
         let impl_type_args = match impl_def {
             Some(def) if self.tysys.type_table.borrow().impl_trait_sets_params(def) => {
                 let (given, asked) = {
@@ -5504,11 +5511,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 self.impl_instance_args(def, given, &asked)
             }
-            Some(def) if !self.tysys.trait_env.impl_headers[&def].is_concrete() => self
-                .tysys
-                .receiver_args_at_impl(Some(target_type), &[], impl_def)
-                .unwrap_or_default(),
-            _ => Vec::new(),
+            _ => receiver_args.clone(),
         };
         let type_param_receiver = impl_def.is_none();
         // Through a bound the trait's own method is the callee, whose edges
@@ -5528,6 +5531,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 target_name: target_receiver,
                 type_param_receiver,
                 trait_name,
+                receiver_args,
                 impl_type_args,
             },
         );

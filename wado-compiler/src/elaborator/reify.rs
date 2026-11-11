@@ -6691,7 +6691,7 @@ impl<'a> Reify<'a> {
         let arg_names: Vec<FqTypeName> = {
             let table = self.tysys.type_table.borrow();
             facts
-                .impl_type_args
+                .receiver_args
                 .iter()
                 .map(|&arg| table.fq_type_name_rowless(arg))
                 .collect()

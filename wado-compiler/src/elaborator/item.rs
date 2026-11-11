@@ -3044,7 +3044,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 impl TypeSystem {
     /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag for
     /// [i32, i32]`): every target argument pins a position (`arg_pins`), a
-    /// parameter of `type_params` an `fn` bound fixes among them.
+    /// parameter of `type_params` an `fn` bound fixes among them. A parameter
+    /// the target never names (`S` in `impl<S> From<S> for Bx<i32>`) leaves
+    /// the block generic, one instance per argument the trait reference takes.
     pub(super) fn impl_is_concrete_instantiation(
         &self,
         impl_ty: &ast::Type,
@@ -3053,7 +3055,12 @@ impl TypeSystem {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
-        !args.is_empty() && args.iter().all(|a| self.arg_pins(a, type_params))
+        !args.is_empty()
+            && args.iter().all(|a| self.arg_pins(a, type_params))
+            && type_params
+                .iter()
+                .filter(|param| param.fills_impl_slot())
+                .all(|param| args.iter().any(|a| a.mentions(&param.name)))
     }
 }
 

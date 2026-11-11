@@ -1540,7 +1540,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What `block`'s instance is keyed by: every slot in slot order, `given`
     /// filling what the receiver binds and `inferred`, answered, the slots only
-    /// the trait arguments name.
+    /// the trait arguments name. A position the target writes concretely holds
+    /// what the target wrote there, which is what any receiver it matched holds.
     pub(super) fn impl_instance_args(
         &self,
         block: DefId,
@@ -1553,7 +1554,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|(&slot, &ty)| (slot, self.apply_infer_holes(ty))),
         );
         let count = self.impl_param_slots(block).count();
-        impl_args_in_slot_order(block, count, &given, &[])
+        let tt = self.tysys.type_table.borrow();
+        impl_args_in_slot_order(block, count, &given, tt.impl_target_args(block))
             .expect("the receiver and the trait arguments fill every slot")
     }
 
