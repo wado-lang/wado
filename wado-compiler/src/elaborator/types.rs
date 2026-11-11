@@ -479,6 +479,8 @@ pub enum OverloadedCallForm {
     Receiver,
     /// `Type::f(…)`, where the result type is the other way to select.
     Static,
+    /// `Type::f()`, where the result type is the only way to select.
+    StaticNullary,
 }
 
 /// Errors from the type resolution phase
@@ -2191,6 +2193,7 @@ impl TypeError {
                         )
                     }
                     OverloadedCallForm::Static => "annotate an argument (e.g. '42 as i64') or the result".to_string(),
+                    OverloadedCallForm::StaticNullary => "annotate the result (e.g. 'let v: i32 = …')".to_string(),
                 };
                 (
                     Code::AmbiguousCandidate,

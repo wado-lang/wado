@@ -906,7 +906,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method: method_name.to_string(),
             traits: traits.clone(),
             arguments: self.tysys.describe_arg_classes(&classes),
-            form: OverloadedCallForm::Static,
+            form: if arg_types.is_empty() {
+                OverloadedCallForm::StaticNullary
+            } else {
+                OverloadedCallForm::Static
+            },
             span,
         });
         true
