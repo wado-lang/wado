@@ -22,6 +22,7 @@ struct Inner {
 // Two fields so single-field-parameter SROA does not flatten the wrapper,
 // keeping the `cur.inner.*` accesses a genuine two-level reference chain
 // (mirrors `JsonStructAccess { de: &mut JsonDeserializer, first: bool }`).
+// `run` prints `started`, so dead field elimination keeps it.
 struct Cursor {
     inner: &mut Inner,
     started: bool,
@@ -42,12 +43,12 @@ export fn run() with Stdout {
     let mut cur = Cursor { inner: &mut data, started: false };
     let result = drain(&mut cur);
     // pos walks 0,1,2,3,4 -> acc = 0+1+2+3+4 = 10
-    println(`${result}`);
+    println(`${result} ${cur.started}`);
 }
 
 __DATA__
 {
-    "stdout": "10\n",
+    "stdout": "10 true\n",
     "wir_pass": {"O2": ["nir/licm"]},
     "wir_expect:O2": ["$licm_limit_{} = local.tee $load_{}(cur.inner).limit;"]
 }

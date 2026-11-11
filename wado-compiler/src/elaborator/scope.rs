@@ -408,6 +408,10 @@ pub(super) struct TraitContext {
     /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<DefId>,
+    /// The arguments the impl block under walk writes for [`Self::self_trait`]:
+    /// what that trait's parameters are where a default body's bound names
+    /// them.
+    pub(super) self_trait_args: Vec<TypeId>,
     /// Set while the body under walk is a trait's default body, written
     /// against the trait's `Self` rather than this concrete one: what each
     /// of its calls selected through a declared bound, by the call's node.
@@ -576,6 +580,7 @@ pub(super) struct SelfFrame {
     assoc_type_bindings: AssocBindings,
     self_type: Option<TypeId>,
     self_trait: Option<DefId>,
+    self_trait_args: Vec<TypeId>,
     abstract_selections: Option<Rc<AbstractSelections>>,
 }
 
@@ -636,6 +641,7 @@ impl Scope {
             assoc_type_bindings: std::mem::take(&mut self.trait_ctx.assoc_type_bindings),
             self_type: self.trait_ctx.self_type.take(),
             self_trait: self.trait_ctx.self_trait.take(),
+            self_trait_args: std::mem::take(&mut self.trait_ctx.self_trait_args),
             abstract_selections: self.trait_ctx.abstract_selections.take(),
         }
     }
@@ -644,6 +650,7 @@ impl Scope {
         self.trait_ctx.assoc_type_bindings = frame.assoc_type_bindings;
         self.trait_ctx.self_type = frame.self_type;
         self.trait_ctx.self_trait = frame.self_trait;
+        self.trait_ctx.self_trait_args = frame.self_trait_args;
         self.trait_ctx.abstract_selections = frame.abstract_selections;
     }
 }
@@ -860,6 +867,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn set_self_binding(&mut self, binding: SelfBinding) {
         self.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
         self.annotate_ctx.trait_ctx.self_trait = binding.declaring_trait;
+        self.annotate_ctx.trait_ctx.self_trait_args = Vec::new();
         self.annotate_ctx.trait_ctx.self_type = Some(binding.type_id);
         self.annotate_ctx.trait_ctx.abstract_selections = None;
     }

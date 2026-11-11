@@ -98,8 +98,6 @@ struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,c
     mut values: ref "Array<core:prelude/string.wado/String>",
     mut alive: ref Array<bool>,
     mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(12)
@@ -313,25 +311,25 @@ fn "condition_implication_sibling_field_lengths.wado/second_input"($mv$node$outp
     let end: i32;
     let v_28: ref "core:prelude/string.wado//String";
     let value_31: ref "core:prelude/string.wado//String";
-    let self_69: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>";
-    let b_75: i32;
-    let $sroa_$iter_0_repr_85: ref "Array<core:prelude/string.wado/String>";
-    let $sroa_$iter_0_index_86: i32;
+    let self_41: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>";
+    let b_47: i32;
+    let $sroa_$iter_0_repr_101: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_$iter_0_index_102: i32;
     v_16 = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v_16(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v_16.k1 };
-    map = struct.new "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "core:prelude/string.wado//String">(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v_16 };
+    map = struct.new "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "core:prelude/string.wado//String">(0), alive: builtin::array_new<bool>(0), count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v_16 };
     end = $mv$node$inputs.used;
-    $sroa_$iter_0_repr_85 = $mv$node$inputs.repr;
-    $sroa_$iter_0_index_86 = 0;
+    $sroa_$iter_0_repr_101 = $mv$node$inputs.repr;
+    $sroa_$iter_0_index_102 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_86 >= end;
-            v_28 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_85, $sroa_$iter_0_index_86);
+            break_if b0 $sroa_$iter_0_index_102 >= end;
+            v_28 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_101, $sroa_$iter_0_index_102);
             let $array_clone_src_1: ref Array<u8>;
             $array_clone_src_1 = v_28.repr;
             $load_5 = v_28.used;
             let $array_clone_dst_2: ref Array<u8>;
             builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5);
-            $sroa_$iter_0_index_86 = $sroa_$iter_0_index_86 + 1;
+            $sroa_$iter_0_index_102 = $sroa_$iter_0_index_102 + 1;
             v_28 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>($load_5)), 0, $array_clone_dst_2, 0, $load_5); $array_clone_src_1, used: $load_5 };
             value_31 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>($load_5)), 0, $array_clone_dst_2, 0, $load_5); $array_clone_src_1, used: $load_5 };
             $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_16: block {
@@ -339,15 +337,14 @@ fn "condition_implication_sibling_field_lengths.wado/second_input"($mv$node$outp
                     builtin::array_set<ref "core:prelude/string.wado//String">(map.log.values, $load_5, value_31);
                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_16;
                 }
-                if @unlikely(local.tee $load_5(local.tee self_69(map.log).count) == builtin::array_len(self_69.keys)) {
+                if @unlikely(local.tee $load_5(local.tee self_41(map.log).count) == builtin::array_len(self_41.keys)) {
                     cold_path;
-                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow"(self_69, b_75 = $load_5 * 2; select i32(4 > b_75, 4, b_75));
+                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow"(self_41, b_47 = $load_5 * 2; select i32(4 > b_47, 4, b_47));
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">(self_69.keys, $load_5, v_28);
-                builtin::array_set<ref "core:prelude/string.wado//String">(self_69.values, $load_5, value_31);
-                builtin::array_set<bool>(self_69.alive, $load_5, 1);
-                self_69.count = $load_5 + 1;
-                self_69.size = self_69.size + 1;
+                builtin::array_set<ref "core:prelude/string.wado//String">(self_41.keys, $load_5, v_28);
+                builtin::array_set<ref "core:prelude/string.wado//String">(self_41.values, $load_5, value_31);
+                builtin::array_set<bool>(self_41.alive, $load_5, 1);
+                self_41.count = $load_5 + 1;
             };
             continue l1;
         };
@@ -368,20 +365,19 @@ fn "condition_implication_sibling_field_lengths.wado/second_input"($mv$node$outp
     }
     end = local.tee value_31(builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$node$inputs.repr, 1)).used;
     value_31 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = value_31.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(end)), 0, $array_clone_src_1, 0, end); $array_clone_dst_2, used: end };
-    $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_25: block {
+    $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_31: block {
         if local.tee end("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::place"(map, v_28)) >= 0 {
             builtin::array_set<ref "core:prelude/string.wado//String">(map.log.values, end, value_31);
-            break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_25;
+            break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_31;
         }
-        if @unlikely(local.tee end(local.tee self_69(map.log).count) == builtin::array_len(self_69.keys)) {
+        if @unlikely(local.tee end(local.tee self_41(map.log).count) == builtin::array_len(self_41.keys)) {
             cold_path;
-            "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow"(self_69, $sroa_$iter_0_index_86 = end * 2; select i32(4 > $sroa_$iter_0_index_86, 4, $sroa_$iter_0_index_86));
+            "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow"(self_41, $sroa_$iter_0_index_102 = end * 2; select i32(4 > $sroa_$iter_0_index_102, 4, $sroa_$iter_0_index_102));
         }
-        builtin::array_set<ref "core:prelude/string.wado//String">(self_69.keys, end, v_28);
-        builtin::array_set<ref "core:prelude/string.wado//String">(self_69.values, end, value_31);
-        builtin::array_set<bool>(self_69.alive, end, 1);
-        self_69.count = end + 1;
-        self_69.size = self_69.size + 1;
+        builtin::array_set<ref "core:prelude/string.wado//String">(self_41.keys, end, v_28);
+        builtin::array_set<ref "core:prelude/string.wado//String">(self_41.values, end, value_31);
+        builtin::array_set<bool>(self_41.alive, end, 1);
+        self_41.count = end + 1;
     };
     return map;
 }

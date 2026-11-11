@@ -7,57 +7,52 @@ struct core:prelude/string.wado//String {  // TypeId(0)
     mut used: i32,
 }
 
-struct core:serde//SerializeError {  // TypeId(1)
-    mut kind: "core:serde//enum:SerializeErrorKind",
-    mut message: ref "core:prelude/string.wado//String",
-}
+struct core:serde//SerializeError {}  // TypeId(1)
 
-enum core:serde//enum:SerializeErrorKind { UnsupportedValue = 0, Custom = 1 };  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
 
-array Array<u8> (mut u8);  // TypeId(3)
-
-variant core:prelude/types.wado//Option<char> {  // TypeId(4)
+variant core:prelude/types.wado//Option<char> {  // TypeId(3)
     None,
     Some(char),
 }
 
-variant core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError> {  // TypeId(5)
+variant core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError> {  // TypeId(4)
     Ok(ref "core:prelude/string.wado//String"),
     Err(ref "core:serde//SerializeError"),
 }
 
-struct core:prelude/types.wado//Option<char>::Some {  // TypeId(6)
+struct core:prelude/types.wado//Option<char>::Some {  // TypeId(5)
     discriminant: i32,
     payload_0: char,
 }
 
-struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok {  // TypeId(7)
+struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok {  // TypeId(6)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err {  // TypeId(8)
+struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err {  // TypeId(7)
     discriminant: i32,
     payload_0: ref "core:serde//SerializeError",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(8)
 
-type "functype//serde_bound_driven_absence.wado/$cm_export__run" = fn();  // TypeId(10)
+type "functype//serde_bound_driven_absence.wado/$cm_export__run" = fn();  // TypeId(9)
 
-type "functype//core:json/core:json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(11)
+type "functype//core:json/core:json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(10)
 
-type "functype//core:json/core:json/serialize_into<i32>$sroa[value.value]" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(12)
+type "functype//core:json/core:json/serialize_into<i32>$sroa[value.value]" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(11)
 
-type "functype//core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32);  // TypeId(13)
+type "functype//core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32);  // TypeId(12)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(13)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(16)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(15)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";

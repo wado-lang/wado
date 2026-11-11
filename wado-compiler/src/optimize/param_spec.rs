@@ -1955,18 +1955,18 @@ fn body_exprs(project: &NirPackage, func: FuncId) -> usize {
 }
 
 /// Whether `clone` still presents the same signature as `original`, so a call
-/// written against the original can be retargeted to it unchanged.
+/// written against the original can be retargeted to it unchanged. Names
+/// count: `dae` drops a different parameter from each route to one key, and
+/// the survivors may agree in type and position while meaning other things.
 fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bool {
     let original = project.functions[original.index()].borrow();
     let clone = project.functions[clone.index()].borrow();
     !clone.is_dead
         && clone.params.len() == original.params.len()
         && clone.return_type == original.return_type
-        && clone
-            .params
-            .iter()
-            .zip(&original.params)
-            .all(|(c, o)| c.type_id == o.type_id && c.local_index == o.local_index)
+        && clone.params.iter().zip(&original.params).all(|(c, o)| {
+            c.type_id == o.type_id && c.local_index == o.local_index && c.name == o.name
+        })
 }
 
 /// Replace every value-position read of a bound field with its constant.

@@ -5826,6 +5826,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow()
                 .type_param_id(type_param_type_id);
+            method_info
+                .trait_type_args
+                .clone_from(&method_info_result.bound_trait_args);
             if !method_type_arg_names.is_empty() {
                 method_info.method_type_args = method_type_arg_names;
             }

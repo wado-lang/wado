@@ -11,9 +11,7 @@ struct opt_value_copy_ref_match_binding_in_literal.wado//Rep {  // TypeId(1)
     mut tags: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
 }
 
-struct opt_value_copy_ref_match_binding_in_literal.wado//Held {  // TypeId(2)
-    mut r: ref "opt_value_copy_ref_match_binding_in_literal.wado//Rep",
-}
+struct opt_value_copy_ref_match_binding_in_literal.wado//Held {}  // TypeId(2)
 
 struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(3)
     mut repr: ref "Array<core:prelude/string.wado/String>",
@@ -122,7 +120,6 @@ fn "opt_value_copy_ref_match_binding_in_literal.wado/build$dae[n]"() {
     let tagged: i32;
     let i_3: i32;
     let rep: ref "opt_value_copy_ref_match_binding_in_literal.wado//Rep";
-    let value_14: ref "opt_value_copy_ref_match_binding_in_literal.wado//Held";
     let used_15: i32;
     let v_28: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $sroa_op_value_36: ref "opt_value_copy_ref_match_binding_in_literal.wado//Op";
@@ -139,12 +136,12 @@ fn "opt_value_copy_ref_match_binding_in_literal.wado/build$dae[n]"() {
                 }
                 break $inline_make_2: struct.new "opt_value_copy_ref_match_binding_in_literal.wado//Op::Plain" { discriminant: 0, payload_0: i_3 };
             })) {
-                value_14 = struct.new "opt_value_copy_ref_match_binding_in_literal.wado//Held" { r: local.tee rep(ref.cast "opt_value_copy_ref_match_binding_in_literal.wado//Op::Repeat"($sroa_op_value_36).payload_0) };
+                rep = ref.cast "opt_value_copy_ref_match_binding_in_literal.wado//Op::Repeat"($sroa_op_value_36).payload_0;
                 if @unlikely(local.tee used_15(held.used) >= builtin::array_len(held.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_ref_match_binding_in_literal.wado/Held>::grow"(held);
                 }
-                builtin::array_set<ref "opt_value_copy_ref_match_binding_in_literal.wado//Held">(held.repr, used_15, value_14);
+                builtin::array_set<ref "opt_value_copy_ref_match_binding_in_literal.wado//Held">(held.repr, used_15, struct.new "opt_value_copy_ref_match_binding_in_literal.wado//Held" {});
                 held.used = used_15 + 1;
                 tagged = tagged + rep.tags.used;
             } else {

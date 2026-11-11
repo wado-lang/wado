@@ -7,6 +7,10 @@
 // of the original's address-taken set, so each call still built and passed
 // every segment `String` the clone never looks at. With `t` gone each clone
 // takes nothing, and the loop folds to the lengths.
+//
+// A literal's struct type is shared by every literal of the same text, so
+// `show` reading the holes of one keeps dead field elimination from removing
+// them from `tag`'s.
 
 #[inline("never")]
 fn tag<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
@@ -18,12 +22,23 @@ fn tag<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     return out;
 }
 
+#[inline("never")]
+fn show<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&`${h.get(&t)}`);
+    }
+    return out;
+}
+
 export fn run() {
     let mut s = 0;
     for let i of 0..<builtin::black_box(10) {
         s += tag`a${i}bb${i}ccc`.len() + tag`dd${i}e${i}f`.len();
     }
     assert s == 100;
+    let n = builtin::black_box(7);
+    assert show`a${n}bb${n}ccc` == "77";
 }
 
 __DATA__

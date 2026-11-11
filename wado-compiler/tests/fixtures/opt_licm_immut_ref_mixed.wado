@@ -3,7 +3,8 @@
 // In the same loop, the immutable ref's field read hoists, while the mutable
 // ref's field is read after `increment` writes it on every iteration, which
 // the output shows. The config is a list element, so no pass scalarizes it
-// before LICM sees the read.
+// before LICM sees the read. `run` prints `limit`, so the twin's write to it
+// survives dead field elimination.
 
 use { println, Stdout } from "core:cli";
 
@@ -38,12 +39,12 @@ export fn run() with Stdout {
         increment(cm);
         sum += cr.threshold + cm.value;
     }
-    println(`${sum}`);
+    println(`${sum} ${counter.limit}`);
 }
 
 __DATA__
 {
-    "stdout": "65\n",
+    "stdout": "65 100\n",
     "wir_scope": "opt_licm_immut_ref_mixed.wado/run",
     "wir_pass": {"O2": ["nir/licm"]},
     "wir_expect:O2": ["$licm_threshold"],

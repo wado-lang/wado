@@ -425,29 +425,8 @@ fn evaluate_ahead(
             !arg.is_mut,
             "[NIR] dae: a place argument ahead of an effect is rejected at validation"
         );
-        let arg = arg.expr;
-        let arg_type = body.operand_type(arg);
-        let local_index = NirLocal::push_minted(locals, "dae_arg", arg_type, false);
-        let name = locals[local_index as usize].name.clone();
-        stmts.push(body.stmts.push(StmtNode {
-            kind: StmtKind::Let {
-                name: name.clone(),
-                local_index,
-                is_mut: false,
-                type_id: arg_type,
-                value: arg,
-                skip_value_copy: false,
-            },
-            span,
-        }));
-        let read = body.exprs.push(ExprNode {
-            kind: ExprKind::Local {
-                index: local_index,
-                name,
-            },
-            type_id: arg_type,
-            span,
-        });
+        let (bind, read) = NirLocal::bind_minted(locals, body, "dae_arg", arg.expr, false, span);
+        stmts.push(bind);
         reads.push((i, read));
     }
     let ExprKind::Call { args, .. } = &mut body.exprs[call].kind else {

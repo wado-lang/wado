@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -918,7 +917,7 @@ fn "core:prelude/primitive.wado/fmt_float_special$spec0$spec0$sroa[f.buf]"(f, is
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative) {
@@ -1396,20 +1395,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<read_bridge
     let out_3: ref "core:prelude/string.wado//String";
     let new_used_81: i32;
     let start_82: i32;
-    let $sroa_view_repr_110: ref Array<u8>;
+    let $sroa_view_repr_109: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(t, out_3);
-    $sroa_view_repr_110 = global:core:prelude/string.wado::$const_obj_33;
+    $sroa_view_repr_109 = global:core:prelude/string.wado::$const_obj_33;
     if @unlikely(local.tee new_used_81(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_81);
     }
     start_82 = out_3.used;
     out_3.used = new_used_81;
-    builtin::array_copy<u8>(out_3.repr, start_82, $sroa_view_repr_110, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, start_82, $sroa_view_repr_109, 0, 1);
     return out_3;
 }
 
@@ -1417,20 +1416,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<read_bridge
     let out_3: ref "core:prelude/string.wado//String";
     let new_used_81: i32;
     let start_82: i32;
-    let $sroa_view_repr_110: ref Array<u8>;
+    let $sroa_view_repr_109: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(t, out_3);
-    $sroa_view_repr_110 = global:core:prelude/string.wado::$const_obj_33;
+    $sroa_view_repr_109 = global:core:prelude/string.wado::$const_obj_33;
     if @unlikely(local.tee new_used_81(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_81);
     }
     start_82 = out_3.used;
     out_3.used = new_used_81;
-    builtin::array_copy<u8>(out_3.repr, start_82, $sroa_view_repr_110, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, start_82, $sroa_view_repr_109, 0, 1);
     return out_3;
 }
 

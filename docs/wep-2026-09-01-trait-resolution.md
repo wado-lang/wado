@@ -647,14 +647,18 @@ effect binder declares nothing, so `fn() with E` and `fn() with F` are one type
 there. What it admits is a bound
 naming one binder's function type answered by an impl naming another's.
 
-### A parameter only the trait's arguments name is never bound
+### An operator never binds a parameter only the trait's arguments name
 
-The specification determines an impl's parameters from the receiver and the
-trait's arguments, but only the target binds one. `impl<T> Tr<T> for X` answers
-no `X: Tr<i64>`: the solver leaves `T` unbound, so the written argument never
-matches, and monomorphization names no instance for it either
-(`impl_param_bound_by_trait_arg.wado`). A program relying on it is rejected,
-never miscompiled.
+A call names the trait's arguments, written out (`Shown::<Host>::shown(&v)`)
+or through a bound, and they bind a parameter the target does not name. An
+operator names none: under `impl<R: Text> Eq<R> for Tag`, `t == "7"` is refused
+with `expected 'R'`, the parameter left in the signature
+(`operator_impl_param_from_trait_reference.wado`). A program relying on it is
+rejected, never miscompiled.
+
+An impl on `[..T]` declaring such a parameter is refused where it is written
+(`variadic_impl_target_extra_param.wado`): its instances key on the tuple's
+elements alone, which leave no place for one.
 
 ### A projection off a trait parameter keeps the impl's method parameter
 

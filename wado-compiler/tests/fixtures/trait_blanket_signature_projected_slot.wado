@@ -1,0 +1,75 @@
+// A blanket whose signature names a slot its bound projects (`X` in
+// `T: Left<Out = X>`), called on a caller's parameter: `X` is the parameter's
+// `Out`, which the caller's bound pins to `i32`, by a method call and by a
+// trait-qualified one alike.
+use { println, Stdout } from "core:cli";
+
+trait Back with () {
+    fn name() -> String;
+}
+
+struct Host {}
+
+impl Back for Host {
+    fn name() -> String {
+        return "host";
+    }
+}
+
+trait Left with () {
+    type Out;
+}
+
+struct Count {}
+
+impl Left for Count {
+    type Out = i32;
+}
+
+trait Get with () {
+    type R: Display;
+    fn get(&self) -> Self::R;
+}
+
+impl<T: Left<Out = X>, X: Default + Display> Get for T {
+    type R = X;
+    fn get(&self) -> X {
+        return X::default();
+    }
+}
+
+trait GetOn<G: Back> with () {
+    type R: Display;
+    fn get_on(&self) -> Self::R;
+}
+
+impl<T: Left<Out = X>, X: Default + Display, G: Back> GetOn<G> for T {
+    type R = X;
+    fn get_on(&self) -> X {
+        return X::default();
+    }
+}
+
+fn by_method<P: Left<Out = i32>>(p: &P) -> i32 {
+    return p.get() + 1;
+}
+
+fn qualified<P: Left<Out = i32>>(p: &P) -> i32 {
+    return GetOn::<Host>::get_on(p) + 2;
+}
+
+fn shown<P: Left<Out = i32>>(p: &P) -> String {
+    let v = GetOn::<Host>::get_on(p);
+    return `${v}`;
+}
+
+export fn run() with Stdout {
+    println(`${by_method(&Count {})}`);
+    println(`${qualified(&Count {})}`);
+    println(shown(&Count {}));
+}
+
+__DATA__
+{
+  "stdout": "1\n2\n0\n"
+}

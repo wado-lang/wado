@@ -242,27 +242,27 @@ fn "assert_matches_scrutinee.wado/$cm_export__run"() {
 fn "assert_matches_scrutinee.wado/run$cold0"(s) {
     let $load_4: ref Array<u8>;
     let out_6: ref "core:prelude/string.wado//String";
-    let new_used_82: i32;
-    let start_83: i32;
-    let $sroa_view_repr_103: ref Array<u8>;
+    let new_used_84: i32;
+    let start_85: i32;
+    let $sroa_view_repr_105: ref Array<u8>;
     if ref.is_null(global:assert_matches_scrutinee.wado::$const_obj_4) {
         global:assert_matches_scrutinee.wado::$const_obj_4 = array.new_data<u8>("Assertion failed in run at assert_matches_scrutinee.wado:11
 condition: s matches { Point }
 s: ");
     }
     out_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(111), used: 0 };
-    $sroa_view_repr_103 = global:assert_matches_scrutinee.wado::$const_obj_4;
+    $sroa_view_repr_105 = global:assert_matches_scrutinee.wado::$const_obj_4;
     out_6.used = 94;
-    builtin::array_copy<u8>(out_6.repr, 0, $sroa_view_repr_103, 0, 94);
+    builtin::array_copy<u8>(out_6.repr, 0, $sroa_view_repr_105, 0, 94);
     "core:prelude/traits.wado/assert_matches_scrutinee.wado/Shape^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(s, out_6);
-    $sroa_view_repr_103 = global:assert_matches_scrutinee.wado::$const_obj_3;
-    if @unlikely(local.tee new_used_82(out_6.used + 1) > builtin::array_len(out_6.repr)) {
+    $sroa_view_repr_105 = global:assert_matches_scrutinee.wado::$const_obj_3;
+    if @unlikely(local.tee new_used_84(out_6.used + 1) > builtin::array_len(out_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_6, new_used_82);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_6, new_used_84);
     }
-    start_83 = out_6.used;
-    out_6.used = new_used_82;
-    builtin::array_copy<u8>(local.tee $load_4(out_6.repr), start_83, $sroa_view_repr_103, 0, 1);
+    start_85 = out_6.used;
+    out_6.used = new_used_84;
+    builtin::array_copy<u8>(local.tee $load_4(out_6.repr), start_85, $sroa_view_repr_105, 0, 1);
     "core:rt/panic"($load_4, out_6.used);
     unreachable;
 }

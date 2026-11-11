@@ -14,7 +14,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(1)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -81,10 +80,7 @@ struct core:prelude/types.wado//WriteCopy<u8> {  // TypeId(11)
     mut copy: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<u8>,core:prelude/types.wado/StartedWrite<u8>]>>",
 }
 
-struct core:prelude/types.wado//StreamWrite<u8> {  // TypeId(12)
-    mut rest: ref "core:prelude/list.wado//List<u8>",
-    mut result: "core:prelude/types.wado//enum:CopyResult",
-}
+struct core:prelude/types.wado//StreamWrite<u8> {}  // TypeId(12)
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(13)
 
@@ -768,8 +764,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(buffer, da
         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"($contract_arg_0, $load_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:644"), used: 27 });
         unreachable;
     }
-    builtin::array_copy<u8>(local.tee elements(builtin::array_new<u8>(local.tee $load_4($load_4 - $contract_arg_0))), 0, $array_clone_dst_2, $contract_arg_0, $load_4);
-    data = struct.new "core:prelude/list.wado//List<u8>" { repr: elements, used: $load_4 };
+    builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $load_4($load_4 - $contract_arg_0)), 0, $array_clone_dst_2, $contract_arg_0, $load_4);
     packed_2 = (if local.tee packed_2(packed_2 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
     } else if packed_2 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
@@ -785,7 +780,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(buffer, da
     } else {
         select i32(packed_2 == 1, 1, 2);
     });
-    return struct.new "core:prelude/types.wado//StreamWrite<u8>" { rest: data, result: packed_2 };
+    return struct.new "core:prelude/types.wado//StreamWrite<u8>" {};
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/string.wado/String>"(f, text) {
@@ -935,7 +930,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative) {

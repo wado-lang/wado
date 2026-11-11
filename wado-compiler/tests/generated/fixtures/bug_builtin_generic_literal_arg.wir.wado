@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -855,7 +854,7 @@ fn "core:prelude/primitive.wado/fmt_float_special$spec0$spec0$sroa[f.buf]"(f, is
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -1423,7 +1422,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_builtin
     let $sroa_slot_55: bool;
     let $sroa_slot_56: bool;
     let $sroa_slot_57: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    let $sroa_view_repr_636: ref Array<u8>;
+    let $sroa_view_repr_635: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -1476,14 +1475,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_builtin
         }
         "core:prelude/fpfmt.wado/write_decimal"(out_3, bits, $sroa_slot_55, $sroa_slot_57);
     };
-    $sroa_view_repr_636 = global:core:prelude/string.wado::$const_obj_32;
+    $sroa_view_repr_635 = global:core:prelude/string.wado::$const_obj_32;
     if @unlikely(local.tee $sroa_slot_55(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $sroa_slot_55);
     }
     $sroa_slot_56 = out_3.used;
     out_3.used = $sroa_slot_55;
-    builtin::array_copy<u8>(local.tee $load_9(out_3.repr), $sroa_slot_56, $sroa_view_repr_636, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_9(out_3.repr), $sroa_slot_56, $sroa_view_repr_635, 0, 1);
     $sroa_slot_55 = $mv$t$h1 < 0_i64;
     $sroa_slot_56 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $mv$t$h1(select i64($mv$t$h1 < 0_i64, 0_i64 - $mv$t$h1, $mv$t$h1)));
     if $sroa_slot_55 {

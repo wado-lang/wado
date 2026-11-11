@@ -1368,22 +1368,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_name: &str,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
-        let in_own_declaration = self.annotate_ctx.trait_ctx.self_trait == Some(owner)
-            && self.annotate_ctx.trait_ctx.self_type == Some(base)
-            && matches!(
-                self.tysys.type_table.borrow().get(base),
-                ResolvedType::TypeParam { .. }
-            );
-        if in_own_declaration {
-            let binders = &self.annotate_ctx.trait_ctx.type_params;
-            return self
-                .tysys
-                .trait_env
-                .trait_type_params(owner)
-                .iter()
-                .map(|param| Some(binders.get(&param.name)?.type_id))
-                .collect();
-        }
         if let Some((bound, space)) = self
             .bound_closure_of(base_name)
             .unwrap_or_default()
@@ -1404,6 +1388,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
+        // On its own `Self` a trait is reached at its own parameters, which the
+        // bound its frame synthesizes does not write. The registered frame holds
+        // them by identity, which a method parameter's name cannot shadow.
+        if self.tysys.type_table.borrow().type_param_id(base)
+            == Some(TypeParamId::trait_self(owner))
+        {
+            assert!(
+                bound.bound.type_args.is_empty(),
+                "a trait's own `Self` carries only the bound its frame synthesizes"
+            );
+            return self.trait_frame(owner)?.params.iter().copied().collect();
+        }
         let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
         self.trait_args_at(owner, base, &written)
     }

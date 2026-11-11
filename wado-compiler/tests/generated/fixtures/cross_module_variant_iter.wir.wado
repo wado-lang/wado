@@ -10,7 +10,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(0)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -51,7 +50,6 @@ struct cross_module_variant_iter.wado//$tmpl$f86a99973c5f619d {  // TypeId(5)
 }
 
 struct sub/cross_module_variant_iter_helper.wado//AData {  // TypeId(6)
-    mut name: ref "core:prelude/string.wado//String",
     mut children: ref "core:prelude/list.wado//List<sub/cross_module_variant_iter_helper.wado/Choice>",
 }
 
@@ -271,7 +269,7 @@ fn "cross_module_variant_iter.wado/$template_segment$cross_module_variant_iter.w
 fn "cross_module_variant_iter.wado/$cm_export__run"() {
     let result: i32;
     let counter: ref "sub/cross_module_variant_iter_helper.wado//Counter";
-    "sub/cross_module_variant_iter_helper.wado/sub/cross_module_variant_iter_helper.wado/walk<sub/cross_module_variant_iter_helper.wado/Counter>$sroa[c.value]"(local.tee counter(struct.new "sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 }), struct.new "sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: struct.new "core:prelude/list.wado//List<sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "sub/cross_module_variant_iter_helper.wado//Choice">(struct.new "sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } }, struct.new "sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } }), used: 2 } } });
+    "sub/cross_module_variant_iter_helper.wado/sub/cross_module_variant_iter_helper.wado/walk<sub/cross_module_variant_iter_helper.wado/Counter>$sroa[c.value]"(local.tee counter(struct.new "sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 }), struct.new "sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "sub/cross_module_variant_iter_helper.wado//AData" { children: struct.new "core:prelude/list.wado//List<sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "sub/cross_module_variant_iter_helper.wado//Choice">(struct.new "sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } }, struct.new "sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } }), used: 2 } } });
     if @unlikely(local.tee result(counter.total) != 30) {
         cold_path;
         "cross_module_variant_iter.wado/run$cold0"(result);
@@ -660,7 +658,7 @@ fn "sub/cross_module_variant_iter_helper.wado/sub/cross_module_variant_iter_help
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative) {
