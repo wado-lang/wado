@@ -3200,14 +3200,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_binding: Option<SelfBinding>,
         span: Span,
     ) {
+        if bound.assoc_types.is_empty() {
+            return;
+        }
+        let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
+            return;
+        };
+        // The bound's own arguments pick its impl: `Mix<String, Out = B>` is
+        // checked against `impl Mix<String>`, not whichever the trait's impls
+        // agree on, which is nothing when they differ.
+        let trait_args = self.bound_args_on(bound, trait_, type_arg, self_binding);
         for constraint in &bound.assoc_types {
-            let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
-                continue;
-            };
-            // The bound's own arguments pick its impl: `Mix<String, Out = B>`
-            // is checked against `impl Mix<String>`, not whichever the trait's
-            // impls agree on, which is nothing when they differ.
-            let trait_args = self.bound_args_on(bound, trait_, type_arg, self_binding);
             let registered = self
                 .tysys
                 .type_table

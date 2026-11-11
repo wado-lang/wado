@@ -33,7 +33,7 @@ use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{DerivedAt, SelfBinding};
+use super::trait_query::DerivedAt;
 use super::type_resolution::ParamSpace;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
@@ -3805,7 +3805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             })
             .collect();
-        let self_binding = self.static_self_binding(receiver);
+        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
         self.link_deferred_assoc_equalities(&owners, &names, &args, self_binding, span);
     }
 
@@ -4525,7 +4525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: token::Span,
     ) {
-        let self_binding = self.static_self_binding(receiver);
+        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
         self.enforce_type_arg_bounds(
             &type_args.params,
             &type_args.method_args,
@@ -4533,13 +4533,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_binding,
             span,
         );
-    }
-
-    fn static_self_binding(&self, receiver: Option<TypeId>) -> Option<SelfBinding> {
-        receiver.map(|receiver| SelfBinding {
-            type_id: self.tysys.get_base_type(receiver),
-            declaring_trait: None,
-        })
     }
 
     /// Whether `struct_name::method_name` is declared, but by no block reaching

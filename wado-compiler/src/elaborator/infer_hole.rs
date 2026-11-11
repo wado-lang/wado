@@ -674,8 +674,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Link each associated-type equality of a bound on a slot the call
     /// deferred to a variable: the owner's answer settles the slot the right
     /// side names, or is held to the type it spells. `owners` declare the slots
-    /// `names` and `args` list, in their order. An equality reading `Self` is
-    /// the receiver's, which the call checks itself.
+    /// `names` and `args` list, in their order. `self_binding` is what `Self`
+    /// means at the call.
     pub(super) fn link_deferred_assoc_equalities(
         &mut self,
         owners: &[GenericParam],
