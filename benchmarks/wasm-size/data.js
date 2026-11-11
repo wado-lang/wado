@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794372442318,
+  "lastUpdate": 1794389992246,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76529,6 +76529,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7afddabd417867c5211e0f92b1b0eee8641cf493"
         },
         "date": 1794372441096,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404534,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "af60a30f686d913f02cb82ad537787d11df894de",
+          "message": "Merge pull request #2605 from wado-lang/loam/split-emit\n\nrefactor(loam): build, erase and restore the generated structs by runtime field walks",
+          "timestamp": "2026-11-11T18:20:47+09:00",
+          "tree_id": "4861ed8301f9884ca896f65ded3e55384fe84426",
+          "url": "https://github.com/wado-lang/wado/commit/af60a30f686d913f02cb82ad537787d11df894de"
+        },
+        "date": 1794389991006,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
