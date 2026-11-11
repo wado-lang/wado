@@ -55,17 +55,17 @@ global global:field_forward_struct_capture_invalidates.wado::$const_obj_0: ref A
 
 fn "field_forward_struct_capture_invalidates.wado/run"() with Stdout {
     let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_113: i32;
-    let $sroa_$pattern_temp_0_1_114: i32;
+    let $sroa_$pattern_temp_0_0_112: i32;
+    let $sroa_$pattern_temp_0_1_113: i32;
     let new_repr: ref Array<u8>;
-    $sroa_$pattern_temp_0_0_113 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_114 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_113 = "field_forward_struct_capture_invalidates.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_113);
+    $sroa_$pattern_temp_0_0_112 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_113 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_112 = "field_forward_struct_capture_invalidates.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_112);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:field_forward_struct_capture_invalidates.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_114, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_114);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_113);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_113, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_113);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_112);
 }
 
 fn "field_forward_struct_capture_invalidates.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -99,7 +99,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b2: block {
         l3: loop {
-            break_if b2 (((i >= 3) | ((i + 1) >= 3)) | (((i + 1) + 1) >= 3)) | ((((i + 1) + 1) + 1) >= 3);
+            break_if b2 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(3);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));

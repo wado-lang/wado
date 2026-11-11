@@ -63,8 +63,9 @@ again as its `(no-pgo)` row, which `wado_rows` in `benchmark/wado.sh` prints, an
 the tables list both. http-routing has no such row, and the README says so.
 wasm-size has no profile, so a size change is the compiler's or the program's.
 
-The README's PGO section compares three builds, and its commands stand beside
-its tables. The `no-cold-paths` wall clock comes from three more runs, alternated
+The README's PGO section compares three builds by wall clock, and its commands
+stand beside its table. It records no fuel: `benchmark/fuel.json` is the one
+record of that. The `no-cold-paths` wall clock comes from three more runs, alternated
 with the three of the procedure. `benchmark-all` and `all-wado` leave out the
 table's `gale_html` row, so run `mise run -C benchmark gale-highlight-html` the
 same way.
@@ -108,7 +109,9 @@ mise exec -- node benchmark/pick.ts scratchpad/thr{13,20,32}.log
 Read the sweep with `pick.ts` the same way as a best-of-three: it keys rows by
 (task, implementation, phase), so the "best" column names the winning arm per
 row. Only a knob both `wado compile` and `wado run` accept can be swept this
-way, since the harness passes the flags to both. The knob a sweep settles on is
+way, since the harness passes the flags to both. A knob only the engine reads,
+such as `--function-alignment`, goes in `WADO_RUN_FLAGS`, which the harness
+appends to `wado run` and `wado serve` alone. The knob a sweep settles on is
 a default in `optimize.rs`, not a flag the README's numbers were taken under —
 re-run the suite unflagged before updating the tables.
 

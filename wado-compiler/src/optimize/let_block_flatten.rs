@@ -26,6 +26,8 @@ use super::gate::{FunctionGate, GatedPass};
 /// flattened shapes.
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
+    let type_table = project.type_table.borrow();
+    let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(
         GatedPass::LetBlockFlatten,
@@ -41,7 +43,7 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
             let Some(body) = body else {
                 return false;
             };
-            let flattened = Engine::new(body, buffers, locals, params).run(&[&rule]);
+            let flattened = Engine::new(body, buffers, locals, params, type_table).run(&[&rule]);
             promote_lone_assignments(body, locals, params) || flattened
         },
     )
@@ -222,7 +224,7 @@ mod tests {
     use super::*;
     use crate::call_args::CallArgs;
     use crate::nir_arena::Tracked;
-    use crate::nir_engine::EngineBuffers;
+    use crate::nir_engine::{EngineBuffers, TEST_TYPES};
     use std::assert_matches;
 
     use crate::hashmap::IndexSet;
@@ -371,7 +373,7 @@ mod tests {
         let mut buffers = EngineBuffers::default();
         let rule = LetBlockFlattenRule;
         {
-            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[]);
+            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[], &TEST_TYPES);
             engine.run(&[&rule]);
         }
 

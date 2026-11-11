@@ -8,7 +8,6 @@
 //! instead be a `[tag, slots…]` tuple. Value-discarding fusion recognises that
 //! too — [`FusedValue`] is the only axis the two differ on.
 
-use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{fused_block_label, serial_suffixed, threaded_block_label};
 use crate::nir::{NirLiteralPattern, NirLocal};
@@ -45,6 +44,11 @@ const HOISTED_VALUE: &str = "hoisted_value";
 /// disappear as neighbouring rewrites land.
 pub(super) struct LabeledBlockFusionRule;
 
+/// The case an exit's value builds, with its payload.
+fn exit_case(body: &Body, value: Option<Operand>) -> Option<(u32, Option<Operand>)> {
+    body.built_case(value?)
+}
+
 /// The function's locals, asked whether a payload binding slot is declared
 /// with a payload's type.
 #[derive(Clone, Copy)]
@@ -68,9 +72,8 @@ impl<'a> BindingSlots<'a> {
 
 impl Rule for LabeledBlockFusionRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let none_case = option_none_case(engine);
         let slots = BindingSlots::of(engine);
-        let Some(plan) = plan_threading(engine.body, id, slots, none_case) else {
+        let Some(plan) = plan_threading(engine.body, id, slots) else {
             return false;
         };
         perform_threading(engine, id, plan);
@@ -147,9 +150,8 @@ fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: 
     if !is_local(engine.body, scrut, temp) || body_uses(engine, temp) != 1 {
         return false;
     }
-    let none_case = option_none_case(engine);
     let slots = BindingSlots::of(engine);
-    let Some(plan) = plan_threading_of(engine.body, match_id, lb, slots, none_case) else {
+    let Some(plan) = plan_threading_of(engine.body, match_id, lb, slots) else {
         return false;
     };
     assert!(engine.redirect_expr(scrut, Operand::Expr(lb)));
@@ -293,7 +295,7 @@ fn check_fusion_preconditions_if_variant_test(
         return None;
     }
 
-    // --- LabeledBlock only breaks to L with null or VariantConstruct ---
+    // --- Every break to L builds a case ---
     let (payload_type, exits) =
         check_lb_breaks_and_get_payload(body, lb_block, &label, case_index)?;
 
@@ -408,7 +410,7 @@ fn check_fusion_preconditions_match(
     // At most one payload binding slot.
     let pattern_payload_binding = single_payload_binding(body, bindings)?;
 
-    // --- LabeledBlock only breaks to L with null or VariantConstruct ---
+    // --- Every break to L builds a case ---
     let (payload_type, exits) =
         check_lb_breaks_and_get_payload(body, lb_block, &label, case_index)?;
 
@@ -556,8 +558,7 @@ fn tag_slot_of(body: &Body, e: ExprId) -> Option<(u32, u32)> {
 /// Which of the consumer's arms an exit's value sends it to.
 #[derive(Clone, Copy)]
 enum ArmSelector<'a> {
-    /// The first arm when the exit's variant constructs this case, the second
-    /// otherwise.
+    /// The first arm when the exit builds this case, the second otherwise.
     Case(u32),
     /// The first arm whose tag is the constant in the tag slot of the exit's
     /// tuple, a `None` tag being a wildcard.
@@ -566,17 +567,14 @@ enum ArmSelector<'a> {
 
 impl ArmSelector<'_> {
     fn select(self, body: &Body, value: Option<Operand>) -> Option<usize> {
-        let e = value.and_then(Operand::as_expr);
         match self {
             Self::Case(case) => {
-                let takes = e.is_some_and(|e| {
-                    matches!(&body.exprs[e].kind,
-                    ExprKind::VariantConstruct { case_index, .. } if *case_index == case)
-                });
-                Some(usize::from(!takes))
+                let (built, _) = exit_case(body, value)?;
+                Some(usize::from(built != case))
             }
             Self::Tags(tags) => {
-                let ExprKind::TupleLiteral { elements } = &body.exprs[e?].kind else {
+                let ExprKind::TupleLiteral { elements } = &body.exprs[value?.as_expr()?].kind
+                else {
                     return None;
                 };
                 let tag = break_tag_value(body, elements)?;
@@ -883,8 +881,7 @@ fn replace_stmt(engine: &mut Engine, s: StmtId, with: Vec<StmtId>) {
 }
 
 /// [`ExitSink`] for `check_lb_breaks_and_get_payload`: every `break L:` must
-/// carry `null` or a `VariantConstruct`, and the matching case's payload type
-/// is recorded.
+/// build a case, and the matching case's payload type is recorded.
 struct BreakChecker<'a> {
     case_index: u32,
     payload_type: &'a mut Option<TypeId>,
@@ -892,24 +889,10 @@ struct BreakChecker<'a> {
 
 impl ExitSink for BreakChecker<'_> {
     fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool {
-        // A break carrying no value, or a promoted `Null` placeholder, is the
-        // empty/None break the fusion accepts.
-        let Some(e) = value.and_then(Operand::as_expr) else {
-            return value.is_none_or(|v| {
-                v.as_value()
-                    .is_some_and(|vid| matches!(body.values.kind(vid), ValueKind::Null))
-            });
-        };
-        let ExprKind::VariantConstruct {
-            case_index: ci,
-            payload,
-            ..
-        } = &body.exprs[e].kind
-        else {
+        let Some((case_index, payload)) = exit_case(body, value) else {
             return false;
         };
-        let (ci, payload) = (*ci, *payload);
-        if ci == self.case_index
+        if case_index == self.case_index
             && let Some(p) = payload
         {
             *self.payload_type = Some(body.operand_type(p));
@@ -918,8 +901,8 @@ impl ExitSink for BreakChecker<'_> {
     }
 }
 
-/// Verify that all `break L: v` in `block` have `v` as either `null` or
-/// `VariantConstruct`. Returns the payload type of the matching case, and the exits.
+/// Verify that every `break L: v` in `block` builds a case. Returns the payload
+/// type of the matching case, and the exits.
 fn check_lb_breaks_and_get_payload(
     body: &Body,
     block: BlockId,
@@ -1623,7 +1606,7 @@ fn let_stmt(
 
 fn emit_variant_payload_let(
     engine: &mut Engine,
-    vc: ExprId,
+    payload: Option<Operand>,
     f: &Fusion,
     bound: &BoundValue,
     out: &mut Vec<StmtId>,
@@ -1635,9 +1618,6 @@ fn emit_variant_payload_let(
     } = *bound
     else {
         unreachable!("variant break under a slot fusion")
-    };
-    let ExprKind::VariantConstruct { payload, .. } = &engine.body.exprs[vc].kind else {
-        unreachable!("guarded by the caller's case-index filter")
     };
     let value = payload.unwrap_or_else(|| engine.const_operand(ValueKind::Unit, payload_type));
     out.extend(bind_exit_value(
@@ -1654,21 +1634,13 @@ fn emit_variant_payload_let(
 /// statement: it still evaluates at the break.
 fn emit_untaken_payload(
     engine: &mut Engine,
-    value: Option<Operand>,
+    payload: Option<Operand>,
     span: Span,
     out: &mut Vec<StmtId>,
 ) {
-    let Some(vc) = value.and_then(Operand::as_expr) else {
-        return;
-    };
-    let ExprKind::VariantConstruct {
-        payload: Some(payload @ Operand::Expr(_)),
-        ..
-    } = engine.body.exprs[vc].kind
-    else {
-        return;
-    };
-    out.push(engine.alloc_stmt(StmtKind::Expr(payload), span));
+    if let Some(payload @ Operand::Expr(_)) = payload {
+        out.push(engine.alloc_stmt(StmtKind::Expr(payload), span));
+    }
 }
 
 /// `let $fused_slot_k = <element k>;` for each slot `arm` reads. The elements
@@ -1718,19 +1690,26 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
         .collect();
     let bound = f.value.renamed(&renames);
     let mut out = Vec::new();
-    match (&bound, value.and_then(Operand::as_expr)) {
-        (BoundValue::Variant { .. }, Some(vc)) if arm == 0 => {
-            emit_variant_payload_let(engine, vc, f, &bound, &mut out);
+    match &bound {
+        BoundValue::Variant { .. } => {
+            let (_, payload) =
+                exit_case(engine.body, value).expect("guarded by the fusion preconditions");
+            if arm == 0 {
+                emit_variant_payload_let(engine, payload, f, &bound, &mut out);
+            } else {
+                emit_untaken_payload(engine, payload, f.span, &mut out);
+            }
         }
-        (BoundValue::Variant { .. }, _) => emit_untaken_payload(engine, value, f.span, &mut out),
-        (BoundValue::Slots { .. }, Some(tuple)) => {
+        BoundValue::Slots { .. } => {
+            let tuple = value
+                .and_then(Operand::as_expr)
+                .expect("guarded by the slot preconditions");
             let ExprKind::TupleLiteral { elements } = &engine.body.exprs[tuple].kind else {
                 unreachable!("guarded by check_lb_breaks_are_tagged_tuples")
             };
             let elements = elements.clone();
             emit_slot_lets(engine, &elements, arm, f, &bound, &mut out);
         }
-        (BoundValue::Slots { .. }, None) => unreachable!("guarded by the slot preconditions"),
     }
 
     let mut tail = None;
@@ -1962,7 +1941,7 @@ fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &TempReads) {
             Walk::Exprs(elements.iter().filter_map(|o| o.as_expr()).collect())
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            Walk::Exprs(payload.iter().filter_map(|o| o.as_expr()).collect())
+            Walk::Exprs(payload.as_expr().into_iter().collect())
         }
         ExprKind::LabeledBlock { block, .. } => Walk::Block(*block),
         ExprKind::If {
@@ -2038,19 +2017,13 @@ struct ThreadPlan {
     result_type: TypeId,
     unit_result: bool,
     exits: Vec<Exit>,
-    none_case: u32,
 }
 
-fn plan_threading(
-    body: &Body,
-    id: ExprId,
-    slots: BindingSlots<'_>,
-    none_case: u32,
-) -> Option<ThreadPlan> {
+fn plan_threading(body: &Body, id: ExprId, slots: BindingSlots<'_>) -> Option<ThreadPlan> {
     let ExprKind::Match { expr: scrut, .. } = &body.exprs[id].kind else {
         return None;
     };
-    plan_threading_of(body, id, scrut.as_expr()?, slots, none_case)
+    plan_threading_of(body, id, scrut.as_expr()?, slots)
 }
 
 /// [`plan_threading`] for the match `id` with `scrut` as its scrutinee, which
@@ -2060,7 +2033,6 @@ fn plan_threading_of(
     id: ExprId,
     scrut: ExprId,
     slots: BindingSlots<'_>,
-    none_case: u32,
 ) -> Option<ThreadPlan> {
     let ExprKind::Match { arms, .. } = &body.exprs[id].kind else {
         return None;
@@ -2088,15 +2060,16 @@ fn plan_threading_of(
     let result_type = body.exprs[id].type_id;
     let unit_result = result_type == TypeTable::UNIT;
 
-    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, slots, none_case)?;
+    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, slots)?;
 
     let escapes: Vec<Escapes> = arm_infos
         .iter()
         .map(|arm| Escapes::of_operand(body, arm.body))
         .collect();
-    if exits.iter().any(|exit| {
-        escapes[selected_arm(body, exit.stmt, &arm_infos, none_case)].captured_at(&exit.scope)
-    }) {
+    if exits
+        .iter()
+        .any(|exit| escapes[selected_arm(body, exit.stmt, &arm_infos)].captured_at(&exit.scope))
+    {
         return None;
     }
     Some(ThreadPlan {
@@ -2107,7 +2080,6 @@ fn plan_threading_of(
         result_type,
         unit_result,
         exits,
-        none_case,
     })
 }
 
@@ -2145,40 +2117,10 @@ fn select_arm(arms: &[ArmInfo], case_index: u32) -> Option<usize> {
         .position(|a| a.case_index.is_none_or(|index| index == case_index))
 }
 
-/// The case an exit's `value` constructs, with its payload: a variant built in
-/// place, or a promoted `null`, which is `Option`'s `None` (`none_case`).
-fn exit_case(
-    body: &Body,
-    value: Option<Operand>,
-    none_case: u32,
-) -> Option<(u32, Option<Operand>)> {
-    match value? {
-        Operand::Value(v) => {
-            matches!(body.values.kind(v), ValueKind::Null).then_some((none_case, None))
-        }
-        Operand::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::VariantConstruct {
-                case_index,
-                payload,
-                ..
-            } => Some((*case_index, *payload)),
-            _ => None,
-        },
-    }
-}
-
-/// The case number of `Option`'s `None`, which a promoted `null` exit builds.
-fn option_none_case(engine: &Engine) -> u32 {
-    let types = engine
-        .value_graph_type_table()
-        .expect("the peephole session sets the type table");
-    types.compiler_variant_case(CompilerItem::OptionNone).3
-}
-
 /// The arm a validated exit selects.
-fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo], none_case: u32) -> usize {
+fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo]) -> usize {
     let (case_index, _) =
-        exit_case(body, exit_value(body, exit), none_case).expect("guarded by plan_threading");
+        exit_case(body, exit_value(body, exit)).expect("guarded by plan_threading");
     select_arm(arms, case_index).expect("guarded by plan_threading")
 }
 
@@ -2187,12 +2129,11 @@ fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo], none_case: u32) -> 
 struct ExitValidator<'a> {
     arms: &'a [ArmInfo],
     slots: BindingSlots<'a>,
-    none_case: u32,
 }
 
 impl ExitSink for ExitValidator<'_> {
     fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool {
-        let Some((case_index, payload)) = exit_case(body, value, self.none_case) else {
+        let Some((case_index, payload)) = exit_case(body, value) else {
             return false;
         };
         let Some(idx) = select_arm(self.arms, case_index) else {
@@ -2219,13 +2160,8 @@ fn validate_exits_in_block(
     label: &str,
     arms: &[ArmInfo],
     slots: BindingSlots<'_>,
-    none_case: u32,
 ) -> Option<Vec<Exit>> {
-    let mut sink = ExitValidator {
-        arms,
-        slots,
-        none_case,
-    };
+    let mut sink = ExitValidator { arms, slots };
     walk_exits(body, block, label, &mut sink)
 }
 
@@ -2263,8 +2199,8 @@ fn thread_exit(
 ) -> Vec<StmtId> {
     let span = engine.body.stmts[s].span;
     let mut out = Vec::new();
-    let (case_index, payload) = exit_case(engine.body, exit_value(engine.body, s), plan.none_case)
-        .expect("guarded by plan_threading");
+    let (case_index, payload) =
+        exit_case(engine.body, exit_value(engine.body, s)).expect("guarded by plan_threading");
     let arm_idx = select_arm(&plan.arms, case_index).expect("guarded by plan_threading");
     let arm = &plan.arms[arm_idx];
     let arm_body = arm.body;
@@ -2327,14 +2263,6 @@ fn thread_exit(
     out
 }
 
-/// The rule giving each slot of a `let temp = L: { …; break L: [tag, slots…]; }`,
-/// or of a `let temp = match …` whose arms build it, read only as `temp.k` a
-/// local of its own, so the aggregate never exists. A merge needs no labeled
-/// block: each arm's tail assigns the slots in its place.
-pub(super) fn build_slot_temp_sroa(type_table: &TypeTable) -> SlotTempSroaRuleWithTypes<'_> {
-    SlotTempSroaRuleWithTypes { type_table }
-}
-
 /// One scalarizable temp: what hands it its value, and the slots the body
 /// projects.
 struct SlotTempSroa {
@@ -2344,8 +2272,9 @@ struct SlotTempSroa {
     slots: Vec<BoundSlot>,
     /// The name each slot is read under, for a materializing exit's projection.
     names: IndexMap<u32, String>,
-    /// The declaring `let mut slot = <zero>` each one needs ahead of the block.
-    zeros: Vec<(u32, TypeId, Operand)>,
+    /// The declaring `let mut slot = <init>` each one needs ahead of the block:
+    /// its type's zero, or `()`, declaring it without a value, where it has none.
+    inits: Vec<(u32, TypeId, Operand)>,
     span: Span,
 }
 
@@ -2382,15 +2311,17 @@ impl SlotTempSroa {
     }
 }
 
-pub(super) struct SlotTempSroaRuleWithTypes<'t> {
-    type_table: &'t TypeTable,
-}
+/// The rule giving each slot of a `let temp = L: { …; break L: [tag, slots…]; }`,
+/// or of a `let temp = match …` whose arms build it, read only as `temp.k` a
+/// local of its own, so the aggregate never exists. A merge needs no labeled
+/// block: each arm's tail assigns the slots in its place.
+pub(super) struct SlotTempSroaRule;
 
-impl Rule for SlotTempSroaRuleWithTypes<'_> {
+impl Rule for SlotTempSroaRule {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
         let stmts = engine.body.blocks[block].stmts.clone();
         for (i, &s) in stmts.iter().enumerate() {
-            let Some(plan) = plan_slot_temp_sroa(engine, s, self.type_table) else {
+            let Some(plan) = plan_slot_temp_sroa(engine, s) else {
                 continue;
             };
             perform_slot_temp_sroa(engine, block, &stmts, i, plan);
@@ -2400,12 +2331,9 @@ impl Rule for SlotTempSroaRuleWithTypes<'_> {
     }
 }
 
-fn plan_slot_temp_sroa(
-    engine: &mut Engine,
-    let_s: StmtId,
-    type_table: &TypeTable,
-) -> Option<SlotTempSroa> {
-    let mut zeros: Vec<(u32, TypeId, Operand)> = Vec::new();
+fn plan_slot_temp_sroa(engine: &mut Engine, let_s: StmtId) -> Option<SlotTempSroa> {
+    let type_table = engine.type_table();
+    let mut inits: Vec<(u32, TypeId, Operand)> = Vec::new();
     let body = &*engine.body;
     let StmtKind::Let {
         local_index: temp_local,
@@ -2505,24 +2433,24 @@ fn plan_slot_temp_sroa(
     let option = OptionCases::of(type_table);
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
-        let zero = match pad {
-            Some(pad) => materialize_pad(engine, pad, &option, span),
-            None => engine.const_operand(ValueKind::Unit, TypeTable::UNIT),
-        };
+        let (kind, init_type) = pad.map_or((ValueKind::Unit, TypeTable::UNIT), |pad| {
+            pad.constant(&option)
+        });
+        let init = engine.const_operand(kind, init_type);
         let local_index = engine.alloc_minted_local(SROA_SLOT, type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
             local_index,
             type_id,
         });
-        zeros.push((local_index, type_id, zero));
+        inits.push((local_index, type_id, init));
     }
     Some(SlotTempSroa {
         temp_local,
         source,
         slots,
         names: reads.slot_names,
-        zeros,
+        inits,
         span,
     })
 }
@@ -2750,17 +2678,17 @@ fn perform_slot_temp_sroa(
     }
 
     let held = engine.alloc_stmt(held, span);
-    let mut kept = Vec::with_capacity(stmts.len() + plan.zeros.len() + lead.len());
+    let mut kept = Vec::with_capacity(stmts.len() + plan.inits.len() + lead.len());
     kept.extend_from_slice(&stmts[..i]);
     kept.extend_from_slice(&lead);
-    for (local_index, type_id, zero) in plan.zeros {
+    for (local_index, type_id, init) in plan.inits {
         let decl = engine.alloc_stmt(
             StmtKind::Let {
                 name: engine.local_name(local_index),
                 local_index,
                 is_mut: true,
                 type_id,
-                value: zero,
+                value: init,
                 skip_value_copy: false,
             },
             span,
@@ -2929,20 +2857,6 @@ fn scalarize_materialized_exit(
         );
         let kind = slot_assign(engine, slot, Operand::Expr(read), span);
         out.push(engine.alloc_stmt(kind, span));
-    }
-}
-
-/// The zero operand for a slot's declaring `let`, built through the engine so
-/// its per-node buffers grow with the arena.
-fn materialize_pad(engine: &mut Engine, pad: Pad, option: &OptionCases, span: Span) -> Operand {
-    match pad {
-        Pad::Int(ty) => engine.const_operand(ValueKind::Int(0, ty), ty),
-        Pad::Float(ty) => engine.const_operand(ValueKind::Float(0.0f64.to_bits(), ty), ty),
-        Pad::Bool => engine.const_operand(ValueKind::Bool(false), TypeTable::BOOL),
-        Pad::Char => engine.const_operand(ValueKind::Char('\0'), TypeTable::CHAR),
-        Pad::NoneOf(option_type) => {
-            Operand::Expr(engine.alloc_expr(option.none_of(option_type), option_type, span))
-        }
     }
 }
 

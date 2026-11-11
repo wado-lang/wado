@@ -29,7 +29,7 @@ use crate::nir::NirLocal;
 use crate::nir_arena::PatId;
 use crate::nir_value_graph::ValuePool;
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
-use crate::optimize::arena_query::{is_pure_operand, storage_root};
+use crate::optimize::arena_query::{is_loop, is_pure_operand, storage_root};
 use crate::optimize::condition_implication::{
     eliminate_at_root, resolve_panic_ids, resolve_quiet_callee_ids,
 };
@@ -239,7 +239,6 @@ pub fn apply_licm(
         }
         let param_locals: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
         let rule = LicmRule {
-            type_table,
             effects: &effects,
             params: &param_locals,
             applied: Cell::new(false),
@@ -261,9 +260,8 @@ pub fn apply_licm(
             &first_param_types,
             &call_immutability,
         );
-        let mut engine = Engine::new(body, buffers, locals, params);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(type_table);
         engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
@@ -288,7 +286,6 @@ pub fn apply_licm(
 /// Standalone-session rule whose single `apply_block` performs the whole-
 /// function LICM walk at the body root.
 pub(super) struct LicmRule<'a> {
-    type_table: &'a TypeTable,
     effects: &'a HeapEffects<'a>,
     params: &'a [u32],
     applied: Cell<bool>,
@@ -303,7 +300,12 @@ impl Rule for LicmRule<'_> {
             return false;
         }
         let root = engine.body.root();
-        let mut ctx = LicmCtx::new(self.type_table, self.effects, self.params, engine.locals());
+        let mut ctx = LicmCtx::new(
+            engine.type_table(),
+            self.effects,
+            self.params,
+            engine.locals(),
+        );
         let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
         licm_block(engine, root, &mut ctx, &mut outer_aliases)
     }
@@ -1295,9 +1297,7 @@ fn collect_block_labels(body: &Body, node: NodeRef, out: &mut IndexSet<String>) 
 
 /// The number of loops `node` opens: one for a `loop` statement.
 fn loops_opened(body: &Body, node: NodeRef) -> usize {
-    usize::from(
-        matches!(node, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. })),
-    )
+    usize::from(is_loop(body, node))
 }
 
 /// [`reload_skipped_by_jump`] under `node`, `depth` loops inside the loop body.
@@ -1915,9 +1915,7 @@ fn collect_modified_vars_in_expr(
             collect_modified_vars_in_operand(body, *functor, modified, type_table);
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                collect_modified_vars_in_operand(body, *p, modified, type_table);
-            }
+            collect_modified_vars_in_operand(body, *payload, modified, type_table);
         }
         ExprKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(body, *block, modified, type_table);
@@ -2976,12 +2974,7 @@ fn is_hoistable_value(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>
 
 fn value_is_invariant(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>) -> bool {
     match pool.kind(v) {
-        ValueKind::Int(..)
-        | ValueKind::Float(..)
-        | ValueKind::Bool(_)
-        | ValueKind::Char(_)
-        | ValueKind::Null
-        | ValueKind::Unit => true,
+        k if k.is_operand_constant() => true,
         ValueKind::Opaque(oid) => pool
             .opaque_local(*oid)
             .is_some_and(|idx| entry_locals.contains(&idx)),

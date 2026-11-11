@@ -92,9 +92,8 @@ fn forward_one(
         first_param_types,
         call_immutability,
     );
-    let mut engine = Engine::new(body, buffers, locals, params);
+    let mut engine = Engine::new(body, buffers, locals, params, type_table);
     engine.set_alias_sets(alias);
-    engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
     engine.set_ctfe_builtins(ctfe_builtins);
     if is_cm_export {

@@ -17,10 +17,7 @@ struct core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask> {  
     mut ready: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
 }
 
-struct core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask> {  // TypeId(3)
-    mut member: ref null "core:prelude//$Resource",
-    mut event: ref "core:prelude/types.wado//ReadyEvent",
-}
+struct core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask> {}  // TypeId(3)
 
 struct core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> {  // TypeId(4)
     mut repr: ref null "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
@@ -34,67 +31,49 @@ struct core:prelude/list.wado//List<core:prelude/types.wado/Subtask> {  // TypeI
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(6)
 
-enum core:prelude/types.wado//enum:CallState { Starting = 0, Started = 1, Returned = 2, CancelledBeforeStarted = 3, CancelledBeforeReturned = 4 };  // TypeId(7)
+array Array<u8> (mut u8);  // TypeId(7)
 
-array Array<u8> (mut u8);  // TypeId(8)
+array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>");  // TypeId(8)
 
-array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>");  // TypeId(9)
+array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(9)
 
-array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(10)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
 
-variant core:prelude/types.wado//ReadyEvent {  // TypeId(11)
-    Unreported,
-    Call("core:prelude/types.wado//enum:CallState"),
-    Copied("core:prelude/types.wado//enum:CopyResult"),
-}
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(11)
 
-struct core:prelude/types.wado//ReadyEvent::Call {  // TypeId(12)
-    discriminant: i32,
-    payload_0: "core:prelude/types.wado//enum:CallState",
-}
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(12)
 
-struct core:prelude/types.wado//ReadyEvent::Copied {  // TypeId(13)
-    discriminant: i32,
-    payload_0: "core:prelude/types.wado//enum:CopyResult",
-}
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(14)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(15)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(16)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(17)
+type "functype//cm_waitable_set_new.wado/run" = fn();  // TypeId(17)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(18)
+type "functype//cm_waitable_set_new.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(19)
+type "functype//core:rt/unreachable" = fn();  // TypeId(19)
 
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//cm_waitable_set_new.wado/run" = fn();  // TypeId(21)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//cm_waitable_set_new.wado/$cm_export__run" = fn();  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(23)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>");  // TypeId(23)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(26)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>");  // TypeId(27)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
-
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
-
-type "functype//cm_waitable_set_new.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//cm_waitable_set_new.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -121,17 +100,17 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     let new_used_159: i32;
     let start_160: i32;
     let $sroa_view_repr_407: ref Array<u8>;
-    let $sroa_slot_422: ref null Array<u8>;
+    let $sroa_slot_418: ref null Array<u8>;
     $sroa_t_h0_129 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: global:cm_waitable_set_new.wado::$const_obj_1, ready: global:cm_waitable_set_new.wado::$const_obj_2 }).members.used + set.ready.used) == 0;
     out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
     $sroa_view_repr_407 = global:cm_waitable_set_new.wado::$const_obj_0;
     out_17.used = 7;
     builtin::array_copy<u8>(out_17.repr, 0, $sroa_view_repr_407, 0, 7);
     if $sroa_t_h0_129 {
-        $sroa_slot_422 = array.new_fixed<u8>(116, 114, 117, 101);
+        $sroa_slot_418 = array.new_fixed<u8>(116, 114, 117, 101);
         $sroa_t_h0_129 = 4;
     } else {
-        $sroa_slot_422 = array.new_data<u8>("false");
+        $sroa_slot_418 = array.new_data<u8>("false");
         $sroa_t_h0_129 = 5;
     }
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
@@ -143,7 +122,7 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
             }
             start_160 = out_17.used;
             out_17.used = new_used_159;
-            builtin::array_copy<u8>(out_17.repr, start_160, $sroa_slot_422, 0, $sroa_t_h0_129);
+            builtin::array_copy<u8>(out_17.repr, start_160, $sroa_slot_418, 0, $sroa_t_h0_129);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
@@ -191,7 +170,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b5: block {
         l6: loop {
-            break_if b5 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b5 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -213,7 +192,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b9: block {
         l10: loop {
-            break_if b9 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b9 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -296,7 +275,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     $index_3_6 = 0;
     b21: block {
         l22: loop {
-            break_if b21 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
+            break_if b21 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
@@ -321,7 +300,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     $index_3_6 = 0;
     b25: block {
         l26: loop {
-            break_if b25 ((($index_3_6 >= $end_2_5) | (($index_3_6 + 1) >= $end_2_5)) | ((($index_3_6 + 1) + 1) >= $end_2_5)) | (((($index_3_6 + 1) + 1) + 1) >= $end_2_5);
+            break_if b25 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));

@@ -2406,18 +2406,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             decl,
             written_self,
         } = candidate;
-        if selects_one_trait
-            && let (Some(call), Some(selections)) =
-                (call, self.annotate_ctx.abstract_selections.as_mut())
-        {
-            selections.insert(
-                call,
-                AbstractSelection {
-                    trait_decl: decl,
-                    through_ref,
-                },
-            );
-        }
         let fq_trait_name = FqTraitName::declared(self.tysys.resolutions.defs(), decl);
         // The arguments the bound writes name the trait the way the impl that
         // answers it is named, so `T: Eq<String>` reaches `impl Eq<String>`.
@@ -2445,6 +2433,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
             &EffectRows::default(),
         );
+<<<<<<< HEAD
         let mut trait_args: Vec<(u32, TypeId)> = slots
             .iter()
             .filter(|(slot, _)| slot.owner == decl && *slot != &TypeParamId::trait_self(decl))
@@ -2452,11 +2441,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         trait_args.sort_unstable_by_key(|&(index, _)| index);
         let trait_args = trait_args.into_iter().map(|(_, arg)| arg).collect();
+||||||| 6a354679246
+=======
+        // Slot 0 is the trait's `Self`; its arguments follow it.
+        let bound_trait_args: Vec<TypeId> = (1..)
+            .map_while(|index| slots.get(&TypeParamId { owner: decl, index }).copied())
+            .collect();
+        if selects_one_trait && self.annotate_ctx.abstract_selections.is_some() {
+            let own_self = TypeParamId::trait_self(decl);
+            let on_own_self = slots.get(&own_self).is_some_and(|&ty| {
+                self.tysys.type_table.borrow().type_param_id(ty) == Some(own_self)
+            });
+            let trait_args = (!on_own_self).then(|| bound_trait_args.clone());
+            if let (Some(call), Some(selections)) =
+                (call, self.annotate_ctx.abstract_selections.as_mut())
+            {
+                selections.insert(
+                    call,
+                    AbstractSelection {
+                        trait_decl: decl,
+                        trait_args,
+                        through_ref,
+                    },
+                );
+            }
+        }
+>>>>>>> origin/main
         // A bare bound dispatches on the parameter itself, off no `impl` block.
         Some((
             fq_trait_name,
             MethodInfo {
+<<<<<<< HEAD
                 trait_args,
+||||||| 6a354679246
+        Some((fq_trait_name, MethodInfo::of_sig(&sig, instantiated)))
+=======
+                bound_trait_args,
+>>>>>>> origin/main
                 ..MethodInfo::of_sig(&sig, instantiated)
             },
         ))

@@ -9,7 +9,6 @@ struct core:prelude/string.wado//String {  // TypeId(0)
 
 struct hfs_consecutive_mut_calls_no_inter_sync.wado//Buf {  // TypeId(1)
     mut v: i32,
-    mut pad: i32,
 }
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
@@ -103,23 +102,23 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     let c_ret: i32;
     let out_39: ref "core:prelude/string.wado//String";
     let x_110: i64;
-    let $sroa_view_repr_203: ref Array<u8>;
-    let $hfs_v_268: i32;
-    b = struct.new "hfs_consecutive_mut_calls_no_inter_sync.wado//Buf" { v: 0, pad: 0 };
+    let $sroa_view_repr_201: ref Array<u8>;
+    let $hfs_v_264: i32;
+    b = struct.new "hfs_consecutive_mut_calls_no_inter_sync.wado//Buf" { v: 0 };
     sum = 0;
     i = 0;
-    $hfs_v_268 = 0;
+    $hfs_v_264 = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            b.v = $hfs_v_268;
-            $hfs_v_268 = "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b);
+            b.v = $hfs_v_264;
+            $hfs_v_264 = "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b);
             b_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add10"(b);
             c_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add100"(b);
-            sum = ((sum + $hfs_v_268) + b_ret) + c_ret;
-            $hfs_v_268 = b.v;
+            sum = ((sum + $hfs_v_264) + b_ret) + c_ret;
+            $hfs_v_264 = b.v;
             i = i + 1;
-            b.v = $hfs_v_268;
+            b.v = $hfs_v_264;
             continue l1;
         };
     };
@@ -128,18 +127,18 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__format_hfs_consecutive_mut_calls_no_inter_sync_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_hfs_consecutive_mut_calls_no_inter_sync_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    $hfs_v_268 = sum < 0;
+    $hfs_v_264 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_110(x_110 = builtin::i64_extend_i32_s(sum); select i64(x_110 < 0_i64, 0_i64 - x_110, x_110)));
-    $hfs_v_268 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_39, $hfs_v_268, sum);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_39.repr), $hfs_v_268, x_110, sum);
-    $sroa_view_repr_203 = global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0;
+    $hfs_v_264 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_39, $hfs_v_264, sum);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_39.repr), $hfs_v_264, x_110, sum);
+    $sroa_view_repr_201 = global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0;
     if @unlikely(local.tee sum(out_39.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_39, sum);
     }
-    $hfs_v_268 = out_39.used;
+    $hfs_v_264 = out_39.used;
     out_39.used = sum;
-    builtin::array_copy<u8>(out_39.repr, $hfs_v_268, $sroa_view_repr_203, 0, 1);
+    builtin::array_copy<u8>(out_39.repr, $hfs_v_264, $sroa_view_repr_201, 0, 1);
     sum = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_110(x_110 = builtin::i64_extend_i32_s(i); select i64(x_110 < 0_i64, 0_i64 - x_110, x_110)));
     sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_39, sum, i);
@@ -150,11 +149,11 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     sum = builtin::i32_wrap_i64(local.tee x_110("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x_110 >> 32_i64);
     sum = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee $hfs_v_268(out_39.used) + 1)), 0, out_39.repr, 0, $hfs_v_268);
-    builtin::array_set_u8($load_2, $hfs_v_268, 10);
+    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee $hfs_v_264(out_39.used) + 1)), 0, out_39.repr, 0, $hfs_v_264);
+    builtin::array_set_u8($load_2, $hfs_v_264, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $hfs_v_268 = $hfs_v_268 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i, $load_2, 0, $hfs_v_268);
+        $hfs_v_264 = $hfs_v_264 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i, $load_2, 0, $hfs_v_264);
     });
     "wasi/stream-drop-writable"(i);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
@@ -268,7 +267,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b27: block {
         l28: loop {
-            break_if b27 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b27 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -290,7 +289,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b31: block {
         l32: loop {
-            break_if b31 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b31 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));

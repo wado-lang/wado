@@ -20,7 +20,9 @@ use crate::name::{
     self, FunctionId, LocalMethodName, closure_call_method_info, closure_call_name,
     diagnostic_function_name, minted_name,
 };
-use crate::nir_arena::{Body, ExprBody, Tracked};
+use crate::nir_arena::{
+    Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, StmtId, StmtKind, StmtNode, Tracked,
+};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -968,6 +970,41 @@ impl NirLocal {
             is_mut,
         });
         index
+    }
+
+    /// Bind `value` to an immutable local minted as [`Self::push_minted`]
+    /// does, returning the `let` and a read of the local.
+    pub fn bind_minted(
+        locals: &mut Vec<Self>,
+        body: &mut Body,
+        what: &str,
+        value: Operand,
+        skip_value_copy: bool,
+        span: Span,
+    ) -> (StmtId, ExprId) {
+        let type_id = body.operand_type(value);
+        let local_index = Self::push_minted(locals, what, type_id, false);
+        let name = locals[local_index as usize].name.clone();
+        let stmt = body.stmts.push(StmtNode {
+            kind: StmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                type_id,
+                value,
+                skip_value_copy,
+            },
+            span,
+        });
+        let read = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: local_index,
+                name,
+            },
+            type_id,
+            span,
+        });
+        (stmt, read)
     }
 }
 

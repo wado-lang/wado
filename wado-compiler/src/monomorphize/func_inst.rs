@@ -2,10 +2,12 @@
 //! collecting instantiation sites, variadic expansion, and method call resolution.
 
 use std::cell::RefCell;
+use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -14,12 +16,14 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole, transpose_tuple_expr,
+    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole,
+    impl_args_in_slot_order, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
 
-use super::state::Monomorphizer;
+use super::call_instance::{named_at_trait_args, open_slots};
+use super::state::{Monomorphizer, OutrankedCall};
 use super::{Templates, Unrewritten, module_source_for_trait_impl};
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
@@ -151,6 +155,7 @@ pub fn expand_settled_packs(
         };
         let mut local_count = func.local_count;
         let mut locals = std::mem::take(&mut func.locals);
+        mono.instantiating_module = Some(func.module_source.clone());
         SettledPackExpander {
             mono,
             type_table: type_table_rc,
@@ -853,6 +858,73 @@ impl Monomorphizer {
             .or(written)
     }
 
+    /// The value blanket a generic body checked `call` against, which an impl
+    /// written for an instance outranks.
+    fn checked_blanket(&self, call: &FunctionRef) -> Option<DefId> {
+        call.template
+            .as_ref()
+            .and_then(TemplateId::block)
+            .filter(|&block| self.functions.trait_env.blanket_of_block(block).is_some())
+    }
+
+    /// Record `call` where an impl other than the blanket `checked_against`
+    /// answers it now, with the types the body gave it: the `args` it passes,
+    /// as the callee's last parameters, and what it `returns`.
+    fn note_outranked(
+        &self,
+        checked_against: Option<DefId>,
+        call: &FunctionRef,
+        args: impl Iterator<Item = TypeId>,
+        returns: TypeId,
+        span: Span,
+    ) {
+        let Some(blanket) = checked_against else {
+            return;
+        };
+        if call.template.as_ref().and_then(TemplateId::block) == Some(blanket) {
+            return;
+        }
+        self.outranked_calls.borrow_mut().push(OutrankedCall {
+            module_source: self
+                .instantiating_module
+                .clone()
+                .expect("a call is substituted inside an instance"),
+            span,
+            callee: call.clone(),
+            args: args.collect(),
+            returns,
+        });
+    }
+
+    /// Point `call` at the instance `info` names, its block's arguments
+    /// `impl_type_args` and its own `method_type_args`, both at this instance.
+    fn rename_to_instance(
+        &self,
+        call: &mut FunctionRef,
+        info: LocalMethodName,
+        impl_type_args: Vec<TypeId>,
+        method_type_args: Vec<TypeId>,
+        type_table: &mut TypeTable,
+    ) {
+        let template =
+            self.static_template_at(call.template.take(), &info, &impl_type_args, type_table);
+        let module_source = template
+            .as_ref()
+            .map_or(call.module_source.clone(), |t| t.home(type_table.defs()));
+        *call = FunctionRef {
+            module_source,
+            name: info.to_mangled_name(),
+            template,
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: mem::take(&mut call.name),
+                impl_type_args,
+                method_type_args,
+                is_blanket: false,
+            }),
+            method_info: Some(info),
+        };
+    }
+
     /// The concrete type a `T^Trait::method` receiver dispatches on: what
     /// `substitution` fills the slot the call recorded with, or what a
     /// projection receiver (`T::Item`) binds at the instance. A receiver
@@ -1243,7 +1315,12 @@ impl Monomorphizer {
             let is_blanket = info
                 .receiver()
                 .is_declared_binder_of(generic.impl_type_params.iter().map(|p| p.name.as_str()));
-            if is_blanket && !impl_type_arg_names.is_empty() {
+            if let Some(named) = named_at_trait_args(generic, &key.impl_type_args, type_table) {
+                LocalMethodName {
+                    method_type_args: method_type_arg_names,
+                    ..named
+                }
+            } else if is_blanket && !impl_type_arg_names.is_empty() {
                 info.with_substituted_struct_name(&impl_type_arg_names[0])
             } else {
                 info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
@@ -1284,6 +1361,7 @@ impl Monomorphizer {
         // table, so no slot it unrolls into is shared with another's.
         self.unrolled_local_claims.borrow_mut().clear();
         self.current_param_substitution_key = param_key_by_binder;
+        self.instantiating_module = Some(generic.module_source.clone());
 
         // Substitute types in parameters
         let params: Vec<TirParam> = generic
@@ -1577,6 +1655,7 @@ impl Monomorphizer {
             return;
         }
 
+<<<<<<< HEAD
         // What the call recorded about its instance is written in this
         // template's frame, whether or not the callee's name mentions it.
         if let TirExprKind::Call { func, .. } = &mut expr.kind
@@ -1591,6 +1670,10 @@ impl Monomorphizer {
             }
         }
 
+||||||| 6a354679246
+=======
+        let (returns, span) = (expr.type_id, expr.span);
+>>>>>>> origin/main
         match &mut expr.kind {
             TirExprKind::VariadicTupleComprehension { .. } => unreachable!("expanded above"),
             TirExprKind::Call {
@@ -1601,6 +1684,7 @@ impl Monomorphizer {
                 for type_arg in type_args.iter_mut() {
                     *type_arg = self.substitute_type(*type_arg, substitution, type_table);
                 }
+                let checked_against = self.checked_blanket(call_func);
                 // A static method call carries method_info; substitute the type
                 // args embedded in its mangled name too.
                 let is_static_method = call_func.method_info.is_some();
@@ -1610,7 +1694,6 @@ impl Monomorphizer {
                 {
                     let info = self.trait_named_at_instance(info, substitution, type_table);
                     let old_func_name = call_func.name.clone();
-                    let module_source = call_func.module_source.clone();
 
                     // The callee's own monomorph_info, substituted above, is the
                     // single source of truth for its type args. The outer
@@ -1676,12 +1759,44 @@ impl Monomorphizer {
                             info.with_type_args(&impl_names, &method_names)
                         }
                     };
+<<<<<<< HEAD
                     // A type-param receiver's name takes its method type args
                     // substituted too (R → FixedReader in a default trait method
                     // body calling Self::read::<R>(r)):
                     // with_substituted_struct_name replaces only the struct name.
                     if info.is_type_param_receiver && !sub_method_type_args.is_empty() {
                         new_info.method_type_args = sub_method_type_args
+||||||| 6a354679246
+                    // For type param receivers, also update method type args if they
+                    // contain type params that need substitution (e.g., R → FixedReader
+                    // in a default trait method body calling Self::read::<R>(r)).
+                    // The with_substituted_struct_name above only replaces the struct
+                    // name, not the method type args.
+                    if info.is_type_param_receiver
+                        && let FunctionRef {
+                            monomorph_info: Some(mi),
+                            ..
+                        } = &**call_func
+                    {
+                        let substituted_method_args: Vec<TypeId> = mi
+                            .method_type_args
+=======
+                    new_info.trait_type_args =
+                        self.trait_args_at_instance(&info, substitution, type_table);
+                    // For type param receivers, also update method type args if they
+                    // contain type params that need substitution (e.g., R → FixedReader
+                    // in a default trait method body calling Self::read::<R>(r)).
+                    // The with_substituted_struct_name above only replaces the struct
+                    // name, not the method type args.
+                    if info.is_type_param_receiver
+                        && let FunctionRef {
+                            monomorph_info: Some(mi),
+                            ..
+                        } = &**call_func
+                    {
+                        let substituted_method_args: Vec<TypeId> = mi
+                            .method_type_args
+>>>>>>> origin/main
                             .iter()
                             .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
@@ -1834,6 +1949,25 @@ impl Monomorphizer {
                             let resolved_module = template
                                 .as_ref()
                                 .map_or(resolved_module, |t| t.home(type_table.defs()));
+                            let trait_slots = template.as_ref().and_then(|template| {
+                                self.trait_bound_slots(
+                                    template,
+                                    concrete_type_id,
+                                    &new_info.trait_type_args,
+                                    type_table,
+                                )
+                            });
+                            let new_monomorph = match trait_slots {
+                                Some(impl_type_args) => Some(MonomorphInfo {
+                                    generic_name: old_func_name,
+                                    impl_type_args,
+                                    method_type_args: new_monomorph
+                                        .map(|m| m.method_type_args)
+                                        .unwrap_or_default(),
+                                    is_blanket: false,
+                                }),
+                                None => new_monomorph,
+                            };
                             **call_func = FunctionRef {
                                 module_source: resolved_module,
                                 name: new_func_name,
@@ -1843,31 +1977,16 @@ impl Monomorphizer {
                             };
                         }
                     } else if new_func_name != old_func_name {
-                        let template = self.static_template_at(
-                            call_func.template.take(),
-                            &new_info,
-                            &sub_impl_type_args,
+                        self.rename_to_instance(
+                            call_func,
+                            new_info,
+                            sub_impl_type_args,
+                            sub_method_type_args,
                             type_table,
                         );
-                        let module_source = template
-                            .as_ref()
-                            .map_or(module_source, |t| t.home(type_table.defs()));
-                        let monomorph_info = Some(MonomorphInfo {
-                            generic_name: old_func_name,
-                            impl_type_args: sub_impl_type_args,
-                            method_type_args: sub_method_type_args,
-                            is_blanket: false,
-                        });
-                        **call_func = FunctionRef {
-                            module_source,
-                            name: new_func_name,
-                            template,
-                            monomorph_info,
-                            method_info: Some(new_info),
-                        };
                     }
                 }
-                for arg in args {
+                for arg in &mut *args {
                     self.substitute_types_in_expr(
                         &mut arg.expr,
                         substitution,
@@ -1876,6 +1995,13 @@ impl Monomorphizer {
                         locals,
                     );
                 }
+                self.note_outranked(
+                    checked_against,
+                    call_func,
+                    args.iter().map(|arg| arg.expr.type_id),
+                    returns,
+                    span,
+                );
             }
             TirExprKind::Call {
                 func: method_func,
@@ -1916,11 +2042,19 @@ impl Monomorphizer {
                     }
                 });
 
+                let checked_against = self.checked_blanket(method_func);
                 self.resolve_method_call_substitution(
                     method_func,
                     receiver.type_id,
                     substitution,
                     type_table,
+                );
+                self.note_outranked(
+                    checked_against,
+                    method_func,
+                    args.iter().map(|arg| arg.expr.type_id),
+                    returns,
+                    span,
                 );
                 // A type parameter bound to a reference dispatches to its
                 // pointee's impl, which takes the receiver with the layers the
@@ -2722,6 +2856,42 @@ impl Monomorphizer {
         };
         let info = self.trait_named_at_instance(info, substitution, type_table);
 
+        // A block written for a projection (`impl<G, E> Tr<G> for G::Of<E>`)
+        // is named by the slots the call recorded, which the receiver, once
+        // substituted, no longer shows. Its receiver is left unmarked exactly
+        // where the elaborator recorded every slot.
+        if !info.is_type_param_receiver
+            && let Some(block) = method_func.template.as_ref().and_then(TemplateId::block)
+            && type_table.impl_targets_projection(block)
+        {
+            let mi = method_func
+                .monomorph_info
+                .as_ref()
+                .expect("a call on a projection's block records its slots");
+            let [impl_type_args, method_type_args] = [&mi.impl_type_args, &mi.method_type_args]
+                .map(|args| {
+                    args.iter()
+                        .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                        .collect::<Vec<_>>()
+                });
+            let names = |args: &[TypeId]| -> Vec<FqTypeName> {
+                args.iter()
+                    .map(|&tid| type_table.fq_type_name(tid))
+                    .collect()
+            };
+            let mut new_info =
+                info.with_type_args(&names(&impl_type_args), &names(&method_type_args));
+            new_info.trait_type_args = self.trait_args_at_instance(&info, substitution, type_table);
+            self.rename_to_instance(
+                method_func,
+                new_info,
+                impl_type_args,
+                method_type_args,
+                type_table,
+            );
+            return;
+        }
+
         // An impl written for the reference itself outranks the `&T` blanket.
         let (ref_impl, ref_impl_template) = info
             .is_type_param_receiver
@@ -2838,9 +3008,17 @@ impl Monomorphizer {
                 .map(|&tid| type_table.fq_type_name(tid))
                 .collect();
         }
+        new_info.trait_type_args = self.trait_args_at_instance(&info, substitution, type_table);
         let new_func_name = new_info.to_mangled_name();
 
         if new_func_name == old_func_name {
+            // A slot the trait reference sets shows in no name, only in the
+            // arguments the call recorded.
+            if let Some(mi) = &mut method_func.monomorph_info {
+                for arg in &mut mi.impl_type_args {
+                    *arg = self.substitute_type(*arg, substitution, type_table);
+                }
+            }
             return;
         }
 
@@ -2863,6 +3041,43 @@ impl Monomorphizer {
         } else {
             self.resolve_generic_dispatch(method_func, receiver_type_id, type_table, call);
         }
+    }
+
+    /// The trait arguments `info`'s call names, at this instance.
+    fn trait_args_at_instance(
+        &self,
+        info: &LocalMethodName,
+        substitution: &TypeArgMap,
+        type_table: &mut TypeTable,
+    ) -> Vec<TypeId> {
+        info.trait_type_args
+            .iter()
+            .map(|&tid| self.substitute_type(tid, substitution, type_table))
+            .collect()
+    }
+
+    /// Every slot of `template`'s block at `receiver`, where its trait reference
+    /// binds one the receiver does not show (`G` in `impl<G: Back> Shown<G> for
+    /// i32`): read off `asked`, the arguments the bound dispatched through names
+    /// at this instance. `None` where the receiver shows every slot.
+    fn trait_bound_slots(
+        &self,
+        template: &TemplateId,
+        receiver: TypeId,
+        asked: &[TypeId],
+        type_table: &mut TypeTable,
+    ) -> Option<Vec<TypeId>> {
+        let block = template.block()?;
+        let template = self.functions.templates.get(template)?.borrow();
+        let receiver_args = type_table.generic_type_args(receiver).unwrap_or_default();
+        let mut slots = open_slots(&template, &receiver_args, type_table)?;
+        type_table.bind_impl_slots_asked(block, asked, receiver, &mut slots);
+        impl_args_in_slot_order(
+            block,
+            method_param_offset(&template.impl_type_params),
+            &slots,
+            &receiver_args,
+        )
     }
 
     /// Whether `receiver` derives `info`'s trait through a `Reflect*` blanket.
@@ -2970,6 +3185,7 @@ impl Monomorphizer {
         // instead means the type has no impl of its own, so nothing else queues
         // that instance.
         let served_by_receiver_scan = receiver_has_type_args && blanket_module.is_none();
+<<<<<<< HEAD
         let monomorph_info = if let Some(impl_type_args) = trait_keyed_impl_args(
             template.as_ref(),
             receiver_type_id,
@@ -2977,6 +3193,19 @@ impl Monomorphizer {
             &self.functions.trait_env,
             type_table,
         ) {
+||||||| 6a354679246
+        let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
+=======
+        let trait_slots = template.as_ref().and_then(|template| {
+            self.trait_bound_slots(
+                template,
+                type_table.peel_refs(receiver_type_id),
+                &new_info.trait_type_args,
+                type_table,
+            )
+        });
+        let monomorph_info = if let Some(impl_type_args) = trait_slots {
+>>>>>>> origin/main
             Some(MonomorphInfo {
                 generic_name: old_func_name,
                 impl_type_args,

@@ -5803,7 +5803,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
+<<<<<<< HEAD
                 .substitution_slot(type_param_type_id);
+||||||| 6a354679246
+                .type_param_id(type_param_type_id);
+=======
+                .type_param_id(type_param_type_id);
+            method_info
+                .trait_type_args
+                .clone_from(&method_info_result.bound_trait_args);
+>>>>>>> origin/main
             if !method_type_arg_names.is_empty() {
                 method_info.method_type_args = method_type_arg_names;
             }

@@ -2397,6 +2397,7 @@ impl SolverBridge {
         through_ref: Option<bool>,
         method_name: &str,
         required_trait: Option<DefId>,
+        required_args: &[TypeId],
     ) -> Option<Ordered> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
         // A trait-qualified call named its trait, so the order runs within it:
@@ -2414,7 +2415,20 @@ impl SolverBridge {
             None => ty,
         };
         let scope = self.lowering.known_module(module)?;
-        let mut found = candidates(&self.program, &env, &ty, method, scope);
+        // The arguments only bind what the impl leaves to its trait reference,
+        // so a list the lowering cannot say is asked as none, as an unqualified
+        // call asks.
+        let asked: Vec<SolverType> = {
+            let table = tysys.type_table.borrow();
+            let binders = binder_types(ctx);
+            let place = place_binder(&binders, &table);
+            required_args
+                .iter()
+                .map(|&arg| self.lowering.type_id(&table, arg, &place))
+                .collect::<Result<_, _>>()
+                .unwrap_or_default()
+        };
+        let mut found = candidates(&self.program, &env, &ty, method, scope, &asked);
         // An out-of-scope candidate suggests importing its trait, so a trait the
         // call site cannot name is dropped and the call reads as a missing method.
         let defs = tysys.resolutions.defs();

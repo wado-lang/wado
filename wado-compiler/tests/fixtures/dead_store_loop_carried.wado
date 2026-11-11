@@ -1,0 +1,46 @@
+// A store after the last read in a loop body still reaches the next iteration's
+// read, so it is not dead; a `let` inside the loop that re-binds the local is
+// what makes it so, and only when it encloses the store's loop.
+
+fn carried(n: i32) -> i32 {
+    let mut acc = 0;
+    let mut prev = 1;
+    for let i of 0..<n {
+        acc += prev;
+        prev = builtin::black_box(i * 2);
+    }
+    return acc;
+}
+
+fn carried_inner(n: i32) -> i32 {
+    let mut acc = 0;
+    for let i of 0..<n {
+        let mut prev = i;
+        for let _j of 0..<3 {
+            acc += prev;
+            prev = builtin::black_box(prev + 10);
+        }
+    }
+    return acc;
+}
+
+fn rebound(n: i32) -> i32 {
+    let mut acc = 0;
+    for let i of 0..<n {
+        let mut x = builtin::black_box(i);
+        acc += x;
+        x = 100;
+    }
+    return acc;
+}
+
+test {
+    assert carried(4) == 1 + 0 + 2 + 4;
+    assert carried_inner(2) == (0 + 10 + 20) + (1 + 11 + 21);
+    assert rebound(4) == 6;
+}
+
+__DATA__
+{
+    "test": {}
+}

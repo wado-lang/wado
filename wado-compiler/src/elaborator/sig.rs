@@ -855,6 +855,7 @@ mod tests {
             vec![TypeTable::U8, v],
             vec![TypeTable::I32],
             vec![],
+            vec![TypeTable::I32],
         );
         ImplSig {
             def,

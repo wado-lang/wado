@@ -524,6 +524,19 @@ pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
         .ok_or_else(|| format!("GC heap size '{s}' does not fit in 64 bits"))
 }
 
+/// Parse a `--function-alignment` value: a byte count that is a power of two.
+///
+/// # Errors
+///
+/// Returns an error message if the value is not one.
+pub fn parse_function_alignment(s: &str) -> Result<u32, String> {
+    s.trim()
+        .parse::<u32>()
+        .ok()
+        .filter(|bytes| bytes.is_power_of_two())
+        .ok_or_else(|| format!("invalid function alignment '{s}'. Use bytes, a power of two"))
+}
+
 /// A knob shared by the compiling subcommands. Each one declares the subset it
 /// accepts as a `&[CompileKnobOpt]`, used for both matching and help rendering.
 #[derive(Clone, Copy)]
@@ -680,6 +693,7 @@ impl CompileKnobOpt {
 pub enum RuntimeKnobOpt {
     Collector,
     GcHeapInitial,
+    FunctionAlignment,
     ReportFuel,
     DenyProcess,
     ProcessRead,
@@ -690,6 +704,7 @@ impl RuntimeKnobOpt {
     pub const ALL: &[Self] = &[
         Self::Collector,
         Self::GcHeapInitial,
+        Self::FunctionAlignment,
         Self::ReportFuel,
         Self::DenyProcess,
         Self::ProcessRead,
@@ -710,6 +725,12 @@ impl RuntimeKnobOpt {
                 short: None,
                 value: Some("<size>"),
                 desc: "GC heap a guest starts with (default: 256m)\nBytes, or a k / m / g suffix. The copying collector splits it\ninto two semi-spaces, so a program allocates through half",
+            },
+            Self::FunctionAlignment => OptSpec {
+                long: Some("function-alignment"),
+                short: None,
+                value: Some("<bytes>"),
+                desc: "Start each compiled function at a multiple of <bytes>, a power\nof two (default: Cranelift's own, 32 on x86-64). Where an\nunchanged function lands moves a timing by a few percent, so\nan A/B of two builds holds it fixed",
             },
             Self::ReportFuel => OptSpec {
                 long: Some("report-fuel"),
@@ -745,6 +766,9 @@ impl RuntimeKnobOpt {
 pub struct RuntimeKnobs {
     pub collector: Collector,
     pub gc_heap_initial_size: u64,
+    /// `--function-alignment`: the bytes each compiled function starts at a
+    /// multiple of, or Cranelift's own where `None`.
+    pub function_alignment: Option<u32>,
     /// `--report-fuel`: meter the guest in fuel and report what it spent.
     pub report_fuel: bool,
     /// `--deny-process` / `--process-read` / `--process-trace`: whether a
@@ -758,6 +782,7 @@ impl Default for RuntimeKnobs {
         Self {
             collector: DEFAULT_COLLECTOR,
             gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
+            function_alignment: None,
             report_fuel: false,
             process: ProcessGrant::Offered {
                 read: Vec::new(),
@@ -778,6 +803,11 @@ impl RuntimeKnobs {
             RuntimeKnobOpt::GcHeapInitial => {
                 self.gc_heap_initial_size =
                     parse_gc_heap_size(&require_string(parser)?).map_err(CliExit::error)?;
+            }
+            RuntimeKnobOpt::FunctionAlignment => {
+                self.function_alignment = Some(
+                    parse_function_alignment(&require_string(parser)?).map_err(CliExit::error)?,
+                );
             }
             RuntimeKnobOpt::ReportFuel => self.report_fuel = true,
             RuntimeKnobOpt::DenyProcess => match &self.process {

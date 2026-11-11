@@ -1,0 +1,42 @@
+// A loop storing one constant over a run of indices becomes one `array_fill`,
+// whether loop versioning proved its stores in bounds or constant folding
+// already had: the list here has a known length, so no check is left to
+// version, and the loop is still a fill.
+
+#[inline(never)]
+fn reset(xs: &mut List<bool>) {
+    for let mut i = 0; i <= 999; i += 1 {
+        xs[i] = true;
+    }
+}
+
+#[inline(never)]
+fn count(xs: &List<bool>) -> i32 {
+    let mut n = 0;
+    for let x of xs {
+        if *x {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+#[inline(never)]
+fn run_once() -> i32 {
+    let mut xs = List::<bool>::filled(1000, false);
+    reset(&mut xs);
+    return count(&xs);
+}
+
+test {
+    assert run_once() == 1000;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_scope": "reset",
+    "wir_pass": {"O2": ["nir/loop_version_bce"]},
+    "wir_expect:O2": ["array_fill<bool>("],
+    "wir_not_expect:O2": ["array_set<bool>("]
+}

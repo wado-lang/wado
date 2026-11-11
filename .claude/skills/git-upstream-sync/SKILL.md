@@ -6,7 +6,8 @@ description: The only way to merge origin/main into a branch, conflicts or not. 
 # Overview
 
 Merge origin/main into the current branch. Follow every step whether or not the
-merge conflicts: a clean merge still ends with the sanity check.
+merge conflicts: a clean merge still ends with the sanity check, except as step
+4 says.
 
 ## Procedure
 
@@ -66,6 +67,10 @@ git commit -m "resolve merge conflicts"
 ### 4. Run `mise run test` for sanity check
 
 CI applies clippy and format, so a quick sanity check is sufficient.
+
+The one exception is a merge whose only conflict is `benchmark/fuel.json`.
+Regenerate it with `mise run update-baselines`, commit that as the resolution,
+and skip the tests.
 
 ## Important
 

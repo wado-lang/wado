@@ -145,6 +145,10 @@ against the impl selected in the generic body itself, and an instance with an
 impl written for it takes that impl instead. This holds for a method call and a static call
 alike.
 
+The two impls must agree on the signature the body was checked at. Where the
+written impl binds an associated type differently, its method takes or returns
+other types than the body passes or expects, and that instance is an error.
+
 #### Scope
 
 A trait contributes candidates only where its declaration is in scope: declared

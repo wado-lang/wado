@@ -934,12 +934,12 @@ fn emit_ref(
 /// until no further bindings can be propagated.
 fn propagate_at_root(
     engine: &mut Engine,
-    type_table: &TypeTable,
     oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
     param_count: usize,
     effects: &HeapEffects<'_>,
 ) -> bool {
+    let type_table = engine.type_table();
     let mut ever_changed = false;
     loop {
         let aliases = MutRefAliases::of_body(engine.body, engine.locals(), param_count, type_table);
@@ -1016,7 +1016,6 @@ fn propagate_at_root(
 /// Standalone-session rule whose single `apply_block` performs the whole-
 /// function copy-propagation fixpoint at the body root.
 pub(super) struct CopyPropRule<'a> {
-    type_table: &'a TypeTable,
     oracle: MutationOracle<'a>,
     copy_value_id: Option<FuncId>,
     /// Locals `0..param_count` are the function's parameters (external
@@ -1036,7 +1035,6 @@ impl Rule for CopyPropRule<'_> {
         }
         propagate_at_root(
             engine,
-            self.type_table,
             &self.oracle,
             self.copy_value_id,
             self.param_count,
@@ -1063,7 +1061,6 @@ pub fn propagate_copies(
             return false;
         }
         let rule = CopyPropRule {
-            type_table,
             oracle: MutationOracle::new(&param_mut),
             copy_value_id,
             param_count: func.params.len(),
@@ -1078,7 +1075,7 @@ pub fn propagate_copies(
             ..
         } = func.parts();
         let body = body.expect("checked above");
-        let mut engine = Engine::new(body, buffers, locals, params);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         let changed = engine.run(&[&rule]);
         if changed {
             compiler_trace!("opt_loop", "copy_prop changed {name}");

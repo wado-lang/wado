@@ -1,0 +1,42 @@
+// A loop whose stores the guard already keeps under the length, but whose
+// entry and step are runtime values, keeps only the floor check. Versioning
+// takes that check out of the fast loop on its own, as it does beside an
+// upper one: `start >= 0`, `step >= 0` and no wrap past the guard.
+
+#[inline(never)]
+fn mark(start: i32, step: i32) -> i32 {
+    let mut xs = List::<bool>::filled(1001, false);
+    for let mut m = start; m <= 1000; m += step {
+        xs[m] = true;
+    }
+    let mut n = 0;
+    for let x of xs {
+        if x {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+test {
+    assert mark(builtin::black_box(0), builtin::black_box(10)) == 101;
+    assert mark(builtin::black_box(990), builtin::black_box(3)) == 4;
+}
+
+#[expect_trap]
+test "a negative start still traps" {
+    mark(builtin::black_box(-1), builtin::black_box(10));
+}
+
+#[expect_trap]
+test "a step that wraps the index below zero still traps" {
+    mark(builtin::black_box(990), builtin::black_box(i32::MAX));
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_scope": "mark",
+    "wir_pass": {"O2": ["nir/loop_version_bce"]},
+    "wir_expect:O2": ["if ((start >= 0) & (step >= 0)) & (1000 <= (2147483647 - step)) {"]
+}

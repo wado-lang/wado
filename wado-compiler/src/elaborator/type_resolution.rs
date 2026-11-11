@@ -1369,6 +1369,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+<<<<<<< HEAD
     /// The arguments `owner` is reached through for `base`, one per
     /// parameter: the trait's own parameters inside its declaration, the bound
     /// naming it where one does, the bounds a projection base carries. Defaults
@@ -1390,6 +1391,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|param| Some(binders.get(&param.name)?.type_id))
                 .collect();
         }
+||||||| 6a354679246
+    /// The arguments `owner` is reached through for `base`, which the frame
+    /// files under `base_name`, one per parameter: the trait's own parameters
+    /// inside its declaration, the bound naming it where one does, the bounds
+    /// a projection base carries. Defaults fill what a bound leaves out.
+    /// `None` where nothing in the frame says.
+    pub(super) fn trait_args_for(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        owner: DefId,
+    ) -> Option<Vec<TypeId>> {
+        let in_own_declaration = self.annotate_ctx.trait_ctx.self_trait == Some(owner)
+            && self.annotate_ctx.trait_ctx.self_type == Some(base)
+            && matches!(
+                self.tysys.type_table.borrow().get(base),
+                ResolvedType::TypeParam { .. }
+            );
+        if in_own_declaration {
+            let binders = &self.annotate_ctx.trait_ctx.type_params;
+            return self
+                .tysys
+                .trait_env
+                .trait_type_params(owner)
+                .iter()
+                .map(|param| Some(binders.get(&param.name)?.type_id))
+                .collect();
+        }
+=======
+    /// The arguments `owner` is reached through for `base`, which the frame
+    /// files under `base_name`, one per parameter: the trait's own parameters
+    /// inside its declaration, the bound naming it where one does, the bounds
+    /// a projection base carries. Defaults fill what a bound leaves out.
+    /// `None` where nothing in the frame says.
+    pub(super) fn trait_args_for(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        owner: DefId,
+    ) -> Option<Vec<TypeId>> {
+>>>>>>> origin/main
         if let Some((bound, space)) = self
             .bound_closure_of(BoundsOf::Type(base))
             .unwrap_or_default()
@@ -1422,7 +1464,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
+<<<<<<< HEAD
         let written = self.bound_args_where_written(bound, space);
+||||||| 6a354679246
+        let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
+=======
+        // On its own `Self` a trait is reached at its own parameters, which the
+        // bound its frame synthesizes does not write. The registered frame holds
+        // them by identity, which a method parameter's name cannot shadow.
+        if self.tysys.type_table.borrow().type_param_id(base)
+            == Some(TypeParamId::trait_self(owner))
+        {
+            assert!(
+                bound.bound.type_args.is_empty(),
+                "a trait's own `Self` carries only the bound its frame synthesizes"
+            );
+            return self.trait_frame(owner)?.params.iter().copied().collect();
+        }
+        let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
+>>>>>>> origin/main
         self.trait_args_at(owner, base, &written)
     }
 

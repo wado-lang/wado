@@ -33,12 +33,10 @@ pub fn fuse_unsigned_range_checks(project: &mut NirPackage) -> bool {
             ..
         } = func.parts();
         if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params);
-            engine.set_value_graph_type_table(&type_table);
+            let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
             // A snapshot, as condition implication's: a fused check writes no
             // local, so no bind it holds goes stale.
             let rule = UnsignedRangeCheckRule {
-                types: &type_table,
                 binds: build_copy_bindings(&engine),
             };
             changed |= engine.run(&[&rule]);
@@ -47,8 +45,7 @@ pub fn fuse_unsigned_range_checks(project: &mut NirPackage) -> bool {
     changed
 }
 
-struct UnsignedRangeCheckRule<'t> {
-    types: &'t TypeTable,
+struct UnsignedRangeCheckRule {
     binds: Binds,
 }
 
@@ -61,7 +58,7 @@ enum Shape {
     Outside,
 }
 
-impl UnsignedRangeCheckRule<'_> {
+impl UnsignedRangeCheckRule {
     /// `a op b` with `op` turned to `<` or `<=` by swapping the sides of a `>`
     /// or `>=`. Only a comparison written in place: the fused one takes over
     /// its operands, which a `let`'s value still holds.
@@ -115,15 +112,6 @@ impl UnsignedRangeCheckRule<'_> {
             || parse_const_i64(engine, &self.binds, op).is_some_and(|c| c >= 0)
     }
 
-    /// The unsigned type of the same width as the signed `ty`.
-    fn unsigned_of(&self, ty: TypeId) -> Option<TypeId> {
-        match self.types.primitive_head(ty)? {
-            PrimitiveType::I32 => Some(TypeTable::U32),
-            PrimitiveType::I64 => Some(TypeTable::U64),
-            _ => None,
-        }
-    }
-
     /// The comparison `id` fuses into: its halves, each in either order.
     fn fused(&self, engine: &Engine, id: ExprId) -> Option<(Operand, NirBinaryOp, Operand)> {
         let ExprKind::Binary { left, op, right } = engine.body.exprs[id].kind else {
@@ -135,7 +123,7 @@ impl UnsignedRangeCheckRule<'_> {
             _ => return None,
         };
         if engine.body.exprs[id].type_id != TypeTable::BOOL
-            || !is_pure_nontrapping_operand_typed(engine.body, right, Some(self.types))
+            || !is_pure_nontrapping_operand_typed(engine.body, right, Some(engine.type_table()))
         {
             return None;
         }
@@ -148,12 +136,22 @@ impl UnsignedRangeCheckRule<'_> {
     }
 }
 
-impl Rule for UnsignedRangeCheckRule<'_> {
+/// The unsigned type of the same width as the signed `ty`.
+fn unsigned_of(types: &TypeTable, ty: TypeId) -> Option<TypeId> {
+    match types.primitive_head(ty)? {
+        PrimitiveType::I32 => Some(TypeTable::U32),
+        PrimitiveType::I64 => Some(TypeTable::U64),
+        _ => None,
+    }
+}
+
+impl Rule for UnsignedRangeCheckRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let Some((left, op, right)) = self.fused(engine, id) else {
             return false;
         };
-        let Some(unsigned) = self.unsigned_of(engine.body.operand_type(left)) else {
+        let Some(unsigned) = unsigned_of(engine.type_table(), engine.body.operand_type(left))
+        else {
             return false;
         };
         let span = engine.body.exprs[id].span;

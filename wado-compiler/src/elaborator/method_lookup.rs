@@ -19,8 +19,16 @@ use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
 };
 use crate::tir::{
+<<<<<<< HEAD
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
     StructDef, SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId,
+||||||| 6a354679246
+    EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, StructDef,
+    SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId, positional_substitution,
+=======
+    EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, StructDef,
+    SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId, impl_args_in_slot_order,
+>>>>>>> origin/main
     positional_substitution,
 };
 use crate::token::Span;
@@ -165,8 +173,14 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: Some(sig.defaults_module.clone()),
             impl_type_bindings: Vec::new(),
+<<<<<<< HEAD
             inferred_impl_slots: TypeArgMap::default(),
             trait_args: Vec::new(),
+||||||| 6a354679246
+=======
+            impl_slot_args: Vec::new(),
+            bound_trait_args: Vec::new(),
+>>>>>>> origin/main
         }
     }
 }
@@ -289,6 +303,12 @@ impl ImplParamSlots {
 
     pub(crate) fn of_name(&self, param: &str) -> Option<u32> {
         self.slots.get(param).copied()
+    }
+
+    /// How many slots the parameters take, concrete positions between them
+    /// included.
+    pub(super) fn count(&self) -> u32 {
+        self.slots.values().map(|&slot| slot + 1).max().unwrap_or(0)
     }
 
     /// The parameter filling `slot`; `None` for a position the target writes
@@ -2160,6 +2180,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(name.to_string(), BinderInScope::of(slot, type_id, decl));
     }
 
+    /// Bind each of `header`'s parameters the frame does not hold yet to what
+    /// `filled` holds at its slot. Whether any was bound.
+    fn bind_from_slots(
+        scope: &mut scope::TypeParamScope<'_, '_, H>,
+        header: &ImplHeader,
+        slots: &ImplParamSlots,
+        owner: DefId,
+        filled: &TypeArgMap,
+    ) -> bool {
+        let mut bound_any = false;
+        for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
+            if scope
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&param.name)
+            {
+                continue;
+            }
+            let Some(slot) = slots.of_name(&param.name) else {
+                continue;
+            };
+            if let Some(&bound) = filled.get(&TypeParamId { owner, index: slot }) {
+                Self::bind_type_param(scope, Some(param), &param.name, slot, bound);
+                bound_any = true;
+            }
+        }
+        bound_any
+    }
+
+    /// The frame's bindings as the slots of `owner`, the block they belong to.
+    fn frame_slots(scope: &scope::TypeParamScope<'_, '_, H>, owner: DefId) -> TypeArgMap {
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|b| {
+                let id = TypeParamId {
+                    owner,
+                    index: b.index,
+                };
+                (id, b.type_id)
+            })
+            .collect()
+    }
+
     /// The lists a `Type::method(...)` call checks and pads against. Every
     /// static spelling asks this one question, so none of them differs on the
     /// arity it checks.
@@ -2233,8 +2300,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(Ordered::Nothing) | None => &[],
         };
-        let mut found_traits: Vec<TraitMethodMatch> =
-            self.materialize_matches(named, method_name, receiver_type_args, receiver_type_id);
+        let asked = required_trait.and_then(|wanted| wanted.args.as_deref());
+        let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
+            named,
+            method_name,
+            receiver_type_args,
+            receiver_type_id,
+            asked,
+        );
         // A named block declares the method, or its trait does, so it yields a
         // match; none means the block and the lowering disagree on the name.
         assert!(
@@ -2275,13 +2348,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The matches the named impls yield for `method_name`: read off each
     /// block, or for a body the compiler supplies with no block (`None`), off
-    /// the derived template.
+    /// the derived template. `asked` is the trait arguments a qualified call
+    /// names.
     fn materialize_matches(
         &mut self,
         named: &[Option<DefId>],
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
+        asked: Option<&[TypeId]>,
     ) -> Vec<TraitMethodMatch> {
         let mut found = Vec::new();
         // An impl the order names at two levels of the chain is one block.
@@ -2296,6 +2371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_name,
                     receiver_type_args,
                     receiver_type_id,
+                    asked,
                 )),
                 None => {
                     if let Some(recv_id) = receiver_type_id {
@@ -2314,19 +2390,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Project one candidate trait impl into 0+ [`TraitMethodMatch`]es: set up
     /// the impl's type-parameter / associated-type scope, then emit a match for
     /// the impl's own `method_name`, or failing that for any matching trait
-    /// default method with a body.
+    /// default method with a body. `asked`, the trait arguments a qualified
+    /// call names, binds what only the trait reference names.
     fn collect_trait_method_matches_from_impl(
         &mut self,
         impl_ref: &ImplBlockRef,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
+        asked: Option<&[TypeId]>,
     ) -> Vec<TraitMethodMatch> {
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
         // Extract type param mappings from the impl header before mutating self.
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
+        let param_slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let impl_struct_name = self.get_type_name(&header.ty);
         let is_blanket_type_param = matches!(
             &header.ty,
@@ -2433,33 +2512,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A parameter nested in a target argument (`T` in `impl<T> Peek for
             // Listed<Option<T>>`) is what matching the target binds.
             if blanket_name.is_none() {
-                let slots = ImplParamSlots::of(&header.ty, &header.type_params);
                 let filled = scope
                     .tysys
                     .type_table
                     .borrow_mut()
                     .impl_slots(impl_ref.0, type_args);
-                for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
-                    if scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .contains_key(&param.name)
-                    {
-                        continue;
-                    }
-                    let Some(slot) = slots.of_name(&param.name) else {
-                        continue;
-                    };
-                    let id = TypeParamId {
-                        owner: impl_ref.0,
-                        index: slot,
-                    };
-                    let Some(&bound) = filled.get(&id) else {
-                        continue;
-                    };
-                    Self::bind_type_param(&mut scope, Some(param), &param.name, slot, bound);
-                }
+                Self::bind_from_slots(&mut scope, header, &param_slots, impl_ref.0, &filled);
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
             // map the pack to a TypePack so that the method body can reference it.
@@ -2508,6 +2566,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 slot,
                 bound,
             );
+            // The slots its bounds project from the receiver (`X` in
+            // `impl<T: Left<Out = X>, X> Tr for T`) bind as a head impl's do.
+            let mut slots = Self::frame_slots(&scope, impl_ref.0);
+            scope
+                .tysys
+                .type_table
+                .borrow_mut()
+                .project_impl_slots(impl_ref.0, &mut slots);
+            Self::bind_from_slots(&mut scope, header, &param_slots, impl_ref.0, &slots);
+        }
+
+        // A parameter only the trait reference names, or only a projection in
+        // the target (`G`, `E` in `impl<G: Back, E> Shown<G> for G::Of<E>`),
+        // is bound by the arguments the call names, or by a receiver that is
+        // that projection off the caller's own parameter (`G::Of<f32>`).
+        let mut impl_slot_args = Vec::new();
+        if let Some(receiver) = receiver_type_id
+            && (asked.is_some()
+                || scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_targets_projection(impl_ref.0))
+        {
+            let mut slots = Self::frame_slots(&scope, impl_ref.0);
+            scope.tysys.type_table.borrow_mut().bind_impl_slots_asked(
+                impl_ref.0,
+                asked.unwrap_or_default(),
+                receiver,
+                &mut slots,
+            );
+            if Self::bind_from_slots(&mut scope, header, &param_slots, impl_ref.0, &slots) {
+                impl_slot_args = impl_args_in_slot_order(
+                    impl_ref.0,
+                    param_slots.count(),
+                    &Self::frame_slots(&scope, impl_ref.0),
+                    receiver_type_args.unwrap_or_default(),
+                )
+                // A block the arguments leave partly unbound keys no instance,
+                // and its call reports the unmet bound at WIR build.
+                .unwrap_or_default();
+            }
         }
 
         // A parameter only the trait reference names (`T` in `impl<T> Tr<T>
@@ -2526,19 +2626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // shape (generic, ref, blanket, variadic) — which a flat positional
         // list cannot express. Method-level slots stay abstract: inference
         // solves them at the call site.
-        let impl_slots: TypeArgMap = scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .values()
-            .map(|b| {
-                let id = TypeParamId {
-                    owner: impl_ref.0,
-                    index: b.index,
-                };
-                (id, b.type_id)
-            })
-            .collect();
+        let impl_slots = Self::frame_slots(&scope, impl_ref.0);
         // The same frame under the names the block wrote, which is what a
         // parameter default naming one (`v: T = T::default()`) spells. Taken
         // before the method's own parameters join the frame: those are still
@@ -2669,8 +2757,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_block: Some(impl_ref.0),
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
+<<<<<<< HEAD
                     inferred_impl_slots: inferred_impl_slots.clone(),
                     trait_args: trait_args.clone(),
+||||||| 6a354679246
+=======
+                    impl_slot_args: impl_slot_args.clone(),
+>>>>>>> origin/main
                     ..MethodInfo::of_sig(&method_sig, instantiated)
                 },
                 impl_module_source: impl_module_source.clone(),
@@ -2721,8 +2814,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_block: Some(impl_ref.0),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
+<<<<<<< HEAD
                         inferred_impl_slots,
                         trait_args: trait_args.clone(),
+||||||| 6a354679246
+=======
+                        impl_slot_args,
+>>>>>>> origin/main
                         ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
@@ -2890,6 +2988,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             through_ref,
             method_name,
             required,
+            required_trait
+                .and_then(|r| r.args.as_deref())
+                .unwrap_or_default(),
         )
     }
 
@@ -3955,8 +4056,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+<<<<<<< HEAD
             inferred_impl_slots,
             trait_args,
+||||||| 6a354679246
+=======
+            impl_slot_args: _,
+            bound_trait_args: _,
+>>>>>>> origin/main
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

@@ -108,7 +108,6 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
             stores_lookup: &stores_lookup,
             value_copy_ids: &value_copy_ids,
             builtins: &builtins,
-            type_table,
             applied: Cell::new(false),
         };
         let FuncParts {
@@ -118,7 +117,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
             ..
         } = func.parts();
         let body = body.expect("checked above");
-        let mut engine = Engine::new(body, buffers, locals, params);
+        let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.run(&[&rule])
     })
 }
@@ -138,7 +137,6 @@ pub(super) struct SroaRule<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
     /// Which sequence builtin each callee is, for an array candidate's reads.
     builtins: &'a CtfeBuiltinMap,
-    type_table: &'a TypeTable,
     /// Whole-function rewrite: only run once per session. The engine's
     /// re-try-after-success loop and any block re-enqueue triggered by edits
     /// could otherwise call `apply_block` at the root again.
@@ -187,7 +185,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         &uses,
         rule.stores_lookup,
         rule.value_copy_ids,
-        rule.type_table,
+        engine.type_table(),
     );
 
     let mut decomposed: IndexSet<u32> = IndexSet::default();

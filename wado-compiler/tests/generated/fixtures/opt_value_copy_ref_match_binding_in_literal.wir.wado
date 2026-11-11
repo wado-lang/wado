@@ -11,9 +11,7 @@ struct opt_value_copy_ref_match_binding_in_literal.wado//Rep {  // TypeId(1)
     mut tags: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>",
 }
 
-struct opt_value_copy_ref_match_binding_in_literal.wado//Held {  // TypeId(2)
-    mut r: ref "opt_value_copy_ref_match_binding_in_literal.wado//Rep",
-}
+struct opt_value_copy_ref_match_binding_in_literal.wado//Held {}  // TypeId(2)
 
 struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(3)
     mut repr: ref "Array<core:prelude/string.wado/String>",
@@ -122,7 +120,6 @@ fn "opt_value_copy_ref_match_binding_in_literal.wado/build$dae[n]"() {
     let tagged: i32;
     let i_3: i32;
     let rep: ref "opt_value_copy_ref_match_binding_in_literal.wado//Rep";
-    let value_14: ref "opt_value_copy_ref_match_binding_in_literal.wado//Held";
     let used_15: i32;
     let v_28: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $sroa_op_value_36: ref "opt_value_copy_ref_match_binding_in_literal.wado//Op";
@@ -139,12 +136,12 @@ fn "opt_value_copy_ref_match_binding_in_literal.wado/build$dae[n]"() {
                 }
                 break $inline_make_2: struct.new "opt_value_copy_ref_match_binding_in_literal.wado//Op::Plain" { discriminant: 0, payload_0: i_3 };
             })) {
-                value_14 = struct.new "opt_value_copy_ref_match_binding_in_literal.wado//Held" { r: local.tee rep(ref.cast "opt_value_copy_ref_match_binding_in_literal.wado//Op::Repeat"($sroa_op_value_36).payload_0) };
+                rep = ref.cast "opt_value_copy_ref_match_binding_in_literal.wado//Op::Repeat"($sroa_op_value_36).payload_0;
                 if @unlikely(local.tee used_15(held.used) >= builtin::array_len(held.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_ref_match_binding_in_literal.wado/Held>::grow"(held);
                 }
-                builtin::array_set<ref "opt_value_copy_ref_match_binding_in_literal.wado//Held">(held.repr, used_15, value_14);
+                builtin::array_set<ref "opt_value_copy_ref_match_binding_in_literal.wado//Held">(held.repr, used_15, struct.new "opt_value_copy_ref_match_binding_in_literal.wado//Held" {});
                 held.used = used_15 + 1;
                 tagged = tagged + rep.tags.used;
             } else {
@@ -234,7 +231,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b12: block {
         l13: loop {
-            break_if b12 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b12 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -256,7 +253,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b16: block {
         l17: loop {
-            break_if b16 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b16 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));

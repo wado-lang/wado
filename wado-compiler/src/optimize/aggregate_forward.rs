@@ -34,7 +34,7 @@ fn is_aggregate_literal(body: &Body, expr: ExprId) -> bool {
 fn construct_payload(body: &Body, expr: ExprId, case_index: u32) -> Option<Operand> {
     let ExprKind::VariantConstruct {
         case_index: built,
-        payload: Some(payload),
+        payload,
         ..
     } = &body.exprs[expr].kind
     else {

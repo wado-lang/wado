@@ -95,12 +95,15 @@ fn "retain_anchored_local_destination.wado/fill"(p) {
 }
 
 fn "retain_anchored_local_destination.wado/$cm_export__$test_0_a_bounded_retention_leaves_the_write_back_standing"() {
-    let $load_0: ref null "core:prelude/string.wado//String";
+    let $load_1: ref null "core:prelude/string.wado//String";
     let $write_back_1: ref "core:prelude//$Cell<retain_anchored_local_destination.wado/Payload>";
+    let $write_back_before_2: ref null "core:prelude/string.wado//String";
     let $sroa_b_item_7: ref null "core:prelude/string.wado//String";
-    "retain_anchored_local_destination.wado/fill"(local.tee $write_back_1(struct.new "core:prelude//$Cell<retain_anchored_local_destination.wado/Payload>" { value: local.tee $sroa_b_item_7(ref.null none) }));
-    if ref.eq(local.tee $load_0($write_back_1.value), $sroa_b_item_7) == 0 {
-        $sroa_b_item_7 = $load_0;
+    $sroa_b_item_7 = ref.null none;
+    $write_back_before_2 = local.tee $write_back_1(struct.new "core:prelude//$Cell<retain_anchored_local_destination.wado/Payload>" { value: ref.null none }).value;
+    "retain_anchored_local_destination.wado/fill"($write_back_1);
+    if ref.eq(local.tee $load_1($write_back_1.value), $write_back_before_2) == 0 {
+        $sroa_b_item_7 = $load_1;
     }
     if @unlikely((ref.is_null($sroa_b_item_7) == 0) == 0) {
         cold_path;
@@ -154,7 +157,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b5: block {
         l6: loop {
-            break_if b5 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b5 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -178,7 +181,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b9: block {
         l10: loop {
-            break_if b9 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b9 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));

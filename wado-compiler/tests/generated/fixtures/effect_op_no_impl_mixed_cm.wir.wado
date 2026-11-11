@@ -4,7 +4,6 @@
 
 struct effect_op_no_impl_mixed_cm.wado//$Dispatch_effect_op_no_impl_mixed_cm.wado/Log {  // TypeId(0)
     mut outer: ref null "effect_op_no_impl_mixed_cm.wado//$Dispatch_effect_op_no_impl_mixed_cm.wado/Log",
-    mut op_sink: ref struct,
     mut op_enabled: ref struct,
 }
 
@@ -12,11 +11,11 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(2)
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(3)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(3)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(4)
+struct canonical//CanonicalClosure_0 {  // TypeId(4)
     env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_1",
+    func: ref "functype/$canonical_closure_fn_0",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
@@ -102,8 +101,8 @@ fn "effect_op_no_impl_mixed_cm.wado/$cm_export__run"() {
         if @likely(ref.is_null(local.tee $local_1(global:effect_op_no_impl_mixed_cm.wado::$effect_effect_op_no_impl_mixed_cm.wado/Log)) == 0) {
             global:effect_op_no_impl_mixed_cm.wado::$effect_effect_op_no_impl_mixed_cm.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             $sroa_$pattern_temp_0_0_13_18 = block -> bool {
-                let $indirect_call_3: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($local_2.op_enabled)).env, 2);
+                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_enabled)).env, 2);
             };
             global:effect_op_no_impl_mixed_cm.wado::$effect_effect_op_no_impl_mixed_cm.wado/Log = $local_1;
             break $inline__effect_dispatch__effect_op_no_impl_mixed_cm_wado_Log__enabled_4: $sroa_$pattern_temp_0_0_13_18;
@@ -171,7 +170,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b5: block {
         l6: loop {
-            break_if b5 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b5 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -193,7 +192,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b9: block {
         l10: loop {
-            break_if b9 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b9 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -268,7 +267,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
         };
     }; b22: block {
         l23: loop {
-            break_if b22 (((i >= 7) | ((i + 1) >= 7)) | (((i + 1) + 1) >= 7)) | ((((i + 1) + 1) + 1) >= 7);
+            break_if b22 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(7);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -343,7 +342,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(handle
         };
     }; b35: block {
         l36: loop {
-            break_if b35 (((i >= 12) | ((i + 1) >= 12)) | (((i + 1) + 1) >= 12)) | ((((i + 1) + 1) + 1) >= 12);
+            break_if b35 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(12);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));

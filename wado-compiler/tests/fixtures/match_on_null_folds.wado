@@ -1,0 +1,29 @@
+// A `match` on a `null` takes its `None` arm at compile time, as one on a built
+// `None` does: a promoted `null` is that case, so constant folding and
+// `known_case` each read it.
+
+struct Act {
+    at: i32,
+}
+
+#[inline(never)]
+fn pick() -> i32 {
+    let found: Option<&Act> = null;
+    let fallback = builtin::black_box(3);
+    return match found {
+        None => fallback,
+        Some(a) => a.at,
+    };
+}
+
+test {
+    assert pick() == 3;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_scope": "pick",
+    "wir_pass": {"O2": ["nir/const_fold", "nir/const_fold_post_global", "nir/peephole/known_case", "nir/store_load_forward_post_scalarize"]},
+    "wir_not_expect:O2": ["ref.is_null("]
+}

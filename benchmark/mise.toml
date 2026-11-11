@@ -10,13 +10,16 @@
 # libclang-rt-18-dev-wasm32`), and the zlib task skips the C Wasm step when
 # neither is available.
 #
-# Two env vars pick an A/B arm without a second checkout. `WADO_BENCH_FLAGS` is
-# appended to every `wado compile` / `wado run` here, so a knob is swept without
-# rebuilding the compiler; `WADO_BIN` (see `wado.sh`) names a prebuilt compiler
-# to run instead of this tree's, which is how a branch is measured against the
-# `mise run benchmark-baseline` build of `origin/main`.
+# Three env vars pick an A/B arm without a second checkout. `WADO_BENCH_FLAGS`
+# is appended to every `wado compile` / `wado run` here, so a knob is swept
+# without rebuilding the compiler; `WADO_RUN_FLAGS` to every `wado run` and
+# `wado serve` alone, for a knob only the engine reads; `WADO_BIN` (see
+# `wado.sh`) names a prebuilt compiler to run instead of this tree's, which is
+# how a branch is measured against the `mise run benchmark-baseline` build of
+# `origin/main`.
 #
 #   WADO_BENCH_FLAGS="--optimize-inline-threshold 20" mise run all
+#   WADO_RUN_FLAGS="--function-alignment 64" mise run all
 #   WADO_BIN="$(mise run benchmark-baseline)" mise run all
 #
 # Every row runs at the 256 MiB default GC heap. Each benchmark's task times
@@ -387,7 +390,7 @@ for f in $FILES; do
     name=${f##*/}
     echo "[${name%.wado}] \\$ wado run -O2 $f"
     echo "=== Wado ==="
-    wado run -O2 $WADO_BENCH_FLAGS "$f"
+    wado run -O2 $WADO_BENCH_FLAGS $WADO_RUN_FLAGS "$f"
 done
 """
 

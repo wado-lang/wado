@@ -18,6 +18,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
+use std::sync::Arc;
 
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
@@ -290,7 +291,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// selected it ([`Elaborator::abstract_selections`]).
     pub(super) fn abstract_selection(&self, call: AstId) -> Option<AbstractSelection> {
         let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
-        selections.get(&call).copied()
+        selections.get(&call).cloned()
+    }
+
+    /// `args`, written in the frame of the trait declaring the default body
+    /// under walk, at the impl that body stands on: the trait's `Self` is the
+    /// impl's target, and each of its parameters the argument the impl writes.
+    fn at_impl_frame(&self, args: &[TypeId]) -> Vec<TypeId> {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        let (Some(declaring), Some(self_type)) = (trait_ctx.self_trait, trait_ctx.self_type) else {
+            unreachable!("a default body is walked for one trait's impl on one target")
+        };
+        let mut table = self.tysys.type_table.borrow_mut();
+        let frame = Arc::clone(
+            table
+                .trait_frame(declaring)
+                .expect("a trait's frame is registered before a body reads it"),
+        );
+        let slots = table.frame_slots(&frame, self_type, &trait_ctx.self_trait_args);
+        args.iter()
+            .map(|&arg| table.substitute_type_params(arg, &slots))
+            .collect()
     }
 
     pub(super) fn resolve_method_call(
@@ -399,7 +420,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (None, Some(call)) => self.abstract_selection(call),
             _ => None,
         };
-        let declared_trait = selection.map(|s| self.tysys.required_trait(s.trait_decl));
+        let declared_trait = selection.as_ref().map(|s| {
+            let mut required = self.tysys.required_trait(s.trait_decl);
+            let args = match &s.trait_args {
+                Some(args) => self.at_impl_frame(args),
+                None => self.annotate_ctx.trait_ctx.self_trait_args.clone(),
+            };
+            if !args.is_empty() {
+                required.args = Some(args);
+            }
+            required
+        });
         // A qualified call names one trait, so the inherent-method step — a
         // different namespace — is skipped; only that trait's impls may
         // answer. The ref-impl priority step still runs (with the filter):
@@ -478,7 +509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // through a reference reads the subject, so the reference the author
         // wrote selects no `&T` impl. The subject may be a reference itself,
         // where `Self` is the `&T` an impl was written for.
-        let subject = if selection.is_some_and(|s| s.through_ref) {
+        let subject = if selection.as_ref().is_some_and(|s| s.through_ref) {
             self.tysys.type_table.borrow().ref_pointee(receiver)
         } else {
             Some(receiver)
@@ -568,32 +599,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&mut probe),
             )
         {
-            matched_impl_decl = trait_match.impl_struct_fq.head().def();
-            if trait_match.impl_struct_fq.head() != self.tysys.fq_receiver_head(base_type_id).head()
-            {
-                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-            }
-            trait_name = Some(trait_match.trait_name);
             let mut info = trait_match.method_info;
-            // A newtype inherits a trait impl its base wrote, and the impl
-            // spells `Self` as that base. Name the link the impl sits on, so
-            // the signature re-types to the receiver the way an inherited
-            // inherent method's does.
-            if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
-                && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
-                && link != base_type_id
-                && info.owner == MethodOwner::Receiver
+            // A blanket answers a parameter's call only until the instance
+            // names its type, where an impl written for that type outranks it.
+            // So a call naming the trait's arguments goes as one through a
+            // bound does: on the receiver, to the trait at those arguments,
+            // dispatched there. It keeps the blanket's block, which the body
+            // is checked against and the instance's impl must agree with.
+            if trait_match.blanket_type_param.is_some()
+                && self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .receiver_head_awaits_substitution(base_type_id)
+                && let Some(asked) = required_trait.and_then(|r| r.args.clone())
             {
-                info.owner = if self.tysys.link_behind_reference(base_type_id, link) {
-                    MethodOwner::Referent(link)
-                } else {
-                    MethodOwner::InheritedFrom(link)
+                let names: Vec<FqTypeName> = {
+                    let tt = self.tysys.type_table.borrow();
+                    asked.iter().map(|&arg| tt.fq_type_name(arg)).collect()
                 };
+                trait_name = Some(trait_match.trait_name.with_args(names));
+                info.impl_slot_args = Vec::new();
+                info.bound_trait_args = asked;
+                method_info = Some(info);
+            } else {
+                matched_impl_decl = trait_match.impl_struct_fq.head().def();
+                if trait_match.impl_struct_fq.head()
+                    != self.tysys.fq_receiver_head(base_type_id).head()
+                {
+                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
+                }
+                trait_name = Some(trait_match.trait_name);
+                // A newtype inherits a trait impl its base wrote, and the impl
+                // spells `Self` as that base. Name the link the impl sits on, so
+                // the signature re-types to the receiver the way an inherited
+                // inherent method's does.
+                if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
+                    && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
+                    && link != base_type_id
+                    && info.owner == MethodOwner::Receiver
+                {
+                    info.owner = if self.tysys.link_behind_reference(base_type_id, link) {
+                        MethodOwner::Referent(link)
+                    } else {
+                        MethodOwner::InheritedFrom(link)
+                    };
+                }
+                method_info = Some(info);
+                trait_impl_module_source = Some(trait_match.impl_module_source);
+                blanket_type_param = trait_match.blanket_type_param;
+                blanket_binder = trait_match.blanket_binder;
             }
-            method_info = Some(info);
-            trait_impl_module_source = Some(trait_match.impl_module_source);
-            blanket_type_param = trait_match.blanket_type_param;
-            blanket_binder = trait_match.blanket_binder;
         }
 
         // `T: Ord` gives `T` its `cmp`, and `type Seq: SerializeSeq` gives
@@ -650,8 +706,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
+<<<<<<< HEAD
             inferred_impl_slots,
             trait_args,
+||||||| 6a354679246
+=======
+            impl_slot_args,
+            bound_trait_args,
+>>>>>>> origin/main
         } = if let Some(info) = method_info {
             info
         } else {
@@ -758,6 +820,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .substitute_newtype_in_type(*ty, base_type_id, newtype_id);
             }
+        }
+        // A slot projected off the caller's parameter (`P::Out`) reads as the
+        // caller's bounds say it is.
+        for ty in expected_param_types
+            .iter_mut()
+            .chain(std::iter::once(&mut return_type))
+        {
+            *ty = self.answer_frame_projections(*ty);
         }
 
         let impl_args = settled_impl_args(&impl_type_bindings);
@@ -1078,6 +1148,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mangled_method_name =
             MethodName::format_local(&receiver_struct_name, trait_name.as_ref(), method_name);
+        // The block's slots name the instance, so the receiver, a projection
+        // included, waits on no substitution to pick one.
+        let keyed_by_slots = !impl_slot_args.is_empty();
 
         let keyed_trait_args = self.trait_args_keying(dispatched_impl_block, &trait_args);
         // Build monomorph_info for method calls on generic types or with method type args
@@ -1106,6 +1179,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     is_blanket: false,
                 })
             }
+        } else if keyed_by_slots {
+            Some(MonomorphInfo {
+                generic_name: MethodName::format_local(&base_struct_name, None, method_name),
+                impl_type_args: impl_slot_args,
+                method_type_args: method_type_args.clone(),
+                is_blanket: false,
+            })
         } else if let Some(ref blanket_param) = blanket_type_param {
             // For blanket impls, the template function uses the type param name (e.g., "I").
             // The call site uses the concrete receiver (e.g., "ListIter<i32>").
@@ -1169,12 +1249,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
-        self.tysys
-            .type_table
-            .borrow()
-            .mark_receiver(&mut method_info, base_type_id);
+        if !keyed_by_slots {
+            self.tysys
+                .type_table
+                .borrow()
+                .mark_receiver(&mut method_info, base_type_id);
+        }
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
+<<<<<<< HEAD
         // A receiver that is a type parameter is dispatched again at each
         // instance, and the trait arguments key the block found there where
         // its parameters come from them.
@@ -1182,6 +1265,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&arg| self.apply_infer_holes(arg))
             .collect();
+||||||| 6a354679246
+=======
+        method_info.trait_type_args = bound_trait_args;
+>>>>>>> origin/main
 
         let template = match (dispatched_method_def, dispatched_impl_block) {
             (Some(def), Some(block)) => Some(TemplateId::in_block(def, block)),

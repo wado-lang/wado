@@ -68,8 +68,8 @@ on how many. See [WEP: Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.m
 at `-O0`. Every other level runs the whole list.
 
 1. DCE.
-2. Before the loop: `cold_outline`, `match_to_switch` over global initializers,
-   and the early arithmetic promotion.
+2. Before the loop: `dead_field`, `cold_outline`, `match_to_switch` over
+   global initializers, and the early arithmetic promotion.
 3. The fixed-point loop: `container_sroa`, `peephole`, `value_copy_demote`,
    `sroa_param`, `sroa_variant_return`, `inline`, `peephole`,
    `let_block_flatten`, `sroa`, `copy_prop`, `dae`, `drve`, `const_folding`,
@@ -193,6 +193,11 @@ Loops and fields:
 Whole program and backend:
 
 - `dce` — remove unreachable functions, types, globals, literals, and imports.
+- `dead_field` — remove a struct field no code reads from its type, and from
+  every literal, assignment and pattern that names it. A copy of the struct
+  reads no field by itself. A body-less call that may read everything its
+  arguments reach, such as `builtin::black_box`, reads every field of what
+  they reach. A removed field's initializer still runs when it has an effect.
 - `promote_fields` / `freeze_pure_arith` — fold pure field reads and arithmetic
   into the value graph.
 - `match_to_bitset` — test membership in a set of literals and ranges with one
@@ -327,8 +332,10 @@ Architectural work is tracked in
 - [ ] Global value numbering across effectful nodes.
 - [ ] Instruction combining over identical operands (`x - x`, `x & x`, `~(~x)`).
 - [ ] Dead store elimination at NIR, and of field and array stores.
-- [ ] Removing a struct field that no code in the program reads. Committed in
-  [WEP: Library-Defined Derivation](./wep-2026-06-13-reflect-derivation.md#roadmap).
+- [ ] Deleting a loop that computes nothing a later read sees, such as one that
+  only drains an iterator: `for let b of s.bytes() {}` still walks every byte.
+- [ ] Removing a struct field only written through a reference to it: a field
+  passed as `&mut s.f` counts as read, even to a callee that only writes it.
 - [ ] Strength reduction, reassociation, jump threading, and CFG simplification.
 - [ ] Cross-block copy propagation.
 - [ ] Sinking a pure definition into the branch that uses it.

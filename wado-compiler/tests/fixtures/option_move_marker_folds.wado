@@ -1,0 +1,48 @@
+// A move out of an `Option` place leaves its `None` there, and constant folding
+// reads that `None` as the move marker: `unwrap`'s drop of its emptied `self`
+// folds away, and with it the call that kept `unwrap` out of a loop. Nothing
+// reads the marker then, so its store goes too, leaving `o` bound once: the
+// `Some` it was built with decides `unwrap`'s match, with no test and no panic
+// path, and no drop of `a`, `b` or `c` asks whether it was moved.
+
+global mut DROPS: i32 = 0;
+
+#[inline(never)]
+fn count_drop() {
+    DROPS += 1;
+}
+
+affine struct Res {
+    h: i32,
+}
+
+impl Drop for Res {
+    fn drop(self) {
+        count_drop();
+    }
+}
+
+#[inline(never)]
+fn total(n: i32) -> i32 {
+    let mut sum = 0;
+    for let i of 0..<n {
+        let h = builtin::black_box(i);
+        let o: Option<[Res, Res, Res]> = Some([Res { h }, Res { h }, Res { h }]);
+        let [a, b, c] = o.unwrap();
+        sum += a.h + b.h + c.h;
+    }
+    return sum;
+}
+
+test {
+    assert total(4) == 18;
+    assert DROPS == 12;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_scope": "total",
+    "wir_pass": {"O2": ["nir/const_fold", "nir/inline", "nir/peephole/elide", "nir/peephole/known_case"]},
+    "wir_not_expect:O2": ["::unwrap\"(", "called Option::unwrap() on a None value", "ref.is_null("]
+}

@@ -1,0 +1,32 @@
+// Regression test: a branch decided at compile time takes the markers of the
+// arm it keeps with it. The marker said how rarely that arm is entered, and once
+// the `match` is gone the arm's code is the function's own path. Left in place,
+// `cold_path()` marked all of `pick` cold from there on.
+
+use { println, Stdout } from "core:cli";
+
+global MODE: i32 = 1;
+
+#[inline(never)]
+fn pick(x: i32) -> i32 {
+    let k = match MODE {
+        0 => 5,
+        _ => {
+            builtin::cold_path();
+            9
+        },
+    };
+    return x + k;
+}
+
+export fn run() with Stdout {
+    println(`${pick(builtin::black_box(1))}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n",
+    "wir_scope": "pick",
+    "wir_pass": {"O2": ["nir/const_fold", "nir/const_fold_post_global", "nir/store_load_forward_post_scalarize"]},
+    "wir_not_expect:O2": ["cold_path;"]
+}

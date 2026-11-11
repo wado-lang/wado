@@ -335,6 +335,22 @@ fn run_gc_heap_initial_rejects_overflow() {
 }
 
 #[test]
+fn run_function_alignment_defaults_to_cranelifts() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(opts.runtime.function_alignment, None);
+}
+
+#[test]
+fn run_function_alignment_takes_a_power_of_two() {
+    let parser = Parser::from_args(&["--function-alignment", "64", "input.wado"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(opts.runtime.function_alignment, Some(64));
+    let parser = Parser::from_args(&["--function-alignment", "48", "input.wado"]);
+    assert_err(wado_cli::run::parse_args(parser), "a power of two");
+}
+
+#[test]
 fn run_no_dir() {
     let parser = Parser::from_args(&["--no-dir", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
