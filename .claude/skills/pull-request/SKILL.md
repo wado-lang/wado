@@ -122,3 +122,7 @@ Keep checking mergeability (`mergeable_state`). If conflicting, resolve it with
 the `git-upstream-sync` skill.
 
 Answer a review, human or bot, with the `code-review-response` skill.
+
+Turn the PR back into a draft while you answer a review, so nobody merges a
+branch that is still changing. Run `gh pr ready --undo <N>` before the first
+fix, and `gh pr ready <N>` once the fixes are pushed and the reply is posted.
