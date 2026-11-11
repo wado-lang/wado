@@ -818,14 +818,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .substitute_newtype_in_type(*ty, base_type_id, newtype_id);
             }
         }
-        // A slot projected off the caller's parameter (`P::Out`) reads as the
-        // caller's bounds say it is.
-        for ty in expected_param_types
-            .iter_mut()
-            .chain(std::iter::once(&mut return_type))
-        {
-            *ty = self.answer_frame_projections(*ty);
-        }
+        self.answer_frame_projections_in(&mut expected_param_types);
+        return_type = self.answer_frame_projections(return_type);
 
         let impl_args = settled_impl_args(&impl_type_bindings);
         // Only the method's own slots: the lookup instantiated the declaring
@@ -1535,9 +1529,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `param_types` read at the receiver's arguments `declaring_args` and the
     /// method's `method_type_args`, where either list writes any, and as the
-    /// newtype `inheriting` reads its base's static.
+    /// newtype `inheriting` reads its base's static, and as the caller's
+    /// bounds answer a projection off its own parameter.
     fn instantiate_static_params(
-        &self,
+        &mut self,
         sig: Option<&MethodSig>,
         declaring_args: &[TypeId],
         method_type_args: &[TypeId],
@@ -1579,6 +1574,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(newtype) = inheriting {
             self.retype_through_newtype_chain(newtype, param_types);
         }
+        self.answer_frame_projections_in(param_types);
     }
 
     /// `written`, the arguments `target` spells, as the block declaring `sig`
@@ -2782,15 +2778,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|sig| sig.value_param_types())
             .unwrap_or_default();
         let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
-        let mut tt = self.tysys.type_table.borrow_mut();
-        template
-            .iter()
-            .map(|&pt| {
-                SubstitutionContext::new()
-                    .bind(&[blanket_slot], &[receiver_type_id])
-                    .substitute(pt, &mut tt)
-            })
-            .collect()
+        let mut param_types: Vec<TypeId> = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            template
+                .iter()
+                .map(|&pt| {
+                    SubstitutionContext::new()
+                        .bind(&[blanket_slot], &[receiver_type_id])
+                        .substitute(pt, &mut tt)
+                })
+                .collect()
+        };
+        self.answer_frame_projections_in(&mut param_types);
+        param_types
     }
 
     /// Whether `args` arguments fill a callee declaring `params` parameters,
@@ -2834,7 +2834,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let scope = self.scope_type_param_ids();
         for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
-            let expected = self.answer_frame_projections(expected);
             if !self
                 .tysys
                 .type_table

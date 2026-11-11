@@ -2413,6 +2413,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &mut param_types,
                         );
                     }
+                    self.answer_frame_projections_in(&mut param_types);
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,

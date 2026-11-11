@@ -1,32 +1,31 @@
 // A static call's parameter typed by a projection over the caller's parameter
-// is answered by the caller's bound before the argument is checked:
-// `S::Item` is `i32` here.
-trait Holder with () {
-    type Item;
-}
+// is answered by the caller's bound before its argument is typed: `S::Item`
+// is `i64` here, so the literal `5` is an `i64`, in every spelling.
+use lib from "./sub/static_call_arg_over_caller_projection_lib.wado";
+use { Holder, W } from "./sub/static_call_arg_over_caller_projection_lib.wado";
 
 struct Box {
     v: i32,
 }
 
 impl Holder for Box {
-    type Item = i32;
+    type Item = i64;
 }
 
-struct W<S: Holder> {
-    s: S,
-}
-
-impl<S: Holder> W<S> {
-    fn take(_item: S::Item) -> i32 {
-        return 5;
-    }
-}
-
-fn f<S: Holder<Item = i32>>(_s: S) -> i32 {
+fn turbofish<S: Holder<Item = i64>>(_s: S) -> i32 {
     return W::<S>::take(5);
 }
 
+fn inferred<S: Holder<Item = i64>>(s: S) -> i32 {
+    return W::take_with(s, 5);
+}
+
+fn namespaced<S: Holder<Item = i64>>(s: S) -> i32 {
+    return lib::W::take_with(s, 5);
+}
+
 test "the caller's bound answers the parameter type" {
-    assert f(Box { v: 1 }) == 5;
+    assert turbofish(Box { v: 1 }) == 5;
+    assert inferred(Box { v: 1 }) == 6;
+    assert namespaced(Box { v: 1 }) == 6;
 }

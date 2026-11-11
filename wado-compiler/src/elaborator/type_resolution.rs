@@ -1518,6 +1518,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// A callee's parameter types as this frame's bounds answer them, before an
+    /// argument is typed against one: `S::Item` under `S: Holder<Item = i64>`
+    /// types the literal `5` as `i64`.
+    pub(super) fn answer_frame_projections_in(&mut self, tys: &mut [TypeId]) {
+        for ty in tys {
+            *ty = self.answer_frame_projections(*ty);
+        }
+    }
+
     /// `ty` with each projection over this frame's parameters answered by its
     /// bounds: a use site handing `C` to `T` in `&T::Value` reads `C::Value`.
     pub(super) fn answer_frame_projections(&mut self, ty: TypeId) -> TypeId {
