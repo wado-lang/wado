@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794422656862,
+  "lastUpdate": 1794434053443,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76661,6 +76661,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/233e615d428f3fdaa9ab9972ba8bda6940371578"
         },
         "date": 1794422655701,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 429302,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7790268d14969ce45f13897664a72572bed1753c",
+          "message": "Merge pull request #2608 from wado-lang/ccr-fcd51a39-e9jsrm\n\nfix(elaborator): an impl parameter only the trait's arguments name works in every call form",
+          "timestamp": "2026-11-12T06:34:04+09:00",
+          "tree_id": "cf36d0a133e0a87150077f7f60b95cbfcf9e9dff",
+          "url": "https://github.com/wado-lang/wado/commit/7790268d14969ce45f13897664a72572bed1753c"
+        },
+        "date": 1794434052143,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
