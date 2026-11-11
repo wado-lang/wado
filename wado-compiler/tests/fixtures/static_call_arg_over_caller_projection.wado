@@ -1,0 +1,32 @@
+// A static call's parameter typed by a projection over the caller's parameter
+// is answered by the caller's bound before the argument is checked:
+// `S::Item` is `i32` here.
+trait Holder with () {
+    type Item;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+}
+
+struct W<S: Holder> {
+    s: S,
+}
+
+impl<S: Holder> W<S> {
+    fn take(_item: S::Item) -> i32 {
+        return 5;
+    }
+}
+
+fn f<S: Holder<Item = i32>>(_s: S) -> i32 {
+    return W::<S>::take(5);
+}
+
+test "the caller's bound answers the parameter type" {
+    assert f(Box { v: 1 }) == 5;
+}

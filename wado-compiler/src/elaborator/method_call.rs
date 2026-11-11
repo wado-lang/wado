@@ -2834,6 +2834,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let scope = self.scope_type_param_ids();
         for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
+            let expected = self.answer_frame_projections(expected);
             if !self
                 .tysys
                 .type_table
