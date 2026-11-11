@@ -681,6 +681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owners: &[GenericParam],
         names: &[ParamRef],
         args: &[TypeId],
+        self_binding: Option<SelfBinding>,
         span: Span,
     ) {
         assert_eq!(names.len(), args.len(), "every slot is named");
@@ -692,20 +693,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             for bound in &param.bounds {
-                let equalities: Vec<&AssocTypeBound> = bound
-                    .assoc_types
-                    .iter()
-                    .filter(|assoc| !assoc.ty.mentions("Self"))
-                    .collect();
-                if equalities.is_empty() {
+                if bound.assoc_types.is_empty() {
                     continue;
                 }
                 let written = (!bound.type_args.is_empty())
                     .then(|| self.with_type_params_bound(&space, |e| e.written_bound_args(bound)));
-                for assoc in equalities {
+                for assoc in &bound.assoc_types {
                     let target = match assoc_target_slot(assoc, names, &self.tysys.resolutions) {
                         Some(slot) => args[slot],
-                        None => self.with_type_params_bound(&space, |e| e.resolve_type(&assoc.ty)),
+                        None => match self.with_type_params_bound(&space, |e| {
+                            e.equality_requirement(&assoc.ty, self_binding)
+                        }) {
+                            Some(required) => required,
+                            None => continue,
+                        },
                     };
                     self.infer_holes.links.push(ProjectionLink {
                         owner,

@@ -1933,14 +1933,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ) else {
                     return TypeTable::ERROR;
                 };
+                let receiver_type = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
                 // Before the record, which then holds what stands in for a slot
                 // deferred.
                 self.defer_or_report_uninferred_static_method_type_args(
                     callee,
-                    &mut static_args.impl_args,
-                    &mut static_args.method_args,
+                    &mut static_args,
                     &args,
                     expected_type,
+                    Some(receiver_type),
                     call.span,
                 );
                 // Record `[impl_args, method_args]` — the same order
@@ -1953,12 +1959,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&static_args.method_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                let receiver_type = self.static_receiver_written(
-                    rewritten_receiver,
-                    receiver_site,
-                    prefix,
-                    call.span,
-                );
                 self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
                 let StaticTypeArgs {
                     impl_args: impl_type_args_inferred,
@@ -2260,10 +2260,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.defer_or_report_uninferred_static_method_type_args(
                         callee,
-                        &mut static_args.impl_args,
-                        &mut static_args.method_args,
+                        &mut static_args,
                         &args,
                         expected_type,
+                        ns_receiver_type,
                         call.span,
                     );
                     self.enforce_static_method_bounds(&static_args, ns_receiver_type, call.span);
@@ -3678,14 +3678,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::defer_or_report_uninferred_fn_type_args`] does a free
     /// function's. A slot it reports is the error type from then on: left as
     /// the callee's own binder, it reads as whatever the caller declares under
-    /// that name.
+    /// that name. `receiver` is what `Self` means at the call.
     fn defer_or_report_uninferred_static_method_type_args(
         &mut self,
         callee: StaticCallee,
-        impl_type_args: &mut Vec<TypeId>,
-        method_type_args: &mut Vec<TypeId>,
+        type_args: &mut StaticTypeArgs,
         args: &[TypeId],
         expected_type: Option<TypeId>,
+        receiver: Option<TypeId>,
         span: token::Span,
     ) {
         let StaticCallee {
@@ -3693,6 +3693,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name: suffix,
             receiver_key,
         } = callee;
+        let StaticTypeArgs {
+            impl_args: impl_type_args,
+            method_args: method_type_args,
+            ..
+        } = type_args;
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
@@ -3800,7 +3805,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             })
             .collect();
-        self.link_deferred_assoc_equalities(&owners, &names, &args, span);
+        let self_binding = self.static_self_binding(receiver);
+        self.link_deferred_assoc_equalities(&owners, &names, &args, self_binding, span);
     }
 
     /// The slots `sig` declares, its block's and then its own, as a bound's
@@ -4061,7 +4067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         *type_args = new_args;
         let owners: Vec<ast::GenericParam> = space.iter().map(|&p| p.clone()).collect();
         let names = slot_names(callee.def(), &owners);
-        self.link_deferred_assoc_equalities(&owners, &names, type_args, span);
+        self.link_deferred_assoc_equalities(&owners, &names, type_args, None, span);
     }
 
     /// Shared core of bound-driven inference, used by both the free-function and
@@ -4519,10 +4525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: token::Span,
     ) {
-        let self_binding = receiver.map(|receiver| SelfBinding {
-            type_id: self.tysys.get_base_type(receiver),
-            declaring_trait: None,
-        });
+        let self_binding = self.static_self_binding(receiver);
         self.enforce_type_arg_bounds(
             &type_args.params,
             &type_args.method_args,
@@ -4530,6 +4533,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_binding,
             span,
         );
+    }
+
+    fn static_self_binding(&self, receiver: Option<TypeId>) -> Option<SelfBinding> {
+        receiver.map(|receiver| SelfBinding {
+            type_id: self.tysys.get_base_type(receiver),
+            declaring_trait: None,
+        })
     }
 
     /// Whether `struct_name::method_name` is declared, but by no block reaching

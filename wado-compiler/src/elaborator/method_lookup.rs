@@ -2088,7 +2088,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // enclosing generic happens to be named cannot be confused with it.
         self.record_instantiation(inst, &inferred);
         self.blame_unsolved(inst, &inferred);
-        self.link_deferred_assoc_equalities(&method_type_params, &names, &inferred, span);
+        self.link_deferred_assoc_equalities(
+            &method_type_params,
+            &names,
+            &inferred,
+            Some(self_binding),
+            span,
+        );
         inferred
     }
 

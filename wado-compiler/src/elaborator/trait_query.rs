@@ -3201,15 +3201,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         for constraint in &bound.assoc_types {
-            // `Self` in a constraint means the receiver the call names — how
-            // `collect<C: FromIterator<Elem = Self::Item>>` says what `C`
-            // collects. With no receiver to bind it there is nothing to check
-            // here; `enforce_impl_assoc_type_bounds` owns those.
-            let mentions_self = constraint.ty.mentions("Self");
-            let binding = self_binding.filter(|_| mentions_self);
-            if binding.is_none() && mentions_self {
-                continue;
-            }
             let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
                 continue;
             };
@@ -3232,15 +3223,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            let expected = match binding {
-                // Every `Self::Assoc` it spells must project before the
-                // resolver runs, which reports what it cannot resolve: a bound
-                // nothing answers goes unchecked rather than reported.
-                Some(binding) if self.projects_off_self(&constraint.ty, binding) => {
-                    self.with_self_binding(binding, |e| e.resolve_type(&constraint.ty))
-                }
-                Some(_) => continue,
-                None => self.resolve_type(&constraint.ty),
+            let Some(expected) = self.equality_requirement(&constraint.ty, self_binding) else {
+                continue;
             };
             // A reference is not its referent: `from_iter` pushes the items it
             // is handed.
@@ -3260,6 +3244,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// The type an associated-type equality `ty` requires, in this frame.
+    /// `Self` means the receiver the call names — how
+    /// `collect<C: FromIterator<Elem = Self::Item>>` says what `C` collects —
+    /// and a projection off the caller's parameter reads as the caller's bounds
+    /// say it is. `None` where `ty` spells a `Self` with no receiver to bind
+    /// it, which `enforce_impl_assoc_type_bounds` owns, or a `Self::Assoc` the
+    /// receiver does not project: the resolver reports what it cannot resolve,
+    /// so a bound nothing answers goes unchecked rather than reported.
+    pub(super) fn equality_requirement(
+        &mut self,
+        ty: &ast::Type,
+        self_binding: Option<SelfBinding>,
+    ) -> Option<TypeId> {
+        let required = if ty.mentions("Self") {
+            let binding = self_binding?;
+            if !self.projects_off_self(ty, binding) {
+                return None;
+            }
+            self.with_self_binding(binding, |e| e.resolve_type(ty))
+        } else {
+            self.resolve_type(ty)
+        };
+        Some(self.answer_frame_projections(required))
     }
 
     /// Whether two types differ exactly when their ids do: each names only
@@ -3321,14 +3330,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the constraint qualifies the lookup, and the unqualified rule answers
     /// where it declared the name but a supertrait's impl registered it.
     fn project_off_self(&mut self, binding: SelfBinding, assoc: &str) -> Option<TypeId> {
-        let mut table = self.tysys.type_table.borrow_mut();
-        if let Some(trait_) = binding.declaring_trait
-            && let Some(resolved) =
-                table.resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, None, assoc)
         {
-            return Some(resolved);
+            let mut table = self.tysys.type_table.borrow_mut();
+            if let Some(trait_) = binding.declaring_trait
+                && let Some(resolved) = table.resolve_trait_assoc_type_of_instance(
+                    binding.type_id,
+                    &trait_,
+                    None,
+                    assoc,
+                )
+            {
+                return Some(resolved);
+            }
+            if let Some(resolved) = table.resolve_assoc_type_of_instance(binding.type_id, assoc) {
+                return Some(resolved);
+            }
         }
-        table.resolve_assoc_type_of_instance(binding.type_id, assoc)
+        // A receiver that is this frame's parameter projects through its bounds.
+        self.make_frame_projection(binding.type_id, assoc)
     }
 
     /// Whether `type_arg` satisfies `trait_name`, registering its associated

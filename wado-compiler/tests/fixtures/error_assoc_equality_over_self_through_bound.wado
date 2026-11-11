@@ -1,0 +1,44 @@
+// A bound's equality over `Self` holds through a generic receiver: under
+// `K: Maker<Item = i32>`, `Self::Item` is `i32`, and `Box::Item` is `bool`.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = bool;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+trait Maker with () {
+    type Item;
+    fn made<T, H: Holder<Item = Self::Item>>(&self, t: T) -> H;
+}
+
+struct M {
+    v: i32,
+}
+
+impl Maker for M {
+    type Item = i32;
+    fn made<T, H: Holder<Item = i32>>(&self, _t: T) -> H {
+        return H::empty();
+    }
+}
+
+fn eager<K: Maker<Item = i32>>(k: &K) -> Box {
+    return k.made(1);
+}
+
+test "the annotation's projection disagrees with Self::Item" {
+    let _b = eager(&M { v: 0 });
+}
+
+__DATA__
+{"compile_error": ":36:12: analysis error: type 'Box' does not satisfy the associated type 'Holder::Item = i32': it is 'bool'"}
