@@ -53,3 +53,21 @@ test "an associated function takes the parameter from its argument" {
     assert Made::make(7 as i64).shown == "i64 7";
     assert Made::make("s").shown == "string s";
 }
+
+struct Wrap<W> {
+    v: W,
+    shown: String,
+}
+
+impl<W: Default, U: Show> Make<U> for Wrap<W> {
+    fn make(u: U) -> Wrap<W> {
+        return Wrap { v: W::default(), shown: u.show() };
+    }
+}
+
+test "a turbofish on the receiver keys the parameter its argument settles" {
+    let w = Wrap::<i32>::make(5 as i64);
+    assert w.v == 0;
+    assert w.shown == "i64 5";
+    assert Wrap::<bool>::make("s").shown == "string s";
+}

@@ -821,6 +821,26 @@ impl Program {
         reaching
     }
 
+    /// What a bound on `subject` writing `written` says for each of `trait_`'s
+    /// parameters, defaults included: `T: Eq` says `Eq<T>`. `None` where
+    /// neither spells one.
+    pub(super) fn args_at(
+        &self,
+        trait_: TraitDeclId,
+        written: &[SolverType],
+        subject: &SolverType,
+    ) -> Vec<Option<SolverType>> {
+        let written = self.per_param(Some(trait_), written);
+        let params = self
+            .traits
+            .get(&trait_)
+            .map_or(0, |def| def.arg_defaults.len())
+            .max(written.len());
+        (0..params)
+            .map(|i| self.arg_at(trait_, written.get(i).and_then(Option::as_ref), i, subject))
+            .collect()
+    }
+
     /// `clause`, written in `sub`'s space, at `args`, what a bound on `subject`
     /// writes for each of `sub`'s parameters. `None` where the clause names a
     /// parameter that bound neither writes nor defaults: the edge then answers

@@ -1409,6 +1409,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(self.impl_instance_args(block, positions, &inferred))
     }
 
+    /// The key of the instance a static call reaches in `block` at the
+    /// receiver's `positions`, its bounds enforced there, and the slots only
+    /// the trait arguments name settled by the call's `args`
+    /// ([`Self::slot_instance_args`]).
+    pub(super) fn static_instance_args(
+        &mut self,
+        block: Option<DefId>,
+        positions: &[TypeId],
+        params: &mut [TypeId],
+        args: &[TypeId],
+        return_type: &mut TypeId,
+        span: Span,
+    ) -> Vec<TypeId> {
+        self.enforce_static_block_bounds(block, positions, span);
+        block
+            .and_then(|block| {
+                self.slot_instance_args(
+                    block,
+                    positions.to_vec(),
+                    params,
+                    args,
+                    return_type,
+                    span,
+                )
+            })
+            .unwrap_or_else(|| positions.to_vec())
+    }
+
     /// What `block`'s instance is keyed by: the receiver's `positions`, then
     /// the trait arguments that key it, read with `inferred` standing for the
     /// slots only they name.

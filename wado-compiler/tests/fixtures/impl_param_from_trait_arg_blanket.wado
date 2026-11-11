@@ -1,7 +1,8 @@
 // A value blanket binds its receiver parameter from the receiver and a second
 // parameter from the trait reference: `true.put(7 as i64)` reaches
 // `impl<S: Mark, T: Show> Put<T> for S` at `S = bool, T = i64`, and each bound
-// asks about its own parameter.
+// asks about its own parameter. A call through a bound, from a generic body,
+// and from a default method keys the same instance.
 trait Show with () {
     fn show(&self) -> String;
 }
@@ -30,6 +31,10 @@ impl Mark for bool {
 
 trait Put<T> with () {
     fn put(&self, v: T) -> String;
+
+    fn twice(&self, v: T) -> String {
+        return `${self.put(v)}+${self.put(v)}`;
+    }
 }
 
 impl<S: Mark, T: Show> Put<T> for S {
@@ -38,7 +43,18 @@ impl<S: Mark, T: Show> Put<T> for S {
     }
 }
 
+fn through<A: Put<T>, T>(a: &A, t: T) -> String {
+    return a.put(t);
+}
+
+fn marked<S: Mark, T: Show>(s: &S, t: T) -> String {
+    return s.put(t);
+}
+
 test {
     assert true.put(7 as i64) == "1 i64 7";
     assert true.put("s") == "1 string s";
+    assert through(&true, 9 as i64) == "1 i64 9";
+    assert marked(&true, "m") == "1 string m";
+    assert true.twice(3 as i64) == "1 i64 3+1 i64 3";
 }

@@ -642,6 +642,21 @@ mod tests {
         assert_eq!(targets(&d), vec![decl(POINT)]);
     }
 
+    /// `impl<R> Eq<R> for Point` answers `Eq<Point>` too, so nothing is
+    /// derived beside it.
+    #[test]
+    fn an_impl_leaving_the_argument_open_blocks_derivation() {
+        let mut p = prelude();
+        p.traits.entry(EQ).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        p.push_impl(ImplDef {
+            trait_args: vec![SolverType::Param(0)],
+            params: vec![ParamDef::default()],
+            ..concrete(EQ, decl(POINT))
+        });
+        let d = derived(p, &[declaration(POINT, 0, vec![decl(I32)])]);
+        assert_eq!(d, vec![]);
+    }
+
     const ORD: TraitDeclId = TraitDeclId(1);
 
     fn wrapper_of(arg: SolverType) -> SolverType {

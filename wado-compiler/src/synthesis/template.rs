@@ -998,7 +998,7 @@ pub(crate) fn blanket_dispatch_for(
         method_name.to_string(),
     )
     .to_mangled_name();
-    let impl_type_args = blanket_impl_args(trait_env, blanket, type_id, tt)?;
+    let impl_type_args = blanket_impl_args(trait_env, blanket, type_id, &[], tt)?;
     let template = trait_env
         .method_template(blanket.def, method_name)
         .unwrap_or_else(|| panic!("a blanket of `{trait_name}` provides no `{method_name}`"));
@@ -1014,24 +1014,16 @@ pub(crate) fn blanket_dispatch_for(
     ))
 }
 
-/// The type args a value blanket's instance keys on for `receiver`, each projection
-/// recorded on it; `None` where one does not resolve, so the blanket does not apply.
+/// The type args a value blanket's instance keys on for `receiver`, reached at
+/// `trait_args`, each projection recorded on it; `None` where one does not
+/// resolve, so the blanket does not apply. The trait arguments settle the
+/// slots only they name (`T` in `impl<S, T> Put<T> for S`); a call that has
+/// none to give leaves such a blanket unresolved.
 pub(crate) fn blanket_impl_args(
     trait_env: &TraitEnv,
     blanket: &BlanketImpl,
     receiver: TypeId,
-    tt: &mut TypeTable,
-) -> Option<Vec<TypeId>> {
-    blanket_impl_args_with(trait_env, blanket, receiver, TypeArgMap::default(), tt)
-}
-
-/// [`blanket_impl_args`] at a call that also settled `known`: the slots only
-/// the blanket's trait arguments name.
-pub(crate) fn blanket_impl_args_with(
-    trait_env: &TraitEnv,
-    blanket: &BlanketImpl,
-    receiver: TypeId,
-    known: TypeArgMap,
+    trait_args: &[TypeId],
     tt: &mut TypeTable,
 ) -> Option<Vec<TypeId>> {
     // A blanket's slots are its parameters in declaration order, so a
@@ -1041,7 +1033,13 @@ pub(crate) fn blanket_impl_args_with(
         owner: blanket.def,
         index,
     };
-    let mut slots = known;
+    let written = tt.impl_key_trait_args(blanket.def).to_vec();
+    let mut slots = TypeArgMap::default();
+    for (&declared, &concrete) in written.iter().zip(trait_args) {
+        if let Some(bound) = tt.bind_type_params(&[declared], &[concrete]) {
+            slots.extend(bound);
+        }
+    }
     slots.extend(
         sources
             .iter()

@@ -51,7 +51,7 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
-use crate::synthesis::template::blanket_impl_args_with;
+use crate::synthesis::template::blanket_impl_args;
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -1115,20 +1115,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Keyed by its parameters in order, where a trait argument settles
             // one the receiver does not.
             let impl_type_args = match dispatched_impl_block {
-                Some(block) if !inferred_impl_slots.is_empty() => {
-                    let settled = inferred_impl_slots
-                        .iter()
-                        .map(|(&slot, &var)| (slot, self.apply_infer_holes(var)))
-                        .collect();
+                Some(block) if !keyed_trait_args.is_empty() => {
                     let trait_env = Arc::clone(&self.tysys.trait_env);
                     let blanket = trait_env
                         .blanket_of_block(block)
                         .expect("a match through a blanket names its block");
-                    blanket_impl_args_with(
+                    blanket_impl_args(
                         &trait_env,
                         blanket,
                         base_type_id,
-                        settled,
+                        &keyed_trait_args,
                         &mut self.tysys.type_table.borrow_mut(),
                     )
                     .expect("the receiver and the trait arguments settle every blanket slot")
@@ -1179,15 +1175,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .mark_receiver(&mut method_info, base_type_id);
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
-        // A bound on a parameter answers from no block, so its instance decides
-        // the template, and the bound's trait arguments key it where that
-        // block's parameters come from them.
-        if dispatched_impl_block.is_none() {
-            method_info.trait_type_args = trait_args
-                .iter()
-                .map(|&arg| self.apply_infer_holes(arg))
-                .collect();
-        }
+        // A receiver that is a type parameter is dispatched again at each
+        // instance, and the trait arguments key the block found there where
+        // its parameters come from them.
+        method_info.trait_type_args = trait_args
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
 
         let template = match (dispatched_method_def, dispatched_impl_block) {
             (Some(def), Some(block)) => Some(TemplateId::in_block(def, block)),
@@ -2483,13 +2477,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 declaration.map(|def| self.tysys.signatures.declared_template(def)),
             ),
         };
-        self.enforce_static_block_bounds(block, &struct_type_args, static_call.span);
-        let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
+        let mut return_type = return_type;
+        let instance_args = self.static_instance_args(
+            block,
+            &struct_type_args,
+            &mut param_types,
+            &args,
+            &mut return_type,
+            static_call.span,
+        );
+        let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             Some(MonomorphInfo {
                 generic_name,
-                impl_type_args: struct_type_args.clone(),
+                impl_type_args: instance_args,
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
@@ -3611,22 +3613,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let receiver_fq = concrete_head.unwrap_or(actual_struct_fq);
         let block = self.tysys.block_of(&method_ref);
-        self.enforce_static_block_bounds(block, impl_type_args, span);
-
         let mut return_type = resolution.return_type;
         let mut callee_params = resolution.params;
-        let instance_args = block
-            .and_then(|block| {
-                self.slot_instance_args(
-                    block,
-                    impl_type_args.to_vec(),
-                    &mut callee_params.param_types,
-                    args,
-                    &mut return_type,
-                    span,
-                )
-            })
-            .unwrap_or_else(|| impl_type_args.to_vec());
+        let instance_args = self.static_instance_args(
+            block,
+            impl_type_args,
+            &mut callee_params.param_types,
+            args,
+            &mut return_type,
+            span,
+        );
         self.retype_static_to_newtype(
             &self.impl_target(struct_name),
             block,

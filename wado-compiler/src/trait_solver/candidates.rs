@@ -99,7 +99,7 @@ pub fn instance_candidates(
     let levels = chain(program, ty);
     // A binder the call leaves open fits any type, so it determines nothing.
     let asked: Vec<Option<SolverType>> = program
-        .per_param(Some(trait_), args)
+        .args_at(trait_, args, ty)
         .into_iter()
         .map(|arg| arg.filter(|arg| !matches!(arg, SolverType::Param(_) | SolverType::Pack(_))))
         .collect();

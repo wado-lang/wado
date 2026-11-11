@@ -225,17 +225,20 @@ fn blanket_template_name(
 }
 
 /// The key of the instance a call through a bound reaches at `receiver`, where
-/// `template`'s block keys its instances by its trait arguments too
-/// ([`TypeTable::impl_key_trait_args`]): the receiver's arguments, then the
-/// bound's trait arguments `info` carries.
+/// `template`'s block, written for a declared target, keys its instances by
+/// its trait arguments too ([`TypeTable::impl_key_trait_args`]): the
+/// receiver's arguments, then the bound's trait arguments `info` carries. A
+/// value blanket keys its own ([`blanket_impl_args`]).
 fn trait_keyed_impl_args(
     template: Option<&TemplateId>,
     receiver: TypeId,
     info: &LocalMethodName,
+    trait_env: &TraitEnv,
     type_table: &TypeTable,
 ) -> Option<Vec<TypeId>> {
     let block = template.and_then(TemplateId::block)?;
-    if type_table.impl_key_trait_args(block).is_empty() {
+    if type_table.impl_key_trait_args(block).is_empty() || trait_env.blanket_of_block(block).is_some()
+    {
         return None;
     }
     let mut args = type_table
@@ -1769,6 +1772,7 @@ impl Monomorphizer {
                                 template.as_ref(),
                                 concrete_type_id,
                                 &info,
+                                &self.functions.trait_env,
                                 type_table,
                             )
                             .unwrap_or_else(|| {
@@ -1796,6 +1800,7 @@ impl Monomorphizer {
                                     &self.functions.trait_env,
                                     b,
                                     concrete_type_id,
+                                    &new_info.trait_type_args,
                                     type_table,
                                 )
                             });
@@ -2964,9 +2969,13 @@ impl Monomorphizer {
         // instead means the type has no impl of its own, so nothing else queues
         // that instance.
         let served_by_receiver_scan = receiver_has_type_args && blanket_module.is_none();
-        let monomorph_info = if let Some(impl_type_args) =
-            trait_keyed_impl_args(template.as_ref(), receiver_type_id, &new_info, type_table)
-        {
+        let monomorph_info = if let Some(impl_type_args) = trait_keyed_impl_args(
+            template.as_ref(),
+            receiver_type_id,
+            &new_info,
+            &self.functions.trait_env,
+            type_table,
+        ) {
             Some(MonomorphInfo {
                 generic_name: old_func_name,
                 impl_type_args,
@@ -2985,7 +2994,13 @@ impl Monomorphizer {
             // arity. A plain one-arg blanket (`impl<I: Iterator> IntoIterator
             // for I`) projects nothing and stays keyed by the call-site args.
             let projected = blanket.as_ref().and_then(|b| {
-                blanket_impl_args(&self.functions.trait_env, b, recv_inner, type_table)
+                blanket_impl_args(
+                    &self.functions.trait_env,
+                    b,
+                    recv_inner,
+                    &new_info.trait_type_args,
+                    type_table,
+                )
             });
             let has_projected = projected.as_ref().is_some_and(|args| args.len() > 1);
             let blanket_name = if let Some(b) = blanket.as_ref() {

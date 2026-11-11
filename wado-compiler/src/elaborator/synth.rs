@@ -842,49 +842,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         key: &ArgClass,
         access: KeyedAccess,
     ) -> Option<TypeId> {
-        let settled = |this: &mut Self, default: TypeId| match this
-            .literal_index_key(container, key, access)
-        {
-            LiteralKey::Settled(key) => key,
-            LiteralKey::Unsettled | LiteralKey::Ambiguous(_) => default,
-        };
-        match key {
-            ArgClass::Exact(t) => Some(*t),
-            ArgClass::IntLit => Some(settled(self, TypeTable::I32)),
-            ArgClass::FloatLit => Some(settled(self, TypeTable::F64)),
-            ArgClass::StrLit => Some(self.get_string_struct_type()),
-            ArgClass::BytesLit => Some(self.tysys.type_table.borrow_mut().make_byte_list()),
-            ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => None,
-        }
+        self.index_key(container, key, access).0
     }
 
-    /// Report a numeric literal key that several impls serving `access` admit
-    /// at different keys, one leaving it open among them: the literal selects
-    /// none (WEP 2026-07-31). Whether it reported.
-    pub(super) fn report_ambiguous_literal_key(
+    /// [`Self::index_key_type`] for the subscript at `span`, reporting a
+    /// numeric literal key that several impls serving `access` admit at
+    /// different keys, one leaving it open among them: the literal selects
+    /// none (WEP 2026-07-31).
+    pub(super) fn index_key_type_at(
         &mut self,
         container: TypeId,
         key: &ArgClass,
         access: KeyedAccess,
         span: Span,
-    ) -> bool {
-        if !key.leaves_width_open() {
-            return false;
+    ) -> Option<TypeId> {
+        let (key_type, ambiguous) = self.index_key(container, key, access);
+        if let Some(candidates) = ambiguous {
+            let _ = self.emit(TypeError::AmbiguousTraitArguments {
+                method: candidates[0].method.to_string(),
+                traits: candidates
+                    .iter()
+                    .map(|c| c.trait_name.to_display())
+                    .collect(),
+                arguments: self.tysys.describe_arg_classes(std::slice::from_ref(key)),
+                span,
+            });
         }
-        let LiteralKey::Ambiguous(candidates) = self.literal_index_key(container, key, access)
-        else {
-            return false;
+        key_type
+    }
+
+    /// The key type, and the impls a numeric literal key cannot choose among.
+    fn index_key(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+    ) -> (Option<TypeId>, Option<Vec<KeyCandidate>>) {
+        let default = match key {
+            ArgClass::Exact(t) => return (Some(*t), None),
+            ArgClass::IntLit => TypeTable::I32,
+            ArgClass::FloatLit => TypeTable::F64,
+            ArgClass::StrLit => return (Some(self.get_string_struct_type()), None),
+            ArgClass::BytesLit => {
+                return (Some(self.tysys.type_table.borrow_mut().make_byte_list()), None);
+            }
+            ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => return (None, None),
         };
-        let _ = self.emit(TypeError::AmbiguousTraitArguments {
-            method: candidates[0].method.to_string(),
-            traits: candidates
-                .iter()
-                .map(|c| c.trait_name.to_display())
-                .collect(),
-            arguments: self.tysys.describe_arg_classes(std::slice::from_ref(key)),
-            span,
-        });
-        true
+        match self.literal_index_key(container, key, access) {
+            LiteralKey::Settled(key) => (Some(key), None),
+            LiteralKey::Unsettled => (Some(default), None),
+            LiteralKey::Ambiguous(candidates) => (Some(default), Some(candidates)),
+        }
     }
 
     fn literal_index_key(

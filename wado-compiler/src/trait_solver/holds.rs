@@ -309,7 +309,7 @@ impl Query<'_> {
                 if subject.is_some() && program.not_inherited.contains(&id) {
                     return None;
                 }
-                let asked = program.per_param(Some(trait_), args);
+                let asked = program.args_at(trait_, args, ty);
                 let answer = self.impl_answers(id, def, ty, &asked)?;
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
@@ -942,7 +942,7 @@ fn answers_args_by(
     subject: Option<&SolverType>,
     written: &[SolverType],
     args: &[SolverType],
-    fits: impl Fn(&SolverType, &SolverType) -> bool,
+    mut fits: impl FnMut(&SolverType, &SolverType) -> bool,
 ) -> bool {
     let written = program.per_param(def.trait_, written);
     let args = program.per_param(def.trait_, args);
@@ -996,9 +996,28 @@ fn all_fit(asked: &[SolverType], offered: &[SolverType]) -> bool {
 }
 
 /// Whether the impl answers its trait at the declared defaults, as a derived
-/// impl does: `impl Eq for D`, not `impl Eq<String> for D`.
+/// impl does: `impl Eq for D` and `impl<R> Eq<R> for D`, whose `R` the default
+/// binds, but not `impl Eq<String> for D`.
 pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
-    answers_args(program, def, &def.target, None, &def.trait_args, &[])
+    // The target's own parameters stand for themselves; only one the trait
+    // arguments alone name is free to take the default.
+    let mut bindings: Vec<Option<Binding>> = (0..def.params.len())
+        .map(|index| {
+            let index = u32::try_from(index).expect("fewer than 2^32 impl parameters");
+            def.target
+                .mentions_param(index)
+                .then_some(Binding::One(SolverType::Param(index)))
+        })
+        .collect();
+    answers_args_by(
+        program,
+        def,
+        &def.target,
+        None,
+        &def.trait_args,
+        &[],
+        |default, written| match_target(written, default, &mut bindings, &mut Vec::new()),
+    )
 }
 
 /// Match an impl target against a type, binding the target's parameters by
@@ -1131,6 +1150,27 @@ mod tests {
             holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[decl(I32)]),
             None
         );
+    }
+
+    /// An impl leaving the argument open answers a bare bound at the default
+    /// it binds: `impl<R: Alpha> Eq<R> for Point` answers `Point: Eq` where
+    /// `Point: Alpha`.
+    #[test]
+    fn an_open_impl_answers_a_bare_bound_at_the_default() {
+        let open = |target| ImplDef {
+            trait_args: vec![SolverType::Param(0)],
+            params: vec![ParamDef::bounded(vec![ALPHA])],
+            ..concrete(EQ, target)
+        };
+        let mut p = Builder::default()
+            .concrete(ALPHA, decl(POINT))
+            .impl_(open(decl(POINT)))
+            .impl_(open(decl(I32)))
+            .build();
+        p.traits.entry(EQ).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        let ask = |ty| holds_with_args(&p, &Env::default(), &decl(ty), EQ, &[]);
+        assert_eq!(ask(POINT), Some(Holds::default()));
+        assert_eq!(ask(I32), None);
     }
 
     /// The bound writing the argument answers it, and only it.
