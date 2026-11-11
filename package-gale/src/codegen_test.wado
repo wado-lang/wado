@@ -733,7 +733,7 @@ test "longest leaves an ambiguity the simulator decides by default to the tourna
     assert gen_source(OPAQUE_PREFIX_G4).contains("atn_predict_once(&ATN_SIM, ");
     let longest = gen_with(OPAQUE_PREFIX_G4, &LONGEST);
     assert !longest.source.contains("ATN_SIM");
-    assert longest.source.contains("let _sd_p_0 = scan_a__alt_0(");
+    assert longest.source.contains("scan_a__alt_0(_sd_tokens, _sd_pos)");
     assert !longest.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
 }
 
