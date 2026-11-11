@@ -2057,34 +2057,13 @@ fn lower_scan_repeat(
     gate_caller_follow: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
-    // Greedy Optional + Group inner with nested optional sub-elements
-    // is the shape-based-lookahead case: lower produces
-    // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
-    // instead of running a regular scan-repeat (which would fire on
-    // the first leading token without disambiguating the inner
-    // optional shape, breaking `( (a)? b )?`-style cases).
-    if !rep.non_greedy {
-        if let Optional = rep.kind {
-            if let Group(g) = peel_labels(&rep.element) {
-                if optional_takes_shapes(peel_labels(&rep.element), element_has_field(&rep.element), ctx) {
-                    let plain = lower_scan_plain_repeat(
-                        rep,
-                        ctx,
-                        outer_follow,
-                        follow_arg,
-                        gate_caller_follow,
-                        outer_suffix,
-                    );
-                    return lower_scan_optional_lookahead_group(
-                        &g.alternatives[0],
-                        ctx,
-                        plain,
-                        gate_caller_follow,
-                        outer_suffix,
-                    );
-                }
-            }
-        }
+    let inner = peel_labels(&rep.element);
+    if !rep.non_greedy
+        && rep.kind matches { Optional }
+        && optional_takes_shapes(inner, element_has_field(&rep.element), ctx)
+        && let Group(g) = inner {
+        let plain = lower_scan_plain_repeat(rep, ctx, outer_follow, follow_arg, gate_caller_follow, outer_suffix);
+        return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx, plain, gate_caller_follow, outer_suffix);
     }
     return ScanElement::Repeat(lower_scan_plain_repeat(
         rep,
@@ -3548,9 +3527,9 @@ fn lower_repeat_op<S: AsStrSlice>(
     //   inner is fully scannable; emit runs the scan helper as a
     //   commit gate.
     //
-    // `pick_optional_specialised` resolves which one fires using the
-    // `body_has_field` storability flag to match emit's storable /
-    // transparent dispatch order. When none fires the strategy is
+    // `pick_optional_specialised` resolves which one fires, and
+    // `optional_takes_shapes` holds the scan to the same choice. When none
+    // fires the strategy is
     // `Plain` and the tail-position caller-FOLLOW repair is threaded
     // at runtime via `gate_caller_follow`.
     let body_has_field = element_has_field(&rep.element);
