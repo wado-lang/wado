@@ -609,25 +609,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             trait_name = Some(trait_match.trait_name);
             let mut info = trait_match.method_info;
-            // A newtype inherits a trait impl its base wrote, and the impl
-            // spells `Self` as that base. Name the link the impl sits on, so
-            // the signature re-types to the receiver the way an inherited
-            // inherent method's does.
-            if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
-                && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
-                && link != base_type_id
-                && info.owner == MethodOwner::Receiver
+            // A blanket answers a parameter's call only until the instance
+            // names its type, where an impl written for that type outranks it.
+            // So a call naming the trait's arguments goes as one through a
+            // bound does: to the trait at those arguments, dispatched there.
+            if trait_match.blanket_type_param.is_some()
+                && self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .receiver_head_awaits_substitution(base_type_id)
+                && let Some(asked) = required_trait.and_then(|r| r.args.clone())
             {
-                info.owner = if self.tysys.link_behind_reference(base_type_id, link) {
-                    MethodOwner::Referent(link)
-                } else {
-                    MethodOwner::InheritedFrom(link)
+                let names: Vec<FqTypeName> = {
+                    let tt = self.tysys.type_table.borrow();
+                    asked.iter().map(|&arg| tt.fq_type_name(arg)).collect()
                 };
+                trait_name = trait_name.map(|name| name.head_only().with_args(names));
+                info.impl_block = None;
+                info.impl_slot_args = Vec::new();
+                info.bound_trait_args = asked;
+                blanket_type_param = None;
+                blanket_binder = None;
+                method_info = Some(info);
+                trait_impl_module_source = None;
+            } else {
+                // A newtype inherits a trait impl its base wrote, and the impl
+                // spells `Self` as that base. Name the link the impl sits on, so
+                // the signature re-types to the receiver the way an inherited
+                // inherent method's does.
+                if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
+                    && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
+                    && link != base_type_id
+                    && info.owner == MethodOwner::Receiver
+                {
+                    info.owner = if self.tysys.link_behind_reference(base_type_id, link) {
+                        MethodOwner::Referent(link)
+                    } else {
+                        MethodOwner::InheritedFrom(link)
+                    };
+                }
+                method_info = Some(info);
+                trait_impl_module_source = Some(trait_match.impl_module_source);
+                blanket_type_param = trait_match.blanket_type_param;
+                blanket_binder = trait_match.blanket_binder;
             }
-            method_info = Some(info);
-            trait_impl_module_source = Some(trait_match.impl_module_source);
-            blanket_type_param = trait_match.blanket_type_param;
-            blanket_binder = trait_match.blanket_binder;
         }
 
         // `T: Ord` gives `T` its `cmp`, and `type Seq: SerializeSeq` gives

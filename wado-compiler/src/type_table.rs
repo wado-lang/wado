@@ -6730,33 +6730,20 @@ impl TypeTable {
             let Some(&source) = slots.get(&projection.source) else {
                 continue;
             };
-            let concrete = match self.resolve_trait_assoc_type_of_instance(
+            let Some(concrete) = self.resolve_trait_assoc_type_of_instance(
                 source,
                 &projection.trait_,
                 None,
                 &projection.assoc,
-            ) {
-                Some(concrete) => {
-                    self.register_assoc_type_resolution(
-                        source,
-                        TraitRef::bare(projection.trait_),
-                        projection.assoc.clone(),
-                        concrete,
-                    );
-                    concrete
-                }
-                // A caller's own parameter names no member yet: the slot holds
-                // the projection off it, which its instance reads.
-                None if self.type_param_id(source).is_some() => self.make_assoc_type_projection(
-                    source,
-                    projection.trait_,
-                    None,
-                    projection.assoc,
-                    Vec::new(),
-                    Vec::new(),
-                ),
-                None => continue,
+            ) else {
+                continue;
             };
+            self.register_assoc_type_resolution(
+                source,
+                TraitRef::bare(projection.trait_),
+                projection.assoc,
+                concrete,
+            );
             if let Some(bound) = self.bind_projection_pattern(projection.pattern, concrete) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
