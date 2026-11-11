@@ -737,6 +737,28 @@ test "longest leaves an ambiguity the simulator decides by default to the tourna
     assert !longest.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
 }
 
+// `c` takes what `f` takes with a `U A` at least, and wins the tie by its
+// lower index, so `f` wins only where `c` fails.
+global FALLBACK_LAST_G4: String = "grammar T;
+s : t (c | f) EOF ;
+t : c | f ;
+c : A (U A)+ ;
+f : A (U A)* ;
+A : 'A' ;
+U : 'U' ;
+WS : ' ' -> skip ;
+";
+
+test "a tournament scans the alternative it falls back to only once another won" {
+    let source = longest_source(FALLBACK_LAST_G4);
+    let rule = extract_fn_body(&source, "fn _parse_t__inner(");
+    assert rule.contains("let _sd_p_1 = if _sd_p_0 >= 0 { scan_"), rule;
+    let group = extract_fn_body(&source, "fn _parse_s__inner(");
+    assert group.contains("if gd_best >= 0 {"), group;
+    let trees = parses(FALLBACK_LAST_G4, "s", ["A U A A", "A A U A"], &LONGEST);
+    assert trees == "A U A A => (s (t (c A U A)) (f A))\nA A U A => (s (t (f A)) (c A U A))\n";
+}
+
 // `Z Z X` reads either way. The simulator takes the lower alternative, `b`, and
 // the tournament the longer, `b X`.
 global OPAQUE_CONTINUED_G4: String = "grammar T;
