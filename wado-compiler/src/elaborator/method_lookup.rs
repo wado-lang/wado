@@ -1392,22 +1392,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.defer_impl_bounds(block, inferred, span, OwedBounds::All);
     }
 
-    /// The key of `block`'s instance at a call whose `args` settle the slots
-    /// only its trait arguments name, [`Self::mint_trait_arg_slots`] read into
-    /// the call's `params` and `return_type`; `None` where it has no such slot.
+    /// The key of `block`'s instance at a call spelling `spelled` (the
+    /// receiver's positions, then any slots past them) whose `args` settle the
+    /// slots only its trait arguments name and `spelled` leaves open,
+    /// [`Self::mint_trait_arg_slots`] read into the call's `params` and
+    /// `return_type`; `None` where it has no such slot.
     pub(super) fn slot_instance_args(
         &mut self,
         block: DefId,
-        positions: Vec<TypeId>,
+        spelled: Vec<TypeId>,
         params: &mut [TypeId],
         args: &[TypeId],
         return_type: &mut TypeId,
         span: Span,
     ) -> Option<Vec<TypeId>> {
-        let inferred = self.mint_trait_arg_slots(block, &TypeArgMap::default());
-        if inferred.is_empty() {
+        if !self.tysys.type_table.borrow().impl_trait_sets_params(block) {
             return None;
         }
+        let given = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .impl_spelled_slots(block, &spelled);
+        let inferred = self.mint_trait_arg_slots(block, &given);
         {
             let mut table = self.tysys.type_table.borrow_mut();
             for param in params.iter_mut() {
@@ -1416,7 +1423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             *return_type = table.substitute_type_params(*return_type, &inferred);
         }
         self.settle_trait_arg_slots(block, &inferred, params, args, return_type, span);
-        Some(self.impl_instance_args(block, positions, &inferred))
+        Some(self.impl_instance_args(block, spelled, &inferred))
     }
 
     /// The key of the instance a static call reaches in `block` at the
@@ -1441,19 +1448,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What `block`'s instance is keyed by: every slot in slot order, the
-    /// receiver's `positions` filling theirs and `inferred`, answered, the
+    /// `spelled` list filling what it spells and `inferred`, answered, the
     /// slots only the trait arguments name.
     pub(super) fn impl_instance_args(
         &self,
         block: DefId,
-        positions: Vec<TypeId>,
+        spelled: Vec<TypeId>,
         inferred: &TypeArgMap,
     ) -> Vec<TypeId> {
         let mut slots = self
             .tysys
             .type_table
             .borrow_mut()
-            .impl_slots(block, &positions);
+            .impl_spelled_slots(block, &spelled);
         slots.extend(
             inferred
                 .iter()
@@ -1462,7 +1469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(block));
         let count = ImplParamSlots::of(&header.ty, &header.type_params).count();
-        impl_args_in_slot_order(block, count, &slots, &positions)
+        impl_args_in_slot_order(block, count, &slots, &spelled)
             .expect("the receiver and the trait arguments fill every slot")
     }
 

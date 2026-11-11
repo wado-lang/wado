@@ -5814,6 +5814,22 @@ impl TypeTable {
         });
     }
 
+    /// The parameters matching `id` against a type binds: those
+    /// [`Self::type_params_in`] finds outside any projection, which names no
+    /// type to match until its base is bound.
+    fn type_params_matched_in(&self, id: TypeId, params: &mut IndexSet<TypeParamId>) {
+        if matches!(self.get(id), ResolvedType::AssocTypeProjection { .. }) {
+            return;
+        }
+        if let Some(param) = self.type_param_id(id) {
+            params.insert(param);
+        }
+        self.any_constituent(id, &mut |t| {
+            self.type_params_matched_in(t, params);
+            false
+        });
+    }
+
     /// Whether `id` names a parameter `owner` does not declare, looking also
     /// into a newtype's base, which no argument of the newtype shows: a local
     /// newtype reaches the enclosing function's parameter there. An instance's
@@ -6558,15 +6574,11 @@ impl TypeTable {
         trait_args: Vec<TypeId>,
     ) {
         // The whole target, since a value blanket's receiver is a parameter no
-        // head argument names; a projection target determines none, its base
-        // being what the trait reference binds.
-        let target = (!matches!(self.get(whole), ResolvedType::AssocTypeProjection { .. }))
-            .then_some(whole);
-        let determined: IndexSet<TypeParamId> = target
-            .iter()
-            .chain(projections.iter().map(|p| &p.pattern))
-            .flat_map(|&ty| self.type_params_in(ty))
-            .collect();
+        // head argument names. One only under a projection there (`G` in
+        // `Pair<G::Two<i32>>`) is the trait reference's to bind.
+        let mut determined = IndexSet::default();
+        self.type_params_matched_in(whole, &mut determined);
+        determined.extend(projections.iter().flat_map(|p| self.type_params_in(p.pattern)));
         let trait_arg_slots: Vec<TypeParamId> = trait_args
             .iter()
             .flat_map(|&ty| self.type_params_in(ty))
@@ -6653,6 +6665,20 @@ impl TypeTable {
         let mut slots = IndexMap::default();
         self.bind_each_into(self.impl_target_args(def), receiver_args, &mut slots);
         self.project_impl_slots(def, &mut slots);
+        slots
+    }
+
+    /// The slots of impl block `def` a spelled list fills: its target's
+    /// positions as [`Self::impl_slots`] reads them, then the slots past them
+    /// by index.
+    pub fn impl_spelled_slots(&mut self, def: DefId, spelled: &[TypeId]) -> TypeArgMap {
+        let positions = self.impl_target_args(def).len().min(spelled.len());
+        let mut slots = self.impl_slots(def, &spelled[..positions]);
+        for (index, &arg) in (positions as u32..).zip(&spelled[positions..]) {
+            slots
+                .entry(TypeParamId { owner: def, index })
+                .or_insert(arg);
+        }
         slots
     }
 
