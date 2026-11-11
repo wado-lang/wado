@@ -1,0 +1,46 @@
+// A pack another parameter's associated type pins is not closed empty while
+// that parameter is unsettled at the call: an empty `F` would build a `Point`
+// from no fields. A later arm settles `S`, which never reaches `F`.
+struct Point {
+    x: i32,
+    y: i64,
+}
+
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for i32 {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+impl Make for i64 {
+    fn make() -> i64 {
+        return 2;
+    }
+}
+
+fn made<T, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Make>(_t: T) -> S {
+    return ReflectStruct::<S>::from_fields([for let f of ReflectStruct::<S>::members() { made_at(&f) }]);
+}
+
+fn made_at<S, F: Make>(_field: &StructField<S, F>) -> F {
+    return F::make();
+}
+
+fn fallback() -> [i32, Point] {
+    return [0, Point { x: 0, y: 0 }];
+}
+
+test "the arm after the call settles the struct" {
+    let [n, p] = match builtin::black_box(true) {
+        true => [3, made(1)],
+        false => fallback(),
+    };
+    assert n == 3 && p.x == 1 && p.y == 2;
+}
+
+__DATA__
+{"compile_error": ":39:21: analysis error: cannot infer type parameter `S`, `F` of function `made`"}

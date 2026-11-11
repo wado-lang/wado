@@ -4289,6 +4289,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Settle to the empty pack every pack slot this site left nothing over
     /// for. `reached` ([`Self::packs_args_reach`]) names the packs an argument
     /// was meant to settle, which closing here would answer with a wrong shape.
+    /// A pack another parameter's associated-type equality binds is reached
+    /// too while that parameter is unsettled: only its projection answers for
+    /// the pack, so the pack stays open for the deferral or the report. Once
+    /// the owner is settled, a pack its projection left open closes here, for
+    /// the pin's check to refute.
     pub(super) fn settle_unreached_packs(
         &mut self,
         declared: &[ast::GenericParam],
@@ -4299,6 +4304,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !real.iter().any(|p| p.is_pack) {
             return;
         }
+        let scope = self.scope_type_param_ids();
+        let mut reached = reached.to_vec();
+        for (i, owner) in real.iter().enumerate() {
+            let owner_open = type_args
+                .get(i)
+                .is_none_or(|&t| !scope.contains(&t) && self.tysys.is_unbound_type_param(t));
+            if !owner_open {
+                continue;
+            }
+            reached.extend(
+                owner
+                    .bounds
+                    .iter()
+                    .flat_map(|bound| &bound.assoc_types)
+                    .filter_map(|assoc| assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions))
+                    .map(|target| target.name),
+            );
+        }
+        let reached = reached.as_slice();
         // A pack slot the site never reached stands for no arguments at all, so
         // append one empty tuple per trailing pack. A non-pack slot stops the
         // walk: nothing here can answer for it.
@@ -4328,7 +4352,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A pack the caller declares interns to the same id as the callee's,
         // so a scope holding one is a forwarding this cannot tell apart.
-        let scope = self.scope_type_param_ids();
         if scope
             .iter()
             .any(|&s| self.tysys.type_table.borrow().contains_type_pack(s))
