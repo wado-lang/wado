@@ -721,7 +721,7 @@ iterable is walked through its `IntoIterator`.
 
 #### `fn start(self) -> Self::State`
 
-### `pub affine trait From<T> with ()`
+### `pub affine trait From<affine T> with ()`
 
 Infallible conversion trait.
 Implement this to define how to convert from type `T` into `Self`.
@@ -733,7 +733,7 @@ The compiler provides a reflexive blanket impl `From<T> for T` for all types.
 
 Converts a value of type `T` into `Self`.
 
-### `pub affine trait TryFrom<T> with ()`
+### `pub affine trait TryFrom<affine T> with ()`
 
 Fallible conversion trait. `Err: Error`, so a caller reaching the failure
 through the bound can always report its reason.
