@@ -54,12 +54,14 @@ global NO_CAPTURES: RuleCaptures = RuleCaptures {};
 pub struct ParserPlan {
     /// Lowering built a caller-FOLLOW gate, so the parser threads the FOLLOW
     /// slots (the `follow` parameter, its call-site arguments, and the
-    /// `FOLLOW_MASK_<id>` globals). Off, `follow` would be threaded but never
+    /// `FOLLOW_TABLES` global). Off, `follow` would be threaded but never
     /// read, so it is pruned entirely.
     pub emit_follow: bool = false,
     /// Rules whose functions carry the FOLLOW slots, by snake name: the same
     /// answer for the declaration and every call site.
     follow_rule_snakes: HashSet<String> = HashSet::new(),
+    /// Per rule index, the continuation site `parse_<rule>` passes, or -1.
+    entry_follow_sites: List<i32> = [],
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter, by snake name.
     pub lr_rule_snakes: HashSet<String> = HashSet::new(),
     /// A decision routes to the runtime ATN simulator: the parser carries its
@@ -154,6 +156,7 @@ pub fn plan_parser(
     return ParserPlan {
         emit_follow: marks.caller_follow_gate,
         follow_rule_snakes: name_set(&marks.follow_rule_snakes),
+        entry_follow_sites: marks.entry_follow_sites,
         lr_rule_snakes: name_set(&lr_snakes),
         needs_atn,
         needs_lr_atn: marks.needs_lr_atn,
@@ -196,6 +199,14 @@ impl ParserPlan {
     /// declaration and at every call site, so the two cannot disagree.
     pub fn rule_reads_follow<S: AsStrSlice>(&self, snake: S) -> bool {
         return self.emit_follow && self.follow_rule_snakes.contains_str(snake);
+    }
+
+    /// The continuation site rule `rule`'s entry passes, if any.
+    pub fn entry_follow_site(&self, rule: i32) -> Option<i32> {
+        if self.entry_follow_sites[rule] < 0 {
+            return null;
+        }
+        return Option::Some(self.entry_follow_sites[rule]);
     }
 
     /// Whether a call to `snake` passes `min_prec`: only a left-recursive rule takes one.

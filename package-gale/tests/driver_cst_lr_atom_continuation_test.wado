@@ -1,12 +1,12 @@
 //! An LR rule's atom alternative ends at the precedence loop, not at the
-//! rule's tail, so a viability probe inside it must not ask the caller's
+//! rule's tail, so a continuation scan inside it must not ask the caller's
 //! FOLLOW: an operator that continues the loop is not in that FOLLOW, and the
-//! probe would read its own alternative as unviable. Expected trees are the
+//! scan would read its own alternative as unviable. Expected trees are the
 //! published ANTLR4 jar's (black-box oracle).
 
-use g from "./grammars/lr_atom_probe.g4"
+use g from "./grammars/lr_atom_continuation.g4"
     with {
-        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_atom_probe" },
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_atom_continuation" },
     };
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {

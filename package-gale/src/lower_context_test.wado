@@ -2,31 +2,41 @@ use { ParserRule } from "./ir.wado";
 use { LowerContext, LowerMarks } from "./lower_context.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
+use { Reading } from "./readings.wado";
 
-test "intern_follow_mask: same mask returns same id, empty returns null" {
+test "a site interns once whatever order its kinds were found in" {
     let rules: List<ParserRule> = [];
     let mut ctx = LowerContext::new(GrammarAnalysis::new(&rules), GenSettings {});
     let names: List<String> = ["TK_X", "TK_Y", "TK_Z"];
     let k = ctx.analysis.token_ids_of(&names);
-    let m1: List<List<i32>> = [
-        [k[0]],
-        [k[1]],
+    let s1: List<Reading> = [
+        Reading {
+            kinds: [
+                [k[0], k[1]],
+            ],
+            ends: true,
+        },
     ];
-    let m2: List<List<i32>> = [
-        [k[0]],
-        [k[2]],
+    let s1_reordered: List<Reading> = [
+        Reading {
+            kinds: [
+                [k[1], k[0]],
+            ],
+            ends: true,
+        },
     ];
-    let id1 = ctx.intern_follow_mask(&m1);
-    let id2 = ctx.intern_follow_mask(&m2);
-    let id1_again = ctx.intern_follow_mask(&m1);
-    assert id1 matches { Some(0) }, "first mask gets id 0";
-    assert id2 matches { Some(1) }, "distinct mask gets id 1";
-    assert id1_again == id1, "same mask reuses its id";
-    // A mask whose every depth-set is empty never gates → no global.
-    let empty_depths: List<List<i32>> = [[], []];
-    let id_empty = ctx.intern_follow_mask(&empty_depths);
-    assert id_empty matches { None }, "all-empty mask interns to null";
-    assert ctx.tables.follow_masks().len() == 2, "only the two real masks are registered";
+    let s2: List<Reading> = [
+        Reading {
+            kinds: [
+                [k[2]],
+            ],
+            ends: true,
+        },
+    ];
+    assert ctx.intern_follow_site(&s1) == 0;
+    assert ctx.intern_follow_site(&s2) == 1;
+    assert ctx.intern_follow_site(&s1_reordered) == 0;
+    assert ctx.tables.follow_sites().len() == 2;
 }
 
 // A shared edge list handed every rule the first rule's forwards, and the FOLLOW

@@ -124,7 +124,7 @@ test "tail_greedy_first: transitive via tail RuleRef" {
 
 test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
     // `(A B)?` is tail-position but the inner consumes 2 tokens per
-    // iteration. Suppressing it via a follow mask would conflict with
+    // iteration. Suppressing it via the follow gate would conflict with
     // its inner sequence (e.g. HTMLParser's `htmlContent` re-entering
     // on TAG_OPEN). The single-token-only guard in
     // `tail_greedy_first_of_element`'s Repeat arm filters this out.
@@ -174,9 +174,6 @@ test "tail_greedy_first: tail Optional with single-token-alt Group inner is also
 // `position_first_sets_from`: K-token prefix FIRST sets walked from an
 // element slice. Generalises `alt_position_first_sets` (which is the
 // `start = 0` special case) by accepting an arbitrary `start` index.
-// Underpins `deep_position_first_sets_from`, which `compute_follow_arg`
-// uses to build the multi-depth FOLLOW mask threaded at a `RuleRef`
-// call site.
 
 test "position_first_sets_from: full single-token sequence X Y Z, K=3" {
     let mut ctx = mk_ctx();
@@ -276,12 +273,10 @@ test "position_first_sets_from: start at end returns empty" {
 
 // `deep_position_first_sets_from`: K-prefix that recurses through
 // single-alt non-recursive `RuleRef`s. Generalises
-// `position_first_sets_from` to see "into" the rule body when computing
-// a caller's FOLLOW mask. For our `r : a c EOF` fixture, calling
-// `position_first_sets_from` at start=1 only sees `c` as one
-// non-single-token element (K=1); the deep walk descends into `c`'s
-// body so the mask captures `[{X}, {Y}, {Z}]` — exactly what the
-// runtime gate needs to disambiguate multi-iter inputs.
+// `position_first_sets_from` to see "into" the rule body. For our
+// `r : a c EOF` fixture, calling `position_first_sets_from` at start=1
+// only sees `c` as one non-single-token element (K=1); the deep walk
+// descends into `c`'s body and captures `[{X}, {Y}, {Z}]`.
 
 test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
     // r : a c ; c : X Y Z ;

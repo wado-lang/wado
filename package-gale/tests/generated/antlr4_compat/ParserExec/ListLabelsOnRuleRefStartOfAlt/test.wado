@@ -1,5 +1,7 @@
 #![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/ParserExec/ListLabelsOnRuleRefStartOfAlt.g4"])]
 
+use { HashMap, HashSeed } from "core:collections";
+
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -981,148 +983,152 @@ fn emit_lexer_token(
 
 internal global FOLLOW_MAX_DEPTH: i32 = 4;
 
-internal global FOLLOW_SLOT_BITS: i64 = 8;
+internal global FOLLOW_SLOT_BITS: i64 = 10;
 
-internal global FOLLOW_ID_MASK: i64 = 127;
+internal global FOLLOW_ID_MASK: i64 = 1023;
 
-internal global FOLLOW_OPENS_BIT: i64 = 128;
+internal global FOLLOW_LINK_ID: i64 = FOLLOW_ID_MASK;
 
-internal global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_CONT_BITS: i64 = 60;
 
-internal global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
-
-internal global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
-
-internal global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
-
-internal global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
-
-internal fn follow_open_mark(cont: i64) -> i64 {
-    return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
+internal struct FollowTables {
+    internal stride: i32,
+    internal sets: List<i32>,
+    internal starts: List<i32>,
+    internal readings: List<i32>,
 }
 
-internal fn follow_open_set(mask: i64) -> i64 {
-    return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
+internal fn follow_push(site: i64, cont: i64) -> i64 {
+    return site | follow_behind(cont, FOLLOW_SLOT_BITS) << FOLLOW_SLOT_BITS;
 }
 
-internal fn follow_open_join(a: i64, b: i64) -> i64 {
-    if a == 0 || a == b {
-        return b;
+internal struct FollowLinks {
+    conts: List<i64>,
+    ids: HashMap<i64, i32>,
+}
+
+global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
+
+global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+
+internal fn follow_links_enter() -> FollowLinks {
+    let outer = FOLLOW_LINKS;
+    FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+    return outer;
+}
+
+internal fn follow_links_leave(outer: FollowLinks) {
+    FOLLOW_LINKS = outer;
+}
+
+fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
+    let room = FOLLOW_CONT_BITS - prefix_bits;
+    if cont >> room == 0 {
+        return cont;
     }
-    if b == 0 {
-        return a;
+    assert !follow_is_link(cont), "a continuation starts with a site, never a link";
+    let link = FOLLOW_LINK_ID | follow_link_id(cont) as i64 << FOLLOW_SLOT_BITS;
+    assert link >> room == 0, "a link must fit behind the prefix";
+    return link;
+}
+
+fn follow_link_id(cont: i64) -> i32 {
+    if let Some(id) = FOLLOW_LINKS.ids.get(cont) {
+        return id;
     }
-    return FOLLOW_OPEN_READING;
+    let id = FOLLOW_LINKS.conts.len();
+    FOLLOW_LINKS.conts.push(cont);
+    FOLLOW_LINKS.ids[cont] = id;
+    return id;
 }
 
-internal fn follow_open_with(cont: i64, open: i64) -> i64 {
-    return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
+fn follow_is_link(c: i64) -> bool {
+    return c & FOLLOW_ID_MASK == FOLLOW_LINK_ID;
 }
 
-internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
+fn follow_linked(c: i64) -> i64
+    contract follow_is_link(c)
+{
+    return FOLLOW_LINKS.conts[(c >> FOLLOW_SLOT_BITS) as i32];
 }
 
-internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
-    return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
+internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
+    return follow_reads(tokens, pos, cont, 0, FOLLOW_MAX_DEPTH, false, tables, eof_kind);
 }
 
-internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
-    return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
+internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
+    return follow_reads(tokens, pos, cont, 0, 1, true, tables, eof_kind);
 }
 
-internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
-}
-
-internal fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
-}
-
-internal fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
-        return true;
-    }
-    let kind = follow_kind_at(tokens, pos, eof_kind);
-    return follow_open_has(cont, kind, sets, true);
-}
-
-fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
-    let open = cont & FOLLOW_OPEN_FIELD;
-    if open == 0 {
+fn follow_reads(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    depth: i32,
+    budget: i32,
+    unknown_reads: bool,
+    tables: &FollowTables,
+    eof_kind: i32,
+) -> bool {
+    let mut c = cont;
+    loop {
+        let site = c & FOLLOW_ID_MASK;
+        if site == 0 {
+            return depth > 0 || unknown_reads;
+        }
+        if site == FOLLOW_LINK_ID {
+            c = follow_linked(c);
+            continue;
+        }
+        let rest = c >> FOLLOW_SLOT_BITS;
+        let readings = &tables.readings;
+        let mut at = tables.starts[site as i32 - 1];
+        let end = tables.starts[site as i32];
+        let heads = readings[at];
+        if !follow_set_has(tables, heads >> 1, follow_kind_at(tokens, pos + depth, eof_kind)) {
+            if heads & 1 == 0 {
+                return false;
+            }
+            c = rest;
+            continue;
+        }
+        if depth + 1 >= budget {
+            return true;
+        }
+        at += 1;
+        while at < end {
+            let len = readings[at] >> 1;
+            let mut matched = 0;
+            while matched < len
+                && depth + matched < budget
+                && follow_set_has(tables, readings[at + 1 + matched], follow_kind_at(
+                    tokens,
+                    pos + depth + matched,
+                    eof_kind,
+                )) {
+                matched += 1;
+            }
+            if depth + matched >= budget {
+                return true;
+            }
+            if matched == len
+                && readings[at] & 1 != 0
+                && follow_reads(tokens, pos, rest, depth + len, budget, unknown_reads, tables, eof_kind) {
+                return true;
+            }
+            at += 1 + len;
+        }
         return false;
     }
-    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
 }
 
 fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
     return if pos < tokens.len() { tokens[pos] } else { eof_kind };
 }
 
-fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
-    let set = &sets[(id - 1) as i32];
-    return set.is_empty() || kind_set_has(set, kind);
-}
-
-fn follow_heads_have(
-    tokens: &Array<i32>,
-    pos: i32,
-    cont: i64,
-    sets: &List<List<i32>>,
-    eof_kind: i32,
-    unknown_has: bool,
-) -> bool {
-    if cont == 0 {
-        return unknown_has;
-    }
-    let kind = follow_kind_at(tokens, pos, eof_kind);
-    if follow_open_has(cont, kind, sets, unknown_has) {
-        return true;
-    }
-    let mut c = cont & FOLLOW_CONT_MASK;
-    let mut head = true;
-    while c & FOLLOW_ID_MASK != 0 {
-        if c & FOLLOW_OPENS_BIT != 0 {
-            head = true;
-        }
-        if head {
-            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
-                return true;
-            }
-            head = false;
-        }
-        c >>= FOLLOW_SLOT_BITS;
-    }
-    return false;
-}
-
-internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont & FOLLOW_CONT_MASK;
-    let mut depth = 0;
-    let mut alive = true;
-    let mut constrained = false;
-    while c & FOLLOW_ID_MASK != 0 {
-        if c & FOLLOW_OPENS_BIT != 0 {
-            if alive && constrained {
-                return true;
-            }
-            depth = 0;
-            alive = true;
-            constrained = false;
-        }
-        if depth < FOLLOW_MAX_DEPTH {
-            constrained = true;
-            if alive {
-                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
-            }
-            depth += 1;
-        }
-        c >>= FOLLOW_SLOT_BITS;
-    }
-    return alive && constrained;
+fn follow_set_has(tables: &FollowTables, set: i32, kind: i32) -> bool {
+    let word = kind >> 5;
+    return word < tables.stride && tables.sets[set * tables.stride + word] >> (kind & 31) & 1 != 0;
 }
 internal struct ScanMemo<G> {
     heads: Array<i32>,
@@ -3754,7 +3760,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_AND, &SYNC_0, false);
                 p.site = 2;
                 p.atn_ret_pending = 18;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
+                _parse_expression(p, follow_push(FOLLOW_SITE_0, follow));
             }
             loop {
                 if p.recovering { break; }
@@ -3764,7 +3770,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_AND, &SYNC_0, false);
                 p.site = 2;
                 p.atn_ret_pending = 18;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
+                _parse_expression(p, follow_push(FOLLOW_SITE_0, follow));
             }
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 1 {
@@ -3774,7 +3780,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_OR, &SYNC_0, false);
                 p.site = 4;
                 p.atn_ret_pending = 26;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                _parse_expression(p, follow_push(FOLLOW_SITE_1, follow));
             }
             loop {
                 if p.recovering { break; }
@@ -3784,7 +3790,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_OR, &SYNC_0, false);
                 p.site = 4;
                 p.atn_ret_pending = 26;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                _parse_expression(p, follow_push(FOLLOW_SITE_1, follow));
             }
             p.b.finish_node(p.last_end());
         } else {
@@ -3812,10 +3818,12 @@ fn _parse_expression(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
+    let follow_outer = follow_links_enter();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
     entry(&mut p);
+    follow_links_leave(follow_outer);
     if p.recovering && p.diagnostics.len() < max_errors {
         p.commit_pending();
     }
@@ -3829,7 +3837,7 @@ pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult
 }
 
 pub fn parse_expression<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression(p, FOLLOW_SITE_2));
 }
 
 global CALL_FOLLOW_SETS: List<List<i32>> = [[3], []];
@@ -3866,9 +3874,15 @@ global EXPECTED_1: List<i32> = [TK_AND];
 global SYNC_2: List<i32> = [2];
 global EXPECTED_2: List<i32> = [TK_OR];
 
-global FOLLOW_SETS: List<List<i32>> = [[1], [12], [2]];
-global FOLLOW_MASK_0: i64 = 513;
-global FOLLOW_MASK_1: i64 = 515;
+global FOLLOW_TABLES: FollowTables = FollowTables {
+    stride: 1,
+    sets: [1, 8, 4, 12, 15, 2, 35, 44, 47],
+    starts: [0, 14, 28, 34],
+    readings: [1, 1, 5, 0, 1, 7, 0, 2, 1, 8, 0, 3, 4, 4, 11, 1, 5, 5, 1, 7, 5, 2, 1, 8, 5, 3, 4, 4, 12, 8, 6, 7, 8, 8],
+};
+global FOLLOW_SITE_0: i64 = 1;
+global FOLLOW_SITE_1: i64 = 2;
+global FOLLOW_SITE_2: i64 = 3;
 
 global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x01\x00\x04\x00\x1d\x00\x07\x00\x00\x00\x02\x00\x0a\x00\x13\x00\x1b\x00\x02\x03\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x07\x04\x05\x01\x01\x01\x01\x08\x09\x04\x05\x01\x01\x01\x01\x08\x09\x01\x00\x00\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x05\x05\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x03\x00\x05\x00\x09\x00\x0b\x00\x06\x00\x07\x00\x01\x00\x04\x00\x0a\x00\x04\x00\x0e\x00\x16\x00\x0c\x00\x02\x00\x0b\x00\x10\x00\x14\x00\x11\x00\x12\x00\x01\x00\x0f\x00\x0e\x00\x15\x00\x0d\x00\x18\x00\x1c\x00\x19\x00\x1a\x00\x01\x00\x17\x00\x16\x00\x1d\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"));
 
@@ -3901,12 +3915,12 @@ fn atn_lr_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pr
         match tokens[pos] {
             TK_AND => {
                 if min_prec > 2 { return 2; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 0; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 0; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 1, 0, tokens, pos, TK_EOF, min_prec);
             },
             TK_OR => {
                 if min_prec > 1 { return 2; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 1; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 1; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 1, 1, tokens, pos, TK_EOF, min_prec);
             },
             _ => { return 2; },

@@ -1,11 +1,12 @@
 //! The token-set tables a generated parser declares once and names from its
 //! rule bodies: `_kind_set_<id>` helpers, `SYNC_<id>` / `EXPECTED_<id>`
-//! recovery sets and `FOLLOW_MASK_<id>` continuations. Lowering interns the
-//! masks, emit the rest; ids are first-seen order, so the same grammar always
-//! produces the same names.
+//! recovery sets and `FOLLOW_SITE_<id>` continuation sites. Lowering interns
+//! the sites, emit the rest; ids are first-seen order, so the same grammar
+//! always produces the same names.
 
 use { HashMap } from "core:collections";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
+use { Reading } from "./readings.wado";
 
 /// A token-kind set interned during parser codegen. Multi-element
 /// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
@@ -18,35 +19,20 @@ pub struct KindSetEntry {
     pub tokens: List<i32>,
 }
 
-/// A runtime FOLLOW-continuation mask interned during parser codegen.
-/// Each distinct K-prefix mask is emitted once, as the packed `i64`
-/// `FOLLOW_MASK_<id>` (`gen_follow_mask_globals`) that repair call sites
-/// compose into their continuation. Interning the mask (not rule×mask)
-/// keeps the generated-parser growth proportional to the number of
-/// distinct continuations, not the call graph.
-pub struct FollowMaskEntry {
-    pub id: i32,
-    /// Canonical per-depth token sets, as kind ids. `mask[d]` lists the kinds
-    /// valid at depth `d` of the caller's continuation; emitted as `TK_*` names.
-    pub mask: List<List<i32>>,
-}
-
-/// Maximum K-prefix depth carried into `intern_follow_mask` for the
-/// multi-token follow-mask path. Bounds the runtime peek; deeper
-/// continuations are truncated (the deepest tokens are the cheapest to
-/// disambiguate at runtime via the existing 1-token dispatch, so
-/// truncation hurts precision rather than correctness). The runtime caps
-/// each continuation at the same depth, so a mask that already reaches it
-/// is the whole gate.
-pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
+/// How many tokens deep a continuation site reads: as deep as the runtime gate.
+pub global FOLLOW_SITE_DEPTH: i32 = FOLLOW_MAX_DEPTH;
 
 /// The interned tables, each keyed by its canonical (`canonical_ids`) form.
 pub struct TableRegistry {
     kind_sets: HashMap<List<i32>, KindSetEntry>,
     sync_sets: HashMap<List<i32>, KindSetEntry>,
-    follow_masks: HashMap<List<List<i32>>, FollowMaskEntry>,
-    /// Positions each interned mask constrains, indexed by its id.
-    follow_mask_depths: List<i32>,
+    /// The id of each interned continuation site.
+    follow_site_ids: HashMap<List<Reading>, i32>,
+    /// The continuation sites, indexed by id: the readings of the rest of a
+    /// rule past a call. Each is emitted once, as a row of `FOLLOW_TABLES`
+    /// that `FOLLOW_SITE_<id>` names, so the generated parser grows with the
+    /// distinct continuations rather than with the call graph.
+    follow_sites: List<List<Reading>>,
 }
 
 impl TableRegistry {
@@ -55,8 +41,8 @@ impl TableRegistry {
         return TableRegistry {
             kind_sets: HashMap::new(),
             sync_sets: HashMap::new(),
-            follow_masks: HashMap::new(),
-            follow_mask_depths: [],
+            follow_site_ids: HashMap::new(),
+            follow_sites: [],
         };
     }
 
@@ -96,50 +82,21 @@ impl TableRegistry {
         return self.sync_sets.values().iter_value().collect();
     }
 
-    /// Intern a runtime FOLLOW-continuation mask given as canonical per-depth
-    /// sets. Returns `null` for an effectively-empty mask (no depth carries a
-    /// constraint) — such a mask never gates, so callers pass `&EMPTY_FOLLOW`
-    /// instead of interning a dead global.
-    pub fn intern_follow_mask(&mut self, depths: List<List<i32>>) -> Option<i32> {
-        // Trim trailing depth-sets that carry no constraint: `follow_yields`
-        // skips empty depths, so `[[X], []]` gates identically to `[[X]]`.
-        let mut last_constrained: i32 = -1;
-        for let mut d = 0; d < depths.len(); d += 1 {
-            if !depths[d].is_empty() {
-                last_constrained = d;
-            }
+    /// Intern a continuation site given in canonical form: every position's
+    /// kinds `canonical_ids`, the readings in `readings_add` order.
+    pub fn intern_follow_site(&mut self, readings: List<Reading>) -> i32 {
+        if let Some(id) = self.follow_site_ids.get(readings) {
+            return id;
         }
-        if last_constrained < 0 {
-            return null;
-        }
-        let mut canonical: List<List<i32>> = [];
-        for let mut d = 0; d <= last_constrained; d += 1 {
-            canonical.push(depths[d]);
-        }
-        if let Some(entry) = self.follow_masks.get(canonical) {
-            return Option::<i32>::Some(entry.id);
-        }
-        let id = self.follow_masks.len();
-        self.follow_mask_depths.push(canonical.len());
-        self.follow_masks[canonical] = FollowMaskEntry { id, mask: canonical };
-        return Option::<i32>::Some(id);
+        let id = self.follow_sites.len();
+        self.follow_site_ids[readings] = id;
+        self.follow_sites.push(readings);
+        return id;
     }
 
-    /// The positions `FOLLOW_MASK_<id>` constrains — where a continuation
-    /// composed behind it starts.
-    pub fn follow_mask_positions(&self, id: i32) -> i32 {
-        return self.follow_mask_depths[id];
-    }
-
-    /// At `FOLLOW_MAX_DEPTH` the mask is the whole gate, since `follow_yields`
-    /// reads no deeper.
-    pub fn follow_mask_is_full(&self, id: i32) -> bool {
-        return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
-    }
-
-    /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.
-    pub fn follow_masks(&self) -> List<FollowMaskEntry> {
-        return self.follow_masks.values().iter_value().collect();
+    /// The interned continuation sites, indexed by id.
+    pub fn follow_sites(&self) -> &List<List<Reading>> {
+        return &self.follow_sites;
     }
 }
 
@@ -153,9 +110,9 @@ pub fn sync_list_name(id: i32) -> String {
     return `EXPECTED_${id}`;
 }
 
-/// The `FOLLOW_MASK_<id>` global.
-pub fn follow_mask_name(id: i32) -> String {
-    return `FOLLOW_MASK_${id}`;
+/// The `FOLLOW_SITE_<id>` global.
+pub fn follow_site_name(id: i32) -> String {
+    return `FOLLOW_SITE_${id}`;
 }
 
 /// The `_kind_set_<id>` membership helper.

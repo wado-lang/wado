@@ -1,6 +1,6 @@
 //! What lowering reads and what it records. It reads the grammar's analysis,
-//! the generation's settings and the rules' FOLLOW; it records the FOLLOW masks
-//! its gates name, the diagnostics its decisions raise, and the marks
+//! the generation's settings and the rules' FOLLOW; it records the continuation
+//! sites its calls name, the diagnostics its decisions raise, and the marks
 //! (`LowerMarks`) the parser plan is decided from.
 
 use { Alternative, ParserRule } from "./ir.wado";
@@ -10,6 +10,7 @@ use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry } from "./table_registry.wado";
+use { Reading } from "./readings.wado";
 use {
     DecisionPredicates,
     PredicateSite,
@@ -29,14 +30,15 @@ pub struct LowerMarks {
     /// Lowering built a tail-greedy `Repeat` that gates on the caller's FOLLOW
     /// continuation. While it stays false the grammar has no caller-FOLLOW
     /// repair at all, so emit skips the entire FOLLOW machinery (the `follow`
-    /// parameter, its call-site arguments, and the `FOLLOW_MASK_<id>` globals).
+    /// parameter, its call-site arguments, and the `FOLLOW_TABLES` global).
     /// This keeps deep-recursion grammars — which never read `follow` — from
     /// paying an extra stack slot per recursive frame (the
     /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
     pub caller_follow_gate: bool = false,
     /// An ATN-class LR rule was lowered: `ATN_SIM` carries the LR tables.
     pub needs_lr_atn: bool = false,
-    /// The rule runs a caller-FOLLOW gate or a probe, so it reads the slots
+    /// The rule runs a caller-FOLLOW gate or a continuation scan reaching its
+    /// tail, so it reads the slots
     /// itself; the seeds of `follow_rule_snakes`.
     pub rule_reads_follow: List<bool>,
     /// The callees a call in the rule hands its own continuation to. Such a
@@ -52,6 +54,9 @@ pub struct LowerMarks {
     /// closure of `rule_reads_follow` over `follow_forward_edges`, settled once
     /// every rule is lowered.
     pub follow_rule_snakes: List<String> = [],
+    /// Per rule index, the continuation site its `parse_<rule>` entry passes,
+    /// or -1 where the rule reads no continuation or none follows it.
+    pub entry_follow_sites: List<i32> = [],
 }
 
 impl LowerMarks {
@@ -176,7 +181,7 @@ impl LowerContext {
     }
 
     /// Record that the rule being lowered reads the continuation it was called
-    /// with directly — a caller-FOLLOW gate or a probe.
+    /// with directly — a caller-FOLLOW gate or a continuation scan.
     pub fn mark_rule_reads_follow(&mut self) {
         let idx = self.current_rule_index();
         self.marks.rule_reads_follow[idx] = true;
@@ -191,15 +196,18 @@ impl LowerContext {
         }
     }
 
-    /// Intern a runtime FOLLOW-continuation mask of kind ids per depth. The
-    /// same canonical mask maps to a single `id`; `null` for one no depth
-    /// constrains, where the caller passes `&EMPTY_FOLLOW`.
-    pub fn intern_follow_mask(&mut self, mask: &List<List<i32>>) -> Option<i32> {
-        let mut depths: List<List<i32>> = [];
-        for let depth of mask {
-            depths.push(self.analysis.canonical_ids(*depth));
+    /// Intern the continuation site `readings` describe. The same readings map
+    /// to a single `id` whatever order their kinds were found in.
+    pub fn intern_follow_site(&mut self, readings: &List<Reading>) -> i32 {
+        let mut canonical: List<Reading> = [];
+        for let r of readings {
+            let mut kinds: List<List<i32>> = [];
+            for let position of &r.kinds {
+                kinds.push(self.analysis.canonical_ids(*position));
+            }
+            canonical.push(Reading { kinds, ends: r.ends });
         }
-        return self.tables.intern_follow_mask(depths);
+        return self.tables.intern_follow_site(canonical);
     }
 
     /// Where an alternative of the rule being lowered renders its predicates.
