@@ -1,6 +1,6 @@
-//! `wado dump` runs the checks `wado compile` runs before synthesis, with the
-//! same inputs: it fails on what they reject, after printing what it could
-//! dump, and dumps what they accept.
+//! `wado dump` runs the pipeline `wado compile` runs, with the same inputs: it
+//! fails on what compile rejects, after printing the views built before the
+//! failure, and dumps what it accepts.
 
 use std::fs;
 
@@ -49,6 +49,28 @@ fn dump_fails_on_a_type_error() {
         .args(["dump", "--tir-monomorphized", "entry.wado"])
         .assert()
         .failure();
+}
+
+/// A program rejected past the checks, where a substitution lands, still
+/// prints the views built before the failure.
+#[test]
+fn dump_prints_the_views_before_a_later_rejection() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("entry.wado"),
+        "fn name_of<T>() -> String {\n    return Reflect::<T>::decl_name();\n}\n\n\
+         export fn run() {\n    let _n = name_of::<i32>();\n}\n",
+    )
+    .unwrap();
+    wado_in(root)
+        .args(["dump", "--tir-resolved", "entry.wado"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("fn name_of"))
+        .stderr(predicate::str::contains(
+            "type `i32` does not implement trait `Reflect`",
+        ));
 }
 
 /// A provider discharges the guest effect its dependency imports. `dump`

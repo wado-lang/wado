@@ -432,8 +432,8 @@ pub struct DumpResult {
     pub wir_package: Option<wir::WirPackage>,
     /// AstId-keyed trivia for unparsing the dumped AST.
     pub trivia: comment::TriviaMap,
-    /// Whether the checks `compile` runs before synthesis rejected the
-    /// program, reported already, leaving the views after them empty.
+    /// Whether `compile` rejected the program past its analysis, reported
+    /// already, leaving the views after the failing phase empty.
     pub rejected: bool,
 }
 
@@ -1817,8 +1817,6 @@ struct DumpViews {
     /// The pattern naming the functions whose inlining decisions to record.
     inline_decisions: Option<String>,
     analysis: Option<AnalysisViews>,
-    /// The checks before synthesis passed.
-    checked: bool,
     monomorphized_tir_text: Option<String>,
     lowered_nir_text: Option<String>,
     inline_decisions_text: Option<String>,
@@ -1964,9 +1962,6 @@ fn build_after_load<H: CompilerHost>(
         },
         logger,
     )?;
-    if let Some(views) = views.as_deref_mut() {
-        views.checked = true;
-    }
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // An `Options` no descriptor describes fails here: no options table could
@@ -2806,11 +2801,11 @@ pub async fn dump_with_options<H: CompilerHost>(
         filename,
         Some(&mut views),
     );
-    let (optimized_package, wir_package) = match built {
-        Ok(built) => (Some(built.nir), Some(built.wir_package)),
-        // Rejected by the checks before synthesis: the views of the analysis
-        // still stand, and the ones after it stay empty.
-        Err(Bail) if views.analysis.is_some() && !views.checked => (None, None),
+    // Rejected past the analysis: the views built before the failure still
+    // stand, and the ones after it stay empty.
+    let (rejected, optimized_package, wir_package) = match built {
+        Ok(built) => (false, Some(built.nir), Some(built.wir_package)),
+        Err(Bail) if views.analysis.is_some() => (true, None, None),
         Err(Bail) => return Err(Bail),
     };
     let analysis = views
@@ -2833,7 +2828,7 @@ pub async fn dump_with_options<H: CompilerHost>(
         optimized_package,
         wir_package,
         trivia,
-        rejected: !views.checked,
+        rejected,
     })
 }
 
