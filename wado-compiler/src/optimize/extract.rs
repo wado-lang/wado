@@ -30,7 +30,7 @@ use crate::nir_visitor::reachable_exprs;
 use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
-use crate::optimize::arena_query::storage_root;
+use crate::optimize::arena_query::{def_dominates, storage_root};
 use crate::optimize::gate::FunctionGate;
 use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::parallel::Executor;
@@ -178,48 +178,6 @@ fn materialise_point(e: &Engine, ids: &[ExprId]) -> Option<(StmtId, BlockId)> {
     Some((stmt, block))
 }
 
-/// The structured-control path from the root down to `stmt`'s enclosing chain:
-/// an outermost-first list of `(block, stmt_index)`. Like [`block_path`] but
-/// rooted at a statement, for the def-dominance check.
-fn stmt_block_path(e: &Engine, stmt: StmtId) -> Vec<(BlockId, usize)> {
-    let mut path = Vec::new();
-    let mut last = stmt;
-    let mut node = e.parent_of(NodeRef::Stmt(stmt));
-    while let Some(n) = node {
-        match n {
-            NodeRef::Block(b) => {
-                if let Some(pos) = e.body.blocks[b].stmts.iter().position(|&x| x == last) {
-                    path.push((b, pos));
-                }
-                node = e.parent_of(NodeRef::Block(b));
-            }
-            NodeRef::Stmt(s) => {
-                last = s;
-                node = e.parent_of(NodeRef::Stmt(s));
-            }
-            NodeRef::Expr(_) | NodeRef::Pat(_) => node = e.parent_of(n),
-        }
-    }
-    path.reverse();
-    path
-}
-
-/// Whether `def_stmt` **dominates** the insertion point `before_stmt` (insert
-/// *before* it): in structured control flow, `def_stmt`'s enclosing block must be
-/// the deepest block common to both paths (not nested in a sibling branch
-/// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
-/// Used to admit a non-param `FieldAccess` receiver only when its single-assignment
-/// def is live at the materialisation point (the receiver-availability gate).
-fn def_dominates(e: &Engine, def_stmt: StmtId, before_stmt: StmtId) -> bool {
-    let dp = stmt_block_path(e, def_stmt);
-    let mp = stmt_block_path(e, before_stmt);
-    let mut l = 0;
-    while l < dp.len() && l < mp.len() && dp[l].0 == mp[l].0 {
-        l += 1;
-    }
-    l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
-}
-
 /// Whether a `local.get i` placed at `before_stmt` reads the local's value: a
 /// parameter is entry-defined, any other local needs its `let` to dominate the
 /// point. Answers *where*, not *which version* — `multi_version_locals` settles
@@ -362,9 +320,8 @@ pub(super) fn freeze_pure_arith(
                 .as_ref()
                 .map(|e| e.body_call_writes(body))
                 .unwrap_or_default();
-            let mut engine = Engine::new(body, buffers, locals, params);
+            let mut engine = Engine::new(body, buffers, locals, params, type_table);
             engine.set_alias_sets(alias);
-            engine.set_value_graph_type_table(type_table);
             engine.seed_params();
             engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
             engine.set_call_writes(call_writes);
@@ -858,13 +815,11 @@ pub(super) fn extract_const(e: &mut Engine, rep: ValueId, at: ExprId) -> Option<
     }
     let vk = e.value_kind(rep).clone();
     let type_id = e.body.exprs[at].type_id;
-    let prim = e
-        .value_graph_type_table()
-        .and_then(|tt| prim_of(type_id, tt))
+    let tt = e.type_table();
+    let prim = prim_of(type_id, tt)
         // An enum case is its discriminant, which lowers to `i32`; the type
         // itself is not a primitive, so `prim_of` cannot name its width.
         .or_else(|| {
-            let tt = e.value_graph_type_table()?;
             matches!(tt.get(type_id), ResolvedType::Enum { .. }).then_some(PrimitiveType::I32)
         });
     value_kind_to_const(&vk, prim)
@@ -900,7 +855,7 @@ mod tests {
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::Tracked;
     use crate::nir_arena::{BlockId, BlockNode, Body, ExprNode, StmtId, StmtKind, StmtNode};
-    use crate::nir_engine::{EngineBuffers, Rule};
+    use crate::nir_engine::{EngineBuffers, Rule, TEST_TYPES};
     use crate::tir;
     use crate::token::Span;
     use crate::type_table::TypeTable;
@@ -955,7 +910,7 @@ mod tests {
 
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let rule = ExtractLiteralRule;
         let rules: Vec<&dyn Rule> = vec![&rule];
         let changed = eng.run(&rules);
@@ -1000,7 +955,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         // Uses at positions 0 and 2 -> insert before position 0.
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
         assert_eq!(b, eng.body.root());
@@ -1037,7 +992,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[tu, eu]).unwrap();
         // Common dominator is the root block, at the `if` statement (position 1),
         // not inside either branch.
@@ -1073,7 +1028,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[tu, outer_u]).unwrap();
         assert_eq!(b, eng.body.root());
         assert_eq!(s, outer_s);
@@ -1095,7 +1050,7 @@ mod tests {
         body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         assert_eq!(materialise_point(&eng, &[in_u, out_u]), None);
     }
 
@@ -1115,7 +1070,7 @@ mod tests {
         body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
         assert_eq!(b, loop_body);
         assert_eq!(s, s0);
@@ -1150,7 +1105,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[], &TEST_TYPES);
         let (s, b) = materialise_point(&eng, &[bu2, bu0]).unwrap();
         assert_eq!(b, then_b);
         assert_eq!(s, b0);

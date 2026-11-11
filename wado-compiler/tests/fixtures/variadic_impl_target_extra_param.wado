@@ -1,0 +1,34 @@
+// An impl on `[..T]` keys its instances by the tuple's elements alone, so a
+// parameter beside the pack, which only the trait reference sets, has no
+// place in them: it would read a tuple element instead. It is refused where it
+// is written.
+
+trait Back with () {
+    fn name() -> String;
+}
+
+struct Guest {}
+
+impl Back for Guest {
+    fn name() -> String {
+        return "guest";
+    }
+}
+
+trait Shown<G: Back> with () {
+    fn shown(&self) -> String;
+}
+
+impl<..T, G: Back> Shown<G> for [..T] {
+    fn shown(&self) -> String {
+        return G::name();
+    }
+}
+
+export fn run() {
+    let t = [1, "s"];
+    assert Shown::<Guest>::shown(&t) == "guest";
+}
+
+__DATA__
+{"compile_error": "an impl on the variadic tuple `[..T]` takes no type parameter beside its pack, and `G` is one"}

@@ -1,0 +1,33 @@
+// `builtin::black_box` may read everything its operand reaches, as its
+// `#[side_effect(black_box)]` states, so a struct handed to it keeps every
+// field, a nested struct's included. A benchmark leans on that to keep the
+// work it measures.
+
+struct Inner {
+    deep: i32,
+}
+
+struct Outer {
+    shallow: i32,
+    inner: Inner,
+}
+
+#[inline(never)]
+fn make(n: i32) -> Outer {
+    return Outer { shallow: n, inner: Inner { deep: n + 1 } };
+}
+
+export fn run() {
+    let outer = make(builtin::black_box(1));
+    builtin::black_box(outer);
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/dead_field"]},
+    "wir_expect:O2": ["    mut shallow: i32,", "    mut deep: i32,"],
+    "wir_contrast": {"O2": [
+        {"    builtin::black_box(outer);": "    let _unread = outer;"}
+    ]}
+}

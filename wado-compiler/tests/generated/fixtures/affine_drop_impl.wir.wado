@@ -119,47 +119,44 @@ fn "affine_drop_impl.wado/report"(what) with Stdout {
 }
 
 fn "affine_drop_impl.wado/run"() with Stdout {
-    let kept: ref null "affine_drop_impl.wado//Guard";
-    let self_8: i32;
+    let $load_0: ref null "affine_drop_impl.wado//Guard";
+    let $load_7: i32;
     let _p: ref null "affine_drop_impl.wado//Pair";
     let self_19: ref null "affine_drop_impl.wado//Keeper";
     let self_23: ref null "affine_drop_impl.wado//Giver";
     global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 1;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("scope exit"), used: 10 });
-    kept = struct.new "affine_drop_impl.wado//Guard" { id: 2 };
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("moved out"), used: 9 });
-    self_8 = kept.id;
-    global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + self_8;
+    global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 2;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 112, 116), used: 4 });
-    self_8 = struct.new "affine_drop_impl.wado//Guard" { id: 3 }.id;
-    global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + self_8;
+    global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 3;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("by name"), used: 7 });
     global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 4;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("builtin"), used: 7 });
-    if ref.is_null(local.tee kept(local.tee _p(struct.new "affine_drop_impl.wado//Pair" { a: struct.new "affine_drop_impl.wado//Guard" { id: 10 }, b: struct.new "affine_drop_impl.wado//Guard" { id: 20 } }).a)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
+    if ref.is_null(local.tee $load_0(local.tee _p(struct.new "affine_drop_impl.wado//Pair" { a: struct.new "affine_drop_impl.wado//Guard" { id: 10 }, b: struct.new "affine_drop_impl.wado//Guard" { id: 20 } }).a)) == 0 {
+        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $load_0.id;
     }
     _p.a = ref.null none;
-    if ref.is_null(local.tee kept(_p.b)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
+    if ref.is_null(local.tee $load_0(_p.b)) == 0 {
+        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $load_0.id;
     }
     _p.b = ref.null none;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("holder"), used: 6 });
     self_19 = struct.new "affine_drop_impl.wado//Keeper" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 100 } };
     global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 1;
-    if ref.is_null(local.tee kept(self_19.inner)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
+    if ref.is_null(local.tee $load_0(self_19.inner)) == 0 {
+        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $load_0.id;
     }
     self_19.inner = ref.null none;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("keeper"), used: 6 });
-    kept = local.tee self_23(struct.new "affine_drop_impl.wado//Giver" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 1000 } }).inner;
+    $load_0 = local.tee self_23(struct.new "affine_drop_impl.wado//Giver" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 1000 } }).inner;
     self_23.inner = ref.null none;
-    global:affine_drop_impl.wado::GIVEN = global:affine_drop_impl.wado::GIVEN + local.tee self_8(kept.id);
-    if ref.is_null(kept) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + self_8;
+    global:affine_drop_impl.wado::GIVEN = global:affine_drop_impl.wado::GIVEN + local.tee $load_7($load_0.id);
+    if ref.is_null($load_0) == 0 {
+        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $load_7;
     }
-    if ref.is_null(local.tee kept(self_23.inner)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
+    if ref.is_null(local.tee $load_0(self_23.inner)) == 0 {
+        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $load_0.id;
     }
     self_23.inner = ref.null none;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("giver"), used: 5 });
@@ -273,7 +270,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b30: block {
         l31: loop {
-            break_if b30 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b30 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -295,7 +292,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         };
     }; b34: block {
         l35: loop {
-            break_if b34 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+            break_if b34 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -396,7 +393,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop
     let new_used_375: i32;
     let start_376: i32;
     let $sroa_view_repr_886: ref Array<u8>;
-    let $sroa_view_repr_898: ref Array<u8>;
+    let $sroa_view_repr_897: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(63), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
@@ -429,14 +426,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop
     $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_191(x_191 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_191 < 0_i64, 0_i64 - x_191, x_191)));
     n_371 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, n_371, $mv$t$h1);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_view_repr_886(out_3.repr), n_371, x_191, $mv$t$h1);
-    $sroa_view_repr_898 = global:core:prelude/string.wado::$const_obj_0;
+    $sroa_view_repr_897 = global:core:prelude/string.wado::$const_obj_0;
     if @unlikely(local.tee $mv$t$h1(out_3.used + 7) > builtin::array_len($sroa_view_repr_886)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h1);
     }
     n_371 = out_3.used;
     out_3.used = $mv$t$h1;
-    builtin::array_copy<u8>(out_3.repr, n_371, $sroa_view_repr_898, 0, 7);
+    builtin::array_copy<u8>(out_3.repr, n_371, $sroa_view_repr_897, 0, 7);
     $mv$t$h1 = $mv$t$h2 < 0;
     $mv$t$h2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_191(x_191 = builtin::i64_extend_i32_s($mv$t$h2); select i64(x_191 < 0_i64, 0_i64 - x_191, x_191)));
     $mv$t$h1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h1, $mv$t$h2);

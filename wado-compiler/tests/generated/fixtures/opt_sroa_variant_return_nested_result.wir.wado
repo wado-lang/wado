@@ -415,8 +415,8 @@ fn "opt_sroa_variant_return_nested_result.wado/sum_all$sroa[return]$spec0"($mv$d
             let $vr_case0_payload_0_$mv$$vr_7$1: i64;
             let $vr_case1_payload_0_$mv$$vr_7$1: i32;
             multivalue_bind [$mv$$vr_7$0, $vr_discriminant_$mv$$vr_7$1, $vr_case0_payload_0_$mv$$vr_7$1, $vr_case1_payload_0_$mv$$vr_7$1, $mv$$vr_7$2] = "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/Cursor::step$sroa[return]"(cur);
-            if $mv$$vr_7$0 == 0 {
-            } else if @unlikely($mv$$vr_7$0 == 1) {
+            if @likely($mv$$vr_7$0 == 0) {
+            } else if @likely($mv$$vr_7$0 == 1) {
                 cold_path;
                 $qm_e = ref.as_non_null($mv$$vr_7$2);
                 cold_path;
@@ -449,8 +449,8 @@ fn "opt_sroa_variant_return_nested_result.wado/sum_all$sroa[return]$spec1"($mv$d
             let $vr_case0_payload_0_$mv$$vr_7$1: i64;
             let $vr_case1_payload_0_$mv$$vr_7$1: i32;
             multivalue_bind [$mv$$vr_7$0, $vr_discriminant_$mv$$vr_7$1, $vr_case0_payload_0_$mv$$vr_7$1, $vr_case1_payload_0_$mv$$vr_7$1, $mv$$vr_7$2] = "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/Cursor::step$sroa[return]"(cur);
-            if $mv$$vr_7$0 == 0 {
-            } else if @unlikely($mv$$vr_7$0 == 1) {
+            if @likely($mv$$vr_7$0 == 0) {
+            } else if @likely($mv$$vr_7$0 == 1) {
                 cold_path;
                 $qm_e = ref.as_non_null($mv$$vr_7$2);
                 cold_path;
@@ -483,8 +483,8 @@ fn "opt_sroa_variant_return_nested_result.wado/sum_all$sroa[return]$spec2"($mv$d
             let $vr_case0_payload_0_$mv$$vr_7$1: i64;
             let $vr_case1_payload_0_$mv$$vr_7$1: i32;
             multivalue_bind [$mv$$vr_7$0, $vr_discriminant_$mv$$vr_7$1, $vr_case0_payload_0_$mv$$vr_7$1, $vr_case1_payload_0_$mv$$vr_7$1, $mv$$vr_7$2] = "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/Cursor::step$sroa[return]"(cur);
-            if $mv$$vr_7$0 == 0 {
-            } else if @unlikely($mv$$vr_7$0 == 1) {
+            if @likely($mv$$vr_7$0 == 0) {
+            } else if @likely($mv$$vr_7$0 == 1) {
                 cold_path;
                 $qm_e = ref.as_non_null($mv$$vr_7$2);
                 cold_path;
@@ -722,7 +722,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b74: block {
         l75: loop {
-            break_if b74 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b74 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -746,7 +746,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b78: block {
         l79: loop {
-            break_if b78 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b78 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1157,12 +1157,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_va
     let $load_5: ref "core:prelude/string.wado//String";
     let out_3: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//StrSlice";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_variant_return_nested_result_wado__tmpl_683b550212540605_core_prelude_types_wado_Result_i64_opt_sroa_variant_return_nested_result_wado_OuterErr____fmt_5_0: ref "core:prelude/format.wado//Formatter";
+    let $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_variant_return_nested_result_wado__tmpl_683b550212540605_core_prelude_types_wado_Result_i64_opt_sroa_variant_return_nested_result_wado_OuterErr____fmt_7_0: ref "core:prelude/format.wado//Formatter";
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/$tmpl$683b550212540605^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_return_nested_result.wado/$tmpl$683b550212540605,core:prelude/types.wado/Result<i64,opt_sroa_variant_return_nested_result.wado/OuterErr>>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_variant_return_nested_result.wado/$tmpl$683b550212540605,core:prelude/types.wado/Result<i64,opt_sroa_variant_return_nested_result.wado/OuterErr>>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_variant_return_nested_result_wado__tmpl_683b550212540605_core_prelude_types_wado_Result_i64_opt_sroa_variant_return_nested_result_wado_OuterErr____fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/traits.wado/core:prelude/types.wado/Result<i64,opt_sroa_variant_return_nested_result.wado/OuterErr>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_variant_return_nested_result_wado__tmpl_683b550212540605_core_prelude_types_wado_Result_i64_opt_sroa_variant_return_nested_result_wado_OuterErr____fmt_5_0);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_variant_return_nested_result_wado__tmpl_683b550212540605_core_prelude_types_wado_Result_i64_opt_sroa_variant_return_nested_result_wado_OuterErr____fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
+    "core:prelude/traits.wado/core:prelude/types.wado/Result<i64,opt_sroa_variant_return_nested_result.wado/OuterErr>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_variant_return_nested_result_wado__tmpl_683b550212540605_core_prelude_types_wado_Result_i64_opt_sroa_variant_return_nested_result_wado_OuterErr____fmt_7_0);
     self_9 = "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/$tmpl$683b550212540605^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     return out_3;

@@ -450,13 +450,15 @@ never prints, and grows enough to lose a specialization. The cost belongs to
 the optimizer, since it is the cost of any struct field nothing reads, not to
 the handle's layout. A handle that held only its index and answered each method
 from a synthesized constant would be a second mechanism for the handles alone.
+`nir/dead_field` removes such a field, so a walk that never reads `doc` builds
+none.
 
 ## Roadmap
 
 1. [x] `Reflect::doc()` and `Member::doc()`. Done when every kind and every
    member handle answers as [Doc Comments](./spec-reflection.md#doc-comments)
    states, and Jade's B writes `description` and `title` from them.
-2. [ ] The optimizer removes a struct field that no code in the program reads,
+2. [x] The optimizer removes a struct field that no code in the program reads,
    from the type and from every place that builds it. Done when the WIR
    goldens of `future_started_read` and the `serde_*` fixtures are no larger
    than before handles carried `doc`, and a user struct's unread field is gone

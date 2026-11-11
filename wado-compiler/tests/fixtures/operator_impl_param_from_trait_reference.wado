@@ -1,0 +1,36 @@
+#![TODO]
+// TODO: an operator names no trait arguments, so a parameter only the trait
+// reference sets (`R` in `impl<R: Text> Eq<R> for Tag`) stays in the signature.
+// See WEP Trait Resolution, "an operator never binds a parameter only the
+// trait's arguments name".
+use { println, Stdout } from "core:cli";
+
+trait Text with () {
+    fn text(&self) -> String;
+}
+
+impl Text for String {
+    fn text(&self) -> String {
+        return *self;
+    }
+}
+
+struct Tag {
+    name: String,
+}
+
+impl<R: Text> Eq<R> for Tag {
+    fn eq(&self, other: &R) -> bool {
+        return self.name == other.text();
+    }
+}
+
+export fn run() with Stdout {
+    let t = Tag { name: "7" };
+    println(`${t == "7"} ${t == "8"}`);
+}
+
+__DATA__
+{
+  "stdout": "true false\n"
+}

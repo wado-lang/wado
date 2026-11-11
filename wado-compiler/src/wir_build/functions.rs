@@ -18,7 +18,6 @@ use crate::wir_build::packed_array_is_eager;
 
 use super::context::{PendingFunctionBody, WirContext};
 use super::translate::resolve_param_names;
-use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flat_params_in_buffer,
     flatten_cm_param_type,
@@ -677,18 +676,16 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         let slot = global.init.slot_expr();
         let init_body = slot.body();
         let init_op = slot.expr();
-        let init =
-            if is_null_operand(init_body, init_op) && type_table.as_option(global.ty).is_some() {
-                option_none(&wir_type, type_table)
-            } else {
-                translate_global_init(
-                    init_body,
-                    init_op,
-                    init_body.operand_type(init_op),
-                    type_table,
-                    &wir_type,
-                )
-            };
+        let init = match init_body.built_case(init_op) {
+            Some((case_index, None)) => unit_case(&wir_type, case_index),
+            _ => translate_global_init(
+                init_body,
+                init_op,
+                init_body.operand_type(init_op),
+                type_table,
+                &wir_type,
+            ),
+        };
 
         let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
         ctx.global_map.insert(global_name.clone(), idx);
@@ -704,15 +701,6 @@ fn register_globals(ctx: &mut WirContext<'_>) {
                 ..WirMeta::default()
             },
         });
-    }
-}
-
-/// Whether the declared value is `null` itself.
-fn is_null_operand(body: &Body, op: Operand) -> bool {
-    match op {
-        Operand::Value(v) => matches!(body.values.kind(v), ValueKind::Null),
-        // `null` reaches the pool as a value, never as a skeleton node.
-        Operand::Expr(_) => false,
     }
 }
 
@@ -779,19 +767,19 @@ fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option
     }
 }
 
-/// An `Option`'s `None`, built the way every other `None` in the program is.
-/// Whether it *is* a null reference is `wir_optimize::nullable_ref`'s answer,
-/// which reaches this slot by rewriting it along with the rest; deciding it here
-/// is what let a global disagree with the module around it.
-fn option_none(wir_type: &WirType, type_table: &TypeTable) -> WirInstr {
+/// A payload-less case, such as an `Option`'s `None`, built the way every other
+/// one in the program is. Whether `None` *is* a null reference is
+/// `wir_optimize::nullable_ref`'s answer, which reaches this slot by rewriting
+/// it along with the rest; deciding it here is what let a global disagree with
+/// the module around it.
+fn unit_case(wir_type: &WirType, case_index: u32) -> WirInstr {
     let WirType::Ref { type_id, .. } = wir_type else {
-        panic!("[WIR] an Option-typed global's slot is not a reference: {wir_type:?}");
+        panic!("[WIR] a variant-typed global's slot is not a reference: {wir_type:?}");
     };
-    let none_index = type_table.compiler_variant_case(CompilerItem::OptionNone).3;
     WirInstr::StructNew {
         type_id: type_id.clone(),
         fields: vec![WirInstr::I32Const(
-            i32::try_from(none_index).expect("case index fits i32"),
+            i32::try_from(case_index).expect("case index fits i32"),
         )],
     }
 }

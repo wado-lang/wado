@@ -22,7 +22,6 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
 }
 
@@ -355,46 +354,43 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "affine_array_drops_elements.wado/$test_0"() {
     let toks: ref null "Array<affine_array_drops_elements.wado/Tok>";
-    let $moved_3_16: ref null "affine_array_drops_elements.wado//Tok";
     let $held_7_20: ref null "affine_array_drops_elements.wado//Tok";
     let $end_1: i32;
     let $index_2: i32;
-    toks = builtin::array_new<ref null "affine_array_drops_elements.wado//Tok">(3);
-    $moved_3_16 = struct.new "affine_array_drops_elements.wado//Tok" { id: 1 };
-    if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, 0))) {
-        builtin::array_set<ref null "affine_array_drops_elements.wado//Tok">(toks, 0, $moved_3_16);
+    let $slot_3: ref null "affine_array_drops_elements.wado//Tok";
+    if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(local.tee toks(builtin::array_new<ref null "affine_array_drops_elements.wado//Tok">(3)), 0))) {
+        builtin::array_set<ref null "affine_array_drops_elements.wado//Tok">(toks, 0, struct.new "affine_array_drops_elements.wado//Tok" { id: 1 });
     } else {
         global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
         $held_7_20.id = 1;
     }
-    $moved_3_16 = struct.new "affine_array_drops_elements.wado//Tok" { id: 100 };
     if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, 2))) {
-        builtin::array_set<ref null "affine_array_drops_elements.wado//Tok">(toks, 2, $moved_3_16);
+        builtin::array_set<ref null "affine_array_drops_elements.wado//Tok">(toks, 2, struct.new "affine_array_drops_elements.wado//Tok" { id: 100 });
     } else {
         global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
         $held_7_20.id = 100;
     }
-    $moved_3_16 = builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, 0);
+    $held_7_20 = builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, 0);
     builtin::array_set<ref null "affine_array_drops_elements.wado//Tok">(toks, 0, ref.null none);
     $end_1 = builtin::array_len(toks);
     $index_2 = 0;
     b2: block {
         l3: loop {
-            break_if b2 ((($index_2 >= $end_1) | (($index_2 + 1) >= $end_1)) | ((($index_2 + 1) + 1) >= $end_1)) | (((($index_2 + 1) + 1) + 1) >= $end_1);
-            if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
-                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
+            break_if b2 (builtin::i64_extend_i32_s($index_2) + 3_i64) >= builtin::i64_extend_i32_s($end_1);
+            if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
+                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $slot_3.id;
             }
             $index_2 = $index_2 + 1;
-            if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
-                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
+            if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
+                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $slot_3.id;
             }
             $index_2 = $index_2 + 1;
-            if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
-                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
+            if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
+                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $slot_3.id;
             }
             $index_2 = $index_2 + 1;
-            if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
-                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
+            if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
+                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $slot_3.id;
             }
             $index_2 = $index_2 + 1;
             continue l3;
@@ -403,8 +399,8 @@ fn "affine_array_drops_elements.wado/$test_0"() {
     b8: block {
         l9: loop {
             break_if b8 $index_2 >= $end_1;
-            if ref.is_null(local.tee $held_7_20(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
-                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
+            if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "affine_array_drops_elements.wado//Tok">(toks, $index_2))) == 0 {
+                global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $slot_3.id;
             }
             $index_2 = $index_2 + 1;
             continue l9;
@@ -415,7 +411,7 @@ fn "affine_array_drops_elements.wado/$test_0"() {
         "affine_array_drops_elements.wado/$test_0$cold1"();
         unreachable;
     }
-    global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $moved_3_16.id;
+    global:affine_array_drops_elements.wado::DROPS = global:affine_array_drops_elements.wado::DROPS + $held_7_20.id;
     if @unlikely((global:affine_array_drops_elements.wado::DROPS == 101) == 0) {
         cold_path;
         "affine_array_drops_elements.wado/$test_0$cold0"();
@@ -819,7 +815,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     $licm_arith_7 = len - 8;
     b102: block {
         l103: loop {
-            break_if b102 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            break_if b102 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -843,7 +839,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
     b106: block {
         l107: loop {
-            break_if b106 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            break_if b106 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1262,7 +1258,7 @@ fn "affine_array_drops_elements.wado/affine_array_drops_elements.wado/$tmpl$ebaa
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
-    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
+    return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, buf: buf };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative) {
@@ -1524,12 +1520,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_arra
     let $load_5: ref "core:prelude/string.wado//String";
     let out_3: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//StrSlice";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_affine_array_drops_elements_wado__tmpl_ebaa20f4a908b504_i32___fmt_5_0: ref "core:prelude/format.wado//Formatter";
+    let $temp_inline_core_prelude_traits_wado_TemplateHole_affine_array_drops_elements_wado__tmpl_ebaa20f4a908b504_i32___fmt_7_0: ref "core:prelude/format.wado//Formatter";
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("affine_array_drops_elements.wado/affine_array_drops_elements.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<affine_array_drops_elements.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<affine_array_drops_elements.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_affine_array_drops_elements_wado__tmpl_ebaa20f4a908b504_i32___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_affine_array_drops_elements_wado__tmpl_ebaa20f4a908b504_i32___fmt_5_0);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_affine_array_drops_elements_wado__tmpl_ebaa20f4a908b504_i32___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_affine_array_drops_elements_wado__tmpl_ebaa20f4a908b504_i32___fmt_7_0);
     self_9 = "affine_array_drops_elements.wado/affine_array_drops_elements.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     return out_3;
@@ -1820,12 +1816,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     let $load_5: ref "core:prelude/string.wado//String";
     let out_3: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//StrSlice";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ce9bda9252f81986_bool___fmt_5_0: ref "core:prelude/format.wado//Formatter";
+    let $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ce9bda9252f81986_bool___fmt_7_0: ref "core:prelude/format.wado//Formatter";
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("core:prelude/string.wado/core:prelude/string.wado/$tmpl$ce9bda9252f81986^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/string.wado/$tmpl$ce9bda9252f81986,bool>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/string.wado/$tmpl$ce9bda9252f81986,bool>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ce9bda9252f81986_bool___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ce9bda9252f81986_bool___fmt_5_0);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ce9bda9252f81986_bool___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
+    "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ce9bda9252f81986_bool___fmt_7_0);
     self_9 = "core:prelude/string.wado/core:prelude/string.wado/$tmpl$ce9bda9252f81986^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     return out_3;
@@ -1838,12 +1834,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     let $load_5: ref "core:prelude/string.wado//String";
     let out_3: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//StrSlice";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ebaa20f4a908b504_i32___fmt_5_0: ref "core:prelude/format.wado//Formatter";
+    let $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ebaa20f4a908b504_i32___fmt_7_0: ref "core:prelude/format.wado//Formatter";
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("core:prelude/string.wado/core:prelude/string.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/string.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/string.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ebaa20f4a908b504_i32___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ebaa20f4a908b504_i32___fmt_5_0);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ebaa20f4a908b504_i32___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_string_wado__tmpl_ebaa20f4a908b504_i32___fmt_7_0);
     self_9 = "core:prelude/string.wado/core:prelude/string.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
     return out_3;

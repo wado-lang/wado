@@ -2,6 +2,7 @@
 //! rewrite looks up, keyed by the template the call recorded.
 
 use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, BlanketReceiver};
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TemplateId, TirExpr,
     TirExprKind, TirFunction, TypeArgMap, TypeId,
@@ -127,7 +128,7 @@ impl Monomorphizer {
         &self,
         key: &InstantiationKey,
         templates: &Templates,
-        type_table: &TypeTable,
+        type_table: &mut TypeTable,
     ) -> String {
         let template = key
             .template
@@ -135,6 +136,14 @@ impl Monomorphizer {
             .and_then(|id| templates.get(id))
             .expect("an instance names a registered template")
             .borrow();
+        if let Some(named) = named_at_trait_args(&template, &key.impl_type_args, type_table) {
+            let key = InstantiationKey {
+                impl_type_args: Vec::new(),
+                method_info: Some(named),
+                ..key.clone()
+            };
+            return self.method_instantiation_name_inner(&key, type_table, &[]);
+        }
         self.method_instantiation_name_inner(key, type_table, &template.impl_type_params)
     }
 
@@ -174,13 +183,25 @@ impl Monomorphizer {
             return recorded.map(<[TypeId]>::to_vec);
         };
         let info = template.method_info.as_ref()?;
-        self.struct_info_for_method(
-            receiver,
-            type_table,
-            &info.method_name,
-            info.trait_name.as_ref(),
-        )
-        .map(|(_, args)| args)
+        let args = self
+            .struct_info_for_method(
+                receiver,
+                type_table,
+                &info.method_name,
+                info.trait_name.as_ref(),
+            )
+            .map(|(_, args)| args);
+        // A slot only the trait reference binds shows in no receiver argument,
+        // so the call recorded every slot.
+        match recorded {
+            Some(recorded)
+                if open_slots(template, args.as_deref().unwrap_or_default(), type_table)
+                    .is_some() =>
+            {
+                Some(recorded.to_vec())
+            }
+            _ => args,
+        }
     }
 
     /// A blanket's impl arguments: the receiver it serves, then what its bounds
@@ -234,6 +255,51 @@ impl Monomorphizer {
     }
 }
 
+/// `template` named at the instance `impl_type_args` key, one argument per
+/// slot, where its block's trait reference sets a parameter its target does
+/// not: by the receiver and the trait arguments the slots make. The receiver
+/// alone tells no two such instances apart (`i32^Shown<Host>::shown` and
+/// `i32^Shown<Guest>::shown`). `None` for any other block.
+pub(super) fn named_at_trait_args(
+    template: &TirFunction,
+    impl_type_args: &[TypeId],
+    type_table: &mut TypeTable,
+) -> Option<LocalMethodName> {
+    let block = template.impl_origin?;
+    if !type_table.impl_trait_sets_params(block) {
+        return None;
+    }
+    let (receiver, trait_args) = type_table.impl_instance_at(block, impl_type_args);
+    let trait_args: Vec<FqTypeName> = trait_args
+        .iter()
+        .map(|&arg| type_table.fq_type_name(arg))
+        .collect();
+    Some(
+        template
+            .method_info
+            .as_ref()?
+            .at_owner(&type_table.fq_type_name(receiver))
+            .with_trait_type_args(&trait_args),
+    )
+}
+
+/// The slots of `template`'s block `receiver_args` fill, where they leave one
+/// open: one only its trait reference binds (`G` in `impl<G: Back> Shown<G>
+/// for i32`), or every slot of a projection target (`impl<G: Back> Shown<G>
+/// for G::T`). `None` where they fill every slot.
+pub(super) fn open_slots(
+    template: &TirFunction,
+    receiver_args: &[TypeId],
+    type_table: &mut TypeTable,
+) -> Option<TypeArgMap> {
+    let filled = type_table.impl_slots(template.impl_origin?, receiver_args);
+    template
+        .impl_type_params
+        .iter()
+        .any(|param| !param.is_pack && !filled.contains_key(&param.id))
+        .then_some(filled)
+}
+
 /// Whether `outer` is a newtype whose chain of bases passes `inner`.
 fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -> bool {
     let mut link = outer;
@@ -263,16 +329,19 @@ fn method_args_at(
         return Some(recorded.method_type_args.clone());
     }
     let receiver_slots = usize::from(site.receiver.is_some());
+    let written: Vec<TypeId> = template
+        .params
+        .iter()
+        .skip(receiver_slots)
+        .map(|param| type_table.peel_refs(param.type_id))
+        .collect();
+    let concrete: Vec<TypeId> = site
+        .args
+        .iter()
+        .map(|arg| type_table.peel_refs(arg.expr.type_id))
+        .collect();
     let mut bound = TypeArgMap::default();
-    for (param, arg) in template.params.iter().skip(receiver_slots).zip(site.args) {
-        let written = type_table.peel_refs(param.type_id);
-        let concrete = type_table.peel_refs(arg.expr.type_id);
-        if let Some(slots) = type_table.bind_type_params(&[written], &[concrete]) {
-            for (slot, ty) in slots {
-                bound.entry(slot).or_insert(ty);
-            }
-        }
-    }
+    type_table.bind_each_into(&written, &concrete, &mut bound);
     template
         .type_params
         .iter()

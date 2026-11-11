@@ -17,7 +17,7 @@ MICROGPT_NODE_SEMI_SPACE=128
 # without one, which is how the C and Rust rows beside it are built.
 wado_rows() {
     echo "=== $1 ==="
-    wado run -O2 $WADO_BENCH_FLAGS "$2"
+    wado run -O2 $WADO_BENCH_FLAGS $WADO_RUN_FLAGS "$2"
     echo "=== $1 (no-pgo) ==="
-    wado run -O2 $WADO_BENCH_FLAGS -f no-pgo "$2"
+    wado run -O2 $WADO_BENCH_FLAGS $WADO_RUN_FLAGS -f no-pgo "$2"
 }

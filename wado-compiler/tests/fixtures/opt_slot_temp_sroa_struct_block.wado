@@ -67,7 +67,7 @@ fn pick_half(p: i32) -> Half {
 }
 
 // Only one field is read, so the struct is not fully decomposed and the block
-// stays.
+// stays. `run` reads `dropped` elsewhere, so dead field elimination keeps it.
 #[inline("never")]
 fn use_half(p: i32) -> u64 {
     let x = pick_half(p);
@@ -109,6 +109,7 @@ export fn run() {
     assert use_call(builtin::black_box(90)) == 720;
     assert use_half(builtin::black_box(3)) == 3;
     assert use_half(builtin::black_box(90)) == 270;
+    assert pick_half(builtin::black_box(90)).dropped == 5;
     assert use_boxed(builtin::black_box(3)) == "fast/7";
     assert use_boxed(builtin::black_box(90)) == "w90/450";
 }

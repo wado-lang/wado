@@ -1,0 +1,35 @@
+// The unrolled copy of a counted loop leaves when the last of the iterations it
+// runs would: one widened compare, `i + 3 > last` in `i64`, rather than one
+// compare per iteration. In `i64` the sum cannot wrap, so where it stays in
+// range every earlier one does too. An inclusive bound, which the copy tests
+// with `>`, takes the same form as an exclusive one.
+
+#[inline(never)]
+fn count_to(xs: &List<bool>, last: i32) -> i32 {
+    let mut n = 0;
+    for let mut i = 0; i <= last; i += 1 {
+        if xs[i] {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+test {
+    let mut xs = List::<bool>::filled(builtin::black_box(10), false);
+    xs[0] = true;
+    xs[4] = true;
+    xs[9] = true;
+    assert count_to(&xs, builtin::black_box(-1)) == 0;
+    assert count_to(&xs, builtin::black_box(2)) == 1;
+    assert count_to(&xs, builtin::black_box(8)) == 2;
+    assert count_to(&xs, builtin::black_box(9)) == 3;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_scope": "count_to",
+    "wir_pass": {"O2": ["wir/unroll_array_loops"]},
+    "wir_expect:O2": ["(builtin::i64_extend_i32_s(i) + 3_i64) > builtin::i64_extend_i32_s(last)"]
+}

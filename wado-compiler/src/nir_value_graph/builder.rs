@@ -306,7 +306,7 @@ pub fn build(
     param_locals: &[u32],
     alias: &AliasSets,
     calls: CallFacts<'_>,
-    type_table: Option<&TypeTable>,
+    type_table: &TypeTable,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
     // `Operand::Value` resolves through the same ids), grow it during the walk,
@@ -342,7 +342,7 @@ pub(crate) fn build_scoped(
     param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
     alias: &AliasSets,
-    type_table: Option<&TypeTable>,
+    type_table: &TypeTable,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -387,7 +387,7 @@ pub(crate) fn walk_scoped(
     param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
     alias: &AliasSets,
-    type_table: Option<&TypeTable>,
+    type_table: &TypeTable,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -455,7 +455,7 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Char(c) => pool.char(c),
         ValueKind::Null => pool.null(),
         ValueKind::Unit => pool.unit(),
-        ValueKind::Const(key, t) => pool.constant(key.value(), t),
+        ValueKind::Const(..) | ValueKind::UnitCase { .. } => pool.intern(k),
         ValueKind::Opaque(_)
         | ValueKind::Binary { .. }
         | ValueKind::Unary { .. }
@@ -478,7 +478,7 @@ fn reintern_live_rooted(
     live: &mut ValuePool,
     id: ValueId,
     live_base: u32,
-    type_table: Option<&TypeTable>,
+    type_table: &TypeTable,
 ) -> Option<ValueId> {
     if id.index() < live_base {
         return Some(id);
@@ -491,6 +491,7 @@ fn reintern_live_rooted(
         | ValueKind::Char(_)
         | ValueKind::Null
         | ValueKind::Unit
+        | ValueKind::UnitCase { .. }
         | ValueKind::Const(..) => reintern_const(live, kind),
         ValueKind::Binary { op, lhs, rhs, ty } => {
             let l = reintern_live_rooted(scratch, live, lhs, live_base, type_table)?;
@@ -590,10 +591,7 @@ struct Builder<'a> {
     /// The array is a fresh opaque per call, so a second allocation is a second
     /// entry and a reassignment reaches neither.
     array_lengths: IndexMap<ValueId, ValueId>,
-    /// Type table for constant folding of pure arithmetic on literal operands
-    /// (`Binary` / `Unary`). `None` disables folding (the value graph still
-    /// builds structural nodes). See [`Builder::fold_binary_const`].
-    type_table: Option<&'a TypeTable>,
+    type_table: &'a TypeTable,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
@@ -616,12 +614,7 @@ struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
-    fn new(
-        body: &'a Body,
-        alias: &AliasSets,
-        type_table: Option<&'a TypeTable>,
-        pool: ValuePool,
-    ) -> Self {
+    fn new(body: &'a Body, alias: &AliasSets, type_table: &'a TypeTable, pool: ValuePool) -> Self {
         Self {
             body,
             pool,
@@ -687,7 +680,7 @@ impl<'a> Builder<'a> {
         right: Operand,
         result_type: tir::TypeId,
     ) -> Option<ValueId> {
-        let tt = self.type_table?;
+        let tt = self.type_table;
         // Reflexivity: operands sharing a `ValueId` are the same value, so a
         // comparison of them folds without a literal (e.g. an identity
         // reinterpret `v as SameType == v`). `v128` has no scalar comparison.
@@ -759,8 +752,7 @@ impl<'a> Builder<'a> {
         inner: Operand,
         result_type: tir::TypeId,
     ) -> Option<ValueId> {
-        let tt = self.type_table?;
-        let v = self.value_to_const(operand, inner, tt)?;
+        let v = self.value_to_const(operand, inner, self.type_table)?;
         let result = const_eval::eval_unary(op, v)?;
         Some(self.const_to_value(result, result_type))
     }
@@ -884,8 +876,13 @@ impl<'a> Builder<'a> {
     /// literal built.
     fn known_moved(&mut self, place: Operand) -> Option<ValueId> {
         let value = self.walked_value(place)?;
-        let moved = match self.pool.kind(value) {
+        let kind = self.pool.kind(value);
+        let moved = match kind {
             ValueKind::Null => true,
+            ValueKind::UnitCase { .. } => {
+                let marker = value_kind_to_const(kind, None).expect("a unit case is a constant");
+                const_eval::is_moved_marker(&marker, self.type_table)
+            }
             _ if self.owned_pointees.contains(&value) => false,
             _ => return None,
         };
@@ -948,7 +945,7 @@ impl<'a> Builder<'a> {
             && recv.is_none_or(|v| !self.owned_pointees.contains(&v))
         {
             let ty = self.body.exprs[recv_expr].type_id;
-            Holder::Foreign(self.type_table.and_then(|tt| tt.heap_object_key(ty)))
+            Holder::Foreign(self.type_table.heap_object_key(ty))
         } else {
             Holder::Frame
         }
@@ -1468,9 +1465,7 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    self.walk_operand(p);
-                }
+                self.walk_operand(payload);
                 None
             }
             // An enum case is a compile-time scalar constant: its discriminant.
@@ -2845,7 +2840,8 @@ mod tests {
         });
 
         let facts = TestFacts::default();
-        build(&mut body, &[], &AliasSets::default(), facts.facts(), None);
+        let types = TypeTable::new();
+        build(&mut body, &[], &AliasSets::default(), facts.facts(), &types);
         assert_eq!(body.values.type_of(placeholder), Some(TypeTable::UNIT));
     }
 
@@ -2855,6 +2851,7 @@ mod tests {
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();
         let no_builtin_map = CtfeBuiltinMap::default();
+        let types = TypeTable::new();
         let escaped = |order: [u32; 2]| AliasSets {
             mut_escaped: order.into_iter().collect(),
             ..AliasSets::default()
@@ -2873,7 +2870,7 @@ mod tests {
                     ctfe_builtins: &no_builtin_map,
                     writes: &IndexMap::default(),
                 },
-                None,
+                &types,
             );
             body.values.values.clone()
         };

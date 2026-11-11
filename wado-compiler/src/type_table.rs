@@ -1792,10 +1792,20 @@ impl TypeTable {
                             false
                         });
                     }
-                    ResolvedType::Struct { type_args, .. }
-                    | ResolvedType::Tuple(type_args)
-                    | ResolvedType::Resource { type_args, .. }
-                    | ResolvedType::Variant { type_args, .. } => {
+                    // A declaration's members are answered from what it
+                    // registered, which an optimization that drops a field
+                    // from the NIR struct leaves as declared.
+                    ResolvedType::Struct {
+                        def: StructDef::Decl(def),
+                        type_args,
+                    }
+                    | ResolvedType::Variant { def, type_args } => {
+                        components.extend(type_args.iter().copied());
+                        if let Some(members) = self.declared_members(*def, type_args) {
+                            components.extend(members.types);
+                        }
+                    }
+                    ResolvedType::Tuple(type_args) | ResolvedType::Resource { type_args, .. } => {
                         components.extend(type_args.iter().copied());
                     }
                     ResolvedType::Newtype {
@@ -2242,6 +2252,13 @@ impl TypeTable {
     /// Check if a type is `Option<T>`, returning the inner type if so.
     pub fn as_option(&self, type_id: TypeId) -> Option<TypeId> {
         self.single_arg_of(type_id, CompilerItem::Option)
+    }
+
+    /// The case a `null` of `type_id` builds: `Option`'s `None`. Of any other
+    /// type it is a bare `ref.null`, which builds no case.
+    pub fn null_case(&self, type_id: TypeId) -> Option<u32> {
+        self.as_option(type_id)
+            .map(|_| self.compiler_variant_case(CompilerItem::OptionNone).3)
     }
 
     /// `TreeMap<K, V>`'s key and value types, keyed by the declaration as
@@ -2725,6 +2742,16 @@ impl TypeTable {
         self.reaches_in(ty, Reach::Object(kind), None, &mut IndexSet::default())
     }
 
+    /// Whether a value of `ty` holds, at any depth of its data, an object of
+    /// `kind`: what a callee handed one may read without running other code.
+    /// A function's captures and a resource's state are behind code of their
+    /// own. A type whose members are not registered may hold anything, so it
+    /// does.
+    #[must_use]
+    pub fn reaches_object_data(&self, ty: TypeId, kind: TypeId) -> bool {
+        self.reaches_in(ty, Reach::Data(kind), None, &mut IndexSet::default())
+    }
+
     /// Whether `ty`, as written inside the template `frame` instantiates,
     /// reaches `target`. `walked` holds what the walk is already inside, which
     /// adds nothing.
@@ -2746,7 +2773,7 @@ impl TypeTable {
             return true;
         };
         let ty = self.representation_head(ty);
-        if let Reach::Object(kind) = target
+        if let Reach::Object(kind) | Reach::Data(kind) = target
             && self.object_kind(ty) == kind
         {
             return true;
@@ -2762,7 +2789,7 @@ impl TypeTable {
                 matches!(self.get(kind), ResolvedType::BuiltinArray(array_elem)
                     if *array_elem == elem)
             };
-            return matches!(target, Reach::Object(kind) if backs(kind))
+            return matches!(target, Reach::Object(kind) | Reach::Data(kind) if backs(kind))
                 || self.reaches_in(elem, target, frame, walked);
         }
         let (template, members): (Option<(DefId, Vec<TypeId>)>, Vec<TypeId>) = match self.get(ty) {
@@ -2811,9 +2838,10 @@ impl TypeTable {
             ResolvedType::Newtype { base_type, .. } => {
                 return self.reaches_in(*base_type, target, frame, walked);
             }
-            ResolvedType::Function { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::TypeParam { .. }
+            ResolvedType::Function { .. } | ResolvedType::Resource { .. } => {
+                return !matches!(target, Reach::Data(_));
+            }
+            ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
@@ -3519,7 +3547,7 @@ impl TypeTable {
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
     /// parameter as its argument in `args`, which name a prefix of them.
-    fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
+    pub fn frame_slots(&self, frame: &TraitFrame, base: TypeId, args: &[TypeId]) -> TypeArgMap {
         assert!(
             args.len() <= frame.params.len(),
             "a trait is reached at no more arguments than it has parameters"
@@ -6473,6 +6501,9 @@ struct ImplTarget {
     /// own `TypeParam`.
     args: Vec<TypeId>,
     projections: Vec<ImplProjection>,
+    /// The arguments the block's trait reference writes, empty for an
+    /// inherent block.
+    trait_args: Vec<TypeId>,
 }
 
 /// Slots of an impl block that a bound determines rather than its target:
@@ -6489,7 +6520,7 @@ pub struct ImplProjection {
 }
 
 /// What an impl target binds at a receiver's arguments.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TargetBinding {
     /// The type each of the target's parameters takes.
     pub slots: TypeArgMap,
@@ -6509,13 +6540,15 @@ impl TargetBinding {
 
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
-    /// the head it names, with the slots its bounds determine.
+    /// the head it names, with the slots its bounds determine and the
+    /// arguments its trait reference writes.
     pub fn record_impl_target(
         &mut self,
         def: DefId,
         whole: TypeId,
         args: Vec<TypeId>,
         projections: Vec<ImplProjection>,
+        trait_args: Vec<TypeId>,
     ) {
         self.impl_targets.insert(
             def,
@@ -6523,8 +6556,30 @@ impl TypeTable {
                 whole,
                 args,
                 projections,
+                trait_args,
             },
         );
+    }
+
+    /// Whether impl block `def`'s trait reference names a parameter its target
+    /// does not: `G` in `impl<G: Back> Shown<G> for i32`, or any in a
+    /// projection target, `impl<G: Back> Shown<G> for G::T`. Only a call's
+    /// trait arguments set one, so its instances differ by them alone.
+    pub fn impl_trait_sets_params(&self, def: DefId) -> bool {
+        let target = self.impl_target(def);
+        let in_target = if matches!(
+            self.get(target.whole),
+            ResolvedType::AssocTypeProjection { .. }
+        ) {
+            IndexSet::default()
+        } else {
+            self.type_params_in(target.whole)
+        };
+        target.trait_args.iter().any(|&arg| {
+            self.type_params_in(arg)
+                .iter()
+                .any(|param| param.owner == def && !in_target.contains(param))
+        })
     }
 
     /// Impl block `def`'s target head at `head_args`; `None` where the target
@@ -6571,15 +6626,76 @@ impl TypeTable {
     /// block, so an earlier module's bound check can ask.
     pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> TypeArgMap {
         let mut slots = IndexMap::default();
-        for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
-            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
+        self.bind_each_into(self.impl_target_args(def), receiver_args, &mut slots);
+        self.project_impl_slots(def, &mut slots);
+        slots
+    }
+
+    /// Bind each of `written` against the one in `concrete` at its position
+    /// into `slots`, keeping a slot already filled.
+    pub fn bind_each_into(&self, written: &[TypeId], concrete: &[TypeId], slots: &mut TypeArgMap) {
+        for (&written, &concrete) in written.iter().zip(concrete) {
+            if let Some(bound) = self.bind_type_params(&[written], &[concrete]) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
                 }
             }
         }
-        self.project_impl_slots(def, &mut slots);
-        slots
+    }
+
+    /// Impl block `def`'s receiver and trait arguments at the instance `args`
+    /// key, one argument per slot in slot order.
+    pub fn impl_instance_at(&mut self, def: DefId, args: &[TypeId]) -> (TypeId, Vec<TypeId>) {
+        let slots: TypeArgMap = args
+            .iter()
+            .zip(0..)
+            .map(|(&ty, index)| (TypeParamId { owner: def, index }, ty))
+            .collect();
+        let receiver = self.substitute_type_params(self.impl_target_whole(def), &slots);
+        let trait_args = self
+            .impl_target(def)
+            .trait_args
+            .clone()
+            .into_iter()
+            .map(|arg| self.substitute_type_params(arg, &slots))
+            .collect();
+        (receiver, trait_args)
+    }
+
+    /// Fill the slots of impl block `def` its trait reference binds from the
+    /// arguments a call names: each argument the reference writes against the
+    /// one `asked` at its position, then the target read at what `slots` then
+    /// holds against `receiver`. A target projecting off a parameter binds
+    /// only this way: `G::Of<E>` reads `Boxed<E>` once `G` is `Host`, and
+    /// `Boxed<f32>` then fills `E`. What one read fills can settle another
+    /// projection's base, or a slot a bound projects (`X` in
+    /// `impl<T: Left<Out = X>, X>`), so both are read until nothing more fills.
+    pub fn bind_impl_slots_asked(
+        &mut self,
+        def: DefId,
+        asked: &[TypeId],
+        receiver: TypeId,
+        slots: &mut TypeArgMap,
+    ) {
+        self.bind_each_into(&self.impl_target(def).trait_args, asked, slots);
+        loop {
+            let filled = slots.len();
+            let target = self.substitute_type_params(self.impl_target_whole(def), slots);
+            self.bind_each_into(&[target], &[receiver], slots);
+            self.project_impl_slots(def, slots);
+            if slots.len() == filled {
+                return;
+            }
+        }
+    }
+
+    /// Whether impl block `def` is written for a projection (`G::Of<E>`),
+    /// which a receiver matches only through the block's other slots.
+    pub fn impl_targets_projection(&self, def: DefId) -> bool {
+        matches!(
+            self.get(self.impl_target_whole(def)),
+            ResolvedType::AssocTypeProjection { .. }
+        )
     }
 
     /// The declaration impl block `def` targets, past any reference.
@@ -6614,20 +6730,33 @@ impl TypeTable {
             let Some(&source) = slots.get(&projection.source) else {
                 continue;
             };
-            let Some(concrete) = self.resolve_trait_assoc_type_of_instance(
+            let concrete = match self.resolve_trait_assoc_type_of_instance(
                 source,
                 &projection.trait_,
                 None,
                 &projection.assoc,
-            ) else {
-                continue;
+            ) {
+                Some(concrete) => {
+                    self.register_assoc_type_resolution(
+                        source,
+                        TraitRef::bare(projection.trait_),
+                        projection.assoc,
+                        concrete,
+                    );
+                    concrete
+                }
+                // A caller's own parameter names no member yet: the slot holds
+                // the projection off it, which the caller's bounds answer.
+                None if self.type_param_id(source).is_some() => self.make_assoc_type_projection(
+                    source,
+                    projection.trait_,
+                    None,
+                    projection.assoc,
+                    Vec::new(),
+                    Vec::new(),
+                ),
+                None => continue,
             };
-            self.register_assoc_type_resolution(
-                source,
-                TraitRef::bare(projection.trait_),
-                projection.assoc,
-                concrete,
-            );
             if let Some(bound) = self.bind_projection_pattern(projection.pattern, concrete) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
@@ -6825,12 +6954,25 @@ impl TypeTable {
                 && self.agree(concrete, written, open, binding);
         }
         // An `_` or an unresolvable name: nothing written to match against.
-        // A projection, written inside an `<F: fn(...)>` signature, is its
-        // base's binding's, which the solver checks once the base is bound.
         if matches!(
             self.get(written),
-            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::AssocTypeProjection { .. }
+            ResolvedType::Unknown | ResolvedType::Error
         ) {
+            return true;
+        }
+        // A projection, written inside an `<F: fn(...)>` signature or as a
+        // block's target, is its base's binding's, which the solver checks
+        // once the base is bound. One still standing off a parameter names no
+        // type yet, so the same projection binds what its parts agree on; a
+        // part that disagrees leaves the answer to the solver, as two
+        // projections can still name one type.
+        if matches!(self.get(written), ResolvedType::AssocTypeProjection { .. }) {
+            if let Some((written, concrete)) = self.projection_parts(written, concrete) {
+                let mut trial = binding.clone();
+                if self.bind_all(&written, &concrete, open, &mut trial) {
+                    *binding = trial;
+                }
+            }
             return true;
         }
         if let Some(agrees) =
@@ -6848,6 +6990,54 @@ impl TypeTable {
                 == self.fq_base_type_name(concrete).head();
         }
         written == concrete
+    }
+
+    /// The base, trait arguments and arguments of `a` and of `b` where both
+    /// project one associated type of one trait at as many of each; `None`
+    /// otherwise. Trait arguments one side leaves unwritten are not compared.
+    fn projection_parts(&self, a: TypeId, b: TypeId) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
+        let (
+            ResolvedType::AssocTypeProjection {
+                param_id: base_a,
+                assoc_name: name_a,
+                args: args_a,
+                owning_trait: trait_a,
+                trait_args: trait_args_a,
+                ..
+            },
+            ResolvedType::AssocTypeProjection {
+                param_id: base_b,
+                assoc_name: name_b,
+                args: args_b,
+                owning_trait: trait_b,
+                trait_args: trait_args_b,
+                ..
+            },
+        ) = (self.get(a), self.get(b))
+        else {
+            return None;
+        };
+        let (trait_args_a, trait_args_b) = match (trait_args_a, trait_args_b) {
+            (Some(x), Some(y)) => (x.as_slice(), y.as_slice()),
+            _ => (&[][..], &[][..]),
+        };
+        let alike = name_a == name_b
+            && trait_a == trait_b
+            && args_a.len() == args_b.len()
+            && trait_args_a.len() == trait_args_b.len();
+        let parts = |base: TypeId, trait_args: &[TypeId], args: &[TypeId]| -> Vec<TypeId> {
+            [base]
+                .into_iter()
+                .chain(trait_args.iter().copied())
+                .chain(args.iter().copied())
+                .collect()
+        };
+        alike.then(|| {
+            (
+                parts(*base_a, trait_args_a, args_a),
+                parts(*base_b, trait_args_b, args_b),
+            )
+        })
     }
 
     /// Whether two receiver-side types can be one, answering an open variable
@@ -7405,6 +7595,10 @@ enum Reach {
     MutRef,
     /// An object of this [`TypeTable::object_kind`].
     Object(TypeId),
+    /// An object of this kind among the value's data, which a reader reaches
+    /// without running code: a function's captures and a resource's state are
+    /// reached only by the code behind them.
+    Data(TypeId),
 }
 
 /// An answer about each type, computed once. Valid while the facts the answer
@@ -7699,7 +7893,7 @@ mod tests {
     /// asks whether it covers every instance of that head.
     fn covers(table: &mut TypeTable, whole: TypeId, args: Vec<TypeId>) -> bool {
         let block = DefId::for_test(1);
-        table.record_impl_target(block, whole, args, vec![]);
+        table.record_impl_target(block, whole, args, vec![], vec![]);
         table.impl_covers_every_instance(block)
     }
 

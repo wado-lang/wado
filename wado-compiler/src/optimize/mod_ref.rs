@@ -274,9 +274,8 @@ impl ModRef {
                 }
             }
             ExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = *payload {
-                    self.accumulate_operand(body, p, scope);
-                }
+                let payload = *payload;
+                self.accumulate_operand(body, payload, scope);
             }
             ExprKind::ClosureToCanonical { functor, .. } => {
                 let functor = *functor;

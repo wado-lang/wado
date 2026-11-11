@@ -1,0 +1,28 @@
+// A discarded statement with no effect reads nothing: a struct pattern in it
+// binding a field keeps the field no more than the statement's value is kept.
+// The struct reaches `report` in a list, so no other pass scalarizes it away.
+
+use { println, Stdout } from "core:cli";
+
+struct S {
+    a: i32,
+    b: i32,
+}
+
+#[inline(never)]
+fn report(ss: &List<S>) with Stdout {
+    match ss[0] { S { a, .. } => a + 1 };
+    println(`${ss[0].b}`);
+}
+
+export fn run() with Stdout {
+    let ss: List<S> = [S { a: builtin::black_box(1), b: builtin::black_box(2) }];
+    report(&ss);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "wir_pass": {"O2": ["nir/dead_field"]},
+    "wir_not_expect:O2": ["    mut a: i32,"]
+}

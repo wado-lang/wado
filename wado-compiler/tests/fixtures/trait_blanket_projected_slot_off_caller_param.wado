@@ -1,0 +1,74 @@
+// A blanket whose parameter a bound projects (`X` in `T: Left<Out = X>`),
+// asked through a caller's own parameter `P`. The call is dispatched at the
+// instance, where an impl written for `Unit` outranks the blanket, and the
+// trait argument the call names binds `G`.
+use { println, Stdout } from "core:cli";
+
+trait Back with () {
+    fn name() -> String;
+}
+
+struct Host {}
+
+impl Back for Host {
+    fn name() -> String {
+        return "host";
+    }
+}
+
+trait Left with () {
+    type Out;
+}
+
+struct Unit {}
+
+impl Left for Unit {
+    type Out = i32;
+}
+
+struct Count {}
+
+impl Left for Count {
+    type Out = i32;
+}
+
+struct Named {}
+
+impl Left for Named {
+    type Out = String;
+}
+
+trait Defaulted<G: Back> with () {
+    fn defaulted(&self) -> String;
+}
+
+impl<T: Left<Out = X>, X: Default + Display, G: Back> Defaulted<G> for T {
+    fn defaulted(&self) -> String {
+        return `[${X::default()}] on ${G::name()}`;
+    }
+}
+
+impl<G: Back> Defaulted<G> for Unit {
+    fn defaulted(&self) -> String {
+        return `unit on ${G::name()}`;
+    }
+}
+
+fn pinned<P: Left<Out = i32>>(p: &P) -> String {
+    return Defaulted::<Host>::defaulted(p);
+}
+
+fn projected<P: Left<Out = Y>, Y: Default + Display>(p: &P) -> String {
+    return Defaulted::<Host>::defaulted(p);
+}
+
+export fn run() with Stdout {
+    println(pinned(&Unit {}));
+    println(pinned(&Count {}));
+    println(projected(&Named {}));
+}
+
+__DATA__
+{
+  "stdout": "unit on host\n[0] on host\n[] on host\n"
+}

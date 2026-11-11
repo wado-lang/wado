@@ -57,7 +57,7 @@ fn emit_discarded(engine: &mut Engine, op: Operand, span: Span, out: &mut Vec<St
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             elements.clone()
         }
-        ExprKind::VariantConstruct { payload, .. } => payload.iter().copied().collect(),
+        ExprKind::VariantConstruct { payload, .. } => vec![*payload],
         _ => {
             out.push(engine.alloc_stmt(StmtKind::Expr(op), span));
             return;
