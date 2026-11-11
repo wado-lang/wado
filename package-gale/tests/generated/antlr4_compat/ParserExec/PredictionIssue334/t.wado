@@ -1002,7 +1002,7 @@ internal fn follow_push(site: i64, cont: i64) -> i64 {
     return site | follow_behind(cont, FOLLOW_SLOT_BITS) << FOLLOW_SLOT_BITS;
 }
 
-struct FollowLinks {
+internal struct FollowLinks {
     conts: List<i64>,
     ids: HashMap<i64, i32>,
 }
@@ -1011,8 +1011,14 @@ global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165
 
 global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
 
-internal fn follow_links_reset() {
+internal fn follow_links_enter() -> FollowLinks {
+    let outer = FOLLOW_LINKS;
     FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+    return outer;
+}
+
+internal fn follow_links_leave(outer: FollowLinks) {
+    FOLLOW_LINKS = outer;
 }
 
 fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
@@ -1052,10 +1058,6 @@ internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &Fol
 
 internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
     return follow_reads(tokens, pos, cont, 0, 1, true, tables, eof_kind);
-}
-
-internal fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
-    return follow_reads(tokens, pos, cont, 0, 1, false, tables, eof_kind);
 }
 
 fn follow_reads(
@@ -3345,11 +3347,12 @@ fn _parse_item(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
-    follow_links_reset();
+    let follow_outer = follow_links_enter();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
     entry(&mut p);
+    follow_links_leave(follow_outer);
     if p.recovering && p.diagnostics.len() < max_errors {
         p.commit_pending();
     }

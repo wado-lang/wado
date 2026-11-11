@@ -1002,7 +1002,7 @@ internal fn follow_push(site: i64, cont: i64) -> i64 {
     return site | follow_behind(cont, FOLLOW_SLOT_BITS) << FOLLOW_SLOT_BITS;
 }
 
-struct FollowLinks {
+internal struct FollowLinks {
     conts: List<i64>,
     ids: HashMap<i64, i32>,
 }
@@ -1011,8 +1011,14 @@ global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165
 
 global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
 
-internal fn follow_links_reset() {
+internal fn follow_links_enter() -> FollowLinks {
+    let outer = FOLLOW_LINKS;
     FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+    return outer;
+}
+
+internal fn follow_links_leave(outer: FollowLinks) {
+    FOLLOW_LINKS = outer;
 }
 
 fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
@@ -1052,10 +1058,6 @@ internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &Fol
 
 internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
     return follow_reads(tokens, pos, cont, 0, 1, true, tables, eof_kind);
-}
-
-internal fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
-    return follow_reads(tokens, pos, cont, 0, 1, false, tables, eof_kind);
 }
 
 fn follow_reads(
@@ -3541,11 +3543,12 @@ fn _parse_item_line(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
-    follow_links_reset();
+    let follow_outer = follow_links_enter();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
     entry(&mut p);
+    follow_links_leave(follow_outer);
     if p.recovering && p.diagnostics.len() < max_errors {
         p.commit_pending();
     }
@@ -3559,11 +3562,11 @@ pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult
 }
 
 pub fn parse_checklist_file<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_checklist_file(p, FOLLOW_SITE_1));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_checklist_file(p, FOLLOW_SITE_2));
 }
 
 pub fn parse_item_line<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_item_line(p, FOLLOW_SITE_1));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_item_line(p, FOLLOW_SITE_2));
 }
 
 global CALL_FOLLOW_SETS: List<List<i32>> = [[16]];
@@ -3603,7 +3606,7 @@ global FOLLOW_TABLES: FollowTables = FollowTables {
     readings: [0, 3, 0, 0, 8, 0, 0, 0, 0],
 };
 global FOLLOW_SITE_0: i64 = 1;
-global FOLLOW_SITE_1: i64 = 2;
+global FOLLOW_SITE_2: i64 = 2;
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x01\x00\x12\x00\x06\x00\x00\x00\x02\x00\x10\x00\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x08\x09\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x05\x00\x0b\x00\x07\x00\x02\x00\x03\x00\x09\x00\x0a\x00\x06\x00\x0d\x00\x04\x00\x0e\x00\x0f\x00\x10\x00\x11\x00\x0f\x00\x12\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 
