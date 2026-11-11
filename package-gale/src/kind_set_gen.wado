@@ -93,10 +93,11 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSe
 
 /// Emit the runtime FOLLOW tables: `FOLLOW_TABLES` holds every distinct
 /// position set once, as a row of `stride` bitset words, and each site the
-/// emitted code names as a row. The row opens with the set its readings can start with and whether one
-/// is empty (`set << 1 | empty`), which turns most queries away at one test,
-/// then each reading as a header (`len << 1 | ends`) and its positions' set
-/// indices. `FOLLOW_SITE_<id>` is the row's 1-based
+/// emitted code names as an entry in `heads` and a row of `readings`. The
+/// heads entry is the set its readings can start with and whether one is empty
+/// (`set << 1 | empty`), which turns most queries away at one load. The row
+/// holds each reading as a header (`len << 1 | ends`) and its positions' set
+/// indices. `FOLLOW_SITE_<id>` is the site's 1-based
 /// number, so a continuation is a scalar a call site composes with a shift, and
 /// a rule takes one parameter rather than a row of slots.
 pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
@@ -107,6 +108,7 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
         return;
     }
     let mut sets: List<List<i32>> = [];
+    let mut heads: List<String> = [];
     let mut starts: List<String> = ["0"];
     let mut readings: List<String> = [];
     let mut names: List<String> = [];
@@ -117,8 +119,8 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
             continue;
         }
         let site = &all_sites[site_id];
-        let [heads, has_empty] = site_heads(site);
-        readings.push(`${intern_position_set(&mut sets, &heads) << 1 | if has_empty { 1 } else { 0 }}`);
+        let [first, has_empty] = site_heads(site);
+        heads.push(`${intern_position_set(&mut sets, &first) << 1 | if has_empty { 1 } else { 0 }}`);
         for let r of site {
             readings.push(`${r.positions.len() << 1 | if r.ends { 1 } else { 0 }}`);
             for let position of &r.positions {
@@ -143,6 +145,7 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
     w.line(`global ${FOLLOW_TABLES}: FollowTables = FollowTables {`);
     w.line(`    stride: ${stride},`);
     w.line(`    sets: [${rendered.join(", ")}],`);
+    w.line(`    heads: [${heads.join(", ")}],`);
     w.line(`    starts: [${starts.join(", ")}],`);
     w.line(`    readings: [${readings.join(", ")}],`);
     w.line("};");

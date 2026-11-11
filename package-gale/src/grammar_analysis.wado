@@ -610,7 +610,7 @@ impl GrammarAnalysis {
         for let s of &sites {
             for let r of &s.readings {
                 if !r.ends {
-                    readings_add(&mut entry[s.callee], *r, k);
+                    readings_add(&mut entry[s.callee], r, k);
                 }
             }
         }
@@ -691,7 +691,7 @@ impl GrammarAnalysis {
         let mut out: List<Reading> = [];
         for let h of &head {
             if !h.ends {
-                readings_add(&mut out, *h, k);
+                readings_add(&mut out, h, k);
                 continue;
             }
             let left = k - h.positions.len();
@@ -701,7 +701,8 @@ impl GrammarAnalysis {
             if tails[left] matches { None } {
                 tails[left] = Option::Some(self.readings_of_elements(elements, from + 1, left, visiting, cycled));
             }
-            reading_then(&mut out, h, &tails[left].unwrap(), k);
+            let Some(tail) = &tails[left] else { unreachable(); };
+            reading_then(&mut out, h, tail, k);
         }
         return out;
     }
@@ -758,7 +759,7 @@ impl GrammarAnalysis {
             let mut out = readings_empty(budget);
             for let h of &body {
                 if !h.ends {
-                    readings_add(&mut out, *h, budget);
+                    readings_add(&mut out, h, budget);
                 } else if !h.positions.is_empty() {
                     reading_then(&mut out, h, &star[budget - h.positions.len()], budget);
                 }
@@ -773,7 +774,7 @@ impl GrammarAnalysis {
             if h.ends {
                 reading_then(&mut out, h, &star[k - h.positions.len()], k);
             } else {
-                readings_add(&mut out, *h, k);
+                readings_add(&mut out, h, k);
             }
         }
         return out;

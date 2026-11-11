@@ -28,14 +28,14 @@ pub fn position_of(kinds: &List<i32>) -> List<u64> {
 /// The one reading of a sequence that matches nothing and ends.
 pub fn readings_empty(k: i32) -> List<Reading> {
     let mut out: List<Reading> = [];
-    readings_add(&mut out, Reading { positions: [], ends: true }, k);
+    readings_add(&mut out, &Reading { positions: [], ends: true }, k);
     return out;
 }
 
 /// The one reading of a single position admitting `kinds`.
 pub fn readings_of_position(kinds: &List<i32>, k: i32) -> List<Reading> {
     let mut out: List<Reading> = [];
-    readings_add(&mut out, Reading {
+    readings_add(&mut out, &Reading {
         positions: [position_of(kinds)],
         ends: true,
     }, k);
@@ -44,7 +44,7 @@ pub fn readings_of_position(kinds: &List<i32>, k: i32) -> List<Reading> {
 
 /// Add `reading` to `out`, cut at `k` positions, merged into the reading of
 /// its length and ending where there is one. Whether `out` grew.
-pub fn readings_add(out: &mut List<Reading>, reading: Reading, k: i32) -> bool {
+pub fn readings_add(out: &mut List<Reading>, reading: &Reading, k: i32) -> bool {
     return readings_add_joined(out, &reading.positions, &[], reading.ends, k);
 }
 
@@ -87,7 +87,7 @@ fn reading_key(len: i32, ends: bool) -> i32 {
 /// Every reading of `from`, cut at `k`.
 pub fn readings_union_into(out: &mut List<Reading>, from: &List<Reading>, k: i32) {
     for let r of from {
-        readings_add(out, *r, k);
+        readings_add(out, r, k);
     }
 }
 
