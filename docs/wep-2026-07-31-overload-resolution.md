@@ -539,7 +539,8 @@ not the reverse.
 
 Joint constraint solving over selection and inference (Swift, C#). It is the
 principled answer to "select and infer at once", and it contradicts Wado's
-forward-inference non-goal.
+forward inference: the expected result type narrows what the arguments left,
+and never feeds back into how they are typed.
 
 `<Type as Trait<Args>>::method(args…)` as the qualified form. Not a
 cost-benefit call — the syntactic position is taken. A leading `<` in expression

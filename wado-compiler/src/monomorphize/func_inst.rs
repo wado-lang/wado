@@ -27,9 +27,9 @@ use super::state::{Monomorphizer, OutrankedCall};
 use super::{Templates, Unrewritten, module_source_for_trait_impl};
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
-    answering_block_module, blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
-    ranked_ref_blanket, ranked_value_blanket, ref_blanket_instance, trait_call_template,
-    written_impl_at, written_newtype_link,
+    answering_block_module, blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind,
+    method_template_at, ranked_ref_blanket, ranked_value_blanket, ref_blanket_instance,
+    trait_call_template, written_impl_at, written_newtype_link,
 };
 use crate::tir;
 use crate::token::Span;
@@ -2909,8 +2909,7 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let candidate = self
-                .named_by_impl(info.at_owner(&type_table.fq_type_name(inner)));
+            let candidate = self.named_by_impl(info.at_owner(&type_table.fq_type_name(inner)));
             if self.functions.has_impl(&candidate)
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
@@ -2930,8 +2929,7 @@ impl Monomorphizer {
             // for the template's home module (issue #1110).
             let recv_inner = type_table.peel_refs(receiver_type_id);
             let resolved_recv = type_table.representation_head(recv_inner);
-            let mut new_info =
-                info.at_owner(&type_table.fq_type_name(resolved_recv));
+            let mut new_info = info.at_owner(&type_table.fq_type_name(resolved_recv));
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref receiver (`&` / `&mut`) so that the monomorphizer selects the
             // correct generic function template ("&List^IntoIterator::into_iter" instead

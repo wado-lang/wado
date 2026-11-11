@@ -1822,8 +1822,14 @@ impl LocalMethodName {
     #[must_use]
     pub fn at_owner(&self, receiver: &FqTypeName) -> Self {
         let (head, args) = match receiver.split_reference() {
-            Some((kind, pointee)) => (Receiver::RefTo(kind, pointee.head_only()), pointee.args().to_vec()),
-            None => (Receiver::Type(receiver.head_only()), receiver.args().to_vec()),
+            Some((kind, pointee)) => (
+                Receiver::RefTo(kind, pointee.head_only()),
+                pointee.args().to_vec(),
+            ),
+            None => (
+                Receiver::Type(receiver.head_only()),
+                receiver.args().to_vec(),
+            ),
         };
         Self {
             receiver: head,

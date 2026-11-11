@@ -51,7 +51,9 @@ use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
 use crate::elaborator::solver_bridge::Ordered;
-use crate::elaborator::types::{ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitMethodMatch};
+use crate::elaborator::types::{
+    ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitMethodMatch,
+};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
 use crate::resolve::Resolution;

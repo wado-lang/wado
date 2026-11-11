@@ -2238,7 +2238,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             if let Some(expected) = expected {
                 self.narrow_to_expected_return(&mut admitted, expected, |&i| {
-                    sigs[i].as_ref().expect("an admitted candidate has a signature").return_type
+                    sigs[i]
+                        .as_ref()
+                        .expect("an admitted candidate has a signature")
+                        .return_type
                 });
             }
             // One exact answer decides on its own. A parameter that is the

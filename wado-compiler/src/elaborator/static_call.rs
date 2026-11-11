@@ -377,43 +377,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
             });
         }
-        let resolved = match self.select_candidate(
-            candidates,
-            arg_types,
-            &declaring_args,
-            expected_return,
-        ) {
-            Selection::One(candidate) => self.callee_of_candidate(
-                (receiver_name, &key),
-                method_name,
-                &candidate,
-                receiver_type,
-                (receiver_args, method_args),
-            ),
-            Selection::Ambiguous(alternatives) => {
-                return StaticLookup::Ambiguous(alternatives);
-            }
-            // Nothing picked a declaration, so there is none to mangle and no
-            // list to check. `i32::from(b)` names one `From` impl per source
-            // type, and the call site's own preselect is what reads the
-            // argument.
-            Selection::Overloaded(traits) => {
-                // At `!` every blanket reaches the receiver and none answers:
-                // the call traps once monomorphized, so nothing is left to pick.
-                let on_never = receiver_type
-                    .is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
-                let traits = if on_never { Vec::new() } else { traits };
-                return self.overloaded_callee(&key, method_name, traits);
-            }
-            Selection::Tied { blocks, trait_args } => {
-                return StaticLookup::Tied {
-                    receiver: receiver_name.to_string(),
-                    blocks,
-                    trait_args,
-                };
-            }
-            Selection::None => None,
-        };
+        let resolved =
+            match self.select_candidate(candidates, arg_types, &declaring_args, expected_return) {
+                Selection::One(candidate) => self.callee_of_candidate(
+                    (receiver_name, &key),
+                    method_name,
+                    &candidate,
+                    receiver_type,
+                    (receiver_args, method_args),
+                ),
+                Selection::Ambiguous(alternatives) => {
+                    return StaticLookup::Ambiguous(alternatives);
+                }
+                // Nothing picked a declaration, so there is none to mangle and no
+                // list to check. `i32::from(b)` names one `From` impl per source
+                // type, and the call site's own preselect is what reads the
+                // argument.
+                Selection::Overloaded(traits) => {
+                    // At `!` every blanket reaches the receiver and none answers:
+                    // the call traps once monomorphized, so nothing is left to pick.
+                    let on_never =
+                        receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
+                    let traits = if on_never { Vec::new() } else { traits };
+                    return self.overloaded_callee(&key, method_name, traits);
+                }
+                Selection::Tied { blocks, trait_args } => {
+                    return StaticLookup::Tied {
+                        receiver: receiver_name.to_string(),
+                        blocks,
+                        trait_args,
+                    };
+                }
+                Selection::None => None,
+            };
         if let Some(resolved) = resolved {
             return resolved;
         }
@@ -958,7 +954,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(expected) = expected_return {
             self.narrow_to_expected_return(&mut candidates, expected, |c| {
                 let sig = self.tysys.signatures.method_sig(c.method_id);
-                sig.expect("a candidate names a declared method").decl.return_type.unwrap_or(TypeTable::UNIT)
+                sig.expect("a candidate names a declared method")
+                    .decl
+                    .return_type
+                    .unwrap_or(TypeTable::UNIT)
             });
         }
         // Among what the arguments admit, the earlier origin outranks: the
