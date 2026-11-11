@@ -7720,12 +7720,9 @@ test "a tail repeat takes a token only where the continuation still parses past 
 // start at the last token's end, and a shape opening on `.` is still a shape.
 test "a wildcard takes every kind but EOF, in a continuation and in a shape" {
     let tokens = "X : 'x' ; A : 'a' ; B : 'b' ; WS : ' ' -> skip ;\n";
-    assert parses(`grammar R;\ns : a . EOF ;\na : X? ;\n${tokens}`, "s", ["x", "xx"], &LONGEST)
-        == "x => (s a x)\nxx => (s (a x) x)\n";
-    assert parses(`grammar R;\ns : r EOF ;\nr : (A? .)? ;\n${tokens}`, "s", ["b", "ab", "x"], &LONGEST)
-        == "b => (s (r b))\nab => (s (r a b))\nx => (s (r x))\n";
-    assert parses(`grammar R;\ns : r EOF ;\nr : (. A?)? ;\n${tokens}`, "s", ["b", "ba"], &LONGEST)
-        == "b => (s (r b))\nba => (s (r b a))\n";
+    assert parses(`grammar R;\ns : a . EOF ;\na : X? ;\n${tokens}`, "s", ["x", "xx"], &LONGEST) == "x => (s a x)\nxx => (s (a x) x)\n";
+    assert parses(`grammar R;\ns : r EOF ;\nr : (A? .)? ;\n${tokens}`, "s", ["b", "ab", "x"], &LONGEST) == "b => (s (r b))\nab => (s (r a b))\nx => (s (r x))\n";
+    assert parses(`grammar R;\ns : r EOF ;\nr : (. A?)? ;\n${tokens}`, "s", ["b", "ba"], &LONGEST) == "b => (s (r b))\nba => (s (r b a))\n";
 }
 
 // Every shape of `(t A?)?` decides like any other optional: the caller's `X`

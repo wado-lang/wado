@@ -2240,15 +2240,6 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
 ) {
     let loop_admits = re.inner_admits;
 
-    // Stop the scan where the caller's continuation matches, or the tournament
-    // picking the calling rule's alt over-counts this Repeat. Inert when
-    // `follow` is empty; mirrors the parse side.
-    let caller_follow_gate = if re.gate_caller_follow {
-        repeat_continuation_yields(ctx, &re.exit, "tokens", "pos");
-    } else {
-        String::new();
-    };
-
     // A body matching nothing has no iteration to scan — once here, not once
     // per arm, so an arm added later cannot miss it.
     if admits_is_untestable(&loop_admits) {
@@ -2294,10 +2285,17 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         };
         let leaf_enters = re.gate_caller_follow && scan_body_is_leaf(&re.body);
         let call_enters = scan_enters_while_viable(re);
-        let yield_gate = if leaf_enters || call_enters { String::new() } else { caller_follow_gate };
+        let yield_gate = if leaf_enters || call_enters { String::new() } else { scan_exit_yield_gate(re, ctx) };
         let mut guard = scan_repeat_guard_excluding(&effective, &excluded, &yield_gate, ctx);
         if leaf_enters {
-            guard = `${guard} && ${leaf_enters_while_viable(ctx, &re.exit, &re.after_iteration, "tokens", "tokens", "pos")}`;
+            guard = `${guard} && ${leaf_enters_while_viable(
+                ctx,
+                &re.exit,
+                &re.after_iteration,
+                "tokens",
+                "tokens",
+                "pos",
+            )}`;
         }
         w.begin(`if ${guard}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
@@ -2332,7 +2330,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
             ctx,
         );
     } else if !yields_unless_viable {
-        scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx);
+        scan_repeat_guard(&loop_admits, &scan_exit_yield_gate(re, ctx), ctx);
     } else if walks_iteration {
         scan_repeat_guard(&loop_admits, "", ctx);
     } else {
@@ -2358,6 +2356,17 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         gen_scan_rewind_break(w, ctx, "sp", `!${resumes} && ${yielded}`);
     }
     w.end();
+}
+
+/// Stops the scan where the caller's continuation matches, or the tournament
+/// picking the calling rule's alt over-counts this repeat. Empty where the
+/// repeat has no gate. Rendering it notes the site it reads, so it is rendered
+/// only where the text keeps it.
+fn scan_exit_yield_gate(re: &ScanRepeatElement, ctx: &mut EmitContext) -> String {
+    if !re.gate_caller_follow {
+        return String::new();
+    }
+    return repeat_continuation_yields(ctx, &re.exit, "tokens", "pos");
 }
 
 /// The scan's twin of `enters_while_viable`, for a body longer than the one
@@ -6436,13 +6445,18 @@ fn repeat_continuation_yields<S: AsStrSlice, S1: AsStrSlice>(
     tokens: S,
     pos: S1,
 ) -> String {
-    assert !(cont matches { NoFollow }), "a gated repeat knows what follows it";
+    assert !cont matches { NoFollow }, "a gated repeat knows what follows it";
     return follow_query("follow_yields", tokens, pos, &follow_arg_expr(ctx, cont));
 }
 
 /// Whether a gated repeat's `exit` can start at `pos`.
-fn repeat_exit_admits<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, exit: &FollowArg, tokens: S, pos: S1) -> String {
-    assert !(exit matches { NoFollow }), "a gated repeat knows what follows it";
+fn repeat_exit_admits<S: AsStrSlice, S1: AsStrSlice>(
+    ctx: &mut EmitContext,
+    exit: &FollowArg,
+    tokens: S,
+    pos: S1,
+) -> String {
+    assert !exit matches { NoFollow }, "a gated repeat knows what follows it";
     return follow_query("follow_admits", tokens, pos, &follow_arg_expr(ctx, exit));
 }
 

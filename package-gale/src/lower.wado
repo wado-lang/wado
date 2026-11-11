@@ -2288,9 +2288,6 @@ fn lower_alt_scan_element(
     return se;
 }
 
-/// True iff any element in the alt is an Optional Repeat (possibly
-/// wrapped in a `Label`). Drives the scan-side OptionalLookahead
-/// trigger via `surface_is_optional_repeat`.
 /// Whether a `?` over the single alternative `alt` decides by shape lookahead,
 /// for the parse and the scan alike. It needs a nested optional to enumerate,
 /// no variable-length repeat (two shapes would collapse to one signature, as in
@@ -2301,7 +2298,7 @@ fn shape_lookahead_fits(alt: &Alternative, ctx: &mut LowerContext) -> bool {
     let elements = &alt.elements;
     if !elements.iter_ref().any(|elem| surface_is_optional_repeat(elem))
         || elements.iter_ref().any(|elem| surface_contains_variable_repeat(elem))
-        || shape_optional_count_exceeds_cap(elements) {
+        || elements.iter_ref().filter(|elem| is_nullable(elem)).count() > MAX_SHAPE_OPTIONALS {
         return false;
     }
     for let shape of &compute_shapes_for_alt(elements) {
@@ -2310,6 +2307,30 @@ fn shape_lookahead_fits(alt: &Alternative, ctx: &mut LowerContext) -> bool {
         }
     }
     return true;
+}
+
+/// The shapes of `alt` that select something, each with its signature and scan
+/// body. The shape selecting nothing is the optional's exit, not an entry.
+fn lookahead_shapes(
+    alt: &Alternative,
+    enclosing_at_tail: bool,
+    outer_suffix: &List<Element>,
+    ctx: &mut LowerContext,
+) -> List<OptionalLookaheadShape> {
+    let mut out: List<OptionalLookaheadShape> = [];
+    for let shape of &compute_shapes_for_alt(&alt.elements) {
+        if shape.is_empty() {
+            continue;
+        }
+        let sig = shape_lookahead_signature_for_alt(shape, &alt.elements, ctx);
+        assert !sig.is_empty(), "a shape that selects something has a signature where `shape_lookahead_fits`";
+        out.push(OptionalLookaheadShape {
+            positions: *shape,
+            sig,
+            scan_body: lower_scan_shape_body(shape, alt, enclosing_at_tail, outer_suffix, ctx),
+        });
+    }
+    return out;
 }
 
 fn surface_is_optional_repeat(elem: &Element) -> bool {
@@ -2365,21 +2386,9 @@ fn lower_scan_optional_lookahead_group(
     enclosing_at_tail: bool,
     outer_suffix: &List<Element>,
 ) -> ScanElement {
-    let shapes = compute_shapes_for_alt(&alt.elements);
-    let mut sigs: List<List<List<i32>>> = [];
-    let mut bodies: List<ScanBody> = [];
-    for let shape of &shapes {
-        // An all-optionals-off shape selects no element, so it has no
-        // lookahead to gate on and no body to scan, so it is dropped here as
-        // by the parse-side twin (`try_optional_shape_lookahead`); emit
-        // asserts on a non-empty signature rather than skipping one silently.
-        let sig = shape_lookahead_signature_for_alt(shape, &alt.elements, ctx);
-        if sig.is_empty() {
-            continue;
-        }
-        sigs.push(sig);
-        bodies.push(lower_scan_shape_body(shape, alt, enclosing_at_tail, outer_suffix, ctx));
-    }
+    let shapes = lookahead_shapes(alt, enclosing_at_tail, outer_suffix, ctx);
+    let sigs: List<List<List<i32>>> = shapes.iter_ref().map(|s| s.sig).collect();
+    let bodies: List<ScanBody> = shapes.iter_ref().map(|s| s.scan_body).collect();
     let scan_guarded = shape_signatures_collide(&sigs);
     return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
         sigs: sigs,
@@ -3878,32 +3887,15 @@ fn collect_optional_entry_signature(inner: &Element, ctx: &mut LowerContext) -> 
 }
 
 /// Maximum number of nullable sub-elements for which shape enumeration
-/// (2^n) is worthwhile. Beyond this, both the parse-side
-/// (`try_optional_shape_lookahead`) and scan-side (`lower_scan_repeat`)
-/// shape paths fall back to the non-enumerating strategy (8 → at most
-/// 256 shapes). They must agree, so both consult the shared predicate.
+/// (2^n) is worthwhile: 8 gives at most 256 shapes.
 global MAX_SHAPE_OPTIONALS: i32 = 8;
-
-/// True when the alt has more nullable (shape-contributing) elements than
-/// `MAX_SHAPE_OPTIONALS`, so the 2^n shape enumeration must be skipped.
-/// Shared by the parse-side and scan-side shape gates to keep them in
-/// lockstep.
-fn shape_optional_count_exceeds_cap(elements: &List<Element>) -> bool {
-    let mut nullable_count = 0;
-    for let elem of elements {
-        if is_nullable(elem) {
-            nullable_count += 1;
-        }
-    }
-    return nullable_count > MAX_SHAPE_OPTIONALS;
-}
 
 /// Try to materialise an `OptionalShapeLookahead` strategy. Fires
 /// when the inner is a single-alt Group with at least one nested
 /// Optional Repeat — emit enumerates 2^n shapes (longest-first) and
 /// guards each on the per-position kind set computed from
-/// `ctx.first_of_element`. Returns `null` for other inner shapes or when
-/// there are more than `MAX_SHAPE_OPTIONALS` nullable sub-elements.
+/// `ctx.first_of_element`. Returns `null` for other inner shapes, or where
+/// `shape_lookahead_fits` refuses the alternative.
 fn try_optional_shape_lookahead(
     inner: &Element,
     enclosing_at_tail: bool,
@@ -3914,28 +3906,11 @@ fn try_optional_shape_lookahead(
         if g.alternatives.len() != 1 || !shape_lookahead_fits(&g.alternatives[0], ctx) {
             return null;
         }
-        let elements = &g.alternatives[0].elements;
-        let shapes = compute_shapes_for_alt(elements);
-        let mut shape_entries: List<OptionalLookaheadShape> = [];
-        let mut signatures: List<List<List<i32>>> = [];
-        for let shape of &shapes {
-            let sig = shape_lookahead_signature_for_alt(shape, elements, ctx);
-            if sig.is_empty() {
-                continue;
-            }
-            signatures.push(sig);
-            shape_entries.push(OptionalLookaheadShape {
-                positions: *shape,
-                sig: sig,
-                scan_body: lower_scan_shape_body(shape, &g.alternatives[0], enclosing_at_tail, outer_suffix, ctx),
-            });
-        }
-        if shape_entries.is_empty() {
-            return null;
-        }
+        let shapes = lookahead_shapes(&g.alternatives[0], enclosing_at_tail, outer_suffix, ctx);
+        let signatures = shapes.iter_ref().map(|s| s.sig).collect();
         return Option::Some(RepeatStrategy::OptionalShapeLookahead(
             OptionalShapeLookaheadStrategy {
-                shapes: shape_entries,
+                shapes,
                 scan_guarded: shape_signatures_collide(&signatures),
             },
         ));
@@ -4846,4 +4821,3 @@ fn rebind_group_shape<S: AsStrSlice, S1: AsStrSlice>(shape: GroupShape, new_fiel
         },
     };
 }
-

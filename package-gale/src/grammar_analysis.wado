@@ -365,8 +365,7 @@ impl GrammarAnalysis {
             Group(g) => {
                 let mut kinds: List<i32> = [];
                 for let alt of &g.alternatives {
-                    assert alt.elements.len() == 1 && alt.elements[0] matches { TokenRef(_) | Literal(_) },
-                        "a `~` group's alternative is a single token or literal";
+                    assert alt.elements.len() == 1 && alt.elements[0] matches { TokenRef(_) | Literal(_) }, "a `~` group's alternative is a single token or literal";
                     kinds.push(self.terminal_kind(&alt.elements[0]));
                 }
                 kinds;
@@ -377,7 +376,11 @@ impl GrammarAnalysis {
 
     /// The kinds a `.` or `~ X` takes: every kind but EOF, less what `~` excludes.
     fn open_position_kinds(&mut self, elem: &Element) -> List<i32> {
-        let excluded: List<i32> = if let Not(ne) = elem { self.excluded_kinds(&ne.element) } else { [] };
+        let excluded: List<i32> = if let Not(ne) = elem {
+            self.excluded_kinds(&ne.element);
+        } else {
+            [];
+        };
         let eof = self.eof_kind;
         return (0..<self.token_kind_count()).filter(|k| k != eof && !excluded.contains(&k)).collect();
     }
