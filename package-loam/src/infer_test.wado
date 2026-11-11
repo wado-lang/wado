@@ -57,7 +57,7 @@ fn shapes_of(source: String) -> TreeMap<String, List<String>> {
     let graph = read(&source).unwrap();
     let mut names = TreeMap::<String, List<String>>::new();
     for let [tensor, shape] of infer(&graph).unwrap().shapes.entries() {
-        names[*tensor] = shape.axes.into_iter().map(|a| a.name).collect();
+        names[*tensor] = shape.names();
     }
     return names;
 }

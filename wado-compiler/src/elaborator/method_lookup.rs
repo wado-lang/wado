@@ -1693,7 +1693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .packs_args_reach(input.param_types, input.args.len());
         let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let mut type_args = self.resolve_method_type_args(explicit, input);
-        self.settle_unreached_packs(own_params, &mut type_args, &reached);
+        let reached = self.settle_unreached_packs(own_params, &mut type_args, &reached);
         self.report_unsettled_reached_packs(
             &method_name,
             receiver_type,

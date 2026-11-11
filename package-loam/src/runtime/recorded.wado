@@ -548,6 +548,44 @@ pub variant Any<affine G: Holds> {
     Bool(G::Tensor<bool, Untyped>),
 }
 
+/// An element with a case of `Any`.
+pub trait Erasable: Element with () {
+    /// `t` as `Any` holds it.
+    fn any<affine G: Holds>(t: G::Tensor<Self, Untyped>) -> Any<G>;
+    /// The tensor `a` holds, which must be of this element.
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<Self, Untyped>;
+}
+
+impl Erasable for f32 {
+    fn any<affine G: Holds>(t: G::Tensor<f32, Untyped>) -> Any<G> {
+        return Any::F32(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<f32, Untyped> {
+        return f32s(a);
+    }
+}
+
+impl Erasable for i64 {
+    fn any<affine G: Holds>(t: G::Tensor<i64, Untyped>) -> Any<G> {
+        return Any::I64(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<i64, Untyped> {
+        return i64s(a);
+    }
+}
+
+impl Erasable for bool {
+    fn any<affine G: Holds>(t: G::Tensor<bool, Untyped>) -> Any<G> {
+        return Any::Bool(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<bool, Untyped> {
+        return bools(a);
+    }
+}
+
 /// `t` as `Cpu` holds it among a program's arguments.
 pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     return match data_of(&t.data) {

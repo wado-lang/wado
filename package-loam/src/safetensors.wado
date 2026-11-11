@@ -27,7 +27,7 @@ pub fn expected(vi: &ValueInfo, shape: &Shape) -> Expected {
     return Expected {
         tensor: vi.name,
         dtype: element.stored,
-        axes: shape.axes.into_iter().map(|axis| axis.name).collect(),
+        axes: shape.names(),
         elements: element_count(&extents),
         extents,
         width: element.width,
