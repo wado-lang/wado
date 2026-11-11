@@ -633,8 +633,10 @@ pub(super) struct DeclaredDefaults {
 impl DeclaredDefaults {
     fn of(params: &[ast::GenericParam], resolutions: &Resolutions) -> Self {
         // One per argument a reference to the trait writes.
-        let params: Vec<&ast::GenericParam> =
-            params.iter().filter(|param| param.fills_impl_slot()).collect();
+        let params: Vec<&ast::GenericParam> = params
+            .iter()
+            .filter(|param| param.fills_impl_slot())
+            .collect();
         Self {
             binders: params
                 .iter()
@@ -685,9 +687,25 @@ impl DeclaredDefaults {
         filled
     }
 
+    /// `written` with every trailing argument that only restates its default
+    /// dropped, `Self` meaning the impl's own target — so `impl Add<Cm> for
+    /// Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
+    fn without_restated(
+        &self,
+        mut written: Vec<name::FqTypeName>,
+        target: Option<&name::FqTypeName>,
+    ) -> Vec<name::FqTypeName> {
+        written.truncate(self.non_default_count(&written, target));
+        written
+    }
+
     /// How many of `args` say something the defaults do not: the trailing run
     /// that restates them drops out.
-    fn non_default_count(&self, args: &[name::FqTypeName], target: Option<&name::FqTypeName>) -> usize {
+    fn non_default_count(
+        &self,
+        args: &[name::FqTypeName],
+        target: Option<&name::FqTypeName>,
+    ) -> usize {
         let given: Vec<Option<name::FqTypeName>> = args.iter().cloned().map(Some).collect();
         let mut kept = args.len();
         while let Some(last) = kept.checked_sub(1) {
@@ -1367,7 +1385,7 @@ impl TraitEnv {
     }
 
     /// The trait `header` implements, named as a bound can reach it. See
-    /// [`args_without_declared_defaults`] for why an argument may drop out.
+    /// [`DeclaredDefaults::without_restated`] for why an argument may drop out.
     pub(super) fn fq_trait_of_impl(
         &self,
         header: &ImplHeader,
@@ -1391,8 +1409,7 @@ impl TraitEnv {
             return fq.with_args(written);
         };
         let target = written_type_arg(target, resolutions);
-        let args = args_without_declared_defaults(written, Some(&target), &header.defaults);
-        fq.with_args(args)
+        fq.with_args(header.defaults.without_restated(written, Some(&target)))
     }
 
     /// [`Self::fq_trait_named_by_impl`] for a bound, which writes its arguments
@@ -1414,8 +1431,7 @@ impl TraitEnv {
             .iter()
             .map(|arg| written_type_arg(arg, resolutions))
             .collect();
-        let args = args_without_declared_defaults(written, None, &header.defaults);
-        fq.with_args(args)
+        fq.with_args(header.defaults.without_restated(written, None))
     }
 
     /// The type parameters `trait_` declares, empty for one that declares none
@@ -1510,7 +1526,8 @@ impl TraitEnv {
             binders: Vec::new(),
             defaults: Vec::new(),
         };
-        self.decl_header_of(&trait_).map_or(&NONE, |header| &header.defaults)
+        self.decl_header_of(&trait_)
+            .map_or(&NONE, |header| &header.defaults)
     }
 
     /// The impl on `receiver` answering `trait_` at the caller's `wanted`
@@ -2680,20 +2697,6 @@ pub(super) fn written_type_args(
             .collect(),
         _ => Vec::new(),
     }
-}
-
-/// A trait argument list with every trailing argument that only restates the
-/// declared default dropped, `Self` meaning the impl's own target — so
-/// `impl Add<Cm> for Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
-fn args_without_declared_defaults(
-    written: Vec<name::FqTypeName>,
-    target: Option<&name::FqTypeName>,
-    defaults: &DeclaredDefaults,
-) -> Vec<name::FqTypeName> {
-    let kept = defaults.non_default_count(&written, target);
-    let mut written = written;
-    written.truncate(kept);
-    written
 }
 
 /// Whether an impl on `target` writing `written` answers a use wanting

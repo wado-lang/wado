@@ -747,16 +747,6 @@ impl Program {
         ids.map(|id| (id, &self.impls[&id]))
     }
 
-    /// The default `def`'s trait declares for its argument at `index`, at
-    /// `def`'s target; `None` where it declares none or cannot spell it.
-    pub(super) fn default_arg(&self, def: &ImplDef, index: usize) -> Option<SolverType> {
-        let trait_ = def.trait_?;
-        let written = self.per_param(Some(trait_), &def.trait_args);
-        self.filled(trait_, written, &def.target)
-            .into_iter()
-            .nth(index)?
-    }
-
     /// `given`, one entry per `trait_` parameter, with each it leaves unsaid
     /// filled by the declared default on `subject`, left to right so a default
     /// reads the arguments before it. `None` where neither spells one.

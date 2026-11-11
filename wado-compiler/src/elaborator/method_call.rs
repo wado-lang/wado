@@ -3446,7 +3446,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             let return_type = match recv.ty {
-                Some(receiver) => self.tysys.at_receiver(impl_def, receiver, offer.return_type),
+                Some(receiver) => self
+                    .tysys
+                    .at_receiver(impl_def, receiver, offer.return_type),
                 None => offer.return_type,
             };
             let table = self.tysys.type_table.borrow();
