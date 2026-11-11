@@ -94,6 +94,11 @@ test "fitting cuts and grows each field along its own axes" {
     assert fitted.b.data == [1, 2] && fitted.b.extents == [1, 2];
 }
 
+#[expect_trap]
+test "a walk refuses a list that is not one entry per field" {
+    let _fitted: Pair<Cpu> = fitted_fields(&mut Cpu {}, &pair(), &[[], [], []]);
+}
+
 test "writing puts the rows of one into another, fitted to its extents" {
     let mut g = Cpu {};
     let into: Pair<Cpu> = zeroed_fields(&mut g, &[

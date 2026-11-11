@@ -79,7 +79,7 @@ graph leaves open beside the past's own, as
 axis keeps the WEP's signature.
 
 `compute` retains the cache before it begins. A caller that drives `build`
-itself calls `cache.retain(&mut backend)` there.
+itself calls `retain_fields(&mut backend, &cache)` there.
 
 ## Sharded Checkpoints
 

@@ -75,7 +75,7 @@ impl<E: Element, Axes> Recordable for Value<E, Axes> {
 pub fn erased_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F]>, ..F: Field<G>>(g: &G, s: &S) -> List<Any<G>> {
     let mut out: List<Any<G>> = [];
     for let f of ReflectStruct::<S>::members() {
-        out.push(f.get(s).erased(g));
+        out.push(f.get_ref(s).erased(g));
     }
     return out;
 }
@@ -100,7 +100,9 @@ fn restored_at<affine G: Graph, S, F: Field<G>>(g: &G, a: &Any<G>, _field: &Stru
 pub fn zeroed_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Field<G>>(
     g: &mut G,
     extents: &List<List<i32>>,
-) -> S with _ {
+) -> S with _
+    contract extents.len() == field_count::<S>(), "extents are given for each field"
+{
     return ReflectStruct::<S>::from_fields(
         [for let f of ReflectStruct::<S>::members() { zeroed_at(g, &extents[f.index()], &f) }],
     );
@@ -113,7 +115,7 @@ fn zeroed_at<affine G: Graph, S, F: Field<G>>(g: &mut G, extents: &List<i32>, _f
 /// Keeps each of `s`'s fields through the next `g.begin()`.
 pub fn retain_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F]>, ..F: Field<G>>(g: &mut G, s: &S) with _ {
     for let f of ReflectStruct::<S>::members() {
-        f.get(s).retained(g);
+        f.get_ref(s).retained(g);
     }
 }
 
@@ -123,7 +125,9 @@ pub fn fitted_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], Field
     g: &mut G,
     s: &S,
     fits: &List<List<[i32, i32]>>,
-) -> S with _ {
+) -> S with _
+    contract fits.len() == field_count::<S>(), "fits are given for each field"
+{
     return ReflectStruct::<S>::from_fields(
         [for let f of ReflectStruct::<S>::members() { fitted_at(g, f.get(s), &fits[f.index()]) }],
     );
@@ -145,10 +149,20 @@ pub fn written_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], Fiel
     from: &S,
     axes: &List<i32>,
     at: &G::Tensor<i64, [Slots]>,
-) -> S with _ {
+) -> S with _
+    contract axes.len() == field_count::<S>(), "an axis is given for each field"
+{
     return ReflectStruct::<S>::from_fields(
-        [for let f of ReflectStruct::<S>::members() { f.get(into).written(g, &f.get(from), axes[f.index()], at) }],
+        [for let f of ReflectStruct::<S>::members() { f.get_ref(into).written(g, f.get_ref(from), axes[f.index()], at) }],
     );
+}
+
+fn field_count<S: ReflectStruct<FieldTypes = [..F]>, ..F>() -> i32 {
+    let mut count = 0;
+    for let _ of ReflectStruct::<S>::members() {
+        count += 1;
+    }
+    return count;
 }
 
 /// An `S` recorded as parameters of the extents `extents` holds from `at` on,
