@@ -4122,7 +4122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     };
                     let BoundArgsAtCall::Read(trait_args) =
-                        self.bound_args_at_call(bound, Some(trait_), owner_ty, names, args)
+                        self.bound_args_at_call(bound, trait_, owner_ty, names, args)
                     else {
                         continue;
                     };
@@ -4223,14 +4223,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn bound_args_at_call(
         &mut self,
         bound: &ast::TraitBound,
-        trait_: Option<DefId>,
+        trait_: DefId,
         owner: TypeId,
         names: &[ParamRef],
         args: &[TypeId],
     ) -> BoundArgsAtCall {
-        let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
+        if bound.type_args.is_empty() {
             return BoundArgsAtCall::Read(None);
-        };
+        }
         let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
         let written = self.with_type_params_bound(&space, |e| e.written_bound_args(bound));
         if written
