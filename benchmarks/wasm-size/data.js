@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794389992246,
+  "lastUpdate": 1794402809857,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76593,6 +76593,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 404534,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4bdda145771a13a8e97f45ddfb2535568be2d4ae",
+          "message": "Merge pull request #2606 from wado-lang/ccr-f765b823-1j102r\n\nfeat(gale): longest prediction follows the caller's full continuation",
+          "timestamp": "2026-11-11T21:53:53+09:00",
+          "tree_id": "5dca53ef55d313e823a312e01efeb5c9358ceed2",
+          "url": "https://github.com/wado-lang/wado/commit/4bdda145771a13a8e97f45ddfb2535568be2d4ae"
+        },
+        "date": 1794402808716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 429302,
             "unit": "bytes"
           }
         ]
