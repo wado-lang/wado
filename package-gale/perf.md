@@ -256,6 +256,18 @@ parser generated before and after):
 
 Rust and TypeScript run predicates, so their parsers do not change.
 
+The loop's caller-FOLLOW gate is settled by the same parse
+(`gen_speculative_follow_gate`). It asks whether the caller's continuation
+starts at the iteration, and then whether it resumes where the parse ended,
+rewinding when it does not. Scanning the iteration first read SQLite's every
+statement twice, since a `;` also starts the next `sql_stmt_list`.
+`benchmark/sqlite_parse`, `-O2` fuel (`mise run update-baselines`):
+
+| `gale/sqlite/parse` |       fuel |
+| ------------------- | ---------: |
+| scan, then parse    | 15,393,731 |
+| parse only          | 14,524,325 |
+
 ### A tournament skips the candidates ANTLR4 never takes (landed, 2026-10)
 
 SQLite's `sql_stmt` scanned four SELECT statements for every `SELECT`.
@@ -451,6 +463,26 @@ re-measure before committing. Candidates read off the profile above:
   ("Nesting no longer doubles the scan", above) covers left-recursive rules and
   the recursive rules a failing repeat body rescans, so this is still paid once
   per alternative.
+- **Reading the caller's continuation costs SQLite's parse 8% (2026-11).**
+  Under `longest` a tournament's scan carries the continuation it is called
+  with, so a contested exit inside it asks through every frame. Pushing only
+  the call's own site, which drops what the caller follows with and so changes
+  answers, gives what reading costs. `benchmark/sqlite_parse`, `-O2` fuel, one
+  parse:
+
+  | Continuation pushed          |       fuel |
+  | ---------------------------- | ---------: |
+  | every frame                  | 14,524,325 |
+  | the call's own site only     | 13,367,803 |
+  | (no continuation, before it) | 13,405,970 |
+
+  Per parse there are 1,728 queries (435 `yields`, 408 `admits`, 885
+  `resumes`) and 6,630 pushes, 501 of which overflow six frames into the link
+  table. A one-entry cache in front of that table and a `follow_reads`
+  specialized to a one-token budget each saved under 1%. Two levers are left:
+  a frame width sized to the grammar's site count, so fewer pushes overflow,
+  and leaving the continuation out of a tournament candidate's scan where the
+  decision is proven not to depend on it.
 
 Found by reading generated code (2026-09), not yet measured on a benchmark:
 

@@ -6564,8 +6564,22 @@ fn gen_caller_follow_gate<S: AsStrSlice = String>(
     nc: &mut List<[String, i32]>,
     entry: S = "true",
 ) {
-    if !rep_op.gate_caller_follow {
+    let Some(yields) = caller_follow_yield_test(w, rep_op, entry) else {
         return;
+    };
+    w.begin(`if ${yields}`);
+    let end = gen_scan_guard_with_prefix(w, &rep_op.scan_body, ctx, nc, "iter_scan_pos", "iter_scan", false);
+    w.line(`if ${end} < 0 || !${iteration_resumes_at(rep_op, ctx, &end)} { break; }`);
+    w.end();
+}
+
+/// The test of whether the caller's continuation starts at the iteration, for
+/// a gate to settle by where the iteration ends. None where the loop has no
+/// gate, or where its body cannot be walked and the loop has already been told
+/// to stop wherever the continuation starts.
+fn caller_follow_yield_test<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, entry: S) -> Option<String> {
+    if !rep_op.gate_caller_follow {
+        return null;
     }
     let yields = if entry.as_str_slice() == "true" {
         follow_yields_call("&p.kinds", "p.pos");
@@ -6574,12 +6588,9 @@ fn gen_caller_follow_gate<S: AsStrSlice = String>(
     };
     if !rep_op.body_scannable {
         w.line(`if ${yields} { break; }`);
-        return;
+        return null;
     }
-    w.begin(`if ${yields}`);
-    let end = gen_scan_guard_with_prefix(w, &rep_op.scan_body, ctx, nc, "iter_scan_pos", "iter_scan", false);
-    w.line(`if ${end} < 0 || !${iteration_resumes_at(rep_op, ctx, &end)} { break; }`);
-    w.end();
+    return Option::Some(yields);
 }
 
 /// Whether the loop's continuation, short of the caller or through it, is
@@ -7066,7 +7077,11 @@ fn gen_rep_speculative_iteration(
     w.begin(`if p.recovering || p.pos <= ${mark.pos}`);
     mark.rewind(w);
     if let Some([_, gate]) = rep_probe(rep_op, ctx) {
-        let keeps_probe = if let Some(y) = &yielded { `${y} || ${negate_cond(&gate)}` } else { negate_cond(&gate) };
+        let keeps_probe = if let Some(y) = &yielded {
+            `${y} || ${negate_cond(&gate)}`;
+        } else {
+            negate_cond(&gate);
+        };
         w.line(`if ${keeps_probe} { p.pending = ${pending}; }`);
     } else {
         w.line(`p.pending = ${pending};`);
@@ -7105,14 +7120,9 @@ fn gen_rep_speculative_iteration(
 /// whether the caller's continuation starts at the iteration, for the parse's
 /// end to settle, or none where the gate asks nothing more.
 fn gen_speculative_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, nc: &mut List<[String, i32]>) -> Option<String> {
-    if !rep_op.gate_caller_follow {
+    let Some(yields) = caller_follow_yield_test(w, rep_op, "true") else {
         return null;
-    }
-    let yields = follow_yields_call("&p.kinds", "p.pos");
-    if !rep_op.body_scannable {
-        w.line(`if ${yields} { break; }`);
-        return null;
-    }
+    };
     let yielded = dedup_name("sp_yielded", nc);
     w.line(`let ${yielded} = ${yields};`);
     return Option::Some(yielded);
