@@ -19,7 +19,7 @@ use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
-use crate::ast::{AstId, GenericParam, Type};
+use crate::ast::{AssocTypeBound, AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
     BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
@@ -51,7 +51,7 @@ pub(crate) struct InferHoleTable {
     /// where a check reads the table, so behind a cell.
     mismatches: std::cell::RefCell<Vec<DiagnosticSpan>>,
     /// Slots an associated-type equality binds to a deferred owner, answered
-    /// by [`Elaborator::settle_projection_links`] once the owner is.
+    /// the moment the owner is.
     links: Vec<ProjectionLink>,
 }
 
@@ -65,22 +65,9 @@ struct ProjectionLink {
     /// The bound's own arguments as the call read them, `None` where it
     /// writes none.
     written: Option<Vec<TypeId>>,
-    assoc: String,
-    /// `[..F]` takes the projection's elements, so only a tuple answers it.
-    takes_tuple: bool,
+    assoc: AssocTypeBound,
     trait_name: String,
     span: Span,
-}
-
-/// Where [`Elaborator::settle_projection_links`] runs.
-#[derive(Clone, Copy)]
-pub(super) enum LinkSite {
-    /// The end of a body, whose parameters' bounds still answer a projection
-    /// off one of them.
-    BodyEnd,
-    /// The end of the module, where only a concrete owner's projection is
-    /// answered: a parameter's frame is gone.
-    ModuleEnd,
 }
 
 impl InferHoleTable {
@@ -459,11 +446,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the unifier's `or_insert` policy, and refuses an answer that is itself
     /// still a variable.
     pub(super) fn solve_infer_var(&mut self, var: TypeId, answer: TypeId) {
-        if !self.tysys.is_usable_answer(answer) {
-            return;
-        }
-        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
-            *slot = Some(answer);
+        if self.tysys.is_usable_answer(answer) {
+            self.answer_infer_var(var, answer);
         }
     }
 
@@ -471,10 +455,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// written `!` answers it, where an inferred one, a diverging arm's, says
     /// nothing.
     pub(super) fn solve_infer_var_as_written(&mut self, var: TypeId, written: TypeId) {
-        if written != TypeTable::NEVER {
+        if written == TypeTable::NEVER {
+            self.answer_infer_var(var, written);
+        } else {
             self.solve_infer_var(var, written);
-        } else if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
-            *slot = Some(written);
+        }
+    }
+
+    /// Record `answer` for `var` unless it has one, which every other answer
+    /// goes through: a target its owner's projection answers is answered
+    /// with it here, before anything reads the target.
+    fn answer_infer_var(&mut self, var: TypeId, answer: TypeId) {
+        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
+            *slot = Some(answer);
+            self.settle_projection_links();
         }
     }
 
@@ -493,9 +487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return;
         }
-        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
-            *slot = Some(answer);
-        }
+        self.answer_infer_var(var, answer);
     }
 
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
@@ -533,9 +525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)));
         for (hole, answer) in taken {
             if self.tysys.is_usable_answer(answer) {
-                if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
-                    *slot = Some(answer);
-                }
+                self.answer_infer_var(hole, answer);
             } else if self.awaits_pending_call(answer) {
                 // The enclosing call answers its variable once its arguments
                 // are read, and the hole with it. A hole its own literals
@@ -633,7 +623,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.infer_holes.is_empty() {
             return;
         }
-        self.settle_projection_links(LinkSite::ModuleEnd);
         let diags = std::mem::take(&mut self.infer_holes.diags);
         let mismatches = self.infer_holes.mismatches.take();
         // Group by what the variables belong to, in mint order, so one use
@@ -706,8 +695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         target: args[target_idx],
                         trait_: self.tysys.resolutions.bound_decl(bound),
                         written: written.clone(),
-                        assoc: assoc.name.clone(),
-                        takes_tuple: matches!(assoc.ty, Type::Tuple(_)),
+                        assoc: assoc.clone(),
                         trait_name: bound.written_name(),
                         span,
                     });
@@ -716,75 +704,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Answer each linked target from its owner's answer, until no link
-    /// progresses: one target may be another link's owner. A link whose owner
-    /// is still open waits for a later site.
-    pub(super) fn settle_projection_links(&mut self, site: LinkSite) {
+    /// Answer each linked target whose owner is answered, until no link
+    /// progresses: one target may be another link's owner.
+    fn settle_projection_links(&mut self) {
         let mut pending = std::mem::take(&mut self.infer_holes.links);
         loop {
             let before = pending.len();
-            pending.retain(|link| !self.settle_projection_link(link, site));
+            pending.retain(|link| !self.settle_projection_link(link));
             if pending.len() == before {
                 break;
             }
         }
-        self.infer_holes.links = pending;
+        self.infer_holes.links.append(&mut pending);
     }
 
     /// Whether `link`'s owner is answered, its target then answered by the
     /// owner's projection or held to it. A projection that is not there, or
     /// not a tuple a pack takes, leaves the target to its own report.
-    fn settle_projection_link(&mut self, link: &ProjectionLink, site: LinkSite) -> bool {
+    fn settle_projection_link(&mut self, link: &ProjectionLink) -> bool {
         let owner = self.apply_infer_holes(link.owner);
         if !self.tysys.is_usable_answer(owner) {
             return false;
-        }
-        let forwarded = self.tysys.type_table.borrow().contains_type_param(owner);
-        if forwarded && matches!(site, LinkSite::ModuleEnd) {
-            return true;
         }
         let trait_args = match (&link.written, link.trait_) {
             (Some(written), Some(trait_)) => {
                 let written: Vec<TypeId> =
                     written.iter().map(|&t| self.apply_infer_holes(t)).collect();
-                if written.iter().any(|&t| self.type_has_infer_hole(t)) {
+                let tt = self.tysys.type_table.borrow();
+                if written.iter().any(|&t| tt.contains_undecided(t)) {
                     return false;
                 }
+                drop(tt);
                 self.trait_args_at(trait_, owner, &written)
             }
-            _ => None,
+            (None, _) | (Some(_), None) => None,
         };
-        let answer = match link.trait_ {
-            Some(trait_) if forwarded => {
-                Some(self.forwarded_projection(owner, trait_, trait_args, &link.assoc))
-            }
-            _ => self.settled_projection(owner, link.trait_, trait_args.as_deref(), &link.assoc),
-        };
-        let Some(answer) = answer else {
+        let forwarded = self.scope_type_param_ids().contains(&owner);
+        let Some(answer) =
+            self.bound_projection(owner, forwarded, link.trait_, trait_args, &link.assoc)
+        else {
             return true;
         };
-        if link.takes_tuple && !self.tysys.type_table.borrow().is_tuple(answer) {
-            return true;
-        }
         let target = self.apply_infer_holes(link.target);
         if self.type_has_infer_hole(target) {
             self.solve_infer_holes_against(target, answer);
             return true;
         }
-        let tt = self.tysys.type_table.borrow();
-        if target == answer
-            || says_nothing(target)
-            || tt.contains_type_param(target)
-            || tt.contains_type_param(answer)
-        {
+        if target == answer || says_nothing(target) || !self.decides_equality(target, answer) {
             return true;
         }
+        let tt = self.tysys.type_table.borrow();
         let (type_name, expected, actual) = (tt.name(owner), tt.name(target), tt.name(answer));
         drop(tt);
         let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
             type_name,
             trait_name: link.trait_name.clone(),
-            assoc_name: link.assoc.clone(),
+            assoc_name: link.assoc.name.clone(),
             expected,
             actual,
             span: link.span,

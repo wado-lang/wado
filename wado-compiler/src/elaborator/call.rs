@@ -3786,10 +3786,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(TypeError::CannotInferType { message, span });
             return;
         }
-        let names = self.sig_slot_names(&sig);
+        let (names, owners) = self.sig_slots(&sig);
         let split = sig.declaring_split();
-        let mut owners = self.declaring_params(&names[..split]);
-        owners.extend(sig.own_params.iter().cloned());
         let args: Vec<TypeId> = sig
             .decl
             .type_params
@@ -3807,18 +3805,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The slots `sig` declares, its block's and then its own, as a bound's
-    /// target names them.
-    fn sig_slot_names(&self, sig: &MethodSig) -> Vec<ParamRef> {
-        let table = self.tysys.type_table.borrow();
-        sig.decl
-            .type_params
-            .iter()
-            .map(|(name, slot)| ParamRef {
-                owner: table.type_param_id(*slot).map(|id| id.owner),
-                family_decl: None,
-                name: name.clone(),
-            })
-            .collect()
+    /// target names them, and the parameters that declare them.
+    fn sig_slots(&self, sig: &MethodSig) -> (Vec<ParamRef>, Vec<ast::GenericParam>) {
+        let names: Vec<ParamRef> = {
+            let table = self.tysys.type_table.borrow();
+            sig.decl
+                .type_params
+                .iter()
+                .map(|(name, slot)| ParamRef {
+                    owner: table.type_param_id(*slot).map(|id| id.owner),
+                    family_decl: None,
+                    name: name.clone(),
+                })
+                .collect()
+        };
+        let mut owners = self.declaring_params(&names[..sig.declaring_split()]);
+        owners.extend(sig.own_params.iter().cloned());
+        (names, owners)
     }
 
     /// Whether a slot nothing at the call site answers waits for a sink the
@@ -4116,31 +4119,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     };
                     for (assoc, target_idx) in targets {
-                        let resolved = if forwarded {
-                            trait_.map(|trait_| {
-                                self.forwarded_projection(
-                                    owner_ty,
-                                    trait_,
-                                    trait_args.clone(),
-                                    &assoc.name,
-                                )
-                            })
-                        } else {
-                            self.settled_projection(
-                                owner_ty,
-                                trait_,
-                                trait_args.as_deref(),
-                                &assoc.name,
-                            )
-                        };
                         // A forwarded owner may answer with one of the
                         // caller's parameters, which still reads as open.
-                        // `[..F]` takes a tuple's elements; anything else
-                        // leaves the pack open, for the pin's check to refute.
-                        if let Some(resolved) = resolved
-                            && resolved != args[target_idx]
-                            && (!matches!(assoc.ty, Type::Tuple(_))
-                                || self.tysys.type_table.borrow().is_tuple(resolved))
+                        if let Some(resolved) = self.bound_projection(
+                            owner_ty,
+                            forwarded,
+                            trait_,
+                            trait_args.clone(),
+                            assoc,
+                        ) && resolved != args[target_idx]
                         {
                             args[target_idx] = resolved;
                             progressed = true;
@@ -4154,9 +4141,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// What `assoc`, an equality of a bound on `owner`, binds its target to:
+    /// the projection through the caller's own bounds where `owner` is a
+    /// parameter the caller forwards, else off its impl. `[..F]` takes a
+    /// tuple's elements; anything else leaves the pack open, for the pin's
+    /// check to refute.
+    pub(super) fn bound_projection(
+        &mut self,
+        owner: TypeId,
+        forwarded: bool,
+        trait_: Option<DefId>,
+        trait_args: Option<Vec<TypeId>>,
+        assoc: &ast::AssocTypeBound,
+    ) -> Option<TypeId> {
+        let resolved = if forwarded {
+            self.forwarded_projection(owner, trait_?, trait_args, &assoc.name)
+        } else {
+            self.settled_projection(owner, trait_, trait_args.as_deref(), &assoc.name)?
+        };
+        let takes_tuple = matches!(assoc.ty, Type::Tuple(_));
+        (!takes_tuple || self.tysys.type_table.borrow().is_tuple(resolved)).then_some(resolved)
+    }
+
     /// `owner`'s `assoc` under `trait_` at `trait_args`, `owner` a type the
     /// call has settled.
-    pub(super) fn settled_projection(
+    fn settled_projection(
         &mut self,
         owner: TypeId,
         trait_: Option<DefId>,
@@ -4178,7 +4187,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `owner`'s `assoc` under `trait_`, `owner` a parameter the caller
     /// forwards: its projection, which the caller's own bounds may pin.
-    pub(super) fn forwarded_projection(
+    fn forwarded_projection(
         &mut self,
         owner: TypeId,
         trait_: DefId,
@@ -4714,9 +4723,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`, or the
         // block's own `impl<T: Tr<Out = U>, U>`) is projected off the owner
         // the arguments did settle.
-        let names = self.sig_slot_names(&sig);
-        let mut owners = self.declaring_params(&names[..split]);
-        owners.extend(sig.own_params.iter().cloned());
+        let (names, owners) = self.sig_slots(&sig);
         self.resolve_assoc_bounds_in(&owners, 0, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),

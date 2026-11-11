@@ -1,5 +1,5 @@
-// A later arm answers both the owner and the slot its associated type binds,
-// and they disagree: `Box::Item` is `i32`, not `bool`.
+// A later arm answers the slot an associated type binds before its owner, and
+// the owner's projection disagrees: `Box::Item` is `i32`, not `bool`.
 trait Make with () {
     fn make() -> Self;
 }
@@ -26,12 +26,12 @@ impl Holder for Box {
     }
 }
 
-fn held<T, H: Holder<Item = E>, E: Make>(_t: T) -> [H, E] {
-    return [H::empty(), E::make()];
+fn held<T, H: Holder<Item = E>, E: Make>(_t: T) -> [E, H] {
+    return [E::make(), H::empty()];
 }
 
-fn mismatched() -> [i32, [Box, bool]] {
-    return [0, [Box { v: 0 }, true]];
+fn mismatched() -> [i32, [bool, Box]] {
+    return [0, [true, Box { v: 0 }]];
 }
 
 test "the arm disagrees with the projection" {
