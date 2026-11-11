@@ -18,7 +18,7 @@ use super::callee::CalleeRef;
 use super::coercion::is_primitive_literal_target;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
-use super::types::{FunctionContext, KeyCandidate, MethodOwner, TypeError};
+use super::types::{FunctionContext, KeyCandidate, MethodOwner, OverloadedCallForm, TypeError};
 use super::tysys::TypeSystem;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::lexer::defaults_to_float;
@@ -143,14 +143,22 @@ pub(super) struct ArgProbe<'a> {
     args: &'a [ast::Expr],
     ctx: &'a FunctionContext,
     memo: Vec<Option<ArgClass>>,
+    /// The type the call's context expects of its result, which selects among
+    /// what the arguments leave as an annotated argument does.
+    pub(super) expected: Option<TypeId>,
 }
 
 impl<'a> ArgProbe<'a> {
-    pub(super) fn new(args: &'a [ast::Expr], ctx: &'a FunctionContext) -> Self {
+    pub(super) fn new(
+        args: &'a [ast::Expr],
+        ctx: &'a FunctionContext,
+        expected: Option<TypeId>,
+    ) -> Self {
         Self {
             args,
             ctx,
             memo: Vec::new(),
+            expected,
         }
     }
 
@@ -208,6 +216,14 @@ impl<'a> ArgSource<'_, 'a> {
 
     pub(super) fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// What the call's context expects of its result, where the site knows.
+    pub(super) fn expected(&self) -> Option<TypeId> {
+        match self {
+            Self::Exprs(probe) => probe.expected,
+            Self::Types(_) | Self::NoArguments => None,
+        }
     }
 
     pub(super) fn class<H: CompilerHost>(
@@ -286,6 +302,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "argument synthesis recorded a fact; it must only read"
         );
         class
+    }
+
+    /// Narrow `candidates` to those whose return type takes `expected`, what
+    /// the call's context asks of its result, where any does. It selects as an
+    /// annotated argument does; a context none meets is the mismatch's to
+    /// report.
+    pub(super) fn narrow_to_expected_return<C>(
+        &self,
+        candidates: &mut Vec<C>,
+        expected: TypeId,
+        return_of: impl Fn(&C) -> TypeId,
+    ) {
+        if candidates.len() < 2 || !self.tysys.type_table.borrow().is_concrete(expected) {
+            return;
+        }
+        let class = ArgClass::Exact(expected);
+        let takes = |c: &C| self.class_admits(return_of(c), &class);
+        if candidates.iter().any(takes) {
+            candidates.retain(takes);
+        }
     }
 
     /// Whether a candidate's parameter type is in `class`'s denoted set.
@@ -865,6 +901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|c| c.trait_name.to_display())
                     .collect(),
                 arguments: self.tysys.describe_arg_classes(std::slice::from_ref(key)),
+                form: OverloadedCallForm::Receiver,
                 span,
             });
         }

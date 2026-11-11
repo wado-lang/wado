@@ -20,7 +20,7 @@ use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 use super::trait_query::DerivedAt;
-use super::types::{TraitMethodMatch, TypeError};
+use super::types::{OverloadedCallForm, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
 /// One `Type::method(...)` spelling as the resolution reads it: what it names,
@@ -51,6 +51,9 @@ pub(super) struct StaticQuery<'a> {
     /// impls answer: the receiver's own declaration of the name is a different
     /// method, and a case it declares shadows nothing the trait supplies.
     pub(super) required_trait: Option<DefId>,
+    /// What the call's context expects of its result, which selects among the
+    /// impls the arguments leave as an annotated argument does.
+    pub(super) expected_return: Option<TypeId>,
 }
 
 impl<'a> StaticQuery<'a> {
@@ -66,6 +69,7 @@ impl<'a> StaticQuery<'a> {
             receiver_args: &[],
             method_args: &[],
             required_trait: None,
+            expected_return: None,
         }
     }
 }
@@ -311,6 +315,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_args,
             method_args,
             required_trait,
+            expected_return,
         } = query;
         // One vantage: the key the caller resolved, else the one its reference
         // site answered for, else the name's own. Deriving a second key when
@@ -372,7 +377,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
             });
         }
-        let resolved = match self.select_candidate(candidates, arg_types, &declaring_args) {
+        let resolved = match self.select_candidate(
+            candidates,
+            arg_types,
+            &declaring_args,
+            expected_return,
+        ) {
             Selection::One(candidate) => self.callee_of_candidate(
                 (receiver_name, &key),
                 method_name,
@@ -900,6 +910,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method: method_name.to_string(),
             traits: traits.clone(),
             arguments: self.tysys.describe_arg_classes(&classes),
+            form: OverloadedCallForm::Static,
             span,
         });
         true
@@ -912,6 +923,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         mut candidates: Vec<Candidate>,
         arg_types: &[TypeId],
         declaring_args: &[TypeId],
+        expected_return: Option<TypeId>,
     ) -> Selection {
         // The receiver's own declaration shadows an inherited one of the same
         // kind: a receiver-less declaration beside an instance one is no
@@ -943,6 +955,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // follows from the kind: a receiver-taking declaration has the receiver
         // at argument zero, so its own parameters begin at argument one.
         candidates.retain(|c| self.selector_admits(&c.selector, c.kind.own_args(arg_types)));
+        if let Some(expected) = expected_return {
+            self.narrow_to_expected_return(&mut candidates, expected, |c| {
+                let sig = self.tysys.signatures.method_sig(c.method_id);
+                sig.expect("a candidate names a declared method").decl.return_type.unwrap_or(TypeTable::UNIT)
+            });
+        }
         // Among what the arguments admit, the earlier origin outranks: the
         // receiver's own before a written body, a written body before an
         // inherited one.

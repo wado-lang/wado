@@ -138,11 +138,15 @@ methods; the ref-impl priority and the earlier steps are unchanged):
       position the parameter type must lie in the argument's denoted set. A
       parameter still containing an unsubstituted method-level type parameter
       accepts anything.
-   3. All survivors naming the same trait instantiation → the existing
+   3. Several survivors left, and the context expects a concrete type of the
+      call's result → keep the survivors returning that type, as an argument
+      annotated with it would. Where none returns it, keep them all: the
+      expected type narrows what the arguments left and never overrides them.
+   4. All survivors naming the same trait instantiation → the existing
       [specific-impls-win rule](./spec-traits.md#specific-impls-win) picks the impl.
       Survivors naming distinct instantiations → ambiguity error. No other
       ranking exists — there is no best match, only a unique match.
-   4. A unique survivor is selected: its full trait spelling is recorded in the
+   5. A unique survivor is selected: its full trait spelling is recorded in the
       dispatch fact and mangled name, and the arguments are then elaborated
       against its signature exactly as an unambiguous call is (literal coercion,
       range checks, defaults, effect checking).
@@ -426,8 +430,9 @@ and the prelude's `Default::default` / `FromStr::from_str` do not collide with
 each other — so renaming is an acceptable answer for a case that has not arisen.
 If it does, the follow-up must name `Self` without a receiver and without a
 leading `<` (JSX owns that position): either binding `Self` from the expected
-type (`let c: Config = Loadable::load(p)`, which contradicts this WEP's
-forward-inference non-goal and so needs its own decision), or a turbofish naming
+type (`let c: Config = Loadable::load(p)`, which needs its own decision: the
+expected type selects among one trait's argument lists, never between traits),
+or a turbofish naming
 `Self` on the trait head.
 
 ### Conversions
@@ -502,8 +507,6 @@ annotation on an argument that is already pinned.
 
 - Ad-hoc overloading of free functions or inherent methods — permanently out,
   per the design philosophy.
-- Expected-type or return-type directed selection. Inference stays forward;
-  `?` / `From` remains the one target-directed conversion, on its own path.
 - Ranking. Beyond the existing specific-impls-win rule there is no preference
   order; resolution is unique-or-error, so adding a preference later would only
   turn errors into compiles (backward-compatible), while removing one never is.

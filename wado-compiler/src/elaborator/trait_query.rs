@@ -36,7 +36,7 @@ use super::util;
 use super::{AbstractSelection, Elaborator};
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
-use crate::elaborator::sig::TraitSig;
+use crate::elaborator::sig::{InstantiatedSig, TraitSig};
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitEnv, get_type_name_static,
@@ -2216,32 +2216,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> BoundCandidate {
         let written = group.iter().any(|c| !c.bound.type_args.is_empty());
         let mut args = args;
-        if group.len() > 1 && written && !args.is_empty() {
+        let expected = args.expected();
+        if group.len() > 1 && written && (!args.is_empty() || expected.is_some()) {
             // Classification costs something, so it waits for an overload set,
             // as `select_trait_match` makes it wait (WEP 2026-07-31).
             let classes: Vec<ArgClass> = (0..args.len()).map(|i| args.class(self, i)).collect();
-            let admitted: Vec<usize> = (0..group.len())
+            let sigs: Vec<Option<InstantiatedSig>> = group
+                .iter()
+                .map(|c| self.bound_sig(c, method_name, self_type_id))
+                .collect();
+            let mut admitted: Vec<usize> = (0..group.len())
                 .filter(|&i| {
-                    let Some(params) = self.bound_param_types(&group[i], method_name, self_type_id)
-                    else {
-                        return false;
-                    };
-                    classes.len() <= params.len()
-                        && classes
-                            .iter()
-                            .zip(params.iter())
-                            .all(|(class, &param)| self.class_admits(param, class))
+                    sigs[i].as_ref().is_some_and(|sig| {
+                        classes.len() <= sig.param_types.len()
+                            && classes
+                                .iter()
+                                .zip(sig.param_types.iter())
+                                .all(|(class, &param)| self.class_admits(param, class))
+                    })
                 })
                 .collect();
+            if let Some(expected) = expected {
+                self.narrow_to_expected_return(&mut admitted, expected, |&i| {
+                    sigs[i].as_ref().expect("an admitted candidate has a signature").return_type
+                });
+            }
             // One exact answer decides on its own. A parameter that is the
             // caller’s own type parameter is a bare slot to `class_admits`,
             // which admits every argument, so without this tier an exactly
             // matching instantiation never wins over a slot-shaped sibling.
-            let exact: Vec<usize> = admitted
-                .iter()
-                .copied()
-                .filter(|&i| self.exactly_admits(&group[i], method_name, self_type_id, &classes))
-                .collect();
+            let exact: Vec<usize> = {
+                let tt = self.tysys.type_table.borrow();
+                admitted
+                    .iter()
+                    .copied()
+                    .filter(|&i| {
+                        sigs[i].as_ref().is_some_and(|sig| {
+                            !classes.is_empty()
+                                && classes.len() == sig.param_types.len()
+                                && classes.iter().zip(sig.param_types.iter()).all(
+                                    |(class, &param)| {
+                                        matches!(class, &ArgClass::Exact(arg) if param_takes(&tt, param, arg))
+                                    },
+                                )
+                        })
+                    })
+                    .collect()
+            };
             if let [winner] = exact.as_slice() {
                 let mut group = group;
                 return group.swap_remove(*winner);
@@ -2261,44 +2282,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         group.swap_remove(first_written)
     }
 
-    /// Whether every class names exactly what the candidate takes there, with
-    /// no slot standing in. The reference conversion still applies; a
-    /// conversion to a `&ListView<T>` is not exact.
-    fn exactly_admits(
+    /// What `method_name` takes and returns under `candidate`, its value
+    /// parameters only, for selection.
+    fn bound_sig(
         &mut self,
         candidate: &BoundCandidate,
         method_name: &str,
         self_type_id: TypeId,
-        classes: &[ArgClass],
-    ) -> bool {
-        let Some(params) = self.bound_param_types(candidate, method_name, self_type_id) else {
-            return false;
-        };
-        let tt = self.tysys.type_table.borrow();
-        classes.len() == params.len()
-            && classes.iter().zip(params.iter()).all(|(class, &param)| {
-                matches!(class, ArgClass::Exact(arg) if param_takes(&tt, param, *arg))
-            })
-    }
-
-    /// The value parameters `method_name` takes under `candidate`, for selection.
-    fn bound_param_types(
-        &mut self,
-        candidate: &BoundCandidate,
-        method_name: &str,
-        self_type_id: TypeId,
-    ) -> Option<Vec<TypeId>> {
+    ) -> Option<InstantiatedSig> {
         let decl = candidate.decl;
         let (sig, trait_assoc_types) = self.trait_method_of(&decl, method_name)?;
         let slots = self.bound_slots_in_space(candidate, self_type_id);
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, candidate);
-        let instantiated = sig.decl.instantiate_slots_with(
+        let mut instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
             &SlotProjections::from_iter([(TypeParamId::trait_self(decl), answers)]),
         );
         let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
-        Some(instantiated.param_types[first_value_param..].to_vec())
+        instantiated.param_types.drain(..first_value_param);
+        Some(instantiated)
     }
 
     /// Find a method in the trait declarations the bound names give, read in

@@ -1114,6 +1114,23 @@ test {
 }
 ```
 
+So does the type the context expects of the call's result, once the arguments
+have narrowed the set: a `let` annotation, a parameter, a return. It selects as
+an annotated argument does, on a method call, a static call, and a call through
+bounds, and it never overrides the arguments: where no survivor returns that
+type, selection proceeds as if the context expected nothing.
+
+<!-- {"fixture":"trait_overload_selected_by_expected_return.wado"} -->
+
+```wado
+test "a static call" {
+    let n: i32 = X::mk();
+    let s: String = X::mk();
+    assert n == 1;
+    assert s == "mk";
+}
+```
+
 This is deliberate: letting the literal's default type decide would make
 adding an `impl Take<i32>` silently retarget every existing call that meant
 `Take<i64>`. The error names each argument that came up empty and why, so it

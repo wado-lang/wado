@@ -1650,6 +1650,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *type_param_type_id,
                 given_args.as_deref(),
                 call,
+                expected_type,
                 ctx,
             );
         }
@@ -1856,6 +1857,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         site: receiver_site,
                         arg_types: &args,
                         receiver_args: &receiver_args,
+                        expected_return: expected_type,
                         ..StaticQuery::of(prefix, suffix)
                     })
                     .found()
@@ -1953,6 +1955,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     prefix,
                     &args,
                     None,
+                    expected_type,
                 );
                 if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
@@ -2076,6 +2079,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &method_type_args,
                     call.id,
                     call.span,
+                    expected_type,
                     ctx,
                 );
             }
@@ -2238,6 +2242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_type: ns_receiver_type,
                         receiver_args: &impl_type_args_inferred,
                         method_args: &method_type_args,
+                        expected_return: expected_type,
                         ..StaticQuery::of(type_name, method_name)
                     });
                     if self.report_unresolved_static(&resolved, method_name, &args, call.span) {
@@ -5658,6 +5663,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_param_type_id: TypeId,
         given_args: Option<&[TypeId]>,
         call: &ast::CallExpr,
+        expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let arg_count = given_args.map_or(call.args.len(), <[TypeId]>::len);
@@ -5672,7 +5678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_param_type_id,
                 call.span,
                 None,
-                ArgSource::Exprs(&mut ArgProbe::new(&call.args, ctx)),
+                ArgSource::Exprs(&mut ArgProbe::new(&call.args, ctx, expected_type)),
             )
         } {
             if let Some(def) = method_info_result.method_def

@@ -471,6 +471,16 @@ pub enum SigPosition {
     Return,
 }
 
+/// The form of a call left ambiguous among a trait's argument lists, which
+/// decides what can settle it: only a call with a receiver can pin the trait.
+#[derive(Debug, Clone, Copy)]
+pub enum OverloadedCallForm {
+    /// A method call or a subscript.
+    Receiver,
+    /// `Type::f(…)`, where the result type is the other way to select.
+    Static,
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -886,6 +896,7 @@ pub enum TypeError {
         /// What each argument contributed to selection, in argument order.
         /// Empty when the call never reached argument-directed selection.
         arguments: Vec<String>,
+        form: OverloadedCallForm,
         span: Span,
     },
 
@@ -2168,26 +2179,31 @@ impl TypeError {
                 method,
                 traits,
                 arguments,
+                form,
                 span,
-            } => (
-                Code::AmbiguousCandidate,
-                append_reason_chain(
-                    format!(
-                        "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
-                        traits
-                            .iter()
-                            .map(|t| format!("'{t}'"))
-                            .collect::<Vec<_>>()
-                            .join(" and "),
-                        traits
-                            .first()
-                            .map(|t| t.replacen('<', "::<", 1))
-                            .expect("ambiguity reported with no candidate traits")
+            } => {
+                let remedy = match form {
+                    OverloadedCallForm::Receiver => {
+                        let first = traits.first().expect("ambiguity reported with no candidate traits");
+                        format!(
+                            "annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
+                            first.replacen('<', "::<", 1)
+                        )
+                    }
+                    OverloadedCallForm::Static => "annotate an argument (e.g. '42 as i64') or the result".to_string(),
+                };
+                (
+                    Code::AmbiguousCandidate,
+                    append_reason_chain(
+                        format!(
+                            "ambiguous call to '{method}': the arguments do not select between {}; {remedy}",
+                            traits.iter().map(|t| format!("'{t}'")).collect::<Vec<_>>().join(" and "),
+                        ),
+                        arguments,
                     ),
-                    arguments,
-                ),
-                *span,
-            ),
+                    *span,
+                )
+            }
             TypeError::NoMatchingOverload {
                 method,
                 traits,

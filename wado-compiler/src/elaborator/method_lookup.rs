@@ -51,7 +51,7 @@ use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
 use crate::elaborator::solver_bridge::Ordered;
-use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
+use crate::elaborator::types::{ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitMethodMatch};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
 use crate::resolve::Resolution;
@@ -1248,7 +1248,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .signatures
                 .impl_trait(def)
                 .is_some_and(|t| traits.contains(&t))
-                && trait_arg.is_none_or(|arg| s.impl_takes_key(def, arg))
+                && trait_arg.is_none_or(|arg| {
+                    // A trait taking no parameter (`Ord`) takes `Self` there.
+                    if s.tysys.signatures.impl_sig(def).trait_type_args.is_empty() {
+                        arg == ty
+                    } else {
+                        s.impl_takes_key(def, arg)
+                    }
+                })
         })
     }
 
@@ -2282,12 +2289,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_name: &str,
         arg_types: &[TypeId],
         required_trait: Option<DefId>,
+        expected_return: Option<TypeId>,
     ) -> StaticLookup {
         self.resolve_static_callee(StaticQuery {
             receiver_key: Some(receiver),
             arg_types,
             receiver_type: Some(receiver_type),
             required_trait,
+            expected_return,
             ..StaticQuery::of(receiver_name, method_name)
         })
     }
@@ -3073,6 +3082,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .all(|(class, &param)| self.class_admits(param, class))
                 })
                 .collect();
+            if let Some(expected) = probe.expected {
+                self.narrow_to_expected_return(&mut admitted, expected, |&i| {
+                    found_traits[i].method_info.return_type
+                });
+            }
             // An impl writing the trait's arguments defines the function the
             // call names; one leaving a slot to the call only covers it.
             let writes_trait_args =
@@ -3123,8 +3137,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// One trait implemented for a receiver at two argument lists leaves the
     /// method name pointing at two signatures, and nothing downstream can choose:
-    /// arguments are elaborated *against* the chosen signature, and Wado has no
-    /// qualified call form to name one. Operators do not come through here —
+    /// arguments are elaborated *against* the chosen signature. Operators do not
+    /// come through here —
     /// [`Self::find_indexing_trait_impl`] and friends pick by operand type, which
     /// is how `List<T>` carries two `IndexValue` impls. `classes` is what each
     /// argument contributed, so the message can name the one that gave selection
@@ -3143,6 +3157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method: method_name.to_string(),
             traits,
             arguments: self.tysys.describe_arg_classes(classes),
+            form: OverloadedCallForm::Receiver,
             span,
         });
     }
@@ -4055,7 +4070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This lookup commits the call's resolution (the desugared call is
         // built from it), so argument-directed selection applies here exactly
         // as on the plain method-call path.
-        let mut probe = ArgProbe::new(&method_call.args, ctx);
+        let mut probe = ArgProbe::new(&method_call.args, ctx, expected_type);
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
                 &self.impl_target(&output_struct_name),

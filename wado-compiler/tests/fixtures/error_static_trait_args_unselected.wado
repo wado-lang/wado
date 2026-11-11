@@ -1,13 +1,12 @@
-// A static call whose arguments do not select among the receiver's impls of
-// a generic trait is reported, not left unresolved.
+// A static call whose arguments and context do not select among the
+// receiver's impls of a generic trait is reported, not left unresolved.
 trait Mk<T> with () { fn mk() -> T; }
 struct X {}
 impl Mk<i32> for X { fn mk() -> i32 { return 1; } }
 impl Mk<String> for X { fn mk() -> String { return "s"; } }
 test {
-    let v: i32 = X::mk();
-    assert v == 1;
+    let v = X::mk();
 }
 
 __DATA__
-{"compile_error":":8:18: analysis error: ambiguous call to 'mk': the arguments do not select between 'Mk<i32>' and 'Mk<String>'"}
+{"compile_error":":8:13: analysis error: ambiguous call to 'mk': the arguments do not select between 'Mk<i32>' and 'Mk<String>'; annotate an argument (e.g. '42 as i64') or the result"}

@@ -441,7 +441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The handle argument-directed selection classifies through (WEP
         // 2026-07-31). Constructing it costs nothing: a class is synthesized
         // only if the candidate set turns out to be an overload set.
-        let mut probe = ArgProbe::new(args_ast, ctx);
+        let mut probe = ArgProbe::new(args_ast, ctx, expected_type);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -1950,6 +1950,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &name,
                     &arg_types,
                     required_trait,
+                    expected_type,
                 )
             }
             _ => StaticLookup::NotStatic,
@@ -2483,6 +2484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type: Some(target_type_id),
                 method_args: &method_type_args,
                 required_trait,
+                expected_return: expected_type,
                 ..StaticQuery::of(&struct_name, &static_call.method)
             },
             static_call.span,
@@ -3541,6 +3543,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_args: &[TypeId],
         call_id: AstId,
         span: Span,
+        expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let qualified_struct_name = self.qualified_receiver_name(struct_name);
@@ -3639,6 +3642,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type: newtype_dispatch.as_ref().map(|(newtype, _, _)| *newtype),
                 receiver_args: impl_type_args,
                 method_args: method_type_args,
+                expected_return: expected_type,
                 ..StaticQuery::of(struct_name, method_name)
             },
             span,
