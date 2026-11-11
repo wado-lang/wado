@@ -12,12 +12,14 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::call::bound_targets;
 use super::infer::unify;
 use super::scope::ParamRef;
 use super::trait_query::{SelfBinding, spelled_at};
+use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
-use crate::ast::{AstId, GenericParam};
+use crate::ast::{AstId, GenericParam, Type};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
     BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
@@ -49,25 +51,25 @@ pub(crate) struct InferHoleTable {
     /// where a check reads the table, so behind a cell.
     mismatches: std::cell::RefCell<Vec<DiagnosticSpan>>,
     /// Slots an associated-type equality binds to a deferred owner, answered
-    /// in [`Elaborator::finalize_infer_holes`] once the owner is.
+    /// by [`Elaborator::settle_projection_links`] once the owner is.
     links: Vec<ProjectionLink>,
 }
 
 /// A slot another slot's associated-type equality binds
 /// (`S: ReflectStruct<FieldTypes = [..F]>`), deferred with that owner: only
 /// the owner's projection answers it.
-pub(super) struct ProjectionLink {
-    pub(super) owner: TypeId,
-    pub(super) target: TypeId,
-    pub(super) trait_: Option<DefId>,
+struct ProjectionLink {
+    owner: TypeId,
+    target: TypeId,
+    trait_: Option<DefId>,
     /// The bound's own arguments as the call read them, `None` where it
     /// writes none.
-    pub(super) written: Option<Vec<TypeId>>,
-    pub(super) assoc: String,
+    written: Option<Vec<TypeId>>,
+    assoc: String,
     /// `[..F]` takes the projection's elements, so only a tuple answers it.
-    pub(super) takes_tuple: bool,
-    pub(super) trait_name: String,
-    pub(super) span: Span,
+    takes_tuple: bool,
+    trait_name: String,
+    span: Span,
 }
 
 /// Where [`Elaborator::settle_projection_links`] runs.
@@ -672,8 +674,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_holes = InferHoleTable::default();
     }
 
-    pub(super) fn link_projection(&mut self, link: ProjectionLink) {
-        self.infer_holes.links.push(link);
+    /// Link each slot an associated-type equality binds to the owner declaring
+    /// it, where the call deferred that owner to a variable: the owner's
+    /// answer settles the slot. `owners` declare the slots `names` and `args`
+    /// list, in their order.
+    pub(super) fn link_deferred_assoc_targets(
+        &mut self,
+        owners: &[GenericParam],
+        names: &[ParamRef],
+        args: &[TypeId],
+        span: Span,
+    ) {
+        assert_eq!(names.len(), args.len(), "every slot is named");
+        assert_eq!(owners.len(), args.len(), "every slot is declared");
+        let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
+        for (param, &owner) in owners.iter().zip(args) {
+            let owner = self.apply_infer_holes(owner);
+            if !self.tysys.type_table.borrow().is_infer_var(owner) {
+                continue;
+            }
+            for bound in &param.bounds {
+                let targets = bound_targets(bound, names, &self.tysys.resolutions);
+                if targets.is_empty() {
+                    continue;
+                }
+                let written = (!bound.type_args.is_empty())
+                    .then(|| self.with_type_params_bound(&space, |e| e.written_bound_args(bound)));
+                for (assoc, target_idx) in targets {
+                    self.infer_holes.links.push(ProjectionLink {
+                        owner,
+                        target: args[target_idx],
+                        trait_: self.tysys.resolutions.bound_decl(bound),
+                        written: written.clone(),
+                        assoc: assoc.name.clone(),
+                        takes_tuple: matches!(assoc.ty, Type::Tuple(_)),
+                        trait_name: bound.written_name(),
+                        span,
+                    });
+                }
+            }
+        }
     }
 
     /// Answer each linked target from its owner's answer, until no link

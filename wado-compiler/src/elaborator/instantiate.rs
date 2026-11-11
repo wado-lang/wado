@@ -11,7 +11,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::call::assoc_bound_target_param;
+use super::call::bound_targets;
 use super::coercion::ExpectedReturn;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
@@ -348,8 +348,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Stand a variable in for each pack slot that a slot `solved` left open
     /// pins through an associated-type equality
     /// (`S: ReflectStruct<FieldTypes = [..F]>`). [`Self::instantiate`] leaves a
-    /// pack rigid, and only the owner's answer, projected at finalize, answers
-    /// this one; it is blamed with its owner.
+    /// pack rigid, and only the owner's projection answers this one; it is
+    /// blamed with its owner.
     pub(super) fn defer_pinned_packs(
         &mut self,
         inst: &Instantiated,
@@ -365,14 +365,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            for assoc in param.bounds.iter().flat_map(|b| &b.assoc_types) {
-                let Some(target) = assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)
-                else {
-                    continue;
-                };
-                let Some(j) = names.iter().position(|n| *n == target) else {
-                    continue;
-                };
+            let targets = param
+                .bounds
+                .iter()
+                .flat_map(|b| bound_targets(b, names, &self.tysys.resolutions));
+            for (_, j) in targets.collect::<Vec<_>>() {
                 let pack = &params[j];
                 if !pack.is_pack || solved[j] != inst.vars[j] {
                     continue;

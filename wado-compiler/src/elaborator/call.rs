@@ -22,7 +22,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
-use super::infer_hole::{ProjectionLink, uninferable_type_param};
+use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound, TraitContext};
@@ -77,7 +77,7 @@ enum WrappedCase {
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
 /// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
 /// which is what the pack stands for everywhere else.
-pub(super) fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<ParamRef> {
+fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<ParamRef> {
     let named = match ty {
         Type::Named(named) => named,
         Type::Tuple(elems) => match elems.as_slice() {
@@ -87,6 +87,23 @@ pub(super) fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> 
         _ => return None,
     };
     ParamRef::at_site(named.id, &named.name, resolutions)
+}
+
+/// Each associated-type equality `bound` writes that binds one of `names`,
+/// with that slot's index.
+pub(super) fn bound_targets<'b>(
+    bound: &'b ast::TraitBound,
+    names: &[ParamRef],
+    resolutions: &Resolutions,
+) -> Vec<(&'b ast::AssocTypeBound, usize)> {
+    bound
+        .assoc_types
+        .iter()
+        .filter_map(|assoc| {
+            let target = assoc_bound_target_param(&assoc.ty, resolutions)?;
+            Some((assoc, names.iter().position(|n| *n == target)?))
+        })
+        .collect()
 }
 
 /// The slots `owner` declares for `params`, as a bound's target names them.
@@ -3779,12 +3796,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .enumerate()
             .map(|(i, &(_, id))| {
-                let arg = if i < split {
-                    impl_type_args.get(self.declared_slot(id) as usize)
+                if i < split {
+                    impl_type_args[self.declared_slot(id) as usize]
                 } else {
-                    method_type_args.get(i - split)
-                };
-                arg.copied().unwrap_or(TypeTable::ERROR)
+                    method_type_args[i - split]
+                }
             })
             .collect();
         self.link_deferred_assoc_targets(&owners, &names, &args, span);
@@ -4088,18 +4104,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 for bound in &param.bounds {
-                    let targets: Vec<(usize, &ast::AssocTypeBound)> = bound
-                        .assoc_types
-                        .iter()
-                        .filter_map(|assoc| {
-                            let target =
-                                assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)?;
-                            let target_idx = names.iter().position(|n| *n == target)?;
-                            self.tysys
-                                .is_unbound_type_param(args[target_idx])
-                                .then_some((target_idx, assoc))
-                        })
-                        .collect();
+                    let mut targets = bound_targets(bound, names, &self.tysys.resolutions);
+                    targets.retain(|&(_, i)| self.tysys.is_unbound_type_param(args[i]));
                     if targets.is_empty() {
                         continue;
                     }
@@ -4109,7 +4115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     else {
                         continue;
                     };
-                    for (target_idx, assoc) in targets {
+                    for (assoc, target_idx) in targets {
                         let resolved = if forwarded {
                             trait_.map(|trait_| {
                                 self.forwarded_projection(
@@ -4216,52 +4222,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return BoundArgsAtCall::Waiting;
         }
         BoundArgsAtCall::Read(self.trait_args_at(trait_, owner, &written))
-    }
-
-    /// Link each slot an associated-type equality binds to the owner declaring
-    /// it, where the call deferred that owner to a variable: the owner's
-    /// answer settles the slot at finalize ([`ProjectionLink`]). `owners`
-    /// declare the slots `names` and `args` list, in their order.
-    pub(super) fn link_deferred_assoc_targets(
-        &mut self,
-        owners: &[ast::GenericParam],
-        names: &[ParamRef],
-        args: &[TypeId],
-        span: token::Span,
-    ) {
-        assert_eq!(names.len(), args.len(), "every slot is named");
-        assert_eq!(owners.len(), args.len(), "every slot is declared");
-        let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
-        for (param, &owner) in owners.iter().zip(args) {
-            let owner = self.apply_infer_holes(owner);
-            if !self.tysys.type_table.borrow().is_infer_var(owner) {
-                continue;
-            }
-            for bound in &param.bounds {
-                for assoc in &bound.assoc_types {
-                    let Some(target) = assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)
-                    else {
-                        continue;
-                    };
-                    let Some(target_idx) = names.iter().position(|n| *n == target) else {
-                        continue;
-                    };
-                    let written = (!bound.type_args.is_empty()).then(|| {
-                        self.with_type_params_bound(&space, |e| e.written_bound_args(bound))
-                    });
-                    self.link_projection(ProjectionLink {
-                        owner,
-                        target: args[target_idx],
-                        trait_: self.tysys.resolutions.bound_decl(bound),
-                        written,
-                        assoc: assoc.name.clone(),
-                        takes_tuple: matches!(assoc.ty, Type::Tuple(_)),
-                        trait_name: bound.written_name(),
-                        span,
-                    });
-                }
-            }
-        }
     }
 
     /// Fit flat turbofish type args to `declared`, grouping them into one
