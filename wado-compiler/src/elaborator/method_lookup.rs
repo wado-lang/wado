@@ -32,7 +32,7 @@ use super::call::{
     slot_type_bindings, turbofish_leaves_slot,
 };
 use super::coercion::{ExpectedReturn, answers_last};
-use super::infer::InferCtx;
+use super::infer::{InferCtx, infer_var_answers, unify};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
@@ -1436,13 +1436,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether a match's trait arguments, their open slots solved against
-    /// `pinned`, are `pinned`.
+    /// `pinned`, are `pinned`. Judged before anything is solved, since a
+    /// variable the receiver holds is shared by every match.
     fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
-        trait_args.len() == pinned.len()
-            && trait_args.iter().zip(pinned).all(|(&arg, &want)| {
-                self.solve_infer_holes_against(arg, want);
-                self.apply_infer_holes(arg) == want
-            })
+        if trait_args.len() != pinned.len() {
+            return false;
+        }
+        let args: Vec<TypeId> = trait_args
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
+        let mut bindings = IndexMap::default();
+        for (&arg, &want) in args.iter().zip(pinned) {
+            unify(&self.tysys.type_table, arg, want, &mut bindings);
+        }
+        let mut table = self.tysys.type_table.borrow_mut();
+        let answers = infer_var_answers(&table, bindings);
+        args.iter()
+            .zip(pinned)
+            .all(|(&arg, &want)| table.substitute_infer_vars(arg, &answers) == want)
     }
 
     /// `trait_args`, answered, where they key `block`'s instance
@@ -2213,6 +2225,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // already kept to.
         if let Some(pinned) = required_trait.and_then(|wanted| wanted.args.as_ref()) {
             found_traits.retain(|m| self.trait_args_settle_to(&m.trait_args, pinned));
+            for m in &found_traits {
+                for (&arg, &want) in m.trait_args.iter().zip(pinned) {
+                    self.solve_infer_holes_against(arg, want);
+                }
+            }
         }
         // Rank 3, which the order decided: the report only names what it found.
         match &order {
@@ -2764,29 +2781,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.solve_infer_holes_against(param, *arg);
             }
         }
-        let args: Vec<String> = first
+        let trait_args: Vec<TypeId> = first
             .trait_args
             .iter()
-            .map(|&arg| {
-                let arg = self.apply_infer_holes(arg);
-                self.tysys.type_id_to_string(arg)
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
+        let blocks: Vec<DefId> = tied
+            .iter()
+            .map(|&i| {
+                found[i]
+                    .method_info
+                    .impl_block
+                    .expect("a match leaving a slot to the call is read off its block")
             })
             .collect();
+        self.report_blocks_tied(&blocks, &trait_args, receiver, span);
+    }
+
+    /// Report impl `blocks` of one trait, each leaving a slot to the call, as
+    /// all reaching it at `trait_args` on `receiver`.
+    fn report_blocks_tied(
+        &mut self,
+        blocks: &[DefId],
+        trait_args: &[TypeId],
+        receiver: TypeId,
+        span: Span,
+    ) {
+        let args: Vec<String> = trait_args
+            .iter()
+            .map(|&arg| self.tysys.type_id_to_string(arg))
+            .collect();
         let env = Arc::clone(&self.tysys.trait_env);
-        let header_of = |i: usize| {
-            let block = found[i]
-                .method_info
-                .impl_block
-                .expect("a match leaving a slot to the call is read off its block");
-            &env.impl_headers[&block]
-        };
-        let head = header_of(tied[0]).trait_head_name().unwrap_or_default();
+        let head = env.impl_headers[&blocks[0]]
+            .trait_head_name()
+            .unwrap_or_default();
         let _ = self.emit(TypeError::AmbiguousHeadImpls {
             trait_name: format!("{head}<{}>", args.join(", ")),
             receiver: self.tysys.type_id_to_string(receiver),
-            headers: tied
+            headers: blocks
                 .iter()
-                .map(|&i| header_as_written(header_of(i)))
+                .map(|block| header_as_written(&env.impl_headers[block]))
                 .collect(),
             span,
         });
@@ -3202,6 +3236,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         span: Span,
     ) -> FunctionRef {
+        if !info.tied_with.is_empty() {
+            let blocks: Vec<DefId> = std::iter::once(info.impl_def)
+                .chain(info.tied_with.iter().copied())
+                .collect();
+            let key: Vec<TypeId> = info.index_type.into_iter().collect();
+            self.report_blocks_tied(&blocks, &key, info.container, span);
+        }
         self.defer_impl_bounds(info.impl_def, &info.trait_arg_slots, span, OwedBounds::All);
         let name = MethodName::format_local(&info.receiver, Some(&info.trait_name), method);
         FunctionRef {
@@ -3529,15 +3570,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
-        self.indexing_trait_impls(
+        let mut impls = self.indexing_trait_impls(
             struct_name,
             base_type_id,
             item,
             method_name,
             expected_index_type,
-        )
-        .into_iter()
-        .next()
+        );
+        // An impl writing the key defines the function the subscript names;
+        // one leaving it to the subscript only covers it.
+        if let Some(written) = impls.iter().position(|i| i.trait_arg_slots.is_empty()) {
+            return Some(impls.swap_remove(written));
+        }
+        let mut impls = impls.into_iter();
+        let mut pick = impls.next()?;
+        pick.tied_with = impls.map(|i| i.impl_def).collect();
+        Some(pick)
     }
 
     /// Every indexing trait impl [`Self::find_indexing_trait_impl`] may pick
@@ -3648,6 +3696,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_def: block,
                     trait_arg_slots,
                     instance_args,
+                    container: base_type_id,
+                    tied_with: Vec::new(),
                 })
             },
         )

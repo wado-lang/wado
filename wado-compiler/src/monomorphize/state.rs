@@ -437,21 +437,13 @@ impl Monomorphizer {
             if !is_blanket {
                 return trait_name;
             }
-            let args = trait_name
-                .args()
-                .iter()
-                .map(|arg| {
-                    impl_type_params
-                        .iter()
-                        .find(|p| {
-                            arg.binder_name() == Some(p.name.as_str())
-                                && type_table.impl_trait_arg_slots(p.id.owner).contains(&p.id)
-                        })
-                        .and_then(|p| key.impl_type_args.get(p.id.index as usize))
-                        .map_or_else(|| arg.clone(), |&ty| type_table.fq_type_name(ty))
-                })
-                .collect();
-            trait_name.with_args(args)
+            trait_name.rewrite_args(&|arg| {
+                let p = impl_type_params.iter().find(|p| {
+                    arg.binder_name() == Some(p.name.as_str())
+                        && type_table.impl_trait_arg_slots(p.id.owner).contains(&p.id)
+                })?;
+                Some(type_table.fq_type_name(key.impl_type_args[p.id.index as usize]))
+            })
         });
         let mangled_struct = MethodName::format_struct_with_trait(&receiver, trait_name.as_ref());
 

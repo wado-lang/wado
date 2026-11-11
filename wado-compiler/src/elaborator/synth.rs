@@ -50,9 +50,6 @@ pub(super) enum ArgClass {
     Opaque(OpaqueReason),
 }
 
-/// Why synthesis produced no type. A closed set: the judgement matches on every
-/// `ast::Expr` variant with no wildcard arm, so a new expression form must
-/// either get a rule or name the reason it has none.
 /// Which impls a subscript's key is typed for ([`Elaborator::index_key_type`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum KeyedAccess {
@@ -60,6 +57,9 @@ pub(super) enum KeyedAccess {
     Write,
 }
 
+/// Why synthesis produced no type. A closed set: the judgement matches on every
+/// `ast::Expr` variant with no wildcard arm, so a new expression form must
+/// either get a rule or name the reason it has none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum OpaqueReason {
     /// A closure whose parameter or return types are unannotated: the

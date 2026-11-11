@@ -1748,7 +1748,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             && let Some(key) = info.index_type
                             && key != index_type
                         {
-                            self.typecheck(index_type, key, index_expr.index.span());
+                            // A key assignable to the impl's (`!`) still
+                            // reaches no impl at its own type.
+                            if self.tysys.typecheck(index_type, key).is_err() {
+                                self.typecheck(index_type, key, index_expr.index.span());
+                            } else {
+                                let _ = self.emit(TypeError::MissingTraitImpl {
+                                    type_name: self.tysys.type_id_to_string(base_type_id),
+                                    trait_name: format!(
+                                        "IndexAssign<{}>",
+                                        self.tysys.type_id_to_string(index_type)
+                                    ),
+                                    span: index_expr.index.span(),
+                                });
+                            }
                             return Err(());
                         }
                     }

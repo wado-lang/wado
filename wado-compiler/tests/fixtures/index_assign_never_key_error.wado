@@ -1,0 +1,24 @@
+// A diverging key reaches no `IndexAssign` impl at its own type, and says so
+// rather than passing as assignable to the impl's key.
+struct Sink {
+    last: i64,
+}
+
+impl IndexAssign<i64> for Sink {
+    type Output = i64;
+
+    fn index_assign(&mut self, i: i64, v: i64) {
+        self.last = i + v;
+    }
+}
+
+test {
+    let mut s = Sink { last: 0 };
+    if s.last == 1 {
+        s[panic("never")] = 4;
+    }
+    assert s.last == 0;
+}
+
+__DATA__
+{"compile_error": ":18:11: analysis error: type 'Sink' does not implement IndexAssign<!>"}

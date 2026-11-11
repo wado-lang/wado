@@ -183,7 +183,10 @@ fn collect(
                 trait_args,
                 depth,
                 generality: generality(&def.target),
-                opens_trait_args: def.trait_args.iter().any(|arg| arg.mentions(&|_| true)),
+                opens_trait_args: def
+                    .trait_args
+                    .iter()
+                    .any(|arg| arg.mentions(&|p| !def.target.mentions(&|q| q == p))),
                 is_variadic: is_variadic(&def.target),
             };
             if in_scope.contains(&trait_) {

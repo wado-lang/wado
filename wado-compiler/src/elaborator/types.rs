@@ -4812,6 +4812,11 @@ pub(super) struct IndexingTraitInfo {
     pub(super) trait_arg_slots: TypeArgMap,
     /// The instance key, where the receiver alone does not determine it.
     pub(super) instance_args: Option<Vec<TypeId>>,
+    /// The container the subscript reaches the impl through.
+    pub(super) container: TypeId,
+    /// The other blocks that leave the key to the subscript and reach it too:
+    /// nothing ranks them against `impl_def`, so the dispatch reports them.
+    pub(super) tied_with: Vec<DefId>,
 }
 
 /// Info about an operator trait implementation

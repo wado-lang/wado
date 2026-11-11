@@ -1137,7 +1137,20 @@ impl Monomorphizer {
 
         let mut substitution = TypeArgMap::default();
 
-        // Add impl block type params from key.impl_type_args
+        // Read the shape off the declaration, never off `key`:
+        // `InstantiationKey` leaves `method_info` out of its equality and hash,
+        // so two keys differing only there share one entry.
+        let one_arg_per_param = generic
+            .method_info
+            .as_ref()
+            .is_some_and(|info| info.receiver.is_declared_type());
+        // A declared target's key is its positions, then the trait arguments
+        // that key it, read structurally: a slot nested in either (`T` in
+        // `Pair<List<T>, i32>`, `U` in `Put<List<U>>`) is no key position.
+        if one_arg_per_param && let Some(block) = generic.impl_origin {
+            let positions = &key.impl_type_args[..type_table.impl_key_len(block)];
+            substitution = type_table.impl_slots(block, positions);
+        }
         let non_pack_impl_params_count = generic
             .impl_type_params
             .iter()
@@ -1145,14 +1158,10 @@ impl Monomorphizer {
             .count();
         for param in &generic.impl_type_params {
             let id = param.id;
+            if substitution.contains_key(&id) {
+                continue;
+            }
             if param.is_pack && !param.projected {
-                // Read the shape off the declaration, never off `key`:
-                // `InstantiationKey` leaves `method_info` out of its equality
-                // and hash, so two keys differing only there share one entry.
-                let one_arg_per_param = generic
-                    .method_info
-                    .as_ref()
-                    .is_some_and(|info| info.receiver.is_declared_type());
                 let before = id.index as usize;
                 let pack_type = if one_arg_per_param {
                     key.impl_type_args
@@ -1176,16 +1185,6 @@ impl Monomorphizer {
                 substitution.insert(id, pack_type);
             } else if let Some(&arg) = key.impl_type_args.get(id.index as usize) {
                 substitution.insert(id, arg);
-            }
-        }
-        // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) or
-        // projected by a bound sits past the receiver's positions, and is read
-        // out of the arguments there.
-        if let Some(block) = generic.impl_origin
-            && let Some(positions) = key.impl_type_args.get(..type_table.impl_key_len(block))
-        {
-            for (slot, ty) in type_table.impl_slots(block, positions) {
-                substitution.entry(slot).or_insert(ty);
             }
         }
         for param in &generic.impl_type_params {

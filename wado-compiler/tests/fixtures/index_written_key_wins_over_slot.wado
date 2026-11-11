@@ -1,0 +1,51 @@
+// A subscript takes the impl writing its key over one leaving it to the
+// subscript, as a method call does.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+impl Mark for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+struct Table {}
+
+impl<I: Show> IndexValue<I> for Table {
+    type Output = String;
+
+    fn index_value(&self, index: I) -> String {
+        return index.show();
+    }
+}
+
+impl IndexValue<String> for Table {
+    type Output = String;
+
+    fn index_value(&self, index: String) -> String {
+        return `written ${index}`;
+    }
+}
+
+test {
+    let t = Table {};
+    assert t["s"] == "written s";
+    let s = "s";
+    assert t.index_value(s) == "written s";
+}
