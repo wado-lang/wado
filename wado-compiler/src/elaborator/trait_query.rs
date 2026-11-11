@@ -2154,6 +2154,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// One bound per trait declaration. Several bounds on one trait are one
     /// method at several instantiations, which the call's arguments choose.
+    /// The candidates reaching their trait at `wanted`, the arguments a
+    /// qualifier spells (`Base::<i64>::load`): another bound on the trait is
+    /// another instantiation, whatever else would select it.
+    fn reaching_at(
+        &mut self,
+        candidates: Vec<BoundCandidate>,
+        self_type_id: TypeId,
+        wanted: &[TypeId],
+    ) -> Vec<BoundCandidate> {
+        let mut reaching = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            let read_as = ScopedBound::new(
+                candidate.bound.clone(),
+                candidate.written_self.at(self_type_id, candidate.decl),
+            );
+            let at =
+                self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl);
+            let wanted = self.trait_args_at(candidate.decl, self_type_id, wanted);
+            if at.is_some() && at == wanted {
+                reaching.push(candidate);
+            }
+        }
+        reaching
+    }
+
     fn one_bound_per_trait(
         &mut self,
         candidates: Vec<BoundCandidate>,
@@ -2331,6 +2356,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 decl,
                 written_self: elaborated.self_type,
             });
+        }
+        if let Some(wanted) = required_trait.and_then(|w| w.args.as_deref()) {
+            candidates = self.reaching_at(candidates, self_type_id, wanted);
         }
         let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
         // Two traits declaring the method select neither.

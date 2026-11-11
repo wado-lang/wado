@@ -1,0 +1,36 @@
+// A qualified call reaches its trait at the arguments it spells, whatever the
+// expected type would select: `Base::<i64>::load` returns `String`.
+trait Base<A> with () {
+    type Load;
+    fn load(&self) -> Self::Load;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Base<i32> for Box {
+    type Load = i32;
+    fn load(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Base<i64> for Box {
+    type Load = String;
+    fn load(&self) -> String {
+        return "s";
+    }
+}
+
+fn wrong<T: Base<i32, Load = i32> + Base<i64, Load = String>>(t: &T) -> i32 {
+    return Base::<i64>::load(t);
+}
+
+test "a String read as an i32" {
+    let b = Box { v: 1 };
+    assert wrong(&b) == 1;
+}
+
+__DATA__
+{"compile_error": ":27:5: analysis error: type mismatch: expected 'i32', found 'String'"}

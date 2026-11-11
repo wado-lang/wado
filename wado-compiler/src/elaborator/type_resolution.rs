@@ -1437,6 +1437,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.trait_args_at(owner, base, &written)
     }
 
+    /// Each argument list `bound`, on `decl`, reaches its supertrait `trait_`
+    /// at on `base`: `T: Stacked` with `trait Stacked: Base<i32>` reaches
+    /// `Base<i32>`, one list per path the closure inherits it by.
+    fn inherited_trait_args(
+        &mut self,
+        base: TypeId,
+        bound: &ScopedBound,
+        space: &ParamSpace,
+        decl: DefId,
+        trait_: DefId,
+    ) -> Vec<Vec<TypeId>> {
+        let Some(args) = self.bound_trait_args(base, bound, space, decl) else {
+            return Vec::new();
+        };
+        let closure = self.tysys.trait_env.supertrait_closure(&decl).to_vec();
+        closure
+            .iter()
+            .filter(|inherited| inherited.decl == trait_)
+            .filter_map(|inherited| {
+                let at = self.inherited_space(decl, &args, &inherited.via);
+                let written = self.resolve_in_space(&at, &inherited.bound.type_args);
+                self.trait_args_at(trait_, base, &written)
+            })
+            .collect()
+    }
+
     /// The trait arguments `bound` writes, resolved in this frame.
     pub(super) fn written_bound_args(&mut self, bound: &ast::TraitBound) -> Vec<TypeId> {
         bound
@@ -1536,11 +1562,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(binding) = bound.assoc_types.iter().find(|b| b.name == assoc).cloned() else {
                 continue;
             };
-            if let Some(wanted) = trait_args
-                && !inherits
-            {
-                let at = self.bound_trait_args(base, &bound, &space, trait_);
-                if at.as_deref() != Some(wanted) {
+            if let Some(wanted) = trait_args {
+                let reached = if inherits {
+                    self.inherited_trait_args(base, &bound, &space, decl, trait_)
+                } else {
+                    self.bound_trait_args(base, &bound, &space, trait_)
+                        .into_iter()
+                        .collect()
+                };
+                if !reached.iter().any(|at| at.as_slice() == wanted) {
                     continue;
                 }
             }
