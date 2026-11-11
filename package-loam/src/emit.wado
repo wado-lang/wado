@@ -1589,14 +1589,7 @@ fn emit_least_extents(
 /// `Params::held`: the initializers as the backend keeps them for the pass
 /// `least`, a call of `recorded`, records at the least lengths, the weights
 /// taking its parameters from `first` on, and the folded literals `kept`.
-fn emit_held(
-    w: &mut CodeWriter,
-    graph: &Graph,
-    checked: &Checked,
-    kept: &List<String>,
-    first: i32,
-    least: String,
-) {
+fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kept: &List<String>, first: i32, least: String) {
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
     block.add_generic(GRAPH_BOUND);
@@ -2934,7 +2927,7 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
         },
         constant => constant_elements(&constant),
     };
-    return Result::Ok(`backend.upload(${host_literal(checked, tensor, data, extents)})`);
+    return Result::Ok(`backend.upload(&${host_literal(checked, tensor, data, extents)})`);
 }
 
 /// A folded tensor that no symbol enters on the host, which the backend keeps
@@ -2943,7 +2936,7 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
 fn kept_literal(checked: &Checked, tensor: &String) -> String {
     let extents = static_extents(&checked.shapes[*tensor]).expect("a kept literal's shape is static");
     let data = constant_elements(&checked.known[*tensor].elements);
-    return `host_of(${host_literal(checked, tensor, data, `${extents}`)})`;
+    return `${checked.primitives[*tensor]}_host(${host_literal(checked, tensor, data, `${extents}`)})`;
 }
 
 /// The folded tensors in `literals` that no symbol enters, which `Params`
@@ -2989,12 +2982,11 @@ fn constant_elements(elements: &Elements) -> String {
     };
 }
 
-/// A reference to the host `Tensor` of `data` over `extents`, typed as the
-/// folded `tensor` is.
+/// The host `Tensor` of `data` over `extents`, typed as the folded `tensor` is.
 fn host_literal(checked: &Checked, tensor: &String, data: String, extents: String) -> String {
     let element = checked.primitives.get(*tensor).unwrap();
     let shape = checked.shapes.get(*tensor).unwrap();
-    return `&Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents} }`;
+    return `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents} }`;
 }
 
 /// An input axis whose length the graph spells as arithmetic over symbols,
