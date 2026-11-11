@@ -551,12 +551,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .collect();
-        // A default the impl leaves to its trait reads `Self` as the target:
-        // `Add<Rhs = Self>` at `impl Add for P` is `Add<P>`.
-        let target = SelfBinding {
-            type_id: self_type,
-            declaring_trait: Some(trait_decl),
-        };
         for (decl, bound, via) in clauses {
             let named = self
                 .tysys
@@ -565,9 +559,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolved in the space the clause was written in, which the chain
             // from this impl's own arguments reaches: `X::Item` under `X = Feed`
             // is what `impl Src for Feed` binds it to. A spelling carries none
-            // of that.
-            let space =
-                self.with_self_binding(target, |e| e.inherited_space(trait_decl, &arg_ids, &via));
+            // of that. A default the impl leaves to its trait reads `Self` as
+            // the target: `Add<Rhs = Self>` at `impl Add for P` is `Add<P>`.
+            let space = self.inherited_space(trait_decl, &arg_ids, &via, self_type);
             let pick = vec![true; bound.type_args.len()];
             let supertrait_trait = self.with_type_params_bound(&space, |e| {
                 e.trait_named_with_resolved_args(named, &bound, &pick)
@@ -2119,14 +2113,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The space `elaborated`'s written types are read in: empty for a bound the
     /// frame wrote itself, and for an inherited one the chain from what `bounds`
-    /// writes down to the trait that declared it.
-    fn bound_space(&mut self, bounds: &[ScopedBound], elaborated: &ElaboratedBound) -> ParamSpace {
+    /// writes down to the trait that declared it, `Self` being `subject`.
+    fn bound_space(
+        &mut self,
+        bounds: &[ScopedBound],
+        elaborated: &ElaboratedBound,
+        subject: TypeId,
+    ) -> ParamSpace {
         let own = elaborated.space.clone();
         let Some((root, via)) = elaborated.inherited.clone() else {
             return own;
         };
         let root_args = self.with_type_params_bound(&own, |e| e.trait_args_of_bound(bounds, root));
-        self.inherited_space(root, &root_args, &via)
+        self.inherited_space(root, &root_args, &via, subject)
     }
 
     /// [`Self::bound_slots`] read in the space the candidate's bound was written in.
@@ -2352,7 +2351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // every reader below resolves in it rather than re-spelling.
         let mut candidates = Vec::with_capacity(kept.len());
         for (elaborated, decl) in kept {
-            let space = self.bound_space(bounds, &elaborated);
+            let space = self.bound_space(bounds, &elaborated, self_type_id);
             candidates.push(BoundCandidate {
                 bound: elaborated.bound,
                 space,
@@ -2938,8 +2937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the subject: `Make<Self::Base>` asks the subject's own
                     // `Base`, as its impl answers it.
                     let binding = self.tysys.base_self_binding(subject, Some(root));
-                    let space = self
-                        .with_self_binding(binding, |e| e.inherited_space(root, &root_args, &via));
+                    let space = self.inherited_space(root, &root_args, &via, subject);
                     self.with_type_params_bound(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
                             e.with_self_binding(binding, |e| {

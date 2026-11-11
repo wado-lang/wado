@@ -1165,7 +1165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let closure = e.tysys.trait_env.supertrait_closure(&decl).to_vec();
                     out.push((bound, at_decl));
                     for inherited in closure {
-                        let space = e.inherited_space(decl, &args, &inherited.via);
+                        let space = e.inherited_space(decl, &args, &inherited.via, binder);
                         // An inherited clause is written in `decl`'s own space,
                         // where `Self` is the bounded type — `binder` here.
                         let self_binding = SelfBinding {
@@ -1181,7 +1181,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The space an inherited clause's own bound is written in, reached from
-    /// `root`'s parameters standing at `args`.
+    /// `root`'s parameters standing at `args`, `Self` being `subject`.
     ///
     /// Walking the chain is what carries a site's arguments down to the trait
     /// that declared the clause: each step is written in the one before it, so
@@ -1192,13 +1192,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         root: DefId,
         args: &[TypeId],
         via: &[ViaClause],
+        subject: TypeId,
     ) -> ParamSpace {
-        let mut space = self.param_space_of(root, args);
-        for step in via {
-            let args = self.resolve_in_space(&space, &step.bound.type_args);
-            space = self.param_space_of(step.decl, &args);
-        }
-        space
+        let binding = self.tysys.base_self_binding(subject, Some(root));
+        self.with_self_binding(binding, |e| {
+            let mut space = e.param_space_of(root, args);
+            for step in via {
+                let args = e.resolve_in_space(&space, &step.bound.type_args);
+                space = e.param_space_of(step.decl, &args);
+            }
+            space
+        })
     }
 
     /// `decl`'s declared parameters paired with what `args` answers for them.
@@ -1456,8 +1460,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter(|inherited| inherited.decl == trait_)
             .filter_map(|inherited| {
-                let at = self.inherited_space(decl, &args, &inherited.via);
-                let written = self.resolve_in_space(&at, &inherited.bound.type_args);
+                let at = self.inherited_space(decl, &args, &inherited.via, base);
+                // Written in `decl`'s own space, where `Self` is the subject.
+                let clause = ScopedBound::new(
+                    inherited.bound.clone(),
+                    Some(SelfBinding {
+                        type_id: base,
+                        declaring_trait: Some(decl),
+                    }),
+                );
+                let written = self.bound_args_where_written(&clause, &at);
                 self.trait_args_at(trait_, base, &written)
             })
             .collect()
