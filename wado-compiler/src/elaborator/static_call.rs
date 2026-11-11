@@ -935,12 +935,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Selection> {
         let leaves_slot = |c: &Candidate| {
             c.supply.as_ref().is_some_and(|s| {
-                !self
-                    .tysys
+                self.tysys
                     .type_table
                     .borrow()
-                    .impl_trait_arg_slots(s.impl_def)
-                    .is_empty()
+                    .impl_trait_sets_params(s.impl_def)
             })
         };
         let settled_by_args = |c: &Candidate| match (&c.selector, c.kind) {
@@ -957,9 +955,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blocks: Vec<DefId> = candidates
             .iter()
-            .map(|c| c.supply.as_ref().expect("a slot-leaving candidate").impl_def)
+            .map(|c| {
+                c.supply
+                    .as_ref()
+                    .expect("a slot-leaving candidate")
+                    .impl_def
+            })
             .collect();
-        let mut settled: Vec<TypeArgMap> = candidates
+        let settled: Vec<TypeArgMap> = candidates
             .iter()
             .zip(&blocks)
             .map(|(c, &block)| {
@@ -972,17 +975,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         let mut reaching: Vec<usize> = (0..candidates.len()).collect();
-        narrow_to_reaching(&mut reaching, |&i| self.slot_bounds_hold(blocks[i], &settled[i]));
+        narrow_to_reaching(&mut reaching, |&i| {
+            self.slot_bounds_hold(blocks[i], &settled[i])
+        });
         if let [first, _, ..] = reaching.as_slice() {
-            let slots = settled.swap_remove(*first);
-            let mut table = self.tysys.type_table.borrow_mut();
-            let written = table.impl_trait_args(blocks[*first]).to_vec();
+            let trait_args = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .impl_trait_args_at(blocks[*first], &settled[*first]);
             return Some(Selection::Tied {
                 blocks: reaching.iter().map(|&i| blocks[i]).collect(),
-                trait_args: written
-                    .into_iter()
-                    .map(|arg| table.substitute_type_params(arg, &slots))
-                    .collect(),
+                trait_args,
             });
         }
         let kept = candidates.swap_remove(reaching[0]);

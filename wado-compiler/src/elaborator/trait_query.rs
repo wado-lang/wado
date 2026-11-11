@@ -2755,7 +2755,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             self.owe_bounds(OwedBounds {
                 span: bound.span,
-                owed: Owed::BoundArgs { bound, subject },
+                owed: Owed::BoundArgs {
+                    bound: Box::new(bound),
+                    subject,
+                },
             });
         }
     }

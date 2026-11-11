@@ -738,7 +738,9 @@ order.
 Every form binds a parameter only the trait's arguments determine, and owes its
 bounds at the call (`impl_param_from_trait_arg_*.wado`). The forms reach that
 through shared steps (`slot_instance_args`, `impl_instance_args`), not yet
-through one resolver. An instance is keyed by every slot in slot order where the
+through one resolver. Each form likewise keeps, of the impls leaving a slot to
+it, those whose bounds hold there (`narrow_to_reaching`, `slot_bounds_hold`),
+each from its own candidate list. An instance is keyed by every slot in slot order where the
 trait reference sets one and for a value blanket, and by the target's positions
 otherwise.
 

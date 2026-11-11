@@ -3338,12 +3338,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let [_, _, ..] = admitted.as_slice()
             && !classes.iter().any(ArgClass::leaves_width_open)
             && admitted.iter().any(|c| {
-                !self
-                    .tysys
+                self.tysys
                     .type_table
                     .borrow()
-                    .impl_trait_arg_slots(c.block)
-                    .is_empty()
+                    .impl_trait_sets_params(c.block)
             })
         {
             return ArgPreselect::Pass;

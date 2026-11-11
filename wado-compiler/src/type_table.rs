@@ -6701,20 +6701,19 @@ impl TypeTable {
     /// Impl block `def`'s receiver and trait arguments at the instance `args`
     /// key, one argument per slot in slot order.
     pub fn impl_instance_at(&mut self, def: DefId, args: &[TypeId]) -> (TypeId, Vec<TypeId>) {
-        let slots: TypeArgMap = args
-            .iter()
-            .zip(0..)
-            .map(|(&ty, index)| (TypeParamId { owner: def, index }, ty))
-            .collect();
+        let slots = crate::tir::slots_from_impl_args(def, args);
         let receiver = self.substitute_type_params(self.impl_target_whole(def), &slots);
-        let trait_args = self
-            .impl_target(def)
+        (receiver, self.impl_trait_args_at(def, &slots))
+    }
+
+    /// The arguments impl block `def`'s trait reference writes, at `slots`.
+    pub fn impl_trait_args_at(&mut self, def: DefId, slots: &TypeArgMap) -> Vec<TypeId> {
+        self.impl_target(def)
             .trait_args
             .clone()
             .into_iter()
-            .map(|arg| self.substitute_type_params(arg, &slots))
-            .collect();
-        (receiver, trait_args)
+            .map(|arg| self.substitute_type_params(arg, slots))
+            .collect()
     }
 
     /// Fill the slots of impl block `def` its trait reference binds from the

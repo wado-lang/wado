@@ -1799,7 +1799,7 @@ impl Monomorphizer {
                                 .impl_module(&new_info, receiver_module.as_ref());
                             let concrete_module =
                                 concrete_impl_module.or(blanket_module).or(receiver_module);
-                            let method_type_arg_tids = sub_method_type_args.clone();
+                            let method_type_arg_tids = sub_method_type_args;
                             // Generics have a defined home module by construction:
                             // either the trait-impl block's module, or — for
                             // auto-derived impls — the receiver type's module
@@ -2613,7 +2613,7 @@ impl Monomorphizer {
     /// parameters are named.
     fn trait_named_at_instance(
         &self,
-        mut info: LocalMethodName,
+        info: LocalMethodName,
         substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) -> LocalMethodName {

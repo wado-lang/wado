@@ -21,7 +21,7 @@ use crate::name::{
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
     StructDef, SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId,
-    impl_args_in_slot_order, positional_substitution,
+    impl_args_in_slot_order, positional_substitution, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -66,6 +66,14 @@ pub(super) fn narrow_to_reaching<T>(candidates: &mut Vec<T>, reaches: impl Fn(&T
     } else {
         candidates.truncate(1);
     }
+}
+
+/// The block a match leaving a slot to the call was read off.
+fn slot_leaving_block(found: &TraitMethodMatch) -> DefId {
+    found
+        .method_info
+        .impl_block
+        .expect("a match leaving a slot to the call is read off its block")
 }
 
 /// Which impls [`Elaborator::open_receiver_candidates`] reads.
@@ -1186,7 +1194,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let slots = table.impl_spelled_slots(block, &receiver_args);
                 drop(table);
-                self.tysys.unmet_slot_bound(&self.annotate_ctx, block, &slots)
+                self.tysys
+                    .unmet_slot_bound(&self.annotate_ctx, block, &slots)
             });
         if let Some(unmet) = unmet {
             self.report_unmet(unmet, span);
@@ -1444,7 +1453,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         *return_type = self.apply_infer_holes(*return_type);
         let env = Arc::clone(&self.tysys.trait_env);
-        let owner = format!("of `{}`", header_as_written(impl_header(&env, &ImplBlockRef(block))));
+        let owner = format!(
+            "of `{}`",
+            header_as_written(impl_header(&env, &ImplBlockRef(block)))
+        );
         let names = self.impl_param_slots(block);
         for (slot, &var) in inferred {
             let name = names
@@ -2926,12 +2938,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_args = self.apply_infer_holes_each(&found[tied[0]].trait_args);
         let blocks: Vec<DefId> = tied
             .iter()
-            .map(|&i| {
-                found[i]
-                    .method_info
-                    .impl_block
-                    .expect("a match leaving a slot to the call is read off its block")
-            })
+            .map(|&i| slot_leaving_block(&found[i]))
             .collect();
         let receiver = self.tysys.type_id_to_string(receiver);
         self.report_blocks_tied(&blocks, &trait_args, &receiver, span);
@@ -3077,15 +3084,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.settle_slots_from_classes(&found_traits[i], &classes);
                 }
                 narrow_to_reaching(&mut admitted, |&i| {
-                    let info = &found_traits[i].method_info;
-                    let block = info
-                        .impl_block
-                        .expect("a match leaving a slot to the call is read off its block");
-                    let slots = (0..)
-                        .zip(&info.impl_slot_args)
-                        .map(|(index, &arg)| (TypeParamId { owner: block, index }, arg))
-                        .collect();
-                    self.slot_bounds_hold(block, &slots)
+                    let block = slot_leaving_block(&found_traits[i]);
+                    let args = &found_traits[i].method_info.impl_slot_args;
+                    self.slot_bounds_hold(block, &slots_from_impl_args(block, args))
                 });
                 // Two impls each leaving a slot to the call cover the same
                 // function where both bounds hold, and no argument can tell
@@ -3519,12 +3520,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &concrete_type_args,
             trait_,
             |s, impl_ref, _| {
-                let open = !s
+                let open = s
                     .tysys
                     .type_table
                     .borrow()
-                    .impl_trait_arg_slots(impl_ref.0)
-                    .is_empty();
+                    .impl_trait_sets_params(impl_ref.0);
                 let reaches = concrete_type_args.is_empty()
                     || s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
@@ -3845,12 +3845,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // T`) is the key's to settle, so such a block answers only a
                 // subscript whose key is known.
                 let block = impl_ref.0;
-                let slotted = !s
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .impl_trait_arg_slots(block)
-                    .is_empty();
+                let slotted = s.tysys.type_table.borrow().impl_trait_sets_params(block);
                 let (impl_sig, trait_arg_slots) = if slotted {
                     let key = expected_index_type?;
                     let mut table = s.tysys.type_table.borrow_mut();

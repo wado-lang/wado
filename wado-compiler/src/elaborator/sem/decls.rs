@@ -57,7 +57,10 @@ pub(in crate::elaborator) enum Owed {
     /// A bound on `subject`, whose trait arguments owe their trait's parameter
     /// bounds. They are read when it is answered: a `Self::Assoc` among them
     /// asks about impls the decl pass may not have reached.
-    BoundArgs { bound: ScopedBound, subject: TypeId },
+    BoundArgs {
+        bound: Box<ScopedBound>,
+        subject: TypeId,
+    },
     /// An argument owing bounds already instantiated, on behalf of
     /// `param_name`.
     TraitRefs {
