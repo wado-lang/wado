@@ -157,6 +157,16 @@ pub(super) enum IndexAccess {
     Mutable,
 }
 
+impl IndexAccess {
+    /// Which impls may serve it, and so which keys a literal may take.
+    fn keyed(self) -> KeyedAccess {
+        match self {
+            Self::Value | Self::Shared => KeyedAccess::Read,
+            Self::Mutable => KeyedAccess::Write,
+        }
+    }
+}
+
 /// Per spread base in an anonymous literal: whether it is a key-value map, and
 /// (for a plain struct base) its defining module plus field list
 /// `(name, concrete type, declared index, visibility)`.
@@ -2266,7 +2276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // expected type.
             let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
             let expected_key = self
-                .index_key_type_at(expr_type, key_class, KeyedAccess::Read, index.index.span())
+                .index_key_type_at(expr_type, key_class, access.keyed(), index.index.span())
                 .or_else(|| {
                     self.index_lookup_or_newtype_base(
                         &struct_name,

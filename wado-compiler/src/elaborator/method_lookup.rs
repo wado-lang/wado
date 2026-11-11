@@ -3969,7 +3969,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let class = self.synthesize_arg_class(&index_expr.index, ctx);
-        let key = self.index_key_type(container, &class, KeyedAccess::Write)?;
+        let key = self.index_key_type_at(
+            container,
+            &class,
+            KeyedAccess::Write,
+            index_expr.index.span(),
+        )?;
         Some(self.resolve_expr(&index_expr.index, ctx, Some(key)))
     }
 

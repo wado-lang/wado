@@ -1,0 +1,46 @@
+// A literal key that `IndexRefMut<i32>` and `IndexRefMut<i64>` both admit
+// selects neither, wherever the subscript writes through: a `&mut self` method
+// call and a field assignment alike.
+struct Cell {
+    v: i32,
+}
+
+impl Cell {
+    fn bump(&mut self) {
+        self.v += 1;
+    }
+}
+
+struct Cells {
+    c: Cell,
+}
+
+impl IndexRefMut<i32> for Cells {
+    type Output = Cell;
+
+    fn index_ref_mut(&mut self, i: i32) -> &mut Cell {
+        return &mut self.c;
+    }
+}
+
+impl IndexRefMut<i64> for Cells {
+    type Output = Cell;
+
+    fn index_ref_mut(&mut self, i: i64) -> &mut Cell {
+        return &mut self.c;
+    }
+}
+
+test {
+    let mut cells = Cells { c: Cell { v: 0 } };
+    cells[0].bump();
+    cells[1].v = 3;
+}
+
+__DATA__
+{
+    "compile_error": ":36:11: analysis error: ambiguous call to 'index_ref_mut': the arguments do not select between 'IndexRefMut<i32>' and 'IndexRefMut<i64>'",
+    "compile_errors_contains": [
+        ":37:11: analysis error: ambiguous call to 'index_ref_mut'"
+    ]
+}
