@@ -4293,19 +4293,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// too while that parameter is unsettled: only its projection answers for
     /// the pack, so the pack stays open for the deferral or the report. Once
     /// the owner is settled, a pack its projection left open closes here, for
-    /// the pin's check to refute.
+    /// the pin's check to refute. Returns the packs it left open as reached,
+    /// which a reporter that only knows `reached` must report too.
     pub(super) fn settle_unreached_packs(
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
         reached: &[String],
-    ) {
+    ) -> Vec<String> {
+        let mut reached = reached.to_vec();
         let real = RealTypeParams::borrowed(declared);
         if !real.iter().any(|p| p.is_pack) {
-            return;
+            return reached;
         }
         let scope = self.scope_type_param_ids();
-        let mut reached = reached.to_vec();
         for (i, owner) in real.iter().enumerate() {
             let owner_open = type_args
                 .get(i)
@@ -4324,7 +4325,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|target| target.name),
             );
         }
-        let reached = reached.as_slice();
         // A pack slot the site never reached stands for no arguments at all, so
         // append one empty tuple per trailing pack. A non-pack slot stops the
         // walk: nothing here can answer for it.
@@ -4336,7 +4336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_args.push(empty);
         }
         if type_args.len() != real.len() {
-            return;
+            return reached;
         }
         let unanswered: Vec<usize> = (0..real.len())
             .filter(|&i| real[i].is_pack && !reached.contains(&real[i].name))
@@ -4350,7 +4350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         if unanswered.is_empty() {
-            return;
+            return reached;
         }
         // A pack the caller declares interns to the same id as the callee's,
         // so a scope holding one is a forwarding this cannot tell apart.
@@ -4358,7 +4358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .any(|&s| self.tysys.type_table.borrow().contains_type_pack(s))
         {
-            return;
+            return reached;
         }
         for pack_pos in unanswered {
             if scope.contains(&type_args[pack_pos]) {
@@ -4366,6 +4366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
         }
+        reached
     }
 
     /// The type arguments a `Type::method(..)` call dispatches with: the impl

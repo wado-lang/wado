@@ -141,8 +141,8 @@ fn fitted_at<affine G: Graph, F: Field<G>>(g: &mut G, field: F, fits: &List<[i32
     return out;
 }
 
-/// `into` with each field's rows `at` names written from `from`'s, fitted
-/// along the axis `axes` holds for it.
+/// `into` with each field's row at the one slot `at` names written from
+/// `from`'s, fitted along the axis `axes` holds for it.
 pub fn written_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Field<G>>(
     g: &mut G,
     into: &S,
@@ -152,6 +152,7 @@ pub fn written_fields<affine G: Graph, S: ReflectStruct<FieldTypes = [..F], Fiel
 ) -> S with _
     contract axes.len() == field_count::<S>(), "an axis is given for each field"
 {
+    assert g.extents_of(at) == [1], "one slot is written at a time";
     return ReflectStruct::<S>::from_fields(
         [for let f of ReflectStruct::<S>::members() { f.get_ref(into).written(g, f.get_ref(from), axes[f.index()], at) }],
     );
