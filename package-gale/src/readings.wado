@@ -4,30 +4,39 @@
 //! ends there merge, so a site holds at most `2k + 1` of them however many ways
 //! its elements derive.
 
-use { dedup_append_arr } from "./list_util.wado";
-use { append_ids, bits_set } from "./token_kinds.wado";
+use { bits_set, bits_union_into } from "./token_kinds.wado";
 
 /// One way a sequence begins: the kinds at each position, and whether the
 /// sequence ends right after them, so that what follows it is read next. A
 /// reading as long as the budget never ends: the gate reads no further.
 pub struct Reading {
-    /// Per position, the kinds valid there.
-    pub kinds: List<List<i32>>,
+    /// Per position, the kinds valid there as a `bits_set` bitset, so equal
+    /// sets compare equal however their kinds were found.
+    pub positions: List<List<u64>>,
     pub ends: bool,
+}
+
+/// The position admitting `kinds`.
+pub fn position_of(kinds: &List<i32>) -> List<u64> {
+    let mut bits: List<u64> = [];
+    for let kind of kinds {
+        bits_set(&mut bits, *kind);
+    }
+    return bits;
 }
 
 /// The one reading of a sequence that matches nothing and ends.
 pub fn readings_empty(k: i32) -> List<Reading> {
     let mut out: List<Reading> = [];
-    readings_add(&mut out, Reading { kinds: [], ends: true }, k);
+    readings_add(&mut out, Reading { positions: [], ends: true }, k);
     return out;
 }
 
 /// The one reading of a single position admitting `kinds`.
-pub fn readings_of_position(kinds: List<i32>, k: i32) -> List<Reading> {
+pub fn readings_of_position(kinds: &List<i32>, k: i32) -> List<Reading> {
     let mut out: List<Reading> = [];
     readings_add(&mut out, Reading {
-        kinds: [kinds],
+        positions: [position_of(kinds)],
         ends: true,
     }, k);
     return out;
@@ -36,15 +45,15 @@ pub fn readings_of_position(kinds: List<i32>, k: i32) -> List<Reading> {
 /// Add `reading` to `out`, cut at `k` positions, merged into the reading of
 /// its length and ending where there is one. Whether `out` grew.
 pub fn readings_add(out: &mut List<Reading>, reading: Reading, k: i32) -> bool {
-    return readings_add_joined(out, &reading.kinds, &[], reading.ends, k);
+    return readings_add_joined(out, &reading.positions, &[], reading.ends, k);
 }
 
 /// `readings_add` of the reading `head`'s positions then `tail`'s make, built
 /// only where no reading of its length and ending is there to absorb it.
 fn readings_add_joined(
     out: &mut List<Reading>,
-    head: &List<List<i32>>,
-    tail: &List<List<i32>>,
+    head: &List<List<u64>>,
+    tail: &List<List<u64>>,
     ends: bool,
     k: i32,
 ) -> bool {
@@ -52,42 +61,27 @@ fn readings_add_joined(
     let ends = ends && len < k;
     let key = reading_key(len, ends);
     let mut at = 0;
-    while at < out.len() && reading_key(out[at].kinds.len(), out[at].ends) < key {
+    while at < out.len() && reading_key(out[at].positions.len(), out[at].ends) < key {
         at += 1;
     }
-    if at < out.len() && reading_key(out[at].kinds.len(), out[at].ends) == key {
+    if at < out.len() && reading_key(out[at].positions.len(), out[at].ends) == key {
         let mut grew = false;
         for let i of 0..<len {
             let from = if i < head.len() { &head[i] } else { &tail[i - head.len()] };
-            grew = position_absorb(&mut out[at].kinds[i], from) || grew;
+            grew = bits_union_into(&mut out[at].positions[i], from) || grew;
         }
         return grew;
     }
-    let mut kinds: List<List<i32>> = [];
+    let mut positions: List<List<u64>> = [];
     for let i of 0..<len {
-        kinds.push(if i < head.len() { head[i] } else { tail[i - head.len()] });
+        positions.push(if i < head.len() { head[i] } else { tail[i - head.len()] });
     }
-    out.insert(at, Reading { kinds, ends });
+    out.insert(at, Reading { positions, ends });
     return true;
 }
 
 fn reading_key(len: i32, ends: bool) -> i32 {
     return len * 2 + if ends { 1 } else { 0 };
-}
-
-/// Widen `into` to admit what `from` admits. Whether it grew.
-fn position_absorb(into: &mut List<i32>, from: &List<i32>) -> bool {
-    let before = into.len();
-    if before * from.len() <= 64 {
-        dedup_append_arr(into, from);
-        return into.len() != before;
-    }
-    let mut held: List<u64> = [];
-    for let i of 0..<before {
-        bits_set(&mut held, into[i]);
-    }
-    append_ids(into, &mut held, from);
-    return into.len() != before;
 }
 
 /// Every reading of `from`, cut at `k`.
@@ -104,7 +98,7 @@ pub fn reading_then(out: &mut List<Reading>, head: &Reading, tail: &List<Reading
 {
     let mut grew = false;
     for let t of tail {
-        grew = readings_add_joined(out, &head.kinds, &t.kinds, t.ends, k) || grew;
+        grew = readings_add_joined(out, &head.positions, &t.positions, t.ends, k) || grew;
     }
     return grew;
 }
@@ -116,5 +110,5 @@ pub fn readings_end(readings: &List<Reading>) -> bool {
 
 /// Whether the sequence is nothing but the empty one.
 pub fn readings_are_empty(readings: &List<Reading>) -> bool {
-    return readings.len() == 1 && readings[0].ends && readings[0].kinds.is_empty();
+    return readings.len() == 1 && readings[0].ends && readings[0].positions.is_empty();
 }

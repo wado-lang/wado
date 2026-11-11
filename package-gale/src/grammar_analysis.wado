@@ -23,6 +23,7 @@ use { TokenKinds, append_ids, bits_ids, bits_set } from "./token_kinds.wado";
 use { HashMap } from "core:collections";
 use {
     Reading,
+    position_of,
     readings_add,
     readings_empty,
     readings_of_position,
@@ -596,7 +597,7 @@ impl GrammarAnalysis {
             }
         }
         let input_end: List<Reading> = [
-            Reading { kinds: List::filled(k, [self.eof_kind_id()]), ends: false },
+            Reading { positions: List::filled(k, position_of(&[self.eof_kind_id()])), ends: false },
         ];
         let mut sites_of_caller = List::<List<i32>>::filled(rule_count, []);
         for let [si, s] of sites.iter_ref().enumerate() {
@@ -693,7 +694,7 @@ impl GrammarAnalysis {
                 readings_add(&mut out, *h, k);
                 continue;
             }
-            let left = k - h.kinds.len();
+            let left = k - h.positions.len();
             while tails.len() <= left {
                 tails.push(null);
             }
@@ -713,8 +714,8 @@ impl GrammarAnalysis {
         cycled: &mut bool,
     ) -> List<Reading> {
         return match elem {
-            TokenRef(_) | Literal(_) => readings_of_position([self.terminal_kind(elem)], k),
-            Wildcard(_) | Not(_) => readings_of_position(self.open_position_kinds(elem), k),
+            TokenRef(_) | Literal(_) => readings_of_position(&[self.terminal_kind(elem)], k),
+            Wildcard(_) | Not(_) => readings_of_position(&self.open_position_kinds(elem), k),
             Label(lab) => self.readings_of_element(&lab.element, k, visiting, cycled),
             RuleRef(r) => self.readings_of_rule(&r.name, k, visiting, cycled),
             Group(g) => self.readings_of_alternatives(&g.alternatives, k, visiting, cycled),
@@ -758,8 +759,8 @@ impl GrammarAnalysis {
             for let h of &body {
                 if !h.ends {
                     readings_add(&mut out, *h, budget);
-                } else if !h.kinds.is_empty() {
-                    reading_then(&mut out, h, &star[budget - h.kinds.len()], budget);
+                } else if !h.positions.is_empty() {
+                    reading_then(&mut out, h, &star[budget - h.positions.len()], budget);
                 }
             }
             star.push(out);
@@ -770,7 +771,7 @@ impl GrammarAnalysis {
         let mut out: List<Reading> = [];
         for let h of &body {
             if h.ends {
-                reading_then(&mut out, h, &star[k - h.kinds.len()], k);
+                reading_then(&mut out, h, &star[k - h.positions.len()], k);
             } else {
                 readings_add(&mut out, *h, k);
             }
