@@ -1,0 +1,60 @@
+// A literal right operand selects neither `Add<i64>` nor `Add<R>`, though a
+// typed one takes the written impl at its type.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+impl Mark for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+impl Show for i32 {
+    fn show(&self) -> String {
+        return `i32 ${*self}`;
+    }
+}
+
+struct M {}
+
+impl Add<i64> for M {
+    type Output = String;
+
+    fn add(&self, rhs: &i64) -> String {
+        return `written ${*rhs}`;
+    }
+}
+
+impl<R: Show> Add<R> for M {
+    type Output = String;
+
+    fn add(&self, rhs: &R) -> String {
+        return rhs.show();
+    }
+}
+
+test {
+    let m = M {};
+    assert m + (7 as i64) == "written 7";
+    assert m + (7 as i32) == "i32 7";
+    assert m + 7 == "?";
+}
+
+__DATA__
+{"compile_error": ":56:16: analysis error: ambiguous operator `+` on 'M': the right operand does not select between 'Add<i64>' and 'Add<R>'"}

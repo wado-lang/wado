@@ -827,10 +827,10 @@ test "parse lr_atn_mid_operand.g4" {
     assert g.parser_rules[1].alternatives[3].elements.len() == 4;
 }
 
-test "parse lr_atom_probe.g4" {
-    let input = #include_str("../../tests/grammars/lr_atom_probe.g4");
+test "parse lr_atom_continuation.g4" {
+    let input = #include_str("../../tests/grammars/lr_atom_continuation.g4");
     let g = parse(input).unwrap();
-    assert g.name == "LrAtomProbe";
+    assert g.name == "LrAtomContinuation";
     // s, tail, e, name
     assert g.parser_rules.len() == 4;
     // `e` is the LR rule: `e '+' e`, the `case` atom, `name`.

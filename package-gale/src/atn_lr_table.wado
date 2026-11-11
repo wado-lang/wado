@@ -5,14 +5,15 @@
 //! leaves the loop where none does, and asks the simulator where two suffixes
 //! admit it or a caller's continuation does too. All of that but the caller is
 //! a fact of the token, so the table answers it ahead of time from the same
-//! `AtnSim` the runtime builds. The caller is the parse's FOLLOW mask: where it
-//! does not admit the token, no frame's continuation does, and the loop enters;
-//! where it might, the runtime decides as before.
+//! `AtnSim` the runtime builds. The caller is the parse's FOLLOW continuation:
+//! where it does not admit the token, no frame's continuation does, and the
+//! loop enters; where it might, the runtime decides as before.
 
 use { Atn, atn_blob_bytes } from "./atn.wado";
 use { AtnSim, ATN_TR_EPSILON, ATN_TR_PRECEDENCE, atn_decode } from "./runtime/atn.wado";
 use { atn_state_cont_admits, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { follow_admits_call } from "./gen_util.wado";
 use { CodeWriter, FnSpec, ParamSpec } from "lib:wadopoet";
 
 /// The tokens one suffix alone admits, and that suffix.
@@ -76,7 +77,7 @@ pub fn lr_decide_fn_name(decision: i32) -> String {
 }
 
 /// Emit `lr_decide_fn_name(decision)`. Where `follow`, the parser carries the
-/// FOLLOW runtime, and the function takes the caller's mask; a call that passes
+/// FOLLOW runtime, and the function takes the caller's continuation; a call that passes
 /// none leaves it unknown, which admits every token.
 pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, analysis: &GrammarAnalysis, follow: bool) {
     let mut f = FnSpec::new(lr_decide_fn_name(decision));
@@ -97,7 +98,7 @@ pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, anal
         w.begin(`${analysis.token_names_of(&e.tokens).join(" | ")} =>`);
         w.line(`if min_prec > ${e.prec} { return ${table.exit}; }`);
         if follow {
-            w.line(`if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return ${e.alt}; }`);
+            w.line(`if !${follow_admits_call("tokens", "pos")} { return ${e.alt}; }`);
         }
         // Only `e.alt` takes the token, so only a caller can contest it.
         w.line(`return atn_lr_enter_or_ask(&ATN_SIM, atn, ${decision}, ${e.alt}, tokens, pos, TK_EOF, min_prec);`);

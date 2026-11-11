@@ -1,0 +1,12 @@
+// An impl whose target projects off the trait argument binds that argument
+// only through it, so the impl writing `Shown<Host>` ranks first.
+
+trait Back with () { type Of<E>; }
+struct Host {}
+struct Boxed<E> { e: E }
+impl Back for Host { type Of<E> = Boxed<E>; }
+trait Shown<G> with () { fn shown(&self) -> i32; }
+impl<G: Back, E> Shown<G> for G::Of<E> { fn shown(&self) -> i32 { return 1; } }
+impl<E> Shown<Host> for Boxed<E> { fn shown(&self) -> i32 { return 2; } }
+fn s<T: Shown<Host>>(t: &T) -> i32 { return t.shown(); }
+test { assert s(&Boxed { e: 1 }) == 2; }

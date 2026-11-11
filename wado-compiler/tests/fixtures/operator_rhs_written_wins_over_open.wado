@@ -1,0 +1,57 @@
+// A typed right operand takes the impl writing its type over one leaving the
+// operand open.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+impl Mark for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+impl Show for i32 {
+    fn show(&self) -> String {
+        return `i32 ${*self}`;
+    }
+}
+
+struct M {}
+
+impl Add<i64> for M {
+    type Output = String;
+
+    fn add(&self, rhs: &i64) -> String {
+        return `written ${*rhs}`;
+    }
+}
+
+impl<R: Show> Add<R> for M {
+    type Output = String;
+
+    fn add(&self, rhs: &R) -> String {
+        return rhs.show();
+    }
+}
+
+test {
+    let m = M {};
+    let n: i64 = 7;
+    assert m + n == "written 7";
+    assert m + (7 as i32) == "i32 7";
+}

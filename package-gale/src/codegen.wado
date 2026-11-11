@@ -31,7 +31,7 @@ use {
 } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
-use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
+use { gen_kind_set_helpers, gen_follow_tables, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use {
     action_language_is_emittable,
@@ -57,7 +57,6 @@ use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings, PredictionMode } from "./gen_settings.wado";
-use { push_unique } from "./list_util.wado";
 use { LowerContext } from "./lower_context.wado";
 use { plan_parser } from "./parser_plan.wado";
 use { EmitContext } from "./emit_context.wado";
@@ -214,7 +213,7 @@ pub fn install_action_context(
 /// Scannability is a fixpoint over the whole rule set: answered per query it
 /// re-walks every cycle the query reaches, which on a grammar the size of
 /// `RustParser.g4` is the whole cost of lowering. FOLLOW goes in before
-/// lowering rather than during it: a tail-position viability probe stamps the
+/// lowering rather than during it: a tail-position continuation scan stamps the
 /// enclosing rule's FOLLOW onto its op, so the fixed point has to be complete
 /// by then. It reads only the surface rules.
 fn lower_context(
@@ -351,7 +350,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_kind_set_helpers(&mut w, &ctx, &used);
     gen_sync_set_globals(&mut w, &ctx, &used);
     if emit_follow {
-        gen_follow_mask_globals(&mut w, &ctx, &used);
+        gen_follow_tables(&mut w, &ctx, &used);
     }
     if ctx.plan.needs_atn {
         gen_atn_data_global(&mut w, &atn, ctx.plan.needs_lr_atn);
@@ -386,7 +385,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         head.blank();
     }
     for let std_use of &rt.imports {
-        head.raw(std_use);
+        head.line(`use { ${std_use.items.join(", ")} } from "${std_use.module}";`);
     }
     if !rt.imports.is_empty() {
         head.blank();
@@ -566,7 +565,6 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
 fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &HashSet<String>) {
     let eof = ctx.analysis.eof_kind_id();
     let mut explorer = SllExplorer::new(atn, eof);
-    let verify = ctx.settings.prediction.verifies();
     let mut forest = SllForest::new(atn.num_tokens);
     let mut starts: List<[i32, i32]> = [];
     for let d of 0..<atn.decision_state.len() {
@@ -575,7 +573,7 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
         }
     }
     for let [d, start] of starts {
-        gen_sll_decide_fn(w, d, start, &forest, &ctx.analysis, verify);
+        gen_sll_decide_fn(w, d, start, &forest, &ctx.analysis);
     }
     gen_sll_shared_fns(w, &forest, &ctx.analysis);
     let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect();
@@ -585,7 +583,7 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
             gen_lr_decide_fn(w, d, &lr_table(&sim, d, atn.num_tokens, eof), &ctx.analysis, ctx.plan.emit_follow);
         }
     }
-    if verify {
+    if ctx.settings.prediction.verifies() {
         gen_atn_verified_fn(w);
     }
 }
@@ -703,8 +701,13 @@ struct RuntimeFeatures {
 /// The inlined runtime: its standard-library imports, hoisted to the top of
 /// the generated file, and the fragment bodies.
 struct InlinedRuntime {
-    imports: List<String>,
+    imports: List<HoistedUse>,
     code: CodeWriter,
+}
+
+struct HoistedUse {
+    module: String,
+    items: List<String>,
 }
 
 /// The fragments of `src/runtime/` a generated parser carries: `lex`, `diag`,
@@ -774,13 +777,40 @@ fn gen_runtime_fragment<S: AsStrSlice>(rt: &mut InlinedRuntime, src: S) {
         block.push('\n');
         if line.contains(";") {
             if !block.contains("from \"./") {
-                push_unique(&mut rt.imports, block);
+                hoist_std_use(&mut rt.imports, &block);
             }
             block = String::new();
             in_use = false;
         }
     }
     assert !in_use, "a runtime fragment ends inside a `use`";
+}
+
+/// Fold one fragment's `use { … } from "module";` into the hoisted imports,
+/// so two fragments importing from one module name each item once.
+fn hoist_std_use(imports: &mut List<HoistedUse>, block: &String) {
+    let Some([head, rest]) = block.split_once("} from \"") else {
+        panic(`a runtime fragment's standard-library use names its items in braces: ${block}`);
+    };
+    let Some([_, items]) = head.split_once("{") else {
+        panic(`a runtime fragment's standard-library use names its items in braces: ${block}`);
+    };
+    let Some([module, _]) = rest.split_once("\"") else {
+        panic(`a runtime fragment's use ends with its module: ${block}`);
+    };
+    let mut index = 0;
+    while index < imports.len() && imports[index].module != module {
+        index += 1;
+    }
+    if index == imports.len() {
+        imports.push(HoistedUse { module: module.to_string(), items: [] });
+    }
+    for let item of items.split(",") {
+        let name = item.trim().to_string();
+        if !name.is_empty() && !imports[index].items.contains(&name) {
+            imports[index].items.push(name);
+        }
+    }
 }
 
 /// Surface grammar-level options and named actions from the .g4 prequel as

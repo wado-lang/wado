@@ -1,0 +1,34 @@
+// An affine type implements an affine trait whose parameter defaults to
+// `Self` (`Eq<Rhs = Self>`, `Ord`). The impl writes no argument for `Rhs`, so
+// the default is the trait's own: an affine trait treats `Self` as affine.
+
+use { println, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+impl Eq for Tok {
+    fn eq(&self, other: &Tok) -> bool {
+        return self.id == other.id;
+    }
+}
+
+impl Ord for Tok {
+    fn cmp(&self, other: &Tok) -> Ordering {
+        return self.id.cmp(&other.id);
+    }
+}
+
+export fn run() with Stdout {
+    let a = Tok { id: 1 };
+    let b = Tok { id: 2 };
+    println(`eq=${a == b} lt=${a < b}`);
+}
+
+__DATA__
+{"stdout": "eq=false lt=true\n"}

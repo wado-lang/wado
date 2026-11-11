@@ -10,7 +10,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, TypeArgMap, TypeId, range_item};
+use crate::tir::{ResolvedType, TypeId, range_item};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -18,7 +18,7 @@ use super::callee::CalleeRef;
 use super::coercion::is_primitive_literal_target;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
-use super::types::{FunctionContext, MethodOwner};
+use super::types::{FunctionContext, KeyCandidate, MethodOwner, OverloadedCallForm, TypeError};
 use super::tysys::TypeSystem;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::lexer::defaults_to_float;
@@ -48,6 +48,25 @@ pub(super) enum ArgClass {
     /// No type was produced; admits every parameter. The reason is carried so
     /// the ambiguity diagnostic can say what defeated selection.
     Opaque(OpaqueReason),
+}
+
+/// What the impls a subscript may dispatch to make of a numeric literal key.
+enum LiteralKey {
+    /// Every impl admitting it takes this key.
+    Settled(TypeId),
+    /// None admits it, or only impls leaving the key open do: it keeps its
+    /// default type.
+    Unsettled,
+    /// Impls admitting it take different keys, or some leave it open beside
+    /// one taking a key.
+    Ambiguous(Vec<KeyCandidate>),
+}
+
+/// Which impls a subscript's key is typed for ([`Elaborator::index_key_type`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum KeyedAccess {
+    Read,
+    Write,
 }
 
 /// Why synthesis produced no type. A closed set: the judgement matches on every
@@ -81,6 +100,13 @@ impl ArgClass {
             _ if self == other => self,
             _ => Self::Opaque(OpaqueReason::Inference),
         }
+    }
+
+    /// Whether this is a numeric literal, whose width the impl it reaches
+    /// would choose: it admits an impl writing a width and one leaving a slot
+    /// open alike, and selects between neither (WEP 2026-07-31).
+    pub(super) fn leaves_width_open(&self) -> bool {
+        matches!(self, Self::IntLit | Self::FloatLit)
     }
 }
 
@@ -117,14 +143,22 @@ pub(super) struct ArgProbe<'a> {
     args: &'a [ast::Expr],
     ctx: &'a FunctionContext,
     memo: Vec<Option<ArgClass>>,
+    /// The type the call's context expects of its result, which selects among
+    /// what the arguments leave as an annotated argument does.
+    pub(super) expected: Option<TypeId>,
 }
 
 impl<'a> ArgProbe<'a> {
-    pub(super) fn new(args: &'a [ast::Expr], ctx: &'a FunctionContext) -> Self {
+    pub(super) fn new(
+        args: &'a [ast::Expr],
+        ctx: &'a FunctionContext,
+        expected: Option<TypeId>,
+    ) -> Self {
         Self {
             args,
             ctx,
             memo: Vec::new(),
+            expected,
         }
     }
 
@@ -182,6 +216,14 @@ impl<'a> ArgSource<'_, 'a> {
 
     pub(super) fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// What the call's context expects of its result, where the site knows.
+    pub(super) fn expected(&self) -> Option<TypeId> {
+        match self {
+            Self::Exprs(probe) => probe.expected,
+            Self::Types(_) | Self::NoArguments => None,
+        }
     }
 
     pub(super) fn class<H: CompilerHost>(
@@ -262,6 +304,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class
     }
 
+    /// Narrow `candidates` to those whose result `expected`, what the call's
+    /// context asks of it, takes, where any does: the result flows into the
+    /// context as an argument flows into a parameter. A result the call has
+    /// yet to settle may become anything. A context none meets is the
+    /// mismatch's to report.
+    pub(super) fn narrow_to_expected_return<C>(
+        &self,
+        candidates: &mut Vec<C>,
+        expected: TypeId,
+        return_of: impl Fn(&C) -> TypeId,
+    ) {
+        if candidates.len() < 2 || !self.tysys.type_table.borrow().is_concrete(expected) {
+            return;
+        }
+        let takes = |c: &C| {
+            let result = return_of(c);
+            !self.tysys.type_table.borrow().is_concrete(result)
+                || self.class_admits(expected, &ArgClass::Exact(result))
+        };
+        if candidates.iter().any(takes) {
+            candidates.retain(takes);
+        }
+    }
+
     /// Whether a candidate's parameter type is in `class`'s denoted set.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
@@ -274,7 +340,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || param == TypeTable::ERROR
             || matches!(
                 tt.get(tt.peel_refs(param)),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                ResolvedType::TypeParam { .. }
+                    | ResolvedType::TypePack { .. }
+                    | ResolvedType::InferVar(_)
             )
         {
             return true;
@@ -776,7 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         let key_class = self.synth(&index.index, scope);
-        let Some(key) = self.index_key_type(container, &key_class) else {
+        let Some(key) = self.index_key_type(container, &key_class, KeyedAccess::Read) else {
             // Which impl answers depends on the key's type, so an unpinned key
             // leaves the element type unknown.
             return ArgClass::Opaque(OpaqueReason::Inference);
@@ -803,41 +871,101 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type a subscript key on `container` really elaborates to. A numeric
-    /// literal takes the key type of the one read impl admitting it, as a
-    /// literal argument takes its parameter's, and its default type without
-    /// exactly one. `resolve_index` and synthesis both read the key here, so
-    /// they answer for the same impl.
-    pub(super) fn index_key_type(&mut self, container: TypeId, key: &ArgClass) -> Option<TypeId> {
-        match key {
-            ArgClass::Exact(t) => Some(*t),
-            ArgClass::IntLit => Some(
-                self.literal_index_key(container, key)
-                    .unwrap_or(TypeTable::I32),
-            ),
-            ArgClass::FloatLit => Some(
-                self.literal_index_key(container, key)
-                    .unwrap_or(TypeTable::F64),
-            ),
-            ArgClass::StrLit => Some(self.get_string_struct_type()),
-            ArgClass::BytesLit => Some(self.tysys.type_table.borrow_mut().make_byte_list()),
-            ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => None,
+    /// literal takes the key type of the one impl serving `access` that admits
+    /// it, as a literal argument takes its parameter's, and its default type
+    /// otherwise; [`Self::report_ambiguous_literal_key`] reports several.
+    /// `resolve_index` and synthesis both read the key here, so they answer
+    /// for the same impl.
+    pub(super) fn index_key_type(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+    ) -> Option<TypeId> {
+        self.index_key(container, key, access).0
+    }
+
+    /// [`Self::index_key_type`] for the subscript at `span`, reporting a
+    /// numeric literal key that several impls serving `access` admit at
+    /// different keys, one leaving it open among them: the literal selects
+    /// none (WEP 2026-07-31).
+    pub(super) fn index_key_type_at(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+        span: Span,
+    ) -> Option<TypeId> {
+        let (key_type, ambiguous) = self.index_key(container, key, access);
+        if let Some(candidates) = ambiguous {
+            let _ = self.emit(TypeError::AmbiguousTraitArguments {
+                method: candidates[0].method.to_string(),
+                traits: candidates
+                    .iter()
+                    .map(|c| c.trait_name.to_display())
+                    .collect(),
+                arguments: self.tysys.describe_arg_classes(std::slice::from_ref(key)),
+                form: OverloadedCallForm::Receiver,
+                span,
+            });
+        }
+        key_type
+    }
+
+    /// The key type, and the impls a numeric literal key cannot choose among.
+    fn index_key(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+    ) -> (Option<TypeId>, Option<Vec<KeyCandidate>>) {
+        let default = match key {
+            ArgClass::Exact(t) => return (Some(*t), None),
+            ArgClass::IntLit => TypeTable::I32,
+            ArgClass::FloatLit => TypeTable::F64,
+            ArgClass::StrLit => return (Some(self.get_string_struct_type()), None),
+            ArgClass::BytesLit => {
+                return (
+                    Some(self.tysys.type_table.borrow_mut().make_byte_list()),
+                    None,
+                );
+            }
+            ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => return (None, None),
+        };
+        match self.literal_index_key(container, key, access) {
+            LiteralKey::Settled(key) => (Some(key), None),
+            LiteralKey::Unsettled => (Some(default), None),
+            LiteralKey::Ambiguous(candidates) => (Some(default), Some(candidates)),
         }
     }
 
-    fn literal_index_key(&mut self, container: TypeId, key: &ArgClass) -> Option<TypeId> {
+    fn literal_index_key(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+    ) -> LiteralKey {
         let base = self.tysys.get_base_type(container);
-        let name = self.tysys.struct_name_for_type(base)?;
+        let Some(name) = self.tysys.struct_name_for_type(base) else {
+            return LiteralKey::Unsettled;
+        };
         let (lookup_name, lookup_type) = self.tysys.newtype_base_lookup(&name, base);
-        let (mut keys, _) = self.index_lookup_or_newtype_base(
-            &name,
-            base,
-            &lookup_name,
-            lookup_type,
-            |s, n, t| Some(s.index_read_key_types(n, t)).filter(|keys| !keys.is_empty()),
-        )?;
-        keys.retain(|&k| self.class_admits(k, key));
-        let first = *keys.first()?;
-        keys.iter().all(|&k| k == first).then_some(first)
+        let Some((mut candidates, _)) =
+            self.index_lookup_or_newtype_base(&name, base, &lookup_name, lookup_type, |s, n, t| {
+                Some(s.index_key_candidates(n, t, access)).filter(|c| !c.is_empty())
+            })
+        else {
+            return LiteralKey::Unsettled;
+        };
+        candidates.retain(|c| c.key.is_none_or(|k| self.class_admits(k, key)));
+        match candidates.as_slice() {
+            [] => LiteralKey::Unsettled,
+            [first, ..] if candidates.iter().all(|c| c.key == first.key) => {
+                first.key.map_or(LiteralKey::Unsettled, LiteralKey::Settled)
+            }
+            [_, _, ..] => LiteralKey::Ambiguous(candidates),
+            [_] => unreachable!("one candidate agrees with itself"),
+        }
     }
 
     /// `a..<b` is a `RangeExclusive<T>`: `T` when both endpoints pin it, the
@@ -1018,7 +1146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A type carrying an unsolved inference hole is *not* closed even though
     /// it names a constructor: `let Some(b) = opt` binds `b` at `?` until the
     /// argument position pins it.
-    fn class_of_type(&self, type_id: TypeId) -> ArgClass {
+    pub(super) fn class_of_type(&self, type_id: TypeId) -> ArgClass {
         if type_id == TypeTable::UNKNOWN || type_id == TypeTable::ERROR {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         }
@@ -1096,19 +1224,10 @@ impl TypeSystem {
     fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
         let mut bindings = IndexMap::default();
         unify(&self.type_table, param, arg, &mut bindings);
-        // A binding dropped here leaves that slot spelled as it was written, so
-        // the parameter can never equal the argument.
-        let substitution: TypeArgMap = {
-            let tt = self.type_table.borrow();
-            bindings
-                .iter()
-                .filter_map(|(&slot, &filled)| Some((tt.type_param_id(slot)?, filled)))
-                .collect()
-        };
         let filled = self
             .type_table
             .borrow_mut()
-            .substitute_type_params(param, &substitution);
+            .replace_subterms(param, &bindings);
         param_takes(&self.type_table.borrow(), filled, arg)
     }
 

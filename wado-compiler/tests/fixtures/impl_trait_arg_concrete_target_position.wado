@@ -1,0 +1,50 @@
+// An impl whose target writes a concrete argument beside its parameters
+// (`Pair<i32, A>`, `Bx<i32>`) and whose trait arguments name a parameter the
+// target does not. The block stays generic in that parameter, and the instance
+// it is called at holds the concrete argument at the target's position too: in
+// an operator, a static call, and the conversion `?` makes.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<A, R> Add<R> for Pair<i32, A> {
+    type Output = i32;
+    fn add(&self, rhs: &R) -> i32 {
+        return self.a + 1;
+    }
+}
+
+struct Bx<T> {
+    v: T,
+}
+
+struct E {}
+
+impl<S> From<S> for Bx<i32> {
+    fn from(s: S) -> Bx<i32> {
+        return Bx { v: 7 };
+    }
+}
+
+fn convert() -> Result<i32, Bx<i32>> {
+    let r: Result<i32, E> = Err(E {});
+    let x = r?;
+    return Ok(x);
+}
+
+export fn run() with Stdout {
+    let p = Pair { a: 1, b: "x" };
+    println(`add: ${p + true}`);
+    println(`static: ${Bx::<i32>::from(E {}).v}`);
+    match convert() {
+        Ok(x) => println(`ok: ${x}`),
+        Err(b) => println(`err: ${b.v}`),
+    }
+}
+
+__DATA__
+{"stdout": "add: 2\nstatic: 7\nerr: 7\n"}

@@ -1340,7 +1340,7 @@ impl FunctionTranslator<'_, '_> {
         let value = if local_wir == binding_wir {
             value
         } else {
-            box_new(&local_wir, value)
+            self.box_new(&local_wir, value)
         };
         if !matches!(local_wir, WirType::Unit) {
             instrs.push(WirInstr::LocalSet {
@@ -1366,7 +1366,7 @@ impl FunctionTranslator<'_, '_> {
             return self.binding_value(binding_type, &value_wir, value);
         }
         if ref_binding_needs_boxing(binding_wir, source_wir) {
-            box_new(binding_wir, source)
+            self.box_new(binding_wir, source)
         } else if matches!(
             binding_wir,
             WirType::Ref {
@@ -1379,6 +1379,15 @@ impl FunctionTranslator<'_, '_> {
         } else {
             source
         }
+    }
+
+    /// `value` wrapped in the cell `box_wir` references. A slot may hold `null`
+    /// where the cell's field may not.
+    fn box_new(&self, box_wir: &WirType, value: WirInstr) -> WirInstr {
+        let WirType::Ref { type_id, .. } = box_wir else {
+            unreachable!("a box is a struct reference, not {box_wir:?}")
+        };
+        self.struct_new(type_id.clone(), vec![value])
     }
 
     /// Look up a variant case struct's payload field type, extracting the inner
@@ -1546,17 +1555,6 @@ fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
             fields.iter().any(|f| pattern_has_bindings(body, f.pattern))
         }
         PatKind::Or(alts) => alts.iter().any(|p| pattern_has_bindings(body, *p)),
-    }
-}
-
-/// `value` wrapped in the cell `box_wir` references.
-fn box_new(box_wir: &WirType, value: WirInstr) -> WirInstr {
-    let WirType::Ref { type_id, .. } = box_wir else {
-        unreachable!("a box is a struct reference, not {box_wir:?}")
-    };
-    WirInstr::StructNew {
-        type_id: type_id.clone(),
-        fields: vec![value],
     }
 }
 

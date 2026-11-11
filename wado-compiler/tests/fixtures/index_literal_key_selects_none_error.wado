@@ -1,0 +1,60 @@
+// A literal key selects neither `IndexValue<i64>` nor `IndexValue<I>`, though
+// a typed one takes the written impl at its type.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+impl Mark for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+impl Show for i32 {
+    fn show(&self) -> String {
+        return `i32 ${*self}`;
+    }
+}
+
+struct Table {}
+
+impl IndexValue<i64> for Table {
+    type Output = String;
+
+    fn index_value(&self, index: i64) -> String {
+        return `written ${index}`;
+    }
+}
+
+impl<I: Show> IndexValue<I> for Table {
+    type Output = String;
+
+    fn index_value(&self, index: I) -> String {
+        return index.show();
+    }
+}
+
+test {
+    let t = Table {};
+    assert t[7 as i64] == "written 7";
+    assert t[7 as i32] == "i32 7";
+    assert t[7] == "?";
+}
+
+__DATA__
+{"compile_error": ":56:14: analysis error: ambiguous call to 'index_value': the arguments do not select between 'IndexValue<i64>' and 'IndexValue<I>'"}

@@ -1,0 +1,65 @@
+// `c[k] = v` selects the `IndexAssign` impl at the key's type, as a read does,
+// and settles an impl parameter only the key names: `l[7 as i64] = "x"` reaches
+// `impl<I: Show> IndexAssign<I> for Log` at `I = i64`.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+struct Log {
+    last: String,
+}
+
+impl<I: Show> IndexAssign<I> for Log {
+    type Output = String;
+
+    fn index_assign(&mut self, i: I, v: String) {
+        self.last = `${i.show()}=${v}`;
+    }
+}
+
+struct Pair {
+    n: i32,
+    s: String,
+}
+
+impl IndexAssign<i32> for Pair {
+    type Output = i32;
+
+    fn index_assign(&mut self, i: i32, v: i32) {
+        self.n = i + v;
+    }
+}
+
+impl IndexAssign<String> for Pair {
+    type Output = String;
+
+    fn index_assign(&mut self, i: String, v: String) {
+        self.s = `${i}${v}`;
+    }
+}
+
+test {
+    let mut l = Log { last: "" };
+    l[7 as i64] = "x";
+    assert l.last == "i64 7=x";
+    l["k"] = "y";
+    assert l.last == "string k=y";
+
+    let mut p = Pair { n: 0, s: "" };
+    p[1] = 2;
+    p["a"] = "b";
+    assert p.n == 3;
+    assert p.s == "ab";
+}

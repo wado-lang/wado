@@ -1,0 +1,51 @@
+// Two impls each leaving the trait's argument to the call cover the same
+// function where both bounds hold, and no argument tells them apart.
+use { println, Stdout } from "core:cli";
+
+trait A with () {
+    fn a(&self) -> String;
+}
+
+trait B with () {
+    fn b(&self) -> String;
+}
+
+struct Both {}
+
+impl A for Both {
+    fn a(&self) -> String {
+        return "a";
+    }
+}
+
+impl B for Both {
+    fn b(&self) -> String {
+        return "b";
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+struct X {}
+
+impl<T: A> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.a();
+    }
+}
+
+impl<T: B> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.b();
+    }
+}
+
+export fn run() with Stdout {
+    let x = X {};
+    println(x.put(Both {}));
+}
+
+__DATA__
+{"compile_error": ":47:13: analysis error: ambiguous impls of 'Put<Both>' for 'X': 'impl<T: A> Put<T> for X' and 'impl<T: B> Put<T> for X' both reach it, and nothing ranks them; write 'impl Put<Both> for X'"}

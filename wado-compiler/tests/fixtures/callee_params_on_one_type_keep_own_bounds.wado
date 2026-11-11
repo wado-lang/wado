@@ -1,0 +1,40 @@
+// Two parameters of one callee bound to one caller type each keep the bounds
+// they declare: `A::Out` reads `A: P` alone. Bounds kept by the type alone
+// gave `A` the `Q` that `B` declares, and `A::Out` was ambiguous.
+
+trait P with () {
+    type Out;
+}
+
+trait Q with () {
+    type Out;
+}
+
+fn count<T>() -> i32 {
+    return 5;
+}
+
+fn g<A: P, B: Q>(_a: A, _b: B, k: i32 = count::<A::Out>()) -> i32 {
+    return k;
+}
+
+fn h<X: P + Q>(x: X) -> i32 {
+    return g(x, x);
+}
+
+struct Z {}
+
+impl P for Z {
+    type Out = i32;
+}
+
+impl Q for Z {
+    type Out = u8;
+}
+
+test {
+    assert h(Z {}) == 5;
+}
+
+__DATA__
+{"test": {}}

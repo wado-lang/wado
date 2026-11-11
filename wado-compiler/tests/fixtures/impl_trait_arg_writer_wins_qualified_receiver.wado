@@ -1,0 +1,27 @@
+// A receiver-taking call spelled through the type ranks the impls the method
+// form ranks: the impl writing `Put<i32>` defines the call, and the one leaving
+// `T` open only covers it.
+trait Put<T> with () {
+    fn put(&self, t: T) -> i32;
+}
+
+struct X {}
+
+impl<T> Put<T> for X {
+    fn put(&self, t: T) -> i32 {
+        return 1;
+    }
+}
+
+impl Put<i32> for X {
+    fn put(&self, t: i32) -> i32 {
+        return 2;
+    }
+}
+
+test {
+    let x = X {};
+    assert x.put(1 as i32) == 2;
+    assert X::put(&x, 1 as i32) == 2;
+    assert X::put(&x, "s") == 1;
+}

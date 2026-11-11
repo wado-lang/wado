@@ -13,7 +13,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
     EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext,
-    TirLiteralPattern, TirStruct, TypeId,
+    TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -25,7 +25,7 @@ use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
-use super::synth::ArgClass;
+use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -155,6 +155,16 @@ pub(super) enum IndexAccess {
     Shared,
     /// `&mut xs[i]` — `IndexRefMut` carries the mutability in its signature.
     Mutable,
+}
+
+impl IndexAccess {
+    /// Which impls may serve it, and so which keys a literal may take.
+    fn keyed(self) -> KeyedAccess {
+        match self {
+            Self::Value | Self::Shared => KeyedAccess::Read,
+            Self::Mutable => KeyedAccess::Write,
+        }
+    }
 }
 
 /// Per spread base in an anonymous literal: whether it is a key-value map, and
@@ -2184,11 +2194,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return false;
                 }
                 let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
-                this.index_key_type(receiver, class).is_some_and(|key| {
-                    this.receiver_waits(receiver, "index_value", index.span, |this, def| {
-                        this.impl_takes_key(def, key)
+                this.index_key_type(receiver, class, KeyedAccess::Read)
+                    .is_some_and(|key| {
+                        this.receiver_waits(receiver, "index_value", index.span, |this, def| {
+                            this.impl_takes_key(def, key)
+                        })
                     })
-                })
             },
             |this, receiver, ctx| this.resolve_index_of(index, receiver, ctx, access, &key_class),
         )
@@ -2264,16 +2275,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.
             let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
-            let expected_key = self.index_key_type(expr_type, key_class).or_else(|| {
-                self.index_lookup_or_newtype_base(
-                    &struct_name,
-                    base_type_id,
-                    &lookup_name,
-                    lookup_type_id,
-                    |s, n, t| s.find_index_value_trait_impl(n, t, None),
-                )
-                .and_then(|(i, _)| i.index_type)
-            });
+            let expected_key = self
+                .index_key_type_at(expr_type, key_class, access.keyed(), index.index.span())
+                .or_else(|| {
+                    self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_value_trait_impl(n, t, None),
+                    )
+                    .and_then(|(i, _)| i.index_type)
+                });
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
@@ -2341,7 +2354,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                let func = self.indexing_function_ref(&trait_info, index_method);
+                let func = self.indexing_function_ref(&trait_info, index_method, index.span);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2376,7 +2389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let func = self.indexing_function_ref(&trait_info, "index_value");
+                let func = self.indexing_function_ref(&trait_info, "index_value", index.span);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2450,7 +2463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
-                Elaborator::find_index_assign_trait_impl,
+                |s, n, t| s.find_index_assign_trait_impl(n, t, None),
             )
             .and_then(|(i, _)| i.index_type)
         })
@@ -5488,16 +5501,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .expect("a `From` impl names its trait"),
             None => from.clone(),
         };
-        // A generic block's function is instantiated at the target's arguments.
-        let impl_type_args = impl_def
-            .filter(|def| !self.tysys.trait_env.impl_headers[def].is_concrete())
-            .and_then(|_| {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .nominal_type_args(target_type)
-            })
-            .unwrap_or_default();
+        // A generic block's function is instantiated at what the target binds,
+        // and at every slot where the source the trait reference names settles
+        // one only it names (`S` in `impl<S> From<S> for Failure`).
+        let receiver_args = match impl_def {
+            Some(def) if !self.tysys.trait_env.impl_headers[&def].is_concrete() => self
+                .tysys
+                .receiver_args_at_impl(Some(target_type), &[], impl_def)
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        let impl_type_args = match impl_def {
+            Some(def) if self.tysys.type_table.borrow().impl_trait_sets_params(def) => {
+                let (given, asked) = {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let mut asked = TypeArgMap::default();
+                    tt.bind_each_into(tt.impl_trait_args(def), &[from_type], &mut asked);
+                    (tt.impl_receiver_slots(def, target_type), asked)
+                };
+                self.impl_instance_args(def, given, &asked)
+            }
+            _ => receiver_args.clone(),
+        };
         let type_param_receiver = impl_def.is_none();
         // Through a bound the trait's own method is the callee, whose edges
         // keep every impl live until monomorphization picks one.
@@ -5516,6 +5541,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 target_name: target_receiver,
                 type_param_receiver,
                 trait_name,
+                receiver_args,
                 impl_type_args,
             },
         );

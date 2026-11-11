@@ -1,0 +1,23 @@
+// A slot only the trait's arguments name, which nothing at the call settles,
+// is reported at the call rather than reaching code generation unanswered.
+use { println, Stdout } from "core:cli";
+
+trait Gen<T> with () {
+    fn g(&self) -> String;
+}
+
+struct X {}
+
+impl<T: Default + Display> Gen<T> for X {
+    fn g(&self) -> String {
+        return `${T::default()}`;
+    }
+}
+
+export fn run() with Stdout {
+    let x = X {};
+    println(x.g());
+}
+
+__DATA__
+{"compile_error": ":19:13: analysis error: cannot infer type parameter `T` of `impl<T: Default + Display> Gen<T> for X`"}

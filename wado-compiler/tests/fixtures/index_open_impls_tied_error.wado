@@ -1,0 +1,63 @@
+// Two impls each leaving the key to the subscript both reach `String`, and
+// nothing ranks them.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+impl Mark for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+trait Loud with () {
+    fn loud(&self) -> String;
+}
+
+impl Loud for String {
+    fn loud(&self) -> String {
+        return `LOUD ${*self}`;
+    }
+}
+
+struct Table {}
+
+impl<I: Show> IndexValue<I> for Table {
+    type Output = String;
+
+    fn index_value(&self, index: I) -> String {
+        return index.show();
+    }
+}
+
+impl<J: Loud> IndexValue<J> for Table {
+    type Output = String;
+
+    fn index_value(&self, index: J) -> String {
+        return index.loud();
+    }
+}
+
+test {
+    let t = Table {};
+    let s: String = "s";
+    assert t[s] == "x";
+}
+
+__DATA__
+{"compile_error": ":59:12: analysis error: ambiguous impls of 'IndexValue<String>' for 'Table'"}

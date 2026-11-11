@@ -1,0 +1,21 @@
+// An impl's concrete trait argument meets the bound the trait puts on that
+// parameter: `i32` implements no `Q`, so `impl Tr<i32>` is ill-formed.
+
+trait Q with () {
+    fn q() -> i32;
+}
+
+trait Tr<T: Q> with () {
+    fn run(&self) -> i32;
+}
+
+struct X {}
+
+impl Tr<i32> for X {
+    fn run(&self) -> i32 {
+        return 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":14:6: analysis error: type 'i32' does not implement trait 'Q' required by bound on 'T'"}

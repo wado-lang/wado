@@ -1,0 +1,49 @@
+// A call in a generic body reaches an impl whose parameter only the trait
+// reference names, and each instance binds it to that instance's type: the
+// direct call in `direct` and the call through `A: Put<T>` in `through_bound`.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+
+    fn twice(&self, v: T) -> String {
+        return `${self.put(v)}+${self.put(v)}`;
+    }
+}
+
+struct X {}
+
+impl<T: Show> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.show();
+    }
+}
+
+fn direct<T: Show>(x: &X, t: T) -> String {
+    return x.put(t);
+}
+
+fn through_bound<A: Put<T>, T>(a: &A, t: T) -> String {
+    return a.twice(t);
+}
+
+test {
+    let x = X {};
+    assert direct(&x, 7 as i64) == "i64 7";
+    assert direct(&x, "s") == "string s";
+    assert through_bound(&x, 9 as i64) == "i64 9+i64 9";
+}

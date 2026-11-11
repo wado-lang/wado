@@ -1,0 +1,26 @@
+// A pattern binding of a `&T` to an affine `T`, whose address is taken, holds
+// the reference in a box: the slot it reads may hold `null`, and the box may not.
+
+global mut SEEN: i32 = 0;
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        builtin::black_box(self.n);
+    }
+}
+
+test "a for-of over borrowed affine elements" {
+    let toks: List<Tok> = [Tok { n: 1 }, Tok { n: 2 }];
+    for let t of &toks {
+        builtin::black_box(&t);
+        SEEN += t.n;
+    }
+    assert SEEN == 3;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,8 @@
+// A static call through a bound reaches an impl written for a reference to
+// a generic type.
+
+trait Mk with () { fn mk() -> i32; }
+struct Holder<T> { t: T }
+impl<T> Mk for &Holder<T> { fn mk() -> i32 { return 4; } }
+fn g<M: Mk>() -> i32 { return M::mk(); }
+test { assert g::<&Holder<i32>>() == 4; }

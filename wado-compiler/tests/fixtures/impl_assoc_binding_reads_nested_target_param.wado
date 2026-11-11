@@ -1,0 +1,43 @@
+// An impl whose target nests its parameter, `Wrap<Option<T>>`, binds an
+// associated type through it: registering the impl for `Wrap<Option<S>>`
+// matches the target at depth to bind `T` to `S`. Only a parameter the target
+// wrote outright was bound, so `T::Item` was an unknown type.
+
+trait Src with () {
+    type Item;
+}
+
+trait Tr with () {
+    type Item;
+    fn it(&self) -> i32;
+}
+
+struct Wrap<X> {
+    x: X,
+}
+
+impl<T: Src> Tr for Wrap<Option<T>> {
+    type Item = T::Item;
+
+    fn it(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct S {}
+
+impl Src for S {
+    type Item = i32;
+}
+
+fn get<W: Tr<Item = i32>>(w: W) -> i32 {
+    return w.it();
+}
+
+test {
+    let w = Wrap { x: Option::<S>::Some(S {}) };
+    assert get(w) == 1;
+}
+
+__DATA__
+{"test": {}}

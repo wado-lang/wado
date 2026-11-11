@@ -1,0 +1,17 @@
+// A unit function whose last statement is an expression yields `()`, not that
+// expression's value, once it is inlined where its result is read.
+
+fn discard() {
+    1;
+}
+
+test "an inlined unit callee yields unit" {
+    let unit: () = discard();
+    if builtin::black_box(false) {
+        builtin::black_box(unit);
+    }
+    assert unit == ();
+}
+
+__DATA__
+{"test": {}}

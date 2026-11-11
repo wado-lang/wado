@@ -1,0 +1,25 @@
+// An impl's trait arguments meet the bounds the trait puts on its parameters,
+// as Rust's well-formedness asks: `Tr<T: Q>` implemented at `U` needs `U: Q`
+// among the impl's own bounds; the trait's bound is not implied onto them.
+
+trait Q with () {
+    type QOut;
+    fn q() -> i32;
+}
+
+trait P with () {}
+
+trait Tr<T: Q> with () {
+    fn run(&self) -> i32;
+}
+
+struct X {}
+
+impl<U: P> Tr<U> for X {  // ERROR: type 'U' does not implement trait 'Q'
+    fn run(&self) -> i32 {
+        return 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":18:12: analysis error: type 'U' does not implement trait 'Q' required by bound on 'T'"}

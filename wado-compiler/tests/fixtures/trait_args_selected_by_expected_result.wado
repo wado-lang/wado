@@ -1,0 +1,101 @@
+// The type a call's context expects of its result selects among one trait's
+// argument lists, as an annotated argument does. It does so before a literal
+// argument is called ambiguous, through a newtype receiver, at the result each
+// impl has at the receiver, and in the direction the result flows: `&mut Cell`
+// takes no `&Cell`.
+
+use { println, Stdout } from "core:cli";
+
+trait Pick<T> with () {
+    fn pick(x: T) -> T;
+}
+
+struct Host {}
+
+impl Pick<i32> for Host {
+    fn pick(x: i32) -> i32 {
+        return x + 1;
+    }
+}
+
+impl Pick<i64> for Host {
+    fn pick(x: i64) -> i64 {
+        return x + 2;
+    }
+}
+
+trait Mk<T> with () {
+    fn mk() -> T;
+}
+
+struct X {}
+
+type Y = X;
+
+impl Mk<i32> for X {
+    fn mk() -> i32 {
+        return 1;
+    }
+}
+
+impl Mk<String> for X {
+    fn mk() -> String {
+        return "s";
+    }
+}
+
+struct Boxed<T> {
+    v: T,
+}
+
+impl<T: Default> Mk<T> for Boxed<T> {
+    fn mk() -> T {
+        return T::default();
+    }
+}
+
+impl<T> Mk<String> for Boxed<T> {
+    fn mk() -> String {
+        return "boxed";
+    }
+}
+
+struct Cell {
+    v: i32,
+}
+
+trait At<K> with () {
+    fn at(&mut self) -> K;
+}
+
+struct Holder {
+    c: Cell,
+}
+
+impl At<&Cell> for Holder {
+    fn at(&mut self) -> &Cell {
+        return &self.c;
+    }
+}
+
+impl At<&mut Cell> for Holder {
+    fn at(&mut self) -> &mut Cell {
+        return &mut self.c;
+    }
+}
+
+export fn run() with Stdout {
+    let wide: i64 = Host::pick(1);
+    println(`literal: ${wide}`);
+    let through: i32 = Y::mk();
+    println(`newtype: ${through}`);
+    let boxed: String = Boxed::<i32>::mk();
+    println(`at receiver: ${boxed}`);
+    let mut h = Holder { c: Cell { v: 1 } };
+    let r: &mut Cell = h.at();
+    r.v = 5;
+    println(`direction: ${h.c.v}`);
+}
+
+__DATA__
+{"stdout": "literal: 3\nnewtype: 1\nat receiver: boxed\ndirection: 5\n"}

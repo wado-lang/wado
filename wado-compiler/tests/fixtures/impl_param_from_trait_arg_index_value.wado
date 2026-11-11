@@ -1,0 +1,33 @@
+// A subscript reaches an `IndexValue<I>` impl whose `I` only the trait
+// reference names, binding it to the index's type at each use.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+struct Table {}
+
+impl<I: Show> IndexValue<I> for Table {
+    type Output = String;
+
+    fn index_value(&self, index: I) -> String {
+        return index.show();
+    }
+}
+
+test {
+    let t = Table {};
+    assert t[7 as i64] == "i64 7";
+    assert t["s"] == "string s";
+}

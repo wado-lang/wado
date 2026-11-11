@@ -12,7 +12,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, FamilySite, ParamRef, ScopedBound};
+use super::scope::{BinderInScope, BoundsOf, FamilySite, ParamRef, ScopedBound};
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -42,12 +42,8 @@ enum AssocTarget {
         owner: Option<DefId>,
         family: TypeId,
     },
-    /// A projection off `base`, which the frame files under `base_name`.
-    Projection {
-        base: TypeId,
-        base_name: String,
-        owner: DefId,
-    },
+    /// A projection off `base`.
+    Projection { base: TypeId, owner: DefId },
 }
 
 impl AssocTarget {
@@ -112,9 +108,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(spread) => {
                 let (name, span) = (&spread.name, &spread.span);
-                if let Some(&BinderInScope { type_id, .. }) =
-                    self.annotate_ctx.trait_ctx.repeat_pack(name)
-                {
+                if let Some(type_id) = self.repeat_pack_at(spread.id, name) {
                     if self.tysys.type_table.borrow().is_tuple(type_id) {
                         return type_id;
                     }
@@ -153,19 +147,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Which of `param_name`'s trait bounds declares `assoc_name`, making
-    /// `param_name::assoc_name` mean `<param_name as ThatTrait>::assoc_name`.
+    /// The bounds `of` names in this frame.
+    fn frame_bounds(&self, of: BoundsOf) -> Vec<ScopedBound> {
+        let table = self.tysys.type_table.borrow();
+        self.annotate_ctx.trait_ctx.bounds(&table, of)
+    }
+
+    /// Which of the trait bounds `of` names declares `assoc_name`, making
+    /// `base::assoc_name` mean `<base as ThatTrait>::assoc_name`.
     /// Resolution needs the qualifier: one type may implement two traits that
     /// declare the same associated-type name.
-    fn bound_declaring_assoc_type(&self, param_name: &str, assoc_name: &str) -> Option<DefId> {
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(param_name)?;
-        self.tysys
-            .trait_env
-            .bound_declaring_assoc_type(bounds, assoc_name, &self.tysys.resolutions)
+    fn bound_declaring_assoc_type(&self, of: BoundsOf, assoc_name: &str) -> Option<DefId> {
+        let bounds = self.frame_bounds(of);
+        self.tysys.trait_env.bound_declaring_assoc_type(
+            &bounds,
+            assoc_name,
+            &self.tysys.resolutions,
+        )
     }
 
     /// The identity an impl header names: the trait, plus the arguments it
@@ -177,16 +175,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target: &ast::Type,
         trait_decl: DefId,
     ) -> TraitRef {
-        let Some(params) = self
-            .tysys
-            .trait_env
-            .decl_header_of(&trait_decl)
-            .map(|header| header.type_params.clone())
-        else {
+        let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl) else {
             return TraitRef::bare(trait_decl);
         };
         let written = written_arg_nodes(trait_type);
-        let kept = non_default_arg_count(written, Some(target), &params, &self.tysys.resolutions);
+        let kept =
+            non_default_arg_count(written, target, &header.defaults, &self.tysys.resolutions);
         let args = written
             .iter()
             .take(kept)
@@ -198,26 +192,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report `T::Output` where two of `T`'s bounds declare `Output`, and say
     /// whether it did — answering with the first is a coin toss the writer
     /// never made. Supertraits do not count: a direct bound wins there.
-    fn report_ambiguous_assoc_type(&self, param_name: &str, assoc_name: &str, span: Span) -> bool {
-        let Some(bounds) = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(param_name)
-        else {
-            return false;
-        };
-        // One bound cannot be a coin toss, and the walk below reads every
-        // bound's declaration.
-        if bounds.len() < 2 {
+    fn report_ambiguous_assoc_type(
+        &mut self,
+        of: BoundsOf,
+        param_name: &str,
+        assoc_name: &str,
+        span: Span,
+    ) -> bool {
+        let bounds = self.frame_bounds(of);
+        let declaring: Vec<(&ScopedBound, DefId)> = bounds
+            .iter()
+            .filter_map(|bound| {
+                let decl = self.trait_decl_of(bound)?;
+                let declares = self.tysys.trait_env.declares_assoc_type(&decl, assoc_name);
+                declares.then_some((bound, decl))
+            })
+            .collect();
+        if declaring.len() < 2 {
             return false;
         }
-        let declaring: Vec<&ScopedBound> = bounds
-            .iter()
-            .filter(|bound| {
-                self.trait_decl_of(bound)
-                    .is_some_and(|decl| self.tysys.trait_env.declares_assoc_type(&decl, assoc_name))
+        // Bounds a frame took from several binders may state one trait twice;
+        // it answers one way. Only bounds on one trait can be that, so only
+        // theirs have their arguments read, each with its defaults filled:
+        // `Tr` and `Tr<T>` under `trait Tr<U = Self>` are one instantiation.
+        let decls: Vec<DefId> = declaring.iter().map(|&(_, decl)| decl).collect();
+        let mut traits_seen: Vec<TraitRef> = Vec::new();
+        let declaring: Vec<&ScopedBound> = declaring
+            .into_iter()
+            .filter(|&(bound, decl)| {
+                if decls.iter().filter(|&&other| other == decl).count() < 2 {
+                    return true;
+                }
+                let written = self.bound_args_where_written(bound, &bound.space);
+                // One naming no type is reported where it is written.
+                let Some(args) = self.trait_args_at(decl, of.base(), &written) else {
+                    return true;
+                };
+                let trait_ref = TraitRef::new(decl, args);
+                let fresh = !traits_seen.contains(&trait_ref);
+                traits_seen.push(trait_ref);
+                fresh
             })
+            .map(|(bound, _)| bound)
             .collect();
         if declaring.len() < 2 {
             return false;
@@ -300,13 +316,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base: self.assoc_base(namespaced),
                 trait_args: None,
             },
-            AssocTarget::Projection {
-                base,
-                base_name,
-                owner,
-            } => FamilySite {
+            AssocTarget::Projection { base, owner } => FamilySite {
                 base: *base,
-                trait_args: self.trait_args_for(*base, base_name, *owner),
+                trait_args: self.trait_args_for(*base, *owner),
             },
         };
         let Some(args) = self.assoc_args(namespaced, target.owner(), &site) else {
@@ -327,9 +339,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 family,
                 &args,
             ),
-            AssocTarget::Projection {
-                base_name, owner, ..
-            } => self.make_projection_at(site, &base_name, owner, &namespaced.name, &args),
+            AssocTarget::Projection { owner, .. } => {
+                self.make_projection_at(site, owner, &namespaced.name, &args)
+            }
         }
     }
 
@@ -342,7 +354,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .self_type
                 .expect("a `Self::X` naming a binding is read where `Self` is bound");
         }
-        trait_ctx.type_params[&namespaced.namespace].type_id
+        self.projected_binder(namespaced)
+            .expect("`projects` reached the binder")
+            .type_id
+    }
+
+    /// The binder `namespaced`'s namespace reaches at its own site, not by its
+    /// spelling: a trait parameter replayed under an outer one of its name
+    /// shadows it only where the replay is written.
+    fn projected_binder(&self, namespaced: &NamespacedGenericType) -> Option<&BinderInScope> {
+        self.annotate_ctx.trait_ctx.binder_reached_at(
+            &self.tysys.resolutions,
+            namespaced.id,
+            &namespaced.namespace,
+        )
     }
 
     /// The arguments `namespaced` writes for its associated type's own
@@ -439,19 +464,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
             }
-            // A parameter standing in for `Self` carries the frame's bounds under
-            // its own name, so `Self::Base` at `T: Constrained` asks what `T::Base` asks.
-            let self_param = self
-                .annotate_ctx
-                .trait_ctx
-                .self_type
-                .and_then(|id| Some((id, self.tysys.binder_name(id)?)));
-            if let Some((self_type, param_name)) = self_param
-                && let Some(owner) = self.bound_declaring_assoc_type(&param_name, &namespaced.name)
+            // A parameter standing in for `Self` carries the frame's bounds, so
+            // `Self::Base` at `T: Constrained` asks what `T::Base` asks.
+            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
+                && let Some(owner) =
+                    self.bound_declaring_assoc_type(BoundsOf::Type(self_type), &namespaced.name)
             {
                 return Some(AssocTarget::Projection {
                     base: self_type,
-                    base_name: param_name,
                     owner,
                 });
             }
@@ -460,9 +480,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
-        let param_type_id = self.annotate_ctx.trait_ctx.type_params[&namespaced.namespace].type_id;
-        let base_name = namespaced.namespace.clone();
-        self.project_off(param_type_id, &base_name, namespaced)
+        let binder = *self
+            .projected_binder(namespaced)
+            .expect("`projects` reached the binder");
+        self.project_off(BoundsOf::Binder(binder.key()), namespaced)
     }
 
     /// `ns::Type` / `ns::Type<args>`, where `ns` is a namespace import or an
@@ -506,48 +527,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .resolve_assoc_type_of_owner(base, assoc)
     }
 
-    /// The associated type `namespaced` names, projected off `base_type_id`,
-    /// which the frame files under `base_name`.
+    /// The associated type `namespaced` names, projected off the type its
+    /// namespace names, which `of`'s bounds answer for.
     fn project_off(
         &mut self,
-        base_type_id: TypeId,
-        base_name: &str,
+        of: BoundsOf,
         namespaced: &NamespacedGenericType,
     ) -> Option<AssocTarget> {
+        let base_type_id = of.base();
         if let Some((owner, family)) = self.assoc_bound_by_type(base_type_id, &namespaced.name) {
             return Some(AssocTarget::Family {
                 owner: Some(owner),
                 family,
             });
         }
-        if self.report_ambiguous_assoc_type(base_name, &namespaced.name, namespaced.span) {
+        // Telling two bounds on one trait apart reads their arguments, which
+        // may project this name again; that ask reports nothing, since this
+        // one reports what it finds.
+        let ambiguous = self.unless_on_walk(
+            |scope| &mut scope.ambiguity_stack,
+            (base_type_id, namespaced.name.clone()),
+            |e| {
+                Some(e.report_ambiguous_assoc_type(
+                    of,
+                    &namespaced.namespace,
+                    &namespaced.name,
+                    namespaced.span,
+                ))
+            },
+        );
+        if ambiguous == Some(true) {
             return None;
         }
-        let declared = self.bound_declaring_assoc_type(base_name, &namespaced.name);
+        let declared = self.bound_declaring_assoc_type(of, &namespaced.name);
         // What the frame's bounds bind it to, where they say: `I:
         // IntoIterator<Item = u8>` answers `I::Item` directly.
-        if let Some(family) = self.frame_projection(base_type_id, base_name, &namespaced.name) {
+        if let Some(family) = self.frame_projection(of, &namespaced.name) {
             return Some(AssocTarget::Family {
                 owner: declared,
                 family,
             });
         }
-        // The frame files no bounds under that name, so what the base itself
+        // The frame puts no bound on the base, so what the base itself
         // carries answers: a projection travels with its own.
-        let found = declared
-            .map(|owner| (owner, base_name.to_string()))
-            .or_else(|| {
-                let owner = self.projection_member_owner(base_type_id, &namespaced.name)?;
-                Some((owner, String::new()))
-            });
-        if let Some((owner, base_name)) = found {
+        let found =
+            declared.or_else(|| self.projection_member_owner(base_type_id, &namespaced.name));
+        if let Some(owner) = found {
             return Some(AssocTarget::Projection {
                 base: base_type_id,
-                base_name,
                 owner,
             });
         }
-        let _ = self.unknown_namespaced_type(base_name, &namespaced.name, namespaced.span);
+        let _ =
+            self.unknown_namespaced_type(&namespaced.namespace, &namespaced.name, namespaced.span);
         None
     }
 
@@ -838,16 +870,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(held.type_id)
     }
 
+    /// The pack minted for the `..name` written at `site`, where `name` names
+    /// no pack.
+    pub(super) fn repeat_pack_at(&self, site: AstId, name: &str) -> Option<TypeId> {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        let held = trait_ctx.repeat_pack(&self.tysys.resolutions, site, name)?;
+        Some(held.type_id)
+    }
+
     /// Whether `namespaced` projects through `Self` or a parameter rather
     /// than naming a namespace's member.
     fn projects(&self, namespaced: &NamespacedGenericType) -> bool {
         let ns = &namespaced.namespace;
-        ns == "Self"
-            || self
-                .annotate_ctx
-                .trait_ctx
-                .projection_base_at(&self.tysys.resolutions, namespaced.id, ns)
-                .is_some()
+        ns == "Self" || self.projected_binder(namespaced).is_some()
     }
 
     fn resolve_named_type_at(
@@ -1078,48 +1113,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, type_id)| *type_id)
     }
 
-    /// What this frame knows the projection `base::assoc` to be, where
-    /// `base_name` is the name the frame files `base`'s bounds under.
+    /// What this frame knows the projection `base::assoc` to be.
     ///
     /// Two sources answer, in order: the bindings a projection carries
     /// (`S::SeqSerializer` knowing its `Ok`), then the enclosing bound
     /// (`I: IntoIterator<Item = u8>` answers `I::Item`).
-    pub(super) fn frame_projection(
-        &mut self,
-        base: TypeId,
-        base_name: &str,
-        assoc: &str,
-    ) -> Option<TypeId> {
-        if let Some(carried) = self.carried_binding(base, assoc) {
+    pub(super) fn frame_projection(&mut self, of: BoundsOf, assoc: &str) -> Option<TypeId> {
+        if let Some(carried) = self.carried_binding(of.base(), assoc) {
             return Some(carried);
         }
-        let resolved = self.frame_assoc_bindings_of(base_name, assoc);
+        let resolved = self.frame_assoc_bindings_of(of, assoc);
         // Two bounds binding it differently is the coin toss the caller's
         // ambiguity check reports; answering with the first would hide it.
         let first = *resolved.first()?;
         resolved.iter().all(|t| *t == first).then_some(first)
     }
 
-    /// Every bound on `base_name` a projection may be answered from, each with
-    /// the parameter space it was written in answered at this frame. A
-    /// supertrait binds an assoc type too, so one walk serves every lookup.
-    fn bound_closure_of(&mut self, base_name: &str) -> Option<Vec<FrameBound>> {
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(base_name)?
-            .clone();
+    /// Every bound `of` names a projection may be answered from, each with the
+    /// parameter space it was written in answered at this frame. A supertrait
+    /// binds an assoc type too, so one walk serves every lookup.
+    fn bound_closure_of(&mut self, of: BoundsOf) -> Option<Vec<FrameBound>> {
         // A bound's arguments are read while this closure is built, so
         // `T: Uses<T::Item>` asks for it again. The closure cannot answer
         // itself: the re-entrant ask gets nothing, and `T::Item` stays the
         // abstract projection its instantiation settles.
-        let binder = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(base_name)?
-            .type_id;
+        let binder = match of {
+            BoundsOf::Binder(_) => of.base(),
+            BoundsOf::Type(ty) => {
+                let table = self.tysys.type_table.borrow();
+                self.annotate_ctx.trait_ctx.bounded_type(&table, ty)
+            }
+        };
+        let bounds = self.frame_bounds(of);
         self.unless_on_walk(
             |scope| &mut scope.bound_closure_stack,
             binder,
@@ -1130,13 +1155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         out.push((bound, Vec::new()));
                         continue;
                     };
-                    let written: Vec<TypeId> = e.in_bound_frame(&bound, &ParamSpace::new(), |e| {
-                        bound
-                            .type_args
-                            .iter()
-                            .map(|ty| e.resolve_type(ty))
-                            .collect()
-                    });
+                    let written = e.bound_args_where_written(&bound, &ParamSpace::new());
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
                     let closure = e.tysys.trait_env.supertrait_closure(&decl).to_vec();
@@ -1222,6 +1241,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.with_type_params_bound(space, |e| e.under_self_binding(binding, body))
     }
 
+    /// The arguments `scoped` writes, read in the frame it was written in with
+    /// `space` answering for its trait's parameters.
+    pub(super) fn bound_args_where_written(
+        &mut self,
+        scoped: &ScopedBound,
+        space: &ParamSpace,
+    ) -> Vec<TypeId> {
+        self.in_bound_frame(scoped, space, |e| e.written_bound_args(&scoped.bound))
+    }
+
     /// `types` resolved with `space` answering for the names it was written in.
     fn resolve_in_space(&mut self, space: &ParamSpace, types: &[ast::Type]) -> Vec<TypeId> {
         let types = types.to_vec();
@@ -1234,9 +1263,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// space it was written in. A binding whose space leaves its right-hand side
     /// unanswered is dropped, so the projection stays abstract rather than
     /// standing at a type nothing named.
-    fn frame_assoc_bindings_of(&mut self, base_name: &str, assoc: &str) -> Vec<TypeId> {
+    fn frame_assoc_bindings_of(&mut self, of: BoundsOf, assoc: &str) -> Vec<TypeId> {
         let mut out = Vec::new();
-        for (bound, space) in self.bound_closure_of(base_name).unwrap_or_default() {
+        for (bound, space) in self.bound_closure_of(of).unwrap_or_default() {
             for binding in bound.assoc_types.iter().filter(|b| b.name == assoc) {
                 let ty = binding.ty.clone();
                 let resolved = self.in_bound_frame(&bound, &space, |e| e.resolve_type(&ty));
@@ -1261,18 +1290,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// bound on `base` declares `assoc`.
     // The single builder, so one written in a signature and one synthesized for
     // an expression intern to the same type.
-    pub(super) fn make_frame_projection(
-        &mut self,
-        base: TypeId,
-        base_name: &str,
-        assoc: &str,
-    ) -> Option<TypeId> {
-        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc)?;
+    pub(super) fn make_frame_projection(&mut self, base: TypeId, assoc: &str) -> Option<TypeId> {
+        let owning_trait = self.bound_declaring_assoc_type(BoundsOf::Type(base), assoc)?;
         let site = FamilySite {
             base,
-            trait_args: self.trait_args_for(base, base_name, owning_trait),
+            trait_args: self.trait_args_for(base, owning_trait),
         };
-        Some(self.make_projection_at(site, base_name, owning_trait, assoc, &[]))
+        Some(self.make_projection_at(site, owning_trait, assoc, &[]))
     }
 
     /// The projection `<site.base as owning_trait>::assoc<args>`, carrying what
@@ -1283,7 +1307,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn make_projection_at(
         &mut self,
         site: FamilySite,
-        base_name: &str,
         owning_trait: DefId,
         assoc: &str,
         args: &[TypeId],
@@ -1304,7 +1327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // instantiated at `args`.
         let assoc_type_bindings =
             self.with_assoc_params(owning_trait, assoc, &decl.type_params, Some(&site), |e| {
-                e.frame_assoc_bindings(&site, base_name, owning_trait, assoc, &decl.bounds)
+                e.frame_assoc_bindings(&site, owning_trait, assoc, &decl.bounds)
             });
         let mut table = self.tysys.type_table.borrow_mut();
         let bindings_at: Vec<(String, TypeId)> = assoc_type_bindings
@@ -1357,24 +1380,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The arguments `owner` is reached through for `base`, which the frame
-    /// files under `base_name`, one per parameter: the trait's own parameters
-    /// inside its declaration, the bound naming it where one does, the bounds
-    /// a projection base carries. Defaults fill what a bound leaves out.
-    /// `None` where nothing in the frame says.
-    pub(super) fn trait_args_for(
-        &mut self,
-        base: TypeId,
-        base_name: &str,
-        owner: DefId,
-    ) -> Option<Vec<TypeId>> {
+    /// The arguments `owner` is reached through for `base`, one per
+    /// parameter: the trait's own parameters inside its declaration, the bound
+    /// naming it where one does, the bounds a projection base carries. Defaults
+    /// fill what a bound leaves out. `None` where nothing in the frame says.
+    pub(super) fn trait_args_for(&mut self, base: TypeId, owner: DefId) -> Option<Vec<TypeId>> {
         if let Some((bound, space)) = self
-            .bound_closure_of(base_name)
+            .bound_closure_of(BoundsOf::Type(base))
             .unwrap_or_default()
             .into_iter()
             .find(|(bound, _)| self.trait_decl_of(bound) == Some(owner))
         {
-            return self.bound_trait_args(base, &bound, &space, owner);
+            // Reading the bound's arguments may ask for this projection again
+            // (`T: Conv<T::Out>`); that ask leaves the arguments unsaid. One
+            // another bound answers (`T::Item` under `Src<Item = i32>`) is not
+            // that ask, so the walk holds the trait as well as the base.
+            let held_under = {
+                let table = self.tysys.type_table.borrow();
+                self.annotate_ctx.trait_ctx.bounded_type(&table, base)
+            };
+            return self.unless_on_walk(
+                |scope| &mut scope.bound_args_stack,
+                (held_under, owner),
+                |e| e.bound_trait_args(base, &bound, &space, owner),
+            );
         }
         self.projection_base_trait_args(base, owner)
     }
@@ -1400,7 +1429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             return self.trait_frame(owner)?.params.iter().copied().collect();
         }
-        let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
+        let written = self.bound_args_where_written(bound, space);
         self.trait_args_at(owner, base, &written)
     }
 
@@ -1423,8 +1452,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         written: &[TypeId],
     ) -> Option<Vec<TypeId>> {
         let Some(frame) = self.trait_frame(owner) else {
-            // An interface or a resource takes no arguments.
-            return Some(Vec::new());
+            // An interface or a resource declares no defaults to fill.
+            return Some(written.to_vec());
         };
         if written.len() > frame.params.len() {
             return None;
@@ -1480,12 +1509,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn frame_projection_of_trait(
         &mut self,
         base: TypeId,
-        base_name: &str,
         trait_: DefId,
         trait_args: Option<&[TypeId]>,
         assoc: &str,
     ) -> Option<TypeId> {
-        for (bound, space) in self.bound_closure_of(base_name)? {
+        for (bound, space) in self.bound_closure_of(BoundsOf::Type(base))? {
             let Some(decl) = self.trait_decl_of(&bound) else {
                 continue;
             };
@@ -1530,12 +1558,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `ty` with each projection over this frame's parameters answered by its
     /// bounds: a use site handing `C` to `T` in `&T::Value` reads `C::Value`.
     pub(super) fn answer_frame_projections(&mut self, ty: TypeId) -> TypeId {
-        if self.annotate_ctx.trait_ctx.type_param_bounds.is_empty() {
+        if !self.annotate_ctx.trait_ctx.has_bounds() {
             return ty;
         }
-        let asked: Vec<(TypeParamId, TypeId, String, ProjectionAnswer)> = {
+        let asked: Vec<(TypeParamId, TypeId, ProjectionAnswer)> = {
             let table = self.tysys.type_table.borrow();
-            let binders = &self.annotate_ctx.trait_ctx.type_params;
+            let trait_ctx = &self.annotate_ctx.trait_ctx;
             table
                 .assoc_type_projections(ty)
                 .into_iter()
@@ -1550,7 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     else {
                         unreachable!("assoc_type_projections answers projections");
                     };
-                    let ResolvedType::TypeParam { id, name } = table.get(*param_id) else {
+                    let ResolvedType::TypeParam { id, .. } = table.get(*param_id) else {
                         return None;
                     };
                     let asked = ProjectionAnswer {
@@ -1559,16 +1587,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         assoc_name: assoc_name.clone(),
                         answer: TypeTable::UNKNOWN,
                     };
-                    (binders.get(name)?.type_id == *param_id)
-                        .then(|| (*id, *param_id, name.clone(), asked))
+                    trait_ctx.binder(*param_id).map(|_| (*id, *param_id, asked))
                 })
                 .collect()
         };
         let mut answers = SlotProjections::default();
-        for (slot, base, base_name, mut asked) in asked {
+        for (slot, base, mut asked) in asked {
             if let Some(answer) = self.frame_projection_of_trait(
                 base,
-                &base_name,
                 asked.owning_trait,
                 asked.trait_args.as_deref(),
                 &asked.assoc_name,
@@ -1595,7 +1621,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn frame_assoc_bindings(
         &mut self,
         site: &FamilySite,
-        base_name: &str,
         owning_trait: DefId,
         assoc: &str,
         bounds: &[TraitBound],
@@ -1611,7 +1636,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A family takes its arguments where it is named, so naming
                 // one resolves as any other type does.
                 ast::Type::NamespacedGeneric(ns)
-                    if ns.namespace == "Self" && !self.names_family(base_name, &ns.name) =>
+                    if ns.namespace == "Self" && !self.names_family(base, &ns.name) =>
                 {
                     projections.push((binding.name.clone(), ns.name.clone()));
                 }
@@ -1638,22 +1663,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A frame that binds `Self::X` answers with the binding, one
             // that does not with the projection — which is built from
             // `assoc`'s own bounds, so a pair already on the walk recurses.
-            let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
-                self.unless_on_walk(
-                    |scope| &mut scope.assoc_binding_stack,
-                    (base, assoc.clone()),
-                    |e| e.make_frame_projection(base, base_name, &assoc),
-                )
-            })?;
+            let answer = self
+                .frame_projection(BoundsOf::Type(base), &assoc)
+                .or_else(|| {
+                    self.unless_on_walk(
+                        |scope| &mut scope.assoc_binding_stack,
+                        (base, assoc.clone()),
+                        |e| e.make_frame_projection(base, &assoc),
+                    )
+                })?;
             Some((name, answer))
         }));
         answered
     }
 
-    /// Whether the associated type `assoc` that `base_name`'s bounds declare
+    /// Whether the associated type `assoc` that `base`'s bounds declare
     /// takes parameters of its own.
-    fn names_family(&self, base_name: &str, assoc: &str) -> bool {
-        self.bound_declaring_assoc_type(base_name, assoc)
+    fn names_family(&self, base: TypeId, assoc: &str) -> bool {
+        self.bound_declaring_assoc_type(BoundsOf::Type(base), assoc)
             .and_then(|owner| self.tysys.trait_env.assoc_type_decl(&owner, assoc))
             .is_some_and(|decl| !decl.type_params.is_empty())
     }

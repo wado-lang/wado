@@ -7,19 +7,20 @@ use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::name::FqTraitName;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeArgMap, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_call::{MethodSignatureFacts, StaticReceiver};
+use super::method_lookup::narrow_to_reaching;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 use super::trait_query::DerivedAt;
-use super::types::{TraitMethodMatch, TypeError};
+use super::types::{OverloadedCallForm, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
 /// One `Type::method(...)` spelling as the resolution reads it: what it names,
@@ -50,6 +51,9 @@ pub(super) struct StaticQuery<'a> {
     /// impls answer: the receiver's own declaration of the name is a different
     /// method, and a case it declares shadows nothing the trait supplies.
     pub(super) required_trait: Option<DefId>,
+    /// What the call's context expects of its result, which selects among the
+    /// impls the arguments leave as an annotated argument does.
+    pub(super) expected_return: Option<TypeId>,
 }
 
 impl<'a> StaticQuery<'a> {
@@ -65,6 +69,7 @@ impl<'a> StaticQuery<'a> {
             receiver_args: &[],
             method_args: &[],
             required_trait: None,
+            expected_return: None,
         }
     }
 }
@@ -90,9 +95,12 @@ pub(super) enum StaticLookup {
     Found(Box<StaticCallee>),
     /// One trait, several impls, and no argument to separate them. Nothing is
     /// picked, so there is no identity to mangle and no list to check; the
-    /// return type still answers where every candidate agrees.
+    /// return type still answers where every candidate agrees. Once the
+    /// arguments are elaborated, the call site reports `traits`, each impl's
+    /// trait reference; none at `!`, where no impl answers.
     Overloaded {
         return_type: TypeId,
+        traits: Vec<String>,
     },
     /// Several traits supply the name, which no argument can separate. The
     /// spelling names none of them and the call site reports it.
@@ -102,6 +110,13 @@ pub(super) enum StaticLookup {
     OutOfScope {
         receiver: String,
         traits: Vec<DefId>,
+    },
+    /// Impls of one trait each leaving a slot to the call reach it at
+    /// `trait_args`, and nothing ranks them. The call site reports them.
+    Tied {
+        receiver: String,
+        blocks: Vec<DefId>,
+        trait_args: Vec<TypeId>,
     },
     NotStatic,
 }
@@ -113,6 +128,8 @@ pub(super) struct StaticOffer {
     pub(super) kind: CandidateKind,
     pub(super) origin: CandidateOrigin,
     pub(super) selector: Selector,
+    /// The declaration's result, written in the block's own frame.
+    pub(super) return_type: TypeId,
 }
 
 /// Which kind of declaration a candidate is. What shadows it and which
@@ -131,6 +148,15 @@ impl CandidateKind {
         match self_kind {
             ast::SelfKind::None => Self::Static,
             ast::SelfKind::Value | ast::SelfKind::Ref | ast::SelfKind::MutRef => Self::Instance,
+        }
+    }
+
+    /// The call's arguments a declaration of this kind reads against its own
+    /// parameters: past the receiver for a receiver-taking one.
+    fn own_args(self, arg_types: &[TypeId]) -> &[TypeId] {
+        match self {
+            Self::Static => arg_types,
+            Self::Instance => arg_types.get(1..).unwrap_or_default(),
         }
     }
 }
@@ -175,8 +201,15 @@ enum Selection {
     /// Several traits supply the name, which no argument separates: impls of
     /// different traits share no contract.
     Ambiguous(Vec<String>),
-    /// One trait, several impls, and no argument to tell them apart.
-    Overloaded,
+    /// One trait, several impls, and no argument to tell them apart: each
+    /// impl's trait reference, spelled.
+    Overloaded(Vec<String>),
+    /// Impls each leaving a slot to the call reach it at `trait_args`, their
+    /// bounds all holding there.
+    Tied {
+        blocks: Vec<DefId>,
+        trait_args: Vec<TypeId>,
+    },
     None,
 }
 
@@ -214,6 +247,9 @@ struct Candidate {
     kind: CandidateKind,
     origin: CandidateOrigin,
     selector: Selector,
+    /// The declaration's result, written in the frame of the block declaring
+    /// it.
+    return_type: TypeId,
 }
 
 /// Narrow to the candidates the rule prefers, where any of them qualifies.
@@ -238,6 +274,7 @@ impl StaticLookup {
             Self::Overloaded { .. }
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
+            | Self::Tied { .. }
             | Self::NotStatic => None,
         }
     }
@@ -247,8 +284,10 @@ impl StaticLookup {
     pub(super) fn return_type(&self) -> TypeId {
         match self {
             Self::Found(callee) => callee.return_type,
-            Self::Overloaded { return_type } => *return_type,
-            Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::NotStatic => TypeTable::UNKNOWN,
+            Self::Overloaded { return_type, .. } => *return_type,
+            Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::Tied { .. } | Self::NotStatic => {
+                TypeTable::UNKNOWN
+            }
         }
     }
 
@@ -261,6 +300,7 @@ impl StaticLookup {
             Self::Overloaded { .. }
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
+            | Self::Tied { .. }
             | Self::NotStatic => (CalleeParams::default(), false),
         }
     }
@@ -280,6 +320,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_args,
             method_args,
             required_trait,
+            expected_return,
         } = query;
         // One vantage: the key the caller resolved, else the one its reference
         // site answered for, else the name's own. Deriving a second key when
@@ -341,7 +382,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
             });
         }
-        let resolved = match self.select_candidate(candidates, arg_types) {
+        let resolved = match self.select_candidate(
+            candidates,
+            arg_types,
+            &declaring_args,
+            receiver_type,
+            expected_return,
+        ) {
             Selection::One(candidate) => self.callee_of_candidate(
                 (receiver_name, &key),
                 method_name,
@@ -356,7 +403,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // list to check. `i32::from(b)` names one `From` impl per source
             // type, and the call site's own preselect is what reads the
             // argument.
-            Selection::Overloaded => return self.overloaded_callee(&key, method_name),
+            Selection::Overloaded(traits) => {
+                // At `!` every blanket reaches the receiver and none answers:
+                // the call traps once monomorphized, so nothing is left to pick.
+                let on_never =
+                    receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
+                let traits = if on_never { Vec::new() } else { traits };
+                return self.overloaded_callee(&key, method_name, traits);
+            }
+            Selection::Tied { blocks, trait_args } => {
+                return StaticLookup::Tied {
+                    receiver: receiver_name.to_string(),
+                    blocks,
+                    trait_args,
+                };
+            }
             Selection::None => None,
         };
         if let Some(resolved) = resolved {
@@ -402,6 +463,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match self.newtype_base_target(&key) {
             Some((base_key, base_name)) => {
                 let (base_type, base_arg_types) = self.at_newtype_base(receiver_type, arg_types);
+                let (_, base_expected) =
+                    self.at_newtype_base(receiver_type, expected_return.as_slice());
                 let mut lookup = self.resolve_static_callee(StaticQuery {
                     receiver_key: Some(&base_key),
                     arg_types: &base_arg_types,
@@ -409,6 +472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_args,
                     method_args,
                     required_trait,
+                    expected_return: base_expected.first().copied(),
                     ..StaticQuery::of(&base_name, method_name)
                 });
                 if let (StaticLookup::Found(callee), Some(receiver_type)) =
@@ -818,6 +882,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 span,
             },
+            StaticLookup::Tied {
+                receiver,
+                blocks,
+                trait_args,
+            } => {
+                self.report_blocks_tied(blocks, trait_args, receiver, span);
+                return true;
+            }
             StaticLookup::Found(_) | StaticLookup::Overloaded { .. } | StaticLookup::NotStatic => {
                 return false;
             }
@@ -826,9 +898,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
+    /// [`Self::report_unanswered_static`] once the arguments are elaborated,
+    /// where impls they leave unseparated are reported too: nothing is left to
+    /// pick one, and the call would be mangled with no trait segment.
+    pub(super) fn report_unresolved_static(
+        &mut self,
+        lookup: &StaticLookup,
+        method_name: &str,
+        arg_types: &[TypeId],
+        span: Span,
+    ) -> bool {
+        let StaticLookup::Overloaded { traits, .. } = lookup else {
+            return self.report_unanswered_static(lookup, method_name, span);
+        };
+        if traits.is_empty() {
+            return false;
+        }
+        let classes: Vec<ArgClass> = arg_types.iter().map(|&ty| self.class_of_type(ty)).collect();
+        let _ = self.emit(TypeError::AmbiguousTraitArguments {
+            method: method_name.to_string(),
+            traits: traits.clone(),
+            arguments: self.tysys.describe_arg_classes(&classes),
+            form: if arg_types.is_empty() {
+                OverloadedCallForm::StaticNullary
+            } else {
+                OverloadedCallForm::Static
+            },
+            span,
+        });
+        true
+    }
+
     /// The rules, applied once to every candidate whatever rung produced it.
     /// Their order is the design, not an implementation detail.
-    fn select_candidate(&self, mut candidates: Vec<Candidate>, arg_types: &[TypeId]) -> Selection {
+    fn select_candidate(
+        &self,
+        mut candidates: Vec<Candidate>,
+        arg_types: &[TypeId],
+        declaring_args: &[TypeId],
+        receiver_type: Option<TypeId>,
+        expected_return: Option<TypeId>,
+    ) -> Selection {
         // The receiver's own declaration shadows an inherited one of the same
         // kind: a receiver-less declaration beside an instance one is no
         // alternative, since different argument lists reach them.
@@ -858,25 +968,119 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the impl declares rather than the trait it names. Where they start
         // follows from the kind: a receiver-taking declaration has the receiver
         // at argument zero, so its own parameters begin at argument one.
-        candidates.retain(|c| {
-            let args = match c.kind {
-                CandidateKind::Static => arg_types,
-                CandidateKind::Instance => arg_types.get(1..).unwrap_or_default(),
-            };
-            self.selector_admits(&c.selector, args)
-        });
+        candidates.retain(|c| self.selector_admits(&c.selector, c.kind.own_args(arg_types)));
+        if let Some(expected) = expected_return {
+            self.narrow_to_expected_return(&mut candidates, expected, |c| {
+                let block = match &c.supply {
+                    Some(supply) => Some(supply.impl_def),
+                    None => self
+                        .tysys
+                        .signatures
+                        .method_sig(c.method_id)
+                        .and_then(|sig| sig.declaring_impl),
+                };
+                match (block, receiver_type) {
+                    (Some(block), Some(receiver)) => {
+                        self.tysys.at_receiver(block, receiver, c.return_type)
+                    }
+                    _ => c.return_type,
+                }
+            });
+        }
         // Among what the arguments admit, the earlier origin outranks: the
         // receiver's own before a written body, a written body before an
         // inherited one.
         if let Some(best) = candidates.iter().map(|c| c.origin).min() {
             candidates.retain(|c| c.origin == best);
         }
+        if let Some(tied) = self.rank_slot_leaving_impls(&mut candidates, arg_types, declaring_args)
+        {
+            return tied;
+        }
         match candidates.len() {
             0 => Selection::None,
             1 => Selection::One(Box::new(candidates.remove(0))),
             // One trait, several impls, and no argument that separated them.
-            _ => Selection::Overloaded,
+            _ => Selection::Overloaded(
+                candidates
+                    .iter()
+                    .filter_map(|c| Some(c.supply.as_ref()?.trait_name.to_display()))
+                    .collect(),
+            ),
         }
+    }
+
+    /// The rule a method call's selection applies, over the static
+    /// `candidates` the arguments admit, once their types are known: an impl
+    /// writing the trait's arguments defines the function the call names and
+    /// one leaving a slot to the call only covers it, and of the latter only
+    /// those whose bounds hold where the arguments settle the slots reach it.
+    /// Several still reaching it are the tie returned.
+    fn rank_slot_leaving_impls(
+        &self,
+        candidates: &mut Vec<Candidate>,
+        arg_types: &[TypeId],
+        declaring_args: &[TypeId],
+    ) -> Option<Selection> {
+        let leaves_slot = |c: &Candidate| {
+            c.supply.as_ref().is_some_and(|s| {
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .impl_trait_sets_params(s.impl_def)
+            })
+        };
+        let settled_by_args = |c: &Candidate| match &c.selector {
+            Selector::Params(params) => params.len() <= c.kind.own_args(arg_types).len(),
+            Selector::Absent => true,
+            Selector::Blanket => false,
+        };
+        if !candidates.iter().any(leaves_slot) || !candidates.iter().all(settled_by_args) {
+            return None;
+        }
+        prefer(candidates, |c| !leaves_slot(c));
+        if candidates.len() < 2 || !candidates.iter().all(leaves_slot) {
+            return None;
+        }
+        let blocks: Vec<DefId> = candidates
+            .iter()
+            .map(|c| {
+                c.supply
+                    .as_ref()
+                    .expect("a slot-leaving candidate")
+                    .impl_def
+            })
+            .collect();
+        let settled: Vec<TypeArgMap> = candidates
+            .iter()
+            .zip(&blocks)
+            .map(|(c, &block)| {
+                let mut table = self.tysys.type_table.borrow_mut();
+                let mut slots = table.impl_slots(block, declaring_args);
+                if let Selector::Params(params) = &c.selector {
+                    table.bind_each_into(params, c.kind.own_args(arg_types), &mut slots);
+                }
+                slots
+            })
+            .collect();
+        let mut reaching: Vec<usize> = (0..candidates.len()).collect();
+        narrow_to_reaching(&mut reaching, |&i| {
+            self.slot_bounds_hold(blocks[i], &settled[i])
+        });
+        if let [first, _, ..] = reaching.as_slice() {
+            let trait_args = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .impl_trait_args_at(blocks[*first], &settled[*first]);
+            return Some(Selection::Tied {
+                blocks: reaching.iter().map(|&i| blocks[i]).collect(),
+                trait_args,
+            });
+        }
+        let kept = candidates.swap_remove(reaching[0]);
+        *candidates = vec![kept];
+        None
     }
 
     /// Whether the arguments reach these parameters, each against the one it is
@@ -902,7 +1106,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The resolution for a name several declarations answer to, which only an
     /// argument separates. No list comes with it, and the return type only
     /// where every candidate agrees.
-    fn overloaded_callee(&self, key: &ImplTargetKey, method_name: &str) -> StaticLookup {
+    fn overloaded_callee(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        traits: Vec<String>,
+    ) -> StaticLookup {
         let mut returns = self
             .qualified_method_decl_ids(key, method_name)
             .filter_map(|def| self.tysys.signatures.method_sig(def))
@@ -913,6 +1122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(TypeTable::UNKNOWN);
         StaticLookup::Overloaded {
             return_type: agreed,
+            traits,
         }
     }
 
@@ -936,26 +1146,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .trait_env
                     .fq_trait_of_impl(header, &self.tysys.resolutions)?;
                 let trait_decl = self.tysys.signatures.impl_trait(impl_def)?;
-                let build = |method_id, kind, origin, selector| Candidate {
+                let offer =
+                    self.tysys
+                        .impl_static_offer(header, impl_def, trait_decl, method_name)?;
+                Some(Candidate {
                     supply: Some(TraitSupply {
                         impl_def,
                         trait_decl,
                         trait_name,
                     }),
-                    method_id,
-                    kind,
-                    origin,
-                    selector,
-                };
-                let offer =
-                    self.tysys
-                        .impl_static_offer(header, impl_def, trait_decl, method_name)?;
-                Some(build(
-                    offer.method_id,
-                    offer.kind,
-                    offer.origin,
-                    offer.selector,
-                ))
+                    method_id: offer.method_id,
+                    kind: offer.kind,
+                    origin: offer.origin,
+                    selector: offer.selector,
+                    return_type: offer.return_type,
+                })
             })
             .collect()
     }
@@ -993,6 +1198,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: CandidateKind::Static,
                     origin: CandidateOrigin::Blanket,
                     selector: Selector::Blanket,
+                    return_type: self
+                        .tysys
+                        .signatures
+                        .method_sig(method_id)
+                        .expect("the decl pass records every impl-declared method's signature")
+                        .decl
+                        .return_type
+                        .unwrap_or(TypeTable::UNIT),
                 })
             })
             .collect()
@@ -1059,20 +1272,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// What the arguments are checked against for a body the block wrote: its
-    /// parameters past any receiver, unless only the argument can fill one.
-    pub(super) fn written_selector(&self, header: &ImplHeader, sig: &MethodSig) -> Selector {
+    /// parameters past any receiver. A block parameter only the trait's
+    /// arguments name stays a slot there, which admits by shape.
+    pub(super) fn written_selector(sig: &MethodSig) -> Selector {
         let first = sig.first_value_param().min(sig.decl.param_types.len());
-        let params = &sig.decl.param_types[first..];
-        if params.is_empty() {
-            return Selector::Absent;
+        match &sig.decl.param_types[first..] {
+            [] => Selector::Absent,
+            params => Selector::Params(params.to_vec()),
         }
-        if params
-            .iter()
-            .any(|&param| self.param_filled_by_block(header, sig, param))
-        {
-            return Selector::Blanket;
-        }
-        Selector::Params(params.to_vec())
     }
 
     /// What an `impl` block offers for `method_name`: the body it wrote, else the trait
@@ -1093,7 +1300,8 @@ impl TypeSystem {
                 method_id: method.def,
                 kind: CandidateKind::of(sig.self_kind),
                 origin: CandidateOrigin::Written,
-                selector: self.written_selector(header, sig),
+                selector: Self::written_selector(sig),
+                return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
             });
         }
         self.inherited_offer(trait_decl, impl_def, method_name)
@@ -1127,6 +1335,7 @@ impl TypeSystem {
                 Some([]) | None => Selector::Absent,
                 Some(params) => Selector::Params(params.to_vec()),
             },
+            return_type: instantiated.return_type,
         })
     }
 
@@ -1140,6 +1349,7 @@ impl TypeSystem {
             kind: CandidateKind::of(sig.self_kind),
             origin: CandidateOrigin::Own,
             selector: Selector::Absent,
+            return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
         })
     }
 
@@ -1162,21 +1372,28 @@ impl TypeSystem {
     /// then the block's trait arguments at the receiver's own. Without those,
     /// a default leaves them open and every argument reaches every block.
     pub(super) fn trait_frame_at(&self, impl_def: DefId, receiver: TypeId) -> Vec<TypeId> {
-        let mut table = self.type_table.borrow_mut();
-        let receiver_args = table
-            .impl_target_decl(impl_def)
-            .and_then(|decl| table.args_at_decl(receiver, decl))
-            .unwrap_or_default();
-        let slots = table.impl_slots(impl_def, &receiver_args);
         std::iter::once(receiver)
             .chain(
                 self.signatures
                     .impl_sig(impl_def)
                     .trait_type_args
                     .iter()
-                    .map(|&arg| table.substitute_type_params(arg, &slots)),
+                    .map(|&arg| self.at_receiver(impl_def, receiver, arg)),
             )
             .collect()
+    }
+
+    /// `ty`, written in block `impl_def`, with each slot the block's target
+    /// places taking `receiver`'s argument there. A slot the target does not
+    /// place stays open.
+    pub(super) fn at_receiver(&self, impl_def: DefId, receiver: TypeId, ty: TypeId) -> TypeId {
+        let mut table = self.type_table.borrow_mut();
+        let receiver_args = table
+            .impl_target_decl(impl_def)
+            .and_then(|decl| table.args_at_decl(receiver, decl))
+            .unwrap_or_default();
+        let slots = table.impl_slots(impl_def, &receiver_args);
+        table.substitute_type_params(ty, &slots)
     }
 
     /// [`Self::trait_frame_at`] the block's own target, its parameters open as

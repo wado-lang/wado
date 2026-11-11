@@ -16,7 +16,7 @@ use crate::synthesis::common::{bare_cast, builtin_call};
 use crate::tir::{
     FloatBound, FloatBoundKind, InstancePattern, LetStorage, PatternLiteral, RangeBound,
     ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirPattern,
-    TirStmt, TirStmtKind, TypeId,
+    TirStmt, TirStmtKind, TypeId, TypeParamId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -1075,10 +1075,17 @@ pub(super) fn integer_digits(repr: &str) -> Option<&str> {
     (!defaults_to_float(repr)).then_some(repr)
 }
 
-/// The name a type carries its trait bounds under, where it carries any.
-/// A pack answers with its own name: a pack's bound holds of each member
-/// (WEP 2026-03-14), and `type_param_bounds` keys both the same way; so does
-/// an element of the pack.
+/// The parameter whose trait bounds a type carries, where it carries any: a
+/// type parameter or pack itself, and a pack's element its pack, since a pack's
+/// bound holds of each member (WEP 2026-03-14).
+pub(super) fn bound_param(table: &TypeTable, id: TypeId) -> Option<TypeParamId> {
+    match table.get(id) {
+        ResolvedType::PackElement { pack, .. } => bound_param(table, *pack),
+        _ => table.type_param_id(id),
+    }
+}
+
+/// The name of the parameter [`bound_param`] answers.
 pub(super) fn bound_param_name(table: &TypeTable, id: TypeId) -> Option<&String> {
     match table.get(id) {
         ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),

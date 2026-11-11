@@ -56,6 +56,16 @@ test "a group keeps its type name, lowercases its field name, and declares its b
     assert file.messages[1].fields[0].name == "x";
 }
 
+test "a keyword names a message, a field and its type" {
+    let file = read("syntax = \"proto2\"; message message { optional message message = 1; }").unwrap();
+    assert file.messages[0].path == ["message"];
+    let field = &file.messages[0].fields[0];
+    assert field.name == "message";
+    assert field.label matches { Optional };
+    assert field.type_ matches { Named(t) && t == "message" };
+    assert field.number == 1;
+}
+
 test "packing and enum openness, where the file writes them" {
     let file = read("edition = \"2023\";
 option features.repeated_field_encoding = EXPANDED;

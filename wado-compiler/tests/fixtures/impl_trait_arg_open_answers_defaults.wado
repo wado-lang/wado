@@ -1,0 +1,40 @@
+// `impl<R: Show> Eq<R> for Tag` answers `Eq<Tag>` at `R = Tag`, so it is
+// `Tag`'s written `Eq`: nothing is derived beside it, and a bare `T: Eq`
+// bound, which says `Eq<T>`, is met by it.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+struct Tag {
+    n: i32,
+    note: String,
+}
+
+impl Show for Tag {
+    fn show(&self) -> String {
+        return `tag ${self.n}`;
+    }
+}
+
+impl<R: Show> Eq<R> for Tag {
+    fn eq(&self, other: &R) -> bool {
+        return self.show() == other.show();
+    }
+}
+
+fn explicit<T: Eq<Tag>>(a: T, b: Tag) -> bool {
+    return a == b;
+}
+
+fn bare<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+test {
+    let a = Tag { n: 1, note: "a" };
+    let b = Tag { n: 1, note: "b" };
+    assert a == b;
+    assert explicit(a, b);
+    assert bare(a, b);
+    assert !bare(a, Tag { n: 2, note: "a" });
+}

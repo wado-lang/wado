@@ -1,0 +1,9 @@
+// A newtype inheriting an impl answers a bound whose `Self` default is the
+// newtype, as the impl writes it.
+
+trait Tr<U = Self> with () { fn get(&self) -> i32; }
+struct Base {}
+type N = Base;
+impl Tr<N> for Base { fn get(&self) -> i32 { return 1; } }
+fn need<Z: Tr>(z: Z) -> i32 { return z.get(); }
+test { let n: N = Base {} as N; assert need(n) == 1; }

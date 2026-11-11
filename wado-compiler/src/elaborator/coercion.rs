@@ -1020,11 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.settle_pending_literals(pending, &[], ret, ctx);
         // A variable still open is the outer call's to answer, or reported at
         // finalize; the struct's own parameter would stand for no type there.
-        let solved: Vec<TypeId> = inst
-            .vars
-            .iter()
-            .map(|&var| self.apply_infer_holes(var))
-            .collect();
+        let solved = self.apply_infer_holes_each(&inst.vars);
         self.blame_unsolved(&inst, &solved);
         Some(self.apply_infer_holes(resolved))
     }

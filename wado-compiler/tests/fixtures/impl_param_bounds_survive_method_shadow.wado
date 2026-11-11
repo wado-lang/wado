@@ -1,0 +1,66 @@
+// A method's own `T: B` shadows its impl's `T: A`, yet a value of the impl's
+// `T`, reached through `self`, still answers to `A`, and an impl's
+// `T: Add<Output = T>` still adds. Bounds were filed under the letter, so
+// `self.v.a()` read the method's `B` and found no `a`, and `self.v + self.v`
+// was refused for want of `Add`.
+
+trait A with () {
+    fn a(&self) -> i32;
+}
+
+trait B with () {
+    fn b(&self) -> i32;
+}
+
+struct X {
+    n: i32,
+}
+
+impl A for X {
+    fn a(&self) -> i32 {
+        return self.n;
+    }
+}
+
+struct Y {
+    n: i32,
+}
+
+impl B for Y {
+    fn b(&self) -> i32 {
+        return self.n;
+    }
+}
+
+struct W<T> {
+    v: T,
+}
+
+impl<T: A> W<T> {
+    #[allow(shadowed_name)]
+    fn go<T: B>(&self, t: T) -> i32 {
+        return self.v.a() + t.b();
+    }
+}
+
+struct S<T> {
+    v: T,
+}
+
+impl<T: Add<Output = T>> S<T> {
+    #[allow(shadowed_name)]
+    fn double<T: B>(&mut self, _t: T) {
+        self.v = self.v + self.v;
+    }
+}
+
+test {
+    let w = W { v: X { n: 1 } };
+    assert w.go(Y { n: 2 }) == 3;
+    let mut s = S { v: 4 };
+    s.double(Y { n: 0 });
+    assert s.v == 8;
+}
+
+__DATA__
+{"test": {}}

@@ -853,13 +853,20 @@ SLL. A tail-greedy `Repeat` at a rule's tail can over-consume tokens that
 belong to the caller's continuation; the repair gates that loop on the
 caller's deterministic FOLLOW continuation, threaded as a runtime
 argument rather than baked into a specialised callee. At a tail-greedy
-`Repeat` the loop yields to the caller exactly when the next tokens match
-the caller's continuation at every depth. The parameter is pruned
-entirely when a grammar has no such gate — gate-free grammars carry no
+`Repeat` the loop yields to the caller when the next tokens match the
+caller's continuation at every depth, unless the iteration keeps a parse
+viable: another iteration or the continuation starts where its scan ends.
+The continuation is a chain of frames, one per call that leaves something of
+its rule behind. A frame names a site: the ways the rest of that rule can
+begin, up to the gate's depth, each marked by whether the rule ends there and
+the next frame takes over. A loop's body continues into the loop again, so
+another iteration and the exit are both readings of one site. What overflows
+the slots moves to a per-parse link table, so no frame is lost. The parameter
+is pruned entirely when a grammar has no such gate — gate-free grammars carry no
 `follow` at all (it also costs a stack slot per recursive scan frame,
 which overflowed the wasm stack on a deep-recursion grammar). Because the
-mask is data threaded at runtime, each rule is emitted exactly once,
-with no per-(rule, mask) clones.
+continuation is data threaded at runtime, each rule is emitted exactly once,
+with no per-(rule, continuation) clones.
 
 The static FOLLOW + k-prefix path always has edges — a decidability
 limit, not a tuning gap. Beyond it, the runtime ATN simulator (next
@@ -990,20 +997,22 @@ relevant sites.
    case. Not diagnosed: the same shape parses correctly wherever the group is
    not scanned, which "an empty-alt predicate gates the empty alternative" in
    `codegen_test.wado` pins.
-10. A viability probe asks the caller only where the walk reaches the rule's
-    tail. The probe scans the continuation and, when that runs out, conjoins
-    the rule's FOLLOW — an answer that is only about the caller if nothing
-    else follows inside the rule. A group body, an LR suffix, and an LR rule's
-    atom alternative all end short of the rule (the LR atom ends where the
-    precedence loop begins), so each answers `reaches_rule_tail = false`.
-    Stamping the atom `true` rejected `CASE a WHEN 1 THEN 2 END + 1`: the probe
-    asked the caller's FOLLOW at a position where the `+` loop would continue.
-    Short of the tail, a probe is stamped only where the continuation must
-    consume a token. Its scan then decides alone (`probe_asks_caller = false`):
+10. A continuation scan asks the caller only where the walk reaches the
+    rule's tail. It scans what follows in the rule and, when that runs out,
+    asks the caller's continuation (`follow_admits`), or the rule's classical
+    FOLLOW where the rule carries none — an answer that is only about the
+    caller if nothing else follows inside the rule. A group body, an LR
+    suffix, and an LR rule's atom alternative all end short of the rule (the
+    LR atom ends where the precedence loop begins), so each answers
+    `reaches_rule_tail = false`. Stamping the atom `true` rejected
+    `CASE a WHEN 1 THEN 2 END + 1`: the scan asked the caller's FOLLOW at a
+    position where the `+` loop would continue. Short of the tail, a
+    continuation scan is stamped only where the continuation must consume a
+    token. It then decides alone (`continuation_reaches_caller = false`):
     `('=' m? '@' '#')` with `m : '@' '!'` enters `m` only where `m '@' '#'`
-    scans. Keep it separate from `enclosing_at_tail`, which the FOLLOW
-    gate uses and which asks a weaker question — conflating the two is what
-    put the probe there. Fixtures `tests/grammars/lr_atom_probe.g4`,
+    scans. Keep it separate from `enclosing_at_tail`, which the FOLLOW gate
+    uses and which asks a weaker question — conflating the two is what put
+    the scan there. Fixtures `tests/grammars/lr_atom_continuation.g4`,
     `ll_shape_prefix_signature.g4`.
 11. An LR overlap group's second-token sub-dispatch measures the element that
     carries the shared token, not the one after it — reading the next element

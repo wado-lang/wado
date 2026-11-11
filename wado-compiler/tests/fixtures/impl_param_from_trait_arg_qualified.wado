@@ -1,0 +1,36 @@
+// The trait-qualified form selects the impl the method form would, so it binds
+// an impl parameter only the trait reference names: from the argument, or from
+// the turbofish that pins the trait's argument list.
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i64 {
+    fn show(&self) -> String {
+        return `i64 ${*self}`;
+    }
+}
+
+impl Show for String {
+    fn show(&self) -> String {
+        return `string ${*self}`;
+    }
+}
+
+trait Put<T> with () {
+    fn put(&self, v: T) -> String;
+}
+
+struct X {}
+
+impl<T: Show> Put<T> for X {
+    fn put(&self, v: T) -> String {
+        return v.show();
+    }
+}
+
+test {
+    let x = X {};
+    assert Put::put(&x, 7 as i64) == "i64 7";
+    assert Put::<String>::put(&x, "s") == "string s";
+}

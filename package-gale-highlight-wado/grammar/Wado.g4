@@ -344,11 +344,19 @@ memberName
     | 'contract' | 'unchecked' | 'affine'
     ;
 
+// A lone `;` is an empty statement.
 block
-    : '{' (statement | ';')* '}'
+    : '{' (';' | compoundStatement | simpleStatement ';')* simpleStatement? '}'
     ;
 
+// Where `fragment_entries` resumes a parse; no rule refers to it.
 statement
+    : compoundStatement
+    | simpleStatement ';'?
+    ;
+
+// A statement its own closing brace ends.
+compoundStatement
     : ifStatement
     | forStatement
     | whileStatement
@@ -357,14 +365,18 @@ statement
     | withStatement
     | labeledBlock
     | localItem
-    | letStatement ';'?
-    | returnStatement ';'?
-    | resumeStatement ';'?
-    | taskReturnStatement ';'?
-    | breakStatement ';'?
-    | continueStatement ';'?
-    | assertStatement ';'?
-    | exprStatement ';'?
+    ;
+
+// A statement a `;` ends, or the `}` of its block.
+simpleStatement
+    : letStatement
+    | returnStatement
+    | resumeStatement
+    | taskReturnStatement
+    | breakStatement
+    | continueStatement
+    | assertStatement
+    | exprStatement
     ;
 
 localItem
@@ -410,13 +422,15 @@ ifStatement
     : 'if' condition block ('else' (ifStatement | block))?
     ;
 
+// A condition holding a `let` is a let chain: comparison-level operands that
+// only `&&` joins. Without one it is an expression.
 condition
-    : conditionTerm ('&&' conditionTerm)*
+    : exprNoStruct
+    | (cmpExprNoStruct '&&')* letCondition ('&&' (letCondition | cmpExprNoStruct))*
     ;
 
-conditionTerm
-    : 'let' pattern '=' exprNoStruct
-    | exprNoStruct
+letCondition
+    : 'let' pattern '=' cmpExprNoStruct
     ;
 
 forStatement
@@ -459,35 +473,122 @@ withStatement
     ;
 
 exprStatement
-    : expression
+    : stmtExpression
     ;
 
+// The levels the compiler's parser climbs, loosest first: assignment
+// (right-associative), range (non-associative), `||`, `&&`, comparison, `!`,
+// `matches`, `|`, `^`, `&`, shift, `+ -`, `* / %`, `as`, then the prefix
+// operators. Each level's operand is the level below it. `notTail` and
+// `logicTail` continue the levels after a left edge that a context narrows: a
+// statement leaves `if`, `match`, `with` and a labeled block to the statement
+// forms, and a closure or match arm body leaves a leading `{` to the block.
 expression
-    : expression ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=') expression
-    | expression ('..<' | '..=') expression
-    | expression '||' expression
-    | expression '&&' expression
-    | '!' expression
-    | expression 'matches' '{' pattern ('&&' expression)? '}'
-    | expression '|' expression
-    | expression '^' expression
-    | expression '&' expression
-    | expression ('==' | '!=') expression
-    | expression ('<' | '<=' | '>' | '>=') expression
-    | expression ('<<' | '>' '>') expression
-    | expression ('+' | '-') expression
-    | expression 'as' typeRef
-    | expression ('*' | '/' | '%') expression
-    | unary
+    : notExpr logicTail
+    ;
+
+stmtExpression
+    : ('!' notExpr | stmtUnary notTail) logicTail
+    ;
+
+bodyExpression
+    : ('!' notExpr | bodyUnary notTail) logicTail
+    ;
+
+logicTail
+    : (cmpOp notExpr)* ('&&' cmpExpr)* ('||' andExpr)* (rangeOp orExpr)? (assignOp expression)?
+    ;
+
+orExpr
+    : andExpr ('||' andExpr)*
+    ;
+
+andExpr
+    : cmpExpr ('&&' cmpExpr)*
+    ;
+
+cmpExpr
+    : notExpr (cmpOp notExpr)*
+    ;
+
+notExpr
+    : '!' notExpr
+    | unary notTail
+    ;
+
+notTail
+    : ('as' typeRef)* (mulOp castExpr)* (addOp mulExpr)* (shiftOp addExpr)* ('&' shiftExpr)* ('^' bitAndExpr)* ('|' bitXorExpr)* matchesTest*
+    ;
+
+matchesTest
+    : 'matches' '{' pattern ('&&' expression)? '}'
+    ;
+
+bitXorExpr
+    : bitAndExpr ('^' bitAndExpr)*
+    ;
+
+bitAndExpr
+    : shiftExpr ('&' shiftExpr)*
+    ;
+
+shiftExpr
+    : addExpr (shiftOp addExpr)*
+    ;
+
+addExpr
+    : mulExpr (addOp mulExpr)*
+    ;
+
+mulExpr
+    : castExpr (mulOp castExpr)*
+    ;
+
+castExpr
+    : unary ('as' typeRef)*
+    ;
+
+assignOp
+    : '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>='
+    ;
+
+rangeOp
+    : '..<' | '..='
+    ;
+
+cmpOp
+    : '==' | '!=' | '<' | '<=' | '>' | '>='
+    ;
+
+shiftOp
+    : '<<' | '>' '>'
+    ;
+
+addOp
+    : '+' | '-'
+    ;
+
+mulOp
+    : '*' | '/' | '%'
+    ;
+
+prefixOp
+    : '-' | '~' | ('&' | '&&') 'mut'? | '*' | 'unchecked'
     ;
 
 unary
-    : ('-' | '~' | ('&' | '&&') 'mut'? | '*' | 'unchecked') unary
-    | postfix
+    : prefixOp unary
+    | primary postfixOp*
     ;
 
-postfix
-    : primary postfixOp*
+stmtUnary
+    : prefixOp unary
+    | stmtPrimary postfixOp*
+    ;
+
+bodyUnary
+    : prefixOp unary
+    | bodyPrimary postfixOp*
     ;
 
 postfixOp
@@ -504,21 +605,40 @@ argumentList
     : expression (',' expression)* ','?
     ;
 
+// A brace in value position is a struct literal, never a block.
 primary
-    : literal
-    | 'self'
-    | compileTimeExpr
+    : atom
     | structLiteral
     | braceLiteral
-    | block
-    | taggedTemplate
-    | exprPath
-    | tupleOrArrayLiteral
-    | closure
     | ifExpr
     | matchExpr
     | withExpr
     | labeledBlock
+    ;
+
+stmtPrimary
+    : atom
+    | structLiteral
+    | braceLiteral
+    ;
+
+bodyPrimary
+    : atom
+    | structLiteral
+    | ifExpr
+    | matchExpr
+    | withExpr
+    | labeledBlock
+    ;
+
+atom
+    : literal
+    | 'self'
+    | compileTimeExpr
+    | taggedTemplate
+    | exprPath
+    | tupleOrArrayLiteral
+    | closure
     | '(' expression? ')'
     ;
 
@@ -567,48 +687,65 @@ compileTimeExpr
     : '#' IDENTIFIER ('(' argumentList? ')')?
     ;
 
+// `expression`'s levels where a brace opens the block that follows, as in a
+// condition: no operand outside brackets is a struct literal.
 exprNoStruct
-    : exprNoStruct ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=') exprNoStruct
-    | exprNoStruct ('..<' | '..=') exprNoStruct
-    | exprNoStruct '||' exprNoStruct
-    | exprNoStruct '&&' exprNoStruct
-    | '!' exprNoStruct
-    | exprNoStruct 'matches' '{' pattern ('&&' expression)? '}'
-    | exprNoStruct '|' exprNoStruct
-    | exprNoStruct '^' exprNoStruct
-    | exprNoStruct '&' exprNoStruct
-    | exprNoStruct ('==' | '!=') exprNoStruct
-    | exprNoStruct ('<' | '<=' | '>' | '>=') exprNoStruct
-    | exprNoStruct ('<<' | '>' '>') exprNoStruct
-    | exprNoStruct ('+' | '-') exprNoStruct
-    | exprNoStruct 'as' typeRef
-    | exprNoStruct ('*' | '/' | '%') exprNoStruct
-    | unaryNoStruct
+    : notExprNoStruct (cmpOp notExprNoStruct)* ('&&' cmpExprNoStruct)* ('||' andExprNoStruct)* (rangeOp orExprNoStruct)? (assignOp exprNoStruct)?
+    ;
+
+orExprNoStruct
+    : andExprNoStruct ('||' andExprNoStruct)*
+    ;
+
+andExprNoStruct
+    : cmpExprNoStruct ('&&' cmpExprNoStruct)*
+    ;
+
+cmpExprNoStruct
+    : notExprNoStruct (cmpOp notExprNoStruct)*
+    ;
+
+notExprNoStruct
+    : '!' notExprNoStruct
+    | bitXorExprNoStruct ('|' bitXorExprNoStruct)* matchesTest*
+    ;
+
+bitXorExprNoStruct
+    : bitAndExprNoStruct ('^' bitAndExprNoStruct)*
+    ;
+
+bitAndExprNoStruct
+    : shiftExprNoStruct ('&' shiftExprNoStruct)*
+    ;
+
+shiftExprNoStruct
+    : addExprNoStruct (shiftOp addExprNoStruct)*
+    ;
+
+addExprNoStruct
+    : mulExprNoStruct (addOp mulExprNoStruct)*
+    ;
+
+mulExprNoStruct
+    : castExprNoStruct (mulOp castExprNoStruct)*
+    ;
+
+castExprNoStruct
+    : unaryNoStruct ('as' typeRef)*
     ;
 
 unaryNoStruct
-    : ('-' | '~' | ('&' | '&&') 'mut'? | '*' | 'unchecked') unaryNoStruct
-    | postfixNoStruct
-    ;
-
-postfixNoStruct
-    : primaryNoStruct postfixOp*
+    : prefixOp unaryNoStruct
+    | primaryNoStruct postfixOp*
     ;
 
 // A labeled block belongs here although it ends in a brace: its `:` says the
 // brace opens the block and not the `if` / `while` / `for` body that follows.
 primaryNoStruct
-    : literal
-    | 'self'
-    | compileTimeExpr
-    | taggedTemplate
-    | exprPath
-    | tupleOrArrayLiteral
-    | closure
+    : atom
     | ifExpr
     | matchExpr
     | labeledBlock
-    | '(' expression? ')'
     ;
 
 structLiteral
@@ -639,7 +776,7 @@ arrayElement
 // compiler parses the row and then reports that it carries none yet, so the
 // shape belongs here either way.
 closure
-    : ('||' | '|' closureParamList? '|') returnType? withClause? (block | expression)
+    : ('||' | '|' closureParamList? '|') returnType? withClause? (block | bodyExpression)
     ;
 
 closureParamList
@@ -675,7 +812,7 @@ matchExpr
     ;
 
 matchArm
-    : pattern ('&&' expression)? '=>' (block | ifStatement | 'return' expression? | resumeStatement | expression)
+    : pattern ('&&' expression)? '=>' (block | 'return' expression? | resumeStatement | bodyExpression)
     ;
 
 pattern

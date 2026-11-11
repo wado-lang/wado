@@ -10,6 +10,7 @@ use crate::tir::{FunctionRef, ResolvedType, TemplateShape, TypeArgMap, TypeId};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::scope::BoundsOf;
 use super::trait_query::OnBoundTrait;
 use super::types::{FunctionContext, StructClosure, TypeError};
 use super::tysys::TypeSystem;
@@ -608,7 +609,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info =
             LocalMethodName::new(self.binder_of(subject), Some(reflect_trait_name), method);
         method_info.is_type_param_receiver = true;
-        method_info.receiver_param = self.tysys.type_table.borrow().type_param_id(subject);
+        method_info.receiver_param = self.tysys.type_table.borrow().substitution_slot(subject);
 
         let func_ref = FunctionRef {
             module_source: self.current_module_source.clone(),
@@ -656,10 +657,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return Vec::new();
         };
-        self.annotate_ctx
+        let bounds = self
+            .annotate_ctx
             .trait_ctx
-            .bounds_of(subject)
-            .into_iter()
+            .bounds(&self.tysys.type_table.borrow(), BoundsOf::Type(subject));
+        bounds
+            .iter()
             .filter(|b| self.tysys.resolutions.bound_decl(b) == Some(trait_def))
             .flat_map(|b| &b.assoc_types)
             .filter(|assoc| assoc.name == assoc_name)

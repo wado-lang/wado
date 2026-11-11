@@ -1,0 +1,14 @@
+// An operator impl on a generic newtype binds its parameters at the newtype,
+// not at the representation: `T` is `i32` on `W<i32>`, not `List<i32>`.
+
+struct Holder<U> { u: U }
+type W<T> = Holder<List<T>>;
+impl<T: Default, R> Add<R> for W<T> {
+    type Output = T;
+    fn add(&self, r: &R) -> T { return T::default(); }
+}
+test {
+    let w: W<i32> = Holder { u: [1, 2] } as W<i32>;
+    let v = w + "x";
+    assert v == 0;
+}

@@ -248,7 +248,7 @@ impl Monomorphizer {
                     (None, Some(receiver)) => type_table.peel_refs(receiver),
                     (None, None) => return None,
                 };
-                blanket_impl_args(&self.functions.trait_env, blanket, subject, type_table)
+                blanket_impl_args(&self.functions.trait_env, blanket, subject, &[], type_table)
                     .or_else(|| recorded.map(<[TypeId]>::to_vec))
             }
         }

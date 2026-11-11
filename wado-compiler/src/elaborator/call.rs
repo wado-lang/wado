@@ -25,7 +25,7 @@ use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound, TraitContext};
+use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
@@ -348,24 +348,6 @@ impl SettledAs {
     pub(super) fn is_pack(&self) -> bool {
         matches!(self, Self::Pack(_))
     }
-}
-
-/// What `enclosing` declares `type_id` is bound by, through every name it knows
-/// the type under. Empty where it knows of no such name, which is every argument
-/// that is not one of its own parameters.
-///
-/// One type reaches a frame under several names whenever an `impl` binds two of
-/// a trait's parameters to one type, and each name's bounds hold of it, so they
-/// are taken together rather than one of them picked.
-fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
-    enclosing
-        .type_params
-        .iter()
-        .filter(|(_, binder)| binder.type_id == type_id)
-        .filter_map(|(name, _)| enclosing.type_param_bounds.get(name))
-        .flatten()
-        .cloned()
-        .collect()
 }
 
 /// The receiver's parameter name, which a default cannot name.
@@ -1704,6 +1686,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *type_param_type_id,
                 given_args.as_deref(),
                 call,
+                expected_type,
                 ctx,
             );
         }
@@ -1833,6 +1816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 StaticReceiver {
                     key: Some(&self.impl_target_at(receiver_site, &recv_name)),
                     ty: rewritten_receiver,
+                    expected_return: expected_type,
                     ..StaticReceiver::of(&recv_name)
                 },
                 &method_name,
@@ -1910,6 +1894,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         site: receiver_site,
                         arg_types: &args,
                         receiver_args: &receiver_args,
+                        expected_return: expected_type,
                         ..StaticQuery::of(prefix, suffix)
                     })
                     .found()
@@ -2007,8 +1992,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     prefix,
                     &args,
                     None,
+                    expected_type,
                 );
-                if self.report_unanswered_static(&resolved, suffix, call.span) {
+                if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
                 }
                 // No candidate the arguments admitted — the same report the
@@ -2130,6 +2116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &method_type_args,
                     call.id,
                     call.span,
+                    expected_type,
                     ctx,
                 );
             }
@@ -2292,9 +2279,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_type: ns_receiver_type,
                         receiver_args: &impl_type_args_inferred,
                         method_args: &method_type_args,
+                        expected_return: expected_type,
                         ..StaticQuery::of(type_name, method_name)
                     });
-                    if self.report_unanswered_static(&resolved, method_name, call.span) {
+                    if self.report_unresolved_static(&resolved, method_name, &args, call.span) {
                         return TypeTable::ERROR;
                     }
                     if !resolved.resolves() {
@@ -3333,11 +3321,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // function '?2::default'`) over the call site's real complaint that the
         // parameter could not be inferred, so it binds nothing.
         //
-        // Dispatch on the parameter (`T::default()`) reads its bounds by name,
-        // so the name has to carry them. Where the binding brought none and
-        // stands for a parameter of the enclosing scope, that parameter's are
-        // the ones in force: `T` *is* the caller's `X` here, so it is bound by
-        // whatever `X` is bound by.
+        // Dispatch on the parameter (`T::default()`) reads the bounds on the
+        // type it stands for, which clearing the frame dropped. Where the
+        // binding brought none and stands for a parameter of the enclosing
+        // scope, that parameter's are the ones in force: `T` *is* the caller's
+        // `X` here, so it is bound by whatever `X` is bound by, through every
+        // binder of the caller's standing for it.
         let installed: Vec<Option<Vec<ScopedBound>>> = {
             let table = scope.tysys.type_table.borrow();
             bindings
@@ -3352,7 +3341,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     // A pack is no parameter of the enclosing scope, whatever
                     // a same-named one there is bound by.
-                    Some(type_id.map_or_else(Vec::new, |id| enclosing_bounds_of(scope.saved(), id)))
+                    Some(type_id.map_or_else(Vec::new, |id| {
+                        scope.saved().bounds(&table, BoundsOf::Type(id))
+                    }))
                 })
                 .collect()
         };
@@ -3365,7 +3356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         scope.annotate_ctx.trait_ctx.clear_binders();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.clear_bounds();
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {
                 continue;
@@ -4962,10 +4953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Built afresh rather than substituted, so the base the instance
         // carries is written in the answers, as the call's types are.
-        let answered = vars
-            .iter()
-            .map(|&var| self.apply_infer_holes(var))
-            .collect();
+        let answered = self.apply_infer_holes_each(&vars);
         Some((self.generic_newtype_instance(def, answered), shaped))
     }
 
@@ -5487,7 +5475,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_type: Some(receiver_ty),
             ..StaticQuery::of(type_name, method)
         });
-        if self.report_unanswered_static(&ranked, method, span) {
+        if self.report_unresolved_static(&ranked, method, args, span) {
             return Some(TypeTable::ERROR);
         }
         // The blanket would key on the argument-less head, which carries no
@@ -5755,30 +5743,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_param_type_id: TypeId,
         given_args: Option<&[TypeId]>,
         call: &ast::CallExpr,
+        expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let arg_count = given_args.map_or(call.args.len(), <[TypeId]>::len);
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(type_param_name)
-            .cloned();
+        let bounds = self.carried_bounds(type_param_type_id);
 
-        if let Some(bounds) = bounds
-            && let Some((found_trait, method_info_result)) = {
-                self.find_method_in_trait_bounds(
-                    Some(call.id),
-                    false,
-                    &bounds,
-                    method_name,
-                    type_param_type_id,
-                    call.span,
-                    None,
-                    ArgSource::Exprs(&mut ArgProbe::new(&call.args, ctx)),
-                )
-            }
-        {
+        if let Some((found_trait, method_info_result)) = {
+            self.find_method_in_trait_bounds(
+                Some(call.id),
+                false,
+                &bounds,
+                method_name,
+                type_param_type_id,
+                call.span,
+                None,
+                ArgSource::Exprs(&mut ArgProbe::new(&call.args, ctx, expected_type)),
+            )
+        } {
             if let Some(def) = method_info_result.method_def
                 && self.report_unavailable(def, call.span)
             {
@@ -5904,10 +5886,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .type_param_id(type_param_type_id);
+                .substitution_slot(type_param_type_id);
             method_info
                 .trait_type_args
-                .clone_from(&method_info_result.bound_trait_args);
+                .clone_from(&method_info_result.trait_args);
             if !method_type_arg_names.is_empty() {
                 method_info.method_type_args = method_type_arg_names;
             }

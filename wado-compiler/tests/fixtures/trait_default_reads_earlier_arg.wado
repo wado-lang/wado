@@ -1,0 +1,57 @@
+// A trait parameter's default may read the parameter before it (`B = A`). A
+// bound writing only `A` asks for the impl writing `A` twice, through a
+// newtype too, and a default naming no earlier parameter (`C = Self`) still
+// reads the impl's target.
+
+use { println, Stdout } from "core:cli";
+
+trait Tr<A, B = A> with () {
+    fn go(&self) -> i32;
+}
+
+trait Same<C = Self> with () {
+    fn same(&self, other: &C) -> bool;
+}
+
+struct Base {
+    v: i32,
+}
+
+type N = Base;
+
+impl Tr<i32, i32> for Base {
+    fn go(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Tr<bool, String> for Base {
+    fn go(&self) -> i32 {
+        return -1;
+    }
+}
+
+impl Same for Base {
+    fn same(&self, other: &Base) -> bool {
+        return self.v == other.v;
+    }
+}
+
+fn call<T: Tr<i32>>(t: &T) -> i32 {
+    return t.go();
+}
+
+fn both<T: Tr<i32> + Same>(t: &T) -> bool {
+    return t.same(t);
+}
+
+export fn run() with Stdout {
+    let b = Base { v: 4 };
+    let n = Base { v: 5 } as N;
+    println(`base: ${call(&b)}`);
+    println(`newtype: ${call(&n)}`);
+    println(`same: ${both(&b)}`);
+}
+
+__DATA__
+{"stdout": "base: 4\nnewtype: 5\nsame: true\n"}

@@ -1815,41 +1815,28 @@ impl LocalMethodName {
         }
     }
 
-    /// Create a version with the struct name directly substituted (not wrapped with type args).
-    /// Used when the struct name is a type parameter (e.g., `T^Ord::cmp` → `i32^Ord::cmp`).
-    ///
-    /// `resolved` is the receiver the parameter resolved to; the instantiated
-    /// spelling and the base head both come from it, so they cannot disagree —
-    /// passing them as two separate strings is how they used to.
+    /// This method named at the concrete `receiver`: a type parameter's
+    /// answer (`T^Ord::cmp` → `i32^Ord::cmp`), or what an `impl` block writes.
+    /// A `&X` receiver is the reference to `X`'s head, carrying `X`'s
+    /// arguments, so the reference kind survives for dispatch to read.
     #[must_use]
-    pub fn with_substituted_struct_name(&self, resolved: &FqTypeName) -> Self {
+    pub fn at_owner(&self, receiver: &FqTypeName) -> Self {
+        let (head, args) = match receiver.split_reference() {
+            Some((kind, pointee)) => (
+                Receiver::RefTo(kind, pointee.head_only()),
+                pointee.args().to_vec(),
+            ),
+            None => (
+                Receiver::Type(receiver.head_only()),
+                receiver.args().to_vec(),
+            ),
+        };
         Self {
-            receiver: Receiver::Type(resolved.head_only()),
-            struct_type_args: resolved.args().to_vec(),
-            trait_name: self.trait_name.clone(),
-            trait_type_args: self.trait_type_args.clone(),
-            method_name: self.method_name.clone(),
-            method_type_args: self.method_type_args.clone(),
+            receiver: head,
+            struct_type_args: args,
             is_type_param_receiver: false,
             receiver_param: None,
-            is_ref_impl: self.is_ref_impl,
-            cm_name: self.cm_name.clone(),
-        }
-    }
-
-    /// This method named at the receiver one concrete `impl` block writes. A
-    /// `&X` owner is the reference to `X`'s head, carrying `X`'s arguments.
-    #[must_use]
-    pub fn at_owner(&self, owner: &FqTypeName) -> Self {
-        match owner.split_reference() {
-            Some((kind, pointee)) => Self {
-                receiver: Receiver::RefTo(kind, pointee.head_only()),
-                struct_type_args: pointee.args().to_vec(),
-                is_type_param_receiver: false,
-                receiver_param: None,
-                ..self.clone()
-            },
-            None => self.with_substituted_struct_name(owner),
+            ..self.clone()
         }
     }
 
@@ -3583,8 +3570,10 @@ pub struct ProjectionHead {
     base: FqTypeName,
     assoc: String,
     /// The trait declaring `assoc`, part of the identity: two traits declaring
-    /// one name on a type bind it to different types (WEP-2026-08-12).
-    owning_trait: DeclaredHead,
+    /// one name on a type bind it to different types (WEP-2026-08-12). `None`
+    /// for a projection as written, before the bounds in force on its base
+    /// say which trait declares the member: a bound's argument `Conv<T::Out>`.
+    owning_trait: Option<DeclaredHead>,
     /// The arguments the trait is reached at, part of the identity too:
     /// `Holder<i32>`'s `Out` and `Holder<String>`'s are two types. `None`
     /// where a bare bound left one unwritten.
@@ -3787,8 +3776,20 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Projection(Box::new(ProjectionHead {
             base,
             assoc: assoc.to_string(),
-            owning_trait: DeclaredHead::new(defs, owning_trait),
+            owning_trait: Some(DeclaredHead::new(defs, owning_trait)),
             trait_args,
+        })))
+    }
+
+    /// The associated type `assoc` of `base` as written, its declaring trait
+    /// not yet settled (`T::Out` in a bound's arguments).
+    #[must_use]
+    pub fn written_projection(base: FqTypeName, assoc: &str) -> Self {
+        Self::of_head_kind(TypeHead::Projection(Box::new(ProjectionHead {
+            base,
+            assoc: assoc.to_string(),
+            owning_trait: None,
+            trait_args: None,
         })))
     }
 
@@ -3994,7 +3995,7 @@ impl FqTypeName {
             TypeHead::Projection(head) => Some(Projected {
                 base: &head.base,
                 assoc: &head.assoc,
-                owning_trait: head.owning_trait.def(),
+                owning_trait: head.owning_trait.as_ref().map(DeclaredHead::def),
                 trait_args: head.trait_args.as_deref(),
             }),
             _ => None,
@@ -4046,13 +4047,14 @@ impl FqTypeName {
                 None => out.push_str(name),
             },
             TypeHead::Projection(head) => {
-                out.push_str(&format!(
-                    "{}::{}#{}/{}",
-                    head.base.to_mangled(),
-                    head.assoc,
-                    head.owning_trait.module(),
-                    head.owning_trait.mangled()
-                ));
+                out.push_str(&format!("{}::{}", head.base.to_mangled(), head.assoc));
+                if let Some(owning_trait) = &head.owning_trait {
+                    out.push_str(&format!(
+                        "#{}/{}",
+                        owning_trait.module(),
+                        owning_trait.mangled()
+                    ));
+                }
                 if let Some(trait_args) = head.trait_args.as_ref().filter(|args| !args.is_empty()) {
                     let args: Vec<String> = trait_args.iter().map(FqTypeName::to_mangled).collect();
                     out.push_str(&format!("[{}]", args.join(",")));
@@ -4222,8 +4224,8 @@ pub struct Projected<'n> {
     pub base: &'n FqTypeName,
     /// The associated type's name.
     pub assoc: &'n str,
-    /// The trait declaring it.
-    pub owning_trait: DefId,
+    /// The trait declaring it; see [`ProjectionHead`].
+    pub owning_trait: Option<DefId>,
     /// The arguments the trait is reached at; see [`ProjectionHead`].
     pub trait_args: Option<&'n [FqTypeName]>,
 }

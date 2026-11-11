@@ -11,8 +11,14 @@ internal global LR_LOOP_REST: i32 = -1;
 
 global mut LR_FRAMES: List<LrFrame> = [];
 
-internal fn lr_frames_reset() {
+internal fn lr_frames_enter() -> List<LrFrame> {
+    let outer = LR_FRAMES;
     LR_FRAMES = [];
+    return outer;
+}
+
+internal fn lr_frames_leave(outer: List<LrFrame>) {
+    LR_FRAMES = outer;
 }
 
 internal fn lr_loop_frame(min_prec: i32, follow: i64, cont: i64) -> i64 {
