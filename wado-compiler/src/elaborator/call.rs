@@ -89,6 +89,16 @@ fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<Para
     ParamRef::at_site(named.id, &named.name, resolutions)
 }
 
+/// The index in `names` of the slot `assoc` binds, where it binds one.
+pub(super) fn assoc_target_slot(
+    assoc: &ast::AssocTypeBound,
+    names: &[ParamRef],
+    resolutions: &Resolutions,
+) -> Option<usize> {
+    let target = assoc_bound_target_param(&assoc.ty, resolutions)?;
+    names.iter().position(|n| *n == target)
+}
+
 /// Each associated-type equality `bound` writes that binds one of `names`,
 /// with that slot's index.
 pub(super) fn bound_targets<'b>(
@@ -99,10 +109,7 @@ pub(super) fn bound_targets<'b>(
     bound
         .assoc_types
         .iter()
-        .filter_map(|assoc| {
-            let target = assoc_bound_target_param(&assoc.ty, resolutions)?;
-            Some((assoc, names.iter().position(|n| *n == target)?))
-        })
+        .filter_map(|assoc| Some((assoc, assoc_target_slot(assoc, names, resolutions)?)))
         .collect()
 }
 
@@ -3801,7 +3808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             })
             .collect();
-        self.link_deferred_assoc_targets(&owners, &names, &args, span);
+        self.link_deferred_assoc_equalities(&owners, &names, &args, span);
     }
 
     /// The slots `sig` declares, its block's and then its own, as a bound's
@@ -4062,7 +4069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         *type_args = new_args;
         let owners: Vec<ast::GenericParam> = space.iter().map(|&p| p.clone()).collect();
         let names = slot_names(callee.def(), &owners);
-        self.link_deferred_assoc_targets(&owners, &names, type_args, span);
+        self.link_deferred_assoc_equalities(&owners, &names, type_args, span);
     }
 
     /// Shared core of bound-driven inference, used by both the free-function and
