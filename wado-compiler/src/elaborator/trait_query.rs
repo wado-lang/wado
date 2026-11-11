@@ -3145,15 +3145,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(_) => continue,
                 None => self.resolve_type(&constraint.ty),
             };
-            let tt = self.tysys.type_table.borrow();
             // A reference is not its referent: `from_iter` pushes the items it
             // is handed.
-            if tt.contains_type_param(expected)
-                || tt.contains_type_param(actual)
-                || expected == actual
-            {
+            if expected == actual || !self.decides_equality(expected, actual) {
                 continue;
             }
+            let tt = self.tysys.type_table.borrow();
             let (type_name, expected_name, actual_name) =
                 (tt.name(type_arg), tt.name(expected), tt.name(actual));
             drop(tt);
@@ -3166,6 +3163,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// Whether two types differ exactly when their ids do: each names only
+    /// this frame's own parameters, which are rigid here, and no projection,
+    /// which may still be answered as either side. A parameter a callee left
+    /// open, or the caller's `T` reached through `B::Item`, decides nothing.
+    pub(super) fn decides_equality(&self, a: TypeId, b: TypeId) -> bool {
+        let scope = self.scope_type_param_ids();
+        let tt = self.tysys.type_table.borrow();
+        [a, b].iter().all(|&t| {
+            tt.type_params_all_in(t, &scope) && !tt.contains_assoc_type_projection(t)
+        })
     }
 
     /// The arguments `bound` reaches `trait_` on `type_arg` at, resolved in
