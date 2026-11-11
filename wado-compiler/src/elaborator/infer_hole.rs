@@ -5,6 +5,7 @@
 //! one solves it; the module-end sweep substitutes it or errors.
 
 use crate::compiler_host::{CompilerHost, DiagnosticSpan};
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{InferVarId, ResolvedType, StructDef, TypeId};
 use crate::token::Span;
@@ -47,6 +48,37 @@ pub(crate) struct InferHoleTable {
     /// there, so an unsolved hole inside one reports nothing more. Recorded
     /// where a check reads the table, so behind a cell.
     mismatches: std::cell::RefCell<Vec<DiagnosticSpan>>,
+    /// Slots an associated-type equality binds to a deferred owner, answered
+    /// in [`Elaborator::finalize_infer_holes`] once the owner is.
+    links: Vec<ProjectionLink>,
+}
+
+/// A slot another slot's associated-type equality binds
+/// (`S: ReflectStruct<FieldTypes = [..F]>`), deferred with that owner: only
+/// the owner's projection answers it.
+pub(super) struct ProjectionLink {
+    pub(super) owner: TypeId,
+    pub(super) target: TypeId,
+    pub(super) trait_: Option<DefId>,
+    /// The bound's own arguments as the call read them, `None` where it
+    /// writes none.
+    pub(super) written: Option<Vec<TypeId>>,
+    pub(super) assoc: String,
+    /// `[..F]` takes the projection's elements, so only a tuple answers it.
+    pub(super) takes_tuple: bool,
+    pub(super) trait_name: String,
+    pub(super) span: Span,
+}
+
+/// Where [`Elaborator::settle_projection_links`] runs.
+#[derive(Clone, Copy)]
+pub(super) enum LinkSite {
+    /// The end of a body, whose parameters' bounds still answer a projection
+    /// off one of them.
+    BodyEnd,
+    /// The end of the module, where only a concrete owner's projection is
+    /// answered: a parameter's frame is gone.
+    ModuleEnd,
 }
 
 impl InferHoleTable {
@@ -72,6 +104,9 @@ fn covers(outer: &DiagnosticSpan, inner: &Span) -> bool {
 pub(crate) struct DeclaredBound {
     pub(crate) trait_: FqTraitName,
     pub(crate) written: String,
+    /// A pack's bound (`..F: Make`), which binds each element of the tuple
+    /// the pack is answered with rather than the tuple.
+    pub(crate) each_element: bool,
 }
 
 /// What an unsolved variable reports.
@@ -183,6 +218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(DeclaredBound {
                     trait_: spelled_at(&trait_, &at_impl),
                     written: b.name,
+                    each_element: param.is_pack,
                 })
             })
             .collect()
@@ -595,6 +631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.infer_holes.is_empty() {
             return;
         }
+        self.settle_projection_links(LinkSite::ModuleEnd);
         let diags = std::mem::take(&mut self.infer_holes.diags);
         let mismatches = self.infer_holes.mismatches.take();
         // Group by what the variables belong to, in mint order, so one use
@@ -635,6 +672,86 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_holes = InferHoleTable::default();
     }
 
+    pub(super) fn link_projection(&mut self, link: ProjectionLink) {
+        self.infer_holes.links.push(link);
+    }
+
+    /// Answer each linked target from its owner's answer, until no link
+    /// progresses: one target may be another link's owner. A link whose owner
+    /// is still open waits for a later site.
+    pub(super) fn settle_projection_links(&mut self, site: LinkSite) {
+        let mut pending = std::mem::take(&mut self.infer_holes.links);
+        loop {
+            let before = pending.len();
+            pending.retain(|link| !self.settle_projection_link(link, site));
+            if pending.len() == before {
+                break;
+            }
+        }
+        self.infer_holes.links = pending;
+    }
+
+    /// Whether `link`'s owner is answered, its target then answered by the
+    /// owner's projection or held to it. A projection that is not there, or
+    /// not a tuple a pack takes, leaves the target to its own report.
+    fn settle_projection_link(&mut self, link: &ProjectionLink, site: LinkSite) -> bool {
+        let owner = self.apply_infer_holes(link.owner);
+        if !self.tysys.is_usable_answer(owner) {
+            return false;
+        }
+        let forwarded = self.tysys.type_table.borrow().contains_type_param(owner);
+        if forwarded && matches!(site, LinkSite::ModuleEnd) {
+            return true;
+        }
+        let trait_args = match (&link.written, link.trait_) {
+            (Some(written), Some(trait_)) => {
+                let written: Vec<TypeId> =
+                    written.iter().map(|&t| self.apply_infer_holes(t)).collect();
+                if written.iter().any(|&t| self.type_has_infer_hole(t)) {
+                    return false;
+                }
+                self.trait_args_at(trait_, owner, &written)
+            }
+            _ => None,
+        };
+        let answer = match link.trait_ {
+            Some(trait_) if forwarded => {
+                Some(self.forwarded_projection(owner, trait_, trait_args, &link.assoc))
+            }
+            _ => self.settled_projection(owner, link.trait_, trait_args.as_deref(), &link.assoc),
+        };
+        let Some(answer) = answer else {
+            return true;
+        };
+        if link.takes_tuple && !self.tysys.type_table.borrow().is_tuple(answer) {
+            return true;
+        }
+        let target = self.apply_infer_holes(link.target);
+        if self.type_has_infer_hole(target) {
+            self.solve_infer_holes_against(target, answer);
+            return true;
+        }
+        let tt = self.tysys.type_table.borrow();
+        if target == answer
+            || says_nothing(target)
+            || tt.contains_type_param(target)
+            || tt.contains_type_param(answer)
+        {
+            return true;
+        }
+        let (type_name, expected, actual) = (tt.name(owner), tt.name(target), tt.name(answer));
+        drop(tt);
+        let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
+            type_name,
+            trait_name: link.trait_name.clone(),
+            assoc_name: link.assoc.clone(),
+            expected,
+            actual,
+            span: link.span,
+        });
+        true
+    }
+
     /// Verify each solved bounded hole satisfies its bound (the call-site check
     /// only saw the unconstrained hole), registering associated types on success
     /// or raising a clean trait-bound error on failure.
@@ -668,6 +785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let bound = DeclaredBound {
                         trait_,
                         written: b.written.clone(),
+                        each_element: b.each_element,
                     };
                     (solution, param_name.clone(), bound, *span)
                 }))
@@ -677,13 +795,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         for (solution, param_name, bound, span) in checks {
-            self.enforce_single_bound_args(
-                solution,
-                &bound.written,
-                Some(&bound.trait_),
-                &param_name,
-                span,
-            );
+            let subjects = if bound.each_element {
+                self.tysys.pack_elements(solution)
+            } else {
+                vec![solution]
+            };
+            for subject in subjects {
+                self.enforce_single_bound_args(
+                    subject,
+                    &bound.written,
+                    Some(&bound.trait_),
+                    &param_name,
+                    span,
+                );
+            }
         }
     }
 

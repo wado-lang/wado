@@ -22,7 +22,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
-use super::infer_hole::uninferable_type_param;
+use super::infer_hole::{ProjectionLink, uninferable_type_param};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, ParamRef, Scope, ScopedBound, TraitContext};
@@ -77,7 +77,7 @@ enum WrappedCase {
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
 /// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
 /// which is what the pack stands for everywhere else.
-fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<ParamRef> {
+pub(super) fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<ParamRef> {
     let named = match ty {
         Type::Named(named) => named,
         Type::Tuple(elems) => match elems.as_slice() {
@@ -87,6 +87,18 @@ fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<Para
         _ => return None,
     };
     ParamRef::at_site(named.id, &named.name, resolutions)
+}
+
+/// The slots `owner` declares for `params`, as a bound's target names them.
+pub(super) fn slot_names(owner: Option<DefId>, params: &[ast::GenericParam]) -> Vec<ParamRef> {
+    params
+        .iter()
+        .map(|param| ParamRef {
+            owner,
+            family_decl: None,
+            name: param.name.clone(),
+        })
+        .collect()
 }
 
 /// A callee's signature in its declaration's own frame, as a call site reads it.
@@ -3755,7 +3767,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if !defers {
             let _ = self.emit(TypeError::CannotInferType { message, span });
+            return;
         }
+        let names = self.sig_slot_names(&sig);
+        let split = sig.declaring_split();
+        let mut owners = self.declaring_params(&names[..split]);
+        owners.extend(sig.own_params.iter().cloned());
+        let args: Vec<TypeId> = sig
+            .decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, &(_, id))| {
+                let arg = if i < split {
+                    impl_type_args.get(self.declared_slot(id) as usize)
+                } else {
+                    method_type_args.get(i - split)
+                };
+                arg.copied().unwrap_or(TypeTable::ERROR)
+            })
+            .collect();
+        self.link_deferred_assoc_targets(&owners, &names, &args, span);
+    }
+
+    /// The slots `sig` declares, its block's and then its own, as a bound's
+    /// target names them.
+    fn sig_slot_names(&self, sig: &MethodSig) -> Vec<ParamRef> {
+        let table = self.tysys.type_table.borrow();
+        sig.decl
+            .type_params
+            .iter()
+            .map(|(name, slot)| ParamRef {
+                owner: table.type_param_id(*slot).map(|id| id.owner),
+                family_decl: None,
+                name: name.clone(),
+            })
+            .collect()
     }
 
     /// Whether a slot nothing at the call site answers waits for a sink the
@@ -3994,6 +4041,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             new_args.push(stand_in);
         }
         *type_args = new_args;
+        let owners: Vec<ast::GenericParam> = space.iter().map(|&p| p.clone()).collect();
+        let names = slot_names(callee.def(), &owners);
+        self.link_deferred_assoc_targets(&owners, &names, type_args, span);
     }
 
     /// Shared core of bound-driven inference, used by both the free-function and
@@ -4011,14 +4061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if params.len() != args.len() {
             return;
         }
-        let names: Vec<ParamRef> = params
-            .iter()
-            .map(|param| ParamRef {
-                owner,
-                family_decl: None,
-                name: param.name.clone(),
-            })
-            .collect();
+        let names = slot_names(owner, params);
         self.resolve_assoc_bounds_in(params, 0, &names, args);
     }
 
@@ -4107,7 +4150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `owner`'s `assoc` under `trait_` at `trait_args`, `owner` a type the
     /// call has settled.
-    fn settled_projection(
+    pub(super) fn settled_projection(
         &mut self,
         owner: TypeId,
         trait_: Option<DefId>,
@@ -4129,7 +4172,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `owner`'s `assoc` under `trait_`, `owner` a parameter the caller
     /// forwards: its projection, which the caller's own bounds may pin.
-    fn forwarded_projection(
+    pub(super) fn forwarded_projection(
         &mut self,
         owner: TypeId,
         trait_: DefId,
@@ -4173,6 +4216,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return BoundArgsAtCall::Waiting;
         }
         BoundArgsAtCall::Read(self.trait_args_at(trait_, owner, &written))
+    }
+
+    /// Link each slot an associated-type equality binds to the owner declaring
+    /// it, where the call deferred that owner to a variable: the owner's
+    /// answer settles the slot at finalize ([`ProjectionLink`]). `owners`
+    /// declare the slots `names` and `args` list, in their order.
+    pub(super) fn link_deferred_assoc_targets(
+        &mut self,
+        owners: &[ast::GenericParam],
+        names: &[ParamRef],
+        args: &[TypeId],
+        span: token::Span,
+    ) {
+        assert_eq!(names.len(), args.len(), "every slot is named");
+        assert_eq!(owners.len(), args.len(), "every slot is declared");
+        let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
+        for (param, &owner) in owners.iter().zip(args) {
+            let owner = self.apply_infer_holes(owner);
+            if !self.tysys.type_table.borrow().is_infer_var(owner) {
+                continue;
+            }
+            for bound in &param.bounds {
+                for assoc in &bound.assoc_types {
+                    let Some(target) = assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)
+                    else {
+                        continue;
+                    };
+                    let Some(target_idx) = names.iter().position(|n| *n == target) else {
+                        continue;
+                    };
+                    let written = (!bound.type_args.is_empty()).then(|| {
+                        self.with_type_params_bound(&space, |e| e.written_bound_args(bound))
+                    });
+                    self.link_projection(ProjectionLink {
+                        owner,
+                        target: args[target_idx],
+                        trait_: self.tysys.resolutions.bound_decl(bound),
+                        written,
+                        assoc: assoc.name.clone(),
+                        takes_tuple: matches!(assoc.ty, Type::Tuple(_)),
+                        trait_name: bound.written_name(),
+                        span,
+                    });
+                }
+            }
+        }
     }
 
     /// Fit flat turbofish type args to `declared`, grouping them into one
@@ -4665,18 +4754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`, or the
         // block's own `impl<T: Tr<Out = U>, U>`) is projected off the owner
         // the arguments did settle.
-        let names: Vec<ParamRef> = {
-            let table = self.tysys.type_table.borrow();
-            sig.decl
-                .type_params
-                .iter()
-                .map(|(name, slot)| ParamRef {
-                    owner: table.type_param_id(*slot).map(|id| id.owner),
-                    family_decl: None,
-                    name: name.clone(),
-                })
-                .collect()
-        };
+        let names = self.sig_slot_names(&sig);
         let mut owners = self.declaring_params(&names[..split]);
         owners.extend(sig.own_params.iter().cloned());
         self.resolve_assoc_bounds_in(&owners, 0, &names, &mut inferred);

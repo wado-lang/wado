@@ -1,0 +1,56 @@
+// A parameter another parameter's associated type pins is settled from that
+// parameter's projection once a later arm settles it.
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for i32 {
+    fn make() -> i32 {
+        return 7;
+    }
+}
+
+trait Holder with () {
+    type Item;
+    fn hold(item: Self::Item) -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn hold(item: i32) -> Box {
+        return Box { v: item };
+    }
+}
+
+fn held<T, H: Holder<Item = E>, E: Make>(_t: T) -> H {
+    return H::hold(E::make());
+}
+
+fn fallback() -> [i32, Box] {
+    return [0, Box { v: 0 }];
+}
+
+test "the arm after the call settles the holder" {
+    let [n, b] = match builtin::black_box(true) {
+        true => [3, held(1)],
+        false => fallback(),
+    };
+    assert n == 3 && b.v == 7;
+}
+
+// The caller's own bound answers the projection off its parameter.
+fn forwarded<B: Holder<Item = i32>>(b: B) -> B {
+    let [_n, h] = match builtin::black_box(true) {
+        true => [3, held(1)],
+        false => [0, b],
+    };
+    return h;
+}
+
+test "the arm settles the holder to the caller's parameter" {
+    assert forwarded(Box { v: 1 }).v == 7;
+}

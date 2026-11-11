@@ -21,7 +21,7 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::{ImplProjection, TypeTable};
 
-use super::infer_hole::InferHoleTable;
+use super::infer_hole::{InferHoleTable, LinkSite};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig, own_effect_params};
 use super::trait_query::SelfBinding;
@@ -1344,6 +1344,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some(b) = func.body.as_ref() {
             self.resolve_block(b, ctx, None);
         }
+        self.settle_projection_links(LinkSite::BodyEnd);
         self.validate_missing_return_ast(return_type, func, ctx.in_handler_method);
         self.validate_loop_jumps_ast(func.body.as_ref());
     }
