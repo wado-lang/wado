@@ -1,0 +1,22 @@
+//! An inherent impl whose target fixes an element ahead of the pack offers no
+//! method to a receiver whose element there differs.
+
+struct W<..P> {
+    t: [..P],
+}
+
+impl<..P> W<[i32, ..P]> {
+    fn head(&self) -> i32 {
+        return self.t.0;
+    }
+}
+
+test {
+    let w = W { t: [true, 1] };
+    assert w.head() == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":16:12: analysis error: no method 'head' found on type 'W<[bool, i32]>'"
+}

@@ -5516,7 +5516,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let (given, asked) = {
                     let mut tt = self.tysys.type_table.borrow_mut();
                     let mut asked = TypeArgMap::default();
-                    tt.bind_each_into(tt.impl_trait_args(def), &[from_type], &mut asked);
+                    let written = tt.impl_trait_args(def).to_vec();
+                    tt.bind_each_into(&written, &[from_type], &mut asked);
                     (tt.impl_receiver_slots(def, target_type), asked)
                 };
                 self.impl_instance_args(def, given, &asked)

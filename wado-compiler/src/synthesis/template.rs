@@ -1048,7 +1048,8 @@ pub(crate) fn blanket_impl_args(
         index,
     };
     let mut slots = TypeArgMap::default();
-    tt.bind_each_into(tt.impl_trait_args(blanket.def), trait_args, &mut slots);
+    let written = tt.impl_trait_args(blanket.def).to_vec();
+    tt.bind_each_into(&written, trait_args, &mut slots);
     slots.extend(
         sources
             .iter()
