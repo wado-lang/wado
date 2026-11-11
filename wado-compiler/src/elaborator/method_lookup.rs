@@ -2347,6 +2347,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 slot,
                 bound,
             );
+            // The slots its bounds project from the receiver (`X` in
+            // `impl<T: Left<Out = X>, X> Tr for T`) bind as a head impl's do.
+            let mut slots = Self::frame_slots(&scope, impl_ref.0);
+            scope
+                .tysys
+                .type_table
+                .borrow_mut()
+                .project_impl_slots(impl_ref.0, &mut slots);
+            Self::bind_from_slots(&mut scope, header, &param_slots, impl_ref.0, &slots);
         }
 
         // A parameter only the trait reference names, or only a projection in

@@ -298,12 +298,12 @@ pub(crate) fn bail_with<H: CompilerHost>(
     Bail
 }
 
-/// Bail where a run of `mono` refused a template whose instances never end.
-fn refuse_expanding_instances<H: CompilerHost>(
-    mono: &Monomorphization,
+/// Bail where monomorphization refused an instance, reporting why.
+fn refuse_instances<H: CompilerHost>(
+    refusal: Option<(ModuleSource, Diagnostic)>,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
-    let Some((module, diagnostic)) = mono.expanding_recursion() else {
+    let Some((module, diagnostic)) = refusal else {
         return Ok(());
     };
     let _ = logger.error_in(&module, diagnostic);
@@ -332,7 +332,7 @@ fn bind_monomorphized<H: CompilerHost>(
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(flat, &validated, unbound);
         let bound = flat.functions.len();
         mono.resume(flat);
-        refuse_expanding_instances(mono, logger)?;
+        refuse_instances(mono.expanding_recursion(), logger)?;
         if flat.functions.len() == bound {
             return Ok(());
         }
@@ -2465,10 +2465,11 @@ fn build_after_load<H: CompilerHost>(
         let _span = logger.span("monomorphize");
         lower::contract_checks::check_marked_calls(&flat);
         let mut mono = monomorphize(&mut flat);
-        refuse_expanding_instances(&mono, logger)?;
+        refuse_instances(mono.expanding_recursion(), logger)?;
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
         bind_monomorphized(&mut flat, &mut mono, logger)?;
+        refuse_instances(mono.outranked_disagreement(&flat), logger)?;
         mono.finish(&mut flat);
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }

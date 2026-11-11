@@ -6740,13 +6740,13 @@ impl TypeTable {
                     self.register_assoc_type_resolution(
                         source,
                         TraitRef::bare(projection.trait_),
-                        projection.assoc.clone(),
+                        projection.assoc,
                         concrete,
                     );
                     concrete
                 }
                 // A caller's own parameter names no member yet: the slot holds
-                // the projection off it, which its instance reads.
+                // the projection off it, which the caller's bounds answer.
                 None if self.type_param_id(source).is_some() => self.make_assoc_type_projection(
                     source,
                     projection.trait_,
