@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794359742273,
+  "lastUpdate": 1794372442318,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76485,6 +76485,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/231f8ca895dd41509d7dac639fd37031ff6aeaca"
         },
         "date": 1794359740987,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 404534,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7afddabd417867c5211e0f92b1b0eee8641cf493",
+          "message": "Merge pull request #2604 from wado-lang/compiler/blanket-dispatch-at-instance\n\nfix(compiler): let an impl written for an instance outrank a value blanket in generic code",
+          "timestamp": "2026-11-11T13:31:04+09:00",
+          "tree_id": "ec8925a2fc474ab902fd13a035212b926b5ae960",
+          "url": "https://github.com/wado-lang/wado/commit/7afddabd417867c5211e0f92b1b0eee8641cf493"
+        },
+        "date": 1794372441096,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
