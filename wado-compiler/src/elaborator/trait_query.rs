@@ -2083,12 +2083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         candidate: &BoundCandidate,
     ) -> Vec<ProjectionAnswer> {
-        let read_as = ScopedBound::new(
-            candidate.bound.clone(),
-            candidate.written_self.at(self_type_id, candidate.decl),
-        );
-        let bound_args =
-            self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl);
+        let bound_args = self.candidate_trait_args(candidate, self_type_id);
         let mut answers = Vec::with_capacity(assoc_types.len());
         for (declaring, decl) in assoc_types {
             let at_bound = *declaring == candidate.decl;
@@ -2154,6 +2149,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// One bound per trait declaration. Several bounds on one trait are one
     /// method at several instantiations, which the call's arguments choose.
+    /// The arguments `candidate` reaches its trait at on `self_type_id`.
+    fn candidate_trait_args(
+        &mut self,
+        candidate: &BoundCandidate,
+        self_type_id: TypeId,
+    ) -> Option<Vec<TypeId>> {
+        let read_as = ScopedBound::new(
+            candidate.bound.clone(),
+            candidate.written_self.at(self_type_id, candidate.decl),
+        );
+        self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl)
+    }
+
     /// The candidates reaching their trait at `wanted`, the arguments a
     /// qualifier spells (`Base::<i64>::load`): another bound on the trait is
     /// another instantiation, whatever else would select it.
@@ -2165,12 +2173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<BoundCandidate> {
         let mut reaching = Vec::with_capacity(candidates.len());
         for candidate in candidates {
-            let read_as = ScopedBound::new(
-                candidate.bound.clone(),
-                candidate.written_self.at(self_type_id, candidate.decl),
-            );
-            let at =
-                self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl);
+            let at = self.candidate_trait_args(&candidate, self_type_id);
             let wanted = self.trait_args_at(candidate.decl, self_type_id, wanted);
             if at.is_some() && at == wanted {
                 reaching.push(candidate);
