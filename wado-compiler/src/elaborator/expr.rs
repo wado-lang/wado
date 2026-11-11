@@ -2265,6 +2265,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.
             let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
+            self.report_ambiguous_literal_key(
+                expr_type,
+                key_class,
+                KeyedAccess::Read,
+                index.index.span(),
+            );
             let expected_key = self
                 .index_key_type(expr_type, key_class, KeyedAccess::Read)
                 .or_else(|| {

@@ -4782,6 +4782,14 @@ impl<'a> TypeLookup<'a> {
     }
 }
 
+/// An impl a subscript may dispatch to, as a numeric literal key reads it.
+pub(super) struct KeyCandidate {
+    /// The key it takes; `None` where it leaves the key to the subscript.
+    pub(super) key: Option<TypeId>,
+    pub(super) trait_name: FqTraitName,
+    pub(super) method: &'static str,
+}
+
 /// A matched `IndexRef` / `IndexRefMut` / `IndexValue` / `IndexAssign` impl.
 /// One shape for all four: they differ only in the trait probed and the method
 /// name it declares, both of which the caller named to find this.

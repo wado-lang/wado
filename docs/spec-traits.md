@@ -990,6 +990,14 @@ Two impls that both leave the argument to the call cover the same function
 wherever both bounds hold, and nothing ranks them, so a call reaching both
 reports as two head impls do ([Ambiguity](#ambiguity)).
 
+Only an argument whose type the call pins puts the written impl first. A
+numeric literal could take any width the open impl covers, so it selects
+neither, as it selects none of several written widths
+([One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Beside
+`impl Put<i64> for X` and `impl<T: Show> Put<T> for X`, `x.put(7)` is ambiguous
+and `x.put(7 as i64)` takes the written impl. An operator's right operand and a
+subscript key are read the same way.
+
 This holds only for a trait impl, where the trait gives both methods one
 signature. An inherent impl carries no such contract, so two inherent blocks
 that reach a common receiver may not both define one method name:

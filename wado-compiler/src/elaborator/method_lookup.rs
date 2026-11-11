@@ -41,8 +41,8 @@ use super::trait_env::{
     BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
 };
 use super::types::{
-    ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
-    MethodOwner, TypeError, TypeLookup,
+    ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
+    MethodInfo, MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 use crate::elaborator::callee::CalleeRef;
@@ -2927,7 +2927,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let writes_trait_args =
                 |i: &usize| found_traits[*i].method_info.inferred_impl_slots.is_empty();
             if admitted.iter().any(writes_trait_args) {
-                admitted.retain(writes_trait_args);
+                if !classes.iter().any(ArgClass::leaves_width_open) {
+                    admitted.retain(writes_trait_args);
+                }
             } else if let ([first, _, ..], Some(receiver)) = (admitted.as_slice(), receiver) {
                 // Two impls each leaving a slot to the call cover the same
                 // function, and no argument can tell them apart.
@@ -3297,15 +3299,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The key type of every impl `access` on the container may dispatch to:
-    /// `IndexValue` and `IndexRef` for a read, `IndexAssign` and `IndexRefMut`
-    /// for a write.
-    pub(super) fn index_key_types(
+    /// Every impl `access` on the container may dispatch to: `IndexValue` and
+    /// `IndexRef` for a read, `IndexAssign` and `IndexRefMut` for a write.
+    pub(super) fn index_key_candidates(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
         access: KeyedAccess,
-    ) -> Vec<TypeId> {
+    ) -> Vec<KeyCandidate> {
         let serving: &[(CompilerItem, &str)] = match access {
             KeyedAccess::Read => &[
                 (CompilerItem::IndexValue, "index_value"),
@@ -3316,13 +3317,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (CompilerItem::IndexRefMut, "index_ref_mut"),
             ],
         };
-        serving
-            .iter()
-            .flat_map(|&(item, method)| {
-                self.indexing_trait_impls(struct_name, base_type_id, item, method, None)
-            })
-            .filter_map(|info| info.index_type)
-            .collect()
+        let mut found = Vec::new();
+        for &(item, method) in serving {
+            let written = self.indexing_trait_impls(struct_name, base_type_id, item, method, None);
+            found.extend(written.into_iter().filter_map(|info| {
+                Some(KeyCandidate {
+                    key: Some(info.index_type?),
+                    trait_name: info.trait_name,
+                    method,
+                })
+            }));
+            let open = self.open_indexing_trait_impls(struct_name, base_type_id, item);
+            found.extend(open.into_iter().map(|trait_name| KeyCandidate {
+                key: None,
+                trait_name,
+                method,
+            }));
+        }
+        found
+    }
+
+    /// The trait each impl of `item` on the container names, where the impl
+    /// leaves its key to the subscript (`impl<I: Show> IndexValue<I> for T`).
+    fn open_indexing_trait_impls(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        item: CompilerItem,
+    ) -> Vec<FqTraitName> {
+        let Some(trait_) = self.tysys.compiler_trait_def(item) else {
+            return Vec::new();
+        };
+        let concrete_type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(base_type_id)
+            .unwrap_or_default();
+        self.collect_trait_impls(
+            &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
+            &concrete_type_args,
+            trait_,
+            |s, impl_ref, _| {
+                let open = !s
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_trait_arg_slots(impl_ref.0)
+                    .is_empty();
+                let reaches = concrete_type_args.is_empty()
+                    || s.tysys.check_impl_block_bounds(
+                        &s.annotate_ctx,
+                        impl_ref.0,
+                        Some(base_type_id),
+                        Some(&concrete_type_args),
+                    );
+                if !(open && reaches) {
+                    return None;
+                }
+                let trait_env = Arc::clone(&s.tysys.trait_env);
+                trait_env.fq_trait_of_impl(impl_header(&trait_env, impl_ref), &s.tysys.resolutions)
+            },
+        )
     }
 
     /// Find operator trait implementation
@@ -3348,8 +3404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
-        let mut found = self.find_operator_impls_on(target, receiver, trait_, method_name, rhs);
-        self.tysys.retain_most_specific_rhs(&mut found);
+        let found = self.find_operator_impls_on(target, receiver, trait_, method_name, rhs);
         match found.as_slice() {
             [only] => Some(only.clone()),
             // Unique-or-error, as everywhere else: several admitted impls are
@@ -3412,7 +3467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        self.collect_trait_impls(
+        let mut found = self.collect_trait_impls(
             target,
             &concrete_type_args,
             trait_,
@@ -3521,7 +3576,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     rhs_type,
                 })
             },
-        )
+        );
+        if let Some(class) = rhs {
+            self.tysys.retain_most_specific_rhs(&mut found, class);
+        }
+        found
     }
 
     /// The method's own slots as its declaration wrote them, read off the
@@ -4119,7 +4178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// The reason chain both selection failures carry: what each argument
     /// contributed, in argument order.
-    fn describe_arg_classes(&self, classes: &[ArgClass]) -> Vec<String> {
+    pub(super) fn describe_arg_classes(&self, classes: &[ArgClass]) -> Vec<String> {
         classes
             .iter()
             .enumerate()
@@ -4129,7 +4188,12 @@ impl TypeSystem {
 
     /// Keep only the impls writing a type for the right-hand parameter, where
     /// one does: a bare parameter admits every operand and would shadow them.
-    fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>) {
+    /// A numeric literal `rhs` keeps them all, as an argument does
+    /// ([`ArgClass::leaves_width_open`]).
+    fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>, rhs: &ArgClass) {
+        if rhs.leaves_width_open() {
+            return;
+        }
         if found.len() >= 2 && found.iter().any(|info| self.writes_rhs_type(info)) {
             found.retain(|info| self.writes_rhs_type(info));
         }

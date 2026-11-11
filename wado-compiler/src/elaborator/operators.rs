@@ -1372,6 +1372,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // The impl is the one at the key a read of `c[i]` selects.
         let key_class = self.synthesize_arg_class(transposition.i, ctx);
+        self.report_ambiguous_literal_key(
+            container_type,
+            &key_class,
+            KeyedAccess::Read,
+            transposition.i.span(),
+        );
         let key = self.index_key_type(container_type, &key_class, KeyedAccess::Read);
         let Some((info, _)) = lookup(self, key) else {
             return no_index_swap(self, key);
@@ -1684,6 +1690,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     // The impl is the one at the key's type, as a read's is.
                     let key_class = self.synthesize_arg_class(&index_expr.index, ctx);
+                    self.report_ambiguous_literal_key(
+                        indexed_type,
+                        &key_class,
+                        KeyedAccess::Write,
+                        index_expr.index.span(),
+                    );
                     let key_type = self
                         .index_key_type(indexed_type, &key_class, KeyedAccess::Write)
                         .or_else(|| lookup(self, None).and_then(|(info, _)| info.index_type));

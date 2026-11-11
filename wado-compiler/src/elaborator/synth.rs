@@ -18,7 +18,7 @@ use super::callee::CalleeRef;
 use super::coercion::is_primitive_literal_target;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
-use super::types::{FunctionContext, MethodOwner};
+use super::types::{FunctionContext, KeyCandidate, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::lexer::defaults_to_float;
@@ -48,6 +48,18 @@ pub(super) enum ArgClass {
     /// No type was produced; admits every parameter. The reason is carried so
     /// the ambiguity diagnostic can say what defeated selection.
     Opaque(OpaqueReason),
+}
+
+/// What the impls a subscript may dispatch to make of a numeric literal key.
+enum LiteralKey {
+    /// Every impl admitting it takes this key.
+    Settled(TypeId),
+    /// None admits it, or only impls leaving the key open do: it keeps its
+    /// default type.
+    Unsettled,
+    /// Impls admitting it take different keys, or some leave it open beside
+    /// one taking a key.
+    Ambiguous(Vec<KeyCandidate>),
 }
 
 /// Which impls a subscript's key is typed for ([`Elaborator::index_key_type`]).
@@ -88,6 +100,13 @@ impl ArgClass {
             _ if self == other => self,
             _ => Self::Opaque(OpaqueReason::Inference),
         }
+    }
+
+    /// Whether this is a numeric literal, whose width the impl it reaches
+    /// would choose: it admits an impl writing a width and one leaving a slot
+    /// open alike, and selects between neither (WEP 2026-07-31).
+    pub(super) fn leaves_width_open(&self) -> bool {
+        matches!(self, Self::IntLit | Self::FloatLit)
     }
 }
 
@@ -814,28 +833,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The type a subscript key on `container` really elaborates to. A numeric
     /// literal takes the key type of the one impl serving `access` that admits
     /// it, as a literal argument takes its parameter's, and its default type
-    /// without exactly one. `resolve_index` and synthesis both read the key
-    /// here, so they answer for the same impl.
+    /// otherwise; [`Self::report_ambiguous_literal_key`] reports several.
+    /// `resolve_index` and synthesis both read the key here, so they answer
+    /// for the same impl.
     pub(super) fn index_key_type(
         &mut self,
         container: TypeId,
         key: &ArgClass,
         access: KeyedAccess,
     ) -> Option<TypeId> {
+        let settled = |this: &mut Self, default: TypeId| match this
+            .literal_index_key(container, key, access)
+        {
+            LiteralKey::Settled(key) => key,
+            LiteralKey::Unsettled | LiteralKey::Ambiguous(_) => default,
+        };
         match key {
             ArgClass::Exact(t) => Some(*t),
-            ArgClass::IntLit => Some(
-                self.literal_index_key(container, key, access)
-                    .unwrap_or(TypeTable::I32),
-            ),
-            ArgClass::FloatLit => Some(
-                self.literal_index_key(container, key, access)
-                    .unwrap_or(TypeTable::F64),
-            ),
+            ArgClass::IntLit => Some(settled(self, TypeTable::I32)),
+            ArgClass::FloatLit => Some(settled(self, TypeTable::F64)),
             ArgClass::StrLit => Some(self.get_string_struct_type()),
             ArgClass::BytesLit => Some(self.tysys.type_table.borrow_mut().make_byte_list()),
             ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => None,
         }
+    }
+
+    /// Report a numeric literal key that several impls serving `access` admit
+    /// at different keys, one leaving it open among them: the literal selects
+    /// none (WEP 2026-07-31). Whether it reported.
+    pub(super) fn report_ambiguous_literal_key(
+        &mut self,
+        container: TypeId,
+        key: &ArgClass,
+        access: KeyedAccess,
+        span: Span,
+    ) -> bool {
+        if !key.leaves_width_open() {
+            return false;
+        }
+        let LiteralKey::Ambiguous(candidates) = self.literal_index_key(container, key, access)
+        else {
+            return false;
+        };
+        let _ = self.emit(TypeError::AmbiguousTraitArguments {
+            method: candidates[0].method.to_string(),
+            traits: candidates
+                .iter()
+                .map(|c| c.trait_name.to_display())
+                .collect(),
+            arguments: self.tysys.describe_arg_classes(std::slice::from_ref(key)),
+            span,
+        });
+        true
     }
 
     fn literal_index_key(
@@ -843,20 +892,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         container: TypeId,
         key: &ArgClass,
         access: KeyedAccess,
-    ) -> Option<TypeId> {
+    ) -> LiteralKey {
         let base = self.tysys.get_base_type(container);
-        let name = self.tysys.struct_name_for_type(base)?;
+        let Some(name) = self.tysys.struct_name_for_type(base) else {
+            return LiteralKey::Unsettled;
+        };
         let (lookup_name, lookup_type) = self.tysys.newtype_base_lookup(&name, base);
-        let (mut keys, _) = self.index_lookup_or_newtype_base(
-            &name,
-            base,
-            &lookup_name,
-            lookup_type,
-            |s, n, t| Some(s.index_key_types(n, t, access)).filter(|keys| !keys.is_empty()),
-        )?;
-        keys.retain(|&k| self.class_admits(k, key));
-        let first = *keys.first()?;
-        keys.iter().all(|&k| k == first).then_some(first)
+        let Some((mut candidates, _)) =
+            self.index_lookup_or_newtype_base(&name, base, &lookup_name, lookup_type, |s, n, t| {
+                Some(s.index_key_candidates(n, t, access)).filter(|c| !c.is_empty())
+            })
+        else {
+            return LiteralKey::Unsettled;
+        };
+        candidates.retain(|c| c.key.is_none_or(|k| self.class_admits(k, key)));
+        match candidates.as_slice() {
+            [] => LiteralKey::Unsettled,
+            [first, ..] if candidates.iter().all(|c| c.key == first.key) => {
+                first.key.map_or(LiteralKey::Unsettled, LiteralKey::Settled)
+            }
+            [_, _, ..] => LiteralKey::Ambiguous(candidates),
+            [_] => unreachable!("one candidate agrees with itself"),
+        }
     }
 
     /// `a..<b` is a `RangeExclusive<T>`: `T` when both endpoints pin it, the
