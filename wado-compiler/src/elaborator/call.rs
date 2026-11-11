@@ -4318,7 +4318,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .bounds
                     .iter()
                     .flat_map(|bound| &bound.assoc_types)
-                    .filter_map(|assoc| assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions))
+                    .filter_map(|assoc| {
+                        assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)
+                    })
                     .map(|target| target.name),
             );
         }
