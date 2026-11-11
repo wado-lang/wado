@@ -463,26 +463,26 @@ re-measure before committing. Candidates read off the profile above:
   ("Nesting no longer doubles the scan", above) covers left-recursive rules and
   the recursive rules a failing repeat body rescans, so this is still paid once
   per alternative.
-- **Reading the caller's continuation costs SQLite's parse 8% (2026-11).**
+- **Reading the caller's continuation costs SQLite's parse 34% (2026-11).**
   Under `longest` a tournament's scan carries the continuation it is called
-  with, so a contested exit inside it asks through every frame. Pushing only
-  the call's own site, which drops what the caller follows with and so changes
-  answers, gives what reading costs. `benchmark/sqlite_parse`, `-O2` fuel, one
-  parse:
+  with, and a gated repeat reads two continuations through every frame:
+  `exit` where it stops, and `after_iteration` where an iteration ends. Each
+  read goes `FOLLOW_MAX_DEPTH` tokens deep. `benchmark/sqlite_parse`, `-O2`
+  fuel, one parse:
 
-  | Continuation pushed          |       fuel |
-  | ---------------------------- | ---------: |
-  | every frame                  | 14,524,325 |
-  | the call's own site only     | 13,367,803 |
-  | (no continuation, before it) | 13,405,970 |
+  | Continuation read                 |       fuel |
+  | --------------------------------- | ---------: |
+  | every frame, four tokens deep     | 17,900,538 |
+  | every frame, resumption one token | 14,524,325 |
+  | (no continuation)                 | 13,405,970 |
 
-  Per parse there are 1,728 queries (435 `yields`, 408 `admits`, 885
-  `resumes`) and 6,630 pushes, 501 of which overflow six frames into the link
-  table. A one-entry cache in front of that table and a `follow_reads`
-  specialized to a one-token budget each saved under 1%. Two levers are left:
-  a frame width sized to the grammar's site count, so fewer pushes overflow,
-  and leaving the continuation out of a tournament candidate's scan where the
-  decision is proven not to depend on it.
+  A one-token resumption is cheaper but wrong: `a : X?` in
+  `s : a X X Y EOF` takes the `x` that `X X Y` needs. A one-entry cache in
+  front of the link table saved under 1%. The levers left are a frame width
+  sized to the grammar's site count, so fewer pushes overflow into the link
+  table; a cache of each read by position and continuation; and leaving the
+  continuation out of a tournament candidate's scan where the decision is
+  proven not to depend on it.
 
 Found by reading generated code (2026-09), not yet measured on a benchmark:
 
