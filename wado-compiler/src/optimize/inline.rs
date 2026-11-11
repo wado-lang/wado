@@ -3697,6 +3697,19 @@ fn build_inlined_labeled_block(
     splice_block_into(caller, callee, callee.root(), &ctx, &mut block_stmts);
 
     let result_type = candidate.return_type;
+    // A function body's last statement is no value, but a block's is: a unit
+    // callee ending in `1;` would hand the caller an `i32` where `()` is due.
+    if result_type == TypeTable::UNIT
+        && let Some(&last) = block_stmts.last()
+        && let StmtKind::Expr(tail) = caller.stmts[last].kind
+        && ![TypeTable::UNIT, TypeTable::NEVER].contains(&caller.operand_type(tail))
+    {
+        let unit = Operand::Value(caller.values.unit());
+        block_stmts.push(caller.stmts.push(StmtNode {
+            kind: StmtKind::Expr(unit),
+            span: call_span,
+        }));
+    }
     let bid = caller.blocks.push(BlockNode {
         stmts: block_stmts,
         span: call_span,
