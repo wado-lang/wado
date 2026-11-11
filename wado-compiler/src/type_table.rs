@@ -6578,7 +6578,11 @@ impl TypeTable {
         // `Pair<G::Two<i32>>`) is the trait reference's to bind.
         let mut determined = IndexSet::default();
         self.type_params_matched_in(whole, &mut determined);
-        determined.extend(projections.iter().flat_map(|p| self.type_params_in(p.pattern)));
+        determined.extend(
+            projections
+                .iter()
+                .flat_map(|p| self.type_params_in(p.pattern)),
+        );
         let trait_arg_slots: Vec<TypeParamId> = trait_args
             .iter()
             .flat_map(|&ty| self.type_params_in(ty))
@@ -6599,8 +6603,8 @@ impl TypeTable {
     }
 
     /// The slots of impl block `def` only its trait arguments determine: `G`
-    /// in `impl<G: Back> Shown<G> for i32`, or one in a projection target,
-    /// `impl<G: Back> Shown<G> for G::T`.
+    /// in `impl<G: Back> Shown<G> for i32`, or one the target names only under
+    /// a projection, `impl<G: Back> Shown<G> for G::T`.
     pub fn impl_trait_arg_slots(&self, def: DefId) -> &[TypeParamId] {
         &self.impl_target(def).trait_arg_slots
     }

@@ -1145,10 +1145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The block's slots name the instance, so the receiver, a projection
         // included, waits on no substitution to pick one.
         let keyed_by_slots = !impl_slot_args.is_empty();
-        let trait_args: Vec<TypeId> = trait_args
-            .iter()
-            .map(|&arg| self.apply_infer_holes(arg))
-            .collect();
+        let trait_args = self.apply_infer_holes_each(&trait_args);
 
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
@@ -1179,10 +1176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if keyed_by_slots {
             Some(MonomorphInfo {
                 generic_name: MethodName::format_local(&base_struct_name, None, method_name),
-                impl_type_args: impl_slot_args
-                    .iter()
-                    .map(|&arg| self.apply_infer_holes(arg))
-                    .collect(),
+                impl_type_args: self.apply_infer_holes_each(&impl_slot_args),
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
@@ -1195,13 +1189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Keyed by its parameters in order, where a trait argument settles
             // one the receiver does not.
             let impl_type_args = match dispatched_impl_block {
-                Some(block)
-                    if self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .impl_trait_sets_params(block) =>
-                {
+                Some(block) if self.tysys.type_table.borrow().impl_trait_sets_params(block) => {
                     let trait_env = Arc::clone(&self.tysys.trait_env);
                     let blanket = trait_env
                         .blanket_of_block(block)

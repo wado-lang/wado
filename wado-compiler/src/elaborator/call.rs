@@ -4868,10 +4868,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Built afresh rather than substituted, so the base the instance
         // carries is written in the answers, as the call's types are.
-        let answered = vars
-            .iter()
-            .map(|&var| self.apply_infer_holes(var))
-            .collect();
+        let answered = self.apply_infer_holes_each(&vars);
         Some((self.generic_newtype_instance(def, answered), shaped))
     }
 

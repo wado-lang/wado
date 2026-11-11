@@ -540,6 +540,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_infer_vars(ty, &subst)
     }
 
+    /// [`Self::apply_infer_holes`] on each of `tys`.
+    pub(super) fn apply_infer_holes_each(&self, tys: &[TypeId]) -> Vec<TypeId> {
+        tys.iter().map(|&ty| self.apply_infer_holes(ty)).collect()
+    }
+
     /// Add to `subst` the final answer of each solved variable `ty` reaches,
     /// following each chain [`Self::chain_infer_var`] started to its end.
     fn reached_answers(&self, ty: TypeId, subst: &mut IndexMap<InferVarId, TypeId>) {

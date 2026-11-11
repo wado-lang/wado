@@ -1335,6 +1335,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The slot each of impl block `block`'s parameters takes.
+    fn impl_param_slots(&self, block: DefId) -> ImplParamSlots {
+        let header = impl_header(&self.tysys.trait_env, &ImplBlockRef(block));
+        ImplParamSlots::of(&header.ty, &header.type_params)
+    }
+
     /// A variable for each slot of impl block `block` only its trait arguments
     /// determine (`T` in `impl<T> Tr<T> for X`) that `bound` leaves open: the
     /// call infers it, as it infers a method's own parameter.
@@ -1351,9 +1357,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if slots.is_empty() {
             return TypeArgMap::default();
         }
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        let header = impl_header(&trait_env, &ImplBlockRef(block));
-        let names = ImplParamSlots::of(&header.ty, &header.type_params);
+        let names = self.impl_param_slots(block);
         slots
             .into_iter()
             .map(|slot| {
@@ -1466,9 +1470,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|(&slot, &ty)| (slot, self.apply_infer_holes(ty))),
         );
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        let header = impl_header(&trait_env, &ImplBlockRef(block));
-        let count = ImplParamSlots::of(&header.ty, &header.type_params).count();
+        let count = self.impl_param_slots(block).count();
         impl_args_in_slot_order(block, count, &slots, &spelled)
             .expect("the receiver and the trait arguments fill every slot")
     }
@@ -1480,10 +1482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if trait_args.len() != pinned.len() {
             return false;
         }
-        let args: Vec<TypeId> = trait_args
-            .iter()
-            .map(|&arg| self.apply_infer_holes(arg))
-            .collect();
+        let args = self.apply_infer_holes_each(trait_args);
         let mut bindings = IndexMap::default();
         for (&arg, &want) in args.iter().zip(pinned) {
             unify(&self.tysys.type_table, arg, want, &mut bindings);
@@ -2874,11 +2873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.solve_infer_holes_against(param, *arg);
             }
         }
-        let trait_args: Vec<TypeId> = first
-            .trait_args
-            .iter()
-            .map(|&arg| self.apply_infer_holes(arg))
-            .collect();
+        let trait_args = self.apply_infer_holes_each(&first.trait_args);
         let blocks: Vec<DefId> = tied
             .iter()
             .map(|&i| {
@@ -4222,10 +4217,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // block's slots must.
         let monomorph_info = (!impl_slot_args.is_empty()).then(|| MonomorphInfo {
             generic_name: method_info.to_mangled_name(),
-            impl_type_args: impl_slot_args
-                .iter()
-                .map(|&arg| self.apply_infer_holes(arg))
-                .collect(),
+            impl_type_args: self.apply_infer_holes_each(&impl_slot_args),
             method_type_args: type_args.clone(),
             is_blanket: false,
         });

@@ -2514,11 +2514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let table = self.tysys.type_table.borrow();
             method_info.receiver_param = table.substitution_slot(table.peel_refs(receiver));
         }
-        method_info.trait_type_args = resolved
-            .bound_trait_args
-            .iter()
-            .map(|&arg| self.apply_infer_holes(arg))
-            .collect();
+        method_info.trait_type_args = self.apply_infer_holes_each(&resolved.bound_trait_args);
 
         // Only a *concrete* block's function lives in the block's module: a
         // generic block's instance is materialised in the receiver type's,
