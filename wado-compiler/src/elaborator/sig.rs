@@ -853,7 +853,6 @@ mod tests {
             def,
             TypeTable::UNKNOWN,
             vec![TypeTable::U8, v],
-            vec![TypeTable::I32],
             vec![],
             vec![TypeTable::I32],
         );

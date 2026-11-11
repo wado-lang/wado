@@ -1033,13 +1033,8 @@ pub(crate) fn blanket_impl_args(
         owner: blanket.def,
         index,
     };
-    let written = tt.impl_key_trait_args(blanket.def).to_vec();
     let mut slots = TypeArgMap::default();
-    for (&declared, &concrete) in written.iter().zip(trait_args) {
-        if let Some(bound) = tt.bind_type_params(&[declared], &[concrete]) {
-            slots.extend(bound);
-        }
-    }
+    tt.bind_each_into(tt.impl_trait_args(blanket.def), trait_args, &mut slots);
     slots.extend(
         sources
             .iter()

@@ -40,13 +40,8 @@ pub fn candidates(
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
     let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
-<<<<<<< HEAD
-    let answered = collect(program, env, receiver, in_scope, &[], |trait_, own| {
-||||||| 6a354679246
-    let answered = collect(program, env, receiver, in_scope, |trait_, own| {
-=======
-    let answered = collect(program, env, receiver, in_scope, asked, |trait_, own| {
->>>>>>> origin/main
+    let asked: Vec<Option<SolverType>> = asked.iter().cloned().map(Some).collect();
+    let answered = collect(program, env, receiver, in_scope, &asked, |trait_, own| {
         decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
@@ -54,13 +49,7 @@ pub fn candidates(
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-<<<<<<< HEAD
-    let reserved = collect(program, env, receiver, in_scope, &[], |trait_, _| {
-||||||| 6a354679246
-    let reserved = collect(program, env, receiver, in_scope, |trait_, _| {
-=======
-    let reserved = collect(program, env, receiver, in_scope, asked, |trait_, _| {
->>>>>>> origin/main
+    let reserved = collect(program, env, receiver, in_scope, &asked, |trait_, _| {
         decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
@@ -80,14 +69,8 @@ pub fn bound_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-<<<<<<< HEAD
     let asked = program.per_param(Some(trait_), args);
     collect(program, env, ty, &[trait_], &asked, |t, _| t == trait_)
-||||||| 6a354679246
-    collect(program, env, ty, &[trait_], |t, _| t == trait_)
-=======
-    collect(program, env, ty, &[trait_], args, |t, _| t == trait_)
->>>>>>> origin/main
         .in_scope
         .into_iter()
         .filter(|c| {
@@ -116,7 +99,6 @@ pub fn instance_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-<<<<<<< HEAD
     // A binder the call leaves open fits any type, so it determines nothing.
     let asked: Vec<Option<SolverType>> = program
         .args_at(trait_, args, ty)
@@ -124,24 +106,6 @@ pub fn instance_candidates(
         .map(|arg| arg.filter(|arg| !matches!(arg, SolverType::Param(_) | SolverType::Pack(_))))
         .collect();
     collect(program, &Env::default(), ty, &[trait_], &asked, |t, _| {
-||||||| 6a354679246
-    collect(program, &Env::default(), ty, &[trait_], |t, _| t == trait_)
-        .in_scope
-        .into_iter()
-        .filter(|c| {
-            answers_named_args(
-                program,
-                &program.impls()[&c.impl_],
-                &levels[c.depth as usize],
-                ty,
-                &c.trait_args,
-                args,
-            )
-        })
-        .collect()
-=======
-    collect(program, &Env::default(), ty, &[trait_], args, |t, _| {
->>>>>>> origin/main
         t == trait_
     })
     .in_scope
@@ -173,26 +137,14 @@ pub fn cmp_giving_eq(program: &Program, receiver: &SolverType, c: &Candidate) ->
     }
 }
 
-<<<<<<< HEAD
 /// The impls whose trait or own body `declares` the method, asked at what
 /// `asked` writes for each of the trait's parameters.
-||||||| 6a354679246
-/// The impls whose trait or own body `declares` the method.
-=======
-/// The impls whose trait or own body `declares` the method, asked at the trait
-/// arguments `asked`.
->>>>>>> origin/main
 fn collect(
     program: &Program,
     env: &Env,
     receiver: &SolverType,
     in_scope: &[TraitDeclId],
-<<<<<<< HEAD
     asked: &[Option<SolverType>],
-||||||| 6a354679246
-=======
-    asked: &[SolverType],
->>>>>>> origin/main
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
     let mut found = Candidates::default();

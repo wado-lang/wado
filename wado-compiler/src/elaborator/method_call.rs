@@ -18,7 +18,6 @@ use crate::tir::{
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use std::sync::Arc;
 
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
@@ -620,7 +619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 trait_name = Some(trait_match.trait_name.with_args(names));
                 info.impl_slot_args = Vec::new();
-                info.bound_trait_args = asked;
+                info.trait_args = asked;
                 method_info = Some(info);
             } else {
                 matched_impl_decl = trait_match.impl_struct_fq.head().def();
@@ -706,14 +705,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility,
             defaults_module,
             impl_type_bindings,
-<<<<<<< HEAD
             inferred_impl_slots,
-            trait_args,
-||||||| 6a354679246
-=======
             impl_slot_args,
-            bound_trait_args,
->>>>>>> origin/main
+            trait_args,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -1151,8 +1145,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The block's slots name the instance, so the receiver, a projection
         // included, waits on no substitution to pick one.
         let keyed_by_slots = !impl_slot_args.is_empty();
+        let trait_args: Vec<TypeId> = trait_args
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
 
-        let keyed_trait_args = self.trait_args_keying(dispatched_impl_block, &trait_args);
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
             // A method from a concrete instantiation impl (`impl List<u8>`) is a
@@ -1182,7 +1179,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if keyed_by_slots {
             Some(MonomorphInfo {
                 generic_name: MethodName::format_local(&base_struct_name, None, method_name),
-                impl_type_args: impl_slot_args,
+                impl_type_args: impl_slot_args
+                    .iter()
+                    .map(|&arg| self.apply_infer_holes(arg))
+                    .collect(),
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
@@ -1195,7 +1195,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Keyed by its parameters in order, where a trait argument settles
             // one the receiver does not.
             let impl_type_args = match dispatched_impl_block {
-                Some(block) if !keyed_trait_args.is_empty() => {
+                Some(block)
+                    if self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .impl_trait_sets_params(block) =>
+                {
                     let trait_env = Arc::clone(&self.tysys.trait_env);
                     let blanket = trait_env
                         .blanket_of_block(block)
@@ -1204,7 +1210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &trait_env,
                         blanket,
                         base_type_id,
-                        &keyed_trait_args,
+                        &trait_args,
                         &mut self.tysys.type_table.borrow_mut(),
                     )
                     .expect("the receiver and the trait arguments settle every blanket slot")
@@ -1217,16 +1223,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_type_args: method_type_args.clone(),
                 is_blanket: true,
             })
-        } else if receiver_type_args.is_some()
-            || !method_type_args.is_empty()
-            || !keyed_trait_args.is_empty()
-        {
+        } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
             let generic_name = MethodName::format_local(&base_struct_name, None, method_name);
-            let mut impl_type_args = receiver_type_args.unwrap_or_default();
-            impl_type_args.extend(keyed_trait_args);
             Some(MonomorphInfo {
                 generic_name,
-                impl_type_args,
+                impl_type_args: receiver_type_args.unwrap_or_default(),
                 method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
@@ -1257,18 +1258,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
-<<<<<<< HEAD
         // A receiver that is a type parameter is dispatched again at each
-        // instance, and the trait arguments key the block found there where
-        // its parameters come from them.
-        method_info.trait_type_args = trait_args
-            .iter()
-            .map(|&arg| self.apply_infer_holes(arg))
-            .collect();
-||||||| 6a354679246
-=======
-        method_info.trait_type_args = bound_trait_args;
->>>>>>> origin/main
+        // instance, and the trait arguments set the slots of the block found
+        // there that only they name.
+        method_info.trait_type_args = trait_args;
 
         let template = match (dispatched_method_def, dispatched_impl_block) {
             (Some(def), Some(block)) => Some(TemplateId::in_block(def, block)),

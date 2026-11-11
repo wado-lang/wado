@@ -229,31 +229,6 @@ fn blanket_template_name(
     .to_mangled_name()
 }
 
-/// The key of the instance a call through a bound reaches at `receiver`, where
-/// `template`'s block, written for a declared target, keys its instances by
-/// its trait arguments too ([`TypeTable::impl_key_trait_args`]): the
-/// receiver's arguments, then the bound's trait arguments `info` carries. A
-/// value blanket keys its own ([`blanket_impl_args`]).
-fn trait_keyed_impl_args(
-    template: Option<&TemplateId>,
-    receiver: TypeId,
-    info: &LocalMethodName,
-    trait_env: &TraitEnv,
-    type_table: &TypeTable,
-) -> Option<Vec<TypeId>> {
-    let block = template.and_then(TemplateId::block)?;
-    if type_table.impl_key_trait_args(block).is_empty()
-        || trait_env.blanket_of_block(block).is_some()
-    {
-        return None;
-    }
-    let mut args = type_table
-        .generic_type_args(type_table.peel_refs(receiver))
-        .unwrap_or_default();
-    args.extend_from_slice(&info.trait_type_args);
-    Some(args)
-}
-
 /// The call `method` of `trait_name` names through the universal `&T`
 /// blanket, before its pointee keys it.
 fn ref_blanket_generic(
@@ -1220,15 +1195,15 @@ impl Monomorphizer {
             .method_info
             .as_ref()
             .is_some_and(|info| info.receiver.is_declared_type());
-        // A declared target's key is its positions, then the trait arguments
-        // that key it, read structurally: a slot nested in either (`T` in
-        // `Pair<List<T>, i32>`, `U` in `Put<List<U>>`) is no key position.
+        // A declared target's key is its positions, read structurally: a slot
+        // nested in one (`T` in `Pair<List<T>, i32>`) is no key position. A
+        // block whose trait reference sets a slot is keyed by every slot.
         if one_arg_per_param
             && !generic.impl_type_params.is_empty()
             && let Some(block) = generic.impl_origin
+            && !type_table.impl_trait_sets_params(block)
         {
-            let positions = &key.impl_type_args[..type_table.impl_key_len(block)];
-            substitution = type_table.impl_slots(block, positions);
+            substitution = type_table.impl_slots(block, &key.impl_type_args);
         }
         let non_pack_impl_params_count = generic
             .impl_type_params
@@ -1655,7 +1630,6 @@ impl Monomorphizer {
             return;
         }
 
-<<<<<<< HEAD
         // What the call recorded about its instance is written in this
         // template's frame, whether or not the callee's name mentions it.
         if let TirExprKind::Call { func, .. } = &mut expr.kind
@@ -1670,10 +1644,7 @@ impl Monomorphizer {
             }
         }
 
-||||||| 6a354679246
-=======
         let (returns, span) = (expr.type_id, expr.span);
->>>>>>> origin/main
         match &mut expr.kind {
             TirExprKind::VariadicTupleComprehension { .. } => unreachable!("expanded above"),
             TirExprKind::Call {
@@ -1759,44 +1730,14 @@ impl Monomorphizer {
                             info.with_type_args(&impl_names, &method_names)
                         }
                     };
-<<<<<<< HEAD
+                    new_info.trait_type_args =
+                        self.trait_args_at_instance(&info, substitution, type_table);
                     // A type-param receiver's name takes its method type args
                     // substituted too (R → FixedReader in a default trait method
                     // body calling Self::read::<R>(r)):
                     // with_substituted_struct_name replaces only the struct name.
                     if info.is_type_param_receiver && !sub_method_type_args.is_empty() {
                         new_info.method_type_args = sub_method_type_args
-||||||| 6a354679246
-                    // For type param receivers, also update method type args if they
-                    // contain type params that need substitution (e.g., R → FixedReader
-                    // in a default trait method body calling Self::read::<R>(r)).
-                    // The with_substituted_struct_name above only replaces the struct
-                    // name, not the method type args.
-                    if info.is_type_param_receiver
-                        && let FunctionRef {
-                            monomorph_info: Some(mi),
-                            ..
-                        } = &**call_func
-                    {
-                        let substituted_method_args: Vec<TypeId> = mi
-                            .method_type_args
-=======
-                    new_info.trait_type_args =
-                        self.trait_args_at_instance(&info, substitution, type_table);
-                    // For type param receivers, also update method type args if they
-                    // contain type params that need substitution (e.g., R → FixedReader
-                    // in a default trait method body calling Self::read::<R>(r)).
-                    // The with_substituted_struct_name above only replaces the struct
-                    // name, not the method type args.
-                    if info.is_type_param_receiver
-                        && let FunctionRef {
-                            monomorph_info: Some(mi),
-                            ..
-                        } = &**call_func
-                    {
-                        let substituted_method_args: Vec<TypeId> = mi
-                            .method_type_args
->>>>>>> origin/main
                             .iter()
                             .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
@@ -1884,18 +1825,9 @@ impl Monomorphizer {
                                 &resolved_module,
                                 type_table,
                             );
-                            let impl_type_arg_tids = trait_keyed_impl_args(
-                                template.as_ref(),
-                                concrete_type_id,
-                                &info,
-                                &self.functions.trait_env,
-                                type_table,
-                            )
-                            .unwrap_or_else(|| {
-                                type_table
-                                    .generic_type_args(concrete_type_id)
-                                    .unwrap_or_default()
-                            });
+                            let impl_type_arg_tids = type_table
+                                .generic_type_args(concrete_type_id)
+                                .unwrap_or_default();
                             // A generic-instance receiver
                             // (`List<i32>^Default::default`) must queue its impl
                             // instantiation even with no method type args of its
@@ -3185,17 +3117,6 @@ impl Monomorphizer {
         // instead means the type has no impl of its own, so nothing else queues
         // that instance.
         let served_by_receiver_scan = receiver_has_type_args && blanket_module.is_none();
-<<<<<<< HEAD
-        let monomorph_info = if let Some(impl_type_args) = trait_keyed_impl_args(
-            template.as_ref(),
-            receiver_type_id,
-            &new_info,
-            &self.functions.trait_env,
-            type_table,
-        ) {
-||||||| 6a354679246
-        let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
-=======
         let trait_slots = template.as_ref().and_then(|template| {
             self.trait_bound_slots(
                 template,
@@ -3205,7 +3126,6 @@ impl Monomorphizer {
             )
         });
         let monomorph_info = if let Some(impl_type_args) = trait_slots {
->>>>>>> origin/main
             Some(MonomorphInfo {
                 generic_name: old_func_name,
                 impl_type_args,

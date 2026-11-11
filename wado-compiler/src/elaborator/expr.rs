@@ -13,7 +13,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
     EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext,
-    TirLiteralPattern, TirStruct, TypeId,
+    TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -5492,9 +5492,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => from.clone(),
         };
         // A generic block's function is instantiated at the target's arguments,
-        // then at the source the trait reference names where only it settles a
-        // slot (`S` in `impl<S> From<S> for Failure`).
-        let mut impl_type_args = impl_def
+        // and at every slot where the source the trait reference names settles
+        // one only it names (`S` in `impl<S> From<S> for Failure`).
+        let positions = impl_def
             .filter(|def| !self.tysys.trait_env.impl_headers[def].is_concrete())
             .and_then(|_| {
                 self.tysys
@@ -5503,7 +5503,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .nominal_type_args(target_type)
             })
             .unwrap_or_default();
-        impl_type_args.extend(self.trait_args_keying(impl_def, &[from_type]));
+        let impl_type_args = match impl_def {
+            Some(def) if self.tysys.type_table.borrow().impl_trait_sets_params(def) => {
+                let mut asked = TypeArgMap::default();
+                {
+                    let tt = self.tysys.type_table.borrow();
+                    tt.bind_each_into(tt.impl_trait_args(def), &[from_type], &mut asked);
+                }
+                self.impl_instance_args(def, positions, &asked)
+            }
+            _ => positions,
+        };
         let type_param_receiver = impl_def.is_none();
         // Through a bound the trait's own method is the callee, whose edges
         // keep every impl live until monomorphization picks one.

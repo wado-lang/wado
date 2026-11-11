@@ -3465,24 +3465,19 @@ pub(super) struct MethodInfo {
     /// against them. Empty where the block declares none, or where the lookup
     /// answers from no block at all.
     pub(super) impl_type_bindings: Vec<DefaultTypeBinding>,
-<<<<<<< HEAD
-    /// The block's parameters only its trait reference names (`T` in
-    /// `impl<T> Tr<T> for X`), each a variable the call infers.
+    /// The block's parameters only its trait reference names that the call's
+    /// trait arguments left open (`T` in `impl<T> Tr<T> for X`), each a
+    /// variable the call infers.
     pub(super) inferred_impl_slots: TypeArgMap,
-    /// The arguments of the trait reference the call reaches the method
-    /// through: the matched block's, or the bound's it dispatches on.
-    pub(super) trait_args: Vec<TypeId>,
-||||||| 6a354679246
-=======
     /// Every slot of the matched block in slot order, where its trait reference
     /// binds one the receiver does not show (`G` in `impl<G: Back> Shown<G> for
-    /// i32`): the instance keys on these. Empty where the receiver shows all.
+    /// i32`), an inferred one as its variable: the instance keys on these.
+    /// Empty where the receiver shows all.
     pub(super) impl_slot_args: Vec<TypeId>,
-    /// The arguments a bound names for the trait it dispatches through, which
-    /// set the slots of the impl answering it at an instance. Empty where the
-    /// call answers from a block.
-    pub(super) bound_trait_args: Vec<TypeId>,
->>>>>>> origin/main
+    /// The arguments of the trait reference the call reaches the method
+    /// through: the matched block's, or the bound's it dispatches on, which
+    /// set the slots of the impl answering it at an instance.
+    pub(super) trait_args: Vec<TypeId>,
 }
 
 impl MethodInfo {
@@ -3509,14 +3504,9 @@ impl MethodInfo {
             inherent_visibility: None,
             defaults_module: None,
             impl_type_bindings: Vec::new(),
-<<<<<<< HEAD
             inferred_impl_slots: TypeArgMap::default(),
-            trait_args: Vec::new(),
-||||||| 6a354679246
-=======
             impl_slot_args: Vec::new(),
-            bound_trait_args: Vec::new(),
->>>>>>> origin/main
+            trait_args: Vec::new(),
         }
     }
 }

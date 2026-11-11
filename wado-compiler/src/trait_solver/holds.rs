@@ -310,14 +310,8 @@ impl Query<'_> {
                 if subject.is_some() && program.not_inherited.contains(&id) {
                     return None;
                 }
-<<<<<<< HEAD
                 let asked = program.args_at(trait_, args, ty);
                 let answer = self.impl_answers(id, def, ty, &asked)?;
-||||||| 6a354679246
-                let answer = self.impl_answers(id, def, ty)?;
-=======
-                let answer = self.impl_answers(id, def, ty, args)?;
->>>>>>> origin/main
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
                 if !answers_args(program, def, ty, subject, &answer.trait_args, args) {
@@ -345,33 +339,17 @@ impl Query<'_> {
             })
     }
 
-<<<<<<< HEAD
-    /// Whether one impl applies to `ty`: its target matches, and every bound
-    /// holds of what the match bound.
-    /// `asked` is what the question writes at each of the trait's parameters,
-    /// `None` where it leaves one open.
-    fn impl_answers(
-        &mut self,
-        id: ImplId,
-        def: &ImplDef,
-        ty: &SolverType,
-        asked: &[Option<SolverType>],
-||||||| 6a354679246
-    /// Whether one impl applies to `ty`: its target matches, and every bound
-    /// holds of what the match bound.
-    fn impl_answers(&mut self, id: ImplId, def: &ImplDef, ty: &SolverType) -> Option<Answer> {
-=======
-    /// Whether one impl applies to `ty` asked at the trait arguments `args`:
-    /// its target and its trait reference match, and every bound holds of what
-    /// the match bound. A parameter only the trait reference names, as `G` in
+    /// Whether one impl applies to `ty`: its target and its trait reference
+    /// match, and every bound holds of what the match bound. `asked` is what
+    /// the question writes at each of the trait's parameters, `None` where it
+    /// leaves one open. A parameter only the trait reference names, as `G` in
     /// `impl<G: Back> Shown<G> for G::T`, is bound by the arguments asked.
     fn impl_answers(
         &mut self,
         id: ImplId,
         def: &ImplDef,
         ty: &SolverType,
-        args: &[SolverType],
->>>>>>> origin/main
+        asked: &[Option<SolverType>],
     ) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
@@ -385,7 +363,6 @@ impl Query<'_> {
         if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
             return None;
         }
-<<<<<<< HEAD
         // A parameter the trait reference alone determines, `impl<U> Tr<U>
         // for X`, is what the bound asks at its position.
         let offered = program.per_param(def.trait_, &def.trait_args);
@@ -409,32 +386,9 @@ impl Query<'_> {
                 }
             }
         }
-        if self.projections_refuted(&deferred, &bindings) {
-||||||| 6a354679246
-        if !match_target(&def.target, ty, &mut bindings, &mut deferred)
-            || self.projections_refuted(&deferred, &bindings)
-        {
-=======
-        // The arguments asked bind together or not at all: one the impl's own
-        // refutes would leave the rest binding an impl that answers nothing,
-        // and it would outrank one that does. Whether the impl answers at them
-        // is [`answers_args`]'s to decide.
-        let written = program.per_param(def.trait_, &def.trait_args);
-        let asked = program.per_param(def.trait_, args);
-        let mut trial = (bindings.clone(), deferred.clone());
-        let all_match = written.iter().zip(&asked).all(|pair| match pair {
-            (Some(written), Some(asked)) => {
-                match_target(written, asked, &mut trial.0, &mut trial.1)
-            }
-            _ => true,
-        });
-        if all_match {
-            (bindings, deferred) = trial;
-        }
         if !self.bound_through_projections(&mut deferred, &mut bindings)
             || self.projections_refuted(&deferred, &bindings)
         {
->>>>>>> origin/main
             return None;
         }
         if reached_by(program, implemented, ty, def.origin.yields_to())
@@ -954,12 +908,7 @@ pub(super) fn impl_applies(
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
-<<<<<<< HEAD
     asked: &[Option<SolverType>],
-||||||| 6a354679246
-=======
-    args: &[SolverType],
->>>>>>> origin/main
 ) -> Option<Vec<SolverType>> {
     Some(
         Query {
@@ -969,13 +918,7 @@ pub(super) fn impl_applies(
             member_next: false,
             at_itself: Some(ty.clone()),
         }
-<<<<<<< HEAD
         .impl_answers(id, def, ty, asked)?
-||||||| 6a354679246
-        .impl_answers(id, def, ty)?
-=======
-        .impl_answers(id, def, ty, args)?
->>>>>>> origin/main
         .trait_args,
     )
 }

@@ -6504,16 +6504,13 @@ struct ImplTarget {
     /// The arguments of the head it names past any reference, a binder as its
     /// own `TypeParam`.
     args: Vec<TypeId>,
-    /// The trait reference's arguments where they name a slot neither `args`
-    /// nor a projection determines (`T` in `impl<T> Tr<T> for X`), so an
-    /// instance is keyed by them too; empty otherwise.
-    trait_args: Vec<TypeId>,
-    /// The slots only `trait_args` determine, each the call's to infer.
-    trait_arg_slots: Vec<TypeParamId>,
     projections: Vec<ImplProjection>,
     /// The arguments the block's trait reference writes, empty for an
     /// inherent block.
     trait_args: Vec<TypeId>,
+    /// The slots only `trait_args` determine (`G` in `impl<G: Back> Shown<G>
+    /// for i32`), each the call's to bind or infer.
+    trait_arg_slots: Vec<TypeParamId>,
 }
 
 /// Slots of an impl block that a bound determines rather than its target:
@@ -6550,34 +6547,30 @@ impl TargetBinding {
 
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
-<<<<<<< HEAD
-    /// the head it names, with the slots its bounds determine, and the trait
-    /// reference's `trait_args`.
-||||||| 6a354679246
-    /// the head it names, with the slots its bounds determine.
-=======
     /// the head it names, with the slots its bounds determine and the
     /// arguments its trait reference writes.
->>>>>>> origin/main
     pub fn record_impl_target(
         &mut self,
         def: DefId,
         whole: TypeId,
         args: Vec<TypeId>,
-        trait_args: Vec<TypeId>,
         projections: Vec<ImplProjection>,
         trait_args: Vec<TypeId>,
     ) {
         // The whole target, since a value blanket's receiver is a parameter no
-        // head argument names.
-        let determined: IndexSet<TypeParamId> = std::iter::once(&whole)
+        // head argument names; a projection target determines none, its base
+        // being what the trait reference binds.
+        let target = (!matches!(self.get(whole), ResolvedType::AssocTypeProjection { .. }))
+            .then_some(whole);
+        let determined: IndexSet<TypeParamId> = target
+            .iter()
             .chain(projections.iter().map(|p| &p.pattern))
             .flat_map(|&ty| self.type_params_in(ty))
             .collect();
         let trait_arg_slots: Vec<TypeParamId> = trait_args
             .iter()
             .flat_map(|&ty| self.type_params_in(ty))
-            .filter(|slot| !determined.contains(slot))
+            .filter(|slot| slot.owner == def && !determined.contains(slot))
             .collect::<IndexSet<_>>()
             .into_iter()
             .collect();
@@ -6586,58 +6579,32 @@ impl TypeTable {
             ImplTarget {
                 whole,
                 args,
-                trait_args: if trait_arg_slots.is_empty() {
-                    Vec::new()
-                } else {
-                    trait_args
-                },
-                trait_arg_slots,
                 projections,
                 trait_args,
+                trait_arg_slots,
             },
         );
     }
 
-<<<<<<< HEAD
-    /// The slots of impl block `def` only its trait arguments determine
-    /// ([`Self::impl_key_trait_args`]).
+    /// The slots of impl block `def` only its trait arguments determine: `G`
+    /// in `impl<G: Back> Shown<G> for i32`, or one in a projection target,
+    /// `impl<G: Back> Shown<G> for G::T`.
     pub fn impl_trait_arg_slots(&self, def: DefId) -> &[TypeParamId] {
         &self.impl_target(def).trait_arg_slots
     }
 
-    /// How many arguments key an instance of impl block `def`: its target's,
-    /// then its trait reference's where those determine a slot.
-    pub fn impl_key_len(&self, def: DefId) -> usize {
-        let target = self.impl_target(def);
-        target.args.len() + target.trait_args.len()
+    /// Whether impl block `def` has a slot only its trait arguments determine
+    /// ([`Self::impl_trait_arg_slots`]). Its instances differ by them alone, so
+    /// one is keyed by every slot in slot order rather than by the receiver's
+    /// arguments.
+    pub fn impl_trait_sets_params(&self, def: DefId) -> bool {
+        !self.impl_trait_arg_slots(def).is_empty()
     }
 
-    /// The trait arguments that key impl block `def`'s instances, as written;
-    /// empty where its target alone does.
-    pub fn impl_key_trait_args(&self, def: DefId) -> &[TypeId] {
+    /// The arguments impl block `def`'s trait reference writes, empty for an
+    /// inherent block.
+    pub fn impl_trait_args(&self, def: DefId) -> &[TypeId] {
         &self.impl_target(def).trait_args
-||||||| 6a354679246
-=======
-    /// Whether impl block `def`'s trait reference names a parameter its target
-    /// does not: `G` in `impl<G: Back> Shown<G> for i32`, or any in a
-    /// projection target, `impl<G: Back> Shown<G> for G::T`. Only a call's
-    /// trait arguments set one, so its instances differ by them alone.
-    pub fn impl_trait_sets_params(&self, def: DefId) -> bool {
-        let target = self.impl_target(def);
-        let in_target = if matches!(
-            self.get(target.whole),
-            ResolvedType::AssocTypeProjection { .. }
-        ) {
-            IndexSet::default()
-        } else {
-            self.type_params_in(target.whole)
-        };
-        target.trait_args.iter().any(|&arg| {
-            self.type_params_in(arg)
-                .iter()
-                .any(|param| param.owner == def && !in_target.contains(param))
-        })
->>>>>>> origin/main
     }
 
     /// Impl block `def`'s target head at `head_args`; `None` where the target
@@ -6677,28 +6644,13 @@ impl TypeTable {
         &self.impl_target(def).args
     }
 
-    /// The slots each of impl block `def`'s key positions holds, at any depth,
-    /// filled from `key`: `T` in `Pair<List<T>, i32>` from
-    /// `Pair<List<String>, i32>`, then from the trait arguments that key it
-    /// ([`Self::impl_key_len`]), then the slots its bounds project from those.
-    /// The target is recorded as its module's decl pass reaches the block, so
-    /// an earlier module's bound check can ask.
-    pub fn impl_slots(&mut self, def: DefId, key: &[TypeId]) -> TypeArgMap {
+    /// The slots each of impl block `def`'s target positions holds, at any
+    /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
+    /// from `Pair<List<String>, i32>`, then the slots its bounds project from
+    /// those. The target is recorded as its module's decl pass reaches the
+    /// block, so an earlier module's bound check can ask.
+    pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> TypeArgMap {
         let mut slots = IndexMap::default();
-<<<<<<< HEAD
-        let target = self.impl_target(def);
-        let positions: Vec<TypeId> = target
-            .args
-            .iter()
-            .chain(&target.trait_args)
-            .copied()
-            .collect();
-        for (&declared, &concrete) in positions.iter().zip(key) {
-            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
-||||||| 6a354679246
-        for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
-            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
-=======
         self.bind_each_into(self.impl_target_args(def), receiver_args, &mut slots);
         self.project_impl_slots(def, &mut slots);
         slots
@@ -6709,7 +6661,6 @@ impl TypeTable {
     pub fn bind_each_into(&self, written: &[TypeId], concrete: &[TypeId], slots: &mut TypeArgMap) {
         for (&written, &concrete) in written.iter().zip(concrete) {
             if let Some(bound) = self.bind_type_params(&[written], &[concrete]) {
->>>>>>> origin/main
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
                 }

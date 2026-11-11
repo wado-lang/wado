@@ -814,7 +814,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             impl_def,
             target,
             target_type_args,
-            trait_type_args.clone(),
             projections,
             trait_type_args.clone(),
         );

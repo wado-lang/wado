@@ -690,32 +690,12 @@ effect binder declares nothing, so `fn() with E` and `fn() with F` are one type
 there. What it admits is a bound
 naming one binder's function type answered by an impl naming another's.
 
-<<<<<<< HEAD
-||||||| 6a354679246
-### A parameter only the trait's arguments name is never bound
-
-The specification determines an impl's parameters from the receiver and the
-trait's arguments, but only the target binds one. `impl<T> Tr<T> for X` answers
-no `X: Tr<i64>`: the solver leaves `T` unbound, so the written argument never
-matches, and monomorphization names no instance for it either
-(`impl_param_bound_by_trait_arg.wado`). A program relying on it is rejected,
-never miscompiled.
-
-=======
-### An operator never binds a parameter only the trait's arguments name
-
-A call names the trait's arguments, written out (`Shown::<Host>::shown(&v)`)
-or through a bound, and they bind a parameter the target does not name. An
-operator names none: under `impl<R: Text> Eq<R> for Tag`, `t == "7"` is refused
-with `expected 'R'`, the parameter left in the signature
-(`operator_impl_param_from_trait_reference.wado`). A program relying on it is
-rejected, never miscompiled.
+### A variadic impl takes no parameter only the trait's arguments name
 
 An impl on `[..T]` declaring such a parameter is refused where it is written
 (`variadic_impl_target_extra_param.wado`): its instances key on the tuple's
 elements alone, which leave no place for one.
 
->>>>>>> origin/main
 ### A projection off a trait parameter keeps the impl's method parameter
 
 An impl's method takes its type parameters from the trait, read in the impl's
@@ -758,9 +738,9 @@ order.
 Every form binds a parameter only the trait's arguments determine, and owes its
 bounds at the call (`impl_param_from_trait_arg_*.wado`). The forms reach that
 through shared steps (`slot_instance_args`, `impl_instance_args`), not yet
-through one resolver, and the instance keys still differ by form: a head impl's
-is its target's positions followed by its keyed trait arguments, and a value
-blanket's is its parameters in order.
+through one resolver. An instance is keyed by every slot in slot order where the
+trait reference sets one and for a value blanket, and by the target's positions
+otherwise.
 
 ### Specificity is refused, and now has a named cost
 
