@@ -1,5 +1,7 @@
 #![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/LeftRecursion/JavaExpressions_1.g4"])]
 
+use { HashMap, HashSeed } from "core:collections";
+
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -981,148 +983,152 @@ fn emit_lexer_token(
 
 internal global FOLLOW_MAX_DEPTH: i32 = 4;
 
-internal global FOLLOW_SLOT_BITS: i64 = 8;
+internal global FOLLOW_SLOT_BITS: i64 = 10;
 
-internal global FOLLOW_ID_MASK: i64 = 127;
+internal global FOLLOW_ID_MASK: i64 = 1023;
 
-internal global FOLLOW_OPENS_BIT: i64 = 128;
+internal global FOLLOW_LINK_ID: i64 = FOLLOW_ID_MASK;
 
-internal global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_CONT_BITS: i64 = 60;
 
-internal global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
-
-internal global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
-
-internal global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
-
-internal global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
-
-internal fn follow_open_mark(cont: i64) -> i64 {
-    return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
+internal struct FollowTables {
+    internal stride: i32,
+    internal sets: List<i32>,
+    internal starts: List<i32>,
+    internal readings: List<i32>,
 }
 
-internal fn follow_open_set(mask: i64) -> i64 {
-    return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
+internal fn follow_push(site: i64, cont: i64) -> i64 {
+    return site | follow_behind(cont, FOLLOW_SLOT_BITS) << FOLLOW_SLOT_BITS;
 }
 
-internal fn follow_open_join(a: i64, b: i64) -> i64 {
-    if a == 0 || a == b {
-        return b;
+internal struct FollowLinks {
+    conts: List<i64>,
+    ids: HashMap<i64, i32>,
+}
+
+global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
+
+global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+
+internal fn follow_links_enter() -> FollowLinks {
+    let outer = FOLLOW_LINKS;
+    FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+    return outer;
+}
+
+internal fn follow_links_leave(outer: FollowLinks) {
+    FOLLOW_LINKS = outer;
+}
+
+fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
+    let room = FOLLOW_CONT_BITS - prefix_bits;
+    if cont >> room == 0 {
+        return cont;
     }
-    if b == 0 {
-        return a;
+    assert !follow_is_link(cont), "a continuation starts with a site, never a link";
+    let link = FOLLOW_LINK_ID | follow_link_id(cont) as i64 << FOLLOW_SLOT_BITS;
+    assert link >> room == 0, "a link must fit behind the prefix";
+    return link;
+}
+
+fn follow_link_id(cont: i64) -> i32 {
+    if let Some(id) = FOLLOW_LINKS.ids.get(cont) {
+        return id;
     }
-    return FOLLOW_OPEN_READING;
+    let id = FOLLOW_LINKS.conts.len();
+    FOLLOW_LINKS.conts.push(cont);
+    FOLLOW_LINKS.ids[cont] = id;
+    return id;
 }
 
-internal fn follow_open_with(cont: i64, open: i64) -> i64 {
-    return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
+fn follow_is_link(c: i64) -> bool {
+    return c & FOLLOW_ID_MASK == FOLLOW_LINK_ID;
 }
 
-internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
+fn follow_linked(c: i64) -> i64
+    contract follow_is_link(c)
+{
+    return FOLLOW_LINKS.conts[(c >> FOLLOW_SLOT_BITS) as i32];
 }
 
-internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
-    return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
+internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
+    return follow_reads(tokens, pos, cont, 0, FOLLOW_MAX_DEPTH, false, tables, eof_kind);
 }
 
-internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
-    return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
+internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
+    return follow_reads(tokens, pos, cont, 0, 1, true, tables, eof_kind);
 }
 
-internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
-}
-
-internal fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
-}
-
-internal fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
-        return true;
-    }
-    let kind = follow_kind_at(tokens, pos, eof_kind);
-    return follow_open_has(cont, kind, sets, true);
-}
-
-fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
-    let open = cont & FOLLOW_OPEN_FIELD;
-    if open == 0 {
+fn follow_reads(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    depth: i32,
+    budget: i32,
+    unknown_reads: bool,
+    tables: &FollowTables,
+    eof_kind: i32,
+) -> bool {
+    let mut c = cont;
+    loop {
+        let site = c & FOLLOW_ID_MASK;
+        if site == 0 {
+            return depth > 0 || unknown_reads;
+        }
+        if site == FOLLOW_LINK_ID {
+            c = follow_linked(c);
+            continue;
+        }
+        let rest = c >> FOLLOW_SLOT_BITS;
+        let readings = &tables.readings;
+        let mut at = tables.starts[site as i32 - 1];
+        let end = tables.starts[site as i32];
+        let heads = readings[at];
+        if !follow_set_has(tables, heads >> 1, follow_kind_at(tokens, pos + depth, eof_kind)) {
+            if heads & 1 == 0 {
+                return false;
+            }
+            c = rest;
+            continue;
+        }
+        if depth + 1 >= budget {
+            return true;
+        }
+        at += 1;
+        while at < end {
+            let len = readings[at] >> 1;
+            let mut matched = 0;
+            while matched < len
+                && depth + matched < budget
+                && follow_set_has(tables, readings[at + 1 + matched], follow_kind_at(
+                    tokens,
+                    pos + depth + matched,
+                    eof_kind,
+                )) {
+                matched += 1;
+            }
+            if depth + matched >= budget {
+                return true;
+            }
+            if matched == len
+                && readings[at] & 1 != 0
+                && follow_reads(tokens, pos, rest, depth + len, budget, unknown_reads, tables, eof_kind) {
+                return true;
+            }
+            at += 1 + len;
+        }
         return false;
     }
-    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
 }
 
 fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
     return if pos < tokens.len() { tokens[pos] } else { eof_kind };
 }
 
-fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
-    let set = &sets[(id - 1) as i32];
-    return set.is_empty() || kind_set_has(set, kind);
-}
-
-fn follow_heads_have(
-    tokens: &Array<i32>,
-    pos: i32,
-    cont: i64,
-    sets: &List<List<i32>>,
-    eof_kind: i32,
-    unknown_has: bool,
-) -> bool {
-    if cont == 0 {
-        return unknown_has;
-    }
-    let kind = follow_kind_at(tokens, pos, eof_kind);
-    if follow_open_has(cont, kind, sets, unknown_has) {
-        return true;
-    }
-    let mut c = cont & FOLLOW_CONT_MASK;
-    let mut head = true;
-    while c & FOLLOW_ID_MASK != 0 {
-        if c & FOLLOW_OPENS_BIT != 0 {
-            head = true;
-        }
-        if head {
-            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
-                return true;
-            }
-            head = false;
-        }
-        c >>= FOLLOW_SLOT_BITS;
-    }
-    return false;
-}
-
-internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont & FOLLOW_CONT_MASK;
-    let mut depth = 0;
-    let mut alive = true;
-    let mut constrained = false;
-    while c & FOLLOW_ID_MASK != 0 {
-        if c & FOLLOW_OPENS_BIT != 0 {
-            if alive && constrained {
-                return true;
-            }
-            depth = 0;
-            alive = true;
-            constrained = false;
-        }
-        if depth < FOLLOW_MAX_DEPTH {
-            constrained = true;
-            if alive {
-                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
-            }
-            depth += 1;
-        }
-        c >>= FOLLOW_SLOT_BITS;
-    }
-    return alive && constrained;
+fn follow_set_has(tables: &FollowTables, set: i32, kind: i32) -> bool {
+    let word = kind >> 5;
+    return word < tables.stride && tables.sets[set * tables.stride + word] >> (kind & 31) & 1 != 0;
 }
 internal struct ScanMemo<G> {
     heads: Array<i32>,
@@ -4379,7 +4385,7 @@ fn scan_expression_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(17);
-    pos = scan_e(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
+    pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_1, follow), 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
     while atn_decide_0(atn, tokens, pos, 0) == 0 {
@@ -4388,7 +4394,7 @@ fn scan_expression_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
             sg_0: {
                 pos += 1;
                 atn.stack.push(25);
-                pos = scan_e(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
+                pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_1, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
@@ -4458,7 +4464,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
                         if pos < tokens.len() && _kind_set_1(tokens[pos]) {
                             let sp = pos;
                             atn.stack.push(60);
-                            pos = scan_expression_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_2, 8, follow));
+                            pos = scan_expression_list(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_2, follow));
                             atn.stack.pop();
                             if pos < 0 { pos = sp; }
                         }
@@ -4472,7 +4478,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
                             sg_2: {
                                 pos += 1;
                                 atn.stack.push(68);
-                                pos = scan_e(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 8, follow), 0);
+                                pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_5, follow), 0);
                                 atn.stack.pop();
                                 if pos < 0 { break sg_2; }
                                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_2; }
@@ -4487,7 +4493,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
                                 sg_3: {
                                     pos += 1;
                                     atn.stack.push(68);
-                                    pos = scan_e(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 8, follow), 0);
+                                    pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_5, follow), 0);
                                     atn.stack.pop();
                                     if pos < 0 { break sg_3; }
                                     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_3; }
@@ -4562,7 +4568,7 @@ fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
     if pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
         atn.stack.push(113);
-        pos = scan_expression_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_2, 8, follow));
+        pos = scan_expression_list(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_2, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -4584,7 +4590,7 @@ fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
     if pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
         atn.stack.push(127);
-        pos = scan_expression_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_2, 8, follow));
+        pos = scan_expression_list(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_2, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -4598,7 +4604,7 @@ fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mu
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
     atn.stack.push(133);
-    pos = scan_e(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 8, follow), 0);
+    pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_8, follow), 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
@@ -4620,7 +4626,7 @@ fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mu
     if pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
         atn.stack.push(145);
-        pos = scan_expression_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_2, 8, follow));
+        pos = scan_expression_list(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_2, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -4755,7 +4761,7 @@ fn scan_e_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mu
     if pos >= tokens.len() || tokens[pos] != TK_LIT_QUESTION { return -1; }
     pos += 1;
     atn.stack.push(205);
-    pos = scan_e(tokens, pos, atn, memo, FOLLOW_MASK_8, 0);
+    pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_9, follow), 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
@@ -4892,7 +4898,7 @@ fn scan_typespec(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &m
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     p.atn_ret_pending = 11;
-    let e = _parse_e(p, follow_then(FOLLOW_MASK_0, 8, follow));
+    let e = _parse_e(p, follow_push(FOLLOW_SITE_0, follow));
     let eof = p.expect(TK_EOF, &EMPTY_SYNC, true);
     if !p.speculating {
         p.emit(`${p.rule_string_tree()}\n`);
@@ -4918,7 +4924,7 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_expression_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 1;
     p.atn_ret_pending = 17;
-    _parse_e(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+    _parse_e(p, follow_push(FOLLOW_SITE_1, follow));
     loop {
         if p.recovering { break; }
         let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
@@ -4927,7 +4933,7 @@ fn _parse_expression_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_LIT_COMMA, &SYNC_0, false);
         p.site = 2;
         p.atn_ret_pending = 25;
-        _parse_e(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+        _parse_e(p, follow_push(FOLLOW_SITE_1, follow));
     }
     return;
 }
@@ -4951,7 +4957,7 @@ fn _parse_e__inner_alt_0(p: &mut Parser, min_prec: i32, follow: i64 = 0) -> () {
     p.expect(TK_LIT_LPAREN, &SYNC_0, false);
     p.site = 3;
     p.atn_ret_pending = 32;
-    _parse_e(p, follow_then(FOLLOW_MASK_2, 8, follow));
+    _parse_e(p, follow_push(FOLLOW_SITE_2, follow));
     p.expect(TK_LIT_RPAREN, &SYNC_1, true);
     return;
 }
@@ -4961,7 +4967,7 @@ fn scan_e__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &m
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
     atn.stack.push(32);
-    pos = scan_e(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_2, 8, follow), 0);
+    pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_2, follow), 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
@@ -5086,7 +5092,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
             if _kind_set_1(p.peek_kind()) {
                 p.site = 12;
                 p.atn_ret_pending = 60;
-                _parse_expression_list(p, follow_then(FOLLOW_MASK_2, 8, follow));
+                _parse_expression_list(p, follow_push(FOLLOW_SITE_2, follow));
             }
             p.expect(TK_LIT_RPAREN, &SYNC_1, true);
         } else if grp_kind == TK_LIT_LBRACKET {
@@ -5095,7 +5101,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
                 p.expect(TK_LIT_LBRACKET, &SYNC_0, false);
                 p.site = 13;
                 p.atn_ret_pending = 68;
-                _parse_e(p, follow_then(FOLLOW_MASK_5, 8, follow));
+                _parse_e(p, follow_push(FOLLOW_SITE_5, follow));
                 p.expect(TK_LIT_RBRACKET, &SYNC_1, true);
             }
             loop {
@@ -5106,7 +5112,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
                 p.expect(TK_LIT_LBRACKET, &SYNC_0, false);
                 p.site = 13;
                 p.atn_ret_pending = 68;
-                _parse_e(p, follow_then(FOLLOW_MASK_5, 8, follow));
+                _parse_e(p, follow_push(FOLLOW_SITE_5, follow));
                 p.expect(TK_LIT_RBRACKET, &SYNC_1, true);
             }
         } else {
@@ -5167,7 +5173,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 p.atn.stack.push(113);
-                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_2, 8, follow));
+                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_2, follow));
                 p.atn.stack.pop();
                 if pos < 0 { break opt_scan; }
                 opt_scan_pos = pos;
@@ -5175,7 +5181,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             if opt_scan_pos >= 0 {
                 p.site = 8;
                 p.atn_ret_pending = 113;
-                _parse_expression_list(p, follow_then(FOLLOW_MASK_2, 8, follow));
+                _parse_expression_list(p, follow_push(FOLLOW_SITE_2, follow));
             }
             p.expect(TK_LIT_RPAREN, &SYNC_1, true);
             p.b.finish_node(p.last_end());
@@ -5191,7 +5197,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 p.atn.stack.push(127);
-                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_2, 8, follow));
+                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_2, follow));
                 p.atn.stack.pop();
                 if pos < 0 { break opt_scan_2; }
                 opt_scan_pos_2 = pos;
@@ -5199,7 +5205,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             if opt_scan_pos_2 >= 0 {
                 p.site = 10;
                 p.atn_ret_pending = 127;
-                _parse_expression_list(p, follow_then(FOLLOW_MASK_2, 8, follow));
+                _parse_expression_list(p, follow_push(FOLLOW_SITE_2, follow));
             }
             p.expect(TK_LIT_RPAREN, &SYNC_1, true);
             p.b.finish_node(p.last_end());
@@ -5208,7 +5214,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             p.take();
             p.site = 15;
             p.atn_ret_pending = 133;
-            _parse_e(p, follow_then(FOLLOW_MASK_5, 8, follow), 0);
+            _parse_e(p, follow_push(FOLLOW_SITE_8, follow), 0);
             p.expect(TK_LIT_RBRACKET, &SYNC_1, true);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 5 {
@@ -5224,7 +5230,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 p.atn.stack.push(145);
-                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_2, 8, follow));
+                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_2, follow));
                 p.atn.stack.pop();
                 if pos < 0 { break opt_scan_3; }
                 opt_scan_pos_3 = pos;
@@ -5232,7 +5238,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             if opt_scan_pos_3 >= 0 {
                 p.site = 20;
                 p.atn_ret_pending = 145;
-                _parse_expression_list(p, follow_then(FOLLOW_MASK_2, 8, follow));
+                _parse_expression_list(p, follow_push(FOLLOW_SITE_2, follow));
             }
             p.expect(TK_LIT_RPAREN, &SYNC_1, true);
             p.b.finish_node(p.last_end());
@@ -5318,7 +5324,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             p.take();
             p.site = 46;
             p.atn_ret_pending = 205;
-            _parse_e(p, FOLLOW_MASK_8, 0);
+            _parse_e(p, follow_push(FOLLOW_SITE_9, follow), 0);
             p.expect(TK_LIT_COLON, &SYNC_0, false);
             p.site = 47;
             p.atn_ret_pending = 209;
@@ -5464,10 +5470,12 @@ fn _parse_typespec(p: &mut Parser) -> () {
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1;
+    let follow_outer = follow_links_enter();
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
     entry(&mut p);
+    follow_links_leave(follow_outer);
     if p.recovering && p.diagnostics.len() < max_errors {
         p.commit_pending();
     }
@@ -5481,15 +5489,15 @@ pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult
 }
 
 pub fn parse_s<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p, FOLLOW_SITE_10));
 }
 
 pub fn parse_expression_list<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression_list(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression_list(p, FOLLOW_SITE_11));
 }
 
 pub fn parse_e<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p, FOLLOW_SITE_12));
 }
 
 pub fn parse_typespec<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
@@ -5583,12 +5591,21 @@ global SYNC_7: List<i32> = [64];
 global SYNC_8: List<i32> = [1];
 global SYNC_9: List<i32> = [16384];
 
-global FOLLOW_SETS: List<List<i32>> = [[8], [32], [2069315, 2097152], [128], [16384], [0, 256]];
-global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 770;
-global FOLLOW_MASK_2: i64 = 4;
-global FOLLOW_MASK_5: i64 = 5;
-global FOLLOW_MASK_8: i64 = 774;
+global FOLLOW_TABLES: FollowTables = FollowTables {
+    stride: 2,
+    sets: [8, 0, 32, 0, 771, 0, 2065155, 0, 99075, 0, 2069315, 2097152, -18589, 4194047, -29, 4194047, 128, 0, 16384, 0, 8192, 0, -2237, 4194047, 0, 256, -18621, 4194047, -61, 4194047, -1579800, 2097151, -2069, 4194303, -21, 4194303],
+    starts: [0, 3, 17, 20, 28, 31, 44, 50, 56, 62],
+    readings: [0, 3, 0, 3, 1, 5, 1, 2, 7, 1, 3, 4, 8, 1, 5, 6, 7, 16, 3, 8, 18, 3, 9, 8, 9, 10, 5, 11, 18, 3, 9, 24, 5, 12, 2, 7, 12, 3, 4, 8, 12, 5, 13, 14, 0, 8, 0, 0, 0, 0, 16, 8, 8, 15, 16, 16, 30, 8, 15, 16, 16, 17],
+};
+global FOLLOW_SITE_0: i64 = 1;
+global FOLLOW_SITE_1: i64 = 2;
+global FOLLOW_SITE_2: i64 = 3;
+global FOLLOW_SITE_5: i64 = 4;
+global FOLLOW_SITE_8: i64 = 5;
+global FOLLOW_SITE_9: i64 = 6;
+global FOLLOW_SITE_10: i64 = 7;
+global FOLLOW_SITE_11: i64 = 8;
+global FOLLOW_SITE_12: i64 = 9;
 
 global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x04\x00\x13\x00\xea\x00\x36\x00\x00\x00\x02\x00\x04\x00\x06\x00\x12\x00\x1b\x00\x35\x00\x39\x00\x47\x00\x51\x00\x57\x00\x5d\x00\x6e\x00\x7c\x00\x88\x00\x8e\x00\x94\x00\x9a\x00\xa0\x00\xa6\x00\xb0\x00\xd2\x00\xd8\x00\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x08\x09\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x0a\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x15\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x01\x00\x04\x00\x01\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x00\x00\x06\x00\x04\x00\x00\x00\x06\x00\x04\x00\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x01\x00\x04\x00\x01\x00\x00\x00\x06\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x06\x00\x04\x00\x00\x00\x06\x00\x04\x00\x00\x00\x06\x00\x04\x00\x00\x00\x06\x00\x04\x00\x01\x00\x04\x00\x00\x00\x06\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x00\x00\x06\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x09\x00\x0f\x00\x1c\x00\xd9\x00\x0b\x00\x02\x00\x05\x00\x0d\x00\x0e\x00\x0a\x00\x11\x00\x04\x00\x05\x00\x13\x00\x15\x00\x14\x00\x10\x00\x17\x00\x1b\x00\x18\x00\x19\x00\x05\x00\x16\x00\x13\x00\x1e\x00\x24\x00\x26\x00\x28\x00\x2a\x00\x2c\x00\x32\x00\x4a\x00\x52\x00\x58\x00\x5e\x00\x1f\x00\x20\x00\x05\x00\x22\x00\x23\x00\x1d\x00\x25\x00\x1d\x00\x27\x00\x1d\x00\x29\x00\x1d\x00\x2b\x00\x1d\x00\x07\x00\x2e\x00\x2f\x00\x30\x00\x31\x00\x1d\x00\x33\x00\x34\x00\x07\x00\x36\x00\x38\x00\x40\x00\x1d\x00\x39\x00\x3a\x00\x3c\x00\x3b\x00\x3e\x00\x03\x00\x3b\x00\x3f\x00\x37\x00\x42\x00\x48\x00\x43\x00\x44\x00\x05\x00\x46\x00\x47\x00\x41\x00\x40\x00\x49\x00\x37\x00\x4b\x00\x4c\x00\x07\x00\x4e\x00\x4f\x00\x50\x00\x05\x00\x1d\x00\x54\x00\x56\x00\x55\x00\x53\x00\x05\x00\x1d\x00\x5a\x00\x5c\x00\x5b\x00\x59\x00\x05\x00\x1d\x00\x61\x00\x65\x00\x69\x00\x75\x00\x83\x00\x89\x00\x8d\x00\x95\x00\x9b\x00\xa1\x00\xa7\x00\xad\x00\xb1\x00\xb7\x00\xbb\x00\xbf\x00\xc3\x00\xc7\x00\xcb\x00\xd3\x00\x5f\x00\x06\x00\x5e\x00\x62\x00\x63\x00\x64\x00\x60\x00\x66\x00\x67\x00\x68\x00\x60\x00\x6a\x00\x6b\x00\x6c\x00\x6d\x00\x6e\x00\x6f\x00\x71\x00\x70\x00\x73\x00\x03\x00\x70\x00\x74\x00\x60\x00\x76\x00\x77\x00\x78\x00\x79\x00\x7a\x00\x7b\x00\x7c\x00\x7d\x00\x7f\x00\x7e\x00\x81\x00\x03\x00\x7e\x00\x82\x00\x60\x00\x84\x00\x85\x00\x05\x00\x87\x00\x88\x00\x60\x00\x8b\x00\x60\x00\x8c\x00\x8a\x00\x8e\x00\x8f\x00\x91\x00\x90\x00\x93\x00\x03\x00\x90\x00\x94\x00\x60\x00\x97\x00\x99\x00\x98\x00\x96\x00\x05\x00\x60\x00\x9d\x00\x9f\x00\x9e\x00\x9c\x00\x05\x00\x60\x00\xa3\x00\xa5\x00\xa4\x00\xa2\x00\x05\x00\x60\x00\xa9\x00\xab\x00\xaa\x00\xa8\x00\x05\x00\x60\x00\xae\x00\xaf\x00\x05\x00\x60\x00\xb3\x00\xb5\x00\xb4\x00\xb2\x00\x05\x00\x60\x00\xb8\x00\xb9\x00\x05\x00\x60\x00\xbc\x00\xbd\x00\x05\x00\x60\x00\xc0\x00\xc1\x00\x05\x00\x60\x00\xc4\x00\xc5\x00\x05\x00\x60\x00\xc8\x00\xc9\x00\x05\x00\x60\x00\xcc\x00\xcd\x00\x05\x00\xcf\x00\xd0\x00\xd1\x00\x05\x00\x60\x00\xd5\x00\xd7\x00\xd6\x00\xd4\x00\x05\x00\x60\x00\xdb\x00\xdd\x00\xe3\x00\xe5\x00\x08\x00\xdc\x00\xda\x00\xde\x00\xdf\x00\xe0\x00\xe1\x00\xe2\x00\xda\x00\xe4\x00\xda\x00\xe6\x00\xe7\x00\xe8\x00\xe9\x00\xea\x00\xda\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x20\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x25\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x26\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x27\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x28\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x29\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x36\x00\x00\x00\x00\x00\x36\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x35\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x45\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x4d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x51\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x57\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x72\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x86\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x92\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x9a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa6\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xac\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb6\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xba\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xbe\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc6\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xca\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xce\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xd2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xd8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x14\x00\x13\x00\x12\x00\x11\x00\x10\x00\x0f\x00\x0e\x00\x0d\x00\x0c\x00\x0b\x00\x0a\x00\x09\x00\x08\x00\x07\x00\x06\x00\x05\x00\x04\x00\x03\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x04\x00\x11\x00\x12\x00\x0f\x00\x10\x00\x02\x00\x13\x00\x14\x00\x02\x00\x0f\x00\x10\x00\x03\x00\x15\x00\x16\x00\x17\x00\x02\x00\x11\x00\x12\x00\x03\x00\x18\x00\x19\x00\x1a\x00\x04\x00\x1b\x00\x1c\x00\x1d\x00\x1e\x00\x02\x00\x20\x00\x21\x00\x0c\x00\x29\x00\x2a\x00\x2b\x00\x2c\x00\x2d\x00\x2e\x00\x2f\x00\x30\x00\x31\x00\x32\x00\x33\x00\x34\x00"));
 
@@ -5801,82 +5818,82 @@ fn atn_lr_decide_7(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pr
         match tokens[pos] {
             TK_LIT_LPAREN => {
                 if min_prec > 14 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 6; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 6; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 6, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_LBRACKET => {
                 if min_prec > 16 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 4; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 4; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 4, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS => {
                 if min_prec > 15 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 5; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 5; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 5, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_PLUS | TK_LIT_MINUS => {
                 if min_prec > 12 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 8; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 8; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 8, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_STAR | TK_LIT_SLASH | TK_LIT_PERCENT => {
                 if min_prec > 13 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 7; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 7; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 7, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_LTLT | TK_LIT_GTGTGT | TK_LIT_GTGT => {
                 if min_prec > 11 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 9; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 9; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 9, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_LTEQ | TK_LIT_GTEQ | TK_LIT_GT | TK_LIT_LT => {
                 if min_prec > 10 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 10; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 10; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 10, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_instanceof => {
                 if min_prec > 9 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 11; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 11; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 11, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_EQEQ | TK_LIT_BANGEQ => {
                 if min_prec > 8 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 12; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 12; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 12, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_AMP => {
                 if min_prec > 7 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 13; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 13; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 13, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_CARET => {
                 if min_prec > 6 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 14; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 14; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 14, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_PIPE => {
                 if min_prec > 5 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 15; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 15; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 15, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_AMPAMP => {
                 if min_prec > 4 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 16; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 16; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 16, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_PIPEPIPE => {
                 if min_prec > 3 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 17; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 17; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 17, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_QUESTION => {
                 if min_prec > 2 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 18; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 18; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 18, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_EQ | TK_LIT_PLUSEQ | TK_LIT_MINUSEQ | TK_LIT_STAREQ | TK_LIT_SLASHEQ | TK_LIT_AMPEQ | TK_LIT_PIPEEQ | TK_LIT_CARETEQ | TK_LIT_GTGTEQ | TK_LIT_GTGTGTEQ | TK_LIT_LTLTEQ | TK_LIT_PERCENTEQ => {
                 if min_prec > 1 { return 20; }
-                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 19; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) { return 19; }
                 return atn_lr_enter_or_ask(&ATN_SIM, atn, 7, 19, tokens, pos, TK_EOF, min_prec);
             },
             TK_LIT_DOT => {},

@@ -29,11 +29,14 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 - [ ] **Under `longest`, a contested decision ignores a predicate only the simulator weighs.** Such a predicate calls a member, so no scan answers it, and the static pick reads the tokens alone. With `s : q* 'a'? EOF ; q : {this.pred(false)}? 'a' | 'b' ;`, where `pred` prints and returns its argument, `b a` parses as `(s (q b) q (q <skip a>))`, and the jar gives `(s (q b) a)`. With `r : ({this.pred(false)}? 'a' 'b'? 'c')? 'd' | x 'd' 'e'? ; x : 'a' 'c' ;`, `a c d` fails, and the jar gives `(r (x a c) d)`. `exact` hands both decisions to the simulator and agrees with the jar, and `verify` reports them. With `{false}?` in place of the call, every mode agrees with the jar.
 - [ ] **A lexer alternation whose arms stop at different lengths can pick an arm the rest of the token cannot follow.** `A : ('q' ('y' | 'yz') | 'w') 'h' ;` lexes `qyzh` as four tokens, and so does `B : 'k' ('y' | 'yz')? 'h' ;` on `kyzh`; the jar gives one token each. A fragment whose body is such an alternation, or a single-alternative group or fragment ending in one, lexes as the jar does (`lexer_alt_suffix_shapes.g4`).
 - [ ] **A lexer rule called from a rule that folds case differently takes the first arm of its alternation.** With `A : B 'z' ; B options { caseInsensitive = true; } : 'a' | 'ab' ;`, `abz` lexes as `B:a` and two errors, and `ab` as `B:a` and an error; the jar gives `A:abz` and `B:ab`. The same grammar with the option on both rules, or on neither, lexes as the jar does.
+- [ ] **`~X` and `.` match a token whose numeric type lies past the grammar's vocabulary.** With `r : ~X* ; s : r A EOF ;` and `H : '#' -> type(100) ;`, Gale parses `# a` as `(s (r #) a)`; the jar matches no set against type 100 and reports `extraneous input '#'`.
+- [ ] **A decision with 1024 or more alternatives stops the generator.** grammars-v4's `sql/plsql/PlSqlParser.g4` fails in `build_atn_with` on a 1755-alternative decision: `ATN_FAILED_ALT` (1024) marks a failed alternative by adding itself to the alternative's number, and the config key in `atn_predict.wado` packs the alternative into 12 bits (`CFG_KEY_ALT_SLOT`) beside the state and the guard. The jar accepts the grammar. The fix repacks that key.
+- [ ] **A grammar with more than 1022 continuation sites stops the generator under `longest`.** A continuation slot holds a site id in 10 bits (`FOLLOW_SLOT_BITS`), and `gen_follow_tables` asserts `FOLLOW_SITE_LIMIT`. Rust's grammar (197 rules) interns 164 sites; PL/SQL hits the decision limit above first, so whether it hits this one is unmeasured.
 
 ### Robustness on hostile input
 
 - [ ] **Mid operands nested in each other take time growing as the fourth power of the depth.** With `lr_mid_operand.g4`, `x` followed by `n` × `between y` and then `n` × `and z` takes 0.18M fuel at `n = 4`, 1.1M at 8, 16M at 16 and 349M at 32 under `longest`. An `and` or `or` chain after one `between` grows linearly.
-- [ ] **A generated parser exhausts the Wasm call stack on deeply nested input.** It traps instead of reporting a diagnostic. Grog's `Protobuf.g4` parser traps in `scan_message_def` / `scan_message_body` / `scan_message_element` on 20000 nested `message M {` … `}`. The parse has no nesting limit to report against.
+- [ ] **A generated parser exhausts the Wasm call stack on deeply nested input.** It traps instead of reporting a diagnostic. Grog's `Protobuf.g4` parser traps in `scan_message_def` / `scan_message_body` / `scan_message_element` on 20000 nested `message M {` … `}`, and Wado.g4's on 600 nested templates (550 pass) with the host's 1 MiB stack (`MAX_WASM_STACK` in `wado-host`). The fix is a recursion bound in the generated parser that reports a syntax error and recovers past the nesting, as the compiler's `MAX_NESTING` does.
 
 ## Stage C — action / predicate execution
 
@@ -103,18 +106,6 @@ Remaining:
 ## LL prediction — parked gaps
 
 Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`dead-ends.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.
-
-### Iter-body K-prefix for `Repeat` inner rule references
-
-The K-prefix follow-mask path closes the multi-token tail-greedy gap at the outer alternative position, but a rule reference inside a `Repeat` body still falls back to the 1-token mask path. The fixed-point "next iteration | exit-to-caller" computation that would let it gate is straightforward but not yet plumbed.
-
-### Multi-alt rule-reference expansion in the caller-side mask analysis
-
-The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
-
-### A loop's FOLLOW gate yields where entering stays viable
-
-Under `longest`, a greedy `*` yields to any caller continuation that matches, but ANTLR4 loops wherever another iteration stays viable. The test "a greedy loop keeps an iteration its caller's continuation also reads" pins Rust's `impl Fn() -> a::R + Send` under `exact`, which hands the loop to the simulator. The same gap keeps a SimpleCst group's call at `NoFollow`. Forwarding the group's continuation there is exact, and on this repository's Rust it exposes the gap in `web_dom_e2e.rs`.
 
 ### Opaque first sets in the LR routing and precedence checks
 

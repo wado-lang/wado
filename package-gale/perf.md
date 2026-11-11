@@ -256,6 +256,18 @@ parser generated before and after):
 
 Rust and TypeScript run predicates, so their parsers do not change.
 
+The loop's caller-FOLLOW gate is settled by the same parse
+(`gen_speculative_follow_gate`). It asks whether the caller's continuation
+starts at the iteration, and then whether it resumes where the parse ended,
+rewinding when it does not. Scanning the iteration first read SQLite's every
+statement twice, since a `;` also starts the next `sql_stmt_list`.
+`benchmark/sqlite_parse`, `-O2` fuel (`mise run update-baselines`):
+
+| `gale/sqlite/parse` |       fuel |
+| ------------------- | ---------: |
+| scan, then parse    | 15,393,731 |
+| parse only          | 14,524,325 |
+
 ### A tournament skips the candidates ANTLR4 never takes (landed, 2026-10)
 
 SQLite's `sql_stmt` scanned four SELECT statements for every `SELECT`.
@@ -451,6 +463,26 @@ re-measure before committing. Candidates read off the profile above:
   ("Nesting no longer doubles the scan", above) covers left-recursive rules and
   the recursive rules a failing repeat body rescans, so this is still paid once
   per alternative.
+- **Reading the caller's continuation costs SQLite's parse 34% (2026-11).**
+  Under `longest` a tournament's scan carries the continuation it is called
+  with, and a gated repeat reads two continuations through every frame:
+  `exit` where it stops, and `after_iteration` where an iteration ends. Each
+  read goes `FOLLOW_MAX_DEPTH` tokens deep. `benchmark/sqlite_parse`, `-O2`
+  fuel, one parse:
+
+  | Continuation read                 |       fuel |
+  | --------------------------------- | ---------: |
+  | every frame, four tokens deep     | 17,900,538 |
+  | every frame, resumption one token | 14,524,325 |
+  | (no continuation)                 | 13,405,970 |
+
+  A one-token resumption is cheaper but wrong: `a : X?` in
+  `s : a X X Y EOF` takes the `x` that `X X Y` needs. A one-entry cache in
+  front of the link table saved under 1%. The levers left are a frame width
+  sized to the grammar's site count, so fewer pushes overflow into the link
+  table; a cache of each read by position and continuation; and leaving the
+  continuation out of a tournament candidate's scan where the decision is
+  proven not to depend on it.
 
 Found by reading generated code (2026-09), not yet measured on a benchmark:
 
@@ -466,7 +498,7 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
   the right operand even where the suffix's first token already decides.
   Emitting it only when FIRST(suffix) meets the atom's FIRST or the non-LR
   FOLLOW would skip it on plain arithmetic.
-- [ ] **A loop-reserve probe can scan to EOF.** After Rust's last `#![..]`, the
+- [ ] **A loop's reserve walk can scan to EOF.** After Rust's last `#![..]`, the
   `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
   tokens (`# !` against `# [`) already decide it.
 - [ ] **`exact` parses Rust and TypeScript about twice as slowly as
@@ -728,10 +760,10 @@ These did not pay, measured on the same harness:
 
 Open levers on `benchmark/gale_gen`:
 
-- [ ] **Kind sets and FOLLOW masks still arrive as names.** `kind_check_str`
-  and `intern_follow_mask` get `TK_*` names from the lowered IR, so
-  `names_to_ids` interns each name again through a string-keyed map. Fixing
-  this means threading ids through `lower` and prediction.
+- [ ] **Kind sets still arrive as names.** `kind_check_str` gets `TK_*` names
+  from the lowered IR, so `names_to_ids` interns each name again through a
+  string-keyed map. Fixing this means threading ids through `lower` and
+  prediction.
 - [ ] **The rule-name maps behind the SCC-memoised analyses** (`first_of_rule_at`,
   `rule_is_nullable_at` and the rest) hash the rule name on every visit. A
   stamped rule index measured flat at 512m only; sweep it before deciding.
@@ -882,11 +914,12 @@ cache does not by itself close the gap to the scan.
   brought that down. What shipped decides the ambiguity
   with the compiled scan instead — a greedy `?` scans its body then the
   continuation before entering, a non-greedy loop scans the continuation before
-  exiting. Where the scan runs out — the rule's tail — the verdict conjoins
-  the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
-  optional's callee was receiving the inner's own FIRST) rather than a second
-  runtime argument. That last conjunct is why a probe may ask the FOLLOW only
-  where the walk really reaches the rule's tail (soundness invariant 10). Release
+  exiting. Where the scan runs out — the rule's tail — the verdict asks the
+  caller's continuation, or the rule's classical FOLLOW where the rule carries
+  none, which cost one bug fix in `follow_env` (an optional's callee was
+  receiving the inner's own FIRST). That last question is why a continuation scan
+  may ask it only where the walk really reaches the rule's tail (soundness invariant
+  10). Release
   `sqlite_parse` measured unchanged at every step, each arm's own spread moving
   further than any gap between the arms.
 - **Recursive lexer rule with `.+?` / `.*?`**

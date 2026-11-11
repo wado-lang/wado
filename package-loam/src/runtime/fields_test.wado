@@ -1,0 +1,115 @@
+use { Graph, Slots } from "./hlo.wado";
+use {
+    erased_fields,
+    fitted_fields,
+    recorded_fields,
+    restored_fields,
+    written_fields,
+    zeroed_fields,
+} from "./fields.wado";
+use { Any, Recorder, Value } from "./recorded.wado";
+use { Cpu, Holds, Tensor } from "./tensor.wado";
+
+struct X {
+}
+struct Y {
+}
+
+struct Pair<affine G: Holds> {
+    a: G::Tensor<f32, [X]>,
+    b: G::Tensor<i64, [X, Y]>,
+}
+
+fn pair() -> Pair<Cpu> {
+    return Pair::<Cpu> {
+        a: Tensor {
+            data: [1.5],
+            extents: [1],
+        },
+        b: Tensor {
+            data: [1, 2, 3, 4, 5, 6],
+            extents: [2, 3],
+        },
+    };
+}
+
+test "erasing walks the fields in their order" {
+    let erased = erased_fields(&Cpu {}, &pair());
+    assert erased.len() == 2;
+    assert erased[0] matches { F32(_) } && erased[1] matches { I64(_) };
+}
+
+test "restoring builds the struct back from an offset" {
+    let g = Cpu {};
+    let mut held: List<Any<Cpu>> = [
+        Any::Bool(Tensor {
+            data: [true],
+            extents: [1],
+        }),
+    ];
+    held.extend(&erased_fields(&g, &pair()));
+    let back: Pair<Cpu> = restored_fields(&g, &held, 1);
+    assert back.a.data == [1.5] && back.b.extents == [2, 3];
+}
+
+test "recording makes a parameter of each field's extents" {
+    let mut r = Recorder::new();
+    let recorded: Pair<Recorder> = recorded_fields(&mut r, &[
+        [9],
+        [1],
+        [2, 3],
+    ], 1);
+    assert recorded.a.id != recorded.b.id;
+    assert r.extents_of(&recorded.a) == [1] && r.extents_of(&recorded.b) == [2, 3];
+}
+
+// A caller generic over the backend, as the generated code is.
+fn round_trip<affine G: Graph>(g: &G, p: &Pair<G>) -> Pair<G> {
+    return restored_fields(g, &erased_fields(g, p), 0);
+}
+
+test "a caller generic over the backend" {
+    assert round_trip(&Cpu {}, &pair()).b.data == [1, 2, 3, 4, 5, 6];
+}
+
+test "zeroing gives each field its own extents" {
+    let zeroed: Pair<Cpu> = zeroed_fields(&mut Cpu {}, &[
+        [2],
+        [1, 3],
+    ]);
+    assert zeroed.a.data == [0.0, 0.0] && zeroed.b.data == [0, 0, 0] && zeroed.b.extents == [1, 3];
+}
+
+test "fitting cuts and grows each field along its own axes" {
+    let fitted: Pair<Cpu> = fitted_fields(&mut Cpu {}, &pair(), &[
+        [
+            [0, 3],
+        ],
+        [
+            [0, 1],
+            [1, 2],
+        ],
+    ]);
+    assert fitted.a.data == [1.5, 0.0, 0.0];
+    assert fitted.b.data == [1, 2] && fitted.b.extents == [1, 2];
+}
+
+#[expect_trap]
+test "a walk refuses a list that is not one entry per field" {
+    let _fitted: Pair<Cpu> = fitted_fields(&mut Cpu {}, &pair(), &[[], [], []]);
+}
+
+test "writing puts the rows of one into another, fitted to its extents" {
+    let mut g = Cpu {};
+    let into: Pair<Cpu> = zeroed_fields(&mut g, &[
+        [1],
+        [3, 4],
+    ]);
+    let at = Tensor::<i64, [Slots]> {
+        data: [0],
+        extents: [1],
+    };
+    let written: Pair<Cpu> = written_fields(&mut g, &into, &pair(), &[0, 1], &at);
+    assert written.a.data == [1.5];
+    assert written.b.data == [1, 2, 3, 0, 4, 5, 6, 0, 0, 0, 0, 0];
+}

@@ -8,7 +8,9 @@ use {
     ParserRule,
     Alternative,
     Element,
+    GroupElement,
     RepeatElement,
+    RepeatKind,
     AltAction,
     push_alt_actions,
     compute_scan_cyclic,
@@ -17,18 +19,17 @@ use {
 } from "./ir.wado";
 use { is_single_alt_group, single_alt_group_type_name, all_alts_are_single_token } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
-use {
-    TokenKinds,
-    append_ids,
-    bits_of,
-    bits_is_empty,
-    bits_equal,
-    bits_ids,
-    bits_set,
-    bits_test,
-    bits_union_into,
-} from "./token_kinds.wado";
+use { TokenKinds, append_ids, bits_ids, bits_set } from "./token_kinds.wado";
 use { HashMap } from "core:collections";
+use {
+    Reading,
+    readings_add,
+    readings_empty,
+    readings_of_position,
+    readings_union_into,
+    reading_then,
+} from "./readings.wado";
+use { alt_is_left_recursive } from "./lr_util.wado";
 
 /// The structural queries over a grammar's parser rules, with their memo
 /// caches and the token-kind table their answers are spelled in.
@@ -67,9 +68,8 @@ pub struct GrammarAnalysis {
     scannable_cache: List<Option<bool>>,
     open_end_cache: List<Option<bool>>,
     tail_greedy_cache: List<Option<List<i32>>>,
-    /// By rule name, the ways a rule begins that `first2_of_element` found
-    /// without meeting a cycle.
-    first2_cache: HashMap<String, Heads>,
+    /// By `readings_key`, the readings of a rule met without a cycle.
+    readings_cache: HashMap<i32, List<Reading>>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: HashMap<String, String>,
@@ -147,7 +147,7 @@ impl GrammarAnalysis {
             scannable_cache: none_cache(rule_count),
             open_end_cache: none_cache(rule_count),
             tail_greedy_cache: none_cache(rule_count),
-            first2_cache: HashMap::new(),
+            readings_cache: HashMap::new(),
             single_alt_owner: build_single_alt_owner_map(parser_rules),
             one_token_rules: HashMap::new(),
             predicate_fn_owners: predicate_fn_owners(parser_rules),
@@ -356,6 +356,35 @@ impl GrammarAnalysis {
         return self.token_kinds.len();
     }
 
+    /// The exclusion set of a `~ X` element: `~ TOKEN` / `~ 'lit'` excludes one
+    /// kind, `~ ( A | B | C )` one per alternative, each a single `TokenRef` or
+    /// `Literal`.
+    pub fn excluded_kinds(&mut self, inner: &Element) -> List<i32> {
+        return match inner {
+            TokenRef(_) | Literal(_) => [self.terminal_kind(inner)],
+            Group(g) => {
+                let mut kinds: List<i32> = [];
+                for let alt of &g.alternatives {
+                    assert alt.elements.len() == 1 && alt.elements[0] matches { TokenRef(_) | Literal(_) }, "a `~` group's alternative is a single token or literal";
+                    kinds.push(self.terminal_kind(&alt.elements[0]));
+                }
+                kinds;
+            },
+            _ => panic("a `~` names a token, a literal, or a group of them"),
+        };
+    }
+
+    /// The kinds a `.` or `~ X` takes: every kind but EOF, less what `~` excludes.
+    fn open_position_kinds(&mut self, elem: &Element) -> List<i32> {
+        let excluded: List<i32> = if let Not(ne) = elem {
+            self.excluded_kinds(&ne.element);
+        } else {
+            [];
+        };
+        let eof = self.eof_kind;
+        return (0..<self.token_kind_count()).filter(|k| k != eof && !excluded.contains(&k)).collect();
+    }
+
     /// The `TK_*` name of kind `id`.
     pub fn token_name(&self, id: i32) -> String {
         return self.token_kinds.name_of(id);
@@ -539,19 +568,264 @@ impl GrammarAnalysis {
     /// single-token). Nullable or multi-token elements halt accumulation — the
     /// caller gets a shorter (but always sound) sequence.
     ///
-    /// Thin wrapper around [`position_first_sets_from`] with `start = 0` —
-    /// the generic form supports computing FIRST sets at an arbitrary
-    /// suffix offset (the multi-token follow-mask path).
+    /// [`position_first_sets_from`] with `start = 0`.
     pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> List<List<i32>> {
         return self.position_first_sets_from(&alt.elements, 0, max_depth);
     }
 
+    /// Every way `elements[from..]` begins, at most `k` tokens deep: the
+    /// continuation a call before `elements[from]` reads.
+    pub fn readings_from(&mut self, elements: &List<Element>, from: i32, k: i32) -> List<Reading> {
+        let mut visiting: List<i32> = [];
+        let mut cycled = false;
+        return self.readings_of_elements(elements, from, k, &mut visiting, &mut cycled);
+    }
+
+    /// Per rule, what follows it where a parse enters it directly, at most `k`
+    /// tokens deep: whatever follows a call of it, read on through the caller's
+    /// own entry, and the end of the input where `entry_ends_input` says. The
+    /// jar reads an entered rule's end that way; being the first rule changes
+    /// nothing.
+    pub fn entry_readings(&mut self, k: i32) -> List<List<Reading>> {
+        let rule_count = self.parser_rules().len();
+        let mut sites: List<EntrySite> = [];
+        for let caller of 0..<rule_count {
+            for let a of 0..<self.parser_rules()[caller].alternatives.len() {
+                let elements = self.parser_rules()[caller].alternatives[a].elements;
+                self.collect_entry_sites(&elements, &[], caller, k, &mut sites);
+            }
+        }
+        let input_end: List<Reading> = [
+            Reading { kinds: List::filled(k, [self.eof_kind_id()]), ends: false },
+        ];
+        let mut sites_of_caller = List::<List<i32>>::filled(rule_count, []);
+        for let [si, s] of sites.iter_ref().enumerate() {
+            sites_of_caller[s.caller].push(si);
+        }
+        let mut entry: List<List<Reading>> = [];
+        for let ends_input of entry_ends_input(&sites, &sites_of_caller) {
+            entry.push(if ends_input { input_end } else { [] });
+        }
+        for let s of &sites {
+            for let r of &s.readings {
+                if !r.ends {
+                    readings_add(&mut entry[s.callee], *r, k);
+                }
+            }
+        }
+        let mut queued = List::<bool>::filled(rule_count, true);
+        let mut pending: List<i32> = (0..<rule_count).collect();
+        while let Some(caller) = pending.pop() {
+            queued[caller] = false;
+            let tail = entry[caller];
+            for let si of &sites_of_caller[caller] {
+                let s = &sites[*si];
+                let mut grew = false;
+                for let r of &s.readings {
+                    if r.ends {
+                        grew = reading_then(&mut entry[s.callee], r, &tail, k) || grew;
+                    }
+                }
+                if grew && !queued[s.callee] {
+                    queued[s.callee] = true;
+                    pending.push(s.callee);
+                }
+            }
+        }
+        return entry;
+    }
+
+    /// Each call in `elements`, followed by `suffix`, with the readings of what
+    /// follows it in its rule: a loop's body is followed by the loop again.
+    fn collect_entry_sites(
+        &mut self,
+        elements: &List<Element>,
+        suffix: &List<Element>,
+        caller: i32,
+        k: i32,
+        sites: &mut List<EntrySite>,
+    ) {
+        for let i of 0..<elements.len() {
+            let mut rest = elements_from(elements, i + 1);
+            rest.extend(suffix);
+            match &elements[i] {
+                RuleRef(r) => {
+                    let callee = self.rule_index_of(&r.name);
+                    assert callee >= 0, "a rule reference names a parser rule";
+                    sites.push(EntrySite { caller, callee, readings: self.readings_from(&rest, 0, k) });
+                },
+                Group(g) => {
+                    for let alt of &g.alternatives {
+                        self.collect_entry_sites(&alt.elements, &rest, caller, k, sites);
+                    }
+                },
+                Repeat(rep) => {
+                    let mut body_suffix: List<Element> = [];
+                    if !rep.kind matches { Optional } {
+                        body_suffix.push(Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star }));
+                    }
+                    body_suffix.extend(&rest);
+                    self.collect_entry_sites(&[rep.element], &body_suffix, caller, k, sites);
+                },
+                Label(lab) => self.collect_entry_sites(&[lab.element], &rest, caller, k, sites),
+                TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+                },
+            }
+        }
+    }
+
+    fn readings_of_elements(
+        &mut self,
+        elements: &List<Element>,
+        from: i32,
+        k: i32,
+        visiting: &mut List<i32>,
+        cycled: &mut bool,
+    ) -> List<Reading> {
+        if from >= elements.len() {
+            return readings_empty(k);
+        }
+        let head = self.readings_of_element(&elements[from], k, visiting, cycled);
+        let mut tails: List<Option<List<Reading>>> = [];
+        let mut out: List<Reading> = [];
+        for let h of &head {
+            if !h.ends {
+                readings_add(&mut out, *h, k);
+                continue;
+            }
+            let left = k - h.kinds.len();
+            while tails.len() <= left {
+                tails.push(null);
+            }
+            if tails[left] matches { None } {
+                tails[left] = Option::Some(self.readings_of_elements(elements, from + 1, left, visiting, cycled));
+            }
+            reading_then(&mut out, h, &tails[left].unwrap(), k);
+        }
+        return out;
+    }
+
+    fn readings_of_element(
+        &mut self,
+        elem: &Element,
+        k: i32,
+        visiting: &mut List<i32>,
+        cycled: &mut bool,
+    ) -> List<Reading> {
+        return match elem {
+            TokenRef(_) | Literal(_) => readings_of_position([self.terminal_kind(elem)], k),
+            Wildcard(_) | Not(_) => readings_of_position(self.open_position_kinds(elem), k),
+            Label(lab) => self.readings_of_element(&lab.element, k, visiting, cycled),
+            RuleRef(r) => self.readings_of_rule(&r.name, k, visiting, cycled),
+            Group(g) => self.readings_of_alternatives(&g.alternatives, k, visiting, cycled),
+            Repeat(rep) => self.readings_of_repeat(rep, k, visiting, cycled),
+        };
+    }
+
+    fn readings_of_alternatives(
+        &mut self,
+        alts: &List<Alternative>,
+        k: i32,
+        visiting: &mut List<i32>,
+        cycled: &mut bool,
+    ) -> List<Reading> {
+        let mut out: List<Reading> = [];
+        for let alt of alts {
+            readings_union_into(&mut out, &self.readings_of_elements(&alt.elements, 0, k, visiting, cycled), k);
+        }
+        return out;
+    }
+
+    /// `rep`'s readings. A loop's are built budget by budget, each iteration
+    /// that ends continuing into the loop with what it left.
+    fn readings_of_repeat(
+        &mut self,
+        rep: &RepeatElement,
+        k: i32,
+        visiting: &mut List<i32>,
+        cycled: &mut bool,
+    ) -> List<Reading> {
+        if rep.kind matches { Optional } {
+            let mut out = self.readings_of_element(&rep.element, k, visiting, cycled);
+            readings_union_into(&mut out, &readings_empty(k), k);
+            return out;
+        }
+        let mut star: List<List<Reading>> = [];
+        let mut body: List<Reading> = [];
+        for let budget of 0..=k {
+            body = self.readings_of_element(&rep.element, budget, visiting, cycled);
+            let mut out = readings_empty(budget);
+            for let h of &body {
+                if !h.ends {
+                    readings_add(&mut out, *h, budget);
+                } else if !h.kinds.is_empty() {
+                    reading_then(&mut out, h, &star[budget - h.kinds.len()], budget);
+                }
+            }
+            star.push(out);
+        }
+        if rep.kind matches { Star } {
+            return star[k];
+        }
+        let mut out: List<Reading> = [];
+        for let h of &body {
+            if h.ends {
+                reading_then(&mut out, h, &star[k - h.kinds.len()], k);
+            } else {
+                readings_add(&mut out, *h, k);
+            }
+        }
+        return out;
+    }
+
+    /// A rule's readings. A left-recursive rule reads as its other alternatives
+    /// followed by any number of its recursive alternatives' suffixes. A rule
+    /// met again before a token is consumed contributes nothing, and what was
+    /// read meeting it is not cached.
+    fn readings_of_rule(&mut self, name: &String, k: i32, visiting: &mut List<i32>, cycled: &mut bool) -> List<Reading> {
+        let rid = self.rule_index_of(name);
+        assert rid >= 0, "a rule reference names a parser rule";
+        let key = readings_key(rid, k);
+        if let Some(cached) = self.readings_cache.get(key) {
+            return cached;
+        }
+        if visiting.contains(&key) {
+            *cycled = true;
+            return [];
+        }
+        let rule = self.parser_rules[rid];
+        let mut heads: List<Alternative> = [];
+        let mut suffixes: List<Alternative> = [];
+        for let alt of &rule.alternatives {
+            if alt_is_left_recursive(alt, name) {
+                suffixes.push(Alternative::new(elements_from(&alt.elements, 1)));
+            } else {
+                heads.push(*alt);
+            }
+        }
+        let mut elements: List<Element> = [Element::Group(GroupElement::new(heads))];
+        if !suffixes.is_empty() {
+            elements.push(Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::Group(GroupElement::new(suffixes)),
+                non_greedy: false,
+            }));
+        }
+        visiting.push(key);
+        let mut inner_cycled = false;
+        let out = self.readings_of_elements(&elements, 0, k, visiting, &mut inner_cycled);
+        visiting.pop();
+        if inner_cycled {
+            *cycled = true;
+        } else {
+            self.readings_cache[key] = out;
+        }
+        return out;
+    }
+
     /// Deep version of [`position_first_sets_from`] that expands
-    /// `RuleRef` elements into the referenced rule's body. Used by
-    /// `compute_follow_arg` to build a caller's multi-depth FOLLOW mask
-    /// — `position_first_sets_from` halts at a `RuleRef` to a
-    /// multi-token rule, hiding the depths the runtime gate needs to
-    /// disambiguate iter vs. exit.
+    /// `RuleRef` elements into the referenced rule's body, where
+    /// `position_first_sets_from` halts at a `RuleRef` to a multi-token rule.
     ///
     /// Only single-alt non-cyclic `RuleRef`s are expanded; multi-alt
     /// `RuleRef`s halt accumulation (per-depth union of multi-alt
@@ -575,147 +849,6 @@ impl GrammarAnalysis {
         let mut result: List<List<i32>> = [];
         let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
         return [result, final_cursor - start];
-    }
-
-    /// The two positions every way `elements` begins, where they are exact: each
-    /// sequence is two tokens long and every pairing of a first token with a
-    /// second one begins some sequence. Unlike `deep_position_first_sets_from`,
-    /// this sees through alternatives and nullable tails, since exactness is
-    /// checked on the pairs rather than assumed of the walk. Empty otherwise.
-    pub fn exact_two_position_first_sets(&mut self, elements: &List<Element>) -> List<List<i32>> {
-        let none: List<List<i32>> = [];
-        let mut visiting: List<String> = [];
-        let Some(heads) = self.first2_of_elements(elements, 0, &mut visiting) else {
-            return none;
-        };
-        if heads.empty || !bits_is_empty(&heads.singles) || heads.pairs.is_empty() {
-            return none;
-        }
-        let mut firsts: List<u64> = [];
-        let mut seconds: List<u64> = [];
-        for let pair of &heads.pairs {
-            bits_union_into(&mut firsts, &pair.firsts);
-            bits_union_into(&mut seconds, &pair.seconds);
-        }
-        for let first of &bits_ids(&firsts) {
-            let mut followers: List<u64> = [];
-            for let pair of &heads.pairs {
-                if bits_test(&pair.firsts, *first) {
-                    bits_union_into(&mut followers, &pair.seconds);
-                }
-            }
-            if !bits_equal(&followers, &seconds) {
-                return none;
-            }
-        }
-        return [
-            bits_ids(&firsts),
-            bits_ids(&seconds),
-        ];
-    }
-
-    /// Every way `elements[start..]` begins, at most two tokens deep. `null`
-    /// where a head is a `.`, a `~X` or a left-recursive rule, which no list of
-    /// names spells.
-    fn first2_of_elements(&mut self, elements: &List<Element>, start: i32, visiting: &mut List<String>) -> Option<Heads> {
-        let mut out = Heads::new();
-        if start >= elements.len() {
-            out.empty = true;
-            return Option::Some(out);
-        }
-        let Some(head) = self.first2_of_element(&elements[start], visiting) else {
-            return null;
-        };
-        for let pair of &head.pairs {
-            out.add_pairs(pair);
-        }
-        if !bits_is_empty(&head.singles) {
-            if self.elements_reach_open_end(elements, start + 1) {
-                return null;
-            }
-            out.add_pairs(&self.pairs_before(&head.singles, elements, start + 1));
-            if self.tail_is_nullable_deep(elements, start + 1) {
-                bits_union_into(&mut out.singles, &head.singles);
-            }
-        }
-        if head.empty {
-            let Some(rest) = self.first2_of_elements(elements, start + 1, visiting) else {
-                return null;
-            };
-            out.add(&rest);
-        }
-        return Option::Some(out);
-    }
-
-    fn first2_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> Option<Heads> {
-        return match elem {
-            TokenRef(_) | Literal(_) => {
-                let mut out = Heads::new();
-                out.singles = bits_of(&self.first_of_element(elem, visiting));
-                Option::Some(out);
-            },
-            Label(lab) => self.first2_of_element(&lab.element, visiting),
-            RuleRef(r) => self.first2_of_rule(&r.name, visiting),
-            Group(g) => self.first2_of_alternatives(&g.alternatives, visiting),
-            Repeat(rep) => self.first2_of_repeat(rep, visiting),
-            Wildcard(_) | Not(_) => null,
-        };
-    }
-
-    /// A rule's answer is cached only where it met no cycle: then no rule on
-    /// `visiting` was reached, so any other `visiting` gives the same answer.
-    fn first2_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> Option<Heads> {
-        if let Some(cached) = self.first2_cache.get(*name) {
-            return Option::Some(cached);
-        }
-        if visiting.contains(name) {
-            return null;
-        }
-        let Some(rule) = self.find_rule(name) else {
-            return null;
-        };
-        let alts = rule.alternatives;
-        visiting.push(*name);
-        let found = self.first2_of_alternatives(&alts, visiting);
-        remove_from_visiting(visiting, name);
-        if let Some(heads) = found {
-            self.first2_cache[*name] = heads;
-        }
-        return found;
-    }
-
-    fn first2_of_alternatives(&mut self, alts: &List<Alternative>, visiting: &mut List<String>) -> Option<Heads> {
-        let mut out = Heads::new();
-        for let alt of alts {
-            let Some(heads) = self.first2_of_elements(&alt.elements, 0, visiting) else {
-                return null;
-            };
-            out.add(&heads);
-        }
-        return Option::Some(out);
-    }
-
-    /// Each of `firsts` followed by a token `elements[start..]` begins with.
-    fn pairs_before(&mut self, firsts: &List<u64>, elements: &List<Element>, start: i32) -> Pairs {
-        return Pairs { firsts: *firsts, seconds: bits_of(&self.first_of_elements_from(elements, start)) };
-    }
-
-    fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<Heads> {
-        let Some(body) = self.first2_of_element(&rep.element, visiting) else {
-            return null;
-        };
-        let mut out = Heads::new();
-        out.empty = !rep.kind matches { Plus };
-        let loops = !rep.kind matches { Optional };
-        let body_elements: List<Element> = [rep.element];
-        if loops && self.elements_reach_open_end(&body_elements, 0) {
-            return null;
-        }
-        out.add(&body);
-        if loops && !bits_is_empty(&body.singles) {
-            out.add_pairs(&self.pairs_before(&body.singles, &body_elements, 0));
-        }
-        return Option::Some(out);
     }
 
     /// Internal walker. Returns the cursor index reached when the walk
@@ -835,8 +968,7 @@ impl GrammarAnalysis {
     /// Returns FIRST sets indexed by INPUT TOKEN position relative to the
     /// suffix starting at `elements[start..]`. Generalises
     /// [`alt_position_first_sets`] by accepting an arbitrary `start`
-    /// offset — used by the multi-token follow-mask path to read out a
-    /// caller's K-token continuation prefix at a `RuleRef` call site.
+    /// offset.
     ///
     /// Halts (returns a shorter sequence) at the first nullable or
     /// multi-token element — preserving the input-offset alignment that
@@ -1189,8 +1321,7 @@ impl GrammarAnalysis {
     }
 
     /// Per-call-site caller-FOLLOW for the element at index `i` in
-    /// `elements`. Single source of truth for the `FollowArg` mask
-    /// `lower` builds at each `RuleRef` site (`compute_follow_arg`).
+    /// `elements`: the static FOLLOW `lower` reads at each position.
     ///
     /// Three cases:
     ///
@@ -1581,7 +1712,7 @@ impl GrammarAnalysis {
                 // token per iteration. Multi-token bodies like
                 // `(htmlElement | CDATA | htmlComment) htmlChardata?`
                 // in HTMLParser's `htmlContent` rule cannot be safely
-                // suppressed by a follow mask: the outer caller's
+                // suppressed by a FOLLOW gate: the outer caller's
                 // follow set legitimately overlaps with the inner's
                 // first set (e.g. TAG_OPEN starts a nested htmlElement
                 // AS WELL AS the closing `</div>` tag), and the
@@ -1675,6 +1806,58 @@ fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> {
     };
 }
 
+/// One call, by rule index, with the readings of what follows it in its rule.
+struct EntrySite {
+    caller: i32,
+    callee: i32,
+    readings: List<Reading>,
+}
+
+/// Per rule, whether the input end follows it where it is entered: it has no
+/// caller, or its callers all sit in a cycle that no rule without a caller
+/// reaches by calls, so no caller ever returns out of it.
+fn entry_ends_input(sites: &List<EntrySite>, sites_of_caller: &List<List<i32>>) -> List<bool> {
+    let rule_count = sites_of_caller.len();
+    let mut called = List::<bool>::filled(rule_count, false);
+    for let s of sites {
+        called[s.callee] = true;
+    }
+    let mut reached = List::<bool>::filled(rule_count, false);
+    let mut pending: List<i32> = [];
+    for let ri of 0..<rule_count {
+        if !called[ri] {
+            reached[ri] = true;
+            pending.push(ri);
+        }
+    }
+    while let Some(caller) = pending.pop() {
+        for let si of &sites_of_caller[caller] {
+            let callee = sites[*si].callee;
+            if !reached[callee] {
+                reached[callee] = true;
+                pending.push(callee);
+            }
+        }
+    }
+    return (0..<rule_count).map(|ri| !called[ri] || !reached[ri]).collect();
+}
+
+global READINGS_MAX_BUDGET: i32 = 16;
+
+fn readings_key(rule: i32, k: i32) -> i32
+    contract 0 <= k && k < READINGS_MAX_BUDGET
+{
+    return rule * READINGS_MAX_BUDGET + k;
+}
+
+pub fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
+    let mut out: List<Element> = [];
+    for let mut i = start; i < elements.len(); i += 1 {
+        out.push(elements[i]);
+    }
+    return out;
+}
+
 pub fn is_nullable(elem: &Element) -> bool {
     if let Repeat(rep) = elem {
         if let Star | Optional = rep.kind {
@@ -1766,52 +1949,6 @@ fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
-    }
-}
-
-/// Every way a stretch of the grammar begins, at most two tokens deep: with
-/// nothing, with one token and then nothing, or with a pair. Tokens are kind-id
-/// sets.
-struct Heads {
-    empty: bool,
-    singles: List<u64>,
-    /// Pairs held as products, so a rule whose heads pair every first token
-    /// with every second one costs two sets rather than their product.
-    pairs: List<Pairs>,
-}
-
-/// Every pairing of a token in `firsts` with a token in `seconds`.
-struct Pairs {
-    firsts: List<u64>,
-    seconds: List<u64>,
-}
-
-impl Heads {
-    fn new() -> Heads {
-        return Heads { empty: false, singles: [], pairs: [] };
-    }
-
-    fn add(&mut self, other: &Heads) {
-        self.empty = self.empty || other.empty;
-        bits_union_into(&mut self.singles, &other.singles);
-        for let pair of &other.pairs {
-            self.add_pairs(pair);
-        }
-    }
-
-    /// Products sharing their second set merge, which bounds `pairs` by the
-    /// distinct second sets rather than by the paths reaching them.
-    fn add_pairs(&mut self, pairs: &Pairs) {
-        if bits_is_empty(&pairs.firsts) || bits_is_empty(&pairs.seconds) {
-            return;
-        }
-        for let held of &mut self.pairs {
-            if bits_equal(&held.seconds, &pairs.seconds) {
-                bits_union_into(&mut held.firsts, &pairs.firsts);
-                return;
-            }
-        }
-        self.pairs.push(*pairs);
     }
 }
 

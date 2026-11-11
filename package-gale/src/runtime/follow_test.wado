@@ -1,27 +1,76 @@
 //! Unit tests for the FOLLOW gate queries (`follow.wado`).
 
-use { follow_admits, follow_exit_viable, follow_open_set, follow_resumes } from "./follow.wado";
+use { FollowTables, FOLLOW_SLOT_BITS, follow_admits, follow_push, follow_yields } from "./follow.wado";
 
-global EOF_KIND: i32 = -1;
+global EOF_KIND: i32 = 0;
 
-// An empty set is a wildcard (`.`), whether it heads a reading in the slots or
-// in the open field.
-test "an empty open set admits any kind, as an empty slot set does" {
-    let tokens = ([5] as List<i32>).to_array();
-    let sets: List<List<i32>> = [[]];
-    let open = follow_open_set(1);
-    assert follow_admits(&tokens, 0, open, &sets, EOF_KIND);
-    assert follow_resumes(&tokens, 0, open, &sets, EOF_KIND);
-    assert follow_exit_viable(&tokens, 0, open, &sets, EOF_KIND);
-    assert follow_admits(&tokens, 0, 1, &sets, EOF_KIND);
+global A: i32 = 1;
+
+global B: i32 = 2;
+
+global C: i32 = 3;
+
+// Sets, one word each: 0 = {A}, 1 = {B}, 2 = any but EOF. Each site opens with the set
+// its readings start with and whether one is empty.
+// Site 1 reads `A?`: nothing or A, either way ending. Site 2 reads `B`, ending.
+// Site 3 reads `.`, ending. Site 4 reads `A B A B`, cut.
+fn tables() -> FollowTables {
+    return FollowTables {
+        stride: 1,
+        sets: [1 << A, 1 << B, -1 ^ 1 << EOF_KIND],
+        starts: [0, 4, 7, 10, 16],
+        readings: [1, 1, 3, 0, 2, 3, 1, 4, 3, 2, 0, 8, 0, 1, 0, 1],
+    };
 }
 
-test "a non-empty open set admits only its kinds" {
-    let tokens = ([5, 6] as List<i32>).to_array();
-    let sets: List<List<i32>> = [
-        [1 << 5],
-    ];
-    let open = follow_open_set(1);
-    assert follow_admits(&tokens, 0, open, &sets, EOF_KIND);
-    assert !follow_resumes(&tokens, 1, open, &sets, EOF_KIND);
+fn kinds(list: List<i32>) -> Array<i32> {
+    return list.to_array();
+}
+
+test "a site that can match nothing reads on into its caller's" {
+    let t = tables();
+    let cont = follow_push(1, 2);
+    assert follow_yields(&kinds([B]), 0, cont, &t, EOF_KIND);
+    assert follow_yields(&kinds([A, B]), 0, cont, &t, EOF_KIND);
+    assert !follow_yields(&kinds([A]), 0, cont, &t, EOF_KIND);
+    assert !follow_yields(&kinds([C]), 0, cont, &t, EOF_KIND);
+    assert !follow_admits(&kinds([C]), 0, cont, &t, EOF_KIND);
+}
+
+test "an unknown caller admits, but yields only once a token was read" {
+    let t = tables();
+    let tokens = kinds([C]);
+    assert !follow_yields(&tokens, 0, 1, &t, EOF_KIND);
+    assert follow_admits(&tokens, 0, 1, &t, EOF_KIND);
+    assert follow_yields(&kinds([A, C]), 0, 1, &t, EOF_KIND);
+}
+
+test "a wildcard position takes any kind but EOF" {
+    let t = tables();
+    assert follow_yields(&kinds([C]), 0, 3, &t, EOF_KIND);
+    assert !follow_yields(&kinds([]), 0, 3, &t, EOF_KIND);
+}
+
+test "a kind past every named one is in no set" {
+    // `-> type(100)` lexes a kind the stride does not reach.
+    let t = tables();
+    assert !follow_yields(&kinds([99]), 0, 3, &t, EOF_KIND);
+    assert !follow_yields(&kinds([99]), 0, 1, &t, EOF_KIND);
+}
+
+test "a cut reading needs every position up to the depth" {
+    let t = tables();
+    assert follow_yields(&kinds([A, B, A, B]), 0, 4, &t, EOF_KIND);
+    assert !follow_yields(&kinds([A, B, A, C]), 0, 4, &t, EOF_KIND);
+}
+
+test "a continuation deeper than the slots reads through its link" {
+    let t = tables();
+    let mut cont: i64 = 2;
+    for let _ of 0..<8 {
+        cont = follow_push(1, cont);
+    }
+    assert cont >> FOLLOW_SLOT_BITS * 6 == 0;
+    assert follow_yields(&kinds([B]), 0, cont, &t, EOF_KIND);
+    assert !follow_yields(&kinds([C]), 0, cont, &t, EOF_KIND);
 }

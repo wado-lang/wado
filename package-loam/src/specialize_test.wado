@@ -146,8 +146,7 @@ fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionCo
         |n| `${n.outputs[0]}=${n.op}(${n.inputs[0..<i32::min(n.inputs.len(), 2)].to_list().join(",")})`,
     ).collect();
     let out = checked.shapes.get("Y").unwrap();
-    let axes: List<String> = out.axes.into_iter().map(|a| a.name).collect();
-    return Result::Ok(`${nodes.join(" ")} | Y ${axes.join(",")}`);
+    return Result::Ok(`${nodes.join(" ")} | Y ${out.names().join(",")}`);
 }
 
 /// Whether each node reads only what the graph is given or an earlier node
