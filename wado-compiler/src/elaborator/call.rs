@@ -4117,9 +4117,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if targets.is_empty() {
                         continue;
                     }
-                    let trait_ = self.tysys.resolutions.bound_decl(bound);
+                    // A bound naming no trait was reported where it is written.
+                    let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
+                        continue;
+                    };
                     let BoundArgsAtCall::Read(trait_args) =
-                        self.bound_args_at_call(bound, trait_, owner_ty, names, args)
+                        self.bound_args_at_call(bound, Some(trait_), owner_ty, names, args)
                     else {
                         continue;
                     };
@@ -4148,24 +4151,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What `assoc`, an equality of a bound on `owner`, binds its target to:
     /// the projection through the caller's own bounds where `owner` is a
-    /// parameter the caller forwards, else off its impl. `[..F]` takes a
-    /// tuple's elements; anything else leaves the pack open, for the pin's
-    /// check to refute.
+    /// parameter the caller forwards, else off its impl. A pack spread
+    /// (`[..F]`) takes a tuple's elements; anything else leaves the pack open,
+    /// for the pin's check to refute.
     pub(super) fn bound_projection(
         &mut self,
         owner: TypeId,
         forwarded: bool,
-        trait_: Option<DefId>,
+        trait_: DefId,
         trait_args: Option<Vec<TypeId>>,
         assoc: &ast::AssocTypeBound,
     ) -> Option<TypeId> {
         let resolved = if forwarded {
-            self.forwarded_projection(owner, trait_?, trait_args, &assoc.name)
+            self.forwarded_projection(owner, trait_, trait_args, &assoc.name)
         } else {
             self.settled_projection(owner, trait_, trait_args.as_deref(), &assoc.name)?
         };
-        let takes_tuple = matches!(assoc.ty, Type::Tuple(_));
-        (!takes_tuple || self.tysys.type_table.borrow().is_tuple(resolved)).then_some(resolved)
+        let spreads_pack = matches!(&assoc.ty, Type::Tuple(elements)
+            if elements.iter().any(|e| matches!(e, Type::TypePackSpread(_))));
+        (!spreads_pack || self.tysys.type_table.borrow().is_tuple(resolved)).then_some(resolved)
     }
 
     /// `owner`'s `assoc` under `trait_` at `trait_args`, `owner` a type the
@@ -4173,21 +4177,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn settled_projection(
         &mut self,
         owner: TypeId,
-        trait_: Option<DefId>,
+        trait_: DefId,
         trait_args: Option<&[TypeId]>,
         assoc: &str,
     ) -> Option<TypeId> {
-        let resolved = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            match trait_ {
-                Some(trait_) => tt.answer_projection(owner, &trait_, trait_args, assoc, &[]),
-                None => tt.resolve_assoc_type_of_instance(owner, assoc),
-            }
-        };
+        let resolved = self.tysys.type_table.borrow_mut().answer_projection(
+            owner,
+            &trait_,
+            trait_args,
+            assoc,
+            &[],
+        );
         // Reflection's associated types are registered by a synthesis phase
         // that runs after elaboration, so the registry is empty here; compute
         // the subject's.
-        resolved.or_else(|| self.concrete_reflect_assoc_type(owner, trait_?, assoc))
+        resolved.or_else(|| self.concrete_reflect_assoc_type(owner, trait_, assoc))
     }
 
     /// `owner`'s `assoc` under `trait_`, `owner` a parameter the caller

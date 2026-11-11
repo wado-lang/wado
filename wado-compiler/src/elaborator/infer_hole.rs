@@ -64,7 +64,7 @@ struct ProjectionLink {
     each_element: bool,
     /// The right side at the call: the slot it names, or the type it spells.
     target: TypeId,
-    trait_: Option<DefId>,
+    trait_: DefId,
     /// The bound's own arguments as the call read them, `None` where it
     /// writes none.
     written: Option<Vec<TypeId>>,
@@ -696,8 +696,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if bound.assoc_types.is_empty() {
                     continue;
                 }
-                let written = (!bound.type_args.is_empty())
-                    .then(|| self.with_type_params_bound(&space, |e| e.written_bound_args(bound)));
+                // A bound naming no trait was reported where it is written.
+                let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
+                    continue;
+                };
+                let written = (!bound.type_args.is_empty()).then(|| {
+                    self.with_type_params_bound(&space, |e| {
+                        e.under_self_binding(self_binding, |e| e.written_bound_args(bound))
+                    })
+                });
                 for assoc in &bound.assoc_types {
                     let target = match assoc_target_slot(assoc, names, &self.tysys.resolutions) {
                         Some(slot) => args[slot],
@@ -712,7 +719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         owner,
                         each_element: param.is_pack,
                         target,
-                        trait_: self.tysys.resolutions.bound_decl(bound),
+                        trait_,
                         written: written.clone(),
                         assoc: assoc.clone(),
                         trait_name: bound.written_name(),
@@ -774,10 +781,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: TypeId,
         written: Option<&[TypeId]>,
     ) {
-        let trait_args = match (written, link.trait_) {
-            (Some(written), Some(trait_)) => self.trait_args_at(trait_, owner, written),
-            (None, _) | (Some(_), None) => None,
-        };
+        let trait_args =
+            written.and_then(|written| self.trait_args_at(link.trait_, owner, written));
         let forwarded = self.scope_type_param_ids().contains(&owner);
         let Some(answer) =
             self.bound_projection(owner, forwarded, link.trait_, trait_args, &link.assoc)

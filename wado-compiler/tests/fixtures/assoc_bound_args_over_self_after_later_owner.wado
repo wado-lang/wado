@@ -1,0 +1,42 @@
+// A deferred owner's bound reads its own arguments with `Self` bound to the
+// call's receiver: `Mix<Self::Item, …>` is `Mix<i32, …>` on `M`.
+trait Mix<A> with () {
+    type Out;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Mix<i32> for Box {
+    type Out = i32;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+trait Maker with () {
+    type Item;
+    fn made<T, H: Mix<Self::Item, Out = i32>>(&self, t: T) -> H;
+}
+
+struct M {
+    v: i32,
+}
+
+impl Maker for M {
+    type Item = i32;
+    fn made<T, H: Mix<i32, Out = i32>>(&self, _t: T) -> H {
+        return H::empty();
+    }
+}
+
+test "the bound's arguments over Self" {
+    let m = M { v: 0 };
+    let [_n, b] = match builtin::black_box(true) {
+        true => [3, m.made(1)],
+        false => [0, Box { v: 0 }],
+    };
+    assert b.v == 3;
+}

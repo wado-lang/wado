@@ -3311,7 +3311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn projects_off_self(&mut self, ty: &ast::Type, binding: SelfBinding) -> bool {
         match ty {
             ast::Type::NamespacedGeneric(ns) => {
-                (ns.namespace != "Self" || self.project_off_self(binding, &ns.name).is_some())
+                (ns.namespace != "Self" || self.self_declares(binding, &ns.name))
                     && self.all_project_off_self(&ns.args, binding)
             }
             ast::Type::Generic(generic) => {
@@ -3329,28 +3329,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         types.iter().all(|ty| self.projects_off_self(ty, binding))
     }
 
-    /// `Self::assoc` where `Self` is `binding`'s receiver. The trait that wrote
-    /// the constraint qualifies the lookup, and the unqualified rule answers
-    /// where it declared the name but a supertrait's impl registered it.
-    fn project_off_self(&mut self, binding: SelfBinding, assoc: &str) -> Option<TypeId> {
-        {
-            let mut table = self.tysys.type_table.borrow_mut();
-            if let Some(trait_) = binding.declaring_trait
-                && let Some(resolved) = table.resolve_trait_assoc_type_of_instance(
-                    binding.type_id,
-                    &trait_,
-                    None,
-                    assoc,
-                )
-            {
-                return Some(resolved);
-            }
-            if let Some(resolved) = table.resolve_assoc_type_of_instance(binding.type_id, assoc) {
-                return Some(resolved);
-            }
-        }
-        // A receiver that is this frame's parameter projects through its bounds.
-        self.make_frame_projection(binding.type_id, assoc)
+    /// Whether `Self::assoc` names something where `Self` is `binding`'s
+    /// receiver. The trait that wrote the constraint qualifies the lookup, and
+    /// the unqualified rule answers where it declared the name but a
+    /// supertrait's impl registered it. A receiver that is this frame's
+    /// parameter declares it through its bounds.
+    fn self_declares(&mut self, binding: SelfBinding, assoc: &str) -> bool {
+        let mut table = self.tysys.type_table.borrow_mut();
+        let registered = binding.declaring_trait.is_some_and(|trait_| {
+            table
+                .resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, None, assoc)
+                .is_some()
+        }) || table
+            .resolve_assoc_type_of_instance(binding.type_id, assoc)
+            .is_some();
+        drop(table);
+        registered
+            || self
+                .bound_declaring_assoc_type(BoundsOf::Type(binding.type_id), assoc)
+                .is_some()
     }
 
     /// Whether `type_arg` satisfies `trait_name`, registering its associated

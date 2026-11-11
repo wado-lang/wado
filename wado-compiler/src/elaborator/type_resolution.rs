@@ -157,7 +157,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `base::assoc_name` mean `<base as ThatTrait>::assoc_name`.
     /// Resolution needs the qualifier: one type may implement two traits that
     /// declare the same associated-type name.
-    fn bound_declaring_assoc_type(&self, of: BoundsOf, assoc_name: &str) -> Option<DefId> {
+    pub(super) fn bound_declaring_assoc_type(
+        &self,
+        of: BoundsOf,
+        assoc_name: &str,
+    ) -> Option<DefId> {
         let bounds = self.frame_bounds(of);
         self.tysys.trait_env.bound_declaring_assoc_type(
             &bounds,
