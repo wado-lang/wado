@@ -2740,7 +2740,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(type_args) = self.trait_args_at(trait_, subject, &written) else {
             return;
         };
-        if !self.args_owe_anything(params.iter().copied(), &type_args) {
+        let written = written.len();
+        if !self.args_owe_anything(&self.trait_ref_params(trait_, written), &type_args) {
             return;
         }
         self.owe_bounds(OwedBounds {
@@ -2748,9 +2749,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owed: Owed::TraitArgs {
                 trait_,
                 type_args,
+                written,
                 subject,
             },
         });
+    }
+
+    /// `trait_`'s parameters as a reference writing its first `written`
+    /// arguments binds them. A default is the trait's own argument, so its
+    /// kind is the trait's to answer: an affine trait treats `Self` as affine,
+    /// which `Eq<Rhs = Self>` passes on to `Rhs` for an affine implementor.
+    fn trait_ref_params(&self, trait_: DefId, written: usize) -> Vec<ast::GenericParam> {
+        let mut params: Vec<ast::GenericParam> = self
+            .tysys
+            .trait_env
+            .trait_type_params(trait_)
+            .into_iter()
+            .cloned()
+            .collect();
+        for param in params.iter_mut().skip(written) {
+            param.is_affine = true;
+        }
+        params
     }
 
     /// Read each of `bounds`' trait arguments where written, so an ill-formed
@@ -2996,15 +3016,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Owed::TraitArgs {
                 trait_,
                 type_args,
+                written,
                 subject,
             } => {
-                let params: Vec<ast::GenericParam> = self
-                    .tysys
-                    .trait_env
-                    .trait_type_params(trait_)
-                    .into_iter()
-                    .cloned()
-                    .collect();
+                let params = self.trait_ref_params(trait_, written);
                 let implementing = SelfBinding {
                     type_id: subject,
                     declaring_trait: Some(trait_),

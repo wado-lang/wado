@@ -48,10 +48,12 @@ pub(in crate::elaborator) enum Owed {
     /// A generic type application's arguments, owing its declaration's bounds.
     DeclArgs { def: DefId, type_args: Vec<TypeId> },
     /// A trait reference's arguments, owing its trait's parameter bounds with
-    /// `Self` standing for `subject`.
+    /// `Self` standing for `subject`. The first `written` were written; the
+    /// rest are the trait's defaults.
     TraitArgs {
         trait_: DefId,
         type_args: Vec<TypeId>,
+        written: usize,
         subject: TypeId,
     },
     /// A bound on `subject`, whose trait arguments owe their trait's parameter
