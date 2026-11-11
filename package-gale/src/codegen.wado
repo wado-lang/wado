@@ -253,6 +253,9 @@ fn emit_context(grammar: &Grammar, lowered: &LoweredGrammar, lctx: LowerContext,
     return EmitContext::new(analysis, settings, follow, tables, diagnostics, plan, decisions);
 }
 
+/// Generate a Wado parser module and return its source and collected
+/// diagnostics. Normalizes and stamps `grammar` in place and stages lexer
+/// action bodies when they are emitted.
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
     let token_kinds = canonicalize_for_analysis(grammar);
     // Pre-size the output buffer from the grammar's rule count so the

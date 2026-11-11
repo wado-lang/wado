@@ -19,6 +19,8 @@ internal struct FollowTables {
     internal readings: List<i32>,
 }
 
+/// Prepend a continuation site, retaining overflow frames in the current
+/// parse's link table. The result is valid while that table remains active.
 internal fn follow_push(site: i64, cont: i64) -> i64 {
     return site | follow_behind(cont, FOLLOW_SLOT_BITS) << FOLLOW_SLOT_BITS;
 }
@@ -32,16 +34,22 @@ global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165
 
 global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
 
+/// Start a fresh continuation link table and return the enclosing parse's
+/// table for restoration with `follow_links_leave`.
 internal fn follow_links_enter() -> FollowLinks {
     let outer = FOLLOW_LINKS;
     FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
     return outer;
 }
 
+/// Restore the enclosing parse's link table, discarding the current table.
 internal fn follow_links_leave(outer: FollowLinks) {
     FOLLOW_LINKS = outer;
 }
 
+/// Fit `cont` behind a prefix measured in bits, interning it as a link if
+/// needed. Panics if an overflowing continuation starts with a link or the
+/// resulting link cannot fit behind the prefix.
 fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
     let room = FOLLOW_CONT_BITS - prefix_bits;
     if cont >> room == 0 {
@@ -53,6 +61,8 @@ fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
     return link;
 }
 
+/// Return a stable index for `cont` in the current parse's link table,
+/// inserting it if absent.
 fn follow_link_id(cont: i64) -> i32 {
     if let Some(id) = FOLLOW_LINKS.ids.get(cont) {
         return id;
@@ -73,14 +83,23 @@ fn follow_linked(c: i64) -> i64
     return FOLLOW_LINKS.conts[(c >> FOLLOW_SLOT_BITS) as i32];
 }
 
+/// Whether the continuation matches from token index `pos`, reading at most
+/// `FOLLOW_MAX_DEPTH` tokens. Reaching an unknown tail succeeds only after
+/// matching at least one token. Positions past the input read as `eof_kind`.
 internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
     return follow_reads(tokens, pos, cont, 0, FOLLOW_MAX_DEPTH, false, tables, eof_kind);
 }
 
+/// Whether the continuation can start at token index `pos`, checking one
+/// token. An unknown continuation admits any token; positions past the input
+/// read as `eof_kind`.
 internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
     return follow_reads(tokens, pos, cont, 0, 1, true, tables, eof_kind);
 }
 
+/// Match continuation readings with a total token budget. `depth` tokens
+/// have already matched from `pos`; `unknown_reads` allows an unknown tail
+/// to succeed even when no token has matched.
 fn follow_reads(
     tokens: &Array<i32>,
     pos: i32,
