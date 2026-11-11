@@ -175,16 +175,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target: &ast::Type,
         trait_decl: DefId,
     ) -> TraitRef {
-        let Some(params) = self
-            .tysys
-            .trait_env
-            .decl_header_of(&trait_decl)
-            .map(|header| header.type_params.clone())
-        else {
+        let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl) else {
             return TraitRef::bare(trait_decl);
         };
         let written = written_arg_nodes(trait_type);
-        let kept = non_default_arg_count(written, Some(target), &params, &self.tysys.resolutions);
+        let kept =
+            non_default_arg_count(written, target, &header.defaults, &self.tysys.resolutions);
         let args = written
             .iter()
             .take(kept)

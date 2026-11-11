@@ -25,7 +25,7 @@ use super::scope::{
     TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
-use super::trait_env::{DefaultArg, ImplMethodHeader, InheritedBound, ViaClause};
+use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, OperatorImpl, ParamList, ResolvedTraitMethod, SigPosition,
@@ -40,7 +40,7 @@ use crate::elaborator::sig::{InstantiatedSig, TraitSig};
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitEnv, get_type_name_static,
-    header_answers_bound_args, written_arg_nodes,
+    trait_args_answer, written_arg_nodes,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
@@ -628,6 +628,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let target = self.tysys.type_table.borrow().impl_target_whole(impl_def);
+        let Some(trait_args) = self.trait_args_at(trait_decl, target, &impl_sig.trait_type_args)
+        else {
+            return;
+        };
         let slot = |index| TypeParamId {
             owner: trait_decl,
             index,
@@ -635,28 +639,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let self_slot = TypeParamId::trait_self(trait_decl);
         let mut slots = TypeArgMap::default();
         slots.insert(self_slot, target);
-        let defaults = header
-            .type_params
-            .iter()
-            .zip(&header.default_args)
-            .filter(|(param, _)| param.fills_impl_slot())
-            .map(|(_, default)| default);
-        for (supplied, default) in
-            trait_params_from_impl(&header.type_params, &impl_sig.trait_type_args, None)
-                .into_iter()
-                .zip(defaults)
-        {
-            if !supplied.takes_a_slot {
-                continue;
+        for supplied in trait_params_from_impl(&header.type_params, &trait_args, None) {
+            if supplied.takes_a_slot {
+                let &arg = supplied.arg.expect("defaults fill every argument");
+                slots.insert(slot(supplied.slot), arg);
             }
-            let arg = match (supplied.arg, default) {
-                (Some(&arg), _) => arg,
-                (None, Some(DefaultArg::SelfTarget)) => target,
-                // A default naming another type resolves only in the trait's
-                // own module, which this frame cannot read from.
-                (None, Some(DefaultArg::Named(_)) | None) => return,
-            };
-            slots.insert(slot(supplied.slot), arg);
         }
         let answers: Vec<ProjectionAnswer> = impl_sig
             .associated_types
@@ -1659,7 +1646,7 @@ impl TypeSystem {
     }
 
     /// Whether a bound writing `wanted` selects the header — see
-    /// [`super::trait_env::header_answers_bound_args`] — at the receiver whose
+    /// [`super::trait_env::trait_args_answer`] — at the receiver whose
     /// arguments are `type_args`: an impl parameter the target places stands
     /// for the receiver's argument there, not for any type. One whose argument
     /// inference has yet to settle stays open.
@@ -1677,14 +1664,9 @@ impl TypeSystem {
         };
         // Most headers write no argument an impl parameter stands in.
         let written = header.trait_arg_ids();
+        let target = Some(&header.target_id);
         if type_args.is_none() || !written.iter().any(FqTypeName::mentions_binder) {
-            return header_answers_bound_args(
-                written,
-                &header.ty,
-                &decl_header.type_params,
-                &self.resolutions,
-                wanted,
-            );
+            return trait_args_answer(written, wanted, &decl_header.defaults, target);
         }
         let slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let at_receiver: Vec<FqTypeName> = {
@@ -1709,13 +1691,7 @@ impl TypeSystem {
                 .map(|written| written.rewrite(&|node| settled.get(node).cloned()))
                 .collect()
         };
-        header_answers_bound_args(
-            &at_receiver,
-            &header.ty,
-            &decl_header.type_params,
-            &self.resolutions,
-            wanted,
-        )
+        trait_args_answer(&at_receiver, wanted, &decl_header.defaults, target)
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.

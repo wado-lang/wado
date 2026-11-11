@@ -299,6 +299,8 @@ pub struct ModuleId(pub u32);
 pub enum ArgDefault {
     /// `= Self`: the implementing type.
     SelfType,
+    /// A type in the trait's own space, where `Param(i)` is its parameter at
+    /// `i`: `B = A` reads the argument before it.
     Type(SolverType),
     /// A default the lowering cannot spell. Nothing restates it, so an impl
     /// writing that argument answers no bare bound.
@@ -306,13 +308,14 @@ pub enum ArgDefault {
 }
 
 impl ArgDefault {
-    /// The default at an impl whose target is `target`; `None` for one the
-    /// lowering cannot spell.
+    /// The default at an impl whose target is `target`, the trait's earlier
+    /// parameters at `earlier`; `None` for one the lowering cannot spell or
+    /// that reads a parameter `earlier` leaves unsaid.
     #[must_use]
-    pub fn at(&self, target: &SolverType) -> Option<SolverType> {
+    pub fn at(&self, target: &SolverType, earlier: &[Option<SolverType>]) -> Option<SolverType> {
         match self {
             Self::SelfType => Some(target.clone()),
-            Self::Type(ty) => Some(ty.clone()),
+            Self::Type(ty) => ty.map_params(&|i| earlier.get(i as usize)?.clone()),
             Self::Opaque => None,
         }
     }
@@ -747,28 +750,36 @@ impl Program {
     /// The default `def`'s trait declares for its argument at `index`, at
     /// `def`'s target; `None` where it declares none or cannot spell it.
     pub(super) fn default_arg(&self, def: &ImplDef, index: usize) -> Option<SolverType> {
-        self.arg_at(def.trait_?, None, index, &def.target)
+        let trait_ = def.trait_?;
+        let written = self.per_param(Some(trait_), &def.trait_args);
+        self.filled(trait_, written, &def.target)
+            .into_iter()
+            .nth(index)?
     }
 
-    /// `trait_`'s argument at `index` in a bound on `subject` writing `written`
-    /// there: the written one, else the declared default. `None` where neither
-    /// spells one.
-    pub(super) fn arg_at(
+    /// `given`, one entry per `trait_` parameter, with each it leaves unsaid
+    /// filled by the declared default on `subject`, left to right so a default
+    /// reads the arguments before it. `None` where neither spells one.
+    pub(super) fn filled(
         &self,
         trait_: TraitDeclId,
-        written: Option<&SolverType>,
-        index: usize,
+        mut given: Vec<Option<SolverType>>,
         subject: &SolverType,
-    ) -> Option<SolverType> {
-        if let Some(arg) = written {
-            return Some(arg.clone());
+    ) -> Vec<Option<SolverType>> {
+        let defaults = self
+            .traits
+            .get(&trait_)
+            .map_or(&[][..], |def| def.arg_defaults.as_slice());
+        given.resize(given.len().max(defaults.len()), None);
+        for i in 0..given.len() {
+            if given[i].is_none() {
+                given[i] = defaults
+                    .get(i)
+                    .and_then(Option::as_ref)
+                    .and_then(|default| default.at(subject, &given[..i]));
+            }
         }
-        self.traits
-            .get(&trait_)?
-            .arg_defaults
-            .get(index)?
-            .as_ref()?
-            .at(subject)
+        given
     }
 
     /// What `args`, written for `trait_`, say for each of its parameters, as
@@ -843,15 +854,7 @@ impl Program {
         written: &[SolverType],
         subject: &SolverType,
     ) -> Vec<Option<SolverType>> {
-        let written = self.per_param(Some(trait_), written);
-        let params = self
-            .traits
-            .get(&trait_)
-            .map_or(0, |def| def.arg_defaults.len())
-            .max(written.len());
-        (0..params)
-            .map(|i| self.arg_at(trait_, written.get(i).and_then(Option::as_ref), i, subject))
-            .collect()
+        self.filled(trait_, self.per_param(Some(trait_), written), subject)
     }
 
     /// `clause`, written in `sub`'s space, at `args`, what a bound on `subject`
@@ -865,10 +868,8 @@ impl Program {
         args: &[Option<SolverType>],
         subject: &SolverType,
     ) -> Option<ParamBound> {
-        let arg = |i: u32| {
-            let i = i as usize;
-            self.arg_at(sub, args.get(i).and_then(Option::as_ref), i, subject)
-        };
+        let args = self.filled(sub, args.to_vec(), subject);
+        let arg = |i: u32| args.get(i as usize)?.clone();
         Some(ParamBound {
             trait_: clause.trait_,
             args: clause

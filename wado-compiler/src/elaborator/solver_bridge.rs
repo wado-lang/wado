@@ -1462,22 +1462,22 @@ impl SolverBridge {
             .filter_map(|item| tysys.compiler_trait_def(item))
             .collect();
         let ref_mut = tysys.compiler_trait_def(CompilerItem::RefMut);
-        // A default naming another parameter is opaque to the solver.
-        let closed = Written {
-            resolutions: &tysys.resolutions,
-            param: &|_, _| None,
-            declaring: &|_, _, _| None,
-            self_type: None,
-        };
         for (&trait_, header) in &tysys.trait_env.trait_decl_headers {
             let own = tysys.trait_env.trait_type_params(trait_);
+            let place = |_, name: &str| ParamKind::of(own.iter().copied(), name);
+            let space = Written {
+                resolutions: &tysys.resolutions,
+                param: &place,
+                declaring: &|_, _, _| None,
+                self_type: None,
+            };
             let defaults: Vec<Option<ArgDefault>> = own
                 .iter()
                 .map(|p| {
                     p.default.as_ref().map(|default| match default {
                         Type::Named(named) if named.name == "Self" => ArgDefault::SelfType,
                         other => lowering
-                            .ast_type(other, &closed)
+                            .ast_type(other, &space)
                             .map_or(ArgDefault::Opaque, ArgDefault::Type),
                     })
                 })

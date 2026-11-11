@@ -135,12 +135,10 @@ fn bound_answers(
         .args_reaching(bound, trait_, subject)
         .iter()
         .any(|args| {
-            let args = program.per_param(Some(trait_), args);
+            let args = program.args_at(trait_, args, subject);
             wanted.iter().enumerate().all(|(i, want)| {
-                want.as_ref().is_none_or(|want| {
-                    let given = args.get(i).and_then(Option::as_ref);
-                    program.arg_at(trait_, given, i, subject).as_ref() == Some(want)
-                })
+                want.as_ref()
+                    .is_none_or(|want| args.get(i).and_then(Option::as_ref) == Some(want))
             })
         })
 }
@@ -1051,23 +1049,34 @@ fn answers_args_by(
     args: &[SolverType],
     mut fits: impl FnMut(&SolverType, &SolverType) -> bool,
 ) -> bool {
-    let written = program.per_param(def.trait_, written);
-    let args = program.per_param(def.trait_, args);
     // A `Self` default lowers to the impl's target, which the match bound to
     // `ty` — and to the newtype a peeled question was asked at, which the
     // inherited impl also spells `Self`.
     let selves: Vec<SolverType> = [Some(ty), subject].into_iter().flatten().cloned().collect();
-    let said = |i: usize, given: Option<&SolverType>| match given {
-        Some(given) => vec![given.clone()],
-        None => match program.default_arg(def, i) {
-            Some(default) if default == def.target => selves.clone(),
-            Some(default) => vec![default],
-            None => Vec::new(),
-        },
+    // Each side fills its own defaults, so one reading an earlier argument
+    // (`B = A`) reads that side's.
+    let said = |args: &[SolverType]| -> Vec<Vec<SolverType>> {
+        let given = program.per_param(def.trait_, args);
+        let filled = match def.trait_ {
+            Some(trait_) => program.filled(trait_, given.clone(), &def.target),
+            None => given.clone(),
+        };
+        given
+            .iter()
+            .chain(std::iter::repeat(&None))
+            .zip(filled)
+            .map(|(given, filled)| match (given, filled) {
+                (Some(given), _) => vec![given.clone()],
+                (None, Some(default)) if default == def.target => selves.clone(),
+                (None, Some(default)) => vec![default],
+                (None, None) => Vec::new(),
+            })
+            .collect()
     };
-    (0..written.len().max(args.len())).all(|i| {
-        let asks = said(i, args.get(i).and_then(Option::as_ref));
-        let offered = said(i, written.get(i).and_then(Option::as_ref));
+    let (asked, offered) = (said(args), said(written));
+    (0..asked.len().max(offered.len())).all(|i| {
+        let asks = asked.get(i).map_or(&[][..], Vec::as_slice);
+        let offered = offered.get(i).map_or(&[][..], Vec::as_slice);
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
         asks.is_empty()
