@@ -554,8 +554,11 @@ impl GrammarAnalysis {
 
     /// Per rule, what follows it where a parse enters it directly, at most `k`
     /// tokens deep: whatever follows a call of it, read on through the caller's
-    /// own entry, and the end of the input after the first rule and after a rule
-    /// no other rule calls. The jar reads an entered rule's end that way.
+    /// own entry, and the end of the input after a rule no uncalled rule
+    /// reaches by calls. The jar reads an entered rule's end that way: a rule
+    /// with no caller ends the input, and so does one whose callers all sit in
+    /// a cycle that never returns out of it. Being the first rule changes
+    /// nothing.
     pub fn entry_readings(&mut self, k: i32) -> List<List<Reading>> {
         let rule_count = self.parser_rules().len();
         let mut sites: List<EntrySite> = [];
@@ -565,17 +568,11 @@ impl GrammarAnalysis {
                 self.collect_entry_sites(&elements, &[], caller, k, &mut sites);
             }
         }
-        let mut called_elsewhere = List::<bool>::filled(rule_count, false);
-        for let s of &sites {
-            if s.caller != s.callee {
-                called_elsewhere[s.callee] = true;
-            }
-        }
         let mut input_end: List<Reading> = [];
         readings_add(&mut input_end, Reading { kinds: List::filled(k, [self.eof_kind_id()]), ends: false }, k);
         let mut entry: List<List<Reading>> = [];
-        for let ri of 0..<rule_count {
-            entry.push(if ri == 0 || !called_elsewhere[ri] { input_end } else { [] });
+        for let ends_input of entry_ends_input(&sites, rule_count) {
+            entry.push(if ends_input { input_end } else { [] });
         }
         loop {
             let mut changed = false;
@@ -1775,6 +1772,36 @@ struct EntrySite {
     caller: i32,
     callee: i32,
     readings: List<Reading>,
+}
+
+/// Per rule, whether the input end follows it where it is entered: it has no
+/// caller, or no rule without one reaches it by calls.
+fn entry_ends_input(sites: &List<EntrySite>, rule_count: i32) -> List<bool> {
+    let mut called = List::<bool>::filled(rule_count, false);
+    for let s of sites {
+        called[s.callee] = true;
+    }
+    let mut reached = List::<bool>::filled(rule_count, false);
+    let mut pending: List<i32> = [];
+    for let ri of 0..<rule_count {
+        if !called[ri] {
+            reached[ri] = true;
+            pending.push(ri);
+        }
+    }
+    while let Some(caller) = pending.pop() {
+        for let s of sites {
+            if s.caller == caller && !reached[s.callee] {
+                reached[s.callee] = true;
+                pending.push(s.callee);
+            }
+        }
+    }
+    let mut ends = List::<bool>::filled(rule_count, false);
+    for let ri of 0..<rule_count {
+        ends[ri] = !called[ri] || !reached[ri];
+    }
+    return ends;
 }
 
 global READINGS_MAX_BUDGET: i32 = 16;

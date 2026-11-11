@@ -5313,6 +5313,38 @@ X : 'x' ;
     assert got == "x; => (t x)\nx;; => (t x ;)\n";
 }
 
+test "the first rule, entered, reads on into the rule that calls it" {
+    // Being first gives `s` no end of its own: the jar exits its loop for `u`'s
+    // `;` as it does for any called rule.
+    let got = parses_each("grammar R;
+s : X (';' X?)* ;
+u : s ';' ;
+X : 'x' ;
+", [
+        ["s", "x;"],
+        ["s", "x;;"],
+    ], &LONGEST);
+    assert got == "x; => (s x)\nx;; => (s x ;)\n";
+}
+
+test "an entered rule only a call cycle reaches still ends at the end of the input" {
+    // `a` and `b` call only each other, so no caller reads past the cycle; the
+    // jar still ends the entered `a` where the input ends.
+    let got = parses_each("grammar C;
+s : X ;
+a : Y b? Z* ;
+b : Z a ;
+X : 'x' ; Y : 'y' ; Z : 'z' ;
+WS : ' ' -> skip ;
+", [
+        ["a", "y z"],
+        ["a", "y z y"],
+        ["a", "y z y z"],
+        ["a", "y z y z z"],
+    ], &LONGEST);
+    assert got == "y z => (a y z)\ny z y => (a y (b z (a y)))\ny z y z => (a y (b z (a y z)))\ny z y z z => (a y (b z (a y z z)))\n";
+}
+
 // `expression` calls only itself, so every continuation past its end comes
 // back to it, and none reads the end of the input.
 test "exact ends a directly entered rule that only calls itself at the end of the input" {
