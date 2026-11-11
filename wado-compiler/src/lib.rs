@@ -2801,8 +2801,6 @@ pub async fn dump_with_options<H: CompilerHost>(
         filename,
         Some(&mut views),
     );
-    // Rejected past the analysis: the views built before the failure still
-    // stand, and the ones after it stay empty.
     let (rejected, optimized_package, wir_package) = match built {
         Ok(built) => (false, Some(built.nir), Some(built.wir_package)),
         Err(Bail) if views.analysis.is_some() => (true, None, None),
