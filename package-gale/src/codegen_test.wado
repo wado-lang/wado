@@ -2199,7 +2199,7 @@ ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ";
 
-test "a probe accepts a token an optional suffix of its caller can take" {
+test "a continuation scan accepts a token an optional suffix of its caller can take" {
     // TypeScript's `typeBody : typeMemberList (SemiColon | ',')?`: the `;`
     // after the last member is the suffix's, which the gate does not spell.
     let got = parses(OPTIONAL_SEPARATOR_AFTER_LIST_G4, "s", [
@@ -2223,7 +2223,7 @@ test "a tail optional enters only where its body can match" {
     assert got == "f(); => (s (e (e f) ( )) ;)\nf () => x; => (s (e f (e ( ) => x)) ;)\nf g; => (s (e f (e g)) ;)\nf g(); => (s (e f (e (e g) ( ))) ;)\n";
 }
 
-test "an optional probe that scans the rest of an alternative ends its scan" {
+test "an optional's continuation scan that covers the rest of an alternative ends its scan" {
     let output = longest_source("
 grammar T;
 s : (a ';' | a 'e') ;
@@ -2232,7 +2232,7 @@ c : 'b'* 'c' 'c' ;
 WS : ' ' -> skip ;
 ");
     let body = extract_fn_body(&output, "fn scan_a(");
-    assert body.contains("cont_done_"), "a probe that holds scans `c` once";
+    assert body.contains("cont_done_"), "a continuation scan that holds scans `c` once";
 }
 
 global TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4: String = "
@@ -3041,14 +3041,14 @@ outer : '#' ID | ID ;
 ID : [a-z]+ ;
 ";
 
-test "the reserve probe runs only after the loop's own lookahead declines" {
+test "the reserve walk runs only after the loop's own lookahead declines" {
     let output = longest_source(RESERVE_AFTER_LOOP_G4);
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
     assert_in_order(
         &body,
         "let rep_body_end_kind =",
         "rep_body_end_scan:",
-        "the probe walks before the lookahead can skip it",
+        "the reserve walks before the lookahead can skip it",
     );
 }
 

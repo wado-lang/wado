@@ -83,7 +83,7 @@ pub fn overlap_groups_of(
         analysis,
     );
     let gated = non_lr_indices.iter_ref().any(|i| meets_gate(&rule.alternatives[*i]));
-    let end_follow: List<i32> = if multi_alt && !gated { follow.for_probe(&rule.name) } else { [] };
+    let end_follow: List<i32> = if multi_alt && !gated { follow.exact_kinds(&rule.name) } else { [] };
     admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);
     let groups = compute_overlap_groups_of(&classes);
     return RuleOverlap { non_lr_indices, first_sets, groups, end_follow };

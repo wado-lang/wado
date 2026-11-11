@@ -473,8 +473,8 @@ fn gen_scan_body_walk(w: &mut CodeWriter, body: &ScanBody, ctx: &mut EmitContext
 /// The rule call ending a scan body that the scan can return as its own result:
 /// a failed callee returns -1, which is what the body would. A gate after it, a
 /// one-token callee scanned inline, or an ATN push around it leaves work after
-/// the call. So does an optional probe that already scans through the call, and
-/// would scan it again were the call split off.
+/// the call. So does an optional's continuation scan already scanning through
+/// the call, which would scan it again were the call split off.
 fn scan_tail_call(body: &ScanBody, ctx: &mut EmitContext) -> Option<ScanRuleCallElement> {
     if !body.gates.is_empty() {
         return null;
@@ -487,7 +487,7 @@ fn scan_tail_call(body: &ScanBody, ctx: &mut EmitContext) -> Option<ScanRuleCall
     }
     let n = body.elements.len();
     for let i of 0..<n {
-        if probe_scanning_rest(&body.elements[i], &body.elements, i + 1, n, ctx) matches { Some(_) } {
+        if optional_scanning_rest(&body.elements[i], &body.elements, i + 1, n, ctx) matches { Some(_) } {
             return null;
         }
     }
@@ -1957,10 +1957,11 @@ fn gen_scan_op_element<S: AsStrSlice>(
 }
 
 /// The repeat a shape optional scans as where what follows contests its entry,
-/// so its probe decides, as `optional_probe_decides` has the parse side do.
+/// so its continuation scan decides, as `optional_continuation_decides` has the
+/// parse side do.
 fn contested_shape_repeat(ole: &ScanOptionalLookaheadElement, ctx: &mut EmitContext) -> Option<ScanRepeatElement> {
     return match &ole.as_repeat {
-        Some(re) && scan_optional_probe_decides(re, ctx) => Option::Some(*re),
+        Some(re) && scan_optional_continuation_decides(re, ctx) => Option::Some(*re),
         _ => null,
     };
 }
@@ -2041,9 +2042,10 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Em
     }
 }
 
-/// Scan mirror of `gen_optional_probe_entry`. With `cont_done` named, a probe
-/// that holds has scanned the rest of the sequence, so it sets the flag and stays.
-fn gen_scan_optional_probe(
+/// Scan mirror of `gen_optional_continuation_entry`. With `cont_done` named, a
+/// continuation scan that holds has scanned the rest of the sequence, so it sets
+/// the flag and stays.
+fn gen_scan_optional_continuation(
     w: &mut CodeWriter,
     re: &ScanRepeatElement,
     ctx: &mut EmitContext,
@@ -2059,13 +2061,13 @@ fn gen_scan_optional_probe(
         gen_scan_mark(w, ctx, "bp");
     }
     w.line("let mut opt_ok: bool = false;");
-    w.begin("opt_probe:");
-    let fail = "break opt_probe;";
+    w.begin("opt_cont:");
+    let fail = "break opt_cont;";
     for let se of &re.continuation_scan {
         gen_scan_op_element(w, se, ctx, &fail);
     }
     let opt_ok = "opt_ok";
-    emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &opt_ok, ctx);
+    emit_continuation_verdict(w, re.continuation_reaches_caller, &re.caller_follow_kinds, &opt_ok, ctx);
     w.end();
     if !cont_done.is_empty() {
         w.begin("if opt_ok");
@@ -2077,7 +2079,7 @@ fn gen_scan_optional_probe(
         w.end();
         return;
     }
-    // The probe only asks whether the continuation fits, so its walk is undone
+    // The scan only asks whether the continuation fits, so its walk is undone
     // either way: keeping the body means the gate the body left, dropping it
     // means the gate before the iteration.
     if ctx.settings.emit_scan_gate() {
@@ -2093,10 +2095,10 @@ fn gen_scan_optional_probe(
     w.end();
 }
 
-/// Scan mirror of `begin_non_greedy_probe_loop`: iterate only while exiting
+/// Scan mirror of `begin_non_greedy_continuation_loop`: iterate only while exiting
 /// stays non-viable, so the tournament measures what the parse consumes.
 /// `Plus`'s mandatory first iteration is emitted by the caller.
-fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut EmitContext) {
+fn gen_scan_non_greedy_continuation_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut EmitContext) {
     let no_gate = String::new();
     let guard = scan_repeat_guard(&re.inner_admits, &no_gate, ctx);
     w.begin("loop");
@@ -2108,7 +2110,7 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
         gen_scan_op_element(w, se, ctx, &fail);
     }
     let ng_exit = "ng_exit";
-    emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &ng_exit, ctx);
+    emit_continuation_verdict(w, re.continuation_reaches_caller, &re.caller_follow_kinds, &ng_exit, ctx);
     w.end();
     gen_scan_rewind(w, ctx, "ep");
     w.line("if ng_exit { break; }");
@@ -2120,22 +2122,22 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     w.end();
 }
 
-/// Whether the exit probe decides this scan-side loop, from the same stamp
-/// and parts the parse side reads.
-fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut EmitContext) -> bool {
+/// Whether the continuation scan decides this scan-side loop's exit, from the
+/// same stamp and parts the parse side reads.
+fn scan_non_greedy_continuation_decides(re: &ScanRepeatElement, ctx: &mut EmitContext) -> bool {
     return re.non_greedy
         && re.static_exit_undecided
         && !admits_kinds(&re.inner_admits).is_empty()
-        && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
+        && continuation_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
 
-/// Scan-side twin of `optional_probe_decides` — same conjuncts off the mirror
+/// Scan-side twin of `optional_continuation_decides` — same conjuncts off the mirror
 /// stamps, so the two sides answer identically. A shape lookahead is not a
 /// repeat on this side, so it never asks.
-fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut EmitContext) -> bool {
+fn scan_optional_continuation_decides(re: &ScanRepeatElement, ctx: &mut EmitContext) -> bool {
     return re.body_scannable
-        && re.probe_contested
-        && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
+        && re.continuation_contested
+        && continuation_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
 
 /// Whether the repeat guard already proves the body matches, leaving the
@@ -2259,8 +2261,8 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         w.end();
         return;
     }
-    if scan_takes_optional_probe(re, ctx) {
-        gen_scan_optional_probe(w, re, ctx);
+    if scan_takes_optional_continuation(re, ctx) {
+        gen_scan_optional_continuation(w, re, ctx);
         return;
     }
     if let Optional = re.kind {
@@ -2309,8 +2311,8 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     if re.kind matches { Plus } {
         gen_scan_op_element(w, &re.body, ctx, fail_stmt, known);
     }
-    if scan_non_greedy_probe_decides(re, ctx) {
-        gen_scan_non_greedy_probe_loop(w, re, ctx);
+    if scan_non_greedy_continuation_decides(re, ctx) {
+        gen_scan_non_greedy_continuation_loop(w, re, ctx);
         return;
     }
     let yields_unless_viable = !re.atn_decides && !re.non_greedy && re.gate_caller_follow && re.body_scannable;
@@ -2438,7 +2440,7 @@ fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_admits: &
     }
     let gc = ctx.cursor.next_scan_group();
     open_reserve_decides(w, `rk_${gc}`, "tokens", "pos", loop_admits, ctx);
-    gen_reserve_probe(w, &duties.reserve_scan, `rs_${gc}`, `rs_${gc}_ok`, `rsv_${gc}`, ctx);
+    gen_reserve_walk(w, &duties.reserve_scan, `rs_${gc}`, `rs_${gc}_ok`, `rsv_${gc}`, ctx);
     gen_scan_rewind_break(w, ctx, "sp", `!rs_${gc}_ok`);
     w.end();
 }
@@ -2816,10 +2818,10 @@ fn gen_scan_op_elements<S: AsStrSlice>(
             proven_run += 1;
         } else {
             flush_proven_run(w, &mut proven_run);
-            if gates.is_empty() && let Some(re) = probe_scanning_rest(se, scan_elems, i + 1, end, ctx) {
+            if gates.is_empty() && let Some(re) = optional_scanning_rest(se, scan_elems, i + 1, end, ctx) {
                 let cont_done = `cont_done_${w.next_id()}`;
                 w.line(`let mut ${cont_done} = false;`);
-                gen_scan_optional_probe(w, &re, ctx, &cont_done);
+                gen_scan_optional_continuation(w, &re, ctx, &cont_done);
                 w.begin(`if !${cont_done}`);
                 gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &k);
                 w.end();
@@ -2832,9 +2834,9 @@ fn gen_scan_op_elements<S: AsStrSlice>(
     flush_proven_run(w, &mut proven_run);
 }
 
-/// The optional probe `se` scans as, where its continuation is exactly
-/// `scan_elems[from..end]`, so a probe that holds leaves nothing to scan.
-fn probe_scanning_rest(
+/// The optional `se` scans as with its continuation, where that continuation is
+/// exactly `scan_elems[from..end]`, so a scan that holds leaves nothing to scan.
+fn optional_scanning_rest(
     se: &ScanElement,
     scan_elems: &List<ScanElement>,
     from: i32,
@@ -2853,18 +2855,18 @@ fn probe_scanning_rest(
             return null;
         },
     };
-    if !scan_takes_optional_probe(&re, ctx) {
+    if !scan_takes_optional_continuation(&re, ctx) {
         return null;
     }
     let rest: List<ScanElement> = scan_elems.iter_value().skip(from).take(end - from).collect();
     return if re.continuation_scan == rest { Option::Some(re) } else { null };
 }
 
-/// Whether an optional's scan runs as a probe of its body and continuation.
-fn scan_takes_optional_probe(re: &ScanRepeatElement, ctx: &mut EmitContext) -> bool {
+/// Whether an optional's scan runs its body and then its continuation.
+fn scan_takes_optional_continuation(re: &ScanRepeatElement, ctx: &mut EmitContext) -> bool {
     return re.kind matches { Optional }
         && !admits_is_untestable(&re.inner_admits)
-        && scan_optional_probe_decides(re, ctx);
+        && scan_optional_continuation_decides(re, ctx);
 }
 
 /// Step over tokens the scan already proved, as one move.
@@ -4756,20 +4758,20 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     }
 }
 
-/// Non-greedy `*?` / `+?` under the emitter: loop only while the probe, the
-/// simulator or `non_greedy_static_cond` says to enter, so the inner yields
-/// the closing delimiter to the continuation. `??` lowers to `Plain` and so
-/// never reaches here.
+/// Non-greedy `*?` / `+?` under the emitter: loop only while the continuation
+/// scan, the simulator or `non_greedy_static_cond` says to enter, so the inner
+/// yields the closing delimiter to the continuation. `??` lowers to `Plain` and
+/// so never reaches here.
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
-    let probed = non_greedy_probe_decides(r, ctx);
-    if probed || r.atn_decides {
+    let by_continuation = non_greedy_continuation_decides(r, ctx);
+    if by_continuation || r.atn_decides {
         if let Plus = r.kind {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
         }
-        if probed {
-            begin_non_greedy_probe_loop(w, r, ctx, nc);
+        if by_continuation {
+            begin_non_greedy_continuation_loop(w, r, ctx, nc);
         } else {
             begin_simulated_loop(w, r, ctx, nc);
         }
@@ -4801,25 +4803,30 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitCo
     }
 }
 
-/// Whether the exit probe should decide this loop. Unlike the Optional the
-/// competing readings are the loop's own, so `body_admits` stands in for
-/// the overlap; it also gates each iteration, hence non-empty.
-fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
+/// Whether the continuation scan should decide this loop's exit. Unlike the
+/// Optional the competing readings are the loop's own, so `body_admits` stands
+/// in for the overlap; it also gates each iteration, hence non-empty.
+fn non_greedy_continuation_decides(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
     return r.static_exit_undecided
         && r.kind matches { Star | Plus }
         && !admits_kinds(&r.body_admits).is_empty()
-        && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
+        && continuation_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Open a non-greedy loop that exits only when exiting is viable. The caller
 /// emits the body and closes the block, so both emit walkers share one
 /// decision.
-fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
+fn begin_non_greedy_continuation_loop(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+) {
     w.begin("loop");
     w.line("if p.recovering { break; }");
     let verdict = dedup_name("ng_exit", nc);
     w.line(`let mut ${verdict}: bool = false;`);
-    gen_viability_probe(
+    gen_continuation_scan(
         w,
         &r.continuation_scan,
         &verdict,
@@ -4827,8 +4834,8 @@ fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitC
         ctx,
         nc,
         null,
-        r.probe_asks_caller,
-        &r.probe_viable,
+        r.continuation_reaches_caller,
+        &r.caller_follow_kinds,
     );
     w.line(`if ${verdict} { break; }`);
     w.line(`if ${negate_cond(body_guard_cond(r, ctx))} { break; }`);
@@ -4836,9 +4843,9 @@ fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitC
 
 /// A labelled block that scans `continuation` from the parse position and,
 /// when it matches, lets the caller's FOLLOW rule on everything past the
-/// rule where `asks_caller`; `verdict` is the caller's already-declared
-/// `bool`. `prefix_scan` runs first, for the entry probe's body.
-fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
+/// rule where `reaches_caller`; `verdict` is the caller's already-declared
+/// `bool`. `prefix_scan` runs first, for an optional's body.
+fn gen_continuation_scan<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     continuation: &List<ScanElement>,
     verdict: S,
@@ -4846,8 +4853,8 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
     prefix_scan: Option<ScanElement>,
-    asks_caller: bool,
-    probe_viable: &List<i32>,
+    reaches_caller: bool,
+    caller_follow_kinds: &List<i32>,
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(`${label}:`);
@@ -4859,23 +4866,23 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     for let se of continuation {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx);
+    emit_continuation_verdict(w, reaches_caller, caller_follow_kinds, verdict, ctx);
     w.end();
 }
 
-/// The probe's verdict once its scan has matched: the match itself short of the
+/// The continuation scan's verdict once it has matched: the match itself short of the
 /// rule's tail; at the tail, whether the caller can go on at the position. A
 /// rule that reads its continuation asks it, which every entry and call
 /// supplies; any other asks the rule's classical FOLLOW.
-fn emit_probe_verdict<S: AsStrSlice>(
+fn emit_continuation_verdict<S: AsStrSlice>(
     w: &mut CodeWriter,
-    asks_caller: bool,
-    probe_viable: &List<i32>,
+    reaches_caller: bool,
+    caller_follow_kinds: &List<i32>,
     verdict: S,
     ctx: &mut EmitContext,
 ) {
-    if !asks_caller {
-        assert probe_viable.is_empty(), "a FOLLOW is stamped only on a probe reaching the rule's tail";
+    if !reaches_caller {
+        assert caller_follow_kinds.is_empty(), "a FOLLOW is stamped only on a continuation scan reaching the rule's tail";
         w.line(`${verdict} = true;`);
         return;
     }
@@ -4883,12 +4890,12 @@ fn emit_probe_verdict<S: AsStrSlice>(
         w.line(`if ${follow_admits_call("tokens", "pos")} { ${verdict} = true; }`);
         return;
     }
-    if probe_viable.is_empty() {
+    if caller_follow_kinds.is_empty() {
         w.line(`${verdict} = true;`);
         return;
     }
-    w.line("let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    w.line(`if ${ctx.kind_check_str(probe_viable, "probe_kind")} { ${verdict} = true; }`);
+    w.line("let cont_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
+    w.line(`if ${ctx.kind_check_str(caller_follow_kinds, "cont_kind")} { ${verdict} = true; }`);
 }
 
 /// Whether each iteration of a greedy `*` / `+` scans its whole body and commits
@@ -5052,8 +5059,8 @@ fn gen_op_optional(
         w.end();
         return;
     }
-    if optional_probe_decides(r, ctx) {
-        gen_optional_probe_entry(w, r, ctx, nc);
+    if optional_continuation_decides(r, ctx) {
+        gen_optional_continuation_entry(w, r, ctx, nc);
         return;
     }
     if let OptionalShapeLookahead(s) = &r.strategy {
@@ -5302,7 +5309,7 @@ fn gen_op_opt_scan_guard_for_group(
 /// `?` over a group body, dispatching on `rep_op.strategy`: lower's
 /// `pick_optional_specialised` picks `OptionalLookahead`,
 /// `OptionalShapeLookahead` or `OptionalScanGuard`, else `Plain`. A `??` asks
-/// the runtime ATN instead, and an ambiguous entry the probe.
+/// the runtime ATN instead, and an ambiguous entry the continuation scan.
 fn gen_op_repeat_optional_group(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -5325,8 +5332,8 @@ fn gen_op_repeat_optional_group(
         opt.gen_present(w, ctx, &simulated);
         return;
     }
-    if optional_probe_decides(rep_op, ctx) {
-        let verdict = gen_optional_probe_verdict(w, rep_op, ctx, name_counts);
+    if optional_continuation_decides(rep_op, ctx) {
+        let verdict = gen_optional_continuation_verdict(w, rep_op, ctx, name_counts);
         opt.gen_present(w, ctx, &verdict);
         return;
     }
@@ -5655,7 +5662,7 @@ fn prequel_expected_names<S: AsStrSlice>(rule_name: S, at_entry: bool, ctx: &mut
     if !ctx.follow.is_exact(rule_name) {
         return String::new();
     }
-    let follow = ctx.follow.for_probe(rule_name);
+    let follow = ctx.follow.exact_kinds(rule_name);
     if !at_entry {
         return ctx.analysis.render_expected(&follow);
     }
@@ -6212,8 +6219,8 @@ fn gen_op_repeat_non_greedy(
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, GroupEntry::Required);
         w.end();
     }
-    if non_greedy_probe_decides(rep_op, ctx) {
-        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+    if non_greedy_continuation_decides(rep_op, ctx) {
+        begin_non_greedy_continuation_loop(w, rep_op, ctx, name_counts);
     } else if rep_op.atn_decides {
         begin_simulated_loop(w, rep_op, ctx, name_counts, is_plus);
     } else {
@@ -6299,8 +6306,9 @@ fn gen_op_repeat_optional_greedy(
 }
 
 /// Greedy Optional whose body is a leaf: a rule call, or a Token / Literal /
-/// Wildcard / Excluded. An ambiguous entry asks the probe: holding the body
-/// back from its follow would hand every shared token to the continuation, but
+/// Wildcard / Excluded. An ambiguous entry asks the continuation scan: holding
+/// the body back from its follow would hand every shared token to the
+/// continuation, but
 /// ANTLR4 resolves the ambiguity by entering wherever entering leaves a viable
 /// parse.
 fn gen_op_repeat_optional_leaf(
@@ -6311,8 +6319,8 @@ fn gen_op_repeat_optional_leaf(
     follow: &List<i32>,
 ) {
     let _ = dedup_name(&rep_op.field, name_counts);
-    if optional_probe_decides(rep_op, ctx) {
-        gen_optional_probe_entry(w, rep_op, ctx, name_counts);
+    if optional_continuation_decides(rep_op, ctx) {
+        gen_optional_continuation_entry(w, rep_op, ctx, name_counts);
         return;
     }
     let Some([enters, proven]) = gen_leaf_optional_enters(w, rep_op, ctx, name_counts, follow) else {
@@ -6321,8 +6329,8 @@ fn gen_op_repeat_optional_leaf(
     gen_optional_present(w, &rep_op.body, &enters, ctx, &proven);
 }
 
-/// Whether a greedy `?` over a leaf enters here, short of the probe, and the
-/// kinds entering proves; `null` where nothing selects it. A token body yields
+/// Whether a greedy `?` over a leaf enters here, short of the continuation
+/// scan, and the kinds entering proves; `null` where nothing selects it. A token body yields
 /// to a caller's continuation as `leaf_enters_while_viable` says. A rule call
 /// is held back from `follow`, so a Repeat at e.g.
 /// `selector : simpleSelectorSequence ws (combinator ws)*` doesn't greedily
@@ -6444,17 +6452,19 @@ fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     return `(${ctx.kind_check_str(&kinds, &kind)} || ${caller_resumes})`;
 }
 
-/// Whether the probe decides this greedy `?`. Any body: a token contests a
+/// Whether the continuation scan decides this greedy `?`. Any body: a token contests a
 /// continuation as a rule call does (`A? . C` on `a c`), and so does a group
 /// (`(S | ID)? m` on `f()`), a shape lookahead's included: its signatures
 /// cannot see past the body (`('-'? 'a')? 'a'` on `a`).
-fn optional_probe_decides(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
-    return r.body_scannable && r.probe_contested && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
+fn optional_continuation_decides(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
+    return r.body_scannable
+        && r.continuation_contested
+        && continuation_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
-/// Whether a probe has something to ask: a lowered continuation, or the runtime
+/// Whether a continuation scan has something to ask: a lowered continuation, or the runtime
 /// FOLLOW. Both sides read it, or the tournament measures a length the parse skips.
-fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool, ctx: &mut EmitContext) -> bool {
+fn continuation_decides(continuation: &List<ScanElement>, continuation_scannable: bool, ctx: &mut EmitContext) -> bool {
     return continuation_scannable && (!continuation.is_empty() || ctx.current_rule_reads_follow());
 }
 
@@ -6462,9 +6472,14 @@ fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool,
 /// first-set check stays in front so a token that cannot start the body
 /// never pays for a scan. A caller's continuation starting here does not
 /// yield by itself: ANTLR4 enters wherever entering stays viable, and the
-/// probe asks exactly that.
-fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
-    let verdict = gen_optional_probe_verdict(w, r, ctx, nc);
+/// continuation scan asks exactly that.
+fn gen_optional_continuation_entry(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+) {
+    let verdict = gen_optional_continuation_verdict(w, r, ctx, nc);
     w.begin(`if ${verdict}`);
     if r.body matches { Group(_) } {
         gen_op(w, &r.body, ctx, nc);
@@ -6475,8 +6490,9 @@ fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitCont
     w.end();
 }
 
-/// Declares and computes the probe's verdict on entering `r`, and names it.
-fn gen_optional_probe_verdict(
+/// Declares and computes the continuation scan's verdict on entering `r`, and
+/// names it.
+fn gen_optional_continuation_verdict(
     w: &mut CodeWriter,
     r: &RepeatOp,
     ctx: &mut EmitContext,
@@ -6485,7 +6501,7 @@ fn gen_optional_probe_verdict(
     let verdict = dedup_name("opt_enter", nc);
     w.line(`let mut ${verdict}: bool = false;`);
     w.begin(`if ${body_guard_cond(r, ctx)}`);
-    gen_viability_probe(
+    gen_continuation_scan(
         w,
         &r.continuation_scan,
         &verdict,
@@ -6493,8 +6509,8 @@ fn gen_optional_probe_verdict(
         ctx,
         nc,
         Option::Some(r.scan_body),
-        r.probe_asks_caller,
-        &r.probe_viable,
+        r.continuation_reaches_caller,
+        &r.caller_follow_kinds,
     );
     w.end();
     return verdict;
@@ -6703,16 +6719,16 @@ fn gen_repeat_shadow<S: AsStrSlice>(
         ..*r,
         atn_decides: false,
         shadow: null,
-        continuation_scan: s.scan,
+        continuation_scan: s.elements,
         continuation_scannable: s.scannable,
-        probe_asks_caller: s.asks_caller,
-        probe_viable: s.viable,
+        continuation_reaches_caller: s.reaches_caller,
+        caller_follow_kinds: s.caller_follow_kinds,
     };
     let mut lines = CodeWriter::with_capacity(512);
     let static_enters = if !r.kind matches { Optional } {
         gen_loop_static_enters(&mut lines, &static_view, ctx, nc);
-    } else if optional_probe_decides(&static_view, ctx) {
-        gen_optional_probe_verdict(&mut lines, &static_view, ctx, nc);
+    } else if optional_continuation_decides(&static_view, ctx) {
+        gen_optional_continuation_verdict(&mut lines, &static_view, ctx, nc);
     } else {
         match path {
             OpWalk => gen_op_optional_static_enters(&mut lines, &static_view, ctx, nc),
@@ -6780,8 +6796,8 @@ fn gen_loop_static_enters(
     return enters;
 }
 
-/// Whether a greedy `?`'s static path enters `r` here short of the probe, as
-/// the op-only walker decides it (`gen_op_optional`).
+/// Whether a greedy `?`'s static path enters `r` here short of the continuation
+/// scan, as the op-only walker decides it (`gen_op_optional`).
 fn gen_op_optional_static_enters(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -6802,8 +6818,9 @@ fn gen_op_optional_static_enters(
     return optional_entry_yielding(w, r, own, null, follow_gate, ctx, nc);
 }
 
-/// Whether a greedy `?` over the group `inner` enters here short of the probe,
-/// as the surface walker decides it (`gen_op_repeat_optional_group`).
+/// Whether a greedy `?` over the group `inner` enters here short of the
+/// continuation scan, as the surface walker decides it
+/// (`gen_op_repeat_optional_group`).
 fn gen_group_optional_static_enters(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -7244,7 +7261,7 @@ fn gen_scan_rewind_break<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>
 /// The local a slot's gate lives in. One name per slot, not one per gate field:
 /// a field is named in the grammar, so a per-field local would put grammar text
 /// in the same space as the suffixes the emitter mints (`_ok`, `_exit`), where a
-/// gate named `ok` collides with a reserve probe's verdict.
+/// gate named `ok` collides with a reserve walk's verdict.
 fn scan_gate_local<S: AsStrSlice>(slot: S) -> String {
     return `${slot}_gate`;
 }
@@ -7315,7 +7332,7 @@ fn gen_scan_gate_restore<S: AsStrSlice>(w: &mut CodeWriter, ctx: &EmitContext, s
     w.line(`${ctx.scan_gate_place()} = ${scan_gate_local(slot)};`);
 }
 
-/// The lookahead read every gate and probe opens with: the kind at `at`, EOF
+/// The lookahead read every gate and scan opens with: the kind at `at`, EOF
 /// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
 fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, stream: S1, at: S2) {
     w.line(`let ${name} = ${kind_at(stream, at)};`);
@@ -7459,7 +7476,7 @@ fn gen_rep_scan_guard(
 /// Walk `reserve` from the current position and leave `ok` telling whether it
 /// matched. The reserve only measures, so `slot` holds the position and gate to
 /// put back whichever way the walk went.
-fn gen_reserve_probe<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+fn gen_reserve_walk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     reserve: &List<ScanElement>,
     slot: S,
@@ -7479,7 +7496,7 @@ fn gen_reserve_probe<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 }
 
 /// Open the block that runs only where the loop cannot iterate again, reading
-/// the lookahead at `at` before any probe walks. `(A | B)* A` on `b b a` needs it.
+/// the lookahead at `at` before the reserve walks. `(A | B)* A` on `b b a` needs it.
 fn open_reserve_decides<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     kind: S,
@@ -7508,7 +7525,7 @@ fn gen_reserve_check<S: AsStrSlice, S1: AsStrSlice>(
     let label = dedup_name(`${body_end}_scan`, name_counts);
     let kind = dedup_name(`${body_end}_kind`, name_counts);
     open_reserve_decides(w, &kind, "tokens", "pos", body_admits, ctx);
-    gen_reserve_probe(w, reserve, body_end, &ok, &label, ctx);
+    gen_reserve_walk(w, reserve, body_end, &ok, &label, ctx);
     w.line(`if !${ok} { ${fail} }`);
     w.end();
 }

@@ -37,7 +37,8 @@ pub struct LowerMarks {
     pub caller_follow_gate: bool = false,
     /// An ATN-class LR rule was lowered: `ATN_SIM` carries the LR tables.
     pub needs_lr_atn: bool = false,
-    /// The rule runs a caller-FOLLOW gate or a probe, so it reads the slots
+    /// The rule runs a caller-FOLLOW gate or a continuation scan reaching its
+    /// tail, so it reads the slots
     /// itself; the seeds of `follow_rule_snakes`.
     pub rule_reads_follow: List<bool>,
     /// The callees a call in the rule hands its own continuation to. Such a
@@ -180,7 +181,7 @@ impl LowerContext {
     }
 
     /// Record that the rule being lowered reads the continuation it was called
-    /// with directly — a caller-FOLLOW gate or a probe.
+    /// with directly — a caller-FOLLOW gate or a continuation scan.
     pub fn mark_rule_reads_follow(&mut self) {
         let idx = self.current_rule_index();
         self.marks.rule_reads_follow[idx] = true;

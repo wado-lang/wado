@@ -124,7 +124,7 @@ use {
     WildcardOp,
     ExcludedOp,
     RepeatOp,
-    ContinuationProbe,
+    ContinuationScan,
     RepeatBodyShape,
     RepeatStrategy,
     NonGreedyStrategy,
@@ -346,8 +346,8 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
     };
 }
 
-/// Which rules carry the FOLLOW slots, by snake name. The rules that gate or
-/// probe on the continuation seed it; a rule that hands its continuation to one
+/// Which rules carry the FOLLOW slots, by snake name. The rules that gate on
+/// the continuation or scan to it seed it; a rule that hands its continuation to one
 /// of them joins, and that is what its own callers then see. Settled only once
 /// every rule is lowered, and emit asks it at both ends of a call so the
 /// declaration and the arguments cannot disagree.
@@ -1087,7 +1087,7 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut LowerC
     let mut alts: List<AltBody> = [];
     let mut scan_alts: List<ScanBody> = [];
     // An atom alt ends where the LR suffix loop begins, not at the rule's
-    // tail, so no probe here may ask the caller's FOLLOW.
+    // tail, so no continuation scan here may ask the caller.
     for let idx of non_lr_indices {
         let body = lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false);
         let mut scan = lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false);
@@ -1570,7 +1570,7 @@ fn lower_scan_body<S: AsStrSlice>(
     rule_name: S,
     reaches_rule_tail: bool,
 ) -> ScanBody {
-    let probe_rule = rule_name.to_string();
+    let enclosing_rule = rule_name.to_string();
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
@@ -1579,7 +1579,7 @@ fn lower_scan_body<S: AsStrSlice>(
             ctx,
             reaches_rule_tail,
             true,
-            &probe_rule,
+            &enclosing_rule,
         ));
     }
     return alt_scan_body(alt, elements, ctx);
@@ -1736,7 +1736,7 @@ fn lower_scan_group(
                     ctx,
                     false,
                     enclosing_at_tail,
-                    &NO_PROBE_RULE,
+                    &NO_ENCLOSING_RULE,
                     outer_suffix,
                 ));
             }
@@ -1833,7 +1833,7 @@ fn lower_general_scan_group(
                 ctx,
                 false,
                 enclosing_at_tail,
-                &NO_PROBE_RULE,
+                &NO_ENCLOSING_RULE,
                 outer_suffix,
             ));
         }
@@ -1871,9 +1871,10 @@ fn scan_group_element(
 }
 
 /// A repeat body's own group, scanned strict: finding no alternative is the body
-/// not matching, which an optional's probe and an iteration both read. Lenient,
-/// it rewinds and reports a match of nothing, and the probe enters a group none
-/// of whose alternatives fits (`('-'? 'a' 'b' | 'a' 'd')? 'a' 'c'` on `a c`). A
+/// not matching, which an optional's continuation scan and an iteration both
+/// read. Lenient, it rewinds and reports a match of nothing, and the optional
+/// enters a group none of whose alternatives fits
+/// (`('-'? 'a' 'b' | 'a' 'd')? 'a' 'c'` on `a c`). A
 /// group that can match empty stays lenient, and so does one holding a
 /// non-greedy loop, which a scan measures rather than decides.
 fn strict_repeat_body(body: ScanElement, elem: &Element, ctx: &mut LowerContext) -> ScanElement {
@@ -2154,7 +2155,7 @@ fn rebind_scan_repeat_caller_follow(
     index: i32,
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
-    rule_name: &String = &NO_PROBE_RULE,
+    rule_name: &String = &NO_ENCLOSING_RULE,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     let mut rebind = |re: ScanRepeatElement| {
@@ -2178,14 +2179,14 @@ fn rebind_scan_repeat_caller_follow(
             ..re,
             caller_follow_first,
             caller_follow_second,
-            continuation_scan: stamps.probe.scan,
-            continuation_scannable: stamps.probe.scannable,
-            probe_asks_caller: stamps.probe.asks_caller,
-            probe_contested: stamps.probe_contested,
+            continuation_scan: stamps.continuation.elements,
+            continuation_scannable: stamps.continuation.scannable,
+            continuation_reaches_caller: stamps.continuation.reaches_caller,
+            continuation_contested: stamps.continuation_contested,
             static_exit_undecided: stamps.static_exit_undecided,
             atn_decides: stamps.atn_decides,
             atn_asked_kinds: stamps.atn_asked_kinds,
-            probe_viable: stamps.probe.viable,
+            caller_follow_kinds: stamps.continuation.caller_follow_kinds,
             duties: stamps.duties,
         };
     };
@@ -2203,12 +2204,12 @@ fn rebind_scan_repeat_caller_follow(
 
 /// Default for scan walks with no enclosing rule to stamp from — group
 /// bodies and continuation walks, where `reaches_rule_tail` is false and
-/// the probe set is never read.
-global NO_PROBE_RULE: String = "";
+/// the rule's FOLLOW is never read.
+global NO_ENCLOSING_RULE: String = "";
 
 /// Scan mirror of the elements after `index`, or `null` when any of them is
-/// unscannable. Both probes lower their continuation through here so they
-/// scan the same tokens.
+/// unscannable. The continuation scan and the reserve lower their continuation
+/// through here so they scan the same tokens.
 fn lower_scan_continuation_elements(
     alt_elements: &List<Element>,
     index: i32,
@@ -2238,7 +2239,7 @@ fn lower_scan_continuation_elements(
 ///
 /// `reaches_rule_tail` and `enclosing_at_tail` are different questions and
 /// must stay separate: the FOLLOW gate only needs the enclosing alt to be at
-/// its tail, while the probe ends by asking the caller's FOLLOW and is sound
+/// its tail, while the continuation scan ends by asking the caller and is sound
 /// only where the walk really reaches the rule's tail. An LR atom alt and an
 /// LR suffix both end at the loop, not at the rule, so they answer `false`.
 fn lower_alt_scan_element(
@@ -2247,7 +2248,7 @@ fn lower_alt_scan_element(
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     enclosing_at_tail: bool = true,
-    rule_name: &String = &NO_PROBE_RULE,
+    rule_name: &String = &NO_ENCLOSING_RULE,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     let elem_follow = ctx.analysis.compute_call_site_follow(alt_elements, i);
@@ -2427,7 +2428,7 @@ fn lower_scan_shape_body(
             ctx,
             false,
             enclosing_at_tail,
-            &NO_PROBE_RULE,
+            &NO_ENCLOSING_RULE,
             outer_suffix,
         ));
     }
@@ -3038,7 +3039,7 @@ fn lower_group_alt<S: AsStrSlice, S1: AsStrSlice>(
                     i,
                     ctx,
                     false,
-                    &NO_PROBE_RULE,
+                    &NO_ENCLOSING_RULE,
                     outer_suffix,
                 );
             }
@@ -3689,7 +3690,7 @@ fn compute_body_second_position_first(elem: &Element, ctx: &mut LowerContext) ->
 /// asserts on anything else so emit's exhaustive dispatch can drop
 /// the "did not cover this body shape" panics.
 ///
-/// Mirrors emit's pre-shape probes (`is RuleCall(_)`, `op_is_leaf`,
+/// Mirrors emit's pre-shape checks (`is RuleCall(_)`, `op_is_leaf`,
 /// `let Group(g_op) = body && body_has_field`).
 fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
     return match body {
@@ -3973,7 +3974,7 @@ fn pick_greedy_strategy(specialised: Option<RepeatStrategy>) -> RepeatStrategy {
 ///
 /// Returns `null` for:
 /// * leaf inners (Token / Literal / Wildcard / Not — `Plain`
-///   handles them without a scan probe);
+///   handles them without a scan);
 /// * token-only Groups, whose scan is the first-set check `Plain`
 ///   already emits (`optional_body_decided_by_first`);
 /// * unscannable inners (no save-and-rewind path; emit will panic
@@ -4148,27 +4149,27 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         ..*rep_op,
         caller_follow_first,
         caller_follow_second,
-        continuation_scan: stamps.probe.scan,
-        continuation_scannable: stamps.probe.scannable,
-        probe_asks_caller: stamps.probe.asks_caller,
-        probe_contested: stamps.probe_contested,
+        continuation_scan: stamps.continuation.elements,
+        continuation_scannable: stamps.continuation.scannable,
+        continuation_reaches_caller: stamps.continuation.reaches_caller,
+        continuation_contested: stamps.continuation_contested,
         static_exit_undecided: stamps.static_exit_undecided,
         atn_decides: stamps.atn_decides,
         shadow: stamps.shadow,
         atn_asked_kinds: stamps.atn_asked_kinds,
-        probe_viable: stamps.probe.viable,
+        caller_follow_kinds: stamps.continuation.caller_follow_kinds,
         duties: stamps.duties,
     };
 }
 
 /// What a loop's exit reads from its place in the alternative, stamped alike on
 /// the parse's `RepeatOp` and the scan's `ScanRepeatElement`. `shadow` is the
-/// probe the static path would read where the simulator decides, which only
-/// the parse's check of it reads.
+/// continuation scan the static path would read where the simulator decides,
+/// which only the parse's check of it reads.
 struct RepeatExitStamps {
-    probe: ContinuationProbe,
-    shadow: Option<ContinuationProbe>,
-    probe_contested: bool,
+    continuation: ContinuationScan,
+    shadow: Option<ContinuationScan>,
+    continuation_contested: bool,
     static_exit_undecided: bool,
     atn_decides: bool,
     atn_asked_kinds: List<i32>,
@@ -4239,7 +4240,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     } else if contested {
         ctx.mark_asks_simulator("a repeat whose body and continuation can start on one token");
     }
-    let mut static_probe = || lower_continuation_probe(
+    let mut static_scan = || lower_continuation_scan(
         non_greedy,
         kind,
         alt_elements,
@@ -4249,9 +4250,9 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
         rule_name,
     );
     return RepeatExitStamps {
-        probe: if by_atn || contested { ContinuationProbe {} } else { static_probe() },
-        shadow: if shadowed { Option::Some(static_probe()) } else { null },
-        probe_contested: optional_probe_contested(
+        continuation: if by_atn || contested { ContinuationScan {} } else { static_scan() },
+        shadow: if shadowed { Option::Some(static_scan()) } else { null },
+        continuation_contested: optional_continuation_contested(
             non_greedy,
             kind,
             body_admits,
@@ -4338,9 +4339,9 @@ fn lower_reserve_scan(
     return lower_scan_continuation_elements(alt_elements, index, ctx);
 }
 
-/// The continuation for emit's probe, built only for the Repeat kinds whose
-/// decision can need it, and only where the scan's end settles the exit.
-fn lower_continuation_probe<S: AsStrSlice>(
+/// The continuation emit scans, built only for the Repeat kinds whose decision
+/// can need it, and only where the scan's end settles the exit.
+fn lower_continuation_scan<S: AsStrSlice>(
     non_greedy: bool,
     kind: RepeatKind,
     alt_elements: &List<Element>,
@@ -4348,27 +4349,27 @@ fn lower_continuation_probe<S: AsStrSlice>(
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     rule_name: S,
-) -> ContinuationProbe {
-    let wants_probe = non_greedy || kind matches { Optional };
-    // Only a tail walk may ask the caller's FOLLOW (invariant 10: a group's walk
-    // ends at the group, `use foo::*`); elsewhere the continuation must consume.
-    if !wants_probe || !reaches_rule_tail && ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1) {
-        return ContinuationProbe {};
+) -> ContinuationScan {
+    let wants_scan = non_greedy || kind matches { Optional };
+    // Only a tail walk may ask the caller (invariant 10: a group's walk ends at
+    // the group, `use foo::*`); elsewhere the continuation must consume.
+    if !wants_scan || !reaches_rule_tail && ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1) {
+        return ContinuationScan {};
     }
-    let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) else {
-        return ContinuationProbe {};
+    let Some(elements) = lower_scan_continuation_elements(alt_elements, index, ctx) else {
+        return ContinuationScan {};
     };
     if !reaches_rule_tail {
-        return ContinuationProbe { scan, scannable: true };
+        return ContinuationScan { elements, scannable: true };
     }
-    let viable = ctx.follow.for_probe(rule_name);
+    let caller_follow_kinds = ctx.follow.exact_kinds(rule_name);
     ctx.mark_rule_reads_follow();
-    return ContinuationProbe { scan, scannable: true, asks_caller: true, viable };
+    return ContinuationScan { elements, scannable: true, reaches_caller: true, caller_follow_kinds };
 }
 
 /// Whether a greedy `?`'s body and what follows it can start on one token, so
 /// no lookahead test separates entering from skipping.
-fn optional_probe_contested(
+fn optional_continuation_contested(
     non_greedy: bool,
     kind: RepeatKind,
     body: &Admits,

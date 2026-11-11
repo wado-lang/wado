@@ -922,12 +922,13 @@ impl IterationDuties {
     }
 }
 
-/// The probe stamps of one Repeat, shared by its parse and scan twins.
-pub struct ContinuationProbe {
-    pub scan: List<ScanElement> = [],
+/// The continuation scan stamps of one Repeat, shared by its parse and scan
+/// twins.
+pub struct ContinuationScan {
+    pub elements: List<ScanElement> = [],
     pub scannable: bool = false,
-    pub asks_caller: bool = false,
-    pub viable: List<i32> = [],
+    pub reaches_caller: bool = false,
+    pub caller_follow_kinds: List<i32> = [],
 }
 
 pub struct RepeatOp {
@@ -1006,19 +1007,19 @@ pub struct RepeatOp {
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
     pub body_second_position_first: List<i32>,
-    /// Scan mirror of what follows this Repeat, run as emit's viability
-    /// oracle where no lookahead separates the two readings. Empty for a
-    /// tail Repeat — the caller's FOLLOW answers alone.
+    /// Scan mirror of what follows this Repeat in its rule, run to decide
+    /// where no lookahead separates the two readings. Empty for a tail Repeat
+    /// — the caller's continuation answers alone.
     pub continuation_scan: List<ScanElement> = [],
-    /// True iff `continuation_scan` was built, which `lower_continuation_probe`
+    /// True iff `continuation_scan` was built, which `lower_continuation_scan`
     /// does only where its end settles the exit. False keeps emit static.
     pub continuation_scannable: bool = false,
-    /// The continuation ends at the rule's tail, so the verdict also asks the
-    /// caller's FOLLOW there (soundness invariant 10).
-    pub probe_asks_caller: bool = false,
+    /// The continuation scan ends at the rule's tail, so the verdict then asks
+    /// the caller's continuation (soundness invariant 10).
+    pub continuation_reaches_caller: bool = false,
     /// A greedy `?` whose body and continuation can start on one token, which a
     /// `.` or `~X` on either side does with every token.
-    pub probe_contested: bool = false,
+    pub continuation_contested: bool = false,
     /// What each iteration owes before it commits. See `IterationDuties`.
     pub duties: IterationDuties = IterationDuties {},
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
@@ -1031,16 +1032,16 @@ pub struct RepeatOp {
     /// Repeat whose body and continuation can start on one token.
     pub atn_decides: bool = false,
     /// Under `prediction: "verify"`, where the simulator decides a contested
-    /// greedy repeat, the probe the static path would read to decide it instead.
-    pub shadow: Option<ContinuationProbe> = null,
+    /// greedy repeat, the continuation scan the static path would read to
+    /// decide it instead.
+    pub shadow: Option<ContinuationScan> = null,
     /// For a loop the simulator decides, the only tokens it needs asking
     /// about; any other enters. Empty where every token asks.
     pub atn_asked_kinds: List<i32> = [],
-    /// The enclosing rule's classical FOLLOW, conjoined into the probe's
-    /// verdict: its continuation scan ends at the rule's tail, and a token
-    /// outside this set cannot continue any caller from there. Empty leaves
-    /// the verdict as it was.
-    pub probe_viable: List<i32> = [],
+    /// The enclosing rule's classical FOLLOW, which the verdict at the rule's
+    /// tail asks where the rule carries no continuation: a token outside it
+    /// continues no caller. Empty admits every token.
+    pub caller_follow_kinds: List<i32> = [],
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
     /// at this iteration's entry. Set by lower when the Repeat sits at a
@@ -1360,20 +1361,20 @@ pub struct ScanRepeatElement {
     /// on the same ones on both sides.
     pub caller_follow_second: List<i32> = [],
     pub body_second_position_first: List<i32> = [],
-    /// Mirrors the `RepeatOp` probe stamps below, so a probed Repeat
+    /// Mirrors the `RepeatOp` continuation stamps below, so the Repeat
     /// decides the same on both sides — the tournament measures scan lengths
     /// against what the parse consumes.
     pub continuation_scan: List<ScanElement> = [],
     pub continuation_scannable: bool = false,
-    pub probe_asks_caller: bool = false,
-    pub probe_contested: bool = false,
+    pub continuation_reaches_caller: bool = false,
+    pub continuation_contested: bool = false,
     pub static_exit_undecided: bool = false,
     /// Mirrors `RepeatOp.atn_decides` and `RepeatOp.atn_asked_kinds`.
     pub atn_decides: bool = false,
     pub atn_asked_kinds: List<i32> = [],
-    pub probe_viable: List<i32> = [],
-    /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
-    /// both sides, so an unscannable body cannot probe on the scan alone.
+    pub caller_follow_kinds: List<i32> = [],
+    /// Mirrors `RepeatOp.body_scannable`. The continuation entry gate reads it
+    /// on both sides, so an unscannable body cannot take it on the scan alone.
     pub body_scannable: bool = false,
     /// Mirrors `RepeatOp.atn_decision`, for the exit the simulator decides.
     pub atn_decision: i32 = -1,
@@ -1411,7 +1412,8 @@ pub struct ScanOptionalLookaheadElement {
     pub scan_guarded: bool = false,
     /// The optional as a plain repeat, stamped where it stands as any repeat
     /// is. Where what follows it contests its entry, a shape's signature cannot
-    /// tell entering from skipping, so both sides ask its probe instead.
+    /// tell entering from skipping, so both sides ask its continuation scan
+    /// instead.
     pub as_repeat: Option<ScanRepeatElement> = null,
 }
 

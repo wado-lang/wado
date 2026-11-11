@@ -129,13 +129,9 @@ impl RuleFollow {
         return self.kinds.contains_key_str(rule_name);
     }
 
-    /// The rule's classical FOLLOW, for a probe whose scan ends at the
-    /// rule's tail — there, "can the caller continue" is exactly membership
-    /// in this set. Empty when the set is not exact, which keeps the
-    /// probe on its previous answer. The set over-approximates (a union over
-    /// every call site), so conjoining it can only move a verdict from
-    /// "exit" to "iterate": a token it excludes cannot continue any caller.
-    pub fn for_probe<S: AsStrSlice>(&self, rule_name: S) -> List<i32> {
+    /// The rule's classical FOLLOW, or empty where it is not exact. It is a
+    /// union over every call site, so a token it excludes continues no caller.
+    pub fn exact_kinds<S: AsStrSlice>(&self, rule_name: S) -> List<i32> {
         let Some(follow) = self.kinds.get_str(rule_name) else {
             return [];
         };

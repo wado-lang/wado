@@ -466,7 +466,7 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
   the right operand even where the suffix's first token already decides.
   Emitting it only when FIRST(suffix) meets the atom's FIRST or the non-LR
   FOLLOW would skip it on plain arithmetic.
-- [ ] **A loop-reserve probe can scan to EOF.** After Rust's last `#![..]`, the
+- [ ] **A loop's reserve walk can scan to EOF.** After Rust's last `#![..]`, the
   `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
   tokens (`# !` against `# [`) already decide it.
 - [ ] **`exact` parses Rust and TypeScript about twice as slowly as
@@ -885,8 +885,8 @@ cache does not by itself close the gap to the scan.
   exiting. Where the scan runs out — the rule's tail — the verdict asks the
   caller's continuation, or the rule's classical FOLLOW where the rule carries
   none, which cost one bug fix in `follow_env` (an optional's callee was
-  receiving the inner's own FIRST). That last question is why a probe may ask
-  it only where the walk really reaches the rule's tail (soundness invariant
+  receiving the inner's own FIRST). That last question is why a continuation scan
+  may ask it only where the walk really reaches the rule's tail (soundness invariant
   10). Release
   `sqlite_parse` measured unchanged at every step, each arm's own spread moving
   further than any gap between the arms.
