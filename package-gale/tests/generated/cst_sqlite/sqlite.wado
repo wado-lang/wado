@@ -8791,7 +8791,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
             break osl_291_done;
         }
     }
-    if pos != osl_291_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_291_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_291_start && follow_yields(tokens, osl_291_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_291_start;
     }
     return pos;
@@ -10566,7 +10566,7 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = opt_scan_pos >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(12, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_16 { 0 } else { 1 });
     }
@@ -10715,7 +10715,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(15, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_19 { 0 } else { 1 });
     }
@@ -10747,7 +10747,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(17, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_21 { 0 } else { 1 });
     }
@@ -10767,7 +10767,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(18, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_23 { 0 } else { 1 });
         }
@@ -10823,7 +10823,7 @@ fn _parse_commit_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(20, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_25 { 0 } else { 1 });
     }
@@ -10843,7 +10843,7 @@ fn _parse_commit_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(21, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_27 { 0 } else { 1 });
         }
@@ -11008,7 +11008,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(26, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_33 { 0 } else { 1 });
     }
@@ -11099,7 +11099,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(28, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_37 { 0 } else { 1 });
     }
@@ -11126,7 +11126,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(29, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_39 { 0 } else { 1 });
         }
@@ -11374,7 +11374,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_3 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(35, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_49 { 0 } else { 1 });
     }
@@ -11683,7 +11683,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(43, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_62 { 0 } else { 1 });
         }
@@ -13230,7 +13230,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> (
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_3 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(64, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_96 { 0 } else { 1 });
     }
@@ -13303,7 +13303,7 @@ fn _parse_delete_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(67, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_101 { 0 } else { 1 });
     }
@@ -13367,7 +13367,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(69, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_104 { 0 } else { 1 });
     }
@@ -13443,7 +13443,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_2: bool = opt_scan_pos_2 >= 0;
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(70, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_106 { 0 } else { 1 });
     }
@@ -13486,7 +13486,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(73, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_112 { 0 } else { 1 });
         }
@@ -14064,7 +14064,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(86, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_135 { 0 } else { 1 });
     }
@@ -14155,7 +14155,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(88, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_139 { 0 } else { 1 });
     }
@@ -14182,7 +14182,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(89, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_141 { 0 } else { 1 });
         }
@@ -14854,7 +14854,7 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_2: bool = gd_best >= 0;
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_2 = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(101, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_161 { 0 } else { 1 });
     }
@@ -14955,7 +14955,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = opt_scan_pos >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(103, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_163 { 0 } else { 1 });
     }
@@ -15168,7 +15168,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(108, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_169 { 0 } else { 1 });
     }
@@ -15188,7 +15188,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(109, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_171 { 0 } else { 1 });
         }
@@ -15223,7 +15223,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(110, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_172 { 0 } else { 1 });
     }
@@ -15348,7 +15348,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(113, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_176 { 0 } else { 1 });
     }
@@ -15439,7 +15439,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(115, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_180 { 0 } else { 1 });
     }
@@ -15466,7 +15466,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(116, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_182 { 0 } else { 1 });
         }
@@ -15591,7 +15591,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(120, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_188 { 0 } else { 1 });
     }
@@ -15682,7 +15682,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(122, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_192 { 0 } else { 1 });
     }
@@ -15709,7 +15709,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(123, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_194 { 0 } else { 1 });
         }
@@ -16010,7 +16010,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(129, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_201 { 0 } else { 1 });
         }
@@ -16151,7 +16151,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_2 = pos;
                 }
-                opt_enter_3 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_3 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(132, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_206 { 0 } else { 1 });
         }
@@ -16218,7 +16218,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_3 = pos;
                 }
-                opt_enter_4 = opt_scan_pos_3 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter_4 = opt_scan_pos_3 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(133, 1, p.pos, if opt_enter_4 { 0 } else { 1 }, if rs_simulated_208 { 0 } else { 1 });
         }
@@ -16293,7 +16293,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         opt_scan_pos = pos;
                     }
-                    opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                    opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
                 }
                 atn_shadow(135, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_212 { 0 } else { 1 });
             }
@@ -16729,7 +16729,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(143, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_225 { 0 } else { 1 });
     }
@@ -17134,7 +17134,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(148, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_232 { 0 } else { 1 });
     }
@@ -17210,7 +17210,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_3: bool = opt_scan_pos_2 >= 0;
         if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_3 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(149, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_234 { 0 } else { 1 });
     }
@@ -17253,7 +17253,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(152, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_240 { 0 } else { 1 });
         }
@@ -17448,7 +17448,7 @@ fn _parse_type_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = opt_scan_pos >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(157, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_246 { 0 } else { 1 });
     }
@@ -17565,7 +17565,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     pos += 1;
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(161, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_251 { 0 } else { 1 });
         }
@@ -17579,7 +17579,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_pick_253 < 0 && rs_pick_253 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         let rs_simulated_253 = rs_pick_253 == 0;
         if !p.recovering && !p.speculating {
-            atn_shadow(163, 1, p.pos, if p.peek_kind() == TK_K_AUTOINCREMENT && (follow_yields(&p.kinds, p.pos + 1, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_253 { 0 } else { 1 });
+            atn_shadow(163, 1, p.pos, if p.peek_kind() == TK_K_AUTOINCREMENT && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, p.pos + 1, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_253 { 0 } else { 1 });
         }
         if rs_simulated_253 {
             p.expect(TK_K_AUTOINCREMENT, &EMPTY_SYNC, true);
@@ -17725,7 +17725,7 @@ fn _parse_conflict_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(166, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_256 { 0 } else { 1 });
     }
@@ -19095,7 +19095,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
                         }
                         opt_scan_pos_2 = pos;
                     }
-                    opt_enter_2 = opt_scan_pos_2 >= 0 && ((_kind_set_36((if opt_scan_pos_2 < p.kinds.len() { p.kinds[opt_scan_pos_2] } else { TK_EOF })) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                    opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || (_kind_set_36((if opt_scan_pos_2 < p.kinds.len() { p.kinds[opt_scan_pos_2] } else { TK_EOF })) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF)));
                 }
                 atn_shadow(194, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_283 { 0 } else { 1 });
             }
@@ -19230,7 +19230,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(198, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_297 { 0 } else { 1 });
     }
@@ -19554,7 +19554,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(204, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_306 { 0 } else { 1 });
     }
@@ -19605,7 +19605,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(206, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_309 { 0 } else { 1 });
         }
@@ -19739,7 +19739,7 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(210, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_313 { 0 } else { 1 });
     }
@@ -19763,7 +19763,7 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(211, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_315 { 0 } else { 1 });
     }
@@ -20071,7 +20071,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_2: bool = gd_best >= 0;
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_2 = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(221, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_330 { 0 } else { 1 });
     }
@@ -20132,7 +20132,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(223, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_332 { 0 } else { 1 });
     }
@@ -20156,7 +20156,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(224, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_334 { 0 } else { 1 });
     }
@@ -20312,7 +20312,7 @@ fn _parse_result_column__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(230, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_340 { 0 } else { 1 });
     }
@@ -20345,7 +20345,7 @@ fn scan_result_column__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             break osl_220_done;
         }
     }
-    if pos != osl_220_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_220_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_220_start && follow_yields(tokens, osl_220_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_220_start;
     }
     return pos;
@@ -20521,7 +20521,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(234, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_345 { 0 } else { 1 });
     }
@@ -20568,7 +20568,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
         }
         let mut opt_enter_3: bool = gd_best >= 0;
         if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_3 = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(236, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_348 { 0 } else { 1 });
     }
@@ -20630,7 +20630,7 @@ fn scan_table_or_subquery__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             break osl_230_done;
         }
     }
-    if pos != osl_230_start && !follow_yields(tokens, pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_230_start, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_230_start && follow_yields(tokens, osl_230_start, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) {
         pos = osl_230_start;
     }
     if atn_decide_236(atn, tokens, pos, 0) == 0 {
@@ -20820,7 +20820,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(241, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_356 { 0 } else { 1 });
     }
@@ -20912,7 +20912,7 @@ fn scan_table_or_subquery__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             break osl_245_done;
         }
     }
-    if pos != osl_245_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_245_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_245_start && follow_yields(tokens, osl_245_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_245_start;
     }
     return pos;
@@ -21086,7 +21086,7 @@ fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () 
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(245, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_362 { 0 } else { 1 });
     }
@@ -21136,7 +21136,7 @@ fn scan_table_or_subquery__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             break osl_252_done;
         }
     }
-    if pos != osl_252_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_252_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_252_start && follow_yields(tokens, osl_252_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_252_start;
     }
     return pos;
@@ -21451,7 +21451,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = gd_best >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(253, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_371 { 0 } else { 1 });
     }
@@ -21768,7 +21768,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(260, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_379 { 0 } else { 1 });
         }
@@ -21909,7 +21909,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_2 = pos;
                 }
-                opt_enter_3 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_3 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(263, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_384 { 0 } else { 1 });
         }
@@ -21976,7 +21976,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_3 = pos;
                 }
-                opt_enter_4 = opt_scan_pos_3 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter_4 = opt_scan_pos_3 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(264, 1, p.pos, if opt_enter_4 { 0 } else { 1 }, if rs_simulated_386 { 0 } else { 1 });
         }
@@ -22051,7 +22051,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         opt_scan_pos = pos;
                     }
-                    opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                    opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
                 }
                 atn_shadow(266, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_390 { 0 } else { 1 });
             }
