@@ -1875,12 +1875,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Extract struct name AND canonical decl key for parameter type
-        // lookup (follow newtypes to base). The canonical key disambiguates
-        // two modules' same-named structs whose methods both live in the
-        // global `ImplMethodIndex`.
-        let owner =
-            self.newtype_static_owner(target_type_id, &static_call.method, required_trait);
+        // The name and canonical decl key the parameter types are looked up
+        // at: the link of a newtype chain that owns the static. The canonical
+        // key disambiguates two modules' same-named structs whose methods both
+        // live in the global `ImplMethodIndex`.
+        let owner = self.newtype_static_owner(target_type_id, &static_call.method, required_trait);
         let inherited = !owner
             .as_ref()
             .is_some_and(|(link, _)| *link == target_type_id);
@@ -3215,7 +3214,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ty: owner_type,
                 ..recv
             };
-            return self.report_unmatched_static_arg(owner_recv, method_name, &owner_arg_types, span);
+            return self.report_unmatched_static_arg(
+                owner_recv,
+                method_name,
+                &owner_arg_types,
+                span,
+            );
         }
         let survey = self.static_arg_survey(recv, method_name);
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
@@ -3568,10 +3572,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A newtype inheriting the static dispatches to the link of its chain
         // that owns it.
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
-        let owner = self.lookup_newtype(struct_name).and_then(|newtype| {
-            let (link, _) = self.newtype_static_owner(newtype, method_name, None)?;
-            (link != newtype).then_some((newtype, link))
-        });
+        let owner = self
+            .newtype_static_owner(receiver_type, method_name, None)
+            .and_then(|(link, _)| (link != receiver_type).then_some((receiver_type, link)));
         // The written name keys the impl indices; the fq form names the method.
         let (actual_struct_name, actual_struct_fq, actual_mangled_name) = match owner {
             Some((newtype, link)) => {

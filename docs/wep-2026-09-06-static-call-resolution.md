@@ -439,6 +439,11 @@ that needs it, never eagerly for the caller's convenience — resolving the
 receiver up front made a lookup mutate state on paths that never used it, and
 `List<T>::with_capacity`, called from inside its own `impl`, stopped resolving.
 
+The sites that need the owning link before the arguments run the owner walk
+too, but only on a newtype receiver: `newtype_static_target` returns before the
+walk on any other. On a newtype, the walk reads the rungs the call's own
+resolution then reads.
+
 ### Every name reads one answer
 
 A lookup walks no ladder of its own. It reads the resolution's answer, or asks

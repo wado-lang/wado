@@ -3734,13 +3734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
-        let sig = self.owner_static_sig(
-            prefix,
-            suffix,
-            receiver_key,
-            SigChoice::Unique,
-            &[],
-        );
+        let sig = self.owner_static_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[]);
         let Some(sig) = sig else {
             self.report_uninferred_derived_type_args(
                 prefix,
@@ -4998,7 +4992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// that link's slots as the call settled them. A variable nothing answers
     /// comes back as itself.
     pub(super) fn answer_receiver_vars(
-        &mut self,
+        &self,
         vars: &[TypeId],
         spelled: &[TypeId],
         answers: &[Option<TypeId>],
@@ -5215,9 +5209,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodSig> {
         let key = self.static_receiver_key(struct_name, receiver_key);
         match self.newtype_static_target(&key, method_name) {
-            Some((owner, _)) => {
-                self.static_call_sig_or_inherited(struct_name, method_name, Some(&owner), choice, &[])
-            }
+            Some((owner, _)) => self.static_call_sig_or_inherited(
+                struct_name,
+                method_name,
+                Some(&owner),
+                choice,
+                &[],
+            ),
             None => self.static_call_sig_or_inherited(
                 struct_name,
                 method_name,

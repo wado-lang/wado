@@ -4658,11 +4658,6 @@ impl<'a> TypeLookup<'a> {
         self.flags_members_of(self.declaration_at(site, name)?)
     }
 
-    /// The newtype (or `flags` type) `name` names here.
-    pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
-        self.newtype_of(self.declaration(name)?)
-    }
-
     /// `def`'s own type parameters as types, in declaration order. `None` for a
     /// generic newtype, which keeps none: its base is substituted as AST.
     pub(super) fn declared_type_param_ids(&self, def: DefId) -> Option<&'a [TypeId]> {

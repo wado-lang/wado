@@ -255,13 +255,13 @@ struct Candidate {
 
 /// The link of a newtype chain a static call belongs to: the first, from the
 /// spelled head down, whose own impls, cases or derivations answer the name.
-pub(super) struct StaticOwner {
-    pub(super) key: ImplTargetKey,
-    pub(super) name: String,
+struct StaticOwner {
+    key: ImplTargetKey,
+    name: String,
     /// The link's type, where the call knows the head's.
-    pub(super) ty: Option<TypeId>,
+    ty: Option<TypeId>,
     /// The spelled head's type, where the owner is a link below it.
-    pub(super) head: Option<TypeId>,
+    head: Option<TypeId>,
     below_head: bool,
     /// The nearest link that left traits out of scope, which a report names
     /// where no link answers.
@@ -459,7 +459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::static_owner_walk`]'s link alone, for a site that reads the
     /// callee's frame before the call resolves.
-    pub(super) fn static_owner(&mut self, query: &StaticQuery<'_>) -> StaticOwner {
+    fn static_owner(&mut self, query: &StaticQuery<'_>) -> StaticOwner {
         self.static_owner_walk(query).0
     }
 
@@ -658,12 +658,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             required_trait,
             ..StaticQuery::of(&name, method_name)
         });
-        Some((owner.ty?, owner.key))
+        let link = owner.ty.expect("the walk carries the head's type down");
+        Some((link, owner.key))
     }
 
     /// The link below the newtype `key` its static named `method_name`
     /// belongs to, with its name. `None` where `key` is no newtype, or where
-    /// its own impls answer the name.
+    /// it owns the static itself.
     pub(super) fn newtype_static_target(
         &mut self,
         key: &ImplTargetKey,

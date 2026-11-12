@@ -415,10 +415,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some((lookup.flags_members_at(site, name)?.clone(), None))
     }
 
-    pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {
-        self.type_lookup().newtype(name)
-    }
-
     pub(super) fn lookup_variant_case_of_decl(&self, def: DefId) -> Option<&VariantInfo> {
         self.type_lookup().variant_cases_of(def)
     }
@@ -729,11 +725,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return None;
         };
         let newtype = self.newtype_self_type(*def)?;
-        let link = self
-            .tysys
-            .type_table
-            .borrow()
-            .static_link_below(newtype)?;
+        let link = self.tysys.type_table.borrow().static_link_below(newtype)?;
         let link_name = match *self.tysys.type_table.borrow().get(link) {
             tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
                 self.tysys.type_table.borrow().decl_name(def).to_string()
