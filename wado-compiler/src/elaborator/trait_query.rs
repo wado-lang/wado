@@ -25,7 +25,7 @@ use super::scope::{
     TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
-use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
+use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause, clause_writer};
 use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, OperatorImpl, ParamList, ResolvedTraitMethod, SigPosition,
@@ -563,8 +563,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the target: `Add<Rhs = Self>` at `impl Add for P` is `Add<P>`.
             let space = self.inherited_space(trait_decl, &arg_ids, &via, self_type);
             let pick = vec![true; bound.type_args.len()];
+            let binding = self
+                .tysys
+                .base_self_binding(self_type, Some(clause_writer(trait_decl, &via)));
             let supertrait_trait = self.with_type_params_bound(&space, |e| {
-                e.trait_named_with_resolved_args(named, &bound, &pick)
+                e.with_self_binding(binding, |e| {
+                    e.trait_named_with_resolved_args(named, &bound, &pick)
+                })
             });
             let supertrait = self.tysys.resolutions.defs().name(decl).to_string();
             if self
@@ -2943,7 +2948,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `Self` in the clause, or in a default the chain fills, is
                     // the subject: `Make<Self::Base>` asks the subject's own
                     // `Base`, as its impl answers it.
-                    let binding = self.tysys.base_self_binding(subject, Some(root));
+                    let binding = self
+                        .tysys
+                        .base_self_binding(subject, Some(clause_writer(root, &via)));
                     let space = self.inherited_space(root, &root_args, &via, subject);
                     self.with_type_params_bound(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
