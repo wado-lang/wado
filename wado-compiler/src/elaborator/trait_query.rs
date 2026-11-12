@@ -3136,7 +3136,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_,
                 )
             });
-            self.report_tied_impls(&tied, type_arg, span);
+            self.report_tied_impls(&tied, trait_, type_arg, span);
             return true;
         }
         let type_name = self.tysys.type_id_to_string(type_arg);

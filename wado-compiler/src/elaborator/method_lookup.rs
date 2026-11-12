@@ -20,7 +20,7 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
-    StructDef, SubstitutionContext, TemplateId, TypeArgMap, TypeId, TypeParamId,
+    StructDef, SubstitutionContext, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId,
     impl_args_in_slot_order, positional_substitution, slots_from_impl_args,
 };
 use crate::token::Span;
@@ -2408,7 +2408,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match &order {
             Some(Ordered::AmbiguousBlankets(defs)) => {
                 let receiver = receiver_type_id.expect("the order answers a receiver it can say");
-                self.report_tied_impls(defs, receiver, span);
+                // A turbofish no tied impl takes leaves no tie to report.
+                if let [first, ..] = found_traits.as_slice() {
+                    let trait_ = self.trait_at(first.trait_decl, &first.trait_args);
+                    self.report_tied_impls(defs, &trait_, receiver, span);
+                }
             }
             Some(Ordered::AmbiguousTraits(_)) => {
                 self.report_cross_trait_ambiguity(&found_traits, method_name, span);
@@ -2923,6 +2927,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn report_tied_impls(
         &mut self,
         tied: &[Option<DefId>],
+        trait_: &FqTraitName,
         receiver: TypeId,
         span: Span,
     ) {
@@ -2941,22 +2946,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blankets.iter().map(|def| &env.impl_headers[def]).collect();
         let heads: Vec<&ImplHeader> = heads.iter().map(|def| &env.impl_headers[def]).collect();
         let receiver = self.tysys.type_id_to_string(receiver);
-        if let [first, _, ..] = blankets.as_slice() {
+        if let [_, _, ..] = blankets.as_slice() {
             let _ = self.emit(TypeError::AmbiguousValueBlankets {
-                trait_name: first.trait_head_name().unwrap_or_default().to_string(),
+                trait_name: trait_.to_display(),
                 receiver: receiver.clone(),
                 bounds: blankets.iter().map(|h| receiver_as_written(h)).collect(),
                 span,
             });
         }
-        if let [first, _, ..] = heads.as_slice() {
+        if let [_, _, ..] = heads.as_slice() {
             let _ = self.emit(TypeError::AmbiguousHeadImpls {
-                trait_name: first.trait_head_name().unwrap_or_default().to_string(),
+                trait_name: trait_.to_display(),
                 receiver,
                 headers: heads.iter().map(|h| header_as_written(h)).collect(),
                 span,
             });
         }
+    }
+
+    /// Trait `decl` at `args`, its holes settled as far as they are: the
+    /// instance a tie reaches, which names what an impl ending it writes.
+    pub(super) fn trait_at(&self, decl: DefId, args: &[TypeId]) -> FqTraitName {
+        let args = self.apply_infer_holes_each(args);
+        self.tysys
+            .type_table
+            .borrow()
+            .trait_ref_name(&TraitRef { decl, args })
     }
 
     /// Report the impls of one trait that each leave a slot to the call and all
@@ -2969,13 +2984,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         span: Span,
     ) {
-        let trait_args = self.apply_infer_holes_each(&found[tied[0]].trait_args);
         let blocks: Vec<DefId> = tied
             .iter()
             .map(|&i| slot_leaving_block(&found[i]))
             .collect();
         let receiver = self.tysys.type_id_to_string(receiver);
-        self.report_blocks_tied(&blocks, &trait_args, &receiver, span);
+        self.report_blocks_tied(&blocks, &found[tied[0]].trait_args, &receiver, span);
     }
 
     /// Report impl `blocks` of one trait, each leaving a slot to the call, as
@@ -2987,16 +3001,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &str,
         span: Span,
     ) {
-        let args: Vec<String> = trait_args
-            .iter()
-            .map(|&arg| self.tysys.type_id_to_string(arg))
-            .collect();
         let env = Arc::clone(&self.tysys.trait_env);
-        let head = env.impl_headers[&blocks[0]]
-            .trait_head_name()
-            .unwrap_or_default();
+        let decl = env.impl_headers[&blocks[0]]
+            .trait_def()
+            .expect("a tied block implements a resolved trait");
         let _ = self.emit(TypeError::AmbiguousHeadImpls {
-            trait_name: format!("{head}<{}>", args.join(", ")),
+            trait_name: self.trait_at(decl, trait_args).to_display(),
             receiver: receiver.to_string(),
             headers: blocks
                 .iter()

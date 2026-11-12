@@ -4529,7 +4529,7 @@ impl FqTraitName {
     #[must_use]
     pub fn to_display(&self) -> String {
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
-        mangle_generic_name(self.head.name(), &args)
+        display_generic_name(self.head.name(), &args)
     }
 }
 
