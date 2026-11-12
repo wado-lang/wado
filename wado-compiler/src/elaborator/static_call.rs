@@ -362,8 +362,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Err(out_of_scope) => out_of_scope,
         };
-        // A newtype and a `flags` reach what they wrap, one link of a chain at
-        // a time, so a link's own impls answer before its base's. Read from
+        // A newtype reaches what it wraps, one link of a chain at a time, so a
+        // link's own impls answer before its base's. Read from
         // the alias's declaration, since a namespaced `lib::Q::twice()` leaves
         // the caller's frame no `Q` to look one up by.
         let key = match receiver_key {

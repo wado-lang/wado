@@ -33,7 +33,7 @@ use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
-use super::trait_query::{DerivedAt, OnBoundTrait, SelfBinding};
+use super::trait_query::{OnBoundTrait, SelfBinding};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator, util};
@@ -3573,17 +3573,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .resolves()
     }
 
-    /// Whether `ty` is a flags type answering `method_name` itself rather than
-    /// through `u32`: its bitmask's derived `eq` and `cmp` are its own.
-    fn flags_answers_itself(&mut self, ty: TypeId, method_name: &str) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(ty),
-            ResolvedType::Flags { .. }
-        ) && self
-            .try_auto_derived_method_match(method_name, ty, DerivedAt::Instance)
-            .is_some()
-    }
-
     /// Resolve a static method call from a qualified name like `Point::origin()`
     pub(super) fn resolve_static_method_call_from_qualified(
         &mut self,
@@ -3632,18 +3621,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
                 match resolved {
                     ResolvedType::Newtype { .. } => {
-                        let (declared, representation) = {
-                            let tt = self.tysys.type_table.borrow();
-                            (
-                                tt.reflect_structure_head(newtype_id),
-                                tt.representation_head(newtype_id),
-                            )
-                        };
-                        let base_type_id = if self.flags_answers_itself(declared, method_name) {
-                            declared
-                        } else {
-                            representation
-                        };
+                        let base_type_id = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .reflect_structure_head(newtype_id);
                         let base_args = self
                             .tysys
                             .type_table
@@ -3655,13 +3637,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let mangled = MethodName::format_local(&base_fq, None, method_name);
                         let base_name = self.tysys.get_ultimate_base_struct_name(base_type_id);
                         (base_name, base_fq, mangled)
-                    }
-                    ResolvedType::Flags { .. }
-                        if !self.flags_answers_itself(newtype_id, method_name) =>
-                    {
-                        let base_fq = FqTypeName::builtin(TypeTable::FLAGS_BASE_NAME);
-                        let mangled = MethodName::format_local(&base_fq, None, method_name);
-                        (TypeTable::FLAGS_BASE_NAME.to_string(), base_fq, mangled)
                     }
                     _ => (
                         struct_name.to_string(),
@@ -3999,16 +3974,16 @@ impl TypeSystem {
     }
 
     /// A static-method receiver's `(struct_name, decl_key)` for impl / parameter
-    /// lookups: newtypes follow to the base, flags to `u32`, arrays to `core:array`.
+    /// lookups: newtypes follow to the base, arrays to `core:array`.
     pub(super) fn static_receiver_struct_key(
         &self,
         target_type_id: TypeId,
     ) -> (Option<String>, Option<ImplTargetKey>) {
         let key = {
             let table = self.type_table.borrow();
-            // Keyed on what they wrap, not on themselves: a newtype's impls are
-            // looked up on its base, and `flags`' on `u32`.
-            let head = table.representation_head(target_type_id);
+            // Keyed on what a newtype wraps, not on itself: its impls are
+            // looked up on its base. A `flags` wraps nothing it inherits from.
+            let head = table.reflect_structure_head(target_type_id);
             match table.get(head) {
                 ResolvedType::BuiltinArray(_) => {
                     Some(ImplTargetKey::Builtin(ARRAY_TYPE_NAME.to_string()))
