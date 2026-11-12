@@ -79,9 +79,6 @@ spelling and a namespaced one reach the same answer.
 
 Each answer means one thing:
 
-- A link of a newtype chain that offers nothing for the name passes the call to
-  the link below. A link that offers something keeps it, whatever the arguments
-  then select (see below).
 - A declaration whose slots the receiver has not filled resolves, and has a
   return type. Only the _types_ wait on the receiver. How many parameters there
   are, what they are called and which carry defaults are the declaration's own,
