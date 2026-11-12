@@ -1,0 +1,12 @@
+// Two type parameters of one list may not share a name, a pack included.
+
+fn pick<T, ..T>(a: T, rest: [..T]) -> T {
+    return a;
+}
+
+test {
+    assert pick(1, [2]) == 1;
+}
+
+__DATA__
+{"compile_error": ":3:14: analysis error: cannot redeclare 'T' in the same scope (first defined at 3:9)"}

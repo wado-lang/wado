@@ -1004,7 +1004,19 @@ impl Resolver<'_> {
                     .map(|p| (owner, p.name.clone())),
             );
         }
+        let mut written: IndexMap<&str, Span> = IndexMap::default();
         for p in params {
+            if p.is_written()
+                && let Some(&first) = written.get(p.name.as_str())
+            {
+                self.redeclarations.push(Redeclaration {
+                    module: self.module.clone(),
+                    name: p.name.clone(),
+                    first,
+                    second: p.name_span,
+                });
+            }
+            written.entry(p.name.as_str()).or_insert(p.name_span);
             scope.insert(p.name.clone(), p.id);
             if p.is_effect {
                 self.effect_binders.insert(p.id);
