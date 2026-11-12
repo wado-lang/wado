@@ -915,10 +915,6 @@ warm-up phase takes that cost. Three runs:
   a static dispatch, and neither records one.
 - Whether `match type` gains a `template` arm for the `Template` case
   [Total Reflection](./wep-2026-09-05-total-reflection.md) gives the type.
-- A tag answered by a blanket impl (`` i32::label`…` ``). It is not a
-  tagged-template gap: the same static method fails the same way when spelled
-  as a call, and is pinned as `#[TODO]` in
-  `reflect_pack_blanket_static_todo.wado`.
 - A hole that is an affine place is read where the tag runs, not at its own
   position, since it cannot be copied. A later hole that writes it shows
   through: `` `${c:?} ${c.bump()}` `` renders `c` after the bump. The
