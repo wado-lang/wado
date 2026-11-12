@@ -45,6 +45,17 @@ impl<T> Wrap<T> {
     fn take(w: Wrap<T>) -> T {
         return w.v;
     }
+
+    fn maker(&self) -> fn() -> Wrap<T> {
+        let v = self.v;
+        return || Wrap { v };
+    }
+}
+
+impl From<i64> for Wrap<i32> {
+    fn from(value: i64) -> Wrap<i32> {
+        return { v: value as i32 };
+    }
 }
 
 type Wl<T> = Wrap<List<T>>;
@@ -98,6 +109,13 @@ test "a literal argument builds the newtype the solve settles" {
     assert w.v == 4;
     assert takes_wi(Wi::back({ v: 5 })) == 5;
     assert Wi::take({ v: 6 }) == 6;
+    assert takes_wi(Wi::from(7)) == 7;
+}
+
+test "a function type the signature returns reads the base as the newtype" {
+    let a: Wi = { v: 2 };
+    let f: fn() -> Wi = a.maker();
+    assert takes_wi(f()) == 2;
 }
 
 // On a chain, only the link a method is declared on becomes the receiver: a
@@ -167,6 +185,8 @@ test "a chain retypes only the link that declares the method" {
     assert takes_outer(Outer::mid_wrap({ v: 7 })) == 7;
     assert takes_outer(Outer::mid_wrap(o)) == 2;
     assert takes_outer(o.twice()) == 4;
+    let f: fn() -> Outer = o.maker();
+    assert takes_outer(f()) == 2;
 
     let ni: lib::Wi = { v: 3 };
     let passed: lib::Wi = lib::Outer::pass(ni);

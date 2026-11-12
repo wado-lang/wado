@@ -1052,14 +1052,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut substituted_param_types: Vec<TypeId> = if method_type_args.is_empty() {
             expected_param_types.clone()
         } else {
-            expected_param_types
+            let mut solved: Vec<TypeId> = expected_param_types
                 .iter()
                 .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
-                .collect()
+                .collect();
+            if let Some(frame) = inherited {
+                frame.to_newtype_in(&self.tysys, &mut solved);
+            }
+            solved
         };
-        if let Some(frame) = inherited {
-            frame.to_newtype_in(&self.tysys, &mut substituted_param_types);
-        }
         if let Some(block) = dispatched_impl_block {
             self.settle_trait_arg_slots(
                 block,
@@ -1879,9 +1880,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let own_static = self.own_newtype_static(target_type_id, &static_call.method);
         let inherited = own_static.is_none();
         let declaring_key = own_static.or_else(|| {
-            let link = self.newtype_link_declaring(target_type_id, &static_call.method)?;
-            let def = self.tysys.type_table.borrow().nominal_def(link)?;
-            Some(ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def))
+            self.newtype_link_declaring(target_type_id, &static_call.method)
+                .map(|(_, key)| key)
         });
         let (struct_name_for_lookup, struct_key_for_lookup) = match declaring_key {
             Some(key) => (
@@ -3606,76 +3606,77 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // then fall back to the base type's static method
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
         // The written name keys the impl indices; the fq form names the method.
-        let (actual_struct_name, actual_struct_fq, actual_mangled_name) =
-            if let Some(newtype_id) = self.lookup_newtype(struct_name) {
-                // First check if the newtype itself has this static method
-                if self.declares_method_directly(struct_name, method_name) {
-                    (
-                        struct_name.to_string(),
-                        qualified_struct_name,
-                        mangled_func_name.to_string(),
-                    )
-                } else if let Some(link) = self.newtype_link_declaring(newtype_id, method_name) {
-                    let link_name = self.tysys.type_table.borrow().name(link);
-                    let link_fq = self.qualified_receiver_name(&link_name, link);
-                    let mangled = MethodName::format_local(&link_fq, None, method_name);
-                    let link_args = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_type_args(link)
-                        .unwrap_or_default();
-                    newtype_dispatch = Some((newtype_id, link, link_args));
-                    (link_name, link_fq, mangled)
-                } else {
-                    let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
-                    match resolved {
-                        ResolvedType::Newtype { .. } => {
-                            let (declared, representation) = {
-                                let tt = self.tysys.type_table.borrow();
-                                (
-                                    tt.reflect_structure_head(newtype_id),
-                                    tt.representation_head(newtype_id),
-                                )
-                            };
-                            let base_type_id = if self.flags_answers_itself(declared, method_name) {
-                                declared
-                            } else {
-                                representation
-                            };
-                            let base_args = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .nominal_type_args(base_type_id)
-                                .unwrap_or_default();
-                            newtype_dispatch = Some((newtype_id, base_type_id, base_args));
-                            let base_fq = self.tysys.fq_receiver_head(base_type_id);
-                            let mangled = MethodName::format_local(&base_fq, None, method_name);
-                            let base_name = self.tysys.get_ultimate_base_struct_name(base_type_id);
-                            (base_name, base_fq, mangled)
-                        }
-                        ResolvedType::Flags { .. }
-                            if !self.flags_answers_itself(newtype_id, method_name) =>
-                        {
-                            let base_fq = FqTypeName::builtin(TypeTable::FLAGS_BASE_NAME);
-                            let mangled = MethodName::format_local(&base_fq, None, method_name);
-                            (TypeTable::FLAGS_BASE_NAME.to_string(), base_fq, mangled)
-                        }
-                        _ => (
-                            struct_name.to_string(),
-                            qualified_struct_name,
-                            mangled_func_name.to_string(),
-                        ),
-                    }
-                }
-            } else {
+        let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
+            self.lookup_newtype(struct_name)
+        {
+            // First check if the newtype itself has this static method
+            if self.declares_method_directly(struct_name, method_name) {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,
                     mangled_func_name.to_string(),
                 )
-            };
+            } else if let Some((link, _)) = self.newtype_link_declaring(newtype_id, method_name) {
+                let link_name = self.tysys.type_table.borrow().name(link);
+                let link_fq = self.qualified_receiver_name(&link_name, link);
+                let mangled = MethodName::format_local(&link_fq, None, method_name);
+                let link_args = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_type_args(link)
+                    .unwrap_or_default();
+                newtype_dispatch = Some((newtype_id, link, link_args));
+                (link_name, link_fq, mangled)
+            } else {
+                let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
+                match resolved {
+                    ResolvedType::Newtype { .. } => {
+                        let (declared, representation) = {
+                            let tt = self.tysys.type_table.borrow();
+                            (
+                                tt.reflect_structure_head(newtype_id),
+                                tt.representation_head(newtype_id),
+                            )
+                        };
+                        let base_type_id = if self.flags_answers_itself(declared, method_name) {
+                            declared
+                        } else {
+                            representation
+                        };
+                        let base_args = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .nominal_type_args(base_type_id)
+                            .unwrap_or_default();
+                        newtype_dispatch = Some((newtype_id, base_type_id, base_args));
+                        let base_fq = self.tysys.fq_receiver_head(base_type_id);
+                        let mangled = MethodName::format_local(&base_fq, None, method_name);
+                        let base_name = self.tysys.get_ultimate_base_struct_name(base_type_id);
+                        (base_name, base_fq, mangled)
+                    }
+                    ResolvedType::Flags { .. }
+                        if !self.flags_answers_itself(newtype_id, method_name) =>
+                    {
+                        let base_fq = FqTypeName::builtin(TypeTable::FLAGS_BASE_NAME);
+                        let mangled = MethodName::format_local(&base_fq, None, method_name);
+                        (TypeTable::FLAGS_BASE_NAME.to_string(), base_fq, mangled)
+                    }
+                    _ => (
+                        struct_name.to_string(),
+                        qualified_struct_name,
+                        mangled_func_name.to_string(),
+                    ),
+                }
+            }
+        } else {
+            (
+                struct_name.to_string(),
+                qualified_struct_name,
+                mangled_func_name.to_string(),
+            )
+        };
 
         let impl_type_args_owned: Vec<TypeId> = match &newtype_dispatch {
             Some((_, _, base_args)) if impl_type_args.is_empty() && !base_args.is_empty() => {

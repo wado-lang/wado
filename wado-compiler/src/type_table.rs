@@ -5358,14 +5358,9 @@ impl TypeTable {
     /// base an inherited method's signature names, which alone becomes
     /// `newtype` (`spec-types`, "Method Signature Substitution").
     pub fn link_declared_on(&self, newtype: TypeId, declared_on: DefId) -> Option<TypeId> {
-        let mut link = newtype;
-        while let Some(base) = self.link_below(link) {
-            if self.nominal_def(base) == Some(declared_on) {
-                return Some(base);
-            }
-            link = base;
-        }
-        None
+        self.newtype_chain(newtype)
+            .skip(1)
+            .find(|&link| self.nominal_def(link) == Some(declared_on))
     }
 
     /// [`Self::link_declared_on`], else the chain's end, where a method no
@@ -5373,7 +5368,7 @@ impl TypeTable {
     pub fn inherited_base(&self, newtype: TypeId, declared_on: Option<DefId>) -> TypeId {
         declared_on
             .and_then(|decl| self.link_declared_on(newtype, decl))
-            .unwrap_or_else(|| self.representation_head(newtype))
+            .unwrap_or_else(|| self.reflect_structure_head(newtype))
     }
 
     /// Check if two types share a common base type (for cast validation).

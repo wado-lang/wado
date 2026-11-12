@@ -788,6 +788,26 @@ impl TypeSystem {
                 }
             }
 
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => {
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&param| self.substitute_in_type(param, replace))
+                    .collect();
+                let new_return = self.substitute_in_type(return_type, replace);
+                if new_params == params && new_return == return_type {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .make_function_with_mut(is_mut, new_params, new_return, effects)
+                }
+            }
+
             // Other types: no substitution
             _ => type_id,
         }

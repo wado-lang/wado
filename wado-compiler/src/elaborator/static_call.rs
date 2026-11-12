@@ -356,14 +356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let out_of_scope = match answered {
             Ok(mut lookup) => {
                 if let (StaticLookup::Found(callee), Some((head, link))) = (&mut lookup, link) {
-                    for ty in callee
-                        .params
-                        .param_types
-                        .iter_mut()
-                        .chain(std::iter::once(&mut callee.return_type))
-                    {
-                        *ty = self.tysys.substitute_newtype_in_type(*ty, link, head);
-                    }
+                    self.retype_callee(callee, link, head);
                 }
                 return lookup;
             }
@@ -550,13 +543,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The link below `newtype` on its chain that [`Self::newtype_static_target`]
-    /// answers with, where that link is itself a newtype or a `flags`: its
-    /// statics answer before the base's.
+    /// answers with, and its key, where that link is itself a newtype or a
+    /// `flags`: its statics answer before the base's.
     pub(super) fn newtype_link_declaring(
         &mut self,
         newtype: TypeId,
         method_name: &str,
-    ) -> Option<TypeId> {
+    ) -> Option<(TypeId, ImplTargetKey)> {
         let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(newtype) else {
             return None;
         };
@@ -568,7 +561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             table.get(link),
             ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
         );
-        declares.then_some(link)
+        declares.then_some((link, link_key))
     }
 
     /// The base `receiver` wraps, if it is a newtype, and `arg_types` as that
@@ -611,25 +604,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// `callee` as a newtype inherits it: every base on `receiver`'s chain
-    /// becomes `receiver`, in each parameter and the return type (`spec-types`,
-    /// "Method Signature Substitution"). Any other receiver is left as is.
+    /// The derived `callee` as a newtype inherits it: the chain's end, which
+    /// the derivation is written for, becomes `receiver` in each parameter and
+    /// the return type (`spec-types`, "Method Signature Substitution"). Any
+    /// other receiver is left as is.
     fn retype_to_newtype(&self, callee: &mut StaticCallee, receiver: TypeId) {
-        self.retype_through_newtype_chain(receiver, &mut callee.params.param_types);
-        self.retype_through_newtype_chain(receiver, std::slice::from_mut(&mut callee.return_type));
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .inherited_base(receiver, None);
+        self.retype_callee(callee, base, receiver);
     }
 
-    /// `types` with every base on `receiver`'s newtype chain become `receiver`.
-    pub(super) fn retype_through_newtype_chain(&self, receiver: TypeId, types: &mut [TypeId]) {
-        let mut link = receiver;
-        loop {
-            let Some(base) = self.tysys.type_table.borrow().get_newtype_base(link) else {
-                break;
-            };
-            for ty in types.iter_mut() {
-                *ty = self.tysys.substitute_newtype_in_type(*ty, base, receiver);
-            }
-            link = base;
+    /// `callee` with `from` read as `to` in each parameter and the return type.
+    fn retype_callee(&self, callee: &mut StaticCallee, from: TypeId, to: TypeId) {
+        for ty in callee
+            .params
+            .param_types
+            .iter_mut()
+            .chain(std::iter::once(&mut callee.return_type))
+        {
+            *ty = self.tysys.substitute_newtype_in_type(*ty, from, to);
         }
     }
 
