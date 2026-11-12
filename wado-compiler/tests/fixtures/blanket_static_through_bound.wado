@@ -1,0 +1,39 @@
+// A blanket impl's static answers a call on any type its bounds admit: a
+// concrete one, or a parameter whose own bound admits it, though no bound
+// names the blanket's trait. A literal argument takes the parameter's type,
+// here a projection the receiver answers.
+trait Holder with () {
+    type Item;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i64;
+}
+
+trait Tag with () {
+    type Item;
+    fn mk(item: Self::Item) -> Self::Item;
+}
+
+impl<B: Holder> Tag for B {
+    type Item = B::Item;
+    fn mk(item: B::Item) -> B::Item {
+        return item;
+    }
+}
+
+fn through_bound<S: Holder<Item = i64>>(_s: S) -> i64 {
+    return S::mk(7);
+}
+
+test "a concrete receiver" {
+    assert Box::mk(5) == 5;
+}
+
+test "a parameter's bound admits the blanket" {
+    assert through_bound(Box { v: 1 }) == 7;
+}

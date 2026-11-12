@@ -2509,6 +2509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.id,
                 Some(static_call.method_id),
                 &method_type_args,
+                &static_call.args,
                 &args,
                 &arg_sites,
                 static_call.span,
@@ -2670,6 +2671,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_id: Option<AstId>,
         method_type_args: &[TypeId],
+        raw_args: &[Expr],
         args: &[TypeId],
         arg_sites: &[ArgSite],
         span: Span,
@@ -2722,6 +2724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = SubstitutionContext::new()
             .bind(&[blanket_slot], &[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
+        let return_type = self.answer_frame_projections(return_type);
 
         // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
         // as a Wasm validation failure.
@@ -2732,6 +2735,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             receiver_type_id,
         );
+        // The arguments were resolved before the blanket was found, so a
+        // literal among them takes its parameter's type only now.
+        let mut args = args.to_vec();
+        self.recoerce_literal_args(raw_args, &mut args, &param_types);
+        let args = &args[..];
         if !self.check_static_call_args(
             &param_types,
             args,

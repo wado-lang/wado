@@ -5518,6 +5518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call_id,
             method_id,
             &[],
+            raw_args,
             args,
             &arg_sites,
             span,
@@ -5993,11 +5994,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return final_return_type;
         }
 
+        // No bound declares it, but a blanket over what the bounds admit may.
+        let args: Vec<TypeId> = match given_args {
+            Some(args) => args.to_vec(),
+            None => call
+                .args
+                .iter()
+                .map(|arg| self.resolve_expr(arg, ctx, None))
+                .collect(),
+        };
+        let method_id = match &call.callee {
+            Expr::Ident(ident) => ident.segments.last().map(|seg| seg.id),
+            _ => None,
+        };
+        if let Some(return_type) = self.resolve_named_type_blanket_static(
+            type_param_type_id,
+            type_param_name,
+            method_name,
+            call.id,
+            method_id,
+            &args,
+            &call.args,
+            call.span,
+            ctx,
+        ) {
+            return return_type;
+        }
         let _ = self.emit(TypeError::UnknownFunction {
             name: format!("{type_param_name}::{method_name}"),
             span: call.span,
         });
-        self.resolve_args_without_callee(&call.args, ctx)
+        TypeTable::ERROR
     }
 
     /// Resolve `args`, each against the parameter it fills. A parameter still
