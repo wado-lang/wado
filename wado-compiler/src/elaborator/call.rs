@@ -113,15 +113,13 @@ pub(super) fn bound_targets<'b>(
         .collect()
 }
 
-/// The slots `owner` declares for `params`, as a bound's target names them.
-pub(super) fn slot_names(owner: Option<DefId>, params: &[ast::GenericParam]) -> Vec<ParamRef> {
+/// The slots `params` declare, as a bound's target names them. Each is named
+/// by its own binder: an impl method's signature carries the trait's
+/// parameters, whose bounds name the trait method's slots.
+pub(super) fn slot_names(params: &[ast::GenericParam], resolutions: &Resolutions) -> Vec<ParamRef> {
     params
         .iter()
-        .map(|param| ParamRef {
-            owner,
-            family_decl: None,
-            name: param.name.clone(),
-        })
+        .map(|param| ParamRef::declared(param, resolutions))
         .collect()
 }
 
@@ -3582,7 +3580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let open = self.open_slot(owner, param);
             type_args.push(open);
         }
-        self.resolve_assoc_bound_args(owner, params, type_args);
+        self.resolve_assoc_bound_args(params, type_args);
     }
 
     /// A call's slot for `param`, which `owner` declares, that nothing has
@@ -4068,7 +4066,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         *type_args = new_args;
         let owners: Vec<ast::GenericParam> = space.iter().map(|&p| p.clone()).collect();
-        let names = slot_names(callee.def(), &owners);
+        let names = slot_names(&owners, &self.tysys.resolutions);
         self.link_deferred_assoc_equalities(&owners, &names, type_args, None, span);
     }
 
@@ -4080,14 +4078,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// an index space; iterates to a fixpoint for chained bounds.
     pub(super) fn resolve_assoc_bound_args(
         &mut self,
-        owner: Option<DefId>,
         params: &[ast::GenericParam],
         args: &mut [TypeId],
     ) {
         if params.len() != args.len() {
             return;
         }
-        let names = slot_names(owner, params);
+        let names = slot_names(params, &self.tysys.resolutions);
         self.resolve_assoc_bounds_in(params, 0, &names, args);
     }
 

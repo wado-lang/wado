@@ -2042,11 +2042,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve method type params that appear only inside another method
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.
-        let owner = slots
-            .first()
-            .and_then(|&slot| self.tysys.type_table.borrow().type_param_id(slot))
-            .map(|id| id.owner);
-        self.resolve_assoc_bound_args(owner, &method_type_params, &mut inferred);
+        self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
         self.fill_defaulted_method_type_args(
             &method_type_params,
             receiver_type,
@@ -2072,7 +2068,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *answer = inst.vars[i];
             }
         }
-        let names = slot_names(owner, &method_type_params);
+        let names = slot_names(&method_type_params, &self.tysys.resolutions);
         let self_binding = self.tysys.base_self_binding(receiver_type, trait_decl);
         self.defer_pinned_packs(
             inst,

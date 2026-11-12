@@ -1,0 +1,48 @@
+// A trait method called on a concrete receiver resolves to the impl's method,
+// whose signature carries the trait's bounds: `H`'s equality there names the
+// trait method's `E`, and still answers the impl method's slot.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for i32 {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+trait Maker with () {
+    fn made<T, H: Holder<Item = E>, E: Make>(&self, t: T) -> H;
+}
+
+struct M {
+    v: i32,
+}
+
+impl Maker for M {
+    fn made<T, H: Holder<Item = E>, E: Make>(&self, _t: T) -> H {
+        return H::empty();
+    }
+}
+
+test "the impl's method answers the equality" {
+    let m = M { v: 0 };
+    let b: Box = m.made(1);
+    assert b.v == 3;
+}
