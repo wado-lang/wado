@@ -235,21 +235,21 @@ pub(super) struct ElaboratedBound {
 pub(super) enum BoundSelf {
     /// The frame that wrote the bound; `None` where that frame binds no `Self`.
     Frame(Option<SelfBinding>),
-    /// The type being bounded. A supertrait clause and a declared parameter
-    /// default are both written in the trait's own space, where `Self` is
-    /// whichever type the bound is standing on.
-    Bounded,
+    /// The type being bounded, as the trait that wrote the bound sees it. A
+    /// supertrait clause and a declared parameter default are both written in
+    /// a trait's own space, where `Self` is whichever type the bound is
+    /// standing on, and `Self::Item` is that trait's `Item`.
+    Bounded { writer: DefId },
 }
 
 impl BoundSelf {
-    /// The `Self` to resolve under, for a bound standing on `bounded` that
-    /// `declaring` wrote.
-    pub(super) fn at(self, bounded: TypeId, declaring: DefId) -> Option<SelfBinding> {
+    /// The `Self` to resolve under, for a bound standing on `bounded`.
+    pub(super) fn at(self, bounded: TypeId) -> Option<SelfBinding> {
         match self {
             Self::Frame(binding) => binding,
-            Self::Bounded => Some(SelfBinding {
+            Self::Bounded { writer } => Some(SelfBinding {
                 type_id: bounded,
-                declaring_trait: Some(declaring),
+                declaring_trait: Some(writer),
             }),
         }
     }
@@ -1109,7 +1109,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &mut out,
                     &inherited.bound,
                     Some((root, inherited.via.clone())),
-                    BoundSelf::Bounded,
+                    BoundSelf::Bounded {
+                        writer: inherited.writer(root),
+                    },
                     &scoped.space,
                 );
             }

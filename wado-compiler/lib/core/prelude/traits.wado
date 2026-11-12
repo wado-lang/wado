@@ -1759,13 +1759,13 @@ impl Error for ConvertError {
 /// bound. Implemented for every `Add<Output = Self>`.
 pub trait Sum with () {
     type Elem;
-    fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
+    fn sum_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
 }
 
 impl<T: Add<Output = T>> Sum for T {
     type Elem = T;
 
-    fn sum_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
+    fn sum_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.reduce(|a: T, b: T| a + b);
     }
 }
@@ -1774,13 +1774,13 @@ impl<T: Add<Output = T>> Sum for T {
 /// element bound. Implemented for every `Mul<Output = Self>`.
 pub trait Product with () {
     type Elem;
-    fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
+    fn product_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
 }
 
 impl<T: Mul<Output = T>> Product for T {
     type Elem = T;
 
-    fn product_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
+    fn product_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.reduce(|a: T, b: T| a * b);
     }
 }
@@ -1789,18 +1789,18 @@ impl<T: Mul<Output = T>> Product for T {
 /// `max`'s element bound. Implemented for every `Ord`.
 pub trait Extremum with () {
     type Elem;
-    fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
-    fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
+    fn min_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
+    fn max_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
 }
 
 impl<T: Ord> Extremum for T {
     type Elem = T;
 
-    fn min_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
+    fn min_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.min_by(|a: &T, b: &T| a.cmp(b));
     }
 
-    fn max_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
+    fn max_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.max_by(|a: &T, b: &T| a.cmp(b));
     }
 }
@@ -1808,7 +1808,7 @@ impl<T: Ord> Extremum for T {
 /// Trait for creating a collection from any iterator of `Elem`.
 pub trait FromIterator with () {
     type Elem;
-    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
+    fn from_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
 }
 
 /// `..base` inside a `{ … }` literal: merge `base` into `self`, last write

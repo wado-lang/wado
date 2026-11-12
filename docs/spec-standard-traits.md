@@ -69,7 +69,7 @@ pub affine trait IntoIterator with _ {
 /// Trait for creating a collection from any iterator of `Elem`.
 pub trait FromIterator with () {
     type Elem;
-    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
+    fn from_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
 }
 ```
 

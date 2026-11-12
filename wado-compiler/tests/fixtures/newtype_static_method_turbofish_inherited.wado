@@ -1,0 +1,19 @@
+// A method turbofish on a static a newtype inherits names only the method's
+// own slots. The base's are still the newtype's: `Wi` is `Wrap<i32>`, so `T`
+// is `i32` and the argument is checked against it.
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn make<U: Default>(t: T) -> Wrap<U> {
+        return Wrap { v: U::default() };
+    }
+}
+
+type Wi = Wrap<i32>;
+
+test "a method turbofish leaves the base's slots to the newtype" {
+    let w = Wi::make::<bool>(3);
+    assert !w.v;
+}

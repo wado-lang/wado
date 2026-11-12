@@ -1514,7 +1514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The key of the instance a static call reaches in `block` at the
     /// receiver's `positions`, its bounds enforced there, and the slots only
     /// the trait arguments name settled by the call's `args`
-    /// ([`Self::slot_instance_args`]).
+    /// ([`Self::slot_instance_args`]). `return_type` comes back with the
+    /// caller's projections answered, as the parameters already are.
     pub(super) fn static_instance_args(
         &mut self,
         block: Option<DefId>,
@@ -1525,7 +1526,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Vec<TypeId> {
         self.enforce_static_block_bounds(block, positions, span);
-        block
+        let instance_args = block
             .and_then(|block| {
                 let given = self
                     .tysys
@@ -1534,7 +1535,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .impl_spelled_slots(block, positions);
                 self.slot_instance_args(block, given, params, args, return_type, span)
             })
-            .unwrap_or_else(|| positions.to_vec())
+            .unwrap_or_else(|| positions.to_vec());
+        *return_type = self.answer_frame_projections(*return_type);
+        instance_args
     }
 
     /// What `block`'s instance is keyed by: every slot in slot order, `given`
@@ -1759,6 +1762,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// What a static's omitted value defaults read its own slots as:
+    /// [`Self::value_default_slot_bindings`] where it declares one, else the
+    /// slots at `known`.
+    pub(super) fn own_slot_default_bindings(
+        &mut self,
+        defaults: &[(String, Option<ast::Expr>)],
+        own_params: &[ast::GenericParam],
+        own_ids: &[TypeId],
+        receiver: TypeId,
+        declaring_trait: Option<DefId>,
+        known: Vec<TypeId>,
+        declaring_module: Option<ModuleSource>,
+    ) -> Vec<DefaultTypeBinding> {
+        if defaults.iter().any(|(_, d)| d.is_some()) {
+            self.value_default_slot_bindings(
+                own_params,
+                own_ids,
+                receiver,
+                declaring_trait,
+                known,
+                declaring_module,
+            )
+        } else {
+            slot_type_bindings(&self.tysys.type_table, own_ids, &known)
+        }
+    }
+
     /// What a value default naming one of the method's own type parameters
     /// resolves that name against: the type argument the call settled on.
     ///
@@ -1943,10 +1973,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
+        assert!(
+            explicit.len() <= input.own_params.len(),
+            "a turbofish must be grouped into the method's packs before it is bound"
+        );
         let impl_args = input.impl_args.to_vec();
         self.with_type_params_bound(&impl_args, |e| {
             e.bind_method_type_args_in_impl_frame(explicit, input)
         })
+    }
+
+    /// [`Self::bind_method_type_args`] for a static whose arguments resolved
+    /// before its own slots were instantiated: they are instantiated here, so
+    /// an unsolved one is blamed on `name`.
+    pub(super) fn bind_static_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        name: &str,
+        input: MethodInferenceInput<'_>,
+    ) -> (Vec<TypeId>, SubstitutionContext) {
+        assert!(
+            input.inst.is_none(),
+            "the static's own slots are instantiated here"
+        );
+        let inst = (!input.slots.is_empty()).then(|| {
+            self.instantiate(
+                input.slots,
+                &Instantiation {
+                    kind: InstanceKind::Method,
+                    name,
+                    span: input.span,
+                    type_args: &explicit,
+                    self_binding: Some(SelfBinding {
+                        type_id: input.receiver_type,
+                        declaring_trait: input.trait_decl,
+                    }),
+                    impl_args: input.impl_args,
+                },
+            )
+        });
+        self.bind_method_type_args(
+            explicit,
+            MethodInferenceInput {
+                inst: inst.as_ref(),
+                ..input
+            },
+        )
     }
 
     fn bind_method_type_args_in_impl_frame(
@@ -2042,11 +2114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve method type params that appear only inside another method
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.
-        let owner = slots
-            .first()
-            .and_then(|&slot| self.tysys.type_table.borrow().type_param_id(slot))
-            .map(|id| id.owner);
-        self.resolve_assoc_bound_args(owner, &method_type_params, &mut inferred);
+        self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
         self.fill_defaulted_method_type_args(
             &method_type_params,
             receiver_type,
@@ -2072,7 +2140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *answer = inst.vars[i];
             }
         }
-        let names = slot_names(owner, &method_type_params);
+        let names = slot_names(&method_type_params, &self.tysys.resolutions);
         let self_binding = self.tysys.base_self_binding(receiver_type, trait_decl);
         self.defer_pinned_packs(
             inst,
@@ -4216,6 +4284,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A `_` resolves to UNKNOWN, and inference fills it below.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
+        if self.group_variadic_type_args_of(
+            &method_call.method,
+            &method_own_params,
+            &mut type_args,
+            method_call.span,
+        ) {
+            return Some(TypeTable::ERROR);
+        }
 
         let impl_args = settled_impl_args(&impl_type_bindings);
         // This path answers the call, so it runs the method's own inference too:

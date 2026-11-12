@@ -1,0 +1,16 @@
+// The type expected of a static call settles a slot only its return names,
+// though the method also declares a pack: `Wrap::<i32>::make()` meets `i32`.
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn make<U: Default, ..Extra>() -> U {
+        return U::default();
+    }
+}
+
+test "the expected type settles U" {
+    let x: i32 = Wrap::<i32>::make();
+    assert x == 0;
+}

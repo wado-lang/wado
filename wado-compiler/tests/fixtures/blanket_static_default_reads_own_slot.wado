@@ -1,0 +1,28 @@
+// A default a blanket impl's static leaves to its trait reads the method's own
+// slot as the call solved it: `U::default()` is `i32::default()` here.
+trait Bound with () {
+    fn id(&self) -> i32;
+}
+
+trait Maker with () {
+    fn make<U: Default>(u: U = U::default()) -> U;
+}
+
+impl<X: Bound> Maker for X {
+    fn make<U: Default>(u: U) -> U {
+        return u;
+    }
+}
+
+struct S {}
+
+impl Bound for S {
+    fn id(&self) -> i32 {
+        return 1;
+    }
+}
+
+test "the omitted argument takes U's default" {
+    let x: i32 = S::make();
+    assert x == 0;
+}

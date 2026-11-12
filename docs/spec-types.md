@@ -1301,11 +1301,17 @@ assert none == null && ok.unwrap() == 42;
 
 When both mechanisms apply, they must agree. An untyped literal takes its type from the expected type, so `let x: Option<i64> = Option::Some(42)` is an `Option<i64>`. A value whose type is already fixed must match it: with `y: i32`, `let b: Box<i64> = Box { value: y }` is a type mismatch. Backward inference fills in any parameter the values do not mention.
 
+The type expected of a call is whatever its value meets, a type settled after
+the call included: a sibling `match` arm's is one.
+
+Every rule in this section holds for a type parameter pack (`..T`) as it does
+for a scalar parameter. Whatever settles a scalar settles a pack, to a tuple of
+types.
+
 A parameter an associated-type equality binds (`E` in `H: Holder<Item = E>`,
 `..F` in `S: ReflectStruct<FieldTypes = [..F]>`) is settled by the projection of
-the parameter it bounds, once that one is settled: by an argument, by the type
-expected of the call, or by a sibling `match` arm the call's value meets. A type
-that settles it otherwise must agree with the projection.
+the parameter it bounds, once that one is settled. A type that settles it
+otherwise must agree with the projection.
 
 In a generic call, a numeric literal answers last wherever it stands in an
 argument, a nested generic call or constructor included. It takes the type the

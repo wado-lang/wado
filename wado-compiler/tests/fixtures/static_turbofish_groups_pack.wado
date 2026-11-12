@@ -1,0 +1,49 @@
+// A turbofish on a static fills a pack with every argument past the scalars,
+// whichever way the static is reached: through a parameter's bound, or
+// answered by a blanket impl.
+trait Named with () {
+    fn label<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32;
+}
+
+struct K {}
+
+impl Named for K {
+    fn label<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32 {
+        let mut n = 0;
+        for let _f of ReflectStruct::<S>::members() {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+trait Counted with () {
+    fn count<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32;
+}
+
+impl<X: Display> Counted for X {
+    fn count<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32 {
+        let mut n = 0;
+        for let _f of ReflectStruct::<S>::members() {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+fn through_bound<T: Named>(p: &Pair) -> i32 {
+    return T::label::<Pair, i32, i32>(p);
+}
+
+test "through a bound" {
+    assert through_bound::<K>(&Pair { a: 1, b: 2 }) == 2;
+}
+
+test "answered by a blanket impl" {
+    assert i32::count::<Pair, i32, i32>(&Pair { a: 1, b: 2 }) == 2;
+}

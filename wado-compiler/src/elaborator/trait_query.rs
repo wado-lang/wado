@@ -25,7 +25,7 @@ use super::scope::{
     TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
-use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
+use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause, clause_writer};
 use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, OperatorImpl, ParamList, ResolvedTraitMethod, SigPosition,
@@ -563,8 +563,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the target: `Add<Rhs = Self>` at `impl Add for P` is `Add<P>`.
             let space = self.inherited_space(trait_decl, &arg_ids, &via, self_type);
             let pick = vec![true; bound.type_args.len()];
+            let binding = self
+                .tysys
+                .base_self_binding(self_type, Some(clause_writer(trait_decl, &via)));
             let supertrait_trait = self.with_type_params_bound(&space, |e| {
-                e.trait_named_with_resolved_args(named, &bound, &pick)
+                e.with_self_binding(binding, |e| {
+                    e.trait_named_with_resolved_args(named, &bound, &pick)
+                })
             });
             let supertrait = self.tysys.resolutions.defs().name(decl).to_string();
             if self
@@ -2156,7 +2161,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Vec<TypeId>> {
         let read_as = ScopedBound::new(
             candidate.bound.clone(),
-            candidate.written_self.at(self_type_id, candidate.decl),
+            candidate.written_self.at(self_type_id),
         );
         self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl)
     }
@@ -2947,7 +2952,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `Self` in the clause, or in a default the chain fills, is
                     // the subject: `Make<Self::Base>` asks the subject's own
                     // `Base`, as its impl answers it.
-                    let binding = self.tysys.base_self_binding(subject, Some(root));
+                    let binding = self
+                        .tysys
+                        .base_self_binding(subject, Some(clause_writer(root, &via)));
                     let space = self.inherited_space(root, &root_args, &via, subject);
                     self.with_type_params_bound(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
@@ -3209,16 +3216,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|supplied| supplied.takes_a_slot)
                 .filter_map(|supplied| match supplied.arg {
                     Some(ty) => Some((supplied.slot, ty.clone(), written_self)),
-                    None => supplied
-                        .param
-                        .default
-                        .as_ref()
-                        .map(|ty| (supplied.slot, ty.clone(), BoundSelf::Bounded)),
+                    None => supplied.param.default.as_ref().map(|ty| {
+                        (
+                            supplied.slot,
+                            ty.clone(),
+                            BoundSelf::Bounded { writer: decl },
+                        )
+                    }),
                 })
                 .collect();
         for (slot, ty, scope) in written {
-            let resolved =
-                self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
+            let resolved = self.under_self_binding(scope.at(self_type_id), |s| s.resolve_type(&ty));
             slots.insert(
                 TypeParamId {
                     owner: decl,

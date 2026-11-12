@@ -1,0 +1,53 @@
+// A static called through a type parameter's bound (`K::made_static`) solves
+// its own slots as an instance call does: from the type expected of the call,
+// or from a sibling `match` arm the call's value meets.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+trait Maker with () {
+    type Item;
+    fn made_static<T, H: Holder<Item = Self::Item>>(t: T) -> H;
+}
+
+struct M {
+    v: i32,
+}
+
+impl Maker for M {
+    type Item = i32;
+    fn made_static<T, H: Holder<Item = i32>>(_t: T) -> H {
+        return H::empty();
+    }
+}
+
+fn eager<K: Maker<Item = i32>>() -> Box {
+    return K::made_static(1);
+}
+
+fn deferred<K: Maker<Item = i32>>() -> [i32, Box] {
+    return match builtin::black_box(true) {
+        true => [3, K::made_static(1)],
+        false => [0, Box { v: 0 }],
+    };
+}
+
+test "the expected type settles the slot" {
+    assert eager::<M>().v == 3;
+}
+
+test "a sibling arm settles the slot" {
+    assert deferred::<M>().1.v == 3;
+}

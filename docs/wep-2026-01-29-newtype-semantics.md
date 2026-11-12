@@ -264,6 +264,19 @@ Newtypes support the full feature set today:
 - Newtypes over the raw GC `Array<T>` inherit `Index` traits and associated functions (`ByteArray`)
 - `for-of` inherits `IntoIterator`, both by value (`Item = T`) and by reference (`Item = &T`)
 
+## Known Gaps
+
+- Method signature substitution does not say whether it reads the signature
+  before or after the call solves the method's own type parameters. With
+  `fn make<U: Default>() -> Wrap<U>` on `Wrap<T>` and `type Wi = Wrap<i32>`,
+  the base appears in the return only once `U` is `i32`. The spellings
+  disagree:
+  - `let w: Wi = Wi::make();` compiles and returns `Wi`.
+  - `let w: Wl<i32> = Wl::<i32>::make();` (`type Wl<T> = Wrap<List<T>>`)
+    reports `U` as uninferred.
+  - `let w: Wl<i32> = a.same();` on an instance method of the same shape is a
+    type mismatch, and `a.same::<i32>()` on a `Wi` returns `Wrap<i32>`.
+
 ## See Also
 
 - [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) - struct wrapper alternative

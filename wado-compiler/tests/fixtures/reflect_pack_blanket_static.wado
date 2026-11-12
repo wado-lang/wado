@@ -1,0 +1,41 @@
+// A generic static a blanket impl answers binds its own pack, so a body that
+// walks it monomorphizes: called directly, and as a tag
+// (`` i32::label`…` ``).
+
+trait Named with () {
+    fn label<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32;
+    fn holes<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32;
+}
+
+impl<X: Display> Named for X {
+    fn label<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32 {
+        let mut n = 0;
+        for let f of ReflectStruct::<S>::members() {
+            n += 1;
+        }
+        return n;
+    }
+
+    fn holes<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32 {
+        let mut n = 0;
+        for let h of ReflectTemplate::<T>::members() {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+test "a blanket static method binds its own pack" {
+    assert i32::label(&Pair { a: 1, b: 2 }) == 2;
+}
+
+test "a blanket static method is a tag" {
+    let a = 1;
+    let b = "x";
+    assert i32::holes`${a} and ${b}` == 2;
+}
