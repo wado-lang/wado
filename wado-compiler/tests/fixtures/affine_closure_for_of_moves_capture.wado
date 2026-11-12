@@ -1,0 +1,14 @@
+// A for-of consumes its iterable, so iterating an affine capture moves it out
+// of the closure's reference.
+use { Fields } from "wasi:http";
+
+test {
+    let fs: List<Fields> = [Fields::new()];
+    let g = || {
+        for let _f of fs {}
+    };
+    g();
+}
+
+__DATA__
+{"compile_error": ":8:23: analysis error: a closure captures `fs` by reference, so its body cannot move it"}
