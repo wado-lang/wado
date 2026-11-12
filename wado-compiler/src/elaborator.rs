@@ -760,15 +760,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let newtype = self.newtype_self_type(*def)?;
         let link = {
             let table = self.tysys.type_table.borrow();
-            match table.get(newtype) {
-                tir::ResolvedType::Newtype { base_type, .. } => match table.get(*base_type) {
+            table
+                .link_below(newtype)
+                .and_then(|below| match table.get(below) {
                     tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
-                        Some((*base_type, table.decl_name(*def).to_string()))
+                        Some((below, table.decl_name(*def).to_string()))
                     }
                     _ => None,
-                },
-                _ => None,
-            }
+                })
         };
         let Some((link, link_name)) = link else {
             return self.newtype_base_target(key);
