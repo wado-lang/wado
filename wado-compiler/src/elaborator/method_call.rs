@@ -2553,6 +2553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut return_type,
             static_call.span,
         );
+        return_type = self.answer_frame_projections(return_type);
         let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
@@ -3734,6 +3735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_type_args,
             std::slice::from_mut(&mut return_type),
         );
+        return_type = self.answer_frame_projections(return_type);
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {

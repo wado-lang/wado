@@ -2066,6 +2066,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &impl_type_args_inferred,
                     &mut substituted,
                 );
+                self.answer_frame_projections_in(&mut substituted);
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
                 self.record_call_param_types(call.id, substituted.clone());
                 // Per-argument checking alone passes a call of the wrong length:
@@ -2402,6 +2403,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                     }
                     self.answer_frame_projections_in(&mut param_types);
+                    return_type = self.answer_frame_projections(return_type);
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
