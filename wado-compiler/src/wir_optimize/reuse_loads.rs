@@ -294,7 +294,10 @@ impl Reuser<'_> {
         };
         let ty = &def.field(field_name).ty;
         if ty.packed_bits().is_some()
-            || key.moved_by(&Footprint::writes_all(std::slice::from_ref(value), self.callees))
+            || key.moved_by(&Footprint::writes_all(
+                std::slice::from_ref(value),
+                self.callees,
+            ))
         {
             return;
         }
