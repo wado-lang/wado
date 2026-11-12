@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794459902801,
+  "lastUpdate": 1794461597438,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76813,6 +76813,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 429302,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ed74ed17ef861c5aee551c569f146c7403eb2eb",
+          "message": "Merge pull request #2611 from wado-lang/ccr-f765b823-1j102r\n\nperf: Gale parses and generates faster, and field stores forward to the next read",
+          "timestamp": "2026-11-12T14:13:16+09:00",
+          "tree_id": "225f894581b603bb3fffa2ba1e85fcb49a69e91b",
+          "url": "https://github.com/wado-lang/wado/commit/6ed74ed17ef861c5aee551c569f146c7403eb2eb"
+        },
+        "date": 1794461596118,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
             "unit": "bytes"
           }
         ]
