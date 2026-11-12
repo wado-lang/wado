@@ -3702,15 +3702,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
-        let sig = self
-            .static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[])
-            // What `Self::infer_through_newtype` solved: the base's.
-            .or_else(|| {
-                let key = self.static_receiver_key(prefix, receiver_key);
-                self.newtype_base_target(&key).and_then(|(base_key, _)| {
-                    self.static_call_sig(prefix, suffix, Some(&base_key), SigChoice::Unique, &[])
-                })
-            });
+        let sig = self.static_call_sig_through_newtype(
+            prefix,
+            suffix,
+            receiver_key,
+            SigChoice::Unique,
+            &[],
+        );
         let Some(sig) = sig else {
             self.report_uninferred_derived_type_args(
                 prefix,
@@ -4479,7 +4477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected_args =
             self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
         let (method_def, [declaring_slots, own_slots]) = self
-            .static_call_sig(
+            .static_call_sig_through_newtype(
                 callee.type_name,
                 callee.method_name,
                 callee.receiver_key,
@@ -5132,6 +5130,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             (SigChoice::Unique, None) => self.unique_qualified_method_sig(struct_name, method_name),
         }
+    }
+
+    /// [`Self::static_call_sig`], or on a newtype declaring nothing of the name
+    /// its base's, which [`Self::infer_through_newtype`] solves. The base is
+    /// read at any arguments: `receiver_args` spell the newtype.
+    fn static_call_sig_through_newtype(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+        choice: SigChoice,
+        receiver_args: &[TypeId],
+    ) -> Option<MethodSig> {
+        self.static_call_sig(
+            struct_name,
+            method_name,
+            receiver_key,
+            choice,
+            receiver_args,
+        )
+        .or_else(|| {
+            let key = self.static_receiver_key(struct_name, receiver_key);
+            let (base_key, _) = self.newtype_base_target(&key)?;
+            self.static_call_sig(struct_name, method_name, Some(&base_key), choice, &[])
+        })
     }
 
     /// The canonical signature `method_name` names on the resolved `receiver`,
