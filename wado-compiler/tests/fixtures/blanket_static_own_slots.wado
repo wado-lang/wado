@@ -1,0 +1,47 @@
+// A static a blanket impl declares solves its own type parameters as any
+// static does: from a turbofish, the arguments, or the type expected of the
+// call. Reached on a concrete type or through a parameter's bound alike.
+trait Bound with () {
+    fn id(&self) -> i32;
+}
+
+trait Builder with () {
+    fn build<U>(u: U) -> U;
+    fn make<U: Default>() -> U;
+}
+
+impl<X: Bound> Builder for X {
+    fn build<U>(u: U) -> U {
+        return u;
+    }
+
+    fn make<U: Default>() -> U {
+        return U::default();
+    }
+}
+
+struct S {}
+
+impl Bound for S {
+    fn id(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn through_bound<T: Bound>() -> bool {
+    let spelled = T::build::<bool>(true);
+    let inferred = T::build("x");
+    let made: i32 = T::make();
+    return spelled && inferred == "x" && made == 0 && T::make::<i64>() == 0;
+}
+
+test "on a concrete type" {
+    let spelled = S::build::<bool>(true);
+    let inferred = S::build("x");
+    let made: i32 = S::make();
+    assert spelled && inferred == "x" && made == 0 && S::make::<i64>() == 0;
+}
+
+test "through a bound" {
+    assert through_bound::<S>();
+}

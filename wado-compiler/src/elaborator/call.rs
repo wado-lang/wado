@@ -2160,8 +2160,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     prefix,
                     call.span,
                 );
-                return self
-                    .blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
+                return self.blanket_static_or_unknown(
+                    receiver,
+                    prefix,
+                    suffix,
+                    ident,
+                    call,
+                    &args,
+                    expected_type,
+                    ctx,
+                );
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
@@ -2181,8 +2189,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     prefix,
                     call.span,
                 );
-                return self
-                    .blanket_static_or_unknown(receiver, prefix, suffix, ident, call, &args, ctx);
+                return self.blanket_static_or_unknown(
+                    receiver,
+                    prefix,
+                    suffix,
+                    ident,
+                    call,
+                    &args,
+                    expected_type,
+                    ctx,
+                );
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
@@ -5478,11 +5494,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         call: &ast::CallExpr,
         args: &[TypeId],
+        expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let method_id = ident.segments.last().map(|seg| seg.id);
+        let method_type_args = self.resolve_turbofish_args(&call.type_args);
         if let Some(return_type) = self.resolve_named_type_blanket_static(
-            receiver, prefix, suffix, call.id, method_id, args, &call.args, call.span, ctx,
+            receiver,
+            prefix,
+            suffix,
+            call.id,
+            method_id,
+            &method_type_args,
+            args,
+            &call.args,
+            expected_type,
+            call.span,
+            ctx,
         ) {
             return return_type;
         }
@@ -5500,8 +5528,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         call_id: AstId,
         method_id: Option<AstId>,
+        method_type_args: &[TypeId],
         args: &[TypeId],
         raw_args: &[Expr],
+        expected_type: Option<TypeId>,
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
@@ -5541,10 +5571,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             call_id,
             method_id,
-            &[],
+            method_type_args,
             raw_args,
             args,
             &arg_sites,
+            expected_type,
             span,
             ctx,
         )
@@ -6045,6 +6076,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ident,
             call,
             &args,
+            expected_type,
             ctx,
         )
     }

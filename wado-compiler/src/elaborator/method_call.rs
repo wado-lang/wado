@@ -2548,6 +2548,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &static_call.args,
                 &args,
                 &arg_sites,
+                expected_type,
                 static_call.span,
                 ctx,
             )
@@ -2709,6 +2710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         args: &[TypeId],
         arg_sites: &[ArgSite],
+        expected_type: Option<TypeId>,
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
@@ -2760,9 +2762,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .bind(&[blanket_slot], &[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
         let return_type = self.answer_frame_projections(return_type);
-
-        // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
-        // as a Wasm validation failure.
         let param_types = self.blanket_static_param_types(
             blanket_def,
             &blanket_module,
@@ -2770,6 +2769,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             receiver_type_id,
         );
+
+        // The method's own slots are solved as an instance call's are: from
+        // the turbofish, the arguments, and the type expected of the call.
+        let (own_params, slots) = method_def
+            .and_then(|def| self.tysys.signatures.method_sig(def))
+            .map(|sig| (sig.own_params.clone(), sig.own_type_param_ids()))
+            .unwrap_or_default();
+        let trait_decl = trait_name.canonical();
+        let self_binding = SelfBinding {
+            type_id: receiver_type_id,
+            declaring_trait: trait_decl,
+        };
+        let inst = (!slots.is_empty()).then(|| {
+            self.instantiate(
+                &slots,
+                &Instantiation {
+                    kind: InstanceKind::Method,
+                    name: method,
+                    span,
+                    type_args: method_type_args,
+                    self_binding: Some(self_binding),
+                    impl_args: &[],
+                },
+            )
+        });
+        let (method_type_args, subst) = self.bind_method_type_args(
+            method_type_args.to_vec(),
+            MethodInferenceInput {
+                receiver_type: receiver_type_id,
+                method_name: method,
+                slots: &slots,
+                own_params: &own_params,
+                param_types: &param_types,
+                args,
+                raw_args,
+                decl_return_type: return_type,
+                expected_return_type: expected_type,
+                trait_decl,
+                declaring_module: Some(blanket_module.clone()),
+                impl_args: &[],
+                inst: inst.as_ref(),
+                span,
+            },
+        );
+        let param_types: Vec<TypeId> = param_types
+            .iter()
+            .map(|&t| self.substitute_ctx_in_frame(&subst, t))
+            .collect();
+        let return_type = self.substitute_ctx_in_frame(&subst, return_type);
+
+        // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
+        // as a Wasm validation failure.
+        //
         // The arguments were resolved before the blanket was found, so a
         // literal among them takes its parameter's type only now.
         let mut args = args.to_vec();
