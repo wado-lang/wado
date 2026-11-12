@@ -2555,8 +2555,8 @@ impl TypeSystem {
             return None;
         }
         let affine_params = ctx.trait_ctx.affine_params();
-        let unmet = |param: &str, type_arg: TypeId| {
-            self.unmet_param_bound(ctx, header, param, type_arg, &affine_params, &[])
+        let unmet = |param: &str, subjects: &[TypeId]| {
+            self.unmet_param_bound(ctx, header, param, subjects, &affine_params, &[])
         };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
@@ -2565,7 +2565,7 @@ impl TypeSystem {
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
             let pointee = receiver.and_then(|id| self.pointee_of(id))?;
-            return unmet(inner.name.as_str(), pointee);
+            return unmet(inner.name.as_str(), &[pointee]);
         }
         // An existence or bounds check that threaded no positions has nothing
         // to compare against.
@@ -2579,16 +2579,13 @@ impl TypeSystem {
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
-        // `type_args` instantiates the same variadic parameter, so each is
-        // checked against its bounds.
+        // `type_args` is one element of the same pack.
         if let ast::Type::Tuple(elements) = impl_ty {
             return elements.iter().find_map(|elem| {
                 let ast::Type::TypePackSpread(ast::NamedType { name, .. }) = elem else {
                     return None;
                 };
-                type_args
-                    .iter()
-                    .find_map(|&type_arg| unmet(name.as_str(), type_arg))
+                unmet(name.as_str(), type_args)
             });
         }
         None
@@ -2621,20 +2618,26 @@ impl TypeSystem {
         let affine_params = ctx.trait_ctx.affine_params();
         slots.iter().find_map(|(slot, &type_arg)| {
             let param = names.name_of(slot.index)?;
-            self.unmet_param_bound(ctx, header, param, type_arg, &affine_params, &at)
+            let is_pack = header
+                .type_params
+                .iter()
+                .any(|p| p.name == param && p.is_pack);
+            let subjects = self.bound_subjects(is_pack, type_arg);
+            self.unmet_param_bound(ctx, header, param, &subjects, &affine_params, &at)
         })
     }
 
-    /// The bound or kind `header`'s parameter `param` places that `type_arg`
-    /// misses. The bound's own site says which trait it names and what it
-    /// writes for that trait's parameters, so the check compares declarations
-    /// rather than the spelling the impl header happened to write.
+    /// The bound or kind `header`'s parameter `param` places that one of
+    /// `subjects`, each taken whole, misses. The bound's own site says which
+    /// trait it names and what it writes for that trait's parameters, so the
+    /// check compares declarations rather than the spelling the impl header
+    /// happened to write.
     fn unmet_param_bound(
         &self,
         ctx: &Scope,
         header: &ImplHeader,
         param: &str,
-        type_arg: TypeId,
+        subjects: &[TypeId],
         affine_params: &[TypeId],
         at: &[(FqTypeName, FqTypeName)],
     ) -> Option<UnmetImplBound> {
@@ -2645,20 +2648,18 @@ impl TypeSystem {
             .filter_map(|b| self.bound_written(b))
             .map(|bound| spelled_at(&bound, at))
             .collect();
-        self.bound_subjects(declared.is_pack, type_arg)
-            .into_iter()
-            .find_map(|subject| {
-                let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
-                    UnmetKind::Affine
-                } else {
-                    UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
-                };
-                Some(UnmetImplBound {
-                    param: param.to_string(),
-                    type_arg: subject,
-                    missing,
-                })
+        subjects.iter().find_map(|&subject| {
+            let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
+                UnmetKind::Affine
+            } else {
+                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
+            };
+            Some(UnmetImplBound {
+                param: param.to_string(),
+                type_arg: subject,
+                missing,
             })
+        })
     }
 }
 

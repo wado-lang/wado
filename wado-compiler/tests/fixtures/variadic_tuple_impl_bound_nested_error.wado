@@ -1,0 +1,32 @@
+//! A variadic tuple impl's bound holds of each element of the receiver as it
+//! is: an element that is itself a tuple is not split into its own elements.
+
+trait Mk with () {
+    fn mk(&self) -> i32;
+}
+
+impl Mk for bool {
+    fn mk(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Count with () {
+    fn count(&self) -> i32;
+}
+
+impl<..P: Mk> Count for [..P] {
+    fn count(&self) -> i32 {
+        return 0;
+    }
+}
+
+test {
+    let t = [[true]];
+    assert t.count() == 0;
+}
+
+__DATA__
+{
+    "compile_error": ":26:12: analysis error: type '[bool]' does not implement trait 'Mk' required by bound on 'P'"
+}
