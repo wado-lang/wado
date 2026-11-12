@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794434053443,
+  "lastUpdate": 1794449126274,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76705,6 +76705,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7790268d14969ce45f13897664a72572bed1753c"
         },
         "date": 1794434052143,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 429302,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d4f27ab28b4c1a7926a0b6aeaf0bdb7df3787f70",
+          "message": "Merge pull request #2607 from wado-lang/compiler/pack-from-settled-owner\n\nfeat(compiler): settle a parameter an associated type pins once a later arm settles its owner",
+          "timestamp": "2026-11-12T10:48:21+09:00",
+          "tree_id": "d768ed64ca391ee1063e1c1322d890ecdbfb79a7",
+          "url": "https://github.com/wado-lang/wado/commit/d4f27ab28b4c1a7926a0b6aeaf0bdb7df3787f70"
+        },
+        "date": 1794449125080,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
