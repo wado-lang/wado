@@ -469,6 +469,15 @@ occurred.
 
 ---
 
+## Known Gaps
+
+- A pack the call's arguments leave unbound is filled with the empty pack at
+  the call, before a type settled after it can answer: `[3, mk(1)]` beside a
+  `match` arm typed `[i32, Good, Good]` is refused, where a scalar slot waits
+  for that arm.
+
+---
+
 ## See Also
 
 - [Research: Variadic Generics / Variadic Templates](./research-variadic-generics.md)

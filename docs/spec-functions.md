@@ -1294,8 +1294,10 @@ A pack is used inside a tuple type as `[..T]`, alone or beside fixed elements:
 [value spread](./spec-literals.md#value-spread) builds a value of such a type,
 as `[a, ..rest]` does.
 
-A pack that no argument, annotation or turbofish names is the empty pack. Unlike
-a scalar parameter, a pack has one answer when nothing constrains it: no types.
+A pack is inferred as a scalar parameter is
+([Generic Type Inference](./spec-types.md#generic-type-inference)). Its default
+is the empty pack, which fills it where inference leaves it unbound, as a
+declared default fills a scalar ([Type Parameter Defaults](#type-parameter-defaults)).
 
 <!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
