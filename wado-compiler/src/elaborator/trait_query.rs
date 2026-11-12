@@ -2469,12 +2469,22 @@ impl TypeSystem {
         self.signatures.trait_sig(*key)
     }
 
-    /// The types a pack parameter's bound actually falls on.
+    /// The types `param`'s bounds and kind fall on at `type_arg`.
     ///
-    /// A pack is instantiated with the tuple that carries its elements, so the
-    /// bound is checked element-wise. A non-tuple argument is a pack of one.
-    pub(super) fn pack_elements(&self, type_arg: TypeId) -> Vec<TypeId> {
-        self.type_table.borrow().elem_types_or_self(type_arg)
+    /// `..T: Foo` binds every element of the pack, not the tuple that carries
+    /// them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and `String: Foo`, never
+    /// `[i32, String]: Foo`, which would ask for a variadic impl of `Foo` for
+    /// tuples. A non-tuple argument is a pack of one.
+    pub(super) fn bound_subjects(
+        &self,
+        param: &ast::GenericParam,
+        type_arg: TypeId,
+    ) -> Vec<TypeId> {
+        if param.is_pack {
+            self.type_table.borrow().elem_types_or_self(type_arg)
+        } else {
+            vec![type_arg]
+        }
     }
 
     /// Whether what the receiver substitutes for an `impl` block's parameters
@@ -2601,23 +2611,20 @@ impl TypeSystem {
             .filter_map(|b| self.bound_written(b))
             .map(|bound| spelled_at(&bound, at))
             .collect();
-        let subjects = if declared.is_pack {
-            self.pack_elements(type_arg)
-        } else {
-            vec![type_arg]
-        };
-        subjects.into_iter().find_map(|subject| {
-            let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
-                UnmetKind::Affine
-            } else {
-                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
-            };
-            Some(UnmetImplBound {
-                param: param.to_string(),
-                type_arg: subject,
-                missing,
+        self.bound_subjects(declared, type_arg)
+            .into_iter()
+            .find_map(|subject| {
+                let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
+                    UnmetKind::Affine
+                } else {
+                    UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
+                };
+                Some(UnmetImplBound {
+                    param: param.to_string(),
+                    type_arg: subject,
+                    missing,
+                })
             })
-        })
     }
 }
 
@@ -2822,15 +2829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            // `..T: Foo` binds every element of the pack, not the tuple that
-            // carries them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and
-            // `String: Foo`, never `[i32, String]: Foo` — which would be a
-            // question about a variadic impl of `Foo` for tuples.
-            let subjects = if param.is_pack {
-                self.tysys.pack_elements(type_arg)
-            } else {
-                vec![type_arg]
-            };
+            let subjects = self.tysys.bound_subjects(param, type_arg);
             let rigid = self
                 .tysys
                 .solver()
