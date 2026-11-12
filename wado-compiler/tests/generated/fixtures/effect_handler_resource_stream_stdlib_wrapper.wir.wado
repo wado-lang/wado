@@ -438,8 +438,8 @@ global global:effect_handler_resource_stream_stdlib_wrapper.wado::$const_obj_3: 
 global global:core:prelude/format.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38, 109, 117, 116, 32), used: 5 };
 
 fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
-    let $load_24: ref Array<u8>;
-    let $load_37: ref Array<u8>;
+    let $load_25: ref Array<u8>;
+    let $load_39: ref Array<u8>;
     let s: ref "effect_handler_resource_stream_stdlib_wrapper.wado//MockStream";
     let rx_1: ref null "core:prelude//$Resource";
     let tx_2: ref null "core:prelude//$Resource";
@@ -453,13 +453,13 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
     let chunk: ref "core:prelude/types.wado//StreamChunk<u8>";
     let new_used_54: i32;
     let out_82: ref "core:prelude/string.wado//String";
+    let is_negative_145: bool;
     let $local_0_182: ref null "effect_handler_resource_stream_stdlib_wrapper.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_1_183: ref "effect_handler_resource_stream_stdlib_wrapper.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_2_184: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let $cm_pair_5_187: i64;
     let q: u64;
     let tens: i32;
-    let start_255: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_handler_resource_stream_stdlib_wrapper.wado::$modules_initialized);
         cold_path;
@@ -529,7 +529,7 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_resource_stream_stdlib_wrapper.wado:72"), used: 53 });
         unreachable;
     }
-    if @unlikely(local.tee new_used_54(builtin::array_get_value<u8>(local.tee $load_24(all.repr), 0)) != 104) {
+    if @unlikely(local.tee new_used_54(builtin::array_get_value<u8>(local.tee $load_25(all.repr), 0)) != 104) {
         cold_path;
         "effect_handler_resource_stream_stdlib_wrapper.wado/run$cold1"(new_used_54);
         unreachable;
@@ -539,7 +539,7 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(2, $local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_resource_stream_stdlib_wrapper.wado:73"), used: 53 });
         unreachable;
     }
-    if @unlikely(local.tee $local_4(builtin::array_get_value<u8>($load_24, 2)) != 33) {
+    if @unlikely(local.tee $local_4(builtin::array_get_value<u8>($load_25, 2)) != 33) {
         cold_path;
         "effect_handler_resource_stream_stdlib_wrapper.wado/run$cold0"($local_4);
         unreachable;
@@ -569,10 +569,10 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
     global:effect_handler_resource_stream_stdlib_wrapper.wado::$effect_core:prelude/types.wado/Stream<u8> = $save_core:prelude/types.wado/Stream<u8>;
     $local_4 = s.log.used;
     out_82 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-    $load_24 = global:effect_handler_resource_stream_stdlib_wrapper.wado::$const_obj_0;
-    out_82.used = 9;
-    builtin::array_copy<u8>(local.tee $load_37(out_82.repr), 0, $load_24, 0, 9);
-    new_used_54 = $local_4 < 0;
+    $load_25 = global:effect_handler_resource_stream_stdlib_wrapper.wado::$const_obj_0;
+    out_82.used = local.tee new_used_54(9);
+    builtin::array_copy<u8>(local.tee $load_39(out_82.repr), 0, $load_25, 0, 9);
+    is_negative_145 = $local_4 < 0;
     $cm_pair_5_187 = builtin::i64_extend_i32_s($local_4);
     $cm_pair_5_187 = select i64($cm_pair_5_187 < 0_i64, 0_i64 - $cm_pair_5_187, $cm_pair_5_187);
     $local_4 = $inline_count_digits_u64_3: block -> i32 {
@@ -635,38 +635,38 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_3: 20;
     };
-    if new_used_54 {
-        if @unlikely(local.tee new_used_54(out_82.used + 1) > builtin::array_len($load_37)) {
+    if is_negative_145 {
+        if @unlikely(local.tee new_used_54(new_used_54 + 1) > builtin::array_len($load_39)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_82, new_used_54);
         }
-        start_255 = out_82.used;
+        is_negative_145 = out_82.used;
         out_82.used = new_used_54;
-        builtin::array_set_u8(out_82.repr, start_255, 45);
+        builtin::array_set_u8(out_82.repr, is_negative_145, 45);
     } else {
     }
     if @unlikely(local.tee new_used_54(out_82.used + $local_4) > builtin::array_len(out_82.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_82, new_used_54);
     }
-    start_255 = out_82.used;
+    is_negative_145 = out_82.used;
     out_82.used = new_used_54;
-    $load_24 = out_82.repr;
-    $local_4 = start_255 + $local_4;
+    $load_25 = out_82.repr;
+    $local_4 = is_negative_145 + $local_4;
     b37: block {
         l38: loop {
-            break_if b37 ($local_4 - start_255) < 2;
+            break_if b37 ($local_4 - is_negative_145) < 2;
             q = $cm_pair_5_187 /u 100_i64;
             tens = local.tee new_used_54(builtin::i32_wrap_i64($cm_pair_5_187 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_24, $local_4 - 1, (48 + new_used_54) - (tens * 10));
-            builtin::array_set_u8($load_24, $local_4 - 2, 48 + tens);
+            builtin::array_set_u8($load_25, $local_4 - 1, (48 + new_used_54) - (tens * 10));
+            builtin::array_set_u8($load_25, $local_4 - 2, 48 + tens);
             $local_4 = $local_4 - 2;
             $cm_pair_5_187 = q;
             continue l38;
         };
     };
-    if $local_4 > start_255 {
-        builtin::array_set_u8($load_24, start_255, 48 + builtin::i32_wrap_i64($cm_pair_5_187 %u 10_i64));
+    if $local_4 > is_negative_145 {
+        builtin::array_set_u8($load_25, is_negative_145, 48 + builtin::i32_wrap_i64($cm_pair_5_187 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_60: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_60;
@@ -1610,8 +1610,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
     $av_10 = self.used;
     builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
-    self.used = $av_10 - 1;
-    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
+    self.used = local.tee index($av_10 - 1);
+    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, index, ref.null none);
     return v;
 }
 

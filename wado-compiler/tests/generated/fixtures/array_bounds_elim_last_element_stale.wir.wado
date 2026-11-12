@@ -198,8 +198,8 @@ fn "array_bounds_elim_last_element_stale.wado/last_after_pop"(arr) {
     idx = local.tee $av_17(arr.used) - 1;
     $inline_core_prelude_list_wado_List_i32___pop_1: block {
         break_if $inline_core_prelude_list_wado_List_i32___pop_1 $av_17 == 0;
-        arr.used = $av_17 - 1;
-        drop(builtin::array_get_value<i32>(arr.repr, arr.used));
+        arr.used = local.tee $av_17($av_17 - 1);
+        drop(builtin::array_get_value<i32>(arr.repr, $av_17));
         break $inline_core_prelude_list_wado_List_i32___pop_1;
     };
     $av_17 = arr.used;

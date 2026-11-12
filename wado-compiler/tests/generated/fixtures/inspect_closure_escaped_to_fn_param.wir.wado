@@ -281,9 +281,10 @@ fn "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_closure_escaped_to_fn_param.wado/$tmpl$e0a9117283edca3b,[i32,fn(i32)->i32]>$spec0$spec0$sroa[t.h1]"(t) {
-    let $load_3: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_inspect_closure_escaped_to_fn_param_wado__tmpl_e0a9117283edca3b_fn_i32___i32___fmt_45_0: ref "core:prelude/format.wado//Formatter";
+    let pos: i32;
     let t_159: u64;
     let q: u64;
     let pair: i32;
@@ -301,26 +302,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_clo
     }
     start_258 = out_3.used;
     out_3.used = new_used_257;
-    $load_3 = out_3.repr;
-    new_used_257 = start_258 + 1;
+    $load_4 = out_3.repr;
+    pos = start_258 + 1;
     t_159 = 2_i64;
     b22: block {
         l23: loop {
-            break_if b22 (new_used_257 - start_258) < 2;
+            break_if b22 (pos - start_258) < 2;
             q = t_159 /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(t_159 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_3, new_used_257 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_3, new_used_257 - 2, 48 + tens);
-            new_used_257 = new_used_257 - 2;
+            builtin::array_set_u8($load_4, pos - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_4, pos - 2, 48 + tens);
+            pos = pos - 2;
             t_159 = q;
             continue l23;
         };
     };
-    if new_used_257 > start_258 {
-        builtin::array_set_u8($load_3, start_258, 48 + builtin::i32_wrap_i64(t_159 %u 10_i64));
+    if pos > start_258 {
+        builtin::array_set_u8($load_4, start_258, 48 + builtin::i32_wrap_i64(t_159 %u 10_i64));
     }
     $sroa_view_repr_578 = global:core:prelude/string.wado::$const_obj_3;
-    if @unlikely(local.tee new_used_257(out_3.used + 1) > builtin::array_len($load_3)) {
+    if @unlikely(local.tee new_used_257(new_used_257 + 1) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_257);
     }

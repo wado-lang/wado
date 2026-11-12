@@ -683,7 +683,7 @@ fn "match_ergonomics.wado/$test_7_a_mut_binding_copies__a_string_and_a_list"() {
     $match_mut_lift_12.used = $av_64;
     builtin::array_copy<u8>(local.tee $array_clone_src_1($match_mut_lift_12.repr), start_28, global:match_ergonomics.wado::$const_obj_4, 0, 6);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
-        if local.tee $av_64($match_mut_lift_12.used) != 11 {
+        if $av_64 != 11 {
             break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
         start_28 = 0;
@@ -785,8 +785,8 @@ orig: "), used: 132 }, s1: struct.new "core:prelude/string.wado//String" { repr:
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($match_mut_lift_13);
     }
     builtin::array_set<i32>($match_mut_lift_13.repr, $av_64, 4);
-    $match_mut_lift_13.used = $av_64 + 1;
-    if @unlikely(local.tee $av_64($match_mut_lift_13.used) != 4) {
+    $match_mut_lift_13.used = local.tee $av_64($av_64 + 1);
+    if @unlikely($av_64 != 4) {
         cold_path;
         "match_ergonomics.wado/$test_7_a_mut_binding_copies__a_string_and_a_list$cold1"($av_64);
         unreachable;

@@ -303,7 +303,7 @@ fn "shared_escape_tuple_pattern.wado/write_nested$dae[v]"(row) {
 }
 
 fn "shared_escape_tuple_pattern.wado/run"() with Stdout {
-    let $load_12: ref "core:prelude/list.wado//List<f64>";
+    let $load_16: ref "core:prelude/list.wado//List<f64>";
     let n: i32;
     let rows: ref "core:prelude/list.wado//List<[core:prelude/list.wado/List<f64>,core:prelude/list.wado/List<f64>,[i32,i32,i32,core:prelude/list.wado/List<f64>]]>";
     let row_4: ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]";
@@ -363,29 +363,29 @@ fn "shared_escape_tuple_pattern.wado/run"() with Stdout {
             $sroa_$iter_0_start_119 = $sroa_$iter_0_start_119 + 1;
             message_123 = block -> ref "core:prelude/string.wado//String" {
                 let $mv_field_1: f64;
-                current = local.tee $load_12(row_4.0).used;
+                current = local.tee $load_16(row_4.0).used;
                 if @unlikely(0 >= current) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, current, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("shared_escape_tuple_pattern.wado:54"), used: 35 });
                     unreachable;
                 }
-                $mv_field_1 = builtin::array_get_value<f64>($load_12.repr, 0);
+                $mv_field_1 = builtin::array_get_value<f64>($load_16.repr, 0);
                 let $mv_field_2: f64;
-                current = local.tee $load_12(row_4.1).used;
+                current = local.tee $load_16(row_4.1).used;
                 if @unlikely(0 >= current) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, current, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("shared_escape_tuple_pattern.wado:54"), used: 35 });
                     unreachable;
                 }
-                $mv_field_2 = builtin::array_get_value<f64>($load_12.repr, 0);
+                $mv_field_2 = builtin::array_get_value<f64>($load_16.repr, 0);
                 let $mv_field_3: f64;
-                current = local.tee $load_12(row_4.2.3).used;
+                current = local.tee $load_16(row_4.2.3).used;
                 if @unlikely(0 >= current) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, current, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("shared_escape_tuple_pattern.wado:54"), used: 35 });
                     unreachable;
                 }
-                $mv_field_3 = builtin::array_get_value<f64>($load_12.repr, 0);
+                $mv_field_3 = builtin::array_get_value<f64>($load_16.repr, 0);
                 "core:prelude/string.wado/core:prelude/string.wado/String::format<shared_escape_tuple_pattern.wado/$tmpl$56a5d688c9922189,[f64,f64,f64]>$spec0$spec0"($mv_field_1, $mv_field_2, $mv_field_3);
             };
             current = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
@@ -585,7 +585,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 }
 
 fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
-    let $load_3: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let start_15: i32;
     let $av_141: i32;
     p = nd + p;
@@ -598,18 +598,18 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         }
         start_15 = buf.used;
         buf.used = $av_141;
-        builtin::array_set_u8(local.tee $load_3(buf.repr), start_15, 48);
-        builtin::array_set_u8($load_3, start_15 + 1, 46);
+        builtin::array_set_u8(local.tee $load_4(buf.repr), start_15, 48);
+        builtin::array_set_u8($load_4, start_15 + 1, 46);
         $inline_zeros_at_9: block {
             $av_141 = start_15 + 2;
             break_if $inline_zeros_at_9 p <= 0;
-            builtin::array_fill<u8>($load_3, $av_141, 48, p);
+            builtin::array_fill<u8>($load_4, $av_141, 48, p);
         };
         nd = (local.tee p((start_15 + 2) + p) + nd) - 1;
         b41: block {
             l42: loop {
                 break_if b41 nd < p;
-                builtin::array_set_u8($load_3, nd, 48 + builtin::i32_wrap_i64(d %u 10_i64));
+                builtin::array_set_u8($load_4, nd, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 nd = nd - 1;
                 continue l42;
@@ -623,11 +623,11 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         start_15 = buf.used;
         buf.used = $av_141;
         $av_141 = (start_15 + nd) - 1;
-        $load_3 = buf.repr;
+        $load_4 = buf.repr;
         b45: block {
             l46: loop {
                 break_if b45 $av_141 < start_15;
-                builtin::array_set_u8($load_3, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
+                builtin::array_set_u8($load_4, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l46;
@@ -636,7 +636,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         $inline_zeros_at_22: block {
             $av_141 = start_15 + nd;
             break_if $inline_zeros_at_22 local.tee p(p - nd) <= 0;
-            builtin::array_fill<u8>($load_3, $av_141, 48, p);
+            builtin::array_fill<u8>($load_4, $av_141, 48, p);
         };
     } else {
         if @unlikely(local.tee $av_141($av_141 + (nd + 1)) > builtin::array_len(buf.repr)) {
@@ -646,18 +646,18 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         start_15 = buf.used;
         buf.used = $av_141;
         $av_141 = (start_15 + nd) - 1;
-        $load_3 = buf.repr;
+        $load_4 = buf.repr;
         b48: block {
             l49: loop {
                 break_if b48 $av_141 < start_15;
-                builtin::array_set_u8($load_3, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
+                builtin::array_set_u8($load_4, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l49;
             };
         };
-        builtin::array_copy<u8>($load_3, (start_15 + p) + 1, $load_3, start_15 + p, nd - p);
-        builtin::array_set_u8($load_3, start_15 + p, 46);
+        builtin::array_copy<u8>($load_4, (start_15 + p) + 1, $load_4, start_15 + p, nd - p);
+        builtin::array_set_u8($load_4, start_15 + p, 46);
     }
 }
 

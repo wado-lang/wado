@@ -65,7 +65,7 @@ global global:serde_generic_trait_method.wado::$const_obj_1: ref Array<u8> = arr
 global global:serde_generic_trait_method.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(52, 50);
 
 fn "serde_generic_trait_method.wado/run"() with Stdout {
-    let $load_2: ref Array<u8>;
+    let $load_3: ref Array<u8>;
     let start_19: i32;
     let $cm_pair_7: i64;
     let $sroa_buf_data_67: ref "core:prelude/string.wado//String";
@@ -78,15 +78,15 @@ fn "serde_generic_trait_method.wado/run"() with Stdout {
     }
     start_19 = $sroa_buf_data_67.used;
     $sroa_buf_data_67.used = 2;
-    builtin::array_copy<u8>(local.tee $load_2($sroa_buf_data_67.repr), start_19, global:serde_generic_trait_method.wado::$const_obj_2, 0, 2);
-    if @unlikely(3 > builtin::array_len($load_2)) {
+    builtin::array_copy<u8>(local.tee $load_3($sroa_buf_data_67.repr), start_19, global:serde_generic_trait_method.wado::$const_obj_2, 0, 2);
+    if @unlikely(3 > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_buf_data_67, 3);
     }
     start_19 = $sroa_buf_data_67.used;
     $sroa_buf_data_67.used = 3;
-    builtin::array_copy<u8>(local.tee $load_2($sroa_buf_data_67.repr), start_19, global:serde_generic_trait_method.wado::$const_obj_1, 0, 1);
-    if @unlikely(8 > builtin::array_len($load_2)) {
+    builtin::array_copy<u8>(local.tee $load_3($sroa_buf_data_67.repr), start_19, global:serde_generic_trait_method.wado::$const_obj_1, 0, 1);
+    if @unlikely(8 > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_buf_data_67, 8);
     }
@@ -96,11 +96,11 @@ fn "serde_generic_trait_method.wado/run"() with Stdout {
     start_19 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_70 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     start_19 = "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_19);
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee self_77($sroa_buf_data_67.used) + 1)), 0, $sroa_buf_data_67.repr, 0, self_77);
-    builtin::array_set_u8($load_2, self_77, 10);
+    builtin::array_copy<u8>(local.tee $load_3(builtin::array_new<u8>(local.tee self_77($sroa_buf_data_67.used) + 1)), 0, $sroa_buf_data_67.repr, 0, self_77);
+    builtin::array_set_u8($load_3, self_77, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         self_77 = self_77 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_70, $load_2, 0, self_77);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_70, $load_3, 0, self_77);
     });
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_70);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_19);

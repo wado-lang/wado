@@ -240,7 +240,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 }
 
 fn "core:json/core:json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]$spec0$dae[value]"(trailing_char) {
-    let $load_4: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let buf_1: ref "core:prelude/string.wado//String";
     let new_used_93: i32;
     let start_94: i32;
@@ -255,8 +255,8 @@ fn "core:json/core:json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.
         }
         start_94 = buf_1.used;
         buf_1.used = new_used_93;
-        builtin::array_copy<u8>(local.tee $load_4(buf_1.repr), start_94, global:core:json::$const_obj_23, 0, 4);
-        if @unlikely(local.tee new_used_93(buf_1.used + 1) > builtin::array_len($load_4)) {
+        builtin::array_copy<u8>(local.tee $load_6(buf_1.repr), start_94, global:core:json::$const_obj_23, 0, 4);
+        if @unlikely(local.tee new_used_93(new_used_93 + 1) > builtin::array_len($load_6)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_1, new_used_93);
         }
@@ -270,11 +270,11 @@ fn "core:json/core:json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf_1, new_used_93);
     } else {
     }
-    return 0, struct.new "core:prelude/string.wado//String" { repr: $load_4 = buf_1.repr; new_used_93 = buf_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(new_used_93)), 0, $load_4, 0, new_used_93); $array_clone_dst_2, used: new_used_93 }, ref.null none;
+    return 0, struct.new "core:prelude/string.wado//String" { repr: $load_6 = buf_1.repr; new_used_93 = buf_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(new_used_93)), 0, $load_6, 0, new_used_93); $array_clone_dst_2, used: new_used_93 }, ref.null none;
 }
 
 fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"(buf, name, count) {
-    let $load_3: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let start_18: i32;
     if count > 0 {
         if @unlikely(local.tee count(buf.used + 2) > builtin::array_len(buf.repr)) {
@@ -283,16 +283,16 @@ fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"
         }
         start_18 = buf.used;
         buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_31, 0, 2);
-        if @unlikely(local.tee count(buf.used + 4) > builtin::array_len($load_3)) {
+        builtin::array_copy<u8>(local.tee $load_4(buf.repr), start_18, global:core:json::$const_obj_31, 0, 2);
+        if @unlikely(local.tee count(count + 4) > builtin::array_len($load_4)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, count);
         }
         start_18 = buf.used;
         buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, name.repr, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_4(buf.repr), start_18, name.repr, 0, 2);
         count = start_18 + 2;
-        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_29, 0, 2);
+        builtin::array_copy<u8>($load_4, count, global:core:json::$const_obj_29, 0, 2);
         return;
     }
     if @unlikely(local.tee count(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -301,16 +301,16 @@ fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"
     }
     start_18 = buf.used;
     buf.used = count;
-    builtin::array_set_u8(local.tee $load_3(buf.repr), start_18, 34);
-    if @unlikely(local.tee count(buf.used + 4) > builtin::array_len($load_3)) {
+    builtin::array_set_u8(local.tee $load_4(buf.repr), start_18, 34);
+    if @unlikely(local.tee count(count + 4) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, count);
     }
     start_18 = buf.used;
     buf.used = count;
-    builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, name.repr, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_4(buf.repr), start_18, name.repr, 0, 2);
     count = start_18 + 2;
-    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_29, 0, 2);
+    builtin::array_copy<u8>($load_4, count, global:core:json::$const_obj_29, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {

@@ -88,7 +88,7 @@ import fn wasi/task-return from "wasi/task-return";
 global global:cm_component_import_resource_pure.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32, 100, 114, 111, 112, 115, 61);
 
 fn "cm_component_import_resource_pure.wado/run"() {
-    let $load_4: ref Array<u8>;
+    let $load_7: ref Array<u8>;
     let out_31: ref "core:prelude/string.wado//String";
     let value_98: u64;
     let start_291: i32;
@@ -117,17 +117,17 @@ fn "cm_component_import_resource_pure.wado/run"() {
     }
     start_291 = out_31.used;
     out_31.used = $drop_spill_4;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(out_31.repr), start_291, value_98, y);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_7(out_31.repr), start_291, value_98, y);
     $sroa_view_repr_969 = global:cm_component_import_resource_pure.wado::$const_obj_0;
-    if @unlikely(local.tee y(out_31.used + 7) > builtin::array_len($load_4)) {
+    if @unlikely(local.tee y($drop_spill_4 + 7) > builtin::array_len($load_7)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_31, y);
     }
     $drop_spill_4 = out_31.used;
     out_31.used = y;
-    builtin::array_copy<u8>(local.tee $load_4(out_31.repr), $drop_spill_4, $sroa_view_repr_969, 0, 7);
+    builtin::array_copy<u8>(local.tee $load_7(out_31.repr), $drop_spill_4, $sroa_view_repr_969, 0, 7);
     x = "core:prelude/primitive.wado/count_digits_u64"(local.tee value_98(builtin::i64_extend_i32_u(x)));
-    if @unlikely(local.tee y(out_31.used + x) > builtin::array_len($load_4)) {
+    if @unlikely(local.tee y(y + x) > builtin::array_len($load_7)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_31, y);
     }
@@ -140,11 +140,11 @@ fn "cm_component_import_resource_pure.wado/run"() {
     x = builtin::i32_wrap_i64(local.tee value_98("wasi/stream-new"()));
     y = builtin::i32_wrap_i64(value_98 >> 32_i64);
     x = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(x);
-    builtin::array_copy<u8>(local.tee $load_4(builtin::array_new<u8>(local.tee $drop_spill_4(out_31.used) + 1)), 0, out_31.repr, 0, $drop_spill_4);
-    builtin::array_set_u8($load_4, $drop_spill_4, 10);
+    builtin::array_copy<u8>(local.tee $load_7(builtin::array_new<u8>(local.tee $drop_spill_4(out_31.used) + 1)), 0, out_31.repr, 0, $drop_spill_4);
+    builtin::array_set_u8($load_7, $drop_spill_4, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $drop_spill_4 = $drop_spill_4 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(y, $load_4, 0, $drop_spill_4);
+        "core:rt/cm_stream_write_raw_all_u8"(y, $load_7, 0, $drop_spill_4);
     });
     "wasi/stream-drop-writable"(y);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(x);

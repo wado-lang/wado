@@ -198,14 +198,14 @@ fn "opt_bce_write_through_param_alias.wado/h"(a, b, i) with Stdout {
     self_19 = builtin::array_get_value<i32>(local.tee $load_1(a.repr), i);
     $inline_core_prelude_list_wado_List_i32___pop_2: block {
         break_if $inline_core_prelude_list_wado_List_i32___pop_2 local.tee $av_278(b.used) == 0;
-        b.used = $av_278 - 1;
-        drop(builtin::array_get_value<i32>(b.repr, b.used));
+        b.used = local.tee $av_278($av_278 - 1);
+        drop(builtin::array_get_value<i32>(b.repr, $av_278));
         break $inline_core_prelude_list_wado_List_i32___pop_2;
     };
     $inline_core_prelude_list_wado_List_i32___pop_3: block {
         break_if $inline_core_prelude_list_wado_List_i32___pop_3 local.tee $av_278(b.used) == 0;
-        b.used = $av_278 - 1;
-        drop(builtin::array_get_value<i32>(b.repr, b.used));
+        b.used = local.tee $av_278($av_278 - 1);
+        drop(builtin::array_get_value<i32>(b.repr, $av_278));
         break $inline_core_prelude_list_wado_List_i32___pop_3;
     };
     $av_278 = a.used;
@@ -253,9 +253,7 @@ fn "opt_bce_write_through_param_alias.wado/$cm_export__run"() {
     let $load_0: ref Array<i32>;
     let arr: ref "core:prelude/list.wado//List<i32>";
     builtin::array_set<i32>(local.tee $load_0(local.tee arr(struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(16), used: 0 }).repr), 0, 1);
-    arr.used = 1;
     builtin::array_set<i32>($load_0, 1, 2);
-    arr.used = 2;
     builtin::array_set<i32>($load_0, 2, 3);
     arr.used = 3;
     "opt_bce_write_through_param_alias.wado/h"(arr, arr, black_box(2));

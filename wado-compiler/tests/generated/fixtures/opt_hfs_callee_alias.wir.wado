@@ -198,8 +198,9 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_hfs_callee_alias.wado/sneaky"(c) {
-    c.y = c.y + 1;
-    local.tee c(select ref "opt_hfs_callee_alias.wado//Counter"(c.y > 0, c, c)).x = c.x * 2;
+    let $load_1: i32;
+    c.y = local.tee $load_1(c.y + 1);
+    local.tee c(select ref "opt_hfs_callee_alias.wado//Counter"($load_1 > 0, c, c)).x = c.x * 2;
 }
 
 fn "opt_hfs_callee_alias.wado/run"() {

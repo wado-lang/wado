@@ -395,9 +395,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "effect_handler_xmod_shadowed_type_bundled.wado/effect_handler_xmod_shadowed_type_bundled.wado/$Closure_0::$call"(self) {
+    let $load_2: i32;
     let self_1: ref "sub/effect_handler_xmod_shadowed_handler.wado//Ctx";
-    local.tee self_1(self.$capture_0).seen = self_1.seen + 1;
-    return self_1.seen;
+    local.tee self_1(self.$capture_0).seen = local.tee $load_2(self_1.seen + 1);
+    return $load_2;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
@@ -447,14 +448,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_hand
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__60: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $mv$t$h0($mv$t$h1.used) == 0;
-                if @unlikely(local.tee is_negative_70(out_3.used + $mv$t$h0) > builtin::array_len($sroa_view_repr_756)) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee is_negative_70($mv$t$h1.used) == 0;
+                if @unlikely(local.tee $mv$t$h0($mv$t$h0 + is_negative_70) > builtin::array_len($sroa_view_repr_756)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_70);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
                 }
                 start_252 = out_3.used;
-                out_3.used = is_negative_70;
-                builtin::array_copy<u8>(out_3.repr, start_252, $mv$t$h1.repr, 0, $mv$t$h0);
+                out_3.used = $mv$t$h0;
+                builtin::array_copy<u8>(out_3.repr, start_252, $mv$t$h1.repr, 0, is_negative_70);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
         };

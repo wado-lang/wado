@@ -227,11 +227,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_object_globalization_long_literal_ref.wado/$tmpl$9735897fc7613ff0,[i32,core:prelude/string.wado/String]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let $load_6: ref Array<u8>;
+    let $load_8: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_70: bool;
     let x_74: i64;
     let q: u64;
+    let pair: i32;
     let tens: i32;
     let start_270: i32;
     let $sroa_view_repr_1166: ref Array<u8>;
@@ -318,42 +319,42 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
     }
     start_270 = out_3.used;
     out_3.used = is_negative_70;
-    $load_6 = out_3.repr;
+    $load_8 = out_3.repr;
     $mv$t$h0 = start_270 + $mv$t$h0;
     b44: block {
         l45: loop {
             break_if b44 ($mv$t$h0 - start_270) < 2;
             q = x_74 /u 100_i64;
-            tens = local.tee is_negative_70(builtin::i32_wrap_i64(x_74 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_6, $mv$t$h0 - 1, (48 + is_negative_70) - (tens * 10));
-            builtin::array_set_u8($load_6, $mv$t$h0 - 2, 48 + tens);
+            tens = local.tee pair(builtin::i32_wrap_i64(x_74 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_8, $mv$t$h0 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_8, $mv$t$h0 - 2, 48 + tens);
             $mv$t$h0 = $mv$t$h0 - 2;
             x_74 = q;
             continue l45;
         };
     };
     if $mv$t$h0 > start_270 {
-        builtin::array_set_u8($load_6, start_270, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
+        builtin::array_set_u8($load_8, start_270, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
     }
     $sroa_view_repr_1166 = global:core:prelude/string.wado::$const_obj_1;
-    if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_6)) {
+    if @unlikely(local.tee $mv$t$h0(is_negative_70 + 1) > builtin::array_len($load_8)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_70 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(local.tee $load_6(out_3.repr), is_negative_70, $sroa_view_repr_1166, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), is_negative_70, $sroa_view_repr_1166, 0, 1);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__60: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $mv$t$h0($mv$t$h1.used) == 0;
-                if @unlikely(local.tee is_negative_70(out_3.used + $mv$t$h0) > builtin::array_len($load_6)) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee is_negative_70($mv$t$h1.used) == 0;
+                if @unlikely(local.tee $mv$t$h0($mv$t$h0 + is_negative_70) > builtin::array_len($load_8)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_70);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
                 }
                 start_270 = out_3.used;
-                out_3.used = is_negative_70;
-                builtin::array_copy<u8>(out_3.repr, start_270, $mv$t$h1.repr, 0, $mv$t$h0);
+                out_3.used = $mv$t$h0;
+                builtin::array_copy<u8>(out_3.repr, start_270, $mv$t$h1.repr, 0, is_negative_70);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
         };

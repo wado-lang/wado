@@ -1001,7 +1001,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/traits.wado/Drop::drop"(self) {
     let $load_7: ref "Array<core:prelude/types.wado/Resolution>";
     let $load_13: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
-    let $load_30: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>>";
+    let $load_34: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>>";
     let returned: bool;
     let subtask_2: ref null "core:prelude//$Resource";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
@@ -1063,8 +1063,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/t
             }
             drop(builtin::array_get_value<ref "core:prelude/types.wado//Resolution">(local.tee $load_7(self_16.repr), $mv$self_11$1));
             builtin::array_copy<ref "core:prelude/types.wado//Resolution">($load_7, $mv$self_11$1, $load_7, $mv$self_11$1 + 1, (local.tee $mv$self_11$0(self_16.used) - 1) - $mv$self_11$1);
-            self_16.used = $mv$self_11$0 - 1;
-            builtin::array_set<ref "core:prelude/types.wado//Resolution">($load_7, self_16.used, ref.null none);
+            self_16.used = local.tee $mv$self_11$0($mv$self_11$0 - 1);
+            builtin::array_set<ref "core:prelude/types.wado//Resolution">($load_7, $mv$self_11$0, ref.null none);
         } else {
         }
         "wasi/subtask-drop"(subtask_2.value);
@@ -1113,26 +1113,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/t
         } else {
             $load_13.value = $match_scrut_5;
         }
-        if ref.is_null((if ref.is_null(local.tee $load_30(self.args)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>" {
+        if ref.is_null((if ref.is_null(local.tee $load_34(self.args)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>" {
             ref.null none;
         } else {
-            $load_30.value;
+            $load_34.value;
         })) == 0 {
             let $match_scrut_7: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>";
-            if local.tee $match_scrut_7((if ref.is_null($load_30) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>" {
+            if local.tee $match_scrut_7((if ref.is_null($load_34) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>" {
                 ref.null none;
             } else {
-                $load_30.value;
+                $load_34.value;
             })).discriminant == 0 {
             } else {
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_0"(local.tee $drop_v_8(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>::Some"($match_scrut_7).payload_0).release)).env, $drop_v_8.ptr);
             }
         }
         $match_scrut_7 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>$0;
-        if ref.is_null(local.tee $load_30(self.args)) {
+        if ref.is_null(local.tee $load_34(self.args)) {
             self.args = struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>>" { value: $match_scrut_7 };
         } else {
-            $load_30.value = $match_scrut_7;
+            $load_34.value = $match_scrut_7;
         }
     }
 }

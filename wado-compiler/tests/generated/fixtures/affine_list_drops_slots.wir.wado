@@ -484,8 +484,8 @@ fn "affine_list_drops_slots.wado/$test_0"() {
         if local.tee used_27(ends.used) == 0 {
             break $inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0;
         }
-        ends.used = used_27 - 1;
-        break $inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: elements_26 = ends.repr; used_27 = ends.used; $sroa_$pattern_temp_0_0_38 = builtin::array_get_value<ref null "core:prelude//$Resource">(elements_26, used_27); builtin::array_set<ref null "core:prelude//$Resource">(elements_26, used_27, ref.null none); $sroa_$pattern_temp_0_0_38 };
+        ends.used = local.tee used_27(used_27 - 1);
+        break $inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_0_0_38 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_26(ends.repr), used_27); builtin::array_set<ref null "core:prelude//$Resource">(elements_26, used_27, ref.null none); $sroa_$pattern_temp_0_0_38 };
     };
     if ref.is_null(ends) == 0 {
         "affine_list_drops_slots.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(ends.repr, ends.used);
@@ -1872,8 +1872,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
     $av_10 = self.used;
     builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
-    self.used = $av_10 - 1;
-    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
+    self.used = local.tee index($av_10 - 1);
+    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, index, ref.null none);
     return v;
 }
 

@@ -694,8 +694,8 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
         }
         handle = builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self_9.repr), $mv$$match_8$1).packed;
         builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, $mv$$match_8$1, $load_0, $mv$$match_8$1 + 1, (local.tee packed(self_9.used) - 1) - $mv$$match_8$1);
-        self_9.used = packed - 1;
-        builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self_9.used, ref.null none);
+        self_9.used = local.tee packed(packed - 1);
+        builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, packed, ref.null none);
         return handle;
     } else {
     }
@@ -1406,8 +1406,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 
 fn "core:prelude/types.wado/core:prelude/types.wado/WriteCopy<u8>^core:prelude/traits.wado/Drop::drop"(self) {
     let $load_0: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<u8>,core:prelude/types.wado/StartedWrite<u8>]>>";
-    let $load_15: ref null "core:prelude/types.wado//CopyBuffer";
-    let $load_16: i32;
+    let $load_21: ref null "core:prelude/types.wado//CopyBuffer";
+    let $load_22: i32;
     let $twin_1: ref null "core:prelude//$Resource";
     let $twin_2: ref null "core:prelude/types.wado//StartedWrite<u8>";
     let self_25: ref "core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement>";
@@ -1462,25 +1462,25 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WriteCopy<u8>^core:prelude/t
     $twin_2 = $variant_payload_7.1;
     if $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: block -> bool {
         $inline_core_prelude_types_wado_CopyBuffer__wait_on_sroa_return__0: block {
-            $mv$$local_7$1 = (if local.tee $load_16(local.tee $load_15($twin_2.buffer).packed) != -1 -> i32 {
-                $load_16;
+            $mv$$local_7$1 = (if local.tee $load_22(local.tee $load_21($twin_2.buffer).packed) != -1 -> i32 {
+                $load_22;
             } else {
                 let $mv$$local_7$1: i32;
-                multivalue_bind [$load_16, $mv$$local_7$1] = "core:prelude/types.wado/settled_copy_at$sroa[return]"($load_15.handle);
-                if $load_16 == 1 -> i32 {
+                multivalue_bind [$load_22, $mv$$local_7$1] = "core:prelude/types.wado/settled_copy_at$sroa[return]"($load_21.handle);
+                if $load_22 == 1 -> i32 {
                     self_25 = global:core:prelude/types.wado::SETTLED_COPIES;
-                    $load_16 = global:core:prelude/types.wado::SETTLED_COPIES.used;
-                    if @unlikely(((0 <= $mv$$local_7$1) & ($mv$$local_7$1 < $load_16)) == 0) {
+                    $load_22 = global:core:prelude/types.wado::SETTLED_COPIES.used;
+                    if @unlikely(((0 <= $mv$$local_7$1) & ($mv$$local_7$1 < $load_22)) == 0) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$$local_7$1, $load_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:777"), used: 27 });
+                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$$local_7$1, $load_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:777"), used: 27 });
                         unreachable;
                     }
                     builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_25.repr, $mv$$local_7$1).packed;
                 } else {
-                    break $inline_core_prelude_types_wado_CopyBuffer__wait_on_sroa_return__0: $load_16 = 0;
+                    break $inline_core_prelude_types_wado_CopyBuffer__wait_on_sroa_return__0: $load_22 = 0;
                 }
             });
-            $load_16 = 1;
+            $load_22 = 1;
             drop((if local.tee $mv$$local_7$1($mv$$local_7$1 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
             } else if $mv$$local_7$1 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
@@ -1493,7 +1493,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WriteCopy<u8>^core:prelude/t
             }));
             break $inline_core_prelude_types_wado_CopyBuffer__wait_on_sroa_return__0;
         };
-        if $load_16 == 1 {
+        if $load_22 == 1 {
             break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: 0;
         }
         "wasi/waitable-join"($twin_2.buffer.handle, 0);

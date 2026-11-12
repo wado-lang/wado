@@ -617,7 +617,7 @@ global global:core:prelude/format.wado::$const_obj_26: ref "core:prelude/string.
 fn "ref_sees_reassigned_place.wado/$test_0_a_place_below_the_assigned_one"() {
     let $load_0: ref "ref_sees_reassigned_place.wado//H";
     let $load_1: ref "ref_sees_reassigned_place.wado//P";
-    let $load_2: ref "core:prelude/string.wado//String";
+    let $load_4: ref "core:prelude/string.wado//String";
     let $v0_4: i32;
     let elements_23: ref "Array<ref_sees_reassigned_place.wado/H>";
     let hp_66: ref "ref_sees_reassigned_place.wado//P";
@@ -627,8 +627,8 @@ fn "ref_sees_reassigned_place.wado/$test_0_a_place_below_the_assigned_one"() {
     $sroa_$sroa_$sroa_$deref_val_10_h_40_tag_44_repr_44 = array.new_fixed<u8>(98);
     local.tee $load_1(local.tee $load_0(builtin::array_get_value<ref "ref_sees_reassigned_place.wado//G">($sroa_gs_repr_41, 0).h).p).a = 3;
     $load_1.b = 3;
-    local.tee $load_2($load_0.tag).repr = $sroa_$sroa_$sroa_$deref_val_10_h_40_tag_44_repr_44;
-    $load_2.used = 1;
+    local.tee $load_4($load_0.tag).repr = $sroa_$sroa_$sroa_$deref_val_10_h_40_tag_44_repr_44;
+    $load_4.used = 1;
     if @unlikely(local.tee $v0_4(hp_66.a + hp_66.b) != 6) {
         cold_path;
         "ref_sees_reassigned_place.wado/$test_0_a_place_below_the_assigned_one$cold1"($v0_4);
@@ -645,7 +645,7 @@ fn "ref_sees_reassigned_place.wado/$test_0_a_place_below_the_assigned_one"() {
 }
 
 fn "ref_sees_reassigned_place.wado/$test_6_a_struct_field"() {
-    let i: i32;
+    let $load_1: i32;
     let $sroa_h_tag_23: ref "core:prelude/string.wado//String";
     let $sroa_$deref_val_10_repr_26: ref Array<u8>;
     let $sroa_$sroa_h_p_22_b_30: i32;
@@ -653,47 +653,46 @@ fn "ref_sees_reassigned_place.wado/$test_6_a_struct_field"() {
     $sroa_$sroa_h_p_22_b_30 = black_box(3);
     $sroa_$deref_val_10_repr_26 = array.new_fixed<u8>(98);
     $sroa_h_tag_23.repr = $sroa_$deref_val_10_repr_26;
-    $sroa_h_tag_23.used = 1;
+    $sroa_h_tag_23.used = local.tee $load_1(1);
     if @unlikely(local.tee $sroa_$sroa_h_p_22_b_30(3 + $sroa_$sroa_h_p_22_b_30) != 6) {
         cold_path;
         "ref_sees_reassigned_place.wado/$test_6_a_struct_field$cold0"($sroa_$sroa_h_p_22_b_30);
         unreachable;
     }
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        if local.tee $sroa_$sroa_h_p_22_b_30($sroa_h_tag_23.used) != 1 {
+        if $load_1 != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
-        i = 0;
-        $sroa_$deref_val_10_repr_26 = $sroa_h_tag_23.repr;
+        $sroa_$sroa_h_p_22_b_30 = 0;
         b5: block {
             l6: loop {
-                break_if b5 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$sroa_h_p_22_b_30);
-                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, i) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, i) {
+                break_if b5 (builtin::i64_extend_i32_s($sroa_$sroa_h_p_22_b_30) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
+                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, $sroa_$sroa_h_p_22_b_30) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, $sroa_$sroa_h_p_22_b_30) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i = i + 1;
-                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, i) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, i) {
+                $sroa_$sroa_h_p_22_b_30 = $sroa_$sroa_h_p_22_b_30 + 1;
+                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, $sroa_$sroa_h_p_22_b_30) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, $sroa_$sroa_h_p_22_b_30) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i = i + 1;
-                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, i) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, i) {
+                $sroa_$sroa_h_p_22_b_30 = $sroa_$sroa_h_p_22_b_30 + 1;
+                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, $sroa_$sroa_h_p_22_b_30) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, $sroa_$sroa_h_p_22_b_30) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i = i + 1;
-                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, i) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, i) {
+                $sroa_$sroa_h_p_22_b_30 = $sroa_$sroa_h_p_22_b_30 + 1;
+                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, $sroa_$sroa_h_p_22_b_30) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, $sroa_$sroa_h_p_22_b_30) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i = i + 1;
+                $sroa_$sroa_h_p_22_b_30 = $sroa_$sroa_h_p_22_b_30 + 1;
                 continue l6;
             };
         };
         b11: block {
             l12: loop {
-                break_if b11 i >= $sroa_$sroa_h_p_22_b_30;
-                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, i) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, i) {
+                break_if b11 $sroa_$sroa_h_p_22_b_30 >= $load_1;
+                if builtin::array_get_value<u8>($sroa_$deref_val_10_repr_26, $sroa_$sroa_h_p_22_b_30) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_1, $sroa_$sroa_h_p_22_b_30) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i = i + 1;
+                $sroa_$sroa_h_p_22_b_30 = $sroa_$sroa_h_p_22_b_30 + 1;
                 continue l12;
             };
         };
@@ -712,23 +711,22 @@ ht: "), used: 107 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
 }
 
 fn "ref_sees_reassigned_place.wado/$test_8_a_list_and_a_string_local"() {
+    let $load_1: i32;
     let s: ref "core:prelude/string.wado//String";
-    let a_end: i32;
     let i: i32;
     let $sroa_$deref_val_11_repr_31: ref Array<u8>;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 108, 100), used: 3 };
     $sroa_$deref_val_11_repr_31 = array.new_fixed<u8>(110, 101, 119);
     s.repr = $sroa_$deref_val_11_repr_31;
-    s.used = 3;
+    s.used = local.tee $load_1(3);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        if local.tee a_end(s.used) != 3 {
+        if $load_1 != 3 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         i = 0;
-        $sroa_$deref_val_11_repr_31 = s.repr;
         b16: block {
             l17: loop {
-                break_if b16 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
+                break_if b16 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
                 if builtin::array_get_value<u8>($sroa_$deref_val_11_repr_31, i) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
@@ -750,7 +748,7 @@ fn "ref_sees_reassigned_place.wado/$test_8_a_list_and_a_string_local"() {
         };
         b22: block {
             l23: loop {
-                break_if b22 i >= a_end;
+                break_if b22 i >= $load_1;
                 if builtin::array_get_value<u8>($sroa_$deref_val_11_repr_31, i) != builtin::array_get_value<u8>(global:ref_sees_reassigned_place.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
@@ -876,7 +874,7 @@ fn "ref_sees_reassigned_place.wado/$test_12_a_list_element_that_is_a_list"() {
 
 fn "ref_sees_reassigned_place.wado/$test_13_a_field_of_a_list_element"() {
     let $load_0: ref "ref_sees_reassigned_place.wado//P";
-    let $load_1: ref "core:prelude/string.wado//String";
+    let $load_3: ref "core:prelude/string.wado//String";
     let rp: ref "ref_sees_reassigned_place.wado//P";
     let rt: ref "core:prelude/string.wado//String";
     let $deref_ref_20: ref "ref_sees_reassigned_place.wado//H";
@@ -890,8 +888,8 @@ fn "ref_sees_reassigned_place.wado/$test_13_a_field_of_a_list_element"() {
     $sroa_$sroa_$deref_val_19_tag_66_repr_72 = array.new_fixed<u8>(98);
     local.tee $load_0(local.tee $deref_ref_20(builtin::array_get_value<ref "ref_sees_reassigned_place.wado//H">($sroa_hs_repr_68, 0)).p).a = 4;
     $load_0.b = $sroa_$sroa_$deref_val_19_p_65_b_71;
-    local.tee $load_1($deref_ref_20.tag).repr = $sroa_$sroa_$deref_val_19_tag_66_repr_72;
-    $load_1.used = 1;
+    local.tee $load_3($deref_ref_20.tag).repr = $sroa_$sroa_$deref_val_19_tag_66_repr_72;
+    $load_3.used = 1;
     if @unlikely(local.tee $sroa_$sroa_$deref_val_19_p_65_b_71(rp.a + rp.b) != 8) {
         cold_path;
         "ref_sees_reassigned_place.wado/$test_13_a_field_of_a_list_element$cold0"($sroa_$sroa_$deref_val_19_p_65_b_71);
@@ -1123,7 +1121,7 @@ fn "ref_sees_reassigned_place.wado/$cm_export__$test_5_a_local"() {
     $sroa_$deref_val_6_b_11 = black_box(8);
     x.a = 7;
     x.b = $sroa_$deref_val_6_b_11;
-    if @unlikely(local.tee $sroa_$deref_val_6_b_11(7 + x.b) != 15) {
+    if @unlikely(local.tee $sroa_$deref_val_6_b_11(7 + $sroa_$deref_val_6_b_11) != 15) {
         cold_path;
         "ref_sees_reassigned_place.wado/$test_5_a_local$cold0"($sroa_$deref_val_6_b_11);
         unreachable;

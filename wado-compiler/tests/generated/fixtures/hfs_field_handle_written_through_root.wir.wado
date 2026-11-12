@@ -291,24 +291,22 @@ global global:core:prelude/primitive.wado::$const_obj_3: ref "core:prelude/strin
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "hfs_field_handle_written_through_root.wado/add"(log, v) {
+    let $load_1: i32;
     let self_2: ref "core:prelude/list.wado//List<i32>";
-    let value_3: i32;
     let used_4: i32;
-    log.calls = log.calls + 1;
-    self_2 = log.marks;
-    value_3 = log.calls;
-    if @unlikely(local.tee used_4(self_2.used) >= builtin::array_len(self_2.repr)) {
+    log.calls = local.tee $load_1(log.calls + 1);
+    if @unlikely(local.tee used_4(local.tee self_2(log.marks).used) >= builtin::array_len(self_2.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_2);
     }
-    builtin::array_set<i32>(self_2.repr, used_4, value_3);
+    builtin::array_set<i32>(self_2.repr, used_4, $load_1);
     self_2.used = used_4 + 1;
-    if @unlikely(local.tee value_3(local.tee self_2(log.items).used) >= builtin::array_len(self_2.repr)) {
+    if @unlikely(local.tee $load_1(local.tee self_2(log.items).used) >= builtin::array_len(self_2.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_2);
     }
-    builtin::array_set<i32>(self_2.repr, value_3, v);
-    self_2.used = value_3 + 1;
+    builtin::array_set<i32>(self_2.repr, $load_1, v);
+    self_2.used = $load_1 + 1;
 }
 
 fn "hfs_field_handle_written_through_root.wado/walk"($mv$keys$repr, $mv$keys$used, log, nested) {

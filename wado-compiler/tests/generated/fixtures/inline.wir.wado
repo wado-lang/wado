@@ -335,10 +335,10 @@ fn "inline.wado/test_generic_nested_ref"() with Stdout {
 
 fn "inline.wado/test_method_minimal"() with Stdout {
     let $load_1: ref Array<i32>;
+    let $load_7: i32;
     let arr1: ref "core:prelude/list.wado//List<i32>";
     let arr2: ref "core:prelude/list.wado//List<i32>";
     let self_45: i32;
-    let self_52: i32;
     let message_53: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     arr1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
@@ -360,7 +360,7 @@ fn "inline.wado/test_method_minimal"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(arr2);
     }
     builtin::array_set<i32>(local.tee $load_1(arr2.repr), 0, 3);
-    arr2.used = 0 + 1;
+    arr2.used = local.tee $load_7(0 + 1);
     self_45 = arr1.used;
     if @unlikely(0 >= self_45) {
         cold_path;
@@ -368,21 +368,20 @@ fn "inline.wado/test_method_minimal"() with Stdout {
         unreachable;
     }
     self_45 = builtin::array_get_value<i32>(arr1.repr, 0);
-    self_52 = arr2.used;
-    if @unlikely(0 >= self_52) {
+    if @unlikely(0 >= $load_7) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, self_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inline.wado:112"), used: 15 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $load_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inline.wado:112"), used: 15 });
         unreachable;
     }
-    self_52 = builtin::array_get_value<i32>($load_1, 0);
+    $load_7 = builtin::array_get_value<i32>($load_1, 0);
     message_53 = block -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<inline.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(self_45, self_52);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<inline.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(self_45, $load_7);
     };
-    self_45 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    self_52 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    self_45 = "inline.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_45);
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_52, message_53.repr, message_53.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_45);
+    $load_7 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    self_45 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $load_7 = "inline.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_45, message_53.repr, message_53.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_7);
 }
 
 fn "inline.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

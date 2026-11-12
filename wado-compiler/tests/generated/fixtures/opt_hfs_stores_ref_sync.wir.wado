@@ -166,6 +166,7 @@ fn "opt_hfs_stores_ref_sync.wado/bump_y"(c) {
 }
 
 fn "opt_hfs_stores_ref_sync.wado/run"() {
+    let $load_1: i32;
     let c: ref "opt_hfs_stores_ref_sync.wado//Counter";
     let total: i32;
     let i: i32;
@@ -175,8 +176,8 @@ fn "opt_hfs_stores_ref_sync.wado/run"() {
     b0: block {
         l1: loop {
             break_if b0 i >= 5;
-            c.x = c.x + 1;
-            total = (total + local.tee total(c.x)) + total;
+            c.x = local.tee $load_1(c.x + 1);
+            total = (total + $load_1) + $load_1;
             let $mv$h$c: ref "opt_hfs_stores_ref_sync.wado//Counter";
             multivalue_bind [$mv$h$c] = "opt_hfs_stores_ref_sync.wado/store_ref"(c);
             total = total + $mv$h$c.x;

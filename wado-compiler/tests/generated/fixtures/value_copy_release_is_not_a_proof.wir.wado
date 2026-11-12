@@ -378,8 +378,8 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "value_copy_release_is_not_a_proof.wado/$test_1_a_repoint_that_never_runs_licenses_nothing"() {
+    let $load_3: i32;
     let $v0_1: bool;
-    let $v1: i32;
     let a0: ref "core:prelude/list.wado//List<i32>";
     let $sroa_h_xs_25: ref "core:prelude/list.wado//List<i32>";
     $sroa_h_xs_25 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
@@ -393,10 +393,10 @@ fn "value_copy_release_is_not_a_proof.wado/$test_1_a_repoint_that_never_runs_lic
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(a0);
     }
     builtin::array_set<i32>(a0.repr, 2, 9);
-    a0.used = 2 + 1;
-    if @unlikely(local.tee $v1(a0.used) != 3) {
+    a0.used = local.tee $load_3(2 + 1);
+    if @unlikely($load_3 != 3) {
         cold_path;
-        "value_copy_release_is_not_a_proof.wado/$test_1_a_repoint_that_never_runs_licenses_nothing$cold1"($v0_1, $v1);
+        "value_copy_release_is_not_a_proof.wado/$test_1_a_repoint_that_never_runs_licenses_nothing$cold1"($v0_1, $load_3);
         unreachable;
     }
     if @unlikely(local.tee $v0_1($sroa_h_xs_25.used) != 2) {

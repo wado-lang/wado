@@ -411,6 +411,7 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_1_a_struct_literal_out_
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it"() {
     let held: ref null "core:prelude/list.wado//List<i32>";
     let v_1: ref "core:prelude/list.wado//List<i32>";
+    let self_18: i32;
     let $av_20: i32;
     $av_20 = local.tee v_1(ref.as_non_null(local.tee held(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }))).used;
     v_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_1.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_20)), 0, $array_clone_src_1, 0, $av_20); $array_clone_dst_2, used: $av_20 };
@@ -419,13 +420,13 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_a
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_1);
     }
     builtin::array_set<i32>(v_1.repr, $av_20, 3);
-    v_1.used = $av_20 + 1;
-    if @unlikely(local.tee $av_20(held.used) != 2) {
+    v_1.used = local.tee $av_20($av_20 + 1);
+    if @unlikely(local.tee self_18(held.used) != 2) {
         cold_path;
-        "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it$cold1"($av_20);
+        "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it$cold1"(self_18);
         unreachable;
     }
-    if @unlikely(local.tee $av_20(v_1.used) != 3) {
+    if @unlikely($av_20 != 3) {
         cold_path;
         "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it$cold0"($av_20);
         unreachable;
