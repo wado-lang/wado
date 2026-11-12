@@ -3205,11 +3205,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|supplied| supplied.takes_a_slot)
                 .filter_map(|supplied| match supplied.arg {
                     Some(ty) => Some((supplied.slot, ty.clone(), written_self)),
-                    None => supplied
-                        .param
-                        .default
-                        .as_ref()
-                        .map(|ty| (supplied.slot, ty.clone(), BoundSelf::Bounded { writer: decl })),
+                    None => supplied.param.default.as_ref().map(|ty| {
+                        (
+                            supplied.slot,
+                            ty.clone(),
+                            BoundSelf::Bounded { writer: decl },
+                        )
+                    }),
                 })
                 .collect();
         for (slot, ty, scope) in written {

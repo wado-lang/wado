@@ -1515,7 +1515,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The key of the instance a static call reaches in `block` at the
     /// receiver's `positions`, its bounds enforced there, and the slots only
     /// the trait arguments name settled by the call's `args`
-    /// ([`Self::slot_instance_args`]).
+    /// ([`Self::slot_instance_args`]). `return_type` comes back with the
+    /// caller's projections answered, as the parameters already are.
     pub(super) fn static_instance_args(
         &mut self,
         block: Option<DefId>,
@@ -1526,7 +1527,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Vec<TypeId> {
         self.enforce_static_block_bounds(block, positions, span);
-        block
+        let instance_args = block
             .and_then(|block| {
                 let given = self
                     .tysys
@@ -1535,7 +1536,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .impl_spelled_slots(block, positions);
                 self.slot_instance_args(block, given, params, args, return_type, span)
             })
-            .unwrap_or_else(|| positions.to_vec())
+            .unwrap_or_else(|| positions.to_vec());
+        *return_type = self.answer_frame_projections(*return_type);
+        instance_args
     }
 
     /// What `block`'s instance is keyed by: every slot in slot order, `given`

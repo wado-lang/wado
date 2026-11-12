@@ -2292,40 +2292,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && !spelled[i]
                     && method_type_args[i] == merged[i]
             });
-            if unanswered.is_some()
-                && !defaulted
-                && strict
-                && self.defers_uninferred(&args, &method_type_args, expected_type)
-            {
-                let mut static_args = StaticTypeArgs {
-                    params: sig.own_params.clone(),
-                    impl_args: declaring_args.clone(),
-                    method_args: method_type_args,
-                };
-                self.defer_or_report_uninferred_static_method_type_args(
-                    StaticCallee {
-                        type_name: &receiver,
-                        method_name: &static_call.method,
-                        receiver_key: struct_key_for_lookup.as_ref(),
-                    },
-                    &mut static_args,
-                    &args,
-                    expected_type,
-                    Some(target_type_id),
-                    static_call.span,
-                );
-                method_type_args = static_args.method_args;
-            } else if let Some((i, _)) = unanswered
+            if let Some((i, _)) = unanswered
                 && !defaulted
                 && strict
             {
-                let _ = self.emit(TypeError::UninferredMethodTypeArgs {
-                    receiver,
-                    method: static_call.method.clone(),
-                    params: vec![sig.own_params[i].name.clone()],
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
+                // A later use the call's value meets may still settle it, as
+                // it does the bare spelling's.
+                if self.defers_uninferred(&args, &method_type_args, expected_type) {
+                    let mut static_args = StaticTypeArgs {
+                        params: sig.own_params.clone(),
+                        impl_args: declaring_args.clone(),
+                        method_args: method_type_args,
+                    };
+                    self.defer_or_report_uninferred_static_method_type_args(
+                        StaticCallee {
+                            type_name: &receiver,
+                            method_name: &static_call.method,
+                            receiver_key: struct_key_for_lookup.as_ref(),
+                        },
+                        &mut static_args,
+                        &args,
+                        expected_type,
+                        Some(target_type_id),
+                        static_call.span,
+                    );
+                    method_type_args = static_args.method_args;
+                } else {
+                    let _ = self.emit(TypeError::UninferredMethodTypeArgs {
+                        receiver,
+                        method: static_call.method.clone(),
+                        params: vec![sig.own_params[i].name.clone()],
+                        span: static_call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
             }
             let reached = self.tysys.packs_args_reach(&param_types, args.len());
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
@@ -2595,7 +2595,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut return_type,
             static_call.span,
         );
-        return_type = self.answer_frame_projections(return_type);
         let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
@@ -3784,7 +3783,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_type_args,
             std::slice::from_mut(&mut return_type),
         );
-        return_type = self.answer_frame_projections(return_type);
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {

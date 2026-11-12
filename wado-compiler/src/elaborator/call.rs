@@ -13,8 +13,7 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId,
-    TypeParamId,
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId, TypeParamId,
 };
 use crate::type_table::TypeTable;
 
@@ -3814,10 +3813,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The slots `sig` declares, its block's and then its own, as a bound's
     /// target names them, and the parameters that declare them.
     fn sig_slots(&self, sig: &MethodSig) -> (Vec<ParamRef>, Vec<ast::GenericParam>) {
-        let names: Vec<ParamRef> = {
+        let mut names: Vec<ParamRef> = {
             let table = self.tysys.type_table.borrow();
-            sig.decl
-                .type_params
+            sig.decl.type_params[..sig.declaring_split()]
                 .iter()
                 .map(|(name, slot)| ParamRef {
                     owner: table.type_param_id(*slot).map(|id| id.owner),
@@ -3826,7 +3824,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         };
-        let mut owners = self.declaring_params(&names[..sig.declaring_split()]);
+        let mut owners = self.declaring_params(&names);
+        names.extend(slot_names(&sig.own_params, &self.tysys.resolutions));
         owners.extend(sig.own_params.iter().cloned());
         (names, owners)
     }
@@ -5862,7 +5861,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The method's parameters exclude the receiver, so each pairs with
             // the argument after it.
             let (method_type_args, subst) = self.bind_method_type_args(
-                written.clone(),
+                written,
                 MethodInferenceInput {
                     receiver_type: type_param_type_id,
                     method_name,
@@ -6010,27 +6009,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|arg| self.resolve_expr(arg, ctx, None))
                 .collect(),
         };
-        let method_id = match &call.callee {
-            Expr::Ident(ident) => ident.segments.last().map(|seg| seg.id),
-            _ => None,
+        let Expr::Ident(ident) = &call.callee else {
+            unreachable!("a `T::method` callee is a path");
         };
-        if let Some(return_type) = self.resolve_named_type_blanket_static(
+        self.blanket_static_or_unknown(
             type_param_type_id,
             type_param_name,
             method_name,
-            call.id,
-            method_id,
+            ident,
+            call,
             &args,
-            &call.args,
-            call.span,
             ctx,
-        ) {
-            return return_type;
-        }
-        let _ = self.emit(TypeError::UnknownFunction {
-            name: format!("{type_param_name}::{method_name}"),
-            span: call.span,
-        });
-        TypeTable::ERROR
+        )
     }
 }

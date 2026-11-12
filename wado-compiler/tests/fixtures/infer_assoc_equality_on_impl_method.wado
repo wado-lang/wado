@@ -1,6 +1,7 @@
 // A trait method called on a concrete receiver resolves to the impl's method,
 // whose signature carries the trait's bounds: `H`'s equality there names the
-// trait method's `E`, and still answers the impl method's slot.
+// trait method's `E`, and still answers the impl method's slot, whether the
+// call settles `H` itself or a sibling arm does later.
 trait Holder with () {
     type Item;
     fn empty() -> Self;
@@ -29,6 +30,7 @@ impl Make for i32 {
 
 trait Maker with () {
     fn made<T, H: Holder<Item = E>, E: Make>(&self, t: T) -> H;
+    fn made_static<T, H: Holder<Item = E>, E: Make>(t: T) -> H;
 }
 
 struct M {
@@ -39,10 +41,22 @@ impl Maker for M {
     fn made<T, H: Holder<Item = E>, E: Make>(&self, _t: T) -> H {
         return H::empty();
     }
+    fn made_static<T, H: Holder<Item = E>, E: Make>(_t: T) -> H {
+        let _e = E::make();
+        return H::empty();
+    }
 }
 
 test "the impl's method answers the equality" {
     let m = M { v: 0 };
     let b: Box = m.made(1);
+    assert b.v == 3;
+}
+
+test "the impl's static answers the equality a sibling arm settles" {
+    let [_n, b] = match builtin::black_box(true) {
+        true => [3, M::made_static(1)],
+        false => [0, Box { v: 0 }],
+    };
     assert b.v == 3;
 }
