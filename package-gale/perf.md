@@ -333,12 +333,12 @@ tournament apart from the fallback. SQLite's parse fuel: +5.4%.
 `TokenStream` keeps `kinds` dense, since every scan reads it, and stores the
 rest of a token (start, end, its trivia range and flags) side by side in one
 `List<i32>`, five slots per token. A trivia takes four slots in a second one.
-The lexer then grows two arrays where it grew ten, and a push checks one
-capacity.
+Past the `chars/4` pre-size, a token then grows two arrays where it grew six,
+and a trivia one where it grew four.
 
-| input                                   | ms/iter, ten arrays | ms/iter, two |   change |
-| --------------------------------------- | ------------------: | -----------: | -------: |
-| 200 KB, mostly one-character trivia     |                4.81 |         4.20 |     +14% |
+| input                                    | ms/iter, ten arrays | ms/iter, two |   change |
+| ---------------------------------------- | ------------------: | -----------: | -------: |
+| 200 KB, mostly one-character trivia      |                4.81 |         4.20 |     +14% |
 | SQLite `queries.sql` (fits the pre-size) |               0.940 |        0.950 | in noise |
 
 Best of six alternating `wado run -O2` runs of a `core:benchmark` loop over

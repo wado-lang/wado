@@ -107,7 +107,11 @@ impl HighlightVisitor {
             let id = self.classify(toks.trivia_kind_at(t), -1);
             if id >= 0 {
                 self.captures.push(
-                    HighlightCapture { capture_id: id, start: toks.trivia_start_at(t), end: toks.trivia_end_at(t) },
+                    HighlightCapture {
+                        capture_id: id,
+                        start: toks.trivia_start_at(t),
+                        end: toks.trivia_end_at(t),
+                    },
                 );
             }
         }
@@ -117,7 +121,11 @@ impl HighlightVisitor {
         let id = self.classify(toks.kinds[idx], self.enclosing_rule_capture());
         if id >= 0 {
             self.captures.push(
-                HighlightCapture { capture_id: id, start: toks.start_at(idx), end: toks.end_at(idx) },
+                HighlightCapture {
+                    capture_id: id,
+                    start: toks.start_at(idx),
+                    end: toks.end_at(idx),
+                },
             );
         }
     }
