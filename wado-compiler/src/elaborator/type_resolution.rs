@@ -469,13 +469,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             // A parameter standing in for `Self` carries the frame's bounds, so
-            // `Self::Base` at `T: Constrained` asks what `T::Base` asks. The
-            // trait this frame is written in answers first: two of the
-            // parameter's bounds may each declare the name.
+            // `Self::Base` at `T: Constrained` asks what `T::Base` asks. Where
+            // the bounds declare it, the trait this frame is written in
+            // answers first: two of them may each declare the name.
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
-                && let Some(owner) = declared.or_else(|| {
-                    self.bound_declaring_assoc_type(BoundsOf::Type(self_type), &namespaced.name)
-                })
+                && let Some(owner) = self
+                    .bound_declaring_assoc_type(BoundsOf::Type(self_type), &namespaced.name)
+                    .map(|bounds_owner| declared.unwrap_or(bounds_owner))
             {
                 return Some(AssocTarget::Projection {
                     base: self_type,
