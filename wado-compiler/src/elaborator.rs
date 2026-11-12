@@ -1139,9 +1139,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// declared type is qualified through the same canonical key the impl
     /// index uses, and a type parameter by the item declaring it.
     pub(super) fn qualified_receiver_name(&self, written: &str, receiver: TypeId) -> FqTypeName {
-        if let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(written) {
-            assert_eq!(binder.type_id, receiver, "PROBE static receiver {written}");
-        }
         let table = self.tysys.type_table.borrow();
         if table.type_param_id(receiver).is_some() {
             return table.fq_type_name(receiver);
