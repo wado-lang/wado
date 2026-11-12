@@ -610,7 +610,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Re-coerce the arguments that answered last (see [`answers_last`]) to the
-    /// inferred parameter types, which they were resolved before.
+    /// inferred parameter types, which they were resolved before, and a
+    /// composite literal to the newtype a parameter became once the base it
+    /// built was retyped (`spec-types`, "Method Signature Substitution").
     /// `expected_param_types` must already carry the inferred type arguments.
     pub(super) fn recoerce_literal_args(
         &mut self,
@@ -625,7 +627,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&expected) = expected_param_types.get(i) else {
                 continue;
             };
-            if *arg == expected || !answers_last(Some(raw)) {
+            if *arg == expected {
+                continue;
+            }
+            if let Some(coerced) = self.recoerce_composite_newtype(raw, *arg, expected) {
+                *arg = coerced;
+                continue;
+            }
+            if !answers_last(Some(raw)) {
                 continue;
             }
             // Each records `expression_types` for the literal, overwriting the
@@ -1407,6 +1416,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_coercion(expr.id(), CoercionKind::CompositeNewtype, coerced);
         self.record_expression_type(expr.id(), coerced);
         Some(coerced)
+    }
+
+    /// [`Self::try_coerce_composite_newtype`] on a literal already built, as
+    /// `built`, before `target_type` was known to be a newtype over what it
+    /// built.
+    fn recoerce_composite_newtype(
+        &mut self,
+        expr: &Expr,
+        built: TypeId,
+        target_type: TypeId,
+    ) -> Option<TypeId> {
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .newtype_representation(target_type)?;
+        let composite = match expr {
+            Expr::StructLiteral(struct_lit) => struct_lit.name.is_none(),
+            Expr::TupleLiteral(_) => true,
+            _ => false,
+        };
+        // Built as the parameter read before it was retyped, which may be a
+        // link of the target's own chain.
+        let built = self.apply_infer_holes(built);
+        let built = self.tysys.type_table.borrow().representation_head(built);
+        if !composite
+            || check_assignable(built, base, &self.tysys.type_table.borrow())
+                == TypeCheckResult::Incompatible
+        {
+            return None;
+        }
+        self.record_coercion(expr.id(), CoercionKind::CompositeNewtype, target_type);
+        self.record_expression_type(expr.id(), target_type);
+        Some(target_type)
     }
 
     /// `newtype` with the inference variables its `base` names answered by

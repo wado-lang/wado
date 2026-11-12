@@ -1,0 +1,21 @@
+// A chain of newtypes another module declares, reached through a namespace.
+
+pub struct Wrap<T> {
+    pub v: T,
+}
+
+impl<T> Wrap<T> {
+    pub fn pass<U>(u: U) -> U {
+        return u;
+    }
+}
+
+pub type Wi = Wrap<i32>;
+
+impl Wi {
+    pub fn mid_raw() -> Wrap<i32> {
+        return Wrap { v: 8 };
+    }
+}
+
+pub type Outer = Wi;

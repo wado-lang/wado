@@ -26,6 +26,7 @@ use super::tysys::TypeSystem;
 /// One `Type::method(...)` spelling as the resolution reads it: what it names,
 /// and what the call site already knows about it. Carried as one value, so a
 /// fact a rung needs reaches it whatever site asked.
+#[derive(Clone, Copy)]
 pub(super) struct StaticQuery<'a> {
     /// The reference site of the receiver's name, where the caller has one.
     pub(super) site: Option<ast::AstId>,
@@ -310,6 +311,145 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve what `query`'s spelling names, once, for every site that used to
     /// ask its own question.
     pub(super) fn resolve_static_callee(&mut self, query: StaticQuery<'_>) -> StaticLookup {
+        self.resolve_static_callee_inherited(query, None, None)
+    }
+
+    /// [`Self::resolve_static_callee`] at one link of the newtype chain whose
+    /// head `inheriting` the call spelled. The arguments and the expected type
+    /// read that head as this link, and a callee this link declares reads the
+    /// link as the head; no other link is rewritten either way (`spec-types`,
+    /// "Method Signature Substitution"). `nearest` is the first link above
+    /// that left trait candidates out of scope, which a chain no link answers
+    /// reports.
+    fn resolve_static_callee_inherited(
+        &mut self,
+        query: StaticQuery<'_>,
+        inheriting: Option<TypeId>,
+        nearest: Option<(String, Vec<Candidate>)>,
+    ) -> StaticLookup {
+        let StaticQuery {
+            site,
+            receiver_name,
+            receiver_key,
+            method_name,
+            arg_types: written_args,
+            receiver_type,
+            receiver_args,
+            method_args,
+            required_trait,
+            expected_return,
+        } = query;
+        let link = inheriting.zip(receiver_type);
+        let at_link = |e: &Self, ty: TypeId| match link {
+            Some((head, link)) => e.tysys.substitute_newtype_in_type(ty, head, link),
+            None => ty,
+        };
+        let arg_types: Vec<TypeId> = written_args.iter().map(|&t| at_link(self, t)).collect();
+        let answered = self.resolve_static_callee_at_link(StaticQuery {
+            site,
+            receiver_name,
+            receiver_key,
+            method_name,
+            arg_types: &arg_types,
+            receiver_type,
+            receiver_args,
+            method_args,
+            required_trait,
+            expected_return: expected_return.map(|t| at_link(self, t)),
+        });
+        let out_of_scope = match answered {
+            Ok(mut lookup) => {
+                if let (StaticLookup::Found(callee), Some((head, link))) = (&mut lookup, link) {
+                    self.retype_callee(callee, link, head);
+                }
+                return lookup;
+            }
+            Err(out_of_scope) => out_of_scope,
+        };
+        // A newtype reaches what it wraps, one link of a chain at a time, so a
+        // link's own impls answer before its base's. Read from
+        // the alias's declaration, since a namespaced `lib::Q::twice()` leaves
+        // the caller's frame no `Q` to look one up by.
+        let key = match receiver_key {
+            Some(key) => key.clone(),
+            None => self.impl_target_at(site, receiver_name),
+        };
+        let nearest = nearest.or_else(|| {
+            (!out_of_scope.is_empty()).then(|| (receiver_name.to_string(), out_of_scope))
+        });
+        let Some((link_key, link_name)) = self.newtype_link_target(&key) else {
+            let (name, out_of_scope) =
+                nearest.unwrap_or_else(|| (receiver_name.to_string(), Vec::new()));
+            return self.out_of_scope_lookup(&name, &out_of_scope);
+        };
+        let link_type = receiver_type.and_then(|ty| self.tysys.type_table.borrow().link_below(ty));
+        self.resolve_static_callee_inherited(
+            StaticQuery {
+                site: None,
+                receiver_name: &link_name,
+                receiver_key: Some(&link_key),
+                method_name,
+                arg_types: written_args,
+                receiver_type: link_type.or(receiver_type),
+                receiver_args,
+                method_args,
+                required_trait,
+                expected_return,
+            },
+            inheriting.or(receiver_type),
+            nearest,
+        )
+    }
+
+    /// Every declaration of `query`'s method the receiver at `key` supplies,
+    /// its own and its traits', split into those the call reaches and those
+    /// whose trait is out of its scope. `receiver_key` as the caller gave it
+    /// for the traits: a key derived from the name narrows the search to a
+    /// declaration the impls may not be indexed under, putting a primitive's
+    /// `impl FromStr for f32` out of reach.
+    ///
+    /// A qualified spelling names a trait, so the receiver's own declaration
+    /// is not what it asks for.
+    fn link_candidates(
+        &mut self,
+        query: &StaticQuery<'_>,
+        key: &ImplTargetKey,
+        declaring_args: &[TypeId],
+    ) -> (Vec<Candidate>, Vec<Candidate>) {
+        let mut candidates = if query.required_trait.is_some() {
+            Vec::new()
+        } else {
+            self.own_candidates(key, query.method_name, declaring_args)
+        };
+        candidates.extend(self.trait_candidates(
+            query.receiver_name,
+            query.method_name,
+            query.receiver_key,
+            declaring_args,
+        ));
+        candidates.extend(self.blanket_candidates(query.method_name, query.receiver_type));
+        // As a method call's, a trait's declarations answer only where the
+        // trait is in scope (WEP 2026-09-01, "Scope"). A qualified spelling
+        // names its trait, which is what scope asks of a call.
+        if let Some(required) = query.required_trait {
+            candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
+            return (candidates, Vec::new());
+        }
+        let frame = self.frame_module();
+        let resolutions = &self.tysys.resolutions;
+        candidates.into_iter().partition(|c| {
+            c.supply
+                .as_ref()
+                .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
+        })
+    }
+
+    /// What this link answers, or, where it answers nothing, the trait
+    /// candidates it left out of scope.
+    fn resolve_static_callee_at_link(
+        &mut self,
+        query: StaticQuery<'_>,
+    ) -> Result<StaticLookup, Vec<Candidate>> {
         let StaticQuery {
             site,
             receiver_name,
@@ -330,58 +470,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => self.impl_target_at(site, receiver_name),
         };
 
-        // Every declaration the receiver supplies, its own and its traits'.
-        // `receiver_key` as the caller gave it for the traits: a key derived
-        // from the name narrows the search to a declaration the impls may not
-        // be indexed under, putting a primitive's `impl FromStr for f32` out of
-        // reach.
-        //
-        // A qualified spelling names a trait, so the receiver's own declaration
-        // is not what it asks for and no case of the name shadows the answer.
         let declaring_args = self
             .tysys
             .receiver_declaring_args(receiver_type, receiver_args, key.decl())
             .unwrap_or_default();
-        let mut candidates = if required_trait.is_some() {
-            Vec::new()
-        } else {
-            self.own_candidates(&key, method_name, &declaring_args)
-        };
+        let (candidates, out_of_scope) = self.link_candidates(&query, &key, &declaring_args);
 
         // A case or member the receiver declares is written on the type, and
         // shadows a static it only *inherits*: its own arm builds the
         // constructor, so the spelling is not a call at all. It does not shadow
         // the receiver's own declaration — that is a type declaring one name
-        // twice, and answering with the case would hide it.
+        // twice, and answering with the case would hide it — nor what a
+        // qualified spelling's trait supplies.
         if required_trait.is_none()
-            && candidates.is_empty()
+            && !candidates.iter().any(|c| c.supply.is_none())
             && self.declares_case_named(&key, method_name)
         {
-            return StaticLookup::NotStatic;
+            return Ok(StaticLookup::NotStatic);
         }
 
-        candidates.extend(self.trait_candidates(
-            receiver_name,
-            method_name,
-            receiver_key,
-            &declaring_args,
-        ));
-        candidates.extend(self.blanket_candidates(method_name, receiver_type));
-        // As a method call's, a trait's declarations answer only where the
-        // trait is in scope (WEP 2026-09-01, "Scope"). A qualified spelling
-        // names its trait, which is what scope asks of a call.
-        let mut out_of_scope = Vec::new();
-        if let Some(required) = required_trait {
-            candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
-        } else {
-            let frame = self.frame_module();
-            let resolutions = &self.tysys.resolutions;
-            (candidates, out_of_scope) = candidates.into_iter().partition(|c| {
-                c.supply
-                    .as_ref()
-                    .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
-            });
-        }
         let resolved = match self.select_candidate(
             candidates,
             arg_types,
@@ -397,7 +504,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (receiver_args, method_args),
             ),
             Selection::Ambiguous(alternatives) => {
-                return StaticLookup::Ambiguous(alternatives);
+                return Ok(StaticLookup::Ambiguous(alternatives));
             }
             // Nothing picked a declaration, so there is none to mangle and no
             // list to check. `i32::from(b)` names one `From` impl per source
@@ -409,31 +516,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let on_never =
                     receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
                 let traits = if on_never { Vec::new() } else { traits };
-                return self.overloaded_callee(&key, method_name, traits);
+                return Ok(self.overloaded_callee(&key, method_name, traits));
             }
             Selection::Tied { blocks, trait_args } => {
-                return StaticLookup::Tied {
+                return Ok(StaticLookup::Tied {
                     receiver: receiver_name.to_string(),
                     blocks,
                     trait_args,
-                };
+                });
             }
             Selection::None => None,
         };
         if let Some(resolved) = resolved {
-            return resolved;
+            return Ok(resolved);
         }
 
         // The auto-derived `Default`: synthesis emits the body, so no
         // declaration backs it. It takes no arguments and answers with the
         // receiver's own type.
         if let Some((method_ref, return_type)) = self.auto_derived_default_ref(&key, method_name) {
-            return StaticLookup::Found(Box::new(StaticCallee {
+            return Ok(StaticLookup::Found(Box::new(StaticCallee {
                 params: CalleeParams::default(),
                 own_params: Vec::new(),
                 return_type,
                 method_ref,
-            }));
+            })));
         }
         // The auto-derived `eq` / `cmp`, which the method-call spelling reaches
         // through the same derivation: the receiver leads the arguments.
@@ -449,41 +556,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let mut callee = self.derived_instance_callee(derived, method_name, receiver_type);
             self.retype_to_newtype(&mut callee, receiver_type);
-            return StaticLookup::Found(Box::new(callee));
+            return Ok(StaticLookup::Found(Box::new(callee)));
         }
 
-        // A newtype and a `flags` reach what they wrap: their impls are looked
-        // up on the base, so the spelling resolves there too. Read from the
-        // alias's declaration, since a namespaced `lib::Q::twice()` leaves the
-        // caller's frame no `Q` to look one up by.
-        //
-        // One link at a time: the base answers the arguments as it sees them,
-        // its own type where they wrote the newtype, and the answer takes the
-        // newtype back.
-        match self.newtype_base_target(&key) {
-            Some((base_key, base_name)) => {
-                let (base_type, base_arg_types) = self.at_newtype_base(receiver_type, arg_types);
-                let (_, base_expected) =
-                    self.at_newtype_base(receiver_type, expected_return.as_slice());
-                let mut lookup = self.resolve_static_callee(StaticQuery {
-                    receiver_key: Some(&base_key),
-                    arg_types: &base_arg_types,
-                    receiver_type: base_type.or(receiver_type),
-                    receiver_args,
-                    method_args,
-                    required_trait,
-                    expected_return: base_expected.first().copied(),
-                    ..StaticQuery::of(&base_name, method_name)
-                });
-                if let (StaticLookup::Found(callee), Some(receiver_type)) =
-                    (&mut lookup, receiver_type)
-                {
-                    self.retype_to_newtype(callee, receiver_type);
-                }
-                lookup
-            }
-            None => self.out_of_scope_lookup(receiver_name, &out_of_scope),
-        }
+        Err(out_of_scope)
+    }
+
+    /// Whether `key`'s own impls answer `method_name` for a call here, as
+    /// [`Self::link_candidates`] reads them for the resolution: a trait's
+    /// default counts, a trait out of scope does not, and a qualified
+    /// spelling's `required_trait` alone does. A link that does answers a
+    /// newtype's call before the type it wraps.
+    pub(super) fn impls_answer(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        required_trait: Option<DefId>,
+    ) -> bool {
+        let Some(name) = key
+            .decl_name(self.tysys.resolutions.defs())
+            .map(str::to_string)
+        else {
+            return false;
+        };
+        let query = StaticQuery {
+            receiver_key: Some(key),
+            required_trait,
+            ..StaticQuery::of(&name, method_name)
+        };
+        let (reached, _) = self.link_candidates(&query, key, &[]);
+        !reached.is_empty()
+    }
+
+    /// The link below `newtype` on its chain that [`Self::newtype_static_target`]
+    /// answers with, and its key, where that link is itself a newtype or a
+    /// `flags`: its statics answer before the base's.
+    pub(super) fn newtype_link_declaring(
+        &mut self,
+        newtype: TypeId,
+        method_name: &str,
+    ) -> Option<(TypeId, ImplTargetKey)> {
+        let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(newtype) else {
+            return None;
+        };
+        let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+        let (link_key, _) = self.newtype_static_target(&key, method_name)?;
+        let table = self.tysys.type_table.borrow();
+        let link = table.link_declared_on(newtype, link_key.decl()?)?;
+        let declares = matches!(
+            table.get(link),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
+        );
+        declares.then_some((link, link_key))
     }
 
     /// The base `receiver` wraps, if it is a newtype, and `arg_types` as that
@@ -505,34 +629,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (Some(base_type), at_base)
     }
 
-    /// `arg_types` as the type at the end of the newtype `def`'s chain reads
-    /// them.
-    pub(super) fn args_at_representation(&self, def: DefId, arg_types: &[TypeId]) -> Vec<TypeId> {
-        arg_types
-            .iter()
-            .map(|&arg| self.tysys.represent_newtype_in_type(arg, def))
-            .collect()
+    /// The arguments and the expected result of a static the newtype `newtype`
+    /// inherits from the link `link` declares (the chain's end where `None`),
+    /// read as that link, where the static is solved. Without a newtype, both
+    /// as they are.
+    pub(super) fn at_inherited_base(
+        &self,
+        newtype: Option<DefId>,
+        link: Option<DefId>,
+        arg_types: &[TypeId],
+        expected: Option<TypeId>,
+    ) -> (Vec<TypeId>, Option<TypeId>) {
+        let Some(def) = newtype else {
+            return (arg_types.to_vec(), expected);
+        };
+        let represent = |ty| self.tysys.represent_newtype_in_type(ty, def, link);
+        (
+            arg_types.iter().copied().map(represent).collect(),
+            expected.map(represent),
+        )
     }
 
-    /// `callee` as a newtype inherits it: every base on `receiver`'s chain
-    /// becomes `receiver`, in each parameter and the return type (`spec-types`,
-    /// "Method Signature Substitution"). Any other receiver is left as is.
+    /// The derived `callee` as a newtype inherits it: the chain's end, which
+    /// the derivation is written for, becomes `receiver` in each parameter and
+    /// the return type (`spec-types`, "Method Signature Substitution"). Any
+    /// other receiver is left as is.
     fn retype_to_newtype(&self, callee: &mut StaticCallee, receiver: TypeId) {
-        self.retype_through_newtype_chain(receiver, &mut callee.params.param_types);
-        self.retype_through_newtype_chain(receiver, std::slice::from_mut(&mut callee.return_type));
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .inherited_base(receiver, None);
+        self.retype_callee(callee, base, receiver);
     }
 
-    /// `types` with every base on `receiver`'s newtype chain become `receiver`.
-    pub(super) fn retype_through_newtype_chain(&self, receiver: TypeId, types: &mut [TypeId]) {
-        let mut link = receiver;
-        loop {
-            let Some(base) = self.tysys.type_table.borrow().get_newtype_base(link) else {
-                break;
-            };
-            for ty in types.iter_mut() {
-                *ty = self.tysys.substitute_newtype_in_type(*ty, base, receiver);
-            }
-            link = base;
+    /// `callee` with `from` read as `to` in each parameter and the return type.
+    fn retype_callee(&self, callee: &mut StaticCallee, from: TypeId, to: TypeId) {
+        for ty in callee
+            .params
+            .param_types
+            .iter_mut()
+            .chain(std::iter::once(&mut callee.return_type))
+        {
+            *ty = self.tysys.substitute_newtype_in_type(*ty, from, to);
         }
     }
 

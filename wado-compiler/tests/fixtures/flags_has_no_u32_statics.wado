@@ -1,0 +1,14 @@
+// A flags type is not a newtype over `u32`: it inherits none of `u32`'s
+// associated functions.
+
+flags Perm {
+    read,
+    write,
+}
+
+test {
+    let p = Perm::from_str_radix("1", 2);
+}
+
+__DATA__
+{"test": {}, "compile_error": "unknown function 'Perm::from_str_radix'"}

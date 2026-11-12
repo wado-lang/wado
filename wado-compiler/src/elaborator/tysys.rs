@@ -704,17 +704,24 @@ impl TypeSystem {
         })
     }
 
-    /// [`Self::unwrap_newtype_in_type`] down to the end of each instance's
-    /// newtype chain, which a chain's first base is not.
-    pub(crate) fn represent_newtype_in_type(&self, type_id: TypeId, def: DefId) -> TypeId {
+    /// [`Self::unwrap_newtype_in_type`] down each instance's newtype chain to
+    /// the link `link` declares, or to the chain's end where `link` is `None`
+    /// or names no link of it.
+    pub(crate) fn represent_newtype_in_type(
+        &self,
+        type_id: TypeId,
+        def: DefId,
+        link: Option<DefId>,
+    ) -> TypeId {
         self.substitute_in_type(type_id, &|t| {
             let table = self.type_table.borrow();
-            match table.get(t) {
-                ResolvedType::Newtype { def: of, .. } if *of == def => {
-                    Some(table.representation_head(t))
-                }
-                _ => None,
+            let ResolvedType::Newtype { def: of, .. } = table.get(t) else {
+                return None;
+            };
+            if *of != def {
+                return None;
             }
+            Some(table.inherited_base(t, link))
         })
     }
 
@@ -778,6 +785,26 @@ impl TypeSystem {
                     self.type_table
                         .borrow_mut()
                         .make_generic_instance(def, new_args)
+                }
+            }
+
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => {
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&param| self.substitute_in_type(param, replace))
+                    .collect();
+                let new_return = self.substitute_in_type(return_type, replace);
+                if new_params == params && new_return == return_type {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .make_function_with_mut(is_mut, new_params, new_return, effects)
                 }
             }
 

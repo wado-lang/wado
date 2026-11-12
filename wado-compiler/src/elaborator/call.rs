@@ -2934,6 +2934,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(sig) = self.derived_method_signature(&key, suffix) {
                 return Some(sig);
             }
+            // A newtype inheriting the static: its arguments resolve against
+            // the base's parameters, and are held to the newtype once the call
+            // retypes them.
+            if let Some((base_key, _)) = self.newtype_static_target(&key, suffix)
+                && let Some(sig) = self.unique_qualified_method_sig_keyed(&base_key, suffix)
+            {
+                return Some(CalleeSignature::of_method(&sig));
+            }
 
             // Builtin functions resolve through the `core:builtin` module,
             // slots and all: a generic builtin takes its type parameter from
@@ -4710,7 +4718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let key = self.static_receiver_key(struct_name, receiver_key);
             let derived = self.derived_impl_args(&key, method_name, args);
             if derived.is_empty()
-                && let Some(base) = self.newtype_base_target(&key)
+                && let Some(base) = self.newtype_static_target(&key, method_name)
             {
                 return self.infer_through_newtype(
                     &key,
@@ -4883,9 +4891,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let newtype = key
             .decl()
             .expect("a newtype receiver names its declaration");
-        let base_args = self.args_at_representation(newtype, args);
-        let expected_at_base =
-            expected_type.map(|expected| self.tysys.represent_newtype_in_type(expected, newtype));
+        let (base_args, expected_at_base) =
+            self.at_inherited_base(Some(newtype), base_key.decl(), args, expected_type);
         let (inferred, method_args) = self.infer_static_method_type_args(
             &base_name,
             method_name,
@@ -4895,7 +4902,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             Some(&base_key),
         );
-        match self.newtype_at_base_args(key, &inferred) {
+        match self.newtype_at_base_args(key, base_key.decl(), &inferred) {
             Some((_, shaped)) => (shaped, method_args),
             None => (inferred, method_args),
         }
@@ -4918,7 +4925,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if target.is_some() && target == key.decl() {
             return;
         }
-        let Some((newtype, _)) = self.newtype_at_base_args(key, base_args) else {
+        let Some((newtype, _)) = self.newtype_at_base_args(key, target, base_args) else {
             return;
         };
         let open = {
@@ -4928,19 +4935,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if open {
             return;
         }
-        let base = self.tysys.peeled_base(newtype).0;
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .inherited_base(newtype, target);
         for ty in types {
             *ty = self.tysys.substitute_newtype_in_type(*ty, base, newtype);
         }
     }
 
     /// The newtype `key` declares, at the arguments that make its base's
-    /// `base_args`, and the base's arguments as the newtype shapes them. A
-    /// newtype parameter they leave open stays a variable: in the instance,
-    /// and as the whole of each base argument mentioning it.
+    /// `base_args`, and the base's arguments as the newtype shapes them. The
+    /// base is the link `link` declares, or the chain's end. A newtype
+    /// parameter they leave open stays a variable: in the instance, and as
+    /// the whole of each base argument mentioning it.
     pub(super) fn newtype_at_base_args(
         &mut self,
         key: &ImplTargetKey,
+        link: Option<DefId>,
         base_args: &[TypeId],
     ) -> Option<(TypeId, Vec<TypeId>)> {
         let def = key.decl()?;
@@ -4952,7 +4965,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             None => (self.lookup_newtype_of_decl(def)?, Vec::new()),
         };
-        let base = self.tysys.peeled_base(instance).0;
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .inherited_base(instance, link);
         let shape = self
             .tysys
             .type_table
@@ -4991,8 +5008,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             })
             .collect();
-        // Built afresh rather than substituted, so the base the instance
-        // carries is written in the answers, as the call's types are.
         if vars.is_empty() {
             return Some((instance, shaped));
         }
@@ -5080,7 +5095,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let entry = match self.static_method_entry(receiver, method_name) {
             Some(entry) => Some(entry),
             None => self
-                .newtype_base_target(receiver)
+                .newtype_static_target(receiver, method_name)
                 .and_then(|(base_key, _)| self.static_method_entry(&base_key, method_name)),
         };
         let Some(entry) = entry else {
@@ -5207,7 +5222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
         .or_else(|| {
             let key = self.static_receiver_key(struct_name, receiver_key);
-            let (base_key, _) = self.newtype_base_target(&key)?;
+            let (base_key, _) = self.newtype_static_target(&key, method_name)?;
             self.static_call_sig_or_inherited(
                 struct_name,
                 method_name,

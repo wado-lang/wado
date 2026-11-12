@@ -1237,7 +1237,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     let EntryContext { graph, checked, names, crossing, owed, .. } = *context;
     let bk = BACKEND_PARAM;
     let mut empties: List<String> = [];
-    let mut grown_axes: List<String> = [];
+    let mut grown_indices: List<String> = [];
     for let [past, _] of crossing.pairs {
         let shape = checked.shapes[past];
         let Some([g, _]) = owed.into_iter().find(|o| o.0.past == past) else {
@@ -1262,7 +1262,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
             extents.push(extent);
         }
         empties.push(`[${extents.join(", ")}]`);
-        grown_axes.push(`${grown}`);
+        grown_indices.push(`${grown}`);
     }
     let taken: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
     let mut place_params: List<String> = [];
@@ -1332,7 +1332,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     w.line(`    let past = ${mask}.extents[1] as i64;`);
     w.line(`    assert past < self.capacity as i64, "a prompt leaves its slot a position for its steps";`);
     w.line(`    let at = shared::<${bk}>(backend, &scalar::<${bk}, i64>(backend, slot as i64));`);
-    w.line(`    self.cache = written_fields(backend, &self.cache, &passed.cache, &[${grown_axes.join(", ")}], &at);`);
+    w.line(`    self.cache = written_fields(backend, &self.cache, &passed.cache, &[${grown_indices.join(", ")}], &at);`);
     w.line(`    let token = sampling.first_tokens(&passed.${logits}, past)[0];`);
     w.line("    self.pasts[slot] = past;");
     w.line("    self.tokens[slot] = token;");

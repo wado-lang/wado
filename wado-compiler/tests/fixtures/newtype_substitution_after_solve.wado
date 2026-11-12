@@ -1,0 +1,231 @@
+// A method a newtype inherits reads its base as the newtype once the call has
+// solved the method's own parameters, so an occurrence that only the solve
+// makes the base becomes the newtype too. Every spelling agrees: static or
+// instance, the slot settled by a turbofish, an argument or the expected type,
+// and the newtype generic or not. A result the solve makes some other instance
+// of the base keeps the base.
+use lib from "./sub/newtype_substitution_after_solve_lib.wado";
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn same<U: Default>(&self) -> Wrap<U> {
+        return Wrap { v: U::default() };
+    }
+}
+
+type Wi = Wrap<i32>;
+
+test {
+    let a: Wi = { v: 1 };
+    let w: Wi = a.same();                 // `U` is `i32`, so `Wrap<i32>` is `Wi`
+    let b: Wrap<bool> = a.same::<bool>(); // not the receiver's base: stays
+    assert w.v == 0 && !b.v;
+}
+
+impl<T> Wrap<T> {
+    fn make<U: Default>() -> Wrap<U> {
+        return Wrap { v: U::default() };
+    }
+
+    fn merge<U>(&self, other: Wrap<U>) -> Wrap<U> {
+        return other;
+    }
+
+    fn pick<U: Default + Eq>(&self, other: Wrap<U>, fallback: U = U::default()) -> U {
+        return if other.v == fallback { fallback } else { other.v };
+    }
+
+    fn back<U>(w: Wrap<U>) -> Wrap<U> {
+        return w;
+    }
+
+    fn take(w: Wrap<T>) -> T {
+        return w.v;
+    }
+
+    fn maker(&self) -> fn() -> Wrap<T> {
+        let v = self.v;
+        return || Wrap { v };
+    }
+}
+
+impl From<i64> for Wrap<i32> {
+    fn from(value: i64) -> Wrap<i32> {
+        return { v: value as i32 };
+    }
+}
+
+type Wl<T> = Wrap<List<T>>;
+
+fn takes_wi(w: Wi) -> i32 {
+    return w.v;
+}
+
+test "static, settled by the expected type" {
+    let w: Wi = Wi::make();
+    assert w.v == 0;
+    let l: Wl<i32> = Wl::<i32>::make();
+    assert l.v.len() == 0;
+}
+
+test "static, settled by the turbofish" {
+    let w: Wi = Wi::make::<i32>();
+    let unannotated = Wi::make::<i32>();
+    assert takes_wi(unannotated) == takes_wi(w);
+    let l: Wl<i32> = Wl::<i32>::make::<List<i32>>();
+    assert l.v.len() == 0;
+}
+
+test "instance, settled by the expected type" {
+    let b: Wl<i32> = { v: [1] };
+    let l: Wl<i32> = b.same();
+    assert l.v.len() == 0;
+}
+
+test "instance, settled by the turbofish" {
+    let a: Wi = { v: 1 };
+    let w: Wi = a.same::<i32>();
+    assert takes_wi(a.same::<i32>()) == w.v;
+    let b: Wl<i32> = { v: [1] };
+    let l: Wl<i32> = b.same::<List<i32>>();
+    assert l.v.len() == 0;
+}
+
+test "instance, settled by an argument" {
+    let a: Wi = { v: 7 };
+    let w: Wi = a.merge(a);
+    assert w.v == 7;
+    assert takes_wi(a.merge(a)) == 7;
+    assert a.pick(a) == 7;
+}
+
+test "a literal argument builds the newtype the solve settles" {
+    let a: Wi = { v: 7 };
+    assert takes_wi(a.merge({ v: 3 })) == 3;
+    let w: Wi = a.merge({ v: 4 });
+    assert w.v == 4;
+    assert takes_wi(Wi::back({ v: 5 })) == 5;
+    assert Wi::take({ v: 6 }) == 6;
+    assert takes_wi(Wi::from(7)) == 7;
+}
+
+test "a function type the signature returns reads the base as the newtype" {
+    let a: Wi = { v: 2 };
+    let f: fn() -> Wi = a.maker();
+    assert takes_wi(f()) == 2;
+}
+
+// On a chain, only the link a method is declared on becomes the receiver: a
+// type the call brings in through an argument keeps its own link.
+impl Wi {
+    fn mid() -> Wi {
+        return { v: 9 };
+    }
+
+    fn mid_raw() -> Wrap<i32> {
+        return Wrap { v: 8 };
+    }
+
+    fn mid_make<U: Default>() -> Wi {
+        return { v: 10 };
+    }
+
+    fn mid_take<U>(u: U) -> Wi {
+        return { v: 5 };
+    }
+
+    fn mid_list(xs: List<i32>) -> Wi {
+        return { v: xs.len() };
+    }
+
+    fn mid_wrap(w: Wi) -> Wi {
+        return w;
+    }
+
+    fn twice(&self) -> Wi {
+        return { v: self.v * 2 };
+    }
+}
+
+type Outer = Wi;
+
+fn takes_outer(w: Outer) -> i32 {
+    return w.v;
+}
+
+fn takes_wrap(w: Wrap<i32>) -> i32 {
+    return w.v;
+}
+
+impl<T> Wrap<T> {
+    fn pass<U>(u: U) -> U {
+        return u;
+    }
+
+    fn pass_by<U>(&self, u: U) -> U {
+        return u;
+    }
+}
+
+test "a chain retypes only the link that declares the method" {
+    let i: Wi = { v: 1 };
+    let o: Outer = { v: 2 };
+    assert takes_wi(Outer::pass(i)) == 1;
+    assert takes_wi(o.pass_by(i)) == 1;
+    assert takes_outer(Outer::make::<i32>()) == 0;
+    assert takes_outer(o.same::<i32>()) == 0;
+    assert takes_outer(Outer::mid()) == 9;
+    assert takes_wrap(Outer::mid_raw()) == 8;
+    assert takes_outer(Outer::mid_make::<bool>()) == 10;
+    assert takes_outer(Outer::mid_take("x")) == 5;
+    assert takes_outer(Outer::mid_list([1, 2])) == 2;
+    assert takes_outer(Outer::mid_wrap({ v: 7 })) == 7;
+    assert takes_outer(Outer::mid_wrap(o)) == 2;
+    assert takes_outer(o.twice()) == 4;
+    let f: fn() -> Outer = o.maker();
+    assert takes_outer(f()) == 2;
+
+    let ni: lib::Wi = { v: 3 };
+    let passed: lib::Wi = lib::Outer::pass(ni);
+    let raw: lib::Wrap<i32> = lib::Outer::mid_raw();
+    assert passed.v == 3 && raw.v == 8;
+}
+
+// A trait default a link's impl leaves unwritten is that link's own static, and
+// an impl on another instance of a link answers nothing.
+trait Mk {
+    fn mk() -> i32 {
+        return 5;
+    }
+}
+
+impl Mk for Wi {}
+
+impl<T> Wrap<T> {
+    fn only(s: String) -> i32 {
+        return 2;
+    }
+}
+
+type Gw<T> = Wrap<T>;
+
+impl Gw<i32> {
+    fn only() -> i32 {
+        return 1;
+    }
+}
+
+type Gs = Gw<String>;
+
+test "a link answers with its trait's default and only at its own instance" {
+    assert Wi::mk() == 5 && Outer::mk() == 5;
+    assert Gs::only("x") == 2 && Gw::<i32>::only() == 1;
+}
+
+test "static, another instance of the base stays the base" {
+    let c: Wrap<bool> = Wi::make::<bool>();
+    assert !c.v;
+}
