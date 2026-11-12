@@ -2357,22 +2357,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // last source is the one the block above cannot reach: it runs only
         // where the declaring block has slots of its own, and a block with none
         // leaves the method's unbound rather than wrong.
-        let own = if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
-            self.value_default_slot_bindings(
-                &own_params,
-                &own_type_param_ids,
-                target_type_id,
-                declaring_trait,
-                method_type_args.clone(),
-                static_method_module.clone(),
-            )
-        } else {
-            slot_type_bindings(
-                &self.tysys.type_table,
-                &own_type_param_ids,
-                &method_type_args,
-            )
-        };
+        let own = self.own_slot_default_bindings(
+            &static_method_defaults,
+            &own_params,
+            &own_type_param_ids,
+            target_type_id,
+            declaring_trait,
+            method_type_args.clone(),
+            static_method_module.clone(),
+        );
         bind_nearer(&mut static_type_bindings, own);
         self.fill_trailing_defaults(
             &mut args,
@@ -2776,6 +2769,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|def| self.tysys.signatures.method_sig(def))
             .map(|sig| (sig.own_params.clone(), sig.own_type_param_ids()))
             .unwrap_or_default();
+        let mut written = method_type_args.to_vec();
+        if self.group_variadic_type_args_of(method, &own_params, &mut written, span) {
+            return Some(TypeTable::ERROR);
+        }
         let trait_decl = trait_name.canonical();
         let self_binding = SelfBinding {
             type_id: receiver_type_id,
@@ -2788,14 +2785,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: InstanceKind::Method,
                     name: method,
                     span,
-                    type_args: method_type_args,
+                    type_args: &written,
                     self_binding: Some(self_binding),
                     impl_args: &[],
                 },
             )
         });
         let (method_type_args, subst) = self.bind_method_type_args(
-            method_type_args.to_vec(),
+            written,
             MethodInferenceInput {
                 receiver_type: receiver_type_id,
                 method_name: method,
@@ -2865,17 +2862,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
         // The template is written against the blanket parameter, which the
-        // monomorphizer binds to the receiver; nothing here names one of the
-        // method's own slots, so the walk carries no binding.
+        // monomorphizer binds to the receiver. A default reads the method's own
+        // slots as the call solved them.
         let defaults_module =
             template_defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
+        let own_bindings = self.own_slot_default_bindings(
+            &static_method_defaults,
+            &own_params,
+            &slots,
+            receiver_type_id,
+            trait_decl,
+            method_type_args.clone(),
+            Some(defaults_module.clone()),
+        );
         self.record_default_walk(
             call_id,
             args,
             &param_types,
             &static_method_defaults,
             defaults_module.clone(),
-            &[],
+            &own_bindings,
             ctx,
         );
         self.sem.types.static_method_dispatch.insert(

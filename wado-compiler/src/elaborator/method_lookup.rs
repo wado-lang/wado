@@ -1762,6 +1762,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// What a static's omitted value defaults read its own slots as:
+    /// [`Self::value_default_slot_bindings`] where it declares one, else the
+    /// slots at `known`.
+    pub(super) fn own_slot_default_bindings(
+        &mut self,
+        defaults: &[(String, Option<ast::Expr>)],
+        own_params: &[ast::GenericParam],
+        own_ids: &[TypeId],
+        receiver: TypeId,
+        declaring_trait: Option<DefId>,
+        known: Vec<TypeId>,
+        declaring_module: Option<ModuleSource>,
+    ) -> Vec<DefaultTypeBinding> {
+        if defaults.iter().any(|(_, d)| d.is_some()) {
+            self.value_default_slot_bindings(
+                own_params,
+                own_ids,
+                receiver,
+                declaring_trait,
+                known,
+                declaring_module,
+            )
+        } else {
+            slot_type_bindings(&self.tysys.type_table, own_ids, &known)
+        }
+    }
+
     /// What a value default naming one of the method's own type parameters
     /// resolves that name against: the type argument the call settled on.
     ///
@@ -1946,6 +1973,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
+        assert!(
+            explicit.len() <= input.own_params.len(),
+            "a turbofish must be grouped into the method's packs before it is bound"
+        );
         let impl_args = input.impl_args.to_vec();
         self.with_type_params_bound(&impl_args, |e| {
             e.bind_method_type_args_in_impl_frame(explicit, input)

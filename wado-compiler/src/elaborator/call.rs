@@ -5881,7 +5881,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // equalities, or a later use the call's value meets. `Self`, the
             // receiver's param, is settled in this body, and monomorphization
             // substitutes it.
-            let written = self.resolve_turbofish_args(&call.type_args);
+            let mut written = self.resolve_turbofish_args(&call.type_args);
+            if self.group_variadic_type_args_of(method_name, &own_params, &mut written, call.span) {
+                return TypeTable::ERROR;
+            }
             let of = Instantiation {
                 kind: InstanceKind::Method,
                 name: method_name,
