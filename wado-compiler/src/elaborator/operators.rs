@@ -2228,19 +2228,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn bounded_operand(&self, ty: TypeId) -> Option<BoundedOperand> {
         let (receiver, spelled) = {
             let tt = self.tysys.type_table.borrow();
-            let resolved = tt.get(ty);
-            if let Some(param) = bound_param_name(&tt, ty) {
-                let receiver = match resolved {
-                    ResolvedType::TypeParam { .. } => tt.fq_type_name(ty),
-                    // A pack and its element are named by spelling alone.
-                    _ => FqTypeName::binder(param),
-                };
-                (receiver, param.clone())
-            } else if matches!(resolved, ResolvedType::AssocTypeProjection { .. }) {
-                (tt.fq_type_name(ty), tt.name(ty))
-            } else {
-                return None;
-            }
+            let spelled = match bound_param_name(&tt, ty) {
+                Some(param) => param.clone(),
+                None if matches!(tt.get(ty), ResolvedType::AssocTypeProjection { .. }) => {
+                    tt.name(ty)
+                }
+                None => return None,
+            };
+            (tt.fq_type_name(ty), spelled)
         };
         Some(BoundedOperand {
             receiver,

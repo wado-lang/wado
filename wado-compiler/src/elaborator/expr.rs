@@ -5471,18 +5471,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let type_param = match tt.get(target_type) {
-            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
-            _ => None,
-        };
+        let param_binder = matches!(tt.get(target_type), ResolvedType::TypeParam { .. })
+            .then(|| tt.fq_type_name(target_type));
         drop(tt);
 
         let (impl_def, module_source) = self.find_from_impl(target_type, from);
-        let target_receiver = match (impl_def, &type_param) {
+        let target_receiver = match (impl_def, param_binder) {
             (Some(def), _) => {
                 self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type)
             }
-            (None, Some(name)) => self.binder_in_scope(name),
+            (None, Some(binder)) => binder,
             (None, None) => unreachable!(
                 "the caller checked `From` holds, which for a type that is no parameter selects a block"
             ),
@@ -5516,7 +5514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let (given, asked) = {
                     let mut tt = self.tysys.type_table.borrow_mut();
                     let mut asked = TypeArgMap::default();
-                    tt.bind_each_into(tt.impl_trait_args(def), &[from_type], &mut asked);
+                    let written = tt.impl_trait_args(def).to_vec();
+                    tt.bind_each_into(&written, &[from_type], &mut asked);
                     (tt.impl_receiver_slots(def, target_type), asked)
                 };
                 self.impl_instance_args(def, given, &asked)

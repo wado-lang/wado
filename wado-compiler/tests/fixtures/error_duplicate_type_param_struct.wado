@@ -1,0 +1,14 @@
+//! A struct's type parameters may not share a name, as a function's may not.
+
+struct Pair<A, A> {
+    first: A,
+    second: A,
+}
+
+test {
+    let p = Pair { first: 1, second: 2 };
+    assert p.first == 1;
+}
+
+__DATA__
+{"compile_error": ":3:16: analysis error: cannot redeclare 'A' in the same scope (first defined at 3:13)"}

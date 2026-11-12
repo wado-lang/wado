@@ -194,11 +194,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // parameter is the frame's, and only that frame spells it.
         let at_impl: Vec<(FqTypeName, FqTypeName)> = {
             let tt = self.tysys.type_table.borrow();
-            let defs = self.tysys.resolutions.defs();
+            let resolutions = &self.tysys.resolutions;
             impl_args
                 .iter()
                 .filter(|&&(_, arg)| !tt.contains_rigid_param(arg) && !tt.contains_unknown(arg))
-                .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
+                .map(|(param, arg)| (param.binder(resolutions), tt.fq_type_name(*arg)))
                 .collect()
         };
         param
@@ -761,12 +761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }) {
             return false;
         }
-        let subjects = if link.each_element {
-            self.tysys.pack_elements(owner)
-        } else {
-            vec![owner]
-        };
-        for subject in subjects {
+        for subject in self.tysys.bound_subjects(link.each_element, owner) {
             self.settle_projection_of(link, subject, written.as_deref());
         }
         true
@@ -792,8 +787,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target = self.apply_infer_holes(link.target);
         if self.type_has_infer_hole(target) {
             self.solve_infer_holes_against(target, answer);
-            return;
         }
+        // Solving fills the holes and leaves the rest of the target as
+        // written, which the answer must still match: `[i32, U]` against
+        // `[bool, String]` settles `U` and misses at `i32`.
+        let target = self.apply_infer_holes(link.target);
         if target == answer || says_nothing(target) || !self.decides_equality(target, answer) {
             return;
         }
@@ -853,12 +851,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         for (solution, param_name, bound, span) in checks {
-            let subjects = if bound.each_element {
-                self.tysys.pack_elements(solution)
-            } else {
-                vec![solution]
-            };
-            for subject in subjects {
+            for subject in self.tysys.bound_subjects(bound.each_element, solution) {
                 self.enforce_single_bound_args(
                     subject,
                     &bound.written,

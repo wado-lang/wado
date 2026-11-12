@@ -4071,7 +4071,8 @@ impl TypeTable {
     ) -> Option<TypeArgMap> {
         match entry.impl_def {
             Some(def) => {
-                let mut slots = self.impl_target_binding(self.impl_target_args(def), type_args)?;
+                let written = self.impl_target_args(def).to_vec();
+                let mut slots = self.impl_target_binding(&written, type_args)?;
                 self.project_impl_slots(def, &mut slots);
                 Some(slots)
             }
@@ -4082,10 +4083,9 @@ impl TypeTable {
     /// Whether `entry`'s impl's target binds at `type_args`:
     /// `impl<T> Tr for W<List<T>>` answers nothing at `W<i32>`.
     fn entry_reaches(&self, entry: &AssocAnswer, type_args: &[TypeId]) -> bool {
-        entry.impl_def.is_none_or(|def| {
-            self.impl_target_binding(self.impl_target_args(def), type_args)
-                .is_some()
-        })
+        entry
+            .impl_def
+            .is_none_or(|def| self.impl_target_reaches(self.impl_target_args(def), type_args))
     }
 
     fn answers_reaching(&self, answers: &AssocAnswers, type_args: &[TypeId]) -> AssocAnswers {
@@ -6375,6 +6375,17 @@ impl TypeTable {
                 name,
                 ..
             } => FqTypeName::binder_of_family(&self.defs, *owning_trait, assoc_name, name),
+            ResolvedType::TypePack {
+                id,
+                name,
+                mapped_elem,
+            } => {
+                let pack = FqTypeName::pack_spread(&self.defs, id.owner, name);
+                match mapped_elem {
+                    Some(element) => pack.with_args(args_of(&[*element])),
+                    None => pack,
+                }
+            }
             ResolvedType::Tuple(elems) => FqTypeName::tuple(args_of(elems)),
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(ARRAY_TYPE_NAME)
                 .with_args(vec![self.fq_type_name_spelled_in(*elem, arg_rows)]),
@@ -6420,9 +6431,10 @@ impl TypeTable {
             ResolvedType::Unknown | ResolvedType::Error => {
                 FqTypeName::unresolved(&self.mangle_type_name(id))
             }
-            // Shapes that name no declaration — packs, `Unknown`. They carry no
-            // module, so the mangled spelling is already their whole identity.
-            _ => FqTypeName::builtin(&self.mangle_type_name(id)),
+            ResolvedType::PackElement { pack, walk } => {
+                let (pack, name) = self.pack_parts(*pack);
+                FqTypeName::binder_of(&self.defs, pack.owner, &pack_element_name(&name, *walk))
+            }
         }
     }
 
@@ -6557,6 +6569,9 @@ pub struct TargetBinding {
     pub slots: TypeArgMap,
     /// The type each open receiver variable must take for the target to match.
     pub answers: IndexMap<TypeId, TypeId>,
+    /// The elements each pack spread among fixed neighbours takes, which
+    /// [`TypeTable::settle_runs`] makes the tuple its slot holds.
+    runs: IndexMap<TypeParamId, Vec<TypeId>>,
 }
 
 impl TargetBinding {
@@ -6675,7 +6690,8 @@ impl TypeTable {
     /// block, so an earlier module's bound check can ask.
     pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> TypeArgMap {
         let mut slots = IndexMap::default();
-        self.bind_each_into(self.impl_target_args(def), receiver_args, &mut slots);
+        let written = self.impl_target_args(def).to_vec();
+        self.bind_each_into(&written, receiver_args, &mut slots);
         self.project_impl_slots(def, &mut slots);
         slots
     }
@@ -6716,7 +6732,12 @@ impl TypeTable {
 
     /// Bind each of `written` against the one in `concrete` at its position
     /// into `slots`, keeping a slot already filled.
-    pub fn bind_each_into(&self, written: &[TypeId], concrete: &[TypeId], slots: &mut TypeArgMap) {
+    pub fn bind_each_into(
+        &mut self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+        slots: &mut TypeArgMap,
+    ) {
         for (&written, &concrete) in written.iter().zip(concrete) {
             if let Some(bound) = self.bind_type_params(&[written], &[concrete]) {
                 for (slot, ty) in bound {
@@ -6759,7 +6780,8 @@ impl TypeTable {
         receiver: TypeId,
         slots: &mut TypeArgMap,
     ) {
-        self.bind_each_into(&self.impl_target(def).trait_args, asked, slots);
+        let written = self.impl_target(def).trait_args.clone();
+        self.bind_each_into(&written, asked, slots);
         loop {
             let filled = slots.len();
             let target = self.substitute_type_params(self.impl_target_whole(def), slots);
@@ -6839,41 +6861,12 @@ impl TypeTable {
                 ),
                 None => continue,
             };
-            if let Some(bound) = self.bind_projection_pattern(projection.pattern, concrete) {
+            if let Some(bound) = self.bind_type_params(&[projection.pattern], &[concrete]) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
                 }
             }
         }
-    }
-
-    /// [`Self::bind_type_params`] for one pattern, where a tuple pattern may
-    /// spread a pack (`[A, ..F]`): the pack takes the elements its neighbours
-    /// leave, as one tuple.
-    fn bind_projection_pattern(&mut self, pattern: TypeId, concrete: TypeId) -> Option<TypeArgMap> {
-        let (Some(written), Some(elements)) = (self.as_tuple(pattern), self.as_tuple(concrete))
-        else {
-            return self.bind_type_params(&[pattern], &[concrete]);
-        };
-        let Some(at) = written.iter().position(|&w| self.is_type_pack(w)) else {
-            return self.bind_type_params(&[pattern], &[concrete]);
-        };
-        let after = written.len() - at - 1;
-        let pack_end = elements.len().checked_sub(after)?;
-        if pack_end < at {
-            return None;
-        }
-        let pack = self.make_tuple(elements[at..pack_end].to_vec());
-        let mut rest_written = written.clone();
-        rest_written.remove(at);
-        let rest_concrete: Vec<TypeId> = elements[..at]
-            .iter()
-            .chain(&elements[pack_end..])
-            .copied()
-            .collect();
-        let mut bound = self.bind_type_params(&rest_written, &rest_concrete)?;
-        bound.insert(self.declared_param(written[at]), pack);
-        Some(bound)
     }
 
     fn impl_target(&self, def: DefId) -> &ImplTarget {
@@ -6905,7 +6898,7 @@ impl TypeTable {
             ResolvedType::Struct { type_args, .. } => type_args.clone(),
             _ => self.declared_type_args(instance).unwrap_or_default(),
         };
-        self.impl_target_binding(written, &args).is_some()
+        self.impl_target_reaches(written, &args)
     }
 
     /// Whether impl block `def` reaches every instance of its head: its target
@@ -6956,12 +6949,28 @@ impl TypeTable {
     /// What a target writing `written` binds at a receiver with `receiver_args`,
     /// or `None` where it misses it. Unknown arguments and a pack's tail pin none.
     pub fn impl_target_binding(
-        &self,
+        &mut self,
         written: &[TypeId],
         receiver_args: &[TypeId],
     ) -> Option<TypeArgMap> {
+        let binding = self.open_impl_target_binding(written, receiver_args, &|_| false)?;
+        Some(self.settle_runs(binding).slots)
+    }
+
+    /// Whether a target writing `written` reaches a receiver with
+    /// `receiver_args`, as [`Self::impl_target_binding`] binds it.
+    pub fn impl_target_reaches(&self, written: &[TypeId], receiver_args: &[TypeId]) -> bool {
         self.open_impl_target_binding(written, receiver_args, &|_| false)
-            .map(|binding| binding.slots)
+            .is_some()
+    }
+
+    /// `binding` with each pack's run held in its slot as one tuple.
+    pub fn settle_runs(&mut self, mut binding: TargetBinding) -> TargetBinding {
+        for (slot, run) in std::mem::take(&mut binding.runs) {
+            let tuple = self.make_tuple(run);
+            binding.slots.insert(slot, tuple);
+        }
+        binding
     }
 
     /// [`Self::impl_target_binding`] where the receiver's arguments hold
@@ -6997,10 +7006,28 @@ impl TypeTable {
 
     /// The type parameters `concrete` fills in `written`, at any depth; `None`
     /// where they differ outside a parameter or one would take two types.
-    pub fn bind_type_params(&self, written: &[TypeId], concrete: &[TypeId]) -> Option<TypeArgMap> {
+    pub fn bind_type_params(
+        &mut self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+    ) -> Option<TypeArgMap> {
+        let binding = self.matched_type_params(written, concrete)?;
+        Some(self.settle_runs(binding).slots)
+    }
+
+    /// Whether `concrete` fills `written`, as [`Self::bind_type_params`] binds it.
+    pub fn binds_type_params(&self, written: &[TypeId], concrete: &[TypeId]) -> bool {
+        self.matched_type_params(written, concrete).is_some()
+    }
+
+    fn matched_type_params(
+        &self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+    ) -> Option<TargetBinding> {
         let mut binding = TargetBinding::default();
         self.bind_all(written, concrete, &|_| false, &mut binding)
-            .then_some(binding.slots)
+            .then_some(binding)
     }
 
     fn bind_all(
@@ -7057,6 +7084,9 @@ impl TypeTable {
             }
             return true;
         }
+        if let Some(agrees) = self.bind_spread(written, concrete, open, binding) {
+            return agrees;
+        }
         if let Some(agrees) =
             self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, open, binding))
         {
@@ -7072,6 +7102,86 @@ impl TypeTable {
                 == self.fq_base_type_name(concrete).head();
         }
         written == concrete
+    }
+
+    /// A tuple spreading a pack among fixed neighbours (`[A, ..P, B]`) against
+    /// a tuple: the neighbours take the ends, and the pack the run between
+    /// them. `None` where `written` is no tuple spreading a pack.
+    fn bind_spread(
+        &self,
+        written: TypeId,
+        concrete: TypeId,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> Option<bool> {
+        let ResolvedType::Tuple(written) = self.get(written) else {
+            return None;
+        };
+        let at = written.iter().position(|&w| self.is_type_pack(w))?;
+        assert!(
+            matches!(
+                self.get(written[at]),
+                ResolvedType::TypePack {
+                    mapped_elem: None,
+                    ..
+                }
+            ),
+            "a written target spreads a declared pack; a repeat appears only in a signature"
+        );
+        let ResolvedType::Tuple(elements) = self.get(concrete) else {
+            return Some(false);
+        };
+        // A second spread leaves no count to split the elements by.
+        if written[at + 1..].iter().any(|&w| self.is_type_pack(w)) {
+            return Some(false);
+        }
+        let after = written.len() - at - 1;
+        let Some(end) = elements.len().checked_sub(after).filter(|&end| end >= at) else {
+            return Some(false);
+        };
+        let ends: Vec<TypeId> = elements[..at]
+            .iter()
+            .chain(&elements[end..])
+            .copied()
+            .collect();
+        // A neighbour takes one element, and a spread in the receiver stands
+        // for any number of them.
+        if ends.iter().any(|&e| self.is_type_pack(e)) {
+            return Some(false);
+        }
+        let neighbours = written[..at].iter().chain(&written[at + 1..]);
+        if !neighbours
+            .zip(&ends)
+            .all(|(&w, &e)| self.bind_one(w, e, open, binding))
+        {
+            return Some(false);
+        }
+        let slot = self.declared_param(written[at]);
+        let run = &elements[at..end];
+        let prior = match binding.slots.get(&slot) {
+            Some(&prior) => match self.as_tuple(prior) {
+                Some(prior) => Some(prior),
+                None => {
+                    return Some(ends.is_empty() && self.agree(prior, concrete, open, binding));
+                }
+            },
+            None => binding.runs.get(&slot).cloned(),
+        };
+        if let Some(prior) = prior {
+            return Some(
+                prior.len() == run.len()
+                    && prior
+                        .iter()
+                        .zip(run)
+                        .all(|(&p, &r)| self.agree(p, r, open, binding)),
+            );
+        }
+        if ends.is_empty() {
+            binding.slots.insert(slot, concrete);
+        } else {
+            binding.runs.insert(slot, run.to_vec());
+        }
+        Some(true)
     }
 
     /// The base, trait arguments and arguments of `a` and of `b` where both

@@ -509,6 +509,17 @@ A type parameter may declare a default
 ([Type Parameter Defaults](#type-parameter-defaults)). A function may also take
 a pack of them ([Variadic Type Packs](#variadic-type-packs)).
 
+Two type parameters of one list may not share a name, a pack's included. This
+holds for every list: a function's, a type's, a trait's and an `impl` block's.
+
+<!-- {"fixture":"spec_functions_duplicate_type_param.wado"} -->
+
+```wado
+fn pick<T, ..T>(a: T, rest: [..T]) -> T {
+    return a;
+}
+```
+
 ### Type Arguments
 
 A call settles each type parameter from its arguments and from the type expected

@@ -1,0 +1,32 @@
+//! A bound whose argument spreads a pack holds at the tuple the call settles
+//! the pack to: `U: Tr<[..T]>` at `T = [i32]` asks `Tr<[i32]>`, not
+//! `Tr<[[i32]]>`.
+
+trait Tr<X> with () {
+    fn tag(&self) -> i32;
+}
+
+struct A {}
+
+impl Tr<[i32]> for A {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct B {}
+
+impl Tr<[i32, bool]> for B {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn f<..T, U: Tr<[..T]>>(t: [..T], u: U) -> i32 {
+    return u.tag();
+}
+
+test {
+    assert f([7], A {}) == 1;
+    assert f([7, true], B {}) == 2;
+}

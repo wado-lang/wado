@@ -120,10 +120,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map_pack(type_id, element);
                 }
                 if let Some(type_id) = self.binder_at(spread.id, name) {
-                    if self.tysys.type_table.borrow().is_tuple(type_id) {
+                    let mut table = self.tysys.type_table.borrow_mut();
+                    if table.is_tuple(type_id) {
                         return type_id;
                     }
-                    self.tysys.type_table.borrow_mut().plain_pack(type_id)
+                    // A family's pack parameter is rejected where it is declared
+                    // and stands as a plain parameter, which spreads into nothing.
+                    if !table.is_type_pack(type_id) {
+                        return TypeTable::ERROR;
+                    }
+                    table.plain_pack(type_id)
                 } else {
                     // An unknown element is the name check's to report.
                     let element = self.resolve_named_type(spread.id, name, *span, false);

@@ -1048,7 +1048,8 @@ pub(crate) fn blanket_impl_args(
         index,
     };
     let mut slots = TypeArgMap::default();
-    tt.bind_each_into(tt.impl_trait_args(blanket.def), trait_args, &mut slots);
+    let written = tt.impl_trait_args(blanket.def).to_vec();
+    tt.bind_each_into(&written, trait_args, &mut slots);
     slots.extend(
         sources
             .iter()
@@ -1112,8 +1113,9 @@ fn method_name_for_type(
     }
     let resolved = tt_ref.get(type_id).clone();
     let head = match resolved {
-        ResolvedType::TypeParam { .. } => tt_ref.fq_type_name(type_id),
-        ResolvedType::TypePack { ref name, .. } => FqTypeName::binder(name),
+        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => {
+            tt_ref.fq_type_name(type_id)
+        }
         // A `fn(..)` receiver is named by the type itself, the same spelling
         // its dispatch stubs are registered under.
         ResolvedType::Function { .. } => tt_ref.fn_receiver_name(&resolved),

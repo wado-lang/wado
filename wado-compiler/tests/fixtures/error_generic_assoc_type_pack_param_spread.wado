@@ -1,0 +1,22 @@
+//! A generic associated type's pack parameter is rejected where each of the
+//! trait and the impl declares it, and a spread of it in a bound or a binding
+//! reports nothing more.
+
+trait Tr<X> with () {}
+
+trait Store with () {
+    type Packed<..T>: Tr<[..T]>;
+}
+
+struct Bags {}
+
+impl Store for Bags {
+    type Packed<..T> = [..T];
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":14:17: analysis error: associated type `Packed` takes only plain type parameters, which `T` is not; 8:17: associated type `Packed` takes only plain type parameters, which `T` is not"
+}
