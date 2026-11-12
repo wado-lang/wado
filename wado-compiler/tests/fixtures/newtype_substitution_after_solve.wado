@@ -1,0 +1,82 @@
+// A method a newtype inherits reads its base as the newtype once the call has
+// solved the method's own parameters, so an occurrence that only the solve
+// makes the base becomes the newtype too. Every spelling agrees: static or
+// instance, the slot settled by a turbofish, an argument or the expected type,
+// and the newtype generic or not. A result the solve makes some other instance
+// of the base keeps the base.
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn same<U: Default>(&self) -> Wrap<U> {
+        return Wrap { v: U::default() };
+    }
+}
+
+type Wi = Wrap<i32>;
+
+test {
+    let a: Wi = { v: 1 };
+    let w: Wi = a.same();                 // `U` is `i32`, so `Wrap<i32>` is `Wi`
+    let b: Wrap<bool> = a.same::<bool>(); // not the receiver's base: stays
+    assert w.v == 0 && !b.v;
+}
+
+impl<T> Wrap<T> {
+    fn make<U: Default>() -> Wrap<U> {
+        return Wrap { v: U::default() };
+    }
+
+    fn merge<U>(&self, other: Wrap<U>) -> Wrap<U> {
+        return other;
+    }
+}
+
+type Wl<T> = Wrap<List<T>>;
+
+fn takes_wi(w: Wi) -> i32 {
+    return w.v;
+}
+
+test "static, settled by the expected type" {
+    let w: Wi = Wi::make();
+    assert w.v == 0;
+    let l: Wl<i32> = Wl::<i32>::make();
+    assert l.v.len() == 0;
+}
+
+test "static, settled by the turbofish" {
+    let w: Wi = Wi::make::<i32>();
+    let unannotated = Wi::make::<i32>();
+    assert takes_wi(unannotated) == takes_wi(w);
+    let l: Wl<i32> = Wl::<i32>::make::<List<i32>>();
+    assert l.v.len() == 0;
+}
+
+test "instance, settled by the expected type" {
+    let b: Wl<i32> = { v: [1] };
+    let l: Wl<i32> = b.same();
+    assert l.v.len() == 0;
+}
+
+test "instance, settled by the turbofish" {
+    let a: Wi = { v: 1 };
+    let w: Wi = a.same::<i32>();
+    assert takes_wi(a.same::<i32>()) == w.v;
+    let b: Wl<i32> = { v: [1] };
+    let l: Wl<i32> = b.same::<List<i32>>();
+    assert l.v.len() == 0;
+}
+
+test "instance, settled by an argument" {
+    let a: Wi = { v: 7 };
+    let w: Wi = a.merge(a);
+    assert w.v == 7;
+    assert takes_wi(a.merge(a)) == 7;
+}
+
+test "static, another instance of the base stays the base" {
+    let c: Wrap<bool> = Wi::make::<bool>();
+    assert !c.v;
+}

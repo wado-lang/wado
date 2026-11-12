@@ -4883,9 +4883,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let newtype = key
             .decl()
             .expect("a newtype receiver names its declaration");
-        let base_args = self.args_at_representation(newtype, args);
-        let expected_at_base =
-            expected_type.map(|expected| self.tysys.represent_newtype_in_type(expected, newtype));
+        let (base_args, expected_at_base) =
+            self.at_inherited_base(Some(newtype), args, expected_type);
         let (inferred, method_args) = self.infer_static_method_type_args(
             &base_name,
             method_name,

@@ -145,6 +145,30 @@ pub(super) struct DispatchedMethod {
     pub method_def: Option<DefId>,
 }
 
+/// A method a newtype inherits from `base`, as the call on `newtype` reads it
+/// (`spec-types`, "Method Signature Substitution").
+#[derive(Clone, Copy)]
+struct InheritedFrame {
+    base: TypeId,
+    newtype: TypeId,
+}
+
+impl InheritedFrame {
+    fn to_base(self, tysys: &TypeSystem, ty: TypeId) -> TypeId {
+        tysys.substitute_newtype_in_type(ty, self.newtype, self.base)
+    }
+
+    fn to_newtype(self, tysys: &TypeSystem, ty: TypeId) -> TypeId {
+        tysys.substitute_newtype_in_type(ty, self.base, self.newtype)
+    }
+
+    fn to_newtype_in(self, tysys: &TypeSystem, types: &mut [TypeId]) {
+        for ty in types {
+            *ty = self.to_newtype(tysys, *ty);
+        }
+    }
+}
+
 /// The value blanket a static call dispatches through.
 pub(super) struct BlanketStatic {
     pub trait_name: FqTraitName,
@@ -798,20 +822,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A method inherited from a newtype's base reads the base as the newtype:
         // `Point::clone_point() -> Point` is `Location::clone_point() -> Location`.
+        // The method's own slots are solved at the base first, so an occurrence
+        // only the solve makes the base becomes the newtype too.
+        let inherited = owner.newtype_base().map(|base| InheritedFrame {
+            base,
+            newtype: self.tysys.get_base_type(receiver),
+        });
         let mut expected_param_types = param_types;
-        if let Some(base_type_id) = owner.newtype_base() {
-            let newtype_id = self.tysys.get_base_type(receiver);
-            for ty in expected_param_types
-                .iter_mut()
-                .chain(std::iter::once(&mut return_type))
-            {
-                *ty = self
-                    .tysys
-                    .substitute_newtype_in_type(*ty, base_type_id, newtype_id);
-            }
+        if let Some(frame) = inherited {
+            frame.to_newtype_in(&self.tysys, &mut expected_param_types);
         }
         self.answer_frame_projections_in(&mut expected_param_types);
         return_type = self.answer_frame_projections(return_type);
+        let expected_at_base = expected_type
+            .map(|expected| inherited.map_or(expected, |f| f.to_base(&self.tysys, expected)));
 
         let impl_args = settled_impl_args(&impl_type_bindings);
         // Only the method's own slots: the lookup instantiated the declaring
@@ -833,7 +857,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }),
                 impl_args: &impl_args,
             },
-            expected_type.map(|expected| ExpectedReturn {
+            expected_at_base.map(|expected| ExpectedReturn {
                 declared: return_type,
                 expected,
             }),
@@ -958,6 +982,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys.type_table,
         );
 
+        let at_base = |e: &Self, types: &[TypeId]| -> Vec<TypeId> {
+            types
+                .iter()
+                .map(|&t| inherited.map_or(t, |f| f.to_base(&e.tysys, t)))
+                .collect()
+        };
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
@@ -965,11 +995,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 slots: &method_type_param_ids,
                 own_params: &method_own_params,
-                param_types: &expected_param_types,
-                args: &args,
+                param_types: &at_base(self, &expected_param_types),
+                args: &at_base(self, &args),
                 raw_args: args_ast,
                 decl_return_type: return_type,
-                expected_return_type: expected_type,
+                expected_return_type: expected_at_base,
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: Some(callee_module.clone()),
                 impl_args: &impl_args,
@@ -980,6 +1010,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if !subst_ctx.is_empty() {
             return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
+        }
+        if let Some(frame) = inherited {
+            return_type = frame.to_newtype(&self.tysys, return_type);
         }
 
         // Deferred-inference solve point: a hole that flowed in from an
@@ -1013,6 +1046,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
                 .collect()
         };
+        if let Some(frame) = inherited {
+            frame.to_newtype_in(&self.tysys, &mut substituted_param_types);
+        }
         if let Some(block) = dispatched_impl_block {
             self.settle_trait_arg_slots(
                 block,
@@ -2020,6 +2056,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut param_types,
         );
 
+        // The newtype whose base supplies the static, which then solves there.
+        let newtype = match self.tysys.type_table.borrow().get(target_type_id) {
+            ResolvedType::Newtype { def, .. } if inherited => Some(*def),
+            _ => None,
+        };
         // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
@@ -2043,18 +2084,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&inst),
                 None,
             );
-            let newtype = match self.tysys.type_table.borrow().get(target_type_id) {
-                ResolvedType::Newtype { def, .. } if inherited => Some(*def),
-                _ => None,
-            };
-            let (at_base, expected_at_base) = match newtype {
-                Some(def) => (
-                    self.args_at_representation(def, &args),
-                    expected_type
-                        .map(|expected| self.tysys.represent_newtype_in_type(expected, def)),
-                ),
-                None => (args.clone(), expected_type),
-            };
+            let (at_base, expected_at_base) = self.at_inherited_base(newtype, &args, expected_type);
             // A `_` is answered as the bare spelling answers the slot it
             // leaves out, by the one inference both spellings share.
             let inferred = struct_name_for_lookup.clone().map(|name| {
@@ -2192,6 +2222,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the receiver settles.
             let impl_args = settled_impl_args(&impl_bindings);
             let qualified = format!("{receiver}::{}", static_call.method);
+            let (args_at_base, expected_at_base) =
+                self.at_inherited_base(newtype, &args, expected_type);
             (method_type_args, _) = self.bind_static_type_args(
                 method_type_args,
                 &qualified,
@@ -2201,10 +2233,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     slots: &own_ids,
                     own_params: &sig.own_params,
                     param_types: &param_types,
-                    args: &args,
+                    args: &args_at_base,
                     raw_args: &static_call.args,
                     decl_return_type: declared_return,
-                    expected_return_type: expected_type,
+                    expected_return_type: expected_at_base,
                     trait_decl: declaring_trait,
                     declaring_module: Some(sig.defaults_module.clone()),
                     impl_args: &impl_args,

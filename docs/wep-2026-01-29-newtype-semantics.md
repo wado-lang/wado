@@ -63,6 +63,24 @@ let b: i128 = ...;
 let c = a + b;  // c: i128 (not [i64, i64])
 ```
 
+The substitution reads the signature as the call settles it. The method's own
+type parameters are solved first, at the base. Then every occurrence of the
+receiver's base becomes the newtype, including one that only the solve made
+the base. So every spelling of a call agrees: static or instance, a parameter
+settled by a turbofish, an argument or the expected type, and the newtype
+generic or not. With `fn make<U: Default>() -> Wrap<U>` on `Wrap<T>`,
+`Wi::make::<i32>()` returns `Wi` (`type Wi = Wrap<i32>`), while
+`Wi::make::<bool>()` returns `Wrap<bool>`, which is not the receiver's base.
+
+Two consequences follow from solving at the base. An expected newtype settles
+the method's parameters as its base would: `let w: Wi = Wi::make();` solves
+`U` as `i32`. An argument of the newtype settles them the same way.
+
+Substituting through `Self` alone was the alternative. It needs no timing
+rule, but a method that names its own type where `Self` would do returns the
+base on a newtype. It was rejected: a newtype would be usable only over a base
+whose author wrote `Self` throughout.
+
 ### Newtype-Specific Implementations
 
 You can add methods specific to a newtype via `impl`:
@@ -263,19 +281,6 @@ Newtypes support the full feature set today:
 - Generic newtypes (`type MyArray<T> = List<T>`)
 - Newtypes over the raw GC `Array<T>` inherit `Index` traits and associated functions (`ByteArray`)
 - `for-of` inherits `IntoIterator`, both by value (`Item = T`) and by reference (`Item = &T`)
-
-## Known Gaps
-
-- Method signature substitution does not say whether it reads the signature
-  before or after the call solves the method's own type parameters. With
-  `fn make<U: Default>() -> Wrap<U>` on `Wrap<T>` and `type Wi = Wrap<i32>`,
-  the base appears in the return only once `U` is `i32`. The spellings
-  disagree:
-  - `let w: Wi = Wi::make();` compiles and returns `Wi`.
-  - `let w: Wl<i32> = Wl::<i32>::make();` (`type Wl<T> = Wrap<List<T>>`)
-    reports `U` as uninferred.
-  - `let w: Wl<i32> = a.same();` on an instance method of the same shape is a
-    type mismatch, and `a.same::<i32>()` on a `Wi` returns `Wrap<i32>`.
 
 ## See Also
 

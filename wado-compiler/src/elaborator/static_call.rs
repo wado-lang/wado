@@ -505,13 +505,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (Some(base_type), at_base)
     }
 
-    /// `arg_types` as the type at the end of the newtype `def`'s chain reads
-    /// them.
-    pub(super) fn args_at_representation(&self, def: DefId, arg_types: &[TypeId]) -> Vec<TypeId> {
-        arg_types
-            .iter()
-            .map(|&arg| self.tysys.represent_newtype_in_type(arg, def))
-            .collect()
+    /// The arguments and the expected result of a static the newtype `newtype`
+    /// inherits, read as the type at the end of its chain, where the static is
+    /// solved. Without a newtype, both as they are.
+    pub(super) fn at_inherited_base(
+        &self,
+        newtype: Option<DefId>,
+        arg_types: &[TypeId],
+        expected: Option<TypeId>,
+    ) -> (Vec<TypeId>, Option<TypeId>) {
+        let Some(def) = newtype else {
+            return (arg_types.to_vec(), expected);
+        };
+        let represent = |ty| self.tysys.represent_newtype_in_type(ty, def);
+        (
+            arg_types.iter().copied().map(represent).collect(),
+            expected.map(represent),
+        )
     }
 
     /// `callee` as a newtype inherits it: every base on `receiver`'s chain

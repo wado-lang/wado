@@ -758,6 +758,35 @@ argument. A method returning `Option<Point>` or `List<Point>` returns
 type where the substituted signature expects the newtype is a type mismatch:
 `loc1.distance(&Point { x: 0, y: 0 })` is an error.
 
+The substitution reads the signature as the call settles it. The method's own
+type parameters are solved first, at the base: a turbofish, the arguments and
+the expected type settle them, an argument or an expected type of the newtype
+read as its base. Then each occurrence of the receiver's base becomes the
+newtype, including one that only the solve made the base:
+
+<!-- {"fixture":"newtype_substitution_after_solve.wado"} -->
+
+```wado
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn same<U: Default>(&self) -> Wrap<U> {
+        return Wrap { v: U::default() };
+    }
+}
+
+type Wi = Wrap<i32>;
+
+test {
+    let a: Wi = { v: 1 };
+    let w: Wi = a.same();                 // `U` is `i32`, so `Wrap<i32>` is `Wi`
+    let b: Wrap<bool> = a.same::<bool>(); // not the receiver's base: stays
+    assert w.v == 0 && !b.v;
+}
+```
+
 ### Inherited Associated Functions and Traits
 
 A newtype inherits its base type's associated functions too. A function whose
