@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794486886279,
+  "lastUpdate": 1794520370334,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76925,6 +76925,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4759cdc0bd9197035050d047eb43a7746d2fe3e3"
         },
         "date": 1794486885461,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2fc96780f6318cb4e20bbaf7463a6ac3d20e758",
+          "message": "Merge pull request #2614 from wado-lang/compiler/newtype-substitution-order\n\nfix(compiler): an inherited method returns the newtype however its type parameters are settled",
+          "timestamp": "2026-11-13T06:34:25+09:00",
+          "tree_id": "87e502e80a9198730ac3dadf74d1b2f1e46b664b",
+          "url": "https://github.com/wado-lang/wado/commit/a2fc96780f6318cb4e20bbaf7463a6ac3d20e758"
+        },
+        "date": 1794520369040,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
