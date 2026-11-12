@@ -3035,14 +3035,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.impls_answer(&key, method).then_some(key)
     }
 
-    /// Whether `struct_name`'s own impls answer `method_name`, of either kind,
-    /// which decides whether a newtype answers a qualified call or its base
-    /// does. No newtype fallback here, for that reason.
-    fn declares_method_directly(&mut self, struct_name: &str, method_name: &str) -> bool {
-        let key = self.impl_target(struct_name);
-        self.impls_answer(&key, method_name)
-    }
-
     /// What a qualified call returns, off the declaration it selected where it
     /// has one. `receiver` is the declaration the call site resolved, never a
     /// spelling to re-resolve: beside a same-named local declaration, the
@@ -3591,8 +3583,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
             self.lookup_newtype(struct_name)
         {
-            // First check if the newtype itself has this static method
-            if self.declares_method_directly(struct_name, method_name) {
+            if self.own_newtype_static(newtype_id, method_name).is_some() {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,
