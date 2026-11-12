@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FuncRef, NirFunction};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::parallel::lock;
+use crate::parallel::{Executor, lock};
 use crate::tir::{BuiltinDeclarations, DeclarationLookup};
 use crate::type_table::TypeTable;
 
@@ -46,38 +46,18 @@ pub(super) struct SharedEscape<'a> {
     type_table: &'a TypeTable,
     declarations: &'a BuiltinDeclarations,
     verdicts: Mutex<IndexMap<Slot, bool>>,
-    /// Per-body seed census, built on first ask. Every slot is asked of every
-    /// body, so rediscovering one body's reads per slot is quadratic.
-    census: Mutex<IndexMap<usize, BodyCensus>>,
+    readers: Readers,
 }
 
 impl<'a> SharedEscape<'a> {
-    pub(super) fn new(project: &'a NirPackage, type_table: &'a TypeTable) -> Self {
+    pub(super) fn new(project: &'a NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
         Self {
             functions: &project.functions,
             type_table,
             declarations: &project.builtin_declarations,
             verdicts: Mutex::default(),
-            census: Mutex::default(),
+            readers: Readers::new(&project.functions, type_table, exec),
         }
-    }
-
-    /// Whether `body` can read the slot at all. A function that cannot is left
-    /// alone, so an unrelated one never refuses the query.
-    fn can_read(
-        &self,
-        func_idx: usize,
-        body: &Body,
-        seed_field: Option<&str>,
-        seed_call: Option<FuncId>,
-    ) -> bool {
-        if let Some(census) = lock(&self.census).get(&func_idx) {
-            return census.can_read(seed_field, seed_call);
-        }
-        let census = BodyCensus::of(body, self.type_table);
-        let can_read = census.can_read(seed_field, seed_call);
-        lock(&self.census).entry(func_idx).or_insert(census);
-        can_read
     }
 
     /// Whether a constant handed to `func_id`'s parameter at `pos` may be
@@ -124,8 +104,8 @@ impl<'a> SharedEscape<'a> {
             }
         }
         let mut obligations: IndexSet<Slot> = IndexSet::default();
-        for (idx, func) in self.functions.iter().enumerate() {
-            let func = func.borrow();
+        for idx in self.readers.of(slot) {
+            let func = self.functions[idx].borrow();
             if !self.scan_function(slot, idx, &func, &mut obligations) {
                 compiler_trace!("shared_escape", "{slot:?} refused in {}", func.name);
                 return None;
@@ -180,9 +160,8 @@ impl<'a> SharedEscape<'a> {
             Slot::Field(_) | Slot::Param(..) => None,
         };
         let mut locals: IndexSet<u32> = IndexSet::default();
-        if let Slot::Param(id, pos) = slot
-            && id.index() == func_idx
-        {
+        if let Slot::Param(id, pos) = slot {
+            assert_eq!(id.index(), func_idx, "a `Param` slot seeds its owner's body alone");
             // A position this body declares no parameter for is an argument
             // the walk cannot name, and an argument it cannot name is one
             // whose writes it cannot see.
@@ -190,16 +169,6 @@ impl<'a> SharedEscape<'a> {
                 return false;
             };
             locals.insert(param.local_index);
-        }
-        if locals.is_empty() {
-            // A `Param` slot seeds its owner's body alone. Every other body is
-            // left without looking, there being no name for a seed to match.
-            if seed_field.is_none() && seed_call.is_none() {
-                return true;
-            }
-            if !self.can_read(func_idx, body, seed_field, seed_call) {
-                return true;
-            }
         }
         let mut taint = Taint {
             body,
@@ -705,9 +674,69 @@ impl BodyCensus {
         census
     }
 
-    fn can_read(&self, seed_field: Option<&str>, seed_call: Option<FuncId>) -> bool {
-        seed_field.is_some_and(|f| self.reads_unnamed_field || self.fields_read.contains(f))
-            || seed_call.is_some_and(|id| self.callees.contains(&id))
+}
+
+/// The bodies that can read each slot, every one ascending. A body that cannot
+/// is left alone, so an unrelated one never refuses a query. Built up front:
+/// every slot would otherwise walk every function to ask it.
+struct Readers {
+    of_field: IndexMap<String, Vec<usize>>,
+    /// The bodies a [`BodyCensus::reads_unnamed_field`] counts as reading any
+    /// field.
+    of_any_field: Vec<usize>,
+    of_call: IndexMap<FuncId, Vec<usize>>,
+}
+
+impl Readers {
+    fn new(functions: &[FuncRef], type_table: &TypeTable, exec: &Executor) -> Self {
+        let censuses = exec.map_indices(functions.len(), |idx| {
+            let func = functions[idx].borrow();
+            func.body
+                .as_ref()
+                .map(|body| BodyCensus::of(body, type_table))
+        });
+        let mut readers = Self {
+            of_field: IndexMap::default(),
+            of_any_field: Vec::new(),
+            of_call: IndexMap::default(),
+        };
+        for (idx, census) in censuses.into_iter().enumerate() {
+            let Some(census) = census else {
+                continue;
+            };
+            if census.reads_unnamed_field {
+                readers.of_any_field.push(idx);
+            }
+            for field in census.fields_read {
+                readers.of_field.entry(field).or_default().push(idx);
+            }
+            for callee in census.callees {
+                readers.of_call.entry(callee).or_default().push(idx);
+            }
+        }
+        readers
+    }
+
+    /// The bodies `slot` is asked of, ascending. A `Param` slot seeds its
+    /// owner's body alone, there being no name for another body to match.
+    fn of(&self, slot: &Slot) -> Vec<usize> {
+        match slot {
+            Slot::Param(id, _) => vec![id.index()],
+            Slot::Ret(id) => self.of_call.get(id).cloned().unwrap_or_default(),
+            Slot::Field(name) => {
+                let mut bodies: Vec<usize> = self
+                    .of_field
+                    .get(name)
+                    .into_iter()
+                    .flatten()
+                    .chain(&self.of_any_field)
+                    .copied()
+                    .collect();
+                bodies.sort_unstable();
+                bodies.dedup();
+                bodies
+            }
+        }
     }
 }
 
