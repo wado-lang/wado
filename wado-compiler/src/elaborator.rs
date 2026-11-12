@@ -1133,15 +1133,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.handler_bindings.insert(key, info);
     }
 
-    /// The fq name of an impl receiver written as `written`.
+    /// The fq name of a static call's receiver `receiver`, written as `written`.
     ///
     /// An fq name names its subject by the module that declares it, so a
     /// declared type is qualified through the same canonical key the impl
     /// index uses, and a type parameter by the item declaring it.
-    pub(super) fn qualified_receiver_name(&self, written: &str) -> FqTypeName {
+    pub(super) fn qualified_receiver_name(&self, written: &str, receiver: TypeId) -> FqTypeName {
         if let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(written) {
-            return self.tysys.type_table.borrow().fq_type_name(binder.type_id);
+            assert_eq!(binder.type_id, receiver, "PROBE static receiver {written}");
         }
+        let table = self.tysys.type_table.borrow();
+        if table.type_param_id(receiver).is_some() {
+            return table.fq_type_name(receiver);
+        }
+        drop(table);
         match self.decl_key_or_local(written) {
             Some(def) => FqTypeName::of_head(self.tysys.resolutions.defs(), def),
             // A name that reaches no declaration at all: it names a shape or

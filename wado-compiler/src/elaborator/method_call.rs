@@ -3552,7 +3552,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let qualified_struct_name = self.qualified_receiver_name(struct_name);
+        let qualified_struct_name = self.qualified_receiver_name(struct_name, receiver_type);
         let mangled_func_name_owned =
             MethodName::format_local(&qualified_struct_name, None, method_name);
         let mangled_func_name = mangled_func_name_owned.as_str();
