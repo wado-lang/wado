@@ -2172,7 +2172,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<BoundCandidate> {
         let mut reaching = Vec::with_capacity(candidates.len());
         for candidate in candidates {
-            let at = self.candidate_trait_args(&candidate, self_type_id);
+            // `Base<<T as Mid>::Item>` reaches `Base<i32>` where the frame
+            // binds `Mid<Item = i32>`.
+            let at = self
+                .candidate_trait_args(&candidate, self_type_id)
+                .map(|mut at| {
+                    self.answer_frame_projections_in(&mut at);
+                    at
+                });
             let wanted = self.trait_args_at(candidate.decl, self_type_id, wanted);
             if at.is_some() && at == wanted {
                 reaching.push(candidate);
