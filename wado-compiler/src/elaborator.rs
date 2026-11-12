@@ -748,8 +748,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// [`Self::newtype_base_target`] one link down a chain of newtypes: a
-    /// newtype over another newtype reaches that one first, whose own impls
-    /// answer before its base's.
+    /// newtype over another newtype or a `flags` reaches that one first, whose
+    /// own impls answer before its base's.
     pub(super) fn newtype_link_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
@@ -762,7 +762,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let table = self.tysys.type_table.borrow();
             match table.get(newtype) {
                 tir::ResolvedType::Newtype { base_type, .. } => match table.get(*base_type) {
-                    tir::ResolvedType::Newtype { def, .. } => {
+                    tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
                         Some((*base_type, table.decl_name(*def).to_string()))
                     }
                     _ => None,
@@ -1640,14 +1640,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     return Some(key);
                 }
             }
-            current = {
-                let tt = self.tysys.type_table.borrow();
-                match tt.get(current) {
-                    ResolvedType::Newtype { base_type, .. } => *base_type,
-                    ResolvedType::Flags { .. } => TypeTable::U32,
-                    _ => return None,
-                }
-            };
+            current = self.tysys.type_table.borrow().link_below(current)?;
         }
     }
 
@@ -2343,19 +2336,8 @@ impl TypeSystem {
     /// `type Buf = ByteList;` chains, so this peels to the type that declares
     /// methods rather than stopping at the first link.
     fn peeled_base(&self, alias: tir::TypeId) -> (tir::TypeId, String) {
-        let mut current = alias;
-        loop {
-            let peeled = match self.type_table.borrow().get(current).clone() {
-                tir::ResolvedType::Newtype { base_type, .. } => base_type,
-                tir::ResolvedType::Flags { .. } => TypeTable::U32,
-                _ => break,
-            };
-            if peeled == current {
-                break;
-            }
-            current = peeled;
-        }
-        (current, self.get_ultimate_base_struct_name(current))
+        let base = self.type_table.borrow().representation_head(alias);
+        (base, self.get_ultimate_base_struct_name(base))
     }
 
     /// Whether the receiver's own declaration of this name and kind shadows a

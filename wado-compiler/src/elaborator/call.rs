@@ -4935,9 +4935,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if open {
             return;
         }
-        let base = target
-            .and_then(|decl| self.link_declared_on(newtype, decl))
-            .unwrap_or_else(|| self.tysys.peeled_base(newtype).0);
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .inherited_base(newtype, target);
         for ty in types {
             *ty = self.tysys.substitute_newtype_in_type(*ty, base, newtype);
         }
@@ -4963,9 +4965,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             None => (self.lookup_newtype_of_decl(def)?, Vec::new()),
         };
-        let base = link
-            .and_then(|link| self.link_declared_on(instance, link))
-            .unwrap_or_else(|| self.tysys.peeled_base(instance).0);
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .inherited_base(instance, link);
         let shape = self
             .tysys
             .type_table

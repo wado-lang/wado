@@ -380,7 +380,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((link_key, link_name)) = self.newtype_link_target(&key) else {
             return self.out_of_scope_lookup(receiver_name, &out_of_scope);
         };
-        let (link_type, _) = self.at_newtype_base(receiver_type, &[]);
+        let link_type = receiver_type.and_then(|ty| self.tysys.type_table.borrow().link_below(ty));
         self.resolve_static_callee_inherited(
             StaticQuery {
                 site: None,
@@ -549,38 +549,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Err(out_of_scope)
     }
 
-    /// The link below `newtype` on its chain that `declared_on` declares: the
-    /// base an inherited method's signature names, which alone becomes
-    /// `newtype` (`spec-types`, "Method Signature Substitution").
-    pub(super) fn link_declared_on(&self, newtype: TypeId, declared_on: DefId) -> Option<TypeId> {
-        let table = self.tysys.type_table.borrow();
-        let mut link = newtype;
-        while let Some(base) = table.get_newtype_base(link) {
-            if table.nominal_def(base) == Some(declared_on) {
-                return Some(base);
-            }
-            link = base;
-        }
-        None
-    }
-
-    /// [`Self::link_declared_on`], else the chain's last link, where a method
-    /// no link's own impl declares is inherited from.
-    pub(super) fn inherited_base(&self, newtype: TypeId, declared_on: Option<DefId>) -> TypeId {
-        if let Some(link) = declared_on.and_then(|decl| self.link_declared_on(newtype, decl)) {
-            return link;
-        }
-        let table = self.tysys.type_table.borrow();
-        let mut link = newtype;
-        while let Some(base) = table.get_newtype_base(link) {
-            link = base;
-        }
-        link
-    }
-
     /// The link below `newtype` on its chain that [`Self::newtype_static_target`]
-    /// answers with, where that link is itself a newtype: its statics answer
-    /// before the base's.
+    /// answers with, where that link is itself a newtype or a `flags`: its
+    /// statics answer before the base's.
     pub(super) fn newtype_link_declaring(
         &mut self,
         newtype: TypeId,
@@ -591,12 +562,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
         let (link_key, _) = self.newtype_static_target(&key, method_name)?;
-        let link = self.link_declared_on(newtype, link_key.decl()?)?;
-        let is_newtype = matches!(
-            self.tysys.type_table.borrow().get(link),
-            ResolvedType::Newtype { .. }
+        let table = self.tysys.type_table.borrow();
+        let link = table.link_declared_on(newtype, link_key.decl()?)?;
+        let declares = matches!(
+            table.get(link),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
         );
-        is_newtype.then_some(link)
+        declares.then_some(link)
     }
 
     /// The base `receiver` wraps, if it is a newtype, and `arg_types` as that

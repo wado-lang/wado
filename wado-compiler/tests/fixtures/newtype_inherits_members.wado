@@ -47,6 +47,24 @@ test "a flags constant through a newtype is the newtype" {
     assert `${n:?}` == "Perm::none() as M";
 }
 
+impl Perm {
+    fn both() -> Perm {
+        return Perm::read | Perm::write;
+    }
+
+    fn widened(&self) -> Perm {
+        return *self | Perm::write;
+    }
+}
+
+// The flags' own impl answers before the `u32` it wraps.
+test "a flags' own methods through a newtype are the newtype's" {
+    let b: M = M::both();
+    assert `${b:?}` == "Perm::read | Perm::write as M";
+    let w: M = (Perm::read as M).widened();
+    assert w == b;
+}
+
 // The scrutinee keeps its own type while the patterns name the base's cases.
 test "a newtype-of-enum matches on the base's cases" {
     let c = Color::Green as C;

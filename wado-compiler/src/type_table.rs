@@ -5338,17 +5338,42 @@ impl TypeTable {
     /// declaration's impls live — and so stops at `flags`, which writes its own.
     pub fn representation_head(&self, id: TypeId) -> TypeId {
         let mut current = id;
-        loop {
-            match self
-                .types
-                .get(current)
-                .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
-            {
-                ResolvedType::Newtype { base_type, .. } => current = *base_type,
-                ResolvedType::Flags { .. } => return TypeTable::U32,
-                _ => return current,
-            }
+        while let Some(below) = self.link_below(current) {
+            current = below;
         }
+        current
+    }
+
+    /// The type one link down the chain [`Self::representation_head`] walks:
+    /// a newtype's base, and `u32` under a `flags`.
+    pub fn link_below(&self, id: TypeId) -> Option<TypeId> {
+        match self.get(id) {
+            ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+            ResolvedType::Flags { .. } => Some(TypeTable::U32),
+            _ => None,
+        }
+    }
+
+    /// The link below `newtype` on its chain that `declared_on` declares: the
+    /// base an inherited method's signature names, which alone becomes
+    /// `newtype` (`spec-types`, "Method Signature Substitution").
+    pub fn link_declared_on(&self, newtype: TypeId, declared_on: DefId) -> Option<TypeId> {
+        let mut link = newtype;
+        while let Some(base) = self.link_below(link) {
+            if self.nominal_def(base) == Some(declared_on) {
+                return Some(base);
+            }
+            link = base;
+        }
+        None
+    }
+
+    /// [`Self::link_declared_on`], else the chain's end, where a method no
+    /// link's own impl declares is inherited from.
+    pub fn inherited_base(&self, newtype: TypeId, declared_on: Option<DefId>) -> TypeId {
+        declared_on
+            .and_then(|decl| self.link_declared_on(newtype, decl))
+            .unwrap_or_else(|| self.representation_head(newtype))
     }
 
     /// Check if two types share a common base type (for cast validation).

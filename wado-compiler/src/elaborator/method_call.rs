@@ -1644,7 +1644,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let declared_on = sig
                 .and_then(|sig| sig.declaring_impl)
                 .and_then(|block| self.tysys.type_table.borrow().impl_target_decl(block));
-            let base = self.inherited_base(newtype, declared_on);
+            let base = self
+                .tysys
+                .type_table
+                .borrow()
+                .inherited_base(newtype, declared_on);
             for ty in param_types.iter_mut() {
                 *ty = self.tysys.substitute_newtype_in_type(*ty, base, newtype);
             }

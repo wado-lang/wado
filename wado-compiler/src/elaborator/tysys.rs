@@ -721,14 +721,7 @@ impl TypeSystem {
             if *of != def {
                 return None;
             }
-            let mut base = t;
-            while let Some(next) = table.get_newtype_base(base) {
-                if link.is_some() && table.nominal_def(next) == link {
-                    return Some(next);
-                }
-                base = next;
-            }
-            Some(table.representation_head(t))
+            Some(table.inherited_base(t, link))
         })
     }
 
