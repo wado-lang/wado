@@ -19,9 +19,7 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{
-    ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
-};
+use super::call::{ArgSite, CaseSite, SigChoice, bind_nearer, turbofish_leaves_slot};
 use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
@@ -35,12 +33,12 @@ use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{DerivedAt, OnBoundTrait, SelfBinding};
-use super::types::{FunctionContext, MethodInfo, MethodOwner, RealTypeParams, TypeError};
+use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator, util};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-use crate::elaborator::call::{StaticCallee, StaticTypeArgs, slot_type_bindings};
+use crate::elaborator::call::slot_type_bindings;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -2154,18 +2152,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|sig| sig.own_params.clone())
             .unwrap_or_default();
 
-        // A static's own slots, where the spelling wrote none: solved here from
-        // the arguments, as instance dispatch solves them, so that what binds
-        // them reaches reify rather than leaving an abstract `U::default()` to
-        // be rejected at the trait-bound check over WIR.
-        //
-        // Only a block declaring slots of its own answers for an unsolved one.
-        // A block declaring none leaves the method's numbered from zero, where
-        // the receiver's substitution reaches them, and a slot this solve
-        // leaves open is that substitution's to fill.
-        let strict = callee_sig
-            .as_ref()
-            .is_some_and(|sig| sig.declaring_slot_count > 0);
+        // A static's own slots, where the spelling wrote none: solved as an
+        // instance call's are, so that what binds them reaches reify rather
+        // than leaving an abstract `U::default()` to be rejected at the
+        // trait-bound check over WIR.
         let own_from = callee_sig
             .as_ref()
             .is_some_and(|sig| self.own_from_sig(sig));
@@ -2179,151 +2169,63 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
                 .unwrap_or_default();
-            // Solved for as fresh variables, read with the receiver's arguments
-            // in one pass: `param_types` already holds those arguments, and a
-            // caller's parameter among them is the same type as the slot at its
-            // position. A method with a pack keeps `param_types` and its own
-            // slots: read again from the declaration, a spread over the pack
-            // comes back as a tuple of the receiver's arguments.
-            let inst = (!sig.own_params.iter().any(|p| p.is_pack)).then(|| {
-                self.instantiate(
-                    &own_ids,
-                    &Instantiation {
-                        kind: InstanceKind::Method,
-                        name: &static_call.method,
-                        span: static_call.span,
-                        type_args: &[],
-                        self_binding: None,
-                        impl_args: &[],
-                    },
-                )
-            });
-            let solving = inst
-                .as_ref()
-                .map_or_else(|| own_ids.clone(), |inst| inst.vars.clone());
-            let mut solved_for = param_types.clone();
-            let mut solved_return = None;
-            if inst.is_some() {
-                let open: Vec<TypeId> = solving
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &slot)| match method_type_args.get(i) {
-                        Some(&written) if written != TypeTable::UNKNOWN => written,
-                        _ => slot,
-                    })
-                    .collect();
-                self.instantiate_static_params(
-                    Some(&sig),
+            let declaring = sig
+                .declaring_impl
+                .map(|id| self.tysys.signatures.impl_sig(id));
+            let declared_return = sig
+                .instantiate_call_with(
+                    &self.tysys.type_table,
+                    declaring,
                     &declaring_args,
-                    &open,
-                    self_in_args,
-                    inherited.then_some(target_type_id),
-                    &mut solved_for,
-                );
-                solved_return = expected_type.map(|expected| {
-                    let declaring = sig
-                        .declaring_impl
-                        .map(|id| self.tysys.signatures.impl_sig(id));
-                    let declared = sig
-                        .instantiate_call_with(
-                            &self.tysys.type_table,
-                            declaring,
-                            &declaring_args,
-                            &open,
-                        )
-                        .return_type;
-                    (self.answer_frame_projections(declared), expected)
-                });
-            }
-            let mut infer = InferCtx::new(&self.tysys.type_table, solving.clone());
-            for (i, (&param_type, &arg)) in solved_for.iter().zip(args.iter()).enumerate() {
-                if answers_last(static_call.args.get(i)) {
-                    infer.add_deferred(param_type, arg);
-                } else {
-                    infer.add(param_type, arg);
-                }
-            }
-            if let Some((declared, expected)) = solved_return {
-                infer.add_expected_return(declared, expected);
-            }
-            let (mut inferred, bindings) = infer.solve_with_bindings();
-            if let Some(inst) = &inst {
-                self.record_instantiation(inst, &inferred);
-            }
-            // A slot left open stays the declaration's own, for the receiver's
-            // substitution to fill where the block declares none.
-            for ((slot, &var), &own) in inferred.iter_mut().zip(&solving).zip(&own_ids) {
-                if *slot == var {
-                    *slot = own;
-                }
-            }
-            // A slot the arguments do not pin takes the default its declaration
-            // wrote (WEP 2026-04-11), as every other spelling does. Without it
-            // a block declaring slots of its own rejected the call the same
-            // declaration accepts on a receiver that declares none.
-            let defaulted = self.fill_static_default_type_args(&sig, target_type_id, &mut inferred);
-            // A slot the turbofish names was substituted into `param_types`
-            // above, so inference has nothing left to bind for it. A block
-            // declaring no slot of its own leaves the method's to its type
-            // default, which is not the arguments' to answer.
-            // A pack is settled below instead, never a slot to spell.
-            let spelled: Vec<bool> = (0..solving.len())
-                .map(|i| {
-                    method_type_args
-                        .get(i)
-                        .is_some_and(|&a| a != TypeTable::UNKNOWN)
+                    &method_type_args,
+                )
+                .return_type;
+            let declared_return = self.answer_frame_projections(declared_return);
+            // A bound on the method may name the block's parameters, which
+            // the receiver settles.
+            let impl_bindings = sig
+                .declaring_impl
+                .map(|id| {
+                    let table = &self.tysys.type_table;
+                    slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
                 })
-                .collect();
-            merge_turbofish_type_args(&mut method_type_args, &inferred);
-            // A slot bound only through another's associated type (`..V` off
-            // `Holes`, `A` off `T: Holder<Item = A>`) is projected off the
-            // owner the arguments settled, as the bare spelling projects it.
-            let merged = method_type_args.clone();
-            let real = RealTypeParams::of(&sig.own_params);
-            self.project_assoc_bound_args(Some(sig.def), &real, &mut method_type_args);
-            let unanswered = solving.iter().enumerate().find(|&(i, slot)| {
-                !bindings.contains_key(slot)
-                    && !sig.own_params[i].is_pack
-                    && !spelled[i]
-                    && method_type_args[i] == merged[i]
-            });
-            if let Some((i, _)) = unanswered
-                && !defaulted
-                && strict
-            {
-                // A later use the call's value meets may still settle it, as
-                // it does the bare spelling's.
-                if self.defers_uninferred(&args, &method_type_args, expected_type) {
-                    let mut static_args = StaticTypeArgs {
-                        params: sig.own_params.clone(),
-                        impl_args: declaring_args.clone(),
-                        method_args: method_type_args,
-                    };
-                    self.defer_or_report_uninferred_static_method_type_args(
-                        StaticCallee {
-                            type_name: &receiver,
-                            method_name: &static_call.method,
-                            receiver_key: struct_key_for_lookup.as_ref(),
-                        },
-                        &mut static_args,
-                        &args,
-                        expected_type,
-                        Some(target_type_id),
-                        static_call.span,
-                    );
-                    method_type_args = static_args.method_args;
-                } else {
-                    let _ = self.emit(TypeError::UninferredMethodTypeArgs {
-                        receiver,
-                        method: static_call.method.clone(),
-                        params: vec![sig.own_params[i].name.clone()],
-                        span: static_call.span,
-                    });
-                    return TypeTable::ERROR;
-                }
-            }
-            let reached = self.tysys.packs_args_reach(&param_types, args.len());
-            self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
+                .unwrap_or_default();
+            let impl_args = settled_impl_args(&impl_bindings);
+            let qualified = format!("{receiver}::{}", static_call.method);
+            let self_binding = SelfBinding {
+                type_id: target_type_id,
+                declaring_trait,
+            };
+            let inst = self.instantiate(
+                &own_ids,
+                &Instantiation {
+                    kind: InstanceKind::Method,
+                    name: &qualified,
+                    span: static_call.span,
+                    type_args: &method_type_args,
+                    self_binding: Some(self_binding),
+                    impl_args: &impl_args,
+                },
+            );
+            (method_type_args, _) = self.bind_method_type_args(
+                method_type_args,
+                MethodInferenceInput {
+                    receiver_type: target_type_id,
+                    method_name: &static_call.method,
+                    slots: &own_ids,
+                    own_params: &sig.own_params,
+                    param_types: &param_types,
+                    args: &args,
+                    raw_args: &static_call.args,
+                    decl_return_type: declared_return,
+                    expected_return_type: expected_type,
+                    trait_decl: declaring_trait,
+                    declaring_module: Some(sig.defaults_module.clone()),
+                    impl_args: &impl_args,
+                    inst: Some(&inst),
+                    span: static_call.span,
+                },
+            );
             self.instantiate_static_params(
                 Some(&sig),
                 &declaring_args,
@@ -2778,16 +2680,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id: receiver_type_id,
             declaring_trait: trait_decl,
         };
+        // A bound on the method may name the blanket's parameter, which the
+        // receiver settles.
+        let impl_args = settled_impl_args(&slot_type_bindings(
+            &self.tysys.type_table,
+            &[blanket_slot],
+            &[receiver_type_id],
+        ));
+        let qualified = format!(
+            "{}::{method}",
+            self.tysys.type_table.borrow().name(receiver_type_id)
+        );
         let inst = (!slots.is_empty()).then(|| {
             self.instantiate(
                 &slots,
                 &Instantiation {
                     kind: InstanceKind::Method,
-                    name: method,
+                    name: &qualified,
                     span,
                     type_args: &written,
                     self_binding: Some(self_binding),
-                    impl_args: &[],
+                    impl_args: &impl_args,
                 },
             )
         });
@@ -2805,7 +2718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_return_type: expected_type,
                 trait_decl,
                 declaring_module: Some(blanket_module.clone()),
-                impl_args: &[],
+                impl_args: &impl_args,
                 inst: inst.as_ref(),
                 span,
             },

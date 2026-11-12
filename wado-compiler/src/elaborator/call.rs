@@ -5885,9 +5885,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.group_variadic_type_args_of(method_name, &own_params, &mut written, call.span) {
                 return TypeTable::ERROR;
             }
+            let qualified = format!("{type_param_name}::{method_name}");
             let of = Instantiation {
                 kind: InstanceKind::Method,
-                name: method_name,
+                name: &qualified,
                 span: call.span,
                 type_args: &written,
                 self_binding: Some(SelfBinding {
