@@ -4183,13 +4183,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_args: Option<&[TypeId]>,
         assoc: &str,
     ) -> Option<TypeId> {
-        let resolved = self.tysys.type_table.borrow_mut().answer_projection(
-            owner,
-            &trait_,
-            trait_args,
-            assoc,
-            &[],
-        );
+        let answer = |e: &mut Self| {
+            e.tysys.type_table.borrow_mut().answer_projection(
+                owner,
+                &trait_,
+                trait_args,
+                assoc,
+                &[],
+            )
+        };
+        // A blanket impl's bindings are registered for a type only once its
+        // bound is checked, and inference reads them before that.
+        let resolved = answer(self).or_else(|| {
+            self.register_assoc_types_for_concrete_type_and_trait(owner, trait_);
+            answer(self)
+        });
         // Reflection's associated types are registered by a synthesis phase
         // that runs after elaboration, so the registry is empty here; compute
         // the subject's.

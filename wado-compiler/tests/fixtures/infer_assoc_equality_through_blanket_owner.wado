@@ -1,0 +1,47 @@
+// An equality's owner implementing its trait through a blanket impl answers
+// the equality's target, whether the owner is settled by an argument or
+// later by the annotation the result meets.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+trait Tag with () {
+    fn fresh() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Tag for Box {
+    fn fresh() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+impl<B: Tag> Holder for B {
+    type Item = i32;
+    fn empty() -> B {
+        return B::fresh();
+    }
+}
+
+fn items<H: Holder<Item = E>, E>(_h: H) -> List<E> {
+    return [];
+}
+
+fn held<T, H: Holder<Item = E>, E>(_t: T) -> H {
+    return H::empty();
+}
+
+test "an argument settles the owner" {
+    let e = items(Box { v: 1 });
+    let n: List<i32> = e;
+    assert n.len() == 0;
+}
+
+test "the annotation settles the owner" {
+    let b: Box = held(1);
+    assert b.v == 3;
+}
