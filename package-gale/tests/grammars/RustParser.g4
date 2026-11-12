@@ -521,6 +521,9 @@ expression
     | closureExpression                                              # ClosureExpression_            // 8.2.12
     | expressionWithBlock                                            # ExpressionWithBlock_
     | macroInvocation                                                # MacroInvocationAsExpression
+    // LOCAL: `UNDERSCORE` — the underscore expression, a destructuring
+    // assignment's discarded element `(a, _) = t` (Rust 1.59).
+    | UNDERSCORE                                                     # UnderscoreExpression
     ;
 
 comparisonOperator
