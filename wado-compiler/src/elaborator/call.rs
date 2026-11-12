@@ -172,6 +172,15 @@ struct StaticTypeArgs {
     method_args: Vec<TypeId>,
 }
 
+/// A static a newtype inherits: the link it is declared on, read as the
+/// newtype in what the call's types say of it (`spec-types`, "Method
+/// Signature Substitution").
+#[derive(Clone, Copy)]
+pub(super) struct InheritedStatic {
+    newtype: TypeId,
+    base: TypeId,
+}
+
 /// Where a resolved argument came from, for its diagnostics. A tagged
 /// template's argument is the template itself, which no source spells.
 #[derive(Clone, Copy)]
@@ -1965,6 +1974,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_args: method_type_args,
                     ..
                 } = static_args;
+                let inherited = self.inherited_static(callee, &impl_type_args_inferred);
                 if suffix == "from"
                     && !own_from
                     && let [arg_type] = args[..]
@@ -2060,12 +2070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &impl_type_args_inferred,
                     &method_type_args,
                 );
-                self.retype_static_to_newtype(
-                    &receiver_key,
-                    block,
-                    &impl_type_args_inferred,
-                    &mut substituted,
-                );
+                self.retype_inherited(inherited, &mut substituted);
                 self.answer_frame_projections_in(&mut substituted);
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
                 self.record_call_param_types(call.id, substituted.clone());
@@ -2115,6 +2120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &args,
                     &impl_type_args_inferred,
                     &method_type_args,
+                    inherited,
                     call.id,
                     call.span,
                     expected_type,
@@ -2289,6 +2295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_args: method_type_args,
                         ..
                     } = static_args;
+                    let inherited = self.inherited_static(callee, &impl_type_args_inferred);
                     let resolved = self.resolve_static_callee(StaticQuery {
                         site: ident.segments.get(1).map(|segment| segment.id),
                         receiver_key: ns_key.as_ref(),
@@ -2375,14 +2382,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
 
                     let mut return_type = resolved.return_type();
-                    if let Some(key) = &ns_key {
-                        self.retype_static_to_newtype(
-                            key,
-                            block,
-                            &impl_type_args_inferred,
-                            std::slice::from_mut(&mut return_type),
-                        );
-                    }
+                    self.retype_inherited(inherited, std::slice::from_mut(&mut return_type));
 
                     let template = self.tysys.static_template(&method_ref, &receiver);
                     let monomorph_info =
@@ -2410,14 +2410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         },
                         declares_params,
                     ) = resolved.params();
-                    if let Some(key) = &ns_key {
-                        self.retype_static_to_newtype(
-                            key,
-                            block,
-                            &impl_type_args_inferred,
-                            &mut param_types,
-                        );
-                    }
+                    self.retype_inherited(inherited, &mut param_types);
                     self.answer_frame_projections_in(&mut param_types);
                     return_type = self.answer_frame_projections(return_type);
 
@@ -2927,20 +2920,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // method inherited with its trait's default body — leaves the
             // branches below to answer, rather than ending the lookup: an
             // expected type is what makes a sequence literal coerce.
-            if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
+            //
+            // A newtype inheriting the static reads the link that owns it: its
+            // arguments resolve against that link's parameters, and are held to
+            // the newtype once the call retypes them.
+            let key = self.impl_target(prefix);
+            let owner = self.static_owner_key(&key, suffix);
+            if let Some(sig) = self.unique_qualified_method_sig_keyed(&owner, suffix) {
                 return Some(CalleeSignature::of_method(&sig));
             }
-            let key = self.impl_target(prefix);
             if let Some(sig) = self.derived_method_signature(&key, suffix) {
                 return Some(sig);
-            }
-            // A newtype inheriting the static: its arguments resolve against
-            // the base's parameters, and are held to the newtype once the call
-            // retypes them.
-            if let Some((base_key, _)) = self.newtype_static_target(&key, suffix)
-                && let Some(sig) = self.unique_qualified_method_sig_keyed(&base_key, suffix)
-            {
-                return Some(CalleeSignature::of_method(&sig));
             }
 
             // Builtin functions resolve through the `core:builtin` module,
@@ -2972,8 +2962,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+                    let owner = self.static_owner_key(&ns_key, method_name);
                     if let Some(sig) =
-                        self.lookup_static_method_sig_keyed(type_name, method_name, Some(&ns_key))
+                        self.lookup_static_method_sig_keyed(type_name, method_name, Some(&owner))
                     {
                         return Some(CalleeSignature {
                             param_types: sig.value_param_types(),
@@ -3743,7 +3734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
-        let sig = self.static_call_sig_through_newtype(
+        let sig = self.owner_static_sig(
             prefix,
             suffix,
             receiver_key,
@@ -4518,7 +4509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected_args =
             self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
         let (method_def, [declaring_slots, own_slots]) = self
-            .static_call_sig_through_newtype(
+            .owner_static_sig(
                 callee.type_name,
                 callee.method_name,
                 callee.receiver_key,
@@ -4708,6 +4699,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return (expected_args, vec![]);
         }
+        let key = self.static_receiver_key(struct_name, receiver_key);
+        if let Some(owner) = self.newtype_static_target(&key, method_name) {
+            return self.infer_through_newtype(
+                &key,
+                owner,
+                method_name,
+                raw_args,
+                args,
+                expected_type,
+                span,
+            );
+        }
         let Some(sig) = self.static_call_sig_or_inherited(
             struct_name,
             method_name,
@@ -4715,22 +4718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             SigChoice::Any,
             &expected_args,
         ) else {
-            let key = self.static_receiver_key(struct_name, receiver_key);
-            let derived = self.derived_impl_args(&key, method_name, args);
-            if derived.is_empty()
-                && let Some(base) = self.newtype_static_target(&key, method_name)
-            {
-                return self.infer_through_newtype(
-                    &key,
-                    base,
-                    method_name,
-                    raw_args,
-                    args,
-                    expected_type,
-                    span,
-                );
-            }
-            return (derived, vec![]);
+            return (self.derived_impl_args(&key, method_name, args), vec![]);
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
@@ -4908,38 +4896,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// `types`, read off the base's static in `block`, as the newtype `key`
-    /// inherits them: the base at `base_args` becomes the newtype (`spec-types`,
-    /// "Method Signature Substitution"). The resolution retypes a newtype
-    /// declaring no parameters itself; one declaring some has to be solved
-    /// from `base_args` first. A block on the newtype itself keeps what it
-    /// wrote.
-    pub(super) fn retype_static_to_newtype(
+    /// The newtype a static call's receiver is, where it inherits the static
+    /// from a link below it, at the arguments `owner_args` give that link.
+    /// The resolution retypes a newtype declaring no parameters itself; one
+    /// declaring some is solved from `owner_args` here. `None` where the
+    /// receiver owns the static, or where the arguments leave the newtype
+    /// open.
+    pub(super) fn inherited_static(
         &mut self,
-        key: &ImplTargetKey,
-        block: Option<DefId>,
-        base_args: &[TypeId],
+        callee: StaticCallee<'_>,
+        owner_args: &[TypeId],
+    ) -> Option<InheritedStatic> {
+        let key = self.static_receiver_key(callee.type_name, callee.receiver_key);
+        let (owner, _) = self.newtype_static_target(&key, callee.method_name)?;
+        let link = owner.decl();
+        let (newtype, _) = self.newtype_at_base_args(&key, link, owner_args)?;
+        let table = self.tysys.type_table.borrow();
+        if table.contains_infer_var(newtype) && !self.awaits_report(&table, newtype) {
+            return None;
+        }
+        let base = table.inherited_base(newtype, link);
+        Some(InheritedStatic { newtype, base })
+    }
+
+    /// `types`, read off the link `inherited` names, as its newtype reads them.
+    pub(super) fn retype_inherited(
+        &self,
+        inherited: Option<InheritedStatic>,
         types: &mut [TypeId],
     ) {
-        let target = block.and_then(|b| self.tysys.type_table.borrow().impl_target_decl(b));
-        if target.is_some() && target == key.decl() {
-            return;
-        }
-        let Some((newtype, _)) = self.newtype_at_base_args(key, target, base_args) else {
+        let Some(InheritedStatic { newtype, base }) = inherited else {
             return;
         };
-        let open = {
-            let tt = self.tysys.type_table.borrow();
-            tt.contains_infer_var(newtype) && !self.awaits_report(&tt, newtype)
-        };
-        if open {
-            return;
-        }
-        let base = self
-            .tysys
-            .type_table
-            .borrow()
-            .inherited_base(newtype, target);
         for ty in types {
             *ty = self.tysys.substitute_newtype_in_type(*ty, base, newtype);
         }
@@ -4976,20 +4964,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .declared_type_args(base)
             .unwrap_or_default();
-        let scope_params = self.scope_type_param_ids();
-        let mut infer = InferCtx::new(&self.tysys.type_table, vars.clone());
-        for (&spelled, &answer) in shape.iter().zip(base_args) {
-            // A slot deferred to a sink answers as the variable it is, which
-            // the sink's answer then reaches through the newtype.
-            let deferred = self.awaits_report(&self.tysys.type_table.borrow(), answer);
-            if deferred
-                || (self.tysys.is_usable_answer(answer)
-                    && !self.slot_unanswered(answer, &scope_params))
-            {
-                infer.add(spelled, answer);
-            }
-        }
-        let solved = infer.solve();
+        let answers: Vec<Option<TypeId>> = base_args.iter().copied().map(Some).collect();
+        let solved = self.answer_receiver_vars(&vars, &shape, &answers);
         for (&var, &answer) in vars.iter().zip(&solved) {
             self.chain_infer_var(var, answer);
         }
@@ -5015,6 +4991,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // carries is written in the answers, as the call's types are.
         let answered = self.apply_infer_holes_each(&vars);
         Some((self.generic_newtype_instance(def, answered), shaped))
+    }
+
+    /// `vars`, the receiver's open arguments, solved so that `spelled` — the
+    /// owning link's arguments as the receiver writes them — reads `answers`,
+    /// that link's slots as the call settled them. A variable nothing answers
+    /// comes back as itself.
+    pub(super) fn answer_receiver_vars(
+        &mut self,
+        vars: &[TypeId],
+        spelled: &[TypeId],
+        answers: &[Option<TypeId>],
+    ) -> Vec<TypeId> {
+        let scope_params = self.scope_type_param_ids();
+        let mut infer = InferCtx::new(&self.tysys.type_table, vars.to_vec());
+        for (&spelled, &answer) in spelled.iter().zip(answers) {
+            let Some(answer) = answer else {
+                continue;
+            };
+            // A slot deferred to a sink answers as the variable it is, which
+            // the sink's answer then reaches through the receiver.
+            let deferred = self.awaits_report(&self.tysys.type_table.borrow(), answer);
+            if deferred
+                || (self.tysys.is_usable_answer(answer)
+                    && !self.slot_unanswered(answer, &scope_params))
+            {
+                infer.add(spelled, answer);
+            }
+        }
+        infer.solve()
     }
 
     /// The impl level of a derived method called by type path, solved from the
@@ -5088,17 +5093,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
             return;
         };
-        // Through the newtype base where the alias declares nothing of the
-        // name, as the resolution reaches it: checking the spelled receiver
+        // At the link the resolution reaches: checking the spelled receiver
         // alone found an empty bucket, so `type Q = P` passed a call the same
         // call through `P` is rejected for.
-        let entry = match self.static_method_entry(receiver, method_name) {
-            Some(entry) => Some(entry),
-            None => self
-                .newtype_static_target(receiver, method_name)
-                .and_then(|(base_key, _)| self.static_method_entry(&base_key, method_name)),
-        };
-        let Some(entry) = entry else {
+        let owner = self.static_owner_key(receiver, method_name);
+        let Some(entry) = self.static_method_entry(&owner, method_name) else {
             return;
         };
         let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
@@ -5202,10 +5201,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// [`Self::static_call_sig_or_inherited`], or on a newtype declaring nothing
-    /// of the name its base's, which [`Self::infer_through_newtype`] solves. The
-    /// base is read at any arguments: `receiver_args` spell the newtype.
-    fn static_call_sig_through_newtype(
+    /// [`Self::static_call_sig_or_inherited`] at the link of a newtype chain
+    /// that owns the static, which [`Self::infer_through_newtype`] solves at.
+    /// A link below the receiver is read at any arguments: `receiver_args`
+    /// spell the receiver.
+    fn owner_static_sig(
         &mut self,
         struct_name: &str,
         method_name: &str,
@@ -5213,24 +5213,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         choice: SigChoice,
         receiver_args: &[TypeId],
     ) -> Option<MethodSig> {
-        self.static_call_sig_or_inherited(
-            struct_name,
-            method_name,
-            receiver_key,
-            choice,
-            receiver_args,
-        )
-        .or_else(|| {
-            let key = self.static_receiver_key(struct_name, receiver_key);
-            let (base_key, _) = self.newtype_static_target(&key, method_name)?;
-            self.static_call_sig_or_inherited(
+        let key = self.static_receiver_key(struct_name, receiver_key);
+        match self.newtype_static_target(&key, method_name) {
+            Some((owner, _)) => {
+                self.static_call_sig_or_inherited(struct_name, method_name, Some(&owner), choice, &[])
+            }
+            None => self.static_call_sig_or_inherited(
                 struct_name,
                 method_name,
-                Some(&base_key),
+                receiver_key,
                 choice,
-                &[],
-            )
-        })
+                receiver_args,
+            ),
+        }
     }
 
     /// The canonical signature `method_name` names on the resolved `receiver`,

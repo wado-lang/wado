@@ -448,7 +448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let link_type = owner
                 .ty
-                .and_then(|ty| self.tysys.type_table.borrow().link_below(ty));
+                .and_then(|ty| self.tysys.type_table.borrow().static_link_below(ty));
             owner.head = query.receiver_type;
             owner.below_head = true;
             owner.ty = link_type.or(owner.ty);
@@ -678,23 +678,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (owner.key != *key).then_some((owner.key, owner.name))
     }
 
-    /// The base `receiver` wraps, if it is a newtype, and `arg_types` as that
-    /// base reads them: its own type where they wrote the newtype.
-    pub(super) fn at_newtype_base(
+    /// The key of the link a static named `method_name` on `key` belongs to:
+    /// `key` itself, unless it is a newtype inheriting the static.
+    pub(super) fn static_owner_key(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> ImplTargetKey {
+        self.newtype_static_target(key, method_name)
+            .map_or_else(|| key.clone(), |(owner, _)| owner)
+    }
+
+    /// The link of the newtype `head`'s chain that `owner` declares, and
+    /// `arg_types` as [`Self::at_inherited_base`] reads them there.
+    pub(super) fn at_owner_link(
         &self,
-        receiver: Option<TypeId>,
+        head: Option<TypeId>,
+        owner: &ImplTargetKey,
         arg_types: &[TypeId],
     ) -> (Option<TypeId>, Vec<TypeId>) {
-        let Some(ResolvedType::Newtype { def, base_type, .. }) =
-            receiver.map(|newtype| self.tysys.type_table.borrow().get(newtype).clone())
+        let table = self.tysys.type_table.borrow();
+        let Some((head, ResolvedType::Newtype { def, .. })) = head.map(|ty| (ty, table.get(ty)))
         else {
             return (None, arg_types.to_vec());
         };
-        let at_base = arg_types
-            .iter()
-            .map(|&arg| self.tysys.unwrap_newtype_in_type(arg, def))
-            .collect();
-        (Some(base_type), at_base)
+        let (def, link) = (*def, owner.decl());
+        let link_type = table.inherited_base(head, link);
+        drop(table);
+        let (at_link, _) = self.at_inherited_base(Some(def), link, arg_types, None);
+        (Some(link_type), at_link)
     }
 
     /// The arguments and the expected result of a static the newtype `newtype`

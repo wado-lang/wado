@@ -692,21 +692,10 @@ impl TypeSystem {
         self.substitute_in_type(type_id, &|t| (t == base_type).then_some(newtype))
     }
 
-    /// `type_id` with every instance of the newtype `def` replaced by the base
-    /// that instance wraps, so `Same<i32>` reads as `Wrap<i32>` whatever
-    /// arguments the newtype was resolved at elsewhere.
-    pub(crate) fn unwrap_newtype_in_type(&self, type_id: TypeId, def: DefId) -> TypeId {
-        self.substitute_in_type(type_id, &|t| match self.type_table.borrow().get(t) {
-            ResolvedType::Newtype {
-                def: of, base_type, ..
-            } if *of == def => Some(*base_type),
-            _ => None,
-        })
-    }
-
-    /// [`Self::unwrap_newtype_in_type`] down each instance's newtype chain to
-    /// the link `link` declares, or to the chain's end where `link` is `None`
-    /// or names no link of it.
+    /// `type_id` with every instance of the newtype `def` replaced by the link
+    /// of its chain that `link` declares, or by the chain's end where `link`
+    /// is `None` or names no link of it. Any instance: `Same<i32>` reads as
+    /// `Wrap<i32>` whatever arguments the newtype was resolved at elsewhere.
     pub(crate) fn represent_newtype_in_type(
         &self,
         type_id: TypeId,
