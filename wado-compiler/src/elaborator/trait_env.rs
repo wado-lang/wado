@@ -733,6 +733,13 @@ pub(super) struct InheritedBound {
     pub(super) via: Vec<ViaClause>,
 }
 
+impl InheritedBound {
+    /// The trait that wrote [`Self::bound`], reached from `root`.
+    pub(super) fn writer(&self, root: DefId) -> DefId {
+        self.via.last().map_or(root, |step| step.decl)
+    }
+}
+
 /// One step of an [`InheritedBound::via`] chain: the clause as its trait wrote
 /// it, and the trait it names.
 #[derive(Clone, Debug)]

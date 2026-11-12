@@ -12,7 +12,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, BoundsOf, FamilySite, ParamRef, ScopedBound};
+use super::scope::{BinderInScope, BoundSelf, BoundsOf, FamilySite, ParamRef, ScopedBound};
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -469,10 +469,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             // A parameter standing in for `Self` carries the frame's bounds, so
-            // `Self::Base` at `T: Constrained` asks what `T::Base` asks.
+            // `Self::Base` at `T: Constrained` asks what `T::Base` asks. The
+            // trait this frame is written in answers first: two of the
+            // parameter's bounds may each declare the name.
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
-                && let Some(owner) =
+                && let Some(owner) = declared.or_else(|| {
                     self.bound_declaring_assoc_type(BoundsOf::Type(self_type), &namespaced.name)
+                })
             {
                 return Some(AssocTarget::Projection {
                     base: self_type,
@@ -1189,15 +1192,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         via: &[ViaClause],
         subject: TypeId,
     ) -> ParamSpace {
-        let binding = self.tysys.base_self_binding(subject, Some(root));
-        self.with_self_binding(binding, |e| {
-            let mut space = e.param_space_of(root, args);
-            for step in via {
-                let args = e.resolve_in_space(&space, &step.bound.type_args);
-                space = e.param_space_of(step.decl, &args);
-            }
-            space
-        })
+        // Each step is written in the trait before it, and a parameter's
+        // default in its own trait, so each reads `Self::X` as that trait's `X`.
+        let mut writer = root;
+        let mut space = self.param_space_of_on(subject, root, args);
+        for step in via {
+            let binding = self.tysys.base_self_binding(subject, Some(writer));
+            let args = self.with_self_binding(binding, |e| {
+                e.resolve_in_space(&space, &step.bound.type_args)
+            });
+            space = self.param_space_of_on(subject, step.decl, &args);
+            writer = step.decl;
+        }
+        space
+    }
+
+    /// [`Self::param_space_of`] with `Self` the `subject` `decl` stands on.
+    fn param_space_of_on(&mut self, subject: TypeId, decl: DefId, args: &[TypeId]) -> ParamSpace {
+        let binding = self.tysys.base_self_binding(subject, Some(decl));
+        self.with_self_binding(binding, |e| e.param_space_of(decl, args))
     }
 
     /// `decl`'s declared parameters paired with what `args` answers for them.
@@ -1470,15 +1483,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         subject: TypeId,
     ) -> Vec<(DefId, ScopedBound, ParamSpace)> {
         let closure = self.tysys.trait_env.supertrait_closure(&decl).to_vec();
-        let self_binding = SelfBinding {
-            type_id: subject,
-            declaring_trait: Some(decl),
-        };
         closure
             .into_iter()
             .map(|inherited| {
                 let space = self.inherited_space(decl, args, &inherited.via, subject);
-                let clause = ScopedBound::new(inherited.bound, Some(self_binding));
+                let self_binding = BoundSelf::Bounded {
+                    writer: inherited.writer(decl),
+                }
+                .at(subject);
+                let clause = ScopedBound::new(inherited.bound, self_binding);
                 (inherited.decl, clause, space)
             })
             .collect()

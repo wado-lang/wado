@@ -2156,7 +2156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Vec<TypeId>> {
         let read_as = ScopedBound::new(
             candidate.bound.clone(),
-            candidate.written_self.at(self_type_id, candidate.decl),
+            candidate.written_self.at(self_type_id),
         );
         self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl)
     }
@@ -3209,12 +3209,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .param
                         .default
                         .as_ref()
-                        .map(|ty| (supplied.slot, ty.clone(), BoundSelf::Bounded)),
+                        .map(|ty| (supplied.slot, ty.clone(), BoundSelf::Bounded { writer: decl })),
                 })
                 .collect();
         for (slot, ty, scope) in written {
-            let resolved =
-                self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
+            let resolved = self.under_self_binding(scope.at(self_type_id), |s| s.resolve_type(&ty));
             slots.insert(
                 TypeParamId {
                     owner: decl,

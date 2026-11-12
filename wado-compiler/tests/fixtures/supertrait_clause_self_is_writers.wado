@@ -1,0 +1,50 @@
+// A supertrait clause is written in the trait that lists it, so its
+// `Self::Item` is that trait's `Item`: `Mid: Base<Self::Item>` reaches
+// `Base<i32>` here, though `Root`, which inherits the clause, binds an `Item`
+// of its own to `String`.
+trait Base<A> with () {
+    type Load;
+    fn load(&self) -> Self::Load;
+}
+
+trait Mid: Base<Self::Item> with () {
+    type Item;
+}
+
+trait Root: Mid with () {
+    type Item;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Base<i32> for Box {
+    type Load = i32;
+    fn load(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Base<String> for Box {
+    type Load = String;
+    fn load(&self) -> String {
+        return "s";
+    }
+}
+
+impl Mid for Box {
+    type Item = i32;
+}
+
+impl Root for Box {
+    type Item = String;
+}
+
+fn f<T: Root<Load = i32> + Mid<Item = i32>>(t: &T) -> i32 {
+    return Base::<i32>::load(t);
+}
+
+test "Mid's clause reads Mid's Item" {
+    assert f(&Box { v: 4 }) == 4;
+}
