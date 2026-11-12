@@ -1,0 +1,31 @@
+// A deferred owner is held to a fixed tuple its bound's equality spells:
+// `Box::Item` is `bool`, not `[i32, i32]`.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = bool;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+fn mk<T, H: Holder<Item = [i32, i32]>>(_t: T) -> H {
+    return H::empty();
+}
+
+test "a fixed tuple equality" {
+    let [_n, _b] = match builtin::black_box(true) {
+        true => [3, mk(1)],
+        false => [0, Box { v: 0 }],
+    };
+}
+
+__DATA__
+{"compile_error": ":25:21: analysis error: type 'Box' does not satisfy the associated type 'Holder::Item = [i32, i32]': it is 'bool'"}

@@ -1,0 +1,49 @@
+// An associated-type equality is held to a type naming the caller's own
+// parameter: `Box::Item` is `i32`, not `Option<T>`.
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for i32 {
+    fn make() -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Make> Make for Option<T> {
+    fn make() -> Option<T> {
+        return null;
+    }
+}
+
+trait Holder with () {
+    type Item;
+    fn hold(item: Self::Item) -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn hold(item: i32) -> Box {
+        return Box { v: item };
+    }
+}
+
+fn pair<T, H: Holder<Item = E>, E: Make>(_t: T) -> [H, E] {
+    return [H::hold(E::make()), E::make()];
+}
+
+fn mismatched<T: Make>() -> i32 {
+    let x: [Box, Option<T>] = pair(1);
+    return x.0.v;
+}
+
+test "the projection disagrees with a type over the caller's parameter" {
+    assert mismatched::<i32>() == 7;
+}
+
+__DATA__
+{"compile_error": ":40:31: analysis error: type 'Box' does not satisfy the associated type 'Holder::Item = Option<T>': it is 'i32'"}

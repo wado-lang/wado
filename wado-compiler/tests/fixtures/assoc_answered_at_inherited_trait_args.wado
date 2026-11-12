@@ -1,0 +1,44 @@
+// A bound inheriting a trait answers its associated type only at the arguments
+// it inherits the trait at: `Stacked` reaches `Base<i32>`, so `Base<i64>`'s
+// `Load` is the direct bound's `String`.
+trait Base<A> with () {
+    type Load;
+    fn load(&self) -> Self::Load;
+}
+
+trait Stacked: Base<i32> with () {
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Base<i32> for Box {
+    type Load = i32;
+    fn load(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Base<i64> for Box {
+    type Load = String;
+    fn load(&self) -> String {
+        return "s";
+    }
+}
+
+impl Stacked for Box {}
+
+fn pick<T: Stacked<Load = i32> + Base<i64, Load = String>>(t: &T) -> String {
+    return Base::<i64>::load(t);
+}
+
+fn pick_inherited<T: Stacked<Load = i32> + Base<i64, Load = String>>(t: &T) -> i32 {
+    return Base::<i32>::load(t);
+}
+
+test "each bound answers at its own arguments" {
+    let b = Box { v: 1 };
+    assert pick(&b) == "s";
+    assert pick_inherited(&b) == 1;
+}

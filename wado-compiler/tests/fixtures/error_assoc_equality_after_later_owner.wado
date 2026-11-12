@@ -1,0 +1,35 @@
+// A bound's associated-type equality holds of an owner a later arm settles:
+// `Box::Item` is `bool`, not the `i32` the bound requires.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = bool;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+fn mk<T, H: Holder<Item = i32>>(_t: T) -> H {
+    return H::empty();
+}
+
+fn fallback() -> [i32, Box] {
+    return [0, Box { v: 0 }];
+}
+
+test "the owner's projection disagrees with the bound" {
+    let [_n, _b] = match builtin::black_box(true) {
+        true => [3, mk(1)],
+        false => fallback(),
+    };
+}
+
+__DATA__
+{"compile_error": ":29:21: analysis error: type 'Box' does not satisfy the associated type 'Holder::Item = i32': it is 'bool'"}

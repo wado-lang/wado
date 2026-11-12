@@ -1,0 +1,45 @@
+// A later arm answers the slot an associated type binds before its owner, and
+// the owner's projection disagrees: `Box::Item` is `i32`, not `bool`.
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for bool {
+    fn make() -> bool {
+        return true;
+    }
+}
+
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn empty() -> Box {
+        return Box { v: 0 };
+    }
+}
+
+fn held<T, H: Holder<Item = E>, E: Make>(_t: T) -> [E, H] {
+    return [E::make(), H::empty()];
+}
+
+fn mismatched() -> [i32, [bool, Box]] {
+    return [0, [true, Box { v: 0 }]];
+}
+
+test "the arm disagrees with the projection" {
+    let [_n, _pair] = match builtin::black_box(true) {
+        true => [3, held(1)],
+        false => mismatched(),
+    };
+}
+
+__DATA__
+{"compile_error": ":39:21: analysis error: type 'Box' does not satisfy the associated type 'Holder::Item = bool': it is 'i32'"}

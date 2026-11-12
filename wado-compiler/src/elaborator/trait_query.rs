@@ -551,12 +551,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .collect();
-        // A default the impl leaves to its trait reads `Self` as the target:
-        // `Add<Rhs = Self>` at `impl Add for P` is `Add<P>`.
-        let target = SelfBinding {
-            type_id: self_type,
-            declaring_trait: Some(trait_decl),
-        };
         for (decl, bound, via) in clauses {
             let named = self
                 .tysys
@@ -565,9 +559,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolved in the space the clause was written in, which the chain
             // from this impl's own arguments reaches: `X::Item` under `X = Feed`
             // is what `impl Src for Feed` binds it to. A spelling carries none
-            // of that.
-            let space =
-                self.with_self_binding(target, |e| e.inherited_space(trait_decl, &arg_ids, &via));
+            // of that. A default the impl leaves to its trait reads `Self` as
+            // the target: `Add<Rhs = Self>` at `impl Add for P` is `Add<P>`.
+            let space = self.inherited_space(trait_decl, &arg_ids, &via, self_type);
             let pick = vec![true; bound.type_args.len()];
             let supertrait_trait = self.with_type_params_bound(&space, |e| {
                 e.trait_named_with_resolved_args(named, &bound, &pick)
@@ -2083,12 +2077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         candidate: &BoundCandidate,
     ) -> Vec<ProjectionAnswer> {
-        let read_as = ScopedBound::new(
-            candidate.bound.clone(),
-            candidate.written_self.at(self_type_id, candidate.decl),
-        );
-        let bound_args =
-            self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl);
+        let bound_args = self.candidate_trait_args(candidate, self_type_id);
         let mut answers = Vec::with_capacity(assoc_types.len());
         for (declaring, decl) in assoc_types {
             let at_bound = *declaring == candidate.decl;
@@ -2124,14 +2113,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The space `elaborated`'s written types are read in: empty for a bound the
     /// frame wrote itself, and for an inherited one the chain from what `bounds`
-    /// writes down to the trait that declared it.
-    fn bound_space(&mut self, bounds: &[ScopedBound], elaborated: &ElaboratedBound) -> ParamSpace {
+    /// writes down to the trait that declared it, `Self` being `subject`.
+    fn bound_space(
+        &mut self,
+        bounds: &[ScopedBound],
+        elaborated: &ElaboratedBound,
+        subject: TypeId,
+    ) -> ParamSpace {
         let own = elaborated.space.clone();
         let Some((root, via)) = elaborated.inherited.clone() else {
             return own;
         };
         let root_args = self.with_type_params_bound(&own, |e| e.trait_args_of_bound(bounds, root));
-        self.inherited_space(root, &root_args, &via)
+        self.inherited_space(root, &root_args, &via, subject)
     }
 
     /// [`Self::bound_slots`] read in the space the candidate's bound was written in.
@@ -2154,6 +2148,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// One bound per trait declaration. Several bounds on one trait are one
     /// method at several instantiations, which the call's arguments choose.
+    /// The arguments `candidate` reaches its trait at on `self_type_id`.
+    fn candidate_trait_args(
+        &mut self,
+        candidate: &BoundCandidate,
+        self_type_id: TypeId,
+    ) -> Option<Vec<TypeId>> {
+        let read_as = ScopedBound::new(
+            candidate.bound.clone(),
+            candidate.written_self.at(self_type_id, candidate.decl),
+        );
+        self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl)
+    }
+
+    /// The candidates reaching their trait at `wanted`, the arguments a
+    /// qualifier spells (`Base::<i64>::load`): another bound on the trait is
+    /// another instantiation, whatever else would select it.
+    fn reaching_at(
+        &mut self,
+        candidates: Vec<BoundCandidate>,
+        self_type_id: TypeId,
+        wanted: &[TypeId],
+    ) -> Vec<BoundCandidate> {
+        let mut reaching = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            // `Base<<T as Mid>::Item>` reaches `Base<i32>` where the frame
+            // binds `Mid<Item = i32>`.
+            let at = self
+                .candidate_trait_args(&candidate, self_type_id)
+                .map(|mut at| {
+                    self.answer_frame_projections_in(&mut at);
+                    at
+                });
+            let wanted = self.trait_args_at(candidate.decl, self_type_id, wanted);
+            if at.is_some() && at == wanted {
+                reaching.push(candidate);
+            }
+        }
+        reaching
+    }
+
     fn one_bound_per_trait(
         &mut self,
         candidates: Vec<BoundCandidate>,
@@ -2324,13 +2358,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // every reader below resolves in it rather than re-spelling.
         let mut candidates = Vec::with_capacity(kept.len());
         for (elaborated, decl) in kept {
-            let space = self.bound_space(bounds, &elaborated);
+            let space = self.bound_space(bounds, &elaborated, self_type_id);
             candidates.push(BoundCandidate {
                 bound: elaborated.bound,
                 space,
                 decl,
                 written_self: elaborated.self_type,
             });
+        }
+        if let Some(wanted) = required_trait.and_then(|w| w.args.as_deref()) {
+            candidates = self.reaching_at(candidates, self_type_id, wanted);
         }
         let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
         // Two traits declaring the method select neither.
@@ -2907,8 +2944,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the subject: `Make<Self::Base>` asks the subject's own
                     // `Base`, as its impl answers it.
                     let binding = self.tysys.base_self_binding(subject, Some(root));
-                    let space = self
-                        .with_self_binding(binding, |e| e.inherited_space(root, &root_args, &via));
+                    let space = self.inherited_space(root, &root_args, &via, subject);
                     self.with_type_params_bound(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
                             e.with_self_binding(binding, |e| {
@@ -3200,23 +3236,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_binding: Option<SelfBinding>,
         span: Span,
     ) {
+        if bound.assoc_types.is_empty() {
+            return;
+        }
+        let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
+            return;
+        };
+        // The bound's own arguments pick its impl: `Mix<String, Out = B>` is
+        // checked against `impl Mix<String>`, not whichever the trait's impls
+        // agree on, which is nothing when they differ.
+        let trait_args = self.bound_args_on(bound, trait_, type_arg, self_binding);
         for constraint in &bound.assoc_types {
-            // `Self` in a constraint means the receiver the call names — how
-            // `collect<C: FromIterator<Elem = Self::Item>>` says what `C`
-            // collects. With no receiver to bind it there is nothing to check
-            // here; `enforce_impl_assoc_type_bounds` owns those.
-            let mentions_self = constraint.ty.mentions("Self");
-            let binding = self_binding.filter(|_| mentions_self);
-            if binding.is_none() && mentions_self {
-                continue;
-            }
-            let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
-                continue;
-            };
-            // The bound's own arguments pick its impl: `Mix<String, Out = B>`
-            // is checked against `impl Mix<String>`, not whichever the trait's
-            // impls agree on, which is nothing when they differ.
-            let trait_args = self.bound_args_on(bound, trait_, type_arg, self_binding);
             let registered = self
                 .tysys
                 .type_table
@@ -3232,25 +3262,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            let expected = match binding {
-                // Every `Self::Assoc` it spells must project before the
-                // resolver runs, which reports what it cannot resolve: a bound
-                // nothing answers goes unchecked rather than reported.
-                Some(binding) if self.projects_off_self(&constraint.ty, binding) => {
-                    self.with_self_binding(binding, |e| e.resolve_type(&constraint.ty))
-                }
-                Some(_) => continue,
-                None => self.resolve_type(&constraint.ty),
+            let Some(expected) = self.equality_requirement(&constraint.ty, self_binding) else {
+                continue;
             };
-            let tt = self.tysys.type_table.borrow();
             // A reference is not its referent: `from_iter` pushes the items it
             // is handed.
-            if tt.contains_type_param(expected)
-                || tt.contains_type_param(actual)
-                || expected == actual
-            {
+            if expected == actual || !self.decides_equality(expected, actual) {
                 continue;
             }
+            let tt = self.tysys.type_table.borrow();
             let (type_name, expected_name, actual_name) =
                 (tt.name(type_arg), tt.name(expected), tt.name(actual));
             drop(tt);
@@ -3263,6 +3283,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// The type an associated-type equality `ty` requires, in this frame.
+    /// `Self` means the receiver the call names — how
+    /// `collect<C: FromIterator<Elem = Self::Item>>` says what `C` collects —
+    /// and a projection off the caller's parameter reads as the caller's bounds
+    /// say it is. `None` where `ty` spells a `Self` with no receiver to bind
+    /// it, which `enforce_impl_assoc_type_bounds` owns, or a `Self::Assoc` the
+    /// receiver does not project: the resolver reports what it cannot resolve,
+    /// so a bound nothing answers goes unchecked rather than reported.
+    pub(super) fn equality_requirement(
+        &mut self,
+        ty: &ast::Type,
+        self_binding: Option<SelfBinding>,
+    ) -> Option<TypeId> {
+        let required = if ty.mentions("Self") {
+            let binding = self_binding?;
+            if !self.projects_off_self(ty, binding) {
+                return None;
+            }
+            self.with_self_binding(binding, |e| e.resolve_type(ty))
+        } else {
+            self.resolve_type(ty)
+        };
+        Some(self.answer_frame_projections(required))
+    }
+
+    /// Whether two types differ exactly when their ids do: each names only
+    /// this frame's own parameters, which are rigid here, no projection, which
+    /// may still be answered as either side, and nothing undecided.
+    pub(super) fn decides_equality(&self, a: TypeId, b: TypeId) -> bool {
+        let scope = self.scope_type_param_ids();
+        let tt = self.tysys.type_table.borrow();
+        [a, b].iter().all(|&t| {
+            tt.type_params_all_in(t, &scope)
+                && !tt.contains_assoc_type_projection(t)
+                && !tt.contains_undecided(t)
+        })
     }
 
     /// The arguments `bound` reaches `trait_` on `type_arg` at, resolved in
@@ -3289,7 +3347,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn projects_off_self(&mut self, ty: &ast::Type, binding: SelfBinding) -> bool {
         match ty {
             ast::Type::NamespacedGeneric(ns) => {
-                (ns.namespace != "Self" || self.project_off_self(binding, &ns.name).is_some())
+                (ns.namespace != "Self" || self.self_declares(binding, &ns.name))
                     && self.all_project_off_self(&ns.args, binding)
             }
             ast::Type::Generic(generic) => {
@@ -3307,18 +3365,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         types.iter().all(|ty| self.projects_off_self(ty, binding))
     }
 
-    /// `Self::assoc` where `Self` is `binding`'s receiver. The trait that wrote
-    /// the constraint qualifies the lookup, and the unqualified rule answers
-    /// where it declared the name but a supertrait's impl registered it.
-    fn project_off_self(&mut self, binding: SelfBinding, assoc: &str) -> Option<TypeId> {
+    /// Whether `Self::assoc` names something where `Self` is `binding`'s
+    /// receiver. The trait that wrote the constraint qualifies the lookup, and
+    /// the unqualified rule answers where it declared the name but a
+    /// supertrait's impl registered it. A receiver that is this frame's
+    /// parameter declares it through its bounds.
+    fn self_declares(&mut self, binding: SelfBinding, assoc: &str) -> bool {
         let mut table = self.tysys.type_table.borrow_mut();
-        if let Some(trait_) = binding.declaring_trait
-            && let Some(resolved) =
-                table.resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, None, assoc)
-        {
-            return Some(resolved);
-        }
-        table.resolve_assoc_type_of_instance(binding.type_id, assoc)
+        let registered = binding.declaring_trait.is_some_and(|trait_| {
+            table
+                .resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, None, assoc)
+                .is_some()
+        }) || table
+            .resolve_assoc_type_of_instance(binding.type_id, assoc)
+            .is_some();
+        drop(table);
+        registered
+            || self
+                .bound_declaring_assoc_type(BoundsOf::Type(binding.type_id), assoc)
+                .is_some()
     }
 
     /// Whether `type_arg` satisfies `trait_name`, registering its associated

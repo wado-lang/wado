@@ -33,7 +33,7 @@ use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{DerivedAt, SelfBinding};
+use super::trait_query::DerivedAt;
 use super::type_resolution::ParamSpace;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
@@ -87,6 +87,42 @@ fn assoc_bound_target_param(ty: &Type, resolutions: &Resolutions) -> Option<Para
         _ => return None,
     };
     ParamRef::at_site(named.id, &named.name, resolutions)
+}
+
+/// The index in `names` of the slot `assoc` binds, where it binds one.
+pub(super) fn assoc_target_slot(
+    assoc: &ast::AssocTypeBound,
+    names: &[ParamRef],
+    resolutions: &Resolutions,
+) -> Option<usize> {
+    let target = assoc_bound_target_param(&assoc.ty, resolutions)?;
+    names.iter().position(|n| *n == target)
+}
+
+/// Each associated-type equality `bound` writes that binds one of `names`,
+/// with that slot's index.
+pub(super) fn bound_targets<'b>(
+    bound: &'b ast::TraitBound,
+    names: &[ParamRef],
+    resolutions: &Resolutions,
+) -> Vec<(&'b ast::AssocTypeBound, usize)> {
+    bound
+        .assoc_types
+        .iter()
+        .filter_map(|assoc| Some((assoc, assoc_target_slot(assoc, names, resolutions)?)))
+        .collect()
+}
+
+/// The slots `owner` declares for `params`, as a bound's target names them.
+pub(super) fn slot_names(owner: Option<DefId>, params: &[ast::GenericParam]) -> Vec<ParamRef> {
+    params
+        .iter()
+        .map(|param| ParamRef {
+            owner,
+            family_decl: None,
+            name: param.name.clone(),
+        })
+        .collect()
 }
 
 /// A callee's signature in its declaration's own frame, as a call site reads it.
@@ -1897,14 +1933,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ) else {
                     return TypeTable::ERROR;
                 };
+                let receiver_type = self.static_receiver_written(
+                    rewritten_receiver,
+                    receiver_site,
+                    prefix,
+                    call.span,
+                );
                 // Before the record, which then holds what stands in for a slot
                 // deferred.
                 self.defer_or_report_uninferred_static_method_type_args(
                     callee,
-                    &mut static_args.impl_args,
-                    &mut static_args.method_args,
+                    &mut static_args,
                     &args,
                     expected_type,
+                    Some(receiver_type),
                     call.span,
                 );
                 // Record `[impl_args, method_args]` — the same order
@@ -1917,12 +1959,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&static_args.method_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                let receiver_type = self.static_receiver_written(
-                    rewritten_receiver,
-                    receiver_site,
-                    prefix,
-                    call.span,
-                );
                 self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
                 let StaticTypeArgs {
                     impl_args: impl_type_args_inferred,
@@ -2224,10 +2260,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.defer_or_report_uninferred_static_method_type_args(
                         callee,
-                        &mut static_args.impl_args,
-                        &mut static_args.method_args,
+                        &mut static_args,
                         &args,
                         expected_type,
+                        ns_receiver_type,
                         call.span,
                     );
                     self.enforce_static_method_bounds(&static_args, ns_receiver_type, call.span);
@@ -2365,6 +2401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &mut param_types,
                         );
                     }
+                    self.answer_frame_projections_in(&mut param_types);
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
@@ -3641,14 +3678,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::defer_or_report_uninferred_fn_type_args`] does a free
     /// function's. A slot it reports is the error type from then on: left as
     /// the callee's own binder, it reads as whatever the caller declares under
-    /// that name.
+    /// that name. `receiver` is what `Self` means at the call.
     fn defer_or_report_uninferred_static_method_type_args(
         &mut self,
         callee: StaticCallee,
-        impl_type_args: &mut Vec<TypeId>,
-        method_type_args: &mut Vec<TypeId>,
+        type_args: &mut StaticTypeArgs,
         args: &[TypeId],
         expected_type: Option<TypeId>,
+        receiver: Option<TypeId>,
         span: token::Span,
     ) {
         let StaticCallee {
@@ -3656,6 +3693,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name: suffix,
             receiver_key,
         } = callee;
+        let StaticTypeArgs {
+            impl_args: impl_type_args,
+            method_args: method_type_args,
+            ..
+        } = type_args;
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
@@ -3746,7 +3788,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if !defers {
             let _ = self.emit(TypeError::CannotInferType { message, span });
+            return;
         }
+        let (names, owners) = self.sig_slots(&sig);
+        let split = sig.declaring_split();
+        let args: Vec<TypeId> = sig
+            .decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, &(_, id))| {
+                if i < split {
+                    impl_type_args[self.declared_slot(id) as usize]
+                } else {
+                    method_type_args[i - split]
+                }
+            })
+            .collect();
+        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
+        self.link_deferred_assoc_equalities(&owners, &names, &args, self_binding, span);
+    }
+
+    /// The slots `sig` declares, its block's and then its own, as a bound's
+    /// target names them, and the parameters that declare them.
+    fn sig_slots(&self, sig: &MethodSig) -> (Vec<ParamRef>, Vec<ast::GenericParam>) {
+        let names: Vec<ParamRef> = {
+            let table = self.tysys.type_table.borrow();
+            sig.decl
+                .type_params
+                .iter()
+                .map(|(name, slot)| ParamRef {
+                    owner: table.type_param_id(*slot).map(|id| id.owner),
+                    family_decl: None,
+                    name: name.clone(),
+                })
+                .collect()
+        };
+        let mut owners = self.declaring_params(&names[..sig.declaring_split()]);
+        owners.extend(sig.own_params.iter().cloned());
+        (names, owners)
     }
 
     /// Whether a slot nothing at the call site answers waits for a sink the
@@ -3985,6 +4065,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             new_args.push(stand_in);
         }
         *type_args = new_args;
+        let owners: Vec<ast::GenericParam> = space.iter().map(|&p| p.clone()).collect();
+        let names = slot_names(callee.def(), &owners);
+        self.link_deferred_assoc_equalities(&owners, &names, type_args, None, span);
     }
 
     /// Shared core of bound-driven inference, used by both the free-function and
@@ -4002,14 +4085,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if params.len() != args.len() {
             return;
         }
-        let names: Vec<ParamRef> = params
-            .iter()
-            .map(|param| ParamRef {
-                owner,
-                family_decl: None,
-                name: param.name.clone(),
-            })
-            .collect();
+        let names = slot_names(owner, params);
         self.resolve_assoc_bounds_in(params, 0, &names, args);
     }
 
@@ -4036,53 +4112,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 for bound in &param.bounds {
-                    let targets: Vec<(usize, &ast::AssocTypeBound)> = bound
-                        .assoc_types
-                        .iter()
-                        .filter_map(|assoc| {
-                            let target =
-                                assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)?;
-                            let target_idx = names.iter().position(|n| *n == target)?;
-                            self.tysys
-                                .is_unbound_type_param(args[target_idx])
-                                .then_some((target_idx, assoc))
-                        })
-                        .collect();
+                    let mut targets = bound_targets(bound, names, &self.tysys.resolutions);
+                    targets.retain(|&(_, i)| self.tysys.is_unbound_type_param(args[i]));
                     if targets.is_empty() {
                         continue;
                     }
-                    let trait_ = self.tysys.resolutions.bound_decl(bound);
+                    // A bound naming no trait was reported where it is written.
+                    let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
+                        continue;
+                    };
                     let BoundArgsAtCall::Read(trait_args) =
                         self.bound_args_at_call(bound, trait_, owner_ty, names, args)
                     else {
                         continue;
                     };
-                    for (target_idx, assoc) in targets {
-                        let resolved = if forwarded {
-                            trait_.map(|trait_| {
-                                self.forwarded_projection(
-                                    owner_ty,
-                                    trait_,
-                                    trait_args.clone(),
-                                    &assoc.name,
-                                )
-                            })
-                        } else {
-                            self.settled_projection(
-                                owner_ty,
-                                trait_,
-                                trait_args.as_deref(),
-                                &assoc.name,
-                            )
-                        };
+                    for (assoc, target_idx) in targets {
                         // A forwarded owner may answer with one of the
                         // caller's parameters, which still reads as open.
-                        // `[..F]` takes a tuple's elements; anything else
-                        // leaves the pack open, for the pin's check to refute.
-                        if let Some(resolved) = resolved
-                            && resolved != args[target_idx]
-                            && (!matches!(assoc.ty, Type::Tuple(_))
-                                || self.tysys.type_table.borrow().is_tuple(resolved))
+                        if let Some(resolved) = self.bound_projection(
+                            owner_ty,
+                            forwarded,
+                            trait_,
+                            trait_args.clone(),
+                            assoc,
+                        ) && resolved != args[target_idx]
                         {
                             args[target_idx] = resolved;
                             progressed = true;
@@ -4096,26 +4149,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// What `assoc`, an equality of a bound on `owner`, binds its target to:
+    /// the projection through the caller's own bounds where `owner` is a
+    /// parameter the caller forwards, else off its impl. A pack spread
+    /// (`[..F]`) takes a tuple's elements; anything else leaves the pack open,
+    /// for the pin's check to refute.
+    pub(super) fn bound_projection(
+        &mut self,
+        owner: TypeId,
+        forwarded: bool,
+        trait_: DefId,
+        trait_args: Option<Vec<TypeId>>,
+        assoc: &ast::AssocTypeBound,
+    ) -> Option<TypeId> {
+        let resolved = if forwarded {
+            self.forwarded_projection(owner, trait_, trait_args, &assoc.name)
+        } else {
+            self.settled_projection(owner, trait_, trait_args.as_deref(), &assoc.name)?
+        };
+        let spreads_pack = matches!(&assoc.ty, Type::Tuple(elements)
+            if elements.iter().any(|e| matches!(e, Type::TypePackSpread(_))));
+        (!spreads_pack || self.tysys.type_table.borrow().is_tuple(resolved)).then_some(resolved)
+    }
+
     /// `owner`'s `assoc` under `trait_` at `trait_args`, `owner` a type the
     /// call has settled.
     fn settled_projection(
         &mut self,
         owner: TypeId,
-        trait_: Option<DefId>,
+        trait_: DefId,
         trait_args: Option<&[TypeId]>,
         assoc: &str,
     ) -> Option<TypeId> {
-        let resolved = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            match trait_ {
-                Some(trait_) => tt.answer_projection(owner, &trait_, trait_args, assoc, &[]),
-                None => tt.resolve_assoc_type_of_instance(owner, assoc),
-            }
-        };
+        let resolved = self.tysys.type_table.borrow_mut().answer_projection(
+            owner,
+            &trait_,
+            trait_args,
+            assoc,
+            &[],
+        );
         // Reflection's associated types are registered by a synthesis phase
         // that runs after elaboration, so the registry is empty here; compute
         // the subject's.
-        resolved.or_else(|| self.concrete_reflect_assoc_type(owner, trait_?, assoc))
+        resolved.or_else(|| self.concrete_reflect_assoc_type(owner, trait_, assoc))
     }
 
     /// `owner`'s `assoc` under `trait_`, `owner` a parameter the caller
@@ -4147,14 +4223,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn bound_args_at_call(
         &mut self,
         bound: &ast::TraitBound,
-        trait_: Option<DefId>,
+        trait_: DefId,
         owner: TypeId,
         names: &[ParamRef],
         args: &[TypeId],
     ) -> BoundArgsAtCall {
-        let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
+        if bound.type_args.is_empty() {
             return BoundArgsAtCall::Read(None);
-        };
+        }
         let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
         let written = self.with_type_params_bound(&space, |e| e.written_bound_args(bound));
         if written
@@ -4453,10 +4529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: token::Span,
     ) {
-        let self_binding = receiver.map(|receiver| SelfBinding {
-            type_id: self.tysys.get_base_type(receiver),
-            declaring_trait: None,
-        });
+        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
         self.enforce_type_arg_bounds(
             &type_args.params,
             &type_args.method_args,
@@ -4656,20 +4729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`, or the
         // block's own `impl<T: Tr<Out = U>, U>`) is projected off the owner
         // the arguments did settle.
-        let names: Vec<ParamRef> = {
-            let table = self.tysys.type_table.borrow();
-            sig.decl
-                .type_params
-                .iter()
-                .map(|(name, slot)| ParamRef {
-                    owner: table.type_param_id(*slot).map(|id| id.owner),
-                    family_decl: None,
-                    name: name.clone(),
-                })
-                .collect()
-        };
-        let mut owners = self.declaring_params(&names[..split]);
-        owners.extend(sig.own_params.iter().cloned());
+        let (names, owners) = self.sig_slots(&sig);
         self.resolve_assoc_bounds_in(&owners, 0, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),

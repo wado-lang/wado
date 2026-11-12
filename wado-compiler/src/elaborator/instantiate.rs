@@ -11,6 +11,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::call::bound_targets;
 use super::coercion::ExpectedReturn;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
@@ -341,6 +342,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let bounds = self.declared_bounds(param, self_binding, impl_args);
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
+        }
+    }
+
+    /// Stand a variable in for each pack slot that a slot `solved` left open
+    /// pins through an associated-type equality
+    /// (`S: ReflectStruct<FieldTypes = [..F]>`). [`Self::instantiate`] leaves a
+    /// pack rigid, and only the owner's projection answers this one; it is
+    /// blamed with its owner.
+    pub(super) fn defer_pinned_packs(
+        &mut self,
+        inst: &Instantiated,
+        params: &[GenericParam],
+        names: &[ParamRef],
+        solved: &mut [TypeId],
+        self_binding: Option<SelfBinding>,
+        impl_args: &[(ParamRef, TypeId)],
+    ) {
+        for (i, param) in params.iter().enumerate() {
+            let Some((span, _, owner)) =
+                inst.diags[i].clone().filter(|_| solved[i] == inst.vars[i])
+            else {
+                continue;
+            };
+            let targets = param
+                .bounds
+                .iter()
+                .flat_map(|b| bound_targets(b, names, &self.tysys.resolutions));
+            for (_, j) in targets.collect::<Vec<_>>() {
+                let pack = &params[j];
+                if !pack.is_pack || solved[j] != inst.vars[j] {
+                    continue;
+                }
+                let var = self.mint_infer_var_named(&pack.name);
+                self.attach_infer_var_blame(var, span, pack.name.clone(), owner.clone());
+                let bounds = self.declared_bounds(pack, self_binding, impl_args);
+                self.attach_infer_var_bounds(var, pack.name.clone(), bounds, span);
+                solved[j] = var;
+            }
         }
     }
 

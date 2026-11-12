@@ -1,0 +1,38 @@
+// A pack a later-settled owner answers is held to its bound element by
+// element: `i32` is a `Make`, `String` is not, and the tuple is neither.
+struct Point {
+    x: i32,
+    y: String,
+}
+
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for i32 {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+fn made<T, S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Make>(_t: T) -> S {
+    return ReflectStruct::<S>::from_fields([for let f of ReflectStruct::<S>::members() { made_at(&f) }]);
+}
+
+fn made_at<S, F: Make>(_field: &StructField<S, F>) -> F {
+    return F::make();
+}
+
+fn fallback() -> [i32, Point] {
+    return [0, Point { x: 0, y: "" }];
+}
+
+test "the element that is not a Make" {
+    let [_n, _p] = match builtin::black_box(true) {
+        true => [3, made(1)],
+        false => fallback(),
+    };
+}
+
+__DATA__
+{"compile_error": ":32:21: analysis error: type 'String' does not implement trait 'Make' required by bound on 'F'"}

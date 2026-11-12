@@ -5,18 +5,21 @@
 //! one solves it; the module-end sweep substitutes it or errors.
 
 use crate::compiler_host::{CompilerHost, DiagnosticSpan};
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{InferVarId, ResolvedType, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::call::assoc_target_slot;
 use super::infer::unify;
 use super::scope::ParamRef;
 use super::trait_query::{SelfBinding, spelled_at};
+use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
-use crate::ast::{AstId, GenericParam};
+use crate::ast::{AssocTypeBound, AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
     BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
@@ -47,6 +50,27 @@ pub(crate) struct InferHoleTable {
     /// there, so an unsolved hole inside one reports nothing more. Recorded
     /// where a check reads the table, so behind a cell.
     mismatches: std::cell::RefCell<Vec<DiagnosticSpan>>,
+    /// The associated-type equalities of deferred owners, settled the moment
+    /// the owner is answered.
+    links: Vec<ProjectionLink>,
+}
+
+/// An associated-type equality of a bound on a slot the call deferred
+/// (`S: ReflectStruct<FieldTypes = [..F]>`, `H: Holder<Item = i32>`): once the
+/// owner is answered, its projection answers the right side, or is held to it.
+struct ProjectionLink {
+    owner: TypeId,
+    /// A pack's bound holds of each element of the tuple the pack answers.
+    each_element: bool,
+    /// The right side at the call: the slot it names, or the type it spells.
+    target: TypeId,
+    trait_: DefId,
+    /// The bound's own arguments as the call read them, `None` where it
+    /// writes none.
+    written: Option<Vec<TypeId>>,
+    assoc: AssocTypeBound,
+    trait_name: String,
+    span: Span,
 }
 
 impl InferHoleTable {
@@ -72,6 +96,9 @@ fn covers(outer: &DiagnosticSpan, inner: &Span) -> bool {
 pub(crate) struct DeclaredBound {
     pub(crate) trait_: FqTraitName,
     pub(crate) written: String,
+    /// A pack's bound (`..F: Make`), which binds each element of the tuple
+    /// the pack is answered with rather than the tuple.
+    pub(crate) each_element: bool,
 }
 
 /// What an unsolved variable reports.
@@ -183,6 +210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(DeclaredBound {
                     trait_: spelled_at(&trait_, &at_impl),
                     written: b.name,
+                    each_element: param.is_pack,
                 })
             })
             .collect()
@@ -421,11 +449,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the unifier's `or_insert` policy, and refuses an answer that is itself
     /// still a variable.
     pub(super) fn solve_infer_var(&mut self, var: TypeId, answer: TypeId) {
-        if !self.tysys.is_usable_answer(answer) {
-            return;
-        }
-        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
-            *slot = Some(answer);
+        if self.tysys.is_usable_answer(answer) {
+            self.answer_infer_var(var, answer);
         }
     }
 
@@ -433,10 +458,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// written `!` answers it, where an inferred one, a diverging arm's, says
     /// nothing.
     pub(super) fn solve_infer_var_as_written(&mut self, var: TypeId, written: TypeId) {
-        if written != TypeTable::NEVER {
+        if written == TypeTable::NEVER {
+            self.answer_infer_var(var, written);
+        } else {
             self.solve_infer_var(var, written);
-        } else if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
-            *slot = Some(written);
+        }
+    }
+
+    /// Record `answer` for `var` unless it has one, which every other answer
+    /// goes through: a target its owner's projection answers is answered
+    /// with it here, before anything reads the target.
+    fn answer_infer_var(&mut self, var: TypeId, answer: TypeId) {
+        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
+            *slot = Some(answer);
+            self.settle_projection_links();
         }
     }
 
@@ -455,9 +490,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return;
         }
-        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
-            *slot = Some(answer);
-        }
+        self.answer_infer_var(var, answer);
     }
 
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
@@ -495,9 +528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)));
         for (hole, answer) in taken {
             if self.tysys.is_usable_answer(answer) {
-                if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
-                    *slot = Some(answer);
-                }
+                self.answer_infer_var(hole, answer);
             } else if self.awaits_pending_call(answer) {
                 // The enclosing call answers its variable once its arguments
                 // are read, and the hole with it. A hole its own literals
@@ -640,6 +671,145 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_holes = InferHoleTable::default();
     }
 
+    /// Link each associated-type equality of a bound on a slot the call
+    /// deferred to a variable: the owner's answer settles the slot the right
+    /// side names, or is held to the type it spells. `owners` declare the slots
+    /// `names` and `args` list, in their order. `self_binding` is what `Self`
+    /// means at the call.
+    pub(super) fn link_deferred_assoc_equalities(
+        &mut self,
+        owners: &[GenericParam],
+        names: &[ParamRef],
+        args: &[TypeId],
+        self_binding: Option<SelfBinding>,
+        span: Span,
+    ) {
+        assert_eq!(names.len(), args.len(), "every slot is named");
+        assert_eq!(owners.len(), args.len(), "every slot is declared");
+        let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
+        for (param, &owner) in owners.iter().zip(args) {
+            let owner = self.apply_infer_holes(owner);
+            if !self.tysys.type_table.borrow().is_infer_var(owner) {
+                continue;
+            }
+            for bound in &param.bounds {
+                if bound.assoc_types.is_empty() {
+                    continue;
+                }
+                // A bound naming no trait was reported where it is written.
+                let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
+                    continue;
+                };
+                let written = (!bound.type_args.is_empty()).then(|| {
+                    self.with_type_params_bound(&space, |e| {
+                        e.under_self_binding(self_binding, |e| e.written_bound_args(bound))
+                    })
+                });
+                for assoc in &bound.assoc_types {
+                    let target = match assoc_target_slot(assoc, names, &self.tysys.resolutions) {
+                        Some(slot) => args[slot],
+                        None => match self.with_type_params_bound(&space, |e| {
+                            e.equality_requirement(&assoc.ty, self_binding)
+                        }) {
+                            Some(required) => required,
+                            None => continue,
+                        },
+                    };
+                    self.infer_holes.links.push(ProjectionLink {
+                        owner,
+                        each_element: param.is_pack,
+                        target,
+                        trait_,
+                        written: written.clone(),
+                        assoc: assoc.clone(),
+                        trait_name: bound.written_name(),
+                        span,
+                    });
+                }
+            }
+        }
+    }
+
+    /// Answer each linked target whose owner is answered, until no link
+    /// progresses: one target may be another link's owner.
+    fn settle_projection_links(&mut self) {
+        let mut pending = std::mem::take(&mut self.infer_holes.links);
+        loop {
+            let before = pending.len();
+            pending.retain(|link| !self.settle_projection_link(link));
+            if pending.len() == before {
+                break;
+            }
+        }
+        self.infer_holes.links.append(&mut pending);
+    }
+
+    /// Whether `link`'s owner is answered, the link then settled for it, or
+    /// for each element where the owner is a pack.
+    fn settle_projection_link(&mut self, link: &ProjectionLink) -> bool {
+        let owner = self.apply_infer_holes(link.owner);
+        if !self.tysys.is_usable_answer(owner) {
+            return false;
+        }
+        let written: Option<Vec<TypeId>> = link
+            .written
+            .as_ref()
+            .map(|written| written.iter().map(|&t| self.apply_infer_holes(t)).collect());
+        if written.as_ref().is_some_and(|written| {
+            let tt = self.tysys.type_table.borrow();
+            written.iter().any(|&t| tt.contains_undecided(t))
+        }) {
+            return false;
+        }
+        let subjects = if link.each_element {
+            self.tysys.pack_elements(owner)
+        } else {
+            vec![owner]
+        };
+        for subject in subjects {
+            self.settle_projection_of(link, subject, written.as_deref());
+        }
+        true
+    }
+
+    /// `link` at the answered `owner`: the target is answered by the owner's
+    /// projection or held to it. A projection that is not there, or not a
+    /// tuple a pack takes, leaves the target to its own report.
+    fn settle_projection_of(
+        &mut self,
+        link: &ProjectionLink,
+        owner: TypeId,
+        written: Option<&[TypeId]>,
+    ) {
+        let trait_args =
+            written.and_then(|written| self.trait_args_at(link.trait_, owner, written));
+        let forwarded = self.scope_type_param_ids().contains(&owner);
+        let Some(answer) =
+            self.bound_projection(owner, forwarded, link.trait_, trait_args, &link.assoc)
+        else {
+            return;
+        };
+        let target = self.apply_infer_holes(link.target);
+        if self.type_has_infer_hole(target) {
+            self.solve_infer_holes_against(target, answer);
+            return;
+        }
+        if target == answer || says_nothing(target) || !self.decides_equality(target, answer) {
+            return;
+        }
+        let tt = self.tysys.type_table.borrow();
+        let (type_name, expected, actual) = (tt.name(owner), tt.name(target), tt.name(answer));
+        drop(tt);
+        let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
+            type_name,
+            trait_name: link.trait_name.clone(),
+            assoc_name: link.assoc.name.clone(),
+            expected,
+            actual,
+            span: link.span,
+        });
+    }
+
     /// Verify each solved bounded hole satisfies its bound (the call-site check
     /// only saw the unconstrained hole), registering associated types on success
     /// or raising a clean trait-bound error on failure.
@@ -673,6 +843,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let bound = DeclaredBound {
                         trait_,
                         written: b.written.clone(),
+                        each_element: b.each_element,
                     };
                     (solution, param_name.clone(), bound, *span)
                 }))
@@ -682,13 +853,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         for (solution, param_name, bound, span) in checks {
-            self.enforce_single_bound_args(
-                solution,
-                &bound.written,
-                Some(&bound.trait_),
-                &param_name,
-                span,
-            );
+            let subjects = if bound.each_element {
+                self.tysys.pack_elements(solution)
+            } else {
+                vec![solution]
+            };
+            for subject in subjects {
+                self.enforce_single_bound_args(
+                    subject,
+                    &bound.written,
+                    Some(&bound.trait_),
+                    &param_name,
+                    span,
+                );
+            }
         }
     }
 
