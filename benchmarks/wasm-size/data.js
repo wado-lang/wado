@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794461597438,
+  "lastUpdate": 1794466687587,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76837,6 +76837,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6ed74ed17ef861c5aee551c569f146c7403eb2eb"
         },
         "date": 1794461596118,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c81baf925968fd6280ac7aaa6952eb6d9f850ea2",
+          "message": "Merge pull request #2612 from wado-lang/ccr-fcd51a39-e9jsrm\n\nfix(elaborator): an ambiguous-impl hint names the generic trait's arguments",
+          "timestamp": "2026-11-12T15:43:09+09:00",
+          "tree_id": "314103db808a77850d7851a508ac5280e8a6d4d5",
+          "url": "https://github.com/wado-lang/wado/commit/c81baf925968fd6280ac7aaa6952eb6d9f850ea2"
+        },
+        "date": 1794466687176,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
