@@ -1,6 +1,6 @@
-// A pack another parameter's associated type pins is not closed empty while
-// that parameter is unsettled at the call: an empty `F` would build a `Point`
-// from no fields. A later arm settles `S`, which never reaches `F`.
+// A pack another parameter's associated type pins is settled from that
+// parameter's projection once a later arm settles it: an empty `F` would build
+// a `Point` from no fields.
 struct Point {
     x: i32,
     y: i64,
@@ -41,6 +41,3 @@ test "the arm after the call settles the struct" {
     };
     assert n == 3 && p.x == 1 && p.y == 2;
 }
-
-__DATA__
-{"compile_error": ":39:21: analysis error: cannot infer type parameter `S`, `F` of function `made`"}

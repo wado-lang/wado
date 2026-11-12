@@ -1,0 +1,63 @@
+// A bound's equality over `Self` is answered through a generic receiver's
+// bound and through a static's receiver, whether the owner is settled at the
+// call or by a later arm.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+trait Maker with () {
+    type Item;
+    fn made<T, H: Holder<Item = Self::Item>>(&self, t: T) -> H;
+    fn made_static<T, H: Holder<Item = Self::Item>>(t: T) -> H;
+}
+
+struct M {
+    v: i32,
+}
+
+impl Maker for M {
+    type Item = i32;
+    fn made<T, H: Holder<Item = i32>>(&self, _t: T) -> H {
+        return H::empty();
+    }
+    fn made_static<T, H: Holder<Item = i32>>(_t: T) -> H {
+        return H::empty();
+    }
+}
+
+fn eager<K: Maker<Item = i32>>(k: &K) -> Box {
+    return k.made(1);
+}
+
+fn later<K: Maker<Item = i32>>(k: &K) -> [i32, Box] {
+    return match builtin::black_box(true) {
+        true => [3, k.made(1)],
+        false => [0, Box { v: 0 }],
+    };
+}
+
+test "through the receiver's bound" {
+    let m = M { v: 0 };
+    assert eager(&m).v == 3;
+    assert later(&m).1.v == 3;
+}
+
+test "through a static's receiver" {
+    let [_n, b] = match builtin::black_box(true) {
+        true => [3, M::made_static(1)],
+        false => [0, Box { v: 0 }],
+    };
+    assert b.v == 3;
+}

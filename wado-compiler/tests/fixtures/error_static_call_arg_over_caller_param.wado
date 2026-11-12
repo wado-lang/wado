@@ -1,0 +1,22 @@
+// A static call's argument is checked against a parameter type over the
+// caller's own parameter: `5` is not a `T`.
+struct W<T> {
+    v: T,
+}
+
+impl<T> W<T> {
+    fn make(v: T) -> W<T> {
+        return W::<T> { v };
+    }
+}
+
+fn f<T>(_x: T) -> W<T> {
+    return W::<T>::make(5);
+}
+
+test "a wrong argument" {
+    assert f("a").v == "a";
+}
+
+__DATA__
+{"compile_error": ":14:25: analysis error: type mismatch: expected 'T', found 'i32'"}

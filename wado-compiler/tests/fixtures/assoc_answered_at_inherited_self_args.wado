@@ -1,0 +1,46 @@
+// A supertrait clause reads `Self` as the bounded type, in the clause and in
+// each step of the chain reaching it: `Stacked` reaches `Base<T>` directly,
+// `Chained` through `Mid<T>`, so each answers `Base<T>::Load`.
+trait Base<A> with () {
+    type Load;
+    fn load(&self) -> Self::Load;
+}
+
+trait Stacked: Base<Self> with () {
+}
+
+trait Mid<X>: Base<X> with () {
+}
+
+trait Chained: Mid<Self> with () {
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Base<Box> for Box {
+    type Load = i32;
+    fn load(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Stacked for Box {}
+
+impl Mid<Box> for Box {}
+
+impl Chained for Box {}
+
+fn stacked<T: Stacked<Load = i32>>(t: &T) -> i32 {
+    return Base::<T>::load(t);
+}
+
+fn chained<T: Chained<Load = i32>>(t: &T) -> i32 {
+    return Base::<T>::load(t);
+}
+
+test "an inherited clause over Self" {
+    assert stacked(&Box { v: 7 }) == 7;
+    assert chained(&Box { v: 8 }) == 8;
+}

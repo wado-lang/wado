@@ -163,7 +163,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `base::assoc_name` mean `<base as ThatTrait>::assoc_name`.
     /// Resolution needs the qualifier: one type may implement two traits that
     /// declare the same associated-type name.
-    fn bound_declaring_assoc_type(&self, of: BoundsOf, assoc_name: &str) -> Option<DefId> {
+    pub(super) fn bound_declaring_assoc_type(
+        &self,
+        of: BoundsOf,
+        assoc_name: &str,
+    ) -> Option<DefId> {
         let bounds = self.frame_bounds(of);
         self.tysys.trait_env.bound_declaring_assoc_type(
             &bounds,
@@ -1164,18 +1168,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let written = e.bound_args_where_written(&bound, &ParamSpace::new());
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
-                    let closure = e.tysys.trait_env.supertrait_closure(&decl).to_vec();
                     out.push((bound, at_decl));
-                    for inherited in closure {
-                        let space = e.inherited_space(decl, &args, &inherited.via);
-                        // An inherited clause is written in `decl`'s own space,
-                        // where `Self` is the bounded type — `binder` here.
-                        let self_binding = SelfBinding {
-                            type_id: binder,
-                            declaring_trait: Some(decl),
-                        };
-                        out.push((ScopedBound::new(inherited.bound, Some(self_binding)), space));
-                    }
+                    let inherited = e.inherited_clauses(decl, &args, binder);
+                    out.extend(
+                        inherited
+                            .into_iter()
+                            .map(|(_, clause, space)| (clause, space)),
+                    );
                 }
                 Some(out)
             },
@@ -1183,7 +1182,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The space an inherited clause's own bound is written in, reached from
-    /// `root`'s parameters standing at `args`.
+    /// `root`'s parameters standing at `args`, `Self` being `subject`.
     ///
     /// Walking the chain is what carries a site's arguments down to the trait
     /// that declared the clause: each step is written in the one before it, so
@@ -1194,13 +1193,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         root: DefId,
         args: &[TypeId],
         via: &[ViaClause],
+        subject: TypeId,
     ) -> ParamSpace {
-        let mut space = self.param_space_of(root, args);
-        for step in via {
-            let args = self.resolve_in_space(&space, &step.bound.type_args);
-            space = self.param_space_of(step.decl, &args);
-        }
-        space
+        let binding = self.tysys.base_self_binding(subject, Some(root));
+        self.with_self_binding(binding, |e| {
+            let mut space = e.param_space_of(root, args);
+            for step in via {
+                let args = e.resolve_in_space(&space, &step.bound.type_args);
+                space = e.param_space_of(step.decl, &args);
+            }
+            space
+        })
     }
 
     /// `decl`'s declared parameters paired with what `args` answers for them.
@@ -1439,6 +1442,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.trait_args_at(owner, base, &written)
     }
 
+    /// Each argument list `bound`, on `decl`, reaches its supertrait `trait_`
+    /// at on `base`: `T: Stacked` with `trait Stacked: Base<i32>` reaches
+    /// `Base<i32>`, one list per path the closure inherits it by.
+    fn inherited_trait_args(
+        &mut self,
+        base: TypeId,
+        bound: &ScopedBound,
+        space: &ParamSpace,
+        decl: DefId,
+        trait_: DefId,
+    ) -> Vec<Vec<TypeId>> {
+        let Some(args) = self.bound_trait_args(base, bound, space, decl) else {
+            return Vec::new();
+        };
+        self.inherited_clauses(decl, &args, base)
+            .into_iter()
+            .filter(|(inherited, _, _)| *inherited == trait_)
+            .filter_map(|(_, clause, space)| {
+                let written = self.bound_args_where_written(&clause, &space);
+                self.trait_args_at(trait_, base, &written)
+            })
+            .collect()
+    }
+
+    /// Each clause `decl` inherits, with the trait it names and the space it
+    /// is written in, `decl` reached at `args` on `subject`. A clause is
+    /// written in its declaring trait, where `Self` is `subject`.
+    fn inherited_clauses(
+        &mut self,
+        decl: DefId,
+        args: &[TypeId],
+        subject: TypeId,
+    ) -> Vec<(DefId, ScopedBound, ParamSpace)> {
+        let closure = self.tysys.trait_env.supertrait_closure(&decl).to_vec();
+        let self_binding = SelfBinding {
+            type_id: subject,
+            declaring_trait: Some(decl),
+        };
+        closure
+            .into_iter()
+            .map(|inherited| {
+                let space = self.inherited_space(decl, args, &inherited.via, subject);
+                let clause = ScopedBound::new(inherited.bound, Some(self_binding));
+                (inherited.decl, clause, space)
+            })
+            .collect()
+    }
+
     /// The trait arguments `bound` writes, resolved in this frame.
     pub(super) fn written_bound_args(&mut self, bound: &ast::TraitBound) -> Vec<TypeId> {
         bound
@@ -1538,11 +1589,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(binding) = bound.assoc_types.iter().find(|b| b.name == assoc).cloned() else {
                 continue;
             };
-            if let Some(wanted) = trait_args
-                && !inherits
-            {
-                let at = self.bound_trait_args(base, &bound, &space, trait_);
-                if at.as_deref() != Some(wanted) {
+            if let Some(wanted) = trait_args {
+                let reached = if inherits {
+                    self.inherited_trait_args(base, &bound, &space, decl, trait_)
+                } else {
+                    self.bound_trait_args(base, &bound, &space, trait_)
+                        .into_iter()
+                        .collect()
+                };
+                if !reached.iter().any(|at| at.as_slice() == wanted) {
                     continue;
                 }
             }
@@ -1550,6 +1605,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (resolved != TypeTable::UNKNOWN).then_some(resolved);
         }
         None
+    }
+
+    /// A callee's parameter types as this frame's bounds answer them, before an
+    /// argument is typed against one: `S::Item` under `S: Holder<Item = i64>`
+    /// types the literal `5` as `i64`.
+    pub(super) fn answer_frame_projections_in(&mut self, tys: &mut [TypeId]) {
+        for ty in tys {
+            *ty = self.answer_frame_projections(*ty);
+        }
     }
 
     /// `ty` with each projection over this frame's parameters answered by its

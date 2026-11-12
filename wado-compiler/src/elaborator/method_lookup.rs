@@ -29,7 +29,7 @@ use crate::type_table::{TargetBinding, TypeTable};
 use super::Elaborator;
 use super::call::{
     DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
-    slot_type_bindings, turbofish_leaves_slot,
+    slot_names, slot_type_bindings, turbofish_leaves_slot,
 };
 use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::{InferCtx, infer_var_answers, unify};
@@ -1901,7 +1901,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A pack left answering for itself is unanswered, whatever a caller's
         // pack of the same name interns to. One spread over the caller's own
-        // (`[..Bs]`) is the caller forwarding it, settled as the caller's.
+        // (`[..Bs]`) is the caller forwarding it, settled as the caller's. One
+        // deferred to a variable reports itself if nothing answers it.
         let scope = self.scope_type_param_ids();
         let table = self.tysys.type_table.borrow();
         let in_scope = |t: TypeId| scope.contains(&t);
@@ -1909,7 +1910,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(|&(_, slot, arg)| {
                 arg == slot
-                    || (self.tysys.is_unbound_type_param(arg) && !in_scope(arg))
+                    || (self.tysys.is_unbound_type_param(arg)
+                        && !in_scope(arg)
+                        && !self.awaits_report(&table, arg))
                     || table.any_type_pack(arg, &|pack| !in_scope(pack))
             })
             .map(|(p, _, _)| p.name.clone())
@@ -2004,6 +2007,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_decl,
             declaring_module,
             inst,
+            impl_args,
+            span,
             ..
         } = input;
 
@@ -2067,12 +2072,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *answer = inst.vars[i];
             }
         }
+        let names = slot_names(owner, &method_type_params);
+        let self_binding = self.tysys.base_self_binding(receiver_type, trait_decl);
+        self.defer_pinned_packs(
+            inst,
+            &method_type_params,
+            &names,
+            &mut inferred,
+            Some(self_binding),
+            impl_args,
+        );
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
         // module-end sweep, so nothing needs classifying here: what an
         // enclosing generic happens to be named cannot be confused with it.
         self.record_instantiation(inst, &inferred);
         self.blame_unsolved(inst, &inferred);
+        self.link_deferred_assoc_equalities(
+            &method_type_params,
+            &names,
+            &inferred,
+            Some(self_binding),
+            span,
+        );
         inferred
     }
 

@@ -1,0 +1,41 @@
+// An equality over a family applied to `Self` (`Self::Item<i32>`) through a
+// generic receiver is read at its arguments.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+trait Maker with () {
+    type Item<T>;
+    fn made<T, H: Holder<Item = Self::Item<i32>>>(&self, t: T) -> H;
+}
+
+struct M {
+    v: i32,
+}
+
+impl Maker for M {
+    type Item<T> = T;
+    fn made<T, H: Holder<Item = i32>>(&self, _t: T) -> H {
+        return H::empty();
+    }
+}
+
+fn eager<K: Maker>(k: &K) -> Box {
+    return k.made(1);
+}
+
+test "a family application over Self" {
+    assert eager(&M { v: 0 }).v == 3;
+}
