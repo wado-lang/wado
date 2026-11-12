@@ -2819,14 +2819,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let return_type = self.substitute_ctx_in_frame(&subst, return_type);
 
-        // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
-        // as a Wasm validation failure.
-        //
         // The arguments were resolved before the blanket was found, so a
         // literal among them takes its parameter's type only now.
         let mut args = args.to_vec();
         self.recoerce_literal_args(raw_args, &mut args, &param_types);
         let args = &args[..];
+        // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
+        // as a Wasm validation failure.
         if !self.check_static_call_args(
             &param_types,
             args,
