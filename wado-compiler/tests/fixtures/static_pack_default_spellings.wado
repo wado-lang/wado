@@ -1,0 +1,31 @@
+// A static's pack default (`[..P::default()]`) expands to the pack the call
+// settled, whichever spelling reaches the static.
+use lib from "./sub/static_pack_default_spellings_lib.wado";
+use { Made, Kept } from "./sub/static_pack_default_spellings_lib.wado";
+
+trait Inherited with () {
+    fn made<..P: Default>(p: [..P] = [..P::default()]) -> [..P] {
+        return p;
+    }
+}
+
+struct Bare {}
+
+impl Inherited for Bare {}
+
+fn through<T: Made>() -> [i32, bool] {
+    return T::made::<[i32, bool]>();
+}
+
+test "a trait default the impl does not restate" {
+    assert Bare::made::<[i32, bool]>() == [0, false];
+}
+
+test "through a bound" {
+    assert through::<Kept>() == [0, false];
+}
+
+test "through a namespace" {
+    assert lib::Kept::made::<[i32, bool]>() == [0, false];
+    assert lib::Own::made::<[i32, bool]>() == [0, false];
+}

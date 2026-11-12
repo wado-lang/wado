@@ -1,0 +1,18 @@
+// A static a type inherits as its trait's default reports a type parameter
+// nothing settles, as any static does: here nothing pins `U`.
+trait Made with () {
+    fn mk<U: Default>() -> U {
+        return U::default();
+    }
+}
+
+struct Foo {}
+
+impl Made for Foo {}
+
+test {
+    let _x = Foo::mk();
+}
+
+__DATA__
+{"test": {}, "compile_error": "14:14: cannot infer type parameter `U` of `Foo::mk`"}

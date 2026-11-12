@@ -2140,6 +2140,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_sites: Vec<ArgSite> = static_call.args.iter().map(ArgSite::written).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
+        // The declaring block's type parameters, as the receiver settles them.
+        let declaring_args = self
+            .tysys
+            .receiver_args_at_impl(Some(target_type_id), &[], declaring_impl)
+            .unwrap_or_default();
+        let impl_bindings = declaring_impl
+            .map(|id| {
+                let table = &self.tysys.type_table;
+                slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
+            })
+            .unwrap_or_default();
         let declaring_trait = callee_sig
             .as_ref()
             .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
@@ -2165,10 +2176,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(receiver) = struct_name_for_lookup.clone()
         {
             let own_ids = sig.own_type_param_ids();
-            let declaring_args = self
-                .tysys
-                .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
-                .unwrap_or_default();
             let declaring = sig
                 .declaring_impl
                 .map(|id| self.tysys.signatures.impl_sig(id));
@@ -2183,32 +2190,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let declared_return = self.answer_frame_projections(declared_return);
             // A bound on the method may name the block's parameters, which
             // the receiver settles.
-            let impl_bindings = sig
-                .declaring_impl
-                .map(|id| {
-                    let table = &self.tysys.type_table;
-                    slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
-                })
-                .unwrap_or_default();
             let impl_args = settled_impl_args(&impl_bindings);
             let qualified = format!("{receiver}::{}", static_call.method);
-            let self_binding = SelfBinding {
-                type_id: target_type_id,
-                declaring_trait,
-            };
-            let inst = self.instantiate(
-                &own_ids,
-                &Instantiation {
-                    kind: InstanceKind::Method,
-                    name: &qualified,
-                    span: static_call.span,
-                    type_args: &method_type_args,
-                    self_binding: Some(self_binding),
-                    impl_args: &impl_args,
-                },
-            );
-            (method_type_args, _) = self.bind_method_type_args(
+            (method_type_args, _) = self.bind_static_type_args(
                 method_type_args,
+                &qualified,
                 MethodInferenceInput {
                     receiver_type: target_type_id,
                     method_name: &static_call.method,
@@ -2222,7 +2208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl: declaring_trait,
                     declaring_module: Some(sig.defaults_module.clone()),
                     impl_args: &impl_args,
-                    inst: Some(&inst),
+                    inst: None,
                     span: static_call.span,
                 },
             );
@@ -2244,16 +2230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The declaring block's type parameters stand for the receiver's type
         // arguments, so a default naming one (`v: T = T::default()`) resolves
         // against what `Type::<i32>::method()` spelled.
-        let mut static_type_bindings = declaring_impl
-            .map(|id| {
-                let args = self
-                    .tysys
-                    .receiver_args_at_impl(Some(target_type_id), &[], Some(id))
-                    .unwrap_or_default();
-                let table = &self.tysys.type_table;
-                slot_type_bindings(table, table.borrow().impl_target_args(id), &args)
-            })
-            .unwrap_or_default();
+        let mut static_type_bindings = impl_bindings;
         // The static's own slots, as the turbofish spelled them, as the block
         // above solved them, or as their own type defaults settle them. That
         // last source is the one the block above cannot reach: it runs only
@@ -2676,10 +2653,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(TypeTable::ERROR);
         }
         let trait_decl = trait_name.canonical();
-        let self_binding = SelfBinding {
-            type_id: receiver_type_id,
-            declaring_trait: trait_decl,
-        };
         // A bound on the method may name the blanket's parameter, which the
         // receiver settles.
         let impl_args = settled_impl_args(&slot_type_bindings(
@@ -2691,21 +2664,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "{}::{method}",
             self.tysys.type_table.borrow().name(receiver_type_id)
         );
-        let inst = (!slots.is_empty()).then(|| {
-            self.instantiate(
-                &slots,
-                &Instantiation {
-                    kind: InstanceKind::Method,
-                    name: &qualified,
-                    span,
-                    type_args: &written,
-                    self_binding: Some(self_binding),
-                    impl_args: &impl_args,
-                },
-            )
-        });
-        let (method_type_args, subst) = self.bind_method_type_args(
+        let (method_type_args, subst) = self.bind_static_type_args(
             written,
+            &qualified,
             MethodInferenceInput {
                 receiver_type: receiver_type_id,
                 method_name: method,
@@ -2719,7 +2680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl,
                 declaring_module: Some(blanket_module.clone()),
                 impl_args: &impl_args,
-                inst: inst.as_ref(),
+                inst: None,
                 span,
             },
         );
@@ -3769,7 +3730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let callee_sig = declaration
             .and_then(|def| self.tysys.signatures.method_sig(def).cloned())
             .or_else(|| {
-                self.static_call_sig(
+                self.static_call_sig_or_inherited(
                     &actual_struct_name,
                     method_name,
                     receiver_key.as_ref(),

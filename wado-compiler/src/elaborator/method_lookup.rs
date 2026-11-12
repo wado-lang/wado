@@ -1983,6 +1983,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// [`Self::bind_method_type_args`] for a static whose arguments resolved
+    /// before its own slots were instantiated: they are instantiated here, so
+    /// an unsolved one is blamed on `name`.
+    pub(super) fn bind_static_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        name: &str,
+        input: MethodInferenceInput<'_>,
+    ) -> (Vec<TypeId>, SubstitutionContext) {
+        assert!(
+            input.inst.is_none(),
+            "the static's own slots are instantiated here"
+        );
+        let inst = (!input.slots.is_empty()).then(|| {
+            self.instantiate(
+                input.slots,
+                &Instantiation {
+                    kind: InstanceKind::Method,
+                    name,
+                    span: input.span,
+                    type_args: &explicit,
+                    self_binding: Some(SelfBinding {
+                        type_id: input.receiver_type,
+                        declaring_trait: input.trait_decl,
+                    }),
+                    impl_args: input.impl_args,
+                },
+            )
+        });
+        self.bind_method_type_args(
+            explicit,
+            MethodInferenceInput {
+                inst: inst.as_ref(),
+                ..input
+            },
+        )
+    }
+
     fn bind_method_type_args_in_impl_frame(
         &mut self,
         explicit: Vec<TypeId>,
