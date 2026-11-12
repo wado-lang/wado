@@ -72,9 +72,14 @@ generic or not. With `fn make<U: Default>() -> Wrap<U>` on `Wrap<T>`,
 `Wi::make::<i32>()` returns `Wi` (`type Wi = Wrap<i32>`), while
 `Wi::make::<bool>()` returns `Wrap<bool>`, which is not the receiver's base.
 
-Two consequences follow from solving at the base. An expected newtype settles
-the method's parameters as its base would: `let w: Wi = Wi::make();` solves
-`U` as `i32`. An argument of the newtype settles them the same way.
+Three consequences follow from solving at the base. An expected type of the
+receiver's newtype settles the method's parameters as its base would:
+`let w: Wi = Wi::make();` solves `U` as `i32`. An argument of that type settles
+them the same way. And an argument of the base that settles a parameter to the
+base is then a mismatch, as any argument of the base is where the substituted
+signature expects the newtype: with `fn merge<U>(&self, other: Wrap<U>)`, a `Wi`
+receiver takes `a.merge(a)` and `a.merge({ v: 3 })`, and refuses
+`a.merge(Wrap { v: 3 })`.
 
 Substituting through `Self` alone was the alternative. It needs no timing
 rule, but a method that names its own type where `Self` would do returns the
@@ -281,6 +286,15 @@ Newtypes support the full feature set today:
 - Generic newtypes (`type MyArray<T> = List<T>`)
 - Newtypes over the raw GC `Array<T>` inherit `Index` traits and associated functions (`ByteArray`)
 - `for-of` inherits `IntoIterator`, both by value (`Item = T`) and by reference (`Item = &T`)
+
+## Known Gaps
+
+- On a chain of newtypes, which links the substitution replaces is not
+  settled, and the spellings disagree. With `type Wi = Wrap<i32>` and
+  `type Outer = Wi`, a static replaces every link of the receiver's chain, so
+  `Outer::back(i)` with `i: Wi` and `fn back<U>(w: U) -> U` returns `Outer`
+  and refuses its own argument. An instance call replaces only the base the
+  method was declared on, so `o.merge(i)` returns `Wi`.
 
 ## See Also
 

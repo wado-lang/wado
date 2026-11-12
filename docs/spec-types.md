@@ -760,9 +760,10 @@ type where the substituted signature expects the newtype is a type mismatch:
 
 The substitution reads the signature as the call settles it. The method's own
 type parameters are solved first, at the base: a turbofish, the arguments and
-the expected type settle them, an argument or an expected type of the newtype
-read as its base. Then each occurrence of the receiver's base becomes the
-newtype, including one that only the solve made the base:
+the expected type settle them, an argument or an expected type of the
+receiver's type read as its base. Then each occurrence of the receiver's base
+becomes the newtype, including one that only the solve made the base, and a
+literal argument builds the newtype its parameter became:
 
 <!-- {"fixture":"newtype_substitution_after_solve.wado"} -->
 

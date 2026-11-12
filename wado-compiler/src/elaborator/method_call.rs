@@ -1,5 +1,6 @@
 //! Method call and static method call resolution.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use super::trait_env::{ImplTargetKey, written_arg_nodes};
@@ -165,6 +166,19 @@ impl InheritedFrame {
     fn to_newtype_in(self, tysys: &TypeSystem, types: &mut [TypeId]) {
         for ty in types {
             *ty = self.to_newtype(tysys, *ty);
+        }
+    }
+
+    /// `types` as a solve of the method's own slots reads them: at the base
+    /// where the method is inherited, else as they are.
+    fn solved_at<'t>(
+        frame: Option<Self>,
+        tysys: &TypeSystem,
+        types: &'t [TypeId],
+    ) -> Cow<'t, [TypeId]> {
+        match frame {
+            Some(frame) => types.iter().map(|&t| frame.to_base(tysys, t)).collect(),
+            None => Cow::Borrowed(types),
         }
     }
 }
@@ -888,8 +902,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 let mut infer =
                     InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
+                let solve_params =
+                    InheritedFrame::solved_at(inherited, &self.tysys, &expected_param_types);
+                let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
                 for (i, (&param_type, &arg)) in
-                    expected_param_types.iter().zip(args.iter()).enumerate()
+                    solve_params.iter().zip(solve_args.iter()).enumerate()
                 {
                     if answers_last(args_ast.get(i)) {
                         infer.add_deferred(param_type, arg);
@@ -982,12 +999,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys.type_table,
         );
 
-        let at_base = |e: &Self, types: &[TypeId]| -> Vec<TypeId> {
-            types
-                .iter()
-                .map(|&t| inherited.map_or(t, |f| f.to_base(&e.tysys, t)))
-                .collect()
-        };
+        let solve_params = InheritedFrame::solved_at(inherited, &self.tysys, &expected_param_types);
+        let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
@@ -995,8 +1008,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 slots: &method_type_param_ids,
                 own_params: &method_own_params,
-                param_types: &at_base(self, &expected_param_types),
-                args: &at_base(self, &args),
+                param_types: &solve_params,
+                args: &solve_args,
                 raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_at_base,

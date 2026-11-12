@@ -2934,6 +2934,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(sig) = self.derived_method_signature(&key, suffix) {
                 return Some(sig);
             }
+            // A newtype inheriting the static: its arguments resolve against
+            // the base's parameters, and are held to the newtype once the call
+            // retypes them.
+            if let Some((base_key, _)) = self.newtype_base_target(&key)
+                && let Some(sig) = self.unique_qualified_method_sig_keyed(&base_key, suffix)
+            {
+                return Some(CalleeSignature::of_method(&sig));
+            }
 
             // Builtin functions resolve through the `core:builtin` module,
             // slots and all: a generic builtin takes its type parameter from

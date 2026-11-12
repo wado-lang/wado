@@ -31,6 +31,18 @@ impl<T> Wrap<T> {
     fn merge<U>(&self, other: Wrap<U>) -> Wrap<U> {
         return other;
     }
+
+    fn pick<U: Default + Eq>(&self, other: Wrap<U>, fallback: U = U::default()) -> U {
+        return if other.v == fallback { fallback } else { other.v };
+    }
+
+    fn back<U>(w: Wrap<U>) -> Wrap<U> {
+        return w;
+    }
+
+    fn take(w: Wrap<T>) -> T {
+        return w.v;
+    }
 }
 
 type Wl<T> = Wrap<List<T>>;
@@ -74,6 +86,16 @@ test "instance, settled by an argument" {
     let w: Wi = a.merge(a);
     assert w.v == 7;
     assert takes_wi(a.merge(a)) == 7;
+    assert a.pick(a) == 7;
+}
+
+test "a literal argument builds the newtype the solve settles" {
+    let a: Wi = { v: 7 };
+    assert takes_wi(a.merge({ v: 3 })) == 3;
+    let w: Wi = a.merge({ v: 4 });
+    assert w.v == 4;
+    assert takes_wi(Wi::back({ v: 5 })) == 5;
+    assert Wi::take({ v: 6 }) == 6;
 }
 
 test "static, another instance of the base stays the base" {
