@@ -788,6 +788,11 @@ test {
 }
 ```
 
+On a chain of newtypes, the base is the link the method is declared on, and no
+other link is replaced. With `type Outer = Wi`, a method declared on `Wrap<T>`
+reads `Wrap<i32>` as `Outer`, and one declared on `Wi` reads `Wi` as `Outer`. A
+`Wi` an argument brings in stays a `Wi`.
+
 ### Inherited Associated Functions and Traits
 
 A newtype inherits its base type's associated functions too. A function whose

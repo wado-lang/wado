@@ -747,6 +747,60 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some((base_key, base_name))
     }
 
+    /// [`Self::newtype_base_target`] one link down a chain of newtypes: a
+    /// newtype over another newtype reaches that one first, whose own impls
+    /// answer before its base's.
+    pub(super) fn newtype_link_target(
+        &mut self,
+        key: &trait_env::ImplTargetKey,
+    ) -> Option<(trait_env::ImplTargetKey, String)> {
+        let trait_env::ImplTargetKey::Decl(def) = key else {
+            return None;
+        };
+        let newtype = self.newtype_self_type(*def)?;
+        let link = {
+            let table = self.tysys.type_table.borrow();
+            match table.get(newtype) {
+                tir::ResolvedType::Newtype { base_type, .. } => match table.get(*base_type) {
+                    tir::ResolvedType::Newtype { def, .. } => {
+                        Some((*base_type, table.decl_name(*def).to_string()))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+        let Some((link, link_name)) = link else {
+            return self.newtype_base_target(key);
+        };
+        let link_key = self.impl_target_of(link, &name::DeclName::new(&link_name));
+        Some((link_key, link_name))
+    }
+
+    /// The link down the newtype `key`'s chain that a static named
+    /// `method_name` is inherited from: the first whose own impls declare
+    /// it, else [`Self::newtype_base_target`]'s base.
+    pub(super) fn newtype_static_target(
+        &mut self,
+        key: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<(trait_env::ImplTargetKey, String)> {
+        let mut link = self.newtype_link_target(key)?;
+        loop {
+            if self
+                .impl_method_entries(&link.0, method_name)
+                .next()
+                .is_some()
+            {
+                return Some(link);
+            }
+            match self.newtype_link_target(&link.0) {
+                Some(next) => link = next,
+                None => return Some(link),
+            }
+        }
+    }
+
     /// The declaration a `Type::method` call resolves to, seeing through a
     /// transparent alias. Every site that records the use→def edge for such a
     /// call ends its ladder here, so none of them stops one alias short.

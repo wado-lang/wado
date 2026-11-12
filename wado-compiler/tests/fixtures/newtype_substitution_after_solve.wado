@@ -4,6 +4,8 @@
 // instance, the slot settled by a turbofish, an argument or the expected type,
 // and the newtype generic or not. A result the solve makes some other instance
 // of the base keeps the base.
+use lib from "./sub/newtype_substitution_after_solve_lib.wado";
+
 struct Wrap<T> {
     v: T,
 }
@@ -96,6 +98,80 @@ test "a literal argument builds the newtype the solve settles" {
     assert w.v == 4;
     assert takes_wi(Wi::back({ v: 5 })) == 5;
     assert Wi::take({ v: 6 }) == 6;
+}
+
+// On a chain, only the link a method is declared on becomes the receiver: a
+// type the call brings in through an argument keeps its own link.
+impl Wi {
+    fn mid() -> Wi {
+        return { v: 9 };
+    }
+
+    fn mid_raw() -> Wrap<i32> {
+        return Wrap { v: 8 };
+    }
+
+    fn mid_make<U: Default>() -> Wi {
+        return { v: 10 };
+    }
+
+    fn mid_take<U>(u: U) -> Wi {
+        return { v: 5 };
+    }
+
+    fn mid_list(xs: List<i32>) -> Wi {
+        return { v: xs.len() };
+    }
+
+    fn mid_wrap(w: Wi) -> Wi {
+        return w;
+    }
+
+    fn twice(&self) -> Wi {
+        return { v: self.v * 2 };
+    }
+}
+
+type Outer = Wi;
+
+fn takes_outer(w: Outer) -> i32 {
+    return w.v;
+}
+
+fn takes_wrap(w: Wrap<i32>) -> i32 {
+    return w.v;
+}
+
+impl<T> Wrap<T> {
+    fn pass<U>(u: U) -> U {
+        return u;
+    }
+
+    fn pass_by<U>(&self, u: U) -> U {
+        return u;
+    }
+}
+
+test "a chain retypes only the link that declares the method" {
+    let i: Wi = { v: 1 };
+    let o: Outer = { v: 2 };
+    assert takes_wi(Outer::pass(i)) == 1;
+    assert takes_wi(o.pass_by(i)) == 1;
+    assert takes_outer(Outer::make::<i32>()) == 0;
+    assert takes_outer(o.same::<i32>()) == 0;
+    assert takes_outer(Outer::mid()) == 9;
+    assert takes_wrap(Outer::mid_raw()) == 8;
+    assert takes_outer(Outer::mid_make::<bool>()) == 10;
+    assert takes_outer(Outer::mid_take("x")) == 5;
+    assert takes_outer(Outer::mid_list([1, 2])) == 2;
+    assert takes_outer(Outer::mid_wrap({ v: 7 })) == 7;
+    assert takes_outer(Outer::mid_wrap(o)) == 2;
+    assert takes_outer(o.twice()) == 4;
+
+    let ni: lib::Wi = { v: 3 };
+    let passed: lib::Wi = lib::Outer::pass(ni);
+    let raw: lib::Wrap<i32> = lib::Outer::mid_raw();
+    assert passed.v == 3 && raw.v == 8;
 }
 
 test "static, another instance of the base stays the base" {

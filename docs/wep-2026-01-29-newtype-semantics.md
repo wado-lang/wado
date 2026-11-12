@@ -86,6 +86,16 @@ rule, but a method that names its own type where `Self` would do returns the
 base on a newtype. It was rejected: a newtype would be usable only over a base
 whose author wrote `Self` throughout.
 
+On a chain of newtypes, the base is the link the method is declared on, and no
+other link is replaced. With `type Wi = Wrap<i32>` and `type Outer = Wi`, a
+method declared on `Wrap<T>` reads `Wrap<i32>` as `Outer`, and one declared on
+`Wi` reads `Wi` as `Outer`. A `Wi` the call brings in through an argument stays
+a `Wi`: `Outer::pass(i)` with `fn pass<U>(u: U) -> U` returns `Wi`. Replacing
+every link was the alternative. It would rewrite a type the caller chose only
+because of the receiver it called through. The cost of the rule taken is that
+moving a method between links changes what a newtype further down the chain
+receives, as a newtype's own `impl` keeps what it wrote.
+
 ### Newtype-Specific Implementations
 
 You can add methods specific to a newtype via `impl`:
@@ -286,15 +296,6 @@ Newtypes support the full feature set today:
 - Generic newtypes (`type MyArray<T> = List<T>`)
 - Newtypes over the raw GC `Array<T>` inherit `Index` traits and associated functions (`ByteArray`)
 - `for-of` inherits `IntoIterator`, both by value (`Item = T`) and by reference (`Item = &T`)
-
-## Known Gaps
-
-- On a chain of newtypes, which links the substitution replaces is not
-  settled, and the spellings disagree. With `type Wi = Wrap<i32>` and
-  `type Outer = Wi`, a static replaces every link of the receiver's chain, so
-  `Outer::back(i)` with `i: Wi` and `fn back<U>(w: U) -> U` returns `Outer`
-  and refuses its own argument. An instance call replaces only the base the
-  method was declared on, so `o.merge(i)` returns `Wi`.
 
 ## See Also
 

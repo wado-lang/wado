@@ -1437,7 +1437,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TupleLiteral(_) => true,
             _ => false,
         };
+        // Built as the parameter read before it was retyped, which may be a
+        // link of the target's own chain.
         let built = self.apply_infer_holes(built);
+        let built = self.tysys.type_table.borrow().representation_head(built);
         if !composite
             || check_assignable(built, base, &self.tysys.type_table.borrow())
                 == TypeCheckResult::Incompatible

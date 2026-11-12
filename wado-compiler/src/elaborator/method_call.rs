@@ -1641,7 +1641,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         if let Some(newtype) = inheriting {
-            self.retype_through_newtype_chain(newtype, param_types);
+            let declared_on = sig
+                .and_then(|sig| sig.declaring_impl)
+                .and_then(|block| self.tysys.type_table.borrow().impl_target_decl(block));
+            let base = self.inherited_base(newtype, declared_on);
+            for ty in param_types.iter_mut() {
+                *ty = self.tysys.substitute_newtype_in_type(*ty, base, newtype);
+            }
         }
         self.answer_frame_projections_in(param_types);
     }
@@ -1868,7 +1874,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // global `ImplMethodIndex`.
         let own_static = self.own_newtype_static(target_type_id, &static_call.method);
         let inherited = own_static.is_none();
-        let (struct_name_for_lookup, struct_key_for_lookup) = match own_static {
+        let declaring_key = own_static.or_else(|| {
+            let link = self.newtype_link_declaring(target_type_id, &static_call.method)?;
+            let def = self.tysys.type_table.borrow().nominal_def(link)?;
+            Some(ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def))
+        });
+        let (struct_name_for_lookup, struct_key_for_lookup) = match declaring_key {
             Some(key) => (
                 key.decl_name(self.tysys.resolutions.defs())
                     .map(str::to_string),
@@ -2072,6 +2083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Newtype { def, .. } if inherited => Some(*def),
             _ => None,
         };
+        let declaring_link = struct_key_for_lookup.as_ref().and_then(ImplTargetKey::decl);
         // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
@@ -2095,7 +2107,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&inst),
                 None,
             );
-            let (at_base, expected_at_base) = self.at_inherited_base(newtype, &args, expected_type);
+            let (at_base, expected_at_base) =
+                self.at_inherited_base(newtype, declaring_link, &args, expected_type);
             // A `_` is answered as the bare spelling answers the slot it
             // leaves out, by the one inference both spellings share.
             let inferred = struct_name_for_lookup.clone().map(|name| {
@@ -2234,7 +2247,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let impl_args = settled_impl_args(&impl_bindings);
             let qualified = format!("{receiver}::{}", static_call.method);
             let (args_at_base, expected_at_base) =
-                self.at_inherited_base(newtype, &args, expected_type);
+                self.at_inherited_base(newtype, declaring_link, &args, expected_type);
             (method_type_args, _) = self.bind_static_type_args(
                 method_type_args,
                 &qualified,
@@ -3217,7 +3230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // as the resolution does, so the survey reads them there.
         if survey.candidates.is_empty()
             && let key = self.static_receiver_key(struct_name, recv.key)
-            && let Some((base_key, base_name)) = self.newtype_base_target(&key)
+            && let Some((base_key, base_name)) = self.newtype_static_target(&key, method_name)
         {
             let (base_type, base_arg_types) = self.at_newtype_base(recv.ty, arg_types);
             let base_recv = StaticReceiver {
@@ -3598,6 +3611,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         qualified_struct_name,
                         mangled_func_name.to_string(),
                     )
+                } else if let Some(link) = self.newtype_link_declaring(newtype_id, method_name) {
+                    let link_name = self.tysys.type_table.borrow().name(link);
+                    let link_fq = self.qualified_receiver_name(&link_name, link);
+                    let mangled = MethodName::format_local(&link_fq, None, method_name);
+                    let link_args = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_type_args(link)
+                        .unwrap_or_default();
+                    newtype_dispatch = Some((newtype_id, link, link_args));
+                    (link_name, link_fq, mangled)
                 } else {
                     let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
                     match resolved {
