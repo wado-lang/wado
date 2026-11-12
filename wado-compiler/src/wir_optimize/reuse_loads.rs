@@ -43,7 +43,9 @@ impl Key {
         })
     }
 
-    /// The chain a `struct.set` of `field_name` on `receiver` writes.
+    /// The chain a `struct.set` of `field_name` on `receiver` writes, or `None`
+    /// where the store may move that chain: one it reads through a field of the
+    /// same name.
     pub(super) fn of_store(
         receiver: &WirInstr,
         type_id: &WirTypeId,
@@ -56,6 +58,9 @@ impl Key {
             },
             chain => Self::of(chain)?,
         };
+        if key.fields.iter().any(|(_, name)| name == field_name) {
+            return None;
+        }
         key.fields.push((type_id.clone(), field_name.to_string()));
         Some(key)
     }

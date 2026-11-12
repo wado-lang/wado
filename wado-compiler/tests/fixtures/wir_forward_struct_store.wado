@@ -59,6 +59,22 @@ fn early(c: &mut Counter, stop: bool) -> i32 {
     return c.used;
 }
 
+struct Mid {
+    inner: i32,
+}
+
+struct Outer {
+    inner: Mid,
+}
+
+// Fields alias by name, so as far as the pass can tell the write to `inner`
+// may re-point `o.inner` itself: the read loads again.
+#[inline(never)]
+fn through_own_name(o: &mut Outer, x: i32) -> i32 {
+    o.inner.inner = x;
+    return o.inner.inner;
+}
+
 export fn run() with Stdout {
     let mut c = Counter { used: 0 };
     println(`${bump(&mut c)} ${c.used}`);
@@ -68,16 +84,26 @@ export fn run() with Stdout {
     println(`${observed(&mut c, &c)}`);
     println(`${across_call(&mut c)}`);
     println(`${early(&mut c, builtin::black_box(true))} ${c.used}`);
+    let mut o = Outer { inner: Mid { inner: 0 } };
+    println(`${through_own_name(&mut o, builtin::black_box(9))}`);
 }
 
 __DATA__
 {
-    "stdout": "6 6\n[1, 4, 5, 6]\n30\n78\n0 1\n",
+    "stdout": "6 6\n[1, 4, 5, 6]\n30\n78\n0 1\n9\n",
     "wir_pass": {"O2": ["wir/reuse_struct_loads", "wir/elide_overwritten_stores"]},
     "wir_expect:O2": [
         "$load_2 = (c.used + 1) + 2;",
         "c.used = local.tee $load_2($load_2 + 3);",
         "return $load_2;",
-        "required = required + 1;"
-    ]
+        "required = required + 1;",
+        " = x;\n    return o.inner."
+    ],
+    "wir_contrast": {"O2": [
+        {
+            "struct Mid {\n    inner: i32,": "struct Mid {\n    deep: i32,",
+            "Mid { inner: 0 }": "Mid { deep: 0 }",
+            "o.inner.inner = x;\n    return o.inner.inner;": "o.inner.deep = x;\n    return o.inner.deep;"
+        }
+    ]}
 }

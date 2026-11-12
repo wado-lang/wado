@@ -2347,10 +2347,11 @@ impl<'a> WirEmitter<'a> {
 
     /// Convert `WirType` to Wasm `StorageType` (for struct fields).
     fn wir_type_to_storage_type(&self, ty: &WirType) -> StorageType {
-        match ty {
-            WirType::I8 | WirType::U8 | WirType::Bool => StorageType::I8,
-            WirType::I16 | WirType::U16 => StorageType::I16,
-            _ => StorageType::Val(self.wir_type_to_val_type(ty)),
+        match ty.packed_bits() {
+            Some(8) => StorageType::I8,
+            Some(16) => StorageType::I16,
+            Some(bits) => unreachable!("no field packs into {bits} bits"),
+            None => StorageType::Val(self.wir_type_to_val_type(ty)),
         }
     }
 
