@@ -1,0 +1,31 @@
+// A handler two impls of a generic effect tie on reports the tie under the
+// effect's arguments, in either form of installing it.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Stream<u8> for Pair<T, i32> {
+    ..trap
+}
+
+impl<A, B> Stream<u8> for Pair<A, B> {
+    ..trap
+}
+
+export fn run() {
+    let mut h: Pair<String, i32> = Pair { a: "x", b: 2 };
+    with Stream<u8> => &mut h do {
+        let _ = Stream::<u8>::new();
+    }
+    with &mut h do {
+        let _ = Stream::<u8>::new();
+    }
+}
+
+__DATA__
+{
+  "compile_error": ":19:10: analysis error: ambiguous impls of 'Stream<u8>' for 'Pair<String, i32>': 'impl<T> Stream<u8> for Pair<T, i32>' and 'impl<A, B> Stream<u8> for Pair<A, B>' both reach it, and nothing ranks them; write 'impl Stream<u8> for Pair<String, i32>'; 22:10: ambiguous impls of 'Stream<u8>' for 'Pair<String, i32>'",
+  "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]
+}

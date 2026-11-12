@@ -1,0 +1,32 @@
+// Two heads of a generic trait that tie on one receiver are reported, and
+// hinted at, under the trait's arguments at that receiver: `Name` alone names
+// no impl the hint could ask for.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Name<N> {
+    fn name(&self) -> String;
+}
+
+impl<T> Name<T> for Pair<T, i32> {
+    fn name(&self) -> String {
+        return "pinned";
+    }
+}
+
+impl<A, B> Name<A> for Pair<A, B> {
+    fn name(&self) -> String {
+        return "open";
+    }
+}
+
+export fn run() {
+    let p: Pair<String, i32> = Pair { a: "x", b: 2 };
+    let _ = p.name();
+}
+
+__DATA__
+{"compile_error": ":28:13: analysis error: ambiguous impls of 'Name<String>' for 'Pair<String, i32>': 'impl<T> Name<T> for Pair<T, i32>' and 'impl<A, B> Name<A> for Pair<A, B>' both reach it, and nothing ranks them; write 'impl Name<String> for Pair<String, i32>'", "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]}

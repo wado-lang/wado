@@ -17,7 +17,7 @@ use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::solver_bridge::{InstanceBody, InstanceImpl, InstanceOrder};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, DeclaredHead, FqTypeName, TUPLE_TYPE_NAME};
+use crate::name::{DeclName, DeclaredHead, FqTraitName, FqTypeName, TUPLE_TYPE_NAME};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -149,16 +149,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.report_handler_not_implemented(handler_type, &interface_name, binding);
                 }
                 _ => match effect_decl.and_then(|trait_| {
-                    self.effect_impl_order(handler_type, trait_, &trait_type_args)
+                    let order = self.effect_impl_order(handler_type, trait_, &trait_type_args)?;
+                    Some((trait_, order))
                 }) {
-                    Some(InstanceOrder::One(InstanceImpl {
-                        body: InstanceBody::Block(block),
-                        ..
-                    })) => impl_def = Some(block),
-                    Some(InstanceOrder::Tied(tied)) => {
-                        self.report_tied_impls(&tied, handler_type, binding.span);
+                    Some((
+                        _,
+                        InstanceOrder::One(InstanceImpl {
+                            body: InstanceBody::Block(block),
+                            ..
+                        }),
+                    )) => impl_def = Some(block),
+                    Some((trait_, InstanceOrder::Tied(tied))) => {
+                        let trait_ = self.trait_at(trait_, &trait_type_args);
+                        self.report_tied_impls(&tied, &trait_, handler_type, binding.span);
                     }
-                    Some(InstanceOrder::One(_) | InstanceOrder::Nothing) | None => {
+                    Some((_, InstanceOrder::One(_) | InstanceOrder::Nothing)) | None => {
                         self.report_handler_not_implemented(handler_type, &interface_name, binding);
                     }
                 },
@@ -241,8 +246,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let type_name = self.tysys.handler_impl_target_name(handler_type);
         let (effects, ties) = self.collect_effect_impls_for_type(handler_type);
-        for tied in &ties {
-            self.report_tied_impls(tied, handler_type, binding.span);
+        for (tied, trait_) in &ties {
+            self.report_tied_impls(tied, trait_, handler_type, binding.span);
         }
         if !ties.is_empty() {
             return;
@@ -288,10 +293,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn collect_effect_impls_for_type(
         &self,
         handler_type: TypeId,
-    ) -> (Vec<HandlerEffectEntry>, Vec<Vec<Option<DefId>>>) {
+    ) -> (
+        Vec<HandlerEffectEntry>,
+        Vec<(Vec<Option<DefId>>, FqTraitName)>,
+    ) {
         let defs = self.tysys.resolutions.defs();
         let mut out: Vec<HandlerEffectEntry> = Vec::new();
-        let mut ties: Vec<Vec<Option<DefId>>> = Vec::new();
+        let mut ties: Vec<(Vec<Option<DefId>>, FqTraitName)> = Vec::new();
         let mut seen: hashmap::IndexSet<(DefId, Vec<TypeId>)> = hashmap::IndexSet::default();
 
         let trait_env = &self.tysys.trait_env;
@@ -339,8 +347,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ..
                 })) => block == impl_def,
                 Some(InstanceOrder::Tied(tied)) => {
-                    if tied.contains(&Some(impl_def)) && !ties.contains(&tied) {
-                        ties.push(tied);
+                    if tied.contains(&Some(impl_def)) && !ties.iter().any(|(t, _)| *t == tied) {
+                        ties.push((tied, self.trait_at(trait_ref, &type_args)));
                     }
                     false
                 }
