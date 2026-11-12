@@ -4273,6 +4273,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A `_` resolves to UNKNOWN, and inference fills it below.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
+        if self.group_variadic_type_args_of(
+            &method_call.method,
+            &method_own_params,
+            &mut type_args,
+            method_call.span,
+        ) {
+            return Some(TypeTable::ERROR);
+        }
 
         let impl_args = settled_impl_args(&impl_type_bindings);
         // This path answers the call, so it runs the method's own inference too:

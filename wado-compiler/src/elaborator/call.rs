@@ -4779,19 +4779,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         key: &ImplTargetKey,
         method_name: &str,
+        choice: SigChoice,
     ) -> Option<MethodSig> {
         let trait_env = &self.tysys.trait_env;
-        let (impl_def, mut sig) = trait_env
+        let mut inheriting = trait_env
             .impl_index
             .get(key)?
             .iter()
-            .find_map(|&impl_def| {
+            .filter_map(|&impl_def| {
                 let trait_decl = trait_env.impl_headers[&impl_def].trait_def()?;
                 let method = self.tysys.trait_sig_of(&trait_decl)?.method(method_name)?;
                 method
                     .is_inherited()
                     .then(|| (impl_def, method.sig.clone()))
-            })?;
+            });
+        let (impl_def, mut sig) = inheriting.next()?;
+        if matches!(choice, SigChoice::Unique) && inheriting.next().is_some() {
+            return None;
+        }
         let (receiver, receiver_params) = if let Some(decl) = key.decl() {
             (
                 self.declared_self_type(decl)?,
@@ -5178,7 +5183,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
         .or_else(|| {
             let key = self.static_receiver_key(struct_name, receiver_key);
-            self.inherited_default_method_sig(&key, method_name)
+            self.inherited_default_method_sig(&key, method_name, choice)
         })
     }
 

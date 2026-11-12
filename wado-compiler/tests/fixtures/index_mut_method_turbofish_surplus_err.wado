@@ -1,0 +1,9 @@
+// A method called on an indexed place counts its turbofish as any method call
+// does: `push` declares no type parameter, so one is an error, not a crash.
+test {
+    let mut xs: List<List<i32>> = [[1]];
+    xs[0].push::<i32>(2);
+}
+
+__DATA__
+{"test": {}, "compile_error": ":5:5: analysis error: `push` takes no type arguments, but 1 was supplied"}

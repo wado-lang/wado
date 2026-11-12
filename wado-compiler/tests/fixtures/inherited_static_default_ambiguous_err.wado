@@ -1,0 +1,31 @@
+// Two traits a type implements may each give it a default static of one name.
+// The call is ambiguous, and that is the whole report: neither declaration's
+// own type parameter is blamed as uninferred, since the call picks neither.
+trait Made with () {
+    fn make<U: Default>() -> U {
+        return U::default();
+    }
+}
+
+trait Built with () {
+    fn make<V: Default>(v: V) -> V {
+        return v;
+    }
+}
+
+struct Foo {}
+
+impl Made for Foo {}
+
+impl Built for Foo {}
+
+test {
+    let _x = Foo::make();
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "ambiguous method 'make': declared by 'Made' and 'Built'",
+    "compile_errors_not_contains": ["cannot infer"]
+}

@@ -1,0 +1,18 @@
+// A method called on an indexed place fills its pack with every turbofish
+// argument past the scalars, as any method call does.
+struct Bag {
+    n: i32,
+}
+
+impl Bag {
+    fn take<..P>(&mut self, p: [..P]) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+test "a flat turbofish fills the pack" {
+    let mut bags: List<Bag> = [Bag { n: 0 }];
+    assert bags[0].take::<i32, bool>([1, true]) == 1;
+    assert bags[0].n == 1;
+}
