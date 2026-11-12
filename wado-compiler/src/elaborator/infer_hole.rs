@@ -787,8 +787,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target = self.apply_infer_holes(link.target);
         if self.type_has_infer_hole(target) {
             self.solve_infer_holes_against(target, answer);
-            return;
         }
+        // Solving fills the holes and leaves the rest of the target as
+        // written, which the answer must still match: `[i32, U]` against
+        // `[bool, String]` settles `U` and misses at `i32`.
+        let target = self.apply_infer_holes(link.target);
         if target == answer || says_nothing(target) || !self.decides_equality(target, answer) {
             return;
         }

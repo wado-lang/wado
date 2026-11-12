@@ -1,0 +1,36 @@
+//! An associated-type equality whose right side still holds a hole when the
+//! owner settles is held to the owner's answer at every position, not only
+//! where the hole was.
+
+trait Tr with () {
+    type Out;
+    fn mk() -> Self;
+}
+
+struct A {}
+
+impl Tr for A {
+    type Out = [bool, String];
+    fn mk() -> A {
+        return A {};
+    }
+}
+
+fn made<T, S: Tr<Out = [i32, U]>, U>(_t: T) -> S {
+    return S::mk();
+}
+
+fn fallback() -> [i32, A] {
+    return [0, A {}];
+}
+
+test {
+    let [n, _a] = match builtin::black_box(true) {
+        true => [3, made(1)],
+        false => fallback(),
+    };
+    assert n == 3;
+}
+
+__DATA__
+{"compile_error": ":29:21: analysis error: type 'A' does not satisfy the associated type 'Tr::Out = [i32, String]': it is '[bool, String]'"}
