@@ -850,6 +850,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type = self.answer_frame_projections(return_type);
         let expected_at_base = expected_type
             .map(|expected| inherited.map_or(expected, |f| f.to_base(&self.tysys, expected)));
+        let solve_params = InheritedFrame::solved_at(inherited, &self.tysys, &expected_param_types);
 
         let impl_args = settled_impl_args(&impl_type_bindings);
         // Only the method's own slots: the lookup instantiated the declaring
@@ -902,8 +903,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 let mut infer =
                     InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
-                let solve_params =
-                    InheritedFrame::solved_at(inherited, &self.tysys, &expected_param_types);
                 let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
                 for (i, (&param_type, &arg)) in
                     solve_params.iter().zip(solve_args.iter()).enumerate()
@@ -999,7 +998,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys.type_table,
         );
 
-        let solve_params = InheritedFrame::solved_at(inherited, &self.tysys, &expected_param_types);
         let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
