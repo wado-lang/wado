@@ -87,7 +87,7 @@ global global:tuple_pattern_unit_element.wado::$const_obj_3: ref Array<u8> = arr
 global global:core:prelude/string.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "tuple_pattern_unit_element.wado/run"() with Stdout {
-    let $load_9: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let x_1: ref "core:prelude//$Cell<i32>";
     let o: ref null "tuple//[&(), &i32]";
     let v_5: ref "core:prelude//$Cell<i32>";
@@ -128,8 +128,8 @@ fn "tuple_pattern_unit_element.wado/run"() with Stdout {
             }
             is_negative = out_15.used;
             out_15.used = $sroa_t_h0_174;
-            builtin::array_copy<u8>(local.tee $load_9(out_15.repr), is_negative, global:tuple_pattern_unit_element.wado::$const_obj_3, 0, 1);
-            if @unlikely(local.tee $sroa_t_h0_174(out_15.used + 2) > builtin::array_len($load_9)) {
+            builtin::array_copy<u8>(local.tee $load_10(out_15.repr), is_negative, global:tuple_pattern_unit_element.wado::$const_obj_3, 0, 1);
+            if @unlikely(local.tee $sroa_t_h0_174($sroa_t_h0_174 + 2) > builtin::array_len($load_10)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $sroa_t_h0_174);
             }
@@ -162,9 +162,9 @@ fn "tuple_pattern_unit_element.wado/run"() with Stdout {
     $sroa_t_h0_174 = builtin::i32_wrap_i64(local.tee x_81("wasi/stream-new"()));
     is_negative = builtin::i32_wrap_i64(x_81 >> 32_i64);
     $sroa_t_h0_174 = "tuple_pattern_unit_element.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_174);
-    builtin::array_copy<u8>(local.tee $load_9(builtin::array_new<u8>(5)), 0, global:tuple_pattern_unit_element.wado::$const_obj_0, 0, 4);
-    builtin::array_set_u8($load_9, 4, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(is_negative, $load_9);
+    builtin::array_copy<u8>(local.tee $load_10(builtin::array_new<u8>(5)), 0, global:tuple_pattern_unit_element.wado::$const_obj_0, 0, 4);
+    builtin::array_set_u8($load_10, 4, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(is_negative, $load_10);
     "wasi/stream-drop-writable"(is_negative);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_174);
 }

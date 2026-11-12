@@ -82,7 +82,7 @@ global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_
 global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 115, 61);
 
 fn "opt_param_spec_literal_whole_param.wado/run"() with Stdout {
-    let $load_1: i32;
+    let $load_2: i32;
     let message_1: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let self_16: ref null "opt_param_spec_literal_whole_param.wado//Giver";
@@ -90,24 +90,23 @@ fn "opt_param_spec_literal_whole_param.wado/run"() with Stdout {
     let new_repr: ref Array<u8>;
     let self_27: i32;
     $moved_1 = local.tee self_16(struct.new "opt_param_spec_literal_whole_param.wado//Giver" { inner: struct.new "opt_param_spec_literal_whole_param.wado//Guard" { id: 1000 } }).inner;
-    self_16.inner = ref.null none;
-    global:opt_param_spec_literal_whole_param.wado::GIVEN = global:opt_param_spec_literal_whole_param.wado::GIVEN + local.tee $load_1($moved_1.id);
+    global:opt_param_spec_literal_whole_param.wado::GIVEN = global:opt_param_spec_literal_whole_param.wado::GIVEN + local.tee $load_2($moved_1.id);
     if ref.is_null($moved_1) == 0 {
-        global:opt_param_spec_literal_whole_param.wado::DROPS = global:opt_param_spec_literal_whole_param.wado::DROPS + $load_1;
+        global:opt_param_spec_literal_whole_param.wado::DROPS = global:opt_param_spec_literal_whole_param.wado::DROPS + $load_2;
     }
-    if ref.is_null(local.tee $moved_1(self_16.inner)) == 0 {
-        global:opt_param_spec_literal_whole_param.wado::DROPS = global:opt_param_spec_literal_whole_param.wado::DROPS + $moved_1.id;
+    if ref.is_null(ref.null none) == 0 {
+        global:opt_param_spec_literal_whole_param.wado::DROPS = global:opt_param_spec_literal_whole_param.wado::DROPS + ref.null none.id;
     }
     self_16.inner = ref.null none;
     message_1 = block -> ref "core:prelude/string.wado//String" {
-        $load_1 = global:opt_param_spec_literal_whole_param.wado::DROPS;
+        $load_2 = global:opt_param_spec_literal_whole_param.wado::DROPS;
         let $mv_field_2: i32;
         $mv_field_2 = global:opt_param_spec_literal_whole_param.wado::GIVEN;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_param_spec_literal_whole_param.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($load_1, $mv_field_2);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_param_spec_literal_whole_param.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($load_2, $mv_field_2);
     };
-    $load_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $load_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $load_1 = "opt_param_spec_literal_whole_param.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_1);
+    $load_2 = "opt_param_spec_literal_whole_param.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_2);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_27(message_1.used) + 1)), 0, message_1.repr, 0, self_27);
     builtin::array_set_u8(new_repr, self_27, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
@@ -115,7 +114,7 @@ fn "opt_param_spec_literal_whole_param.wado/run"() with Stdout {
         "core:rt/cm_stream_write_raw_all_u8"($mv_field_2, new_repr, 0, self_27);
     });
     "wasi/stream-drop-writable"($mv_field_2);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_1);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_2);
 }
 
 fn "opt_param_spec_literal_whole_param.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

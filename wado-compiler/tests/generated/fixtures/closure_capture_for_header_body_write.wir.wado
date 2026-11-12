@@ -448,7 +448,7 @@ global global:closure_capture_for_header_body_write.wado::$const_obj_54: ref Arr
 global global:core:prelude/primitive.wado::$const_obj_61: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "closure_capture_for_header_body_write.wado/run"() {
-    let $load_150: ref "Array<closure_capture_for_header_body_write.wado/Held>";
+    let $load_176: ref "Array<closure_capture_for_header_body_write.wado/Held>";
     let untaken: ref "core:prelude/list.wado//List<fn()->i32>";
     let i_1: i32;
     let i_9: ref "core:prelude//$Cell<i32>";
@@ -670,8 +670,8 @@ called(before): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
             }
             builtin::array_set<ref struct>(untaken.repr, i_1, item_120);
             untaken.used = i_1 + 1;
-            i_9.value = i_9.value + 10;
-            local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_9.value }).value = i_9.value + 1;
+            i_9.value = local.tee i_1(i_9.value + 10);
+            local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_1 }).value = i_9.value + 1;
             continue l38;
         };
     };
@@ -1270,7 +1270,7 @@ called(bumped): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<closure_capture_for_header_body_write.wado/Held>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, i_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_body_write.wado:76"), used: 45 });
                 unreachable;
-            }; builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">(local.tee $load_150(held_38.repr), 0).r.value = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($load_150, 0).r.value + 100;
+            }; builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">(local.tee $load_176(held_38.repr), 0).r.value = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($load_176, 0).r.value + 100;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_10" { $capture_0: i_9 }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_8", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_8" };
             if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
                 cold_path;
@@ -1562,7 +1562,7 @@ called(fielded): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         };
     };
     i_1 = held_38.used;
-    $load_150 = held_38.repr;
+    $load_176 = held_38.repr;
     used_96 = 0;
     result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     b210: block {
@@ -1570,7 +1570,7 @@ called(fielded): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_closure_capture_for_header_body_write_wado_Held__fn_mut_closure_capture_for_header_body_write_wado_Held___i32__core_prelude_traits_wado_Iterator__next_sroa_return__255: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_closure_capture_for_header_body_write_wado_Held__core_prelude_traits_wado_Iterator__next_256: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_closure_capture_for_header_body_write_wado_Held__core_prelude_traits_wado_Iterator__next_256 used_96 >= i_1;
-                    i_9 = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($load_150, used_96).r;
+                    i_9 = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($load_176, used_96).r;
                     used_96 = used_96 + 1;
                     $fused_slot_903 = i_9.value;
                     if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
@@ -1827,7 +1827,7 @@ called(updated): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     b260: block {
         l261: loop {
-            break_if b260 i_9.value = i_9.value + 1; local.tee i_1(i_9.value) < 3 == 0;
+            break_if b260 i_9.value = local.tee i_1(i_9.value + 1); i_1 < 3 == 0;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_16" { $capture_0: local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_1 }) }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_13", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_13" };
             if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
                 cold_path;

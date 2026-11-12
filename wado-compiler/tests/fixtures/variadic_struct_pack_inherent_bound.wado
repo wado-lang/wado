@@ -1,0 +1,44 @@
+//! An inherent impl's bound on a pack holds of each element the pack takes,
+//! not of the tuple carrying them, as a trait impl's does.
+
+trait Marker with () {
+    fn mark(&self) -> i32;
+}
+
+impl Marker for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Marker for u8 {
+    fn mark(&self) -> i32 {
+        return 2;
+    }
+}
+
+struct W<..P> {
+    t: [..P],
+}
+
+impl<..P: Marker> W<[..P]> {
+    fn whole(&self) -> i32 {
+        return 0;
+    }
+}
+
+impl<..P: Marker> W<[i32, ..P]> {
+    fn head(&self) -> i32 {
+        return self.t.0;
+    }
+}
+
+test "the pack alone" {
+    let w = W { t: [true, 3 as u8] };
+    assert w.whole() == 0;
+}
+
+test "the pack beside a fixed element" {
+    let w = W { t: [7, true, 3 as u8] };
+    assert w.head() == 7;
+}

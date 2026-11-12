@@ -195,8 +195,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:licm_reload_after_callee_loop_write.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "licm_reload_after_callee_loop_write.wado/advance"(c, n) {
-    c.at = c.at + n;
-    return c.at <= c.bytes.used;
+    c.at = local.tee n(c.at + n);
+    return n <= c.bytes.used;
 }
 
 fn "licm_reload_after_callee_loop_write.wado/take"(c) {

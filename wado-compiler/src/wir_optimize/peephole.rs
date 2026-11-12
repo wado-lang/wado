@@ -1248,10 +1248,8 @@ fn try_drop_store_mask(instr: &mut WirInstr, types: &[WirTypeDef]) -> bool {
         }
         _ => return false,
     };
-    let width = match storage {
-        WirType::I8 | WirType::U8 | WirType::Bool => 8,
-        WirType::I16 | WirType::U16 => 16,
-        _ => return false,
+    let Some(width) = storage.packed_bits() else {
+        return false;
     };
     drop_low_bits_masks(value, width)
 }

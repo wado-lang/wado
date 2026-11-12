@@ -114,12 +114,38 @@ pub struct Resolutions {
     /// Each item-level binder's declaring item: a method's `U` and its impl's
     /// `U` are two parameters, told apart by who declares them.
     binder_owners: IndexMap<AstId, DefId>,
+    /// The packs each item declares, by the item and the pack's name.
+    packs: hashmap::IndexSet<(DefId, String)>,
+    /// Each generic associated type's own binder, which its family owns.
+    family_binders: IndexMap<AstId, FamilyBinder>,
+    /// The spellings each family declares its parameters under, keyed by the
+    /// trait and the associated type: an impl may rename them, and the
+    /// declaration's spelling is the one a family binder is named by.
+    family_params: IndexMap<(DefId, String), Vec<String>>,
     /// Each `impl` block's reference site for the head of the type it is for,
     /// keyed by the block, where that type has a head.
     impl_heads: IndexMap<AstId, AstId>,
     /// Each `..X` site repeating the non-pack `X`, keyed by the site, and the
     /// pack its signature minted for the repetition's length.
     repeat_packs: IndexMap<AstId, AstId>,
+}
+
+/// A generic associated type's own parameter, by its slot in the family.
+#[derive(Debug)]
+struct FamilyBinder {
+    family: FamilyTrait,
+    assoc: String,
+    index: usize,
+}
+
+/// The trait whose family a binder belongs to.
+#[derive(Debug, Clone, Copy)]
+enum FamilyTrait {
+    /// The trait declaring the family.
+    Declared(DefId),
+    /// An impl's binding: the site of the head of the trait the impl names,
+    /// which resolves to the trait.
+    Implemented(AstId),
 }
 
 /// What every module can see, by layer.
@@ -300,6 +326,9 @@ impl Resolutions {
         let mut effect_binders = hashmap::IndexSet::default();
         let mut fn_bound_binders = IndexMap::default();
         let mut binder_owners = IndexMap::default();
+        let mut packs = hashmap::IndexSet::default();
+        let mut family_binders = IndexMap::default();
+        let mut family_params = IndexMap::default();
         let mut impl_heads = IndexMap::default();
         let mut repeat_packs = IndexMap::default();
         for (module_source, module) in modules {
@@ -319,6 +348,9 @@ impl Resolutions {
                 effect_binders: &mut effect_binders,
                 fn_bound_binders: &mut fn_bound_binders,
                 binder_owners: &mut binder_owners,
+                packs: &mut packs,
+                family_binders: &mut family_binders,
+                family_params: &mut family_params,
                 impl_heads: &mut impl_heads,
                 repeat_packs: &mut repeat_packs,
                 derived_names: Vec::new(),
@@ -345,6 +377,9 @@ impl Resolutions {
             effect_binders,
             fn_bound_binders,
             binder_owners,
+            packs,
+            family_binders,
+            family_params,
             impl_heads,
             repeat_packs,
         }
@@ -379,6 +414,35 @@ impl Resolutions {
     #[must_use]
     pub fn binder_owner(&self, binder: AstId) -> Option<DefId> {
         self.binder_owners.get(&binder).copied()
+    }
+
+    /// Whether the item `owner` declares its parameter `name` as a pack.
+    #[must_use]
+    pub fn declares_pack(&self, owner: DefId, name: &str) -> bool {
+        self.packs.contains(&(owner, name.to_string()))
+    }
+
+    /// The family declaring the generic associated type parameter `binder`:
+    /// the trait, the associated type, and the spelling the trait declares the
+    /// parameter under. `None` for an item's binder, and for one an impl binds
+    /// for a family its trait reference does not reach.
+    #[must_use]
+    pub fn binder_family(&self, binder: AstId) -> Option<(DefId, &str, &str)> {
+        let family = self.family_binders.get(&binder)?;
+        let trait_ = match family.family {
+            FamilyTrait::Declared(def) => def,
+            FamilyTrait::Implemented(site) => match self.get(site) {
+                Resolution::Def(def) => def,
+                Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => {
+                    return None;
+                }
+            },
+        };
+        let declared = self
+            .family_params
+            .get(&(trait_, family.assoc.clone()))?
+            .get(family.index)?;
+        Some((trait_, &family.assoc, declared))
     }
 
     /// The local names of `module`'s imports that answered one of its
@@ -747,6 +811,9 @@ struct Resolver<'a> {
     effect_binders: &'a mut hashmap::IndexSet<AstId>,
     fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
     binder_owners: &'a mut IndexMap<AstId, DefId>,
+    packs: &'a mut hashmap::IndexSet<(DefId, String)>,
+    family_binders: &'a mut IndexMap<AstId, FamilyBinder>,
+    family_params: &'a mut IndexMap<(DefId, String), Vec<String>>,
     impl_heads: &'a mut IndexMap<AstId, AstId>,
     repeat_packs: &'a mut IndexMap<AstId, AstId>,
     /// Items declared inside the function body being walked, innermost block
@@ -903,6 +970,19 @@ impl Resolver<'_> {
         }
     }
 
+    fn note_family(&mut self, family: FamilyTrait, assoc: &str, params: &[GenericParam]) {
+        for (index, param) in params.iter().enumerate() {
+            self.family_binders.insert(
+                param.id,
+                FamilyBinder {
+                    family,
+                    assoc: assoc.to_string(),
+                    index,
+                },
+            );
+        }
+    }
+
     fn push_binders(
         &mut self,
         params: &[GenericParam],
@@ -917,8 +997,26 @@ impl Resolver<'_> {
             let declared = params.iter().map(|p| p.id).chain(self_binder);
             self.binder_owners
                 .extend(declared.map(|binder| (binder, owner)));
+            self.packs.extend(
+                params
+                    .iter()
+                    .filter(|p| p.is_pack)
+                    .map(|p| (owner, p.name.clone())),
+            );
         }
+        let mut written: IndexMap<&str, Span> = IndexMap::default();
         for p in params {
+            if p.is_written()
+                && let Some(&first) = written.get(p.name.as_str())
+            {
+                self.redeclarations.push(Redeclaration {
+                    module: self.module.clone(),
+                    name: p.name.clone(),
+                    first,
+                    second: p.name_span,
+                });
+            }
+            written.entry(p.name.as_str()).or_insert(p.name_span);
             scope.insert(p.name.clone(), p.id);
             if p.is_effect {
                 self.effect_binders.insert(p.id);
@@ -1207,6 +1305,15 @@ impl AstVisitor<'_> for Resolver<'_> {
                     if let Some(head) = head_site(&i.ty) {
                         self.impl_heads.insert(i.id, head);
                     }
+                    if let Some(trait_head) = i.trait_type.as_ref().and_then(head_site) {
+                        for binding in &i.associated_types {
+                            self.note_family(
+                                FamilyTrait::Implemented(trait_head),
+                                &binding.name,
+                                &binding.type_params,
+                            );
+                        }
+                    }
                     (&i.type_params, Some(i.id), Some(i.id))
                 }
                 Item::Trait(t) => {
@@ -1215,7 +1322,19 @@ impl AstVisitor<'_> for Resolver<'_> {
                     // minted spelling would be a reference the walk never saw — so
                     // the declaration node answers for itself and the bound names
                     // it instead of respelling its name.
-                    self.record(t.id, &t.name, Resolution::Def(self.defs.def_at(t.id)));
+                    let def = self.defs.def_at(t.id);
+                    self.record(t.id, &t.name, Resolution::Def(def));
+                    for assoc in &t.associated_types {
+                        self.note_family(
+                            FamilyTrait::Declared(def),
+                            &assoc.name,
+                            &assoc.type_params,
+                        );
+                        self.family_params.insert(
+                            (def, assoc.name.clone()),
+                            assoc.type_params.iter().map(|p| p.name.clone()).collect(),
+                        );
+                    }
                     (&t.type_params, Some(t.id), Some(t.id))
                 }
                 Item::Function(_)

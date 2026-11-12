@@ -391,9 +391,7 @@ impl TypeSystem {
             return true;
         };
         let table = self.type_table.borrow();
-        table
-            .impl_target_binding(table.impl_target_args(def), receiver_args)
-            .is_some()
+        table.impl_target_reaches(table.impl_target_args(def), receiver_args)
     }
 
     /// Whether every head inside the impl target argument `arg` names a
@@ -1070,6 +1068,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             tt.open_impl_target_binding(tt.impl_target_args(def), &type_args, &open)
         };
         if let Some(binding) = binding {
+            let binding = self.tysys.type_table.borrow_mut().settle_runs(binding);
             self.defer_open_impl_bounds(def, &binding.slots, span);
         }
     }
@@ -1309,7 +1308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .first()
             .copied();
         let tt = self.tysys.type_table.borrow();
-        written.is_some_and(|written| tt.bind_type_params(&[written], &[key]).is_some())
+        written.is_some_and(|written| tt.binds_type_params(&[written], &[key]))
     }
 
     /// Check the bounds impl `def` places on its parameters, where the
@@ -1631,6 +1630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(binding) = binding else {
                 continue;
             };
+            let binding = self.tysys.type_table.borrow_mut().settle_runs(binding);
             if self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 def,
@@ -2752,7 +2752,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|(n, &t)| (n.clone(), t)),
             );
 
-        let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
         // The block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
         let blanket_binder = is_blanket_type_param.then(|| {
@@ -2851,7 +2850,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ..MethodInfo::of_sig(&method_sig, instantiated)
                 },
                 impl_module_source: impl_module_source.clone(),
-                blanket_type_param: blanket_type_param.clone(),
                 blanket_binder: blanket_binder.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
@@ -2904,7 +2902,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
-                    blanket_type_param,
                     blanket_binder,
                     impl_struct_fq,
                     is_blanket_ref_impl,
@@ -3074,7 +3071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let concrete: Vec<usize> = found_traits
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.blanket_type_param.is_none())
+            .filter(|(_, m)| m.blanket_binder.is_none())
             .map(|(i, _)| i)
             .collect();
         let mut classes: Vec<ArgClass> = Vec::new();
@@ -3884,7 +3881,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let key = expected_index_type?;
                     let mut table = s.tysys.type_table.borrow_mut();
                     let mut slots = table.impl_receiver_slots(block, base_type_id);
-                    table.bind_each_into(table.impl_trait_args(block), &[key], &mut slots);
+                    let written = table.impl_trait_args(block).to_vec();
+                    table.bind_each_into(&written, &[key], &mut slots);
                     drop(table);
                     let settled = s
                         .tysys

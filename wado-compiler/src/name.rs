@@ -3700,9 +3700,9 @@ impl FqTypeName {
         })
     }
 
-    /// A binder known only by its spelling (a pack member `F`, a name a
-    /// synthesized template writes). Use [`Self::binder_of`] for a parameter an
-    /// item declares — that one has an identity beyond its spelling.
+    /// A binder known only by its spelling (a name a synthesized template
+    /// writes). Use [`Self::binder_of`] for a parameter an item declares — that
+    /// one has an identity beyond its spelling.
     #[must_use]
     pub fn binder(name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {
@@ -3711,11 +3711,11 @@ impl FqTypeName {
         })
     }
 
-    /// The pack `name` spread in a tuple (`..T` in `[..T]`): any run of the
-    /// tuple's elements, none included.
+    /// The pack `name` the item `def` declares, spread in a tuple (`..T` in
+    /// `[..T]`): any run of the tuple's elements, none included.
     #[must_use]
-    pub fn pack_spread(name: &str) -> Self {
-        Self::binder(&type_pack_name(name))
+    pub fn pack_spread(defs: &DefTable, def: DefId, name: &str) -> Self {
+        Self::binder_of(defs, def, &type_pack_name(name))
     }
 
     /// Whether this is a [`Self::pack_spread`].
@@ -4080,8 +4080,27 @@ impl FqTypeName {
         }
         match at(self) {
             Some(replacement) => replacement,
+            // A spread stands for a run of the tuple's elements, so the tuple
+            // it is answered with splices in rather than nesting.
+            None if self.head == TypeHead::Tuple => FqTypeName::tuple(
+                self.args
+                    .iter()
+                    .flat_map(|arg| {
+                        let rewritten = arg.rewrite(at);
+                        if arg.is_pack_spread() && rewritten.is_bare_tuple() {
+                            rewritten.args
+                        } else {
+                            vec![rewritten]
+                        }
+                    })
+                    .collect(),
+            ),
             None => self.descend(&|inner| inner.rewrite(at)),
         }
+    }
+
+    fn is_bare_tuple(&self) -> bool {
+        self.head == TypeHead::Tuple && self.reference.is_empty()
     }
 
     /// The outermost `&` prefix and what it points at, `None` for a name

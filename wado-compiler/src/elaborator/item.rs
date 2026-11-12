@@ -462,7 +462,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .iter()
             .filter(|p| p.is_real_type_param())
             .map(|p| {
-                let binder = self.annotate_ctx.trait_ctx.type_params[&p.name].type_id;
+                let binder = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .binder_of(&self.tysys.resolutions, p)
+                    .expect("the frame binds each parameter it projects")
+                    .type_id;
                 let id = self.tysys.type_table.borrow().declared_param(binder);
                 TirTypeParam {
                     name: p.name.clone(),
@@ -2552,7 +2557,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .iter()
             .filter(|p| p.is_real_type_param())
             .map(|p| {
-                let binder = &scope.annotate_ctx.trait_ctx.type_params[&p.name];
+                let binder = scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .binder_of(&scope.tysys.resolutions, p)
+                    .expect("the frame binds each parameter the function declares");
                 (p.name.clone(), binder.type_id)
             })
             .collect();
@@ -2833,8 +2842,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The receiver is named by the module that declares it — the written
         // name alone is not an identity. `display_name` below stays bare: it is
         // what diagnostics show, not what the registry keys on.
-        let qualified_struct_name =
-            scope.receiver_name_of_impl(impl_type, impl_declared_params, impl_def);
+        let qualified_struct_name = scope.receiver_name_of_impl(impl_type, impl_declared_params);
         let mangled_name = MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
 
         // Diagnostics show the written name, not the registry key.

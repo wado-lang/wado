@@ -439,8 +439,8 @@ fn "bug_shared_field_escapes_by_move.wado/take"(v) {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v);
     }
     builtin::array_set<i32>(v.repr, used, 4);
-    v.used = used + 1;
-    return v.used;
+    v.used = local.tee used(used + 1);
+    return used;
 }
 
 fn "bug_shared_field_escapes_by_move.wado/moved_out_of_a_local"() {

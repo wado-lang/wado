@@ -89,7 +89,7 @@ fn "param_spec_alias_rebound.wado/pick"(a) {
 }
 
 fn "param_spec_alias_rebound.wado/run"() with Stdout {
-    let $load_2: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let n_0: i32;
     let cfg_11: ref "param_spec_alias_rebound.wado//Config";
     let other_12: ref "param_spec_alias_rebound.wado//Config";
@@ -116,9 +116,9 @@ fn "param_spec_alias_rebound.wado/run"() with Stdout {
     is_negative_109 = $sroa_t_h0_259 < 0;
     $sroa_t_h0_259 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_113(x_113 = builtin::i64_extend_i32_s($sroa_t_h0_259); select i64(x_113 < 0_i64, 0_i64 - x_113, x_113)));
     is_negative_109 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_42, is_negative_109, $sroa_t_h0_259);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_42.repr), is_negative_109, x_113, $sroa_t_h0_259);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(out_42.repr), is_negative_109, x_113, $sroa_t_h0_259);
     $sroa_view_repr_201 = global:param_spec_alias_rebound.wado::$const_obj_0;
-    if @unlikely(local.tee $sroa_t_h0_259(out_42.used + 1) > builtin::array_len($load_2)) {
+    if @unlikely(local.tee $sroa_t_h0_259(out_42.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, $sroa_t_h0_259);
     }
@@ -135,11 +135,11 @@ fn "param_spec_alias_rebound.wado/run"() with Stdout {
     n_0 = builtin::i32_wrap_i64(local.tee x_113("wasi/stream-new"()));
     $sroa_t_h0_259 = builtin::i32_wrap_i64(x_113 >> 32_i64);
     n_0 = "param_spec_alias_rebound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_0);
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee is_negative_109(out_42.used) + 1)), 0, out_42.repr, 0, is_negative_109);
-    builtin::array_set_u8($load_2, is_negative_109, 10);
+    builtin::array_copy<u8>(local.tee $load_6(builtin::array_new<u8>(local.tee is_negative_109(out_42.used) + 1)), 0, out_42.repr, 0, is_negative_109);
+    builtin::array_set_u8($load_6, is_negative_109, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_109 = is_negative_109 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h0_259, $load_2, 0, is_negative_109);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h0_259, $load_6, 0, is_negative_109);
     });
     "wasi/stream-drop-writable"($sroa_t_h0_259);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_0);

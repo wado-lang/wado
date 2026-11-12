@@ -222,15 +222,15 @@ fn "contract_clause_mutates_own_locals.wado/total"(xs) {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(copy_4);
     }
     builtin::array_set<i32>(local.tee $load_1(copy_4.repr), $load_0, 0);
-    copy_4.used = $load_0 + 1;
-    if @unlikely(local.tee $load_0(copy_4.used) >= builtin::array_len($load_1)) {
+    copy_4.used = local.tee $load_0($load_0 + 1);
+    if @unlikely($load_0 >= builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(copy_4);
     }
     builtin::array_set<i32>(copy_4.repr, $load_0, 1);
-    copy_4.used = $load_0 + 1;
+    copy_4.used = local.tee $load_0($load_0 + 1);
     if @unlikely((if sum_1 >= 0 -> i32 {
-        copy_4.used == (xs.used + 2);
+        $load_0 == (xs.used + 2);
     } else {
         0;
     }) == 0) {

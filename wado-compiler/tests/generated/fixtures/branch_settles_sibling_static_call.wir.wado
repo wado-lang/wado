@@ -2637,38 +2637,36 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 }
 
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,bool>::rebuild_table$unchecked"(self, slots) {
-    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,bool>";
+    let $load_1: i32;
+    let $load_2: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,bool>";
     let alive: ref Array<bool>;
-    let table: ref Array<i32>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_36: i32;
     let $sroa_$iter_2_start_37: i32;
-    let $licm_arith_40: u32;
-    self.table = builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a;
-    self.shift = 32 - builtin::i32_ctz(slots);
+    self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
+    self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    alive = local.tee $load_0(self.log).alive;
-    a = self.fps;
-    table = self.table;
-    $sroa_v_end_36 = $load_0.count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_36 = $load_2.count;
     $sroa_$iter_2_start_37 = 0;
-    $licm_arith_40 = self.shift;
     b358: block {
         l359: loop {
             break_if b358 $sroa_$iter_2_start_37 >= $sroa_v_end_36;
             $sroa_$iter_2_start_37 = local.tee current($sroa_$iter_2_start_37) + 1;
             if builtin::array_get_value<bool>(alive, current) {
-                s = builtin::array_get_value<i32>(a, current) >>u $licm_arith_40;
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b361: block {
                     l362: loop {
-                        break_if b361 builtin::array_get_value<i32>(table, s) == -1;
+                        break_if b361 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
                         continue l362;
                     };
                 };
-                builtin::array_set<i32>(table, s, current);
+                builtin::array_set<i32>(a, s, current);
             }
             continue l359;
         };

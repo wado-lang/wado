@@ -77,8 +77,8 @@ fn "multivalue_bind_referenced_binding.wado/run"() with Stdout {
     let $mv_hi_2: i64;
     multivalue_bind [a, $mv_hi_2] = i64.mul_wide_u(a, a);
     lo = struct.new "core:prelude//$Cell<i64>" { value: a };
-    lo.value = a + 1_i64;
-    a = lo.value + $mv_hi_2;
+    lo.value = local.tee a(a + 1_i64);
+    a = a + $mv_hi_2;
     out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;

@@ -362,12 +362,12 @@ fn "visibility_impl_member_index_mut_pub_ok.wado/$template_segment$visibility_im
 }
 
 fn "visibility_impl_member_index_mut_pub_ok.wado/$cm_export__$test_0_pub_mutating_method_through_an_index"() {
-    let $v0: i32;
+    let $load_1: i32;
     let self_10: ref "sub/impl_member_lib.wado//Item";
-    local.tee self_10(builtin::array_get_value<ref "sub/impl_member_lib.wado//Item">(array.new_fixed<ref "sub/impl_member_lib.wado//Item">(struct.new "sub/impl_member_lib.wado//Item" { v: 0 }), 0)).v = self_10.v + 1;
-    if @unlikely(local.tee $v0(self_10.v) != 1) {
+    local.tee self_10(builtin::array_get_value<ref "sub/impl_member_lib.wado//Item">(array.new_fixed<ref "sub/impl_member_lib.wado//Item">(struct.new "sub/impl_member_lib.wado//Item" { v: 0 }), 0)).v = local.tee $load_1(self_10.v + 1);
+    if @unlikely($load_1 != 1) {
         cold_path;
-        "visibility_impl_member_index_mut_pub_ok.wado/$test_0_pub_mutating_method_through_an_index$cold0"($v0);
+        "visibility_impl_member_index_mut_pub_ok.wado/$test_0_pub_mutating_method_through_an_index$cold0"($load_1);
         unreachable;
     }
     "wasi/task-return"(0);

@@ -4386,11 +4386,9 @@ pub(super) struct TraitMethodMatch {
     pub(super) trait_args: Vec<TypeId>,
     pub(super) method_info: MethodInfo,
     pub(super) impl_module_source: ModuleSource,
-    /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
-    /// this holds the type parameter name (e.g., `"I"`). `None` for normal impls.
-    pub(super) blanket_type_param: Option<String>,
-    /// [`Self::blanket_type_param`] as a binder named by its block, so two
-    /// blankets of one trait are two templates whatever letter each spells.
+    /// For a blanket impl match (`impl<I: Iterator> IntoIterator for I`), the
+    /// receiver's binder named by its block, so two blankets of one trait are
+    /// two templates whatever letter each spells. `None` for any other impl.
     pub(super) blanket_binder: Option<FqTypeName>,
     /// The type that has the impl, as the receiver form its methods were
     /// defined under. Not the receiver's when found through the newtype chain.

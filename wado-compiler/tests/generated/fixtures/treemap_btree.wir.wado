@@ -282,7 +282,7 @@ global global:core:prelude/string.wado::$const_obj_20: ref Array<u8> = array.new
 global global:core:prelude/string.wado::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(32, 61, 32);
 
 fn "treemap_btree.wado/run"() with Stdout {
-    let $load_14: ref Array<u8>;
+    let $load_15: ref Array<u8>;
     let map: ref "treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let $match_14: ref "tuple//[i32, i32]";
     let root_24: ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>";
@@ -295,7 +295,7 @@ fn "treemap_btree.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_14_225: i32;
     let $sroa_$iter_5_repr_316: ref "Array<[core:prelude/string.wado/String,i32]>";
     let new_repr_325: ref Array<u8>;
-    let start_559: i32;
+    let is_negative_499: bool;
     "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(local.tee map(struct.new "treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32>" { root: ref.null none, t: 3, size: 0, deleted_count: 0 }), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, 1);
     "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }, 2);
     "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cherry"), used: 6 }, 3);
@@ -331,27 +331,27 @@ fn "treemap_btree.wado/run"() with Stdout {
         $sroa_$pattern_temp_0_0_13_89 = $match_14.1;
         message_91 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         new_repr_325 = global:treemap_btree.wado::$const_obj_9;
-        message_91.used = 9;
-        builtin::array_copy<u8>(local.tee $load_14(message_91.repr), 0, new_repr_325, 0, 9);
-        $sroa_$pattern_temp_0_1_14_90 = $sroa_$pattern_temp_0_0_13_89 < 0;
+        message_91.used = local.tee $sroa_$pattern_temp_0_1_14_90(9);
+        builtin::array_copy<u8>(local.tee $load_15(message_91.repr), 0, new_repr_325, 0, 9);
+        is_negative_499 = $sroa_$pattern_temp_0_0_13_89 < 0;
         $sroa_$pattern_temp_0_0_13_89 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_83($cm_pair_7_83 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_13_89); select i64($cm_pair_7_83 < 0_i64, 0_i64 - $cm_pair_7_83, $cm_pair_7_83)));
-        if $sroa_$pattern_temp_0_1_14_90 {
-            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + 1) > builtin::array_len($load_14)) {
+        if is_negative_499 {
+            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90($sroa_$pattern_temp_0_1_14_90 + 1) > builtin::array_len($load_15)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
             }
-            start_559 = message_91.used;
+            is_negative_499 = message_91.used;
             message_91.used = $sroa_$pattern_temp_0_1_14_90;
-            builtin::array_set_u8(message_91.repr, start_559, 45);
+            builtin::array_set_u8(message_91.repr, is_negative_499, 45);
         } else {
         }
         if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + $sroa_$pattern_temp_0_0_13_89) > builtin::array_len(message_91.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
         }
-        start_559 = message_91.used;
+        is_negative_499 = message_91.used;
         message_91.used = $sroa_$pattern_temp_0_1_14_90;
-        "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, start_559, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
+        "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, is_negative_499, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
         $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
             break $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
         };
@@ -377,27 +377,27 @@ fn "treemap_btree.wado/run"() with Stdout {
         $sroa_$pattern_temp_0_0_13_89 = $match_14.1;
         message_91 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
         new_repr_325 = global:treemap_btree.wado::$const_obj_8;
-        message_91.used = 7;
-        builtin::array_copy<u8>(local.tee $load_14(message_91.repr), 0, new_repr_325, 0, 7);
-        $sroa_$pattern_temp_0_1_14_90 = $sroa_$pattern_temp_0_0_13_89 < 0;
+        message_91.used = local.tee $sroa_$pattern_temp_0_1_14_90(7);
+        builtin::array_copy<u8>(local.tee $load_15(message_91.repr), 0, new_repr_325, 0, 7);
+        is_negative_499 = $sroa_$pattern_temp_0_0_13_89 < 0;
         $sroa_$pattern_temp_0_0_13_89 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_83($cm_pair_7_83 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_13_89); select i64($cm_pair_7_83 < 0_i64, 0_i64 - $cm_pair_7_83, $cm_pair_7_83)));
-        if $sroa_$pattern_temp_0_1_14_90 {
-            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + 1) > builtin::array_len($load_14)) {
+        if is_negative_499 {
+            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90($sroa_$pattern_temp_0_1_14_90 + 1) > builtin::array_len($load_15)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
             }
-            start_559 = message_91.used;
+            is_negative_499 = message_91.used;
             message_91.used = $sroa_$pattern_temp_0_1_14_90;
-            builtin::array_set_u8(message_91.repr, start_559, 45);
+            builtin::array_set_u8(message_91.repr, is_negative_499, 45);
         } else {
         }
         if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + $sroa_$pattern_temp_0_0_13_89) > builtin::array_len(message_91.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
         }
-        start_559 = message_91.used;
+        is_negative_499 = message_91.used;
         message_91.used = $sroa_$pattern_temp_0_1_14_90;
-        "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, start_559, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
+        "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, is_negative_499, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
         $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec2_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
             break $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec2_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_39;
         };
@@ -424,27 +424,27 @@ fn "treemap_btree.wado/run"() with Stdout {
         $sroa_$pattern_temp_0_0_13_89 = $match_14.1;
         message_91 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
         new_repr_325 = global:treemap_btree.wado::$const_obj_7;
-        message_91.used = 19;
-        builtin::array_copy<u8>(local.tee $load_14(message_91.repr), 0, new_repr_325, 0, 19);
-        $sroa_$pattern_temp_0_1_14_90 = $sroa_$pattern_temp_0_0_13_89 < 0;
+        message_91.used = local.tee $sroa_$pattern_temp_0_1_14_90(19);
+        builtin::array_copy<u8>(local.tee $load_15(message_91.repr), 0, new_repr_325, 0, 19);
+        is_negative_499 = $sroa_$pattern_temp_0_0_13_89 < 0;
         $sroa_$pattern_temp_0_0_13_89 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_83($cm_pair_7_83 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_13_89); select i64($cm_pair_7_83 < 0_i64, 0_i64 - $cm_pair_7_83, $cm_pair_7_83)));
-        if $sroa_$pattern_temp_0_1_14_90 {
-            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + 1) > builtin::array_len($load_14)) {
+        if is_negative_499 {
+            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90($sroa_$pattern_temp_0_1_14_90 + 1) > builtin::array_len($load_15)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
             }
-            start_559 = message_91.used;
+            is_negative_499 = message_91.used;
             message_91.used = $sroa_$pattern_temp_0_1_14_90;
-            builtin::array_set_u8(message_91.repr, start_559, 45);
+            builtin::array_set_u8(message_91.repr, is_negative_499, 45);
         } else {
         }
         if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + $sroa_$pattern_temp_0_0_13_89) > builtin::array_len(message_91.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
         }
-        start_559 = message_91.used;
+        is_negative_499 = message_91.used;
         message_91.used = $sroa_$pattern_temp_0_1_14_90;
-        "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, start_559, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
+        "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, is_negative_499, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
         $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec3_sroa_t_h0__2__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
             break $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec3_sroa_t_h0__2__$inline_core_prelude_string_wado_String__internal_push_view_39;
         };
@@ -520,17 +520,17 @@ fn "treemap_btree.wado/run"() with Stdout {
     b19: block {
         l20: loop {
             break_if b19 $sroa_$pattern_temp_0_1_14_90 >= $sroa_$pattern_temp_0_0_13_89;
-            message_91 = struct.new "core:prelude/string.wado//String" { repr: new_repr_325 = local.tee message_91(local.tee v_49(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($sroa_$iter_5_repr_316, $sroa_$pattern_temp_0_1_14_90)).0).repr; builtin::array_copy<u8>(local.tee $load_14(builtin::array_new<u8>(local.tee start_559(message_91.used))), 0, new_repr_325, 0, start_559); $load_14, used: start_559 };
-            start_559 = v_49.1;
+            message_91 = struct.new "core:prelude/string.wado//String" { repr: new_repr_325 = local.tee message_91(local.tee v_49(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($sroa_$iter_5_repr_316, $sroa_$pattern_temp_0_1_14_90)).0).repr; builtin::array_copy<u8>(local.tee $load_15(builtin::array_new<u8>(local.tee is_negative_499(message_91.used))), 0, new_repr_325, 0, is_negative_499); $load_15, used: is_negative_499 };
+            is_negative_499 = v_49.1;
             $sroa_$pattern_temp_0_1_14_90 = $sroa_$pattern_temp_0_1_14_90 + 1;
             message_91 = block -> ref "core:prelude/string.wado//String" {
-                "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btree.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(message_91, start_559);
+                "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btree.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(message_91, is_negative_499);
             };
-            start_559 = builtin::i32_wrap_i64(local.tee $cm_pair_7_83("wasi/stream-new"()));
+            is_negative_499 = builtin::i32_wrap_i64(local.tee $cm_pair_7_83("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14_225 = builtin::i32_wrap_i64($cm_pair_7_83 >> 32_i64);
-            start_559 = "treemap_btree.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_559);
+            is_negative_499 = "treemap_btree.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_499);
             "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_225, message_91.repr, message_91.used);
-            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_559);
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_499);
             continue l20;
         };
     };
@@ -570,27 +570,27 @@ fn "treemap_btree.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_89 = map.deleted_count;
     message_91 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
     new_repr_325 = global:treemap_btree.wado::$const_obj_1;
-    message_91.used = 15;
-    builtin::array_copy<u8>(local.tee $load_14(message_91.repr), 0, new_repr_325, 0, 15);
-    $sroa_$pattern_temp_0_1_14_90 = $sroa_$pattern_temp_0_0_13_89 < 0;
+    message_91.used = local.tee $sroa_$pattern_temp_0_1_14_90(15);
+    builtin::array_copy<u8>(local.tee $load_15(message_91.repr), 0, new_repr_325, 0, 15);
+    is_negative_499 = $sroa_$pattern_temp_0_0_13_89 < 0;
     $sroa_$pattern_temp_0_0_13_89 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_83($cm_pair_7_83 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_13_89); select i64($cm_pair_7_83 < 0_i64, 0_i64 - $cm_pair_7_83, $cm_pair_7_83)));
-    if $sroa_$pattern_temp_0_1_14_90 {
-        if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + 1) > builtin::array_len($load_14)) {
+    if is_negative_499 {
+        if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90($sroa_$pattern_temp_0_1_14_90 + 1) > builtin::array_len($load_15)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
         }
-        start_559 = message_91.used;
+        is_negative_499 = message_91.used;
         message_91.used = $sroa_$pattern_temp_0_1_14_90;
-        builtin::array_set_u8(message_91.repr, start_559, 45);
+        builtin::array_set_u8(message_91.repr, is_negative_499, 45);
     } else {
     }
     if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_90(message_91.used + $sroa_$pattern_temp_0_0_13_89) > builtin::array_len(message_91.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_91, $sroa_$pattern_temp_0_1_14_90);
     }
-    start_559 = message_91.used;
+    is_negative_499 = message_91.used;
     message_91.used = $sroa_$pattern_temp_0_1_14_90;
-    "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, start_559, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
+    "core:prelude/primitive.wado/write_decimal_digits"(message_91.repr, is_negative_499, $cm_pair_7_83, $sroa_$pattern_temp_0_0_13_89);
     $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec4_sroa_t_h0__3__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_treemap_btree_wado__tmpl_fb51c04d54491732__i32___spec0_spec4_sroa_t_h0__3__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };
@@ -619,17 +619,17 @@ fn "treemap_btree.wado/run"() with Stdout {
     b29: block {
         l30: loop {
             break_if b29 $sroa_$pattern_temp_0_1_14_90 >= $sroa_$pattern_temp_0_0_13_89;
-            message_91 = struct.new "core:prelude/string.wado//String" { repr: new_repr_325 = local.tee message_91(local.tee v_49(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($sroa_$iter_5_repr_316, $sroa_$pattern_temp_0_1_14_90)).0).repr; builtin::array_copy<u8>(local.tee $load_14(builtin::array_new<u8>(local.tee start_559(message_91.used))), 0, new_repr_325, 0, start_559); $load_14, used: start_559 };
-            start_559 = v_49.1;
+            message_91 = struct.new "core:prelude/string.wado//String" { repr: new_repr_325 = local.tee message_91(local.tee v_49(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($sroa_$iter_5_repr_316, $sroa_$pattern_temp_0_1_14_90)).0).repr; builtin::array_copy<u8>(local.tee $load_15(builtin::array_new<u8>(local.tee is_negative_499(message_91.used))), 0, new_repr_325, 0, is_negative_499); $load_15, used: is_negative_499 };
+            is_negative_499 = v_49.1;
             $sroa_$pattern_temp_0_1_14_90 = $sroa_$pattern_temp_0_1_14_90 + 1;
             message_91 = block -> ref "core:prelude/string.wado//String" {
-                "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btree.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(message_91, start_559);
+                "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btree.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(message_91, is_negative_499);
             };
-            start_559 = builtin::i32_wrap_i64(local.tee $cm_pair_7_83("wasi/stream-new"()));
+            is_negative_499 = builtin::i32_wrap_i64(local.tee $cm_pair_7_83("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14_225 = builtin::i32_wrap_i64($cm_pair_7_83 >> 32_i64);
-            start_559 = "treemap_btree.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_559);
+            is_negative_499 = "treemap_btree.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_499);
             "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_225, message_91.repr, message_91.used);
-            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_559);
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_499);
             continue l30;
         };
     };
@@ -1753,7 +1753,7 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
     let $load_15: ref "core:prelude/list.wado//List<i32>";
     let $load_18: ref "core:prelude/list.wado//List<bool>";
     let $load_20: ref Array<bool>;
-    let $load_41: ref "core:prelude/list.wado//List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
+    let $load_46: ref "core:prelude/list.wado//List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
     let pos_4: i32;
     let self_35: ref "core:prelude/string.wado//String";
     let $licm_keys_144: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
@@ -2036,7 +2036,7 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
                 continue l251;
             };
         };
-        $licm_used_146 = local.tee $load_41(node.children).used;
+        $licm_used_146 = local.tee $load_46(node.children).used;
         if @unlikely(pos_4 >=u $licm_used_146) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos_4, $licm_used_146, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:190"), used: 22 });
@@ -2044,7 +2044,7 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
         }
         if block -> bool {
             let $mv_arg_1: ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>";
-            "treemap_btree.wado/treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>::is_full"(local.tee $mv_arg_1(builtin::array_get_value<ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">($load_41.repr, pos_4)).keys, $mv_arg_1.deleted, (2 * self.t) - 1);
+            "treemap_btree.wado/treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>::is_full"(local.tee $mv_arg_1(builtin::array_get_value<ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">($load_46.repr, pos_4)).keys, $mv_arg_1.deleted, (2 * self.t) - 1);
         } {
             "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child$sroa[self.t]"(self.t, node, pos_4);
             pos_4 = pos_4 + ($licm_used_146 = local.tee $licm_keys_144(node.keys).used; if @unlikely(pos_4 >= $licm_used_146) {
@@ -2124,11 +2124,11 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
                 break $inline_core_prelude_array_wado_seq_cmp_u8__dae_a_start_b_start__0: 1;
             } == 2);
         }
-        "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_non_full"(self, $licm_used_146 = local.tee $load_41(node.children).used; if @unlikely(pos_4 >=u $licm_used_146) {
+        "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_non_full"(self, $licm_used_146 = local.tee $load_46(node.children).used; if @unlikely(pos_4 >=u $licm_used_146) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos_4, $licm_used_146, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:198"), used: 22 });
             unreachable;
-        }; builtin::array_get_value<ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">($load_41.repr, pos_4), key, value);
+        }; builtin::array_get_value<ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">($load_46.repr, pos_4), key, value);
     }
 }
 
@@ -2364,7 +2364,7 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
 fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, node, key) {
     let $load_14: ref "core:prelude/list.wado//List<bool>";
     let $load_16: ref Array<bool>;
-    let $load_20: ref "core:prelude/list.wado//List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
+    let $load_22: ref "core:prelude/list.wado//List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
     let i_3: i32;
     let other_22: ref "core:prelude/string.wado//String";
     let $licm_keys_72: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
@@ -2531,11 +2531,11 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
     if node.is_leaf {
         return 0;
     }
-    return "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, $licm_used_73 = local.tee $load_20(node.children).used; if @unlikely(i_3 >=u $licm_used_73) {
+    return "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, $licm_used_73 = local.tee $load_22(node.children).used; if @unlikely(i_3 >=u $licm_used_73) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i_3, $licm_used_73, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:283"), used: 22 });
         unreachable;
-    }; builtin::array_get_value<ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">($load_20.repr, i_3), key);
+    }; builtin::array_get_value<ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">($load_22.repr, i_3), key);
 }
 
 fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::collect_entries"(self, $mv$node$keys, $mv$node$values, $mv$node$deleted, $mv$node$children, $mv$node$is_leaf, result) {
@@ -3903,35 +3903,35 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btree.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
-    let $load_0: ref Array<u8>;
+    let $load_0: i32;
+    let $load_1: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
-    let start_125: i32;
     let $sroa_view_repr_486: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $sroa_view_repr_486 = global:core:prelude/string.wado::$const_obj_20;
-    out_3.used = 6;
-    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, $sroa_view_repr_486, 0, 6);
+    out_3.used = local.tee $load_0(6);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_486, 0, 6);
     is_negative_65 = t < 0;
     t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_65 {
-        if @unlikely(local.tee is_negative_65(out_3.used + 1) > builtin::array_len($load_0)) {
+        if @unlikely(local.tee $load_0($load_0 + 1) > builtin::array_len($load_1)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_0);
         }
-        start_125 = out_3.used;
-        out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_125, 45);
+        is_negative_65 = out_3.used;
+        out_3.used = $load_0;
+        builtin::array_set_u8(out_3.repr, is_negative_65, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
+    if @unlikely(local.tee $load_0(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_0);
     }
-    start_125 = out_3.used;
-    out_3.used = is_negative_65;
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, start_125, x, t);
+    is_negative_65 = out_3.used;
+    out_3.used = $load_0;
+    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative_65, x, t);
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
     };
@@ -3939,7 +3939,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btr
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btree.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let $load_8: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let x_170: i64;
     let q: u64;
@@ -3974,8 +3974,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btr
     }
     new_used_261 = out_3.used;
     out_3.used = n_257;
-    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), new_used_261, $sroa_view_repr_1140, 0, 3);
-    n_257 = $mv$t$h1 < 0;
+    builtin::array_copy<u8>(local.tee $load_10(out_3.repr), new_used_261, $sroa_view_repr_1140, 0, 3);
+    new_used_261 = $mv$t$h1 < 0;
     x_170 = builtin::i64_extend_i32_s($mv$t$h1);
     x_170 = select i64(x_170 < 0_i64, 0_i64 - x_170, x_170);
     $mv$t$h1 = $inline_count_digits_u64_5: block -> i32 {
@@ -4038,8 +4038,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<treemap_btr
         }
         break $inline_count_digits_u64_5: 20;
     };
-    if n_257 {
-        if @unlikely(local.tee n_257(out_3.used + 1) > builtin::array_len($load_8)) {
+    if new_used_261 {
+        if @unlikely(local.tee n_257(n_257 + 1) > builtin::array_len($load_10)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, n_257);
         }

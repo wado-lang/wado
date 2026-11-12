@@ -7,7 +7,7 @@ use { EmitContext } from "./emit_context.wado";
 use { follow_site_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { HashSet } from "core:collections";
 use { FOLLOW_SITE_LIMIT, FOLLOW_TABLES } from "./gen_util.wado";
-use { sets_overlap, union_kind_arrays } from "./token_kinds.wado";
+use { bits_ids, bits_union_into, sets_overlap } from "./token_kinds.wado";
 use { Reading } from "./readings.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { DISPATCH_KIND_LOCAL } from "./ident.wado";
@@ -93,10 +93,11 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSe
 
 /// Emit the runtime FOLLOW tables: `FOLLOW_TABLES` holds every distinct
 /// position set once, as a row of `stride` bitset words, and each site the
-/// emitted code names as a row. The row opens with the set its readings can start with and whether one
-/// is empty (`set << 1 | empty`), which turns most queries away at one test,
-/// then each reading as a header (`len << 1 | ends`) and its positions' set
-/// indices. `FOLLOW_SITE_<id>` is the row's 1-based
+/// emitted code names as an entry in `heads` and a row of `readings`. The
+/// heads entry is the set its readings can start with and whether one is empty
+/// (`set << 1 | empty`), which turns most queries away at one load. The row
+/// holds each reading as a header (`len << 1 | ends`) and its positions' set
+/// indices. `FOLLOW_SITE_<id>` is the site's 1-based
 /// number, so a continuation is a scalar a call site composes with a shift, and
 /// a rule takes one parameter rather than a row of slots.
 pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
@@ -107,6 +108,7 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
         return;
     }
     let mut sets: List<List<i32>> = [];
+    let mut heads: List<String> = [];
     let mut starts: List<String> = ["0"];
     let mut readings: List<String> = [];
     let mut names: List<String> = [];
@@ -117,12 +119,12 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
             continue;
         }
         let site = &all_sites[site_id];
-        let [heads, has_empty] = site_heads(site);
-        readings.push(`${intern_position_set(&mut sets, &heads) << 1 | if has_empty { 1 } else { 0 }}`);
+        let [first, has_empty] = site_heads(site);
+        heads.push(`${intern_position_set(&mut sets, &first) << 1 | if has_empty { 1 } else { 0 }}`);
         for let r of site {
-            readings.push(`${r.kinds.len() << 1 | if r.ends { 1 } else { 0 }}`);
-            for let position of &r.kinds {
-                readings.push(`${intern_position_set(&mut sets, position)}`);
+            readings.push(`${r.positions.len() << 1 | if r.ends { 1 } else { 0 }}`);
+            for let position of &r.positions {
+                readings.push(`${intern_position_set(&mut sets, &bits_ids(position))}`);
             }
         }
         starts.push(`${readings.len()}`);
@@ -143,6 +145,7 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
     w.line(`global ${FOLLOW_TABLES}: FollowTables = FollowTables {`);
     w.line(`    stride: ${stride},`);
     w.line(`    sets: [${rendered.join(", ")}],`);
+    w.line(`    heads: [${heads.join(", ")}],`);
     w.line(`    starts: [${starts.join(", ")}],`);
     w.line(`    readings: [${readings.join(", ")}],`);
     w.line("};");
@@ -175,17 +178,17 @@ pub fn kind_bitset_words(set: &List<i32>) -> List<String> {
 /// site is never only the empty reading, which `continuation_arg` forwards
 /// instead, so some reading starts with a token.
 fn site_heads(site: &List<Reading>) -> [List<i32>, bool] {
-    let mut heads: List<i32> = [];
+    let mut heads: List<u64> = [];
     let mut has_empty = false;
     for let r of site {
-        if r.kinds.is_empty() {
+        if r.positions.is_empty() {
             has_empty = true;
         } else {
-            heads = union_kind_arrays(&heads, &r.kinds[0]);
+            bits_union_into(&mut heads, &r.positions[0]);
         }
     }
     assert !heads.is_empty(), "a site starts with some token";
-    return [heads, has_empty];
+    return [bits_ids(&heads), has_empty];
 }
 
 /// The index of `set` in `sets`, appending it when it is new. A grammar

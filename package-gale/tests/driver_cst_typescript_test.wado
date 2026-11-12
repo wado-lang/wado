@@ -361,9 +361,9 @@ test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
     // The second token (the `x` identifier) must carry the HIDDEN
     // whitespace as leading trivia on channel 1.
     let mut found_hidden = false;
-    for let mut j = tokens.triv_lo[1]; j < tokens.triv_hi[1]; j += 1 {
-        if tokens.triv_kinds[j] == TK_WhiteSpaces {
-            assert tokens.triv_chans[j] == 1, "expected HIDDEN channel 1";
+    for let mut j = tokens.trivia_lo_at(1); j < tokens.trivia_hi_at(1); j += 1 {
+        if tokens.trivia_kind_at(j) == TK_WhiteSpaces {
+            assert tokens.trivia_channel_at(j) == 1, "expected HIDDEN channel 1";
             found_hidden = true;
         }
     }

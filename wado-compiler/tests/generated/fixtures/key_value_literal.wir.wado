@@ -663,8 +663,9 @@ fn "key_value_literal.wado/$test_1_a_type_accepting_both_literal_forms_picks_by_
 }
 
 fn "key_value_literal.wado/$test_2_a_blanket_impl_bound_on_the_parameter_s_associated_type"() {
-    let $load_9: ref Array<i32>;
+    let $load_12: ref Array<i32>;
     let used_38: i32;
+    let self_51: i32;
     let $sroa_b_keys_59: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $sroa_b_values_60: ref "core:prelude/list.wado//List<i32>";
     $sroa_b_keys_59 = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
@@ -691,20 +692,19 @@ fn "key_value_literal.wado/$test_2_a_blanket_impl_bound_on_the_parameter_s_assoc
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_b_values_60);
     }
-    builtin::array_set<i32>(local.tee $load_9($sroa_b_values_60.repr), used_38, 2);
-    $sroa_b_values_60.used = used_38 + 1;
-    if @unlikely(local.tee used_38($sroa_b_keys_59.used) != 2) {
+    builtin::array_set<i32>(local.tee $load_12($sroa_b_values_60.repr), used_38, 2);
+    $sroa_b_values_60.used = local.tee used_38(used_38 + 1);
+    if @unlikely(local.tee self_51($sroa_b_keys_59.used) != 2) {
         cold_path;
-        "key_value_literal.wado/$test_2_a_blanket_impl_bound_on_the_parameter_s_associated_type$cold1"(used_38);
+        "key_value_literal.wado/$test_2_a_blanket_impl_bound_on_the_parameter_s_associated_type$cold1"(self_51);
         unreachable;
     }
-    used_38 = $sroa_b_values_60.used;
     if @unlikely(0 >= used_38) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, used_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("key_value_literal.wado:167"), used: 26 });
         unreachable;
     }
-    if @unlikely(local.tee used_38(builtin::array_get_value<i32>($load_9, 0)) != 1) {
+    if @unlikely(local.tee used_38(builtin::array_get_value<i32>($load_12, 0)) != 1) {
         cold_path;
         "key_value_literal.wado/$test_2_a_blanket_impl_bound_on_the_parameter_s_associated_type$cold0"(used_38);
         unreachable;

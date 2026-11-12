@@ -2072,8 +2072,7 @@ fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disj
                 unreachable;
             }
             if local.tee b(builtin::array_get_value<i32>($licm_repr_42, $licm_used_41)) > 0 {
-                self.pos = $licm_used_41 + 1;
-                $licm_used_41 = self.pos;
+                self.pos = local.tee $licm_used_41($licm_used_41 + 1);
                 b266: block {
                     l267: loop {
                         if (if $licm_used_41 < 3 -> i32 {

@@ -1,0 +1,31 @@
+//! An inherent impl's bound on a pack names the element that misses it.
+
+trait Marker with () {
+    fn mark(&self) -> i32;
+}
+
+impl Marker for bool {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct W<..P> {
+    t: [..P],
+}
+
+impl<..P: Marker> W<[i32, ..P]> {
+    fn head(&self) -> i32 {
+        return self.t.0;
+    }
+}
+
+test {
+    let w = W { t: [7, true, "x"] };
+    assert w.head() == 7;
+}
+
+__DATA__
+{
+    "compile_error": ":25:12: analysis error: type 'String' does not implement trait 'Marker' required by bound on 'P'"
+}

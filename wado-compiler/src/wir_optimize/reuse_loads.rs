@@ -1,15 +1,17 @@
 //! Redundant load elimination: a `struct.get` chain off a local, read again
 //! where nothing between could have changed it, reuses the first read through a
-//! temp. wasmtime null-checks and reloads every `struct.get` it is given.
+//! temp. A `struct.set` to such a chain leaves the value it stored for the next
+//! read the same way. wasmtime null-checks and reloads every `struct.get` it is
+//! given.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirInstr, WirPackage, WirType, WirTypeId};
+use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
 use super::util::{CalleeWrites, Footprint, arm_callees};
 
 /// A field chain read off a local: `root.f0.f1…`, outermost field last.
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct Key {
+pub(super) struct Key {
     root: String,
     fields: Vec<(WirTypeId, String)>,
 }
@@ -39,6 +41,43 @@ impl Key {
             root: name.clone(),
             fields,
         })
+    }
+
+    /// The chain a `struct.set` of `field_name` on `receiver` writes, or `None`
+    /// where the store may move that chain: one it reads through a field of the
+    /// same name.
+    pub(super) fn of_store(
+        receiver: &WirInstr,
+        type_id: &WirTypeId,
+        field_name: &str,
+    ) -> Option<Self> {
+        let mut key = match receiver {
+            WirInstr::LocalGet { name, .. } => Self {
+                root: name.clone(),
+                fields: Vec::new(),
+            },
+            chain => Self::of(chain)?,
+        };
+        if key.fields.iter().any(|(_, name)| name == field_name) {
+            return None;
+        }
+        key.fields.push((type_id.clone(), field_name.to_string()));
+        Some(key)
+    }
+
+    /// Whether `writes` may make the chain name another place: a write to its
+    /// root, or to a field it reads on the way to the last one.
+    pub(super) fn moved_by(&self, writes: &Footprint) -> bool {
+        let Some(mut fields) = writes.fields() else {
+            return true;
+        };
+        let through = &self.fields[..self.fields.len() - 1];
+        writes.has_local(&self.root) || fields.any(|f| through.iter().any(|(_, name)| name == f))
+    }
+
+    /// The last field, the one the chain names.
+    pub(super) fn field(&self) -> &str {
+        &self.fields.last().expect("a chain names a field").1
     }
 }
 
@@ -128,6 +167,7 @@ struct Temp {
 }
 
 struct Reuser<'c> {
+    types: &'c [WirTypeDef],
     /// What the arm being visited consults (`arm_callees`).
     callees: Option<&'c CalleeWrites>,
     /// Every chain the function reads, which [`Avail`] names by position.
@@ -199,6 +239,7 @@ impl Reuser<'_> {
                         .all(|end| end.get(chain) == Some(id))
                 });
             }
+            WirInstr::StructSet { .. } => self.visit_store(instr),
             _ => {
                 instr.for_each_boxed_child_mut(&mut |child| self.visit(child));
                 self.avail
@@ -228,6 +269,50 @@ impl Reuser<'_> {
             unreachable!("a chain key is read off a struct.get");
         };
         self.visit(expr);
+        let ty = result_ty.clone();
+        self.supply(chain, instr, ty);
+    }
+
+    /// A `struct.set` writes its chain the value it stores, which a later read
+    /// can take while nothing writes the chain again. A packed field truncates
+    /// what it stores, so its read differs from the value.
+    fn visit_store(&mut self, instr: &mut WirInstr) {
+        let own_writes = Footprint::writes_of_node(instr, self.callees);
+        let WirInstr::StructSet {
+            type_id,
+            field_name,
+            expr,
+            value,
+        } = instr
+        else {
+            unreachable!("visit_store takes a struct.set");
+        };
+        let key = Key::of_store(expr, type_id, field_name);
+        self.visit(expr);
+        self.visit(value);
+        self.avail.forget_written(&self.keys, &own_writes);
+        let Some(key) = key else {
+            return;
+        };
+        let WirTypeDef::Struct(def) = &self.types[type_id.index() as usize] else {
+            unreachable!("struct.set names a struct type");
+        };
+        let ty = &def.field(field_name).ty;
+        if ty.packed_bits().is_some()
+            || key.moved_by(&Footprint::writes_all(
+                std::slice::from_ref(value),
+                self.callees,
+            ))
+        {
+            return;
+        }
+        let ty = ty.clone();
+        let (chain, _) = self.keys.insert_full(key);
+        self.supply(chain, value, ty);
+    }
+
+    /// Make `chain` available as a fresh temp `value` sets.
+    fn supply(&mut self, chain: usize, value: &mut WirInstr, ty: WirType) {
         let id = self.temps.len();
         let name = format!("$load_{id}");
         assert!(
@@ -236,14 +321,14 @@ impl Reuser<'_> {
         );
         self.temps.push(Temp {
             name: name.clone(),
-            ty: result_ty.clone(),
+            ty,
             used: false,
         });
         self.avail.insert(&self.keys, chain, id);
-        let get = std::mem::replace(instr, WirInstr::Nop);
-        *instr = WirInstr::LocalTee {
+        let set = std::mem::replace(value, WirInstr::Nop);
+        *value = WirInstr::LocalTee {
             name,
-            value: Box::new(get),
+            value: Box::new(set),
         };
     }
 }
@@ -261,12 +346,14 @@ fn unwrap_unused(instr: &mut WirInstr, unused: &IndexSet<String>) {
 
 pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
     let callees = CalleeWrites::of_module(module);
+    let types = &module.types;
     for func in &mut module.functions {
         let locals = func.declared_locals();
         let Some(body) = &mut func.body else {
             continue;
         };
         let mut reuser = Reuser {
+            types,
             callees: Some(&callees),
             keys: IndexSet::default(),
             avail: Avail::default(),

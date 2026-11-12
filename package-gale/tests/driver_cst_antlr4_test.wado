@@ -226,9 +226,9 @@ test "user channel: LINE_COMMENT routed to COMMENT channel" {
     let mut found = false;
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.kinds[i] == TK_INT {
-            for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
-                if tokens.triv_kinds[j] == TK_LINE_COMMENT {
-                    assert tokens.triv_chans[j] == 3, "expected COMMENT channel 3";
+            for let mut j = tokens.trivia_lo_at(i); j < tokens.trivia_hi_at(i); j += 1 {
+                if tokens.trivia_kind_at(j) == TK_LINE_COMMENT {
+                    assert tokens.trivia_channel_at(j) == 3, "expected COMMENT channel 3";
                     found = true;
                 }
             }
@@ -245,9 +245,9 @@ test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
     let mut found = false;
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.kinds[i] == TK_INT {
-            for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
-                if tokens.triv_kinds[j] == TK_BLOCK_COMMENT {
-                    assert tokens.triv_chans[j] == 3, "expected COMMENT channel 3";
+            for let mut j = tokens.trivia_lo_at(i); j < tokens.trivia_hi_at(i); j += 1 {
+                if tokens.trivia_kind_at(j) == TK_BLOCK_COMMENT {
+                    assert tokens.trivia_channel_at(j) == 3, "expected COMMENT channel 3";
                     found = true;
                 }
             }

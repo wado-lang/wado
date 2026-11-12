@@ -1744,8 +1744,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
     $av_10 = self.used;
     builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
-    self.used = $av_10 - 1;
-    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
+    self.used = local.tee index($av_10 - 1);
+    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, index, ref.null none);
     return v;
 }
 

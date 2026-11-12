@@ -228,8 +228,10 @@ lowered first. `-O0` then only removes dead items and settles the locals
 3. Constant struct-field forwarding, for constant-index bounds checks.
 4. Array rewrites: constant arrays to data segments, large literals split, and
    the zero fill of a fresh array removed.
-5. Peephole: repeated field loads reused, instruction selection (`select`,
-   rotates), and variant result slots flattened. Then a resource whose
+5. Peephole: a repeated field load reuses the first, or the value last stored
+   to the field; a field store the next one to the same field replaces before
+   any read is dropped; instruction selection (`select`, rotates), and variant
+   result slots flattened. Then a resource whose
    `$Resource` box no reference reaches is kept as its bare handle, across the
    locals, parameters and results it moves through.
 6. Dead-store elimination: a store to a local that every path overwrites, or

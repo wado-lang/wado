@@ -94,10 +94,8 @@ fn "spec_components_extract_through_mut.wado/$test_0"() {
     list_0 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/Fields>" { repr: elements, used: used };
     $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2: block {
         break_if $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2 used == 0;
-        list_0.used = used - 1;
-        elements = list_0.repr;
-        used = list_0.used;
-        $taken_3 = builtin::array_get_value<ref null "core:prelude//$Resource">(elements, used);
+        list_0.used = local.tee used(used - 1);
+        $taken_3 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements(list_0.repr), used);
         builtin::array_set<ref null "core:prelude//$Resource">(elements, used, ref.null none);
         used = $taken_3.value;
         $taken_3.value = 0;

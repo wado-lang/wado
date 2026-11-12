@@ -647,7 +647,7 @@ fn "stream_await_blocked_roundtrip.wado/$cm_export__handle"($p0) {
 }
 
 fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
-    let $load_7: ref "core:prelude/list.wado//List<u8>";
+    let $load_8: ref "core:prelude/list.wado//List<u8>";
     let body_stream_3: ref null "core:prelude//$Resource";
     let _trailers: ref null "core:prelude//$Resource";
     let body: ref "core:prelude/list.wado//List<u8>";
@@ -694,8 +694,8 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
             if ref.is_null(copy) == 0 {
                 "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"(copy);
             }
-            request = local.tee $load_7(chunk_259.items).used;
-            $sroa_$iter_0_repr_315 = $load_7.repr;
+            request = local.tee $load_8(chunk_259.items).used;
+            $sroa_$iter_0_repr_315 = $load_8.repr;
             $sroa_$pattern_temp_0_0_242 = 0;
             b5: block {
                 l6: loop {
@@ -2189,8 +2189,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
     $av_10 = self.used;
     builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
-    self.used = $av_10 - 1;
-    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
+    self.used = local.tee index($av_10 - 1);
+    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, index, ref.null none);
     return v;
 }
 
@@ -2403,8 +2403,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelud
 
 fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"(self) {
     let $load_0: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>";
-    let $load_10: ref null "core:prelude/types.wado//CopyBuffer";
-    let $load_13: i32;
+    let $load_13: ref null "core:prelude/types.wado//CopyBuffer";
+    let $load_16: i32;
     let $twin_1: ref null "core:prelude//$Resource";
     let $twin_2: ref null "core:prelude/types.wado//StartedRead<u8>";
     let $match_scrut_0: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>";
@@ -2441,10 +2441,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
                     }
                     $variant_payload_7.0 = ref.null none;
                     if ref.is_null(local.tee $twin_2($variant_payload_7.1)) == 0 {
-                        if ref.is_null(local.tee $load_10($twin_2.buffer)) == 0 {
-                            drop("core:prelude/types.wado/settled_copy"($load_10.handle, $load_10.packed));
-                            if local.tee $load_13($load_10.size) > 0 {
-                                drop("mem/realloc"($load_10.ptr, $load_13, $load_10.align, 0));
+                        if ref.is_null(local.tee $load_13($twin_2.buffer)) == 0 {
+                            drop("core:prelude/types.wado/settled_copy"($load_13.handle, $load_13.packed));
+                            if local.tee $load_16($load_13.size) > 0 {
+                                drop("mem/realloc"($load_13.ptr, $load_16, $load_13.align, 0));
                             }
                         }
                         $variant_payload_7.1.buffer = ref.null none;
@@ -2463,14 +2463,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
     })).0;
     $twin_2 = $variant_payload_7.1;
     if $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: block -> bool {
-        $load_10 = $twin_2.buffer;
+        $load_13 = $twin_2.buffer;
         let $mv$$vr_1$1: ref null "core:prelude/types.wado//ResourceId";
         let $mv$$vr_1$2: ref null "core:prelude/types.wado//ReadyEvent";
-        multivalue_bind [$load_13, $mv$$vr_1$1, $mv$$vr_1$2] = "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[return]"($load_10.handle, $load_10.packed);
-        if $load_13 == 1 {
+        multivalue_bind [$load_16, $mv$$vr_1$1, $mv$$vr_1$2] = "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[return]"($load_13.handle, $load_13.packed);
+        if $load_16 == 1 {
             break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: 0;
         }
-        "wasi/waitable-join"($load_10.handle, 0);
+        "wasi/waitable-join"($load_13.handle, 0);
         break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: 1;
     } {
         $twin_2.buffer.packed = "wasi/stream-cancel-read"($twin_1.value);
@@ -2496,10 +2496,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
                 }
                 $variant_payload_7.0 = ref.null none;
                 if ref.is_null(local.tee $twin_2($variant_payload_7.1)) == 0 {
-                    if ref.is_null(local.tee $load_10($twin_2.buffer)) == 0 {
-                        drop("core:prelude/types.wado/settled_copy"($load_10.handle, $load_10.packed));
-                        if local.tee $load_13($load_10.size) > 0 {
-                            drop("mem/realloc"($load_10.ptr, $load_13, $load_10.align, 0));
+                    if ref.is_null(local.tee $load_13($twin_2.buffer)) == 0 {
+                        drop("core:prelude/types.wado/settled_copy"($load_13.handle, $load_13.packed));
+                        if local.tee $load_16($load_13.size) > 0 {
+                            drop("mem/realloc"($load_13.ptr, $load_16, $load_13.align, 0));
                         }
                     }
                     $variant_payload_7.1.buffer = ref.null none;

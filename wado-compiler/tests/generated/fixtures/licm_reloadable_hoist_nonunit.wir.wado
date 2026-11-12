@@ -1202,11 +1202,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecke
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reloadable_hoist_nonunit.wado/$tmpl$47d98586269b5b43,[&i32]>$spec0$spec0$sroa[t.h0.value]"(t) {
-    let $load_6: ref Array<u8>;
+    let $load_8: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
     let q: u64;
+    let pair: i32;
     let tens: i32;
     let start_152: i32;
     let $sroa_view_repr_497: ref Array<u8>;
@@ -1293,25 +1294,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reload
     }
     start_152 = out_3.used;
     out_3.used = is_negative_65;
-    $load_6 = out_3.repr;
+    $load_8 = out_3.repr;
     t = start_152 + t;
     b175: block {
         l176: loop {
             break_if b175 (t - start_152) < 2;
             q = x /u 100_i64;
-            tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_6, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8($load_6, t - 2, 48 + tens);
+            tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_8, t - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_8, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l176;
         };
     };
     if t > start_152 {
-        builtin::array_set_u8($load_6, start_152, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_8, start_152, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_5;
-    if @unlikely(local.tee t(out_3.used + 1) > builtin::array_len($load_6)) {
+    if @unlikely(local.tee t(is_negative_65 + 1) > builtin::array_len($load_8)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, t);
     }

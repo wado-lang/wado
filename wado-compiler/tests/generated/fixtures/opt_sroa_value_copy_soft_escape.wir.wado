@@ -144,8 +144,9 @@ import fn wasi/task-return from "wasi/task-return";
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_sroa_value_copy_soft_escape.wado/consume"(p) {
-    p.x = p.x + 1;
-    return (p.x * 100) + p.y;
+    let $load_1: i32;
+    p.x = local.tee $load_1(p.x + 1);
+    return ($load_1 * 100) + p.y;
 }
 
 fn "opt_sroa_value_copy_soft_escape.wado/f"(n) {

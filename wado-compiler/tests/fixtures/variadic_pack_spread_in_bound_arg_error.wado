@@ -1,0 +1,27 @@
+//! A bound whose argument spreads a pack is checked at the call, at the tuple
+//! the call settles the pack to.
+
+trait Tr<X> with () {
+    fn tag(&self) -> i32;
+}
+
+struct A {}
+
+impl Tr<[i32]> for A {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn f<..T, U: Tr<[..T]>>(t: [..T], u: U) -> i32 {
+    return u.tag();
+}
+
+test {
+    assert f([true], A {}) == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":21:12: analysis error: type 'A' does not implement trait 'Tr<[bool]>' required by bound on 'U'"
+}

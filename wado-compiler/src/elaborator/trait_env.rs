@@ -640,7 +640,7 @@ impl DeclaredDefaults {
         Self {
             binders: params
                 .iter()
-                .map(|param| ParamRef::declared(param, resolutions).binder(resolutions.defs()))
+                .map(|param| ParamRef::declared(param, resolutions).binder(resolutions))
                 .collect(),
             defaults: params
                 .iter()
@@ -2767,6 +2767,25 @@ pub(super) fn args_at_impl_target(
         .collect()
 }
 
+/// The binder declared at `binder`, which a written type spells `written`.
+pub(super) fn written_binder(
+    binder: ast::AstId,
+    written: &str,
+    resolutions: &Resolutions,
+) -> name::FqTypeName {
+    if let Some(owner) = resolutions.binder_owner(binder) {
+        return name::FqTypeName::binder_of(resolutions.defs(), owner, written);
+    }
+    match resolutions.binder_family(binder) {
+        Some((trait_, assoc, declared)) => {
+            name::FqTypeName::binder_of_family(resolutions.defs(), trait_, assoc, declared)
+        }
+        // An impl binding a family its trait reference does not declare, which
+        // the impl's check reports.
+        None => name::FqTypeName::unresolved(written),
+    }
+}
+
 /// One written type argument as the identity it names.
 ///
 /// A name that reaches no declaration keeps its spelling as
@@ -2786,7 +2805,25 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
-        ast::Type::TypePackSpread(spread) => name::FqTypeName::pack_spread(&spread.name),
+        ast::Type::TypePackSpread(spread) => {
+            // A pack no item owns is a family's, rejected where it is declared.
+            let pack_of = |pack: ast::AstId, name: &str| match resolutions.binder_owner(pack) {
+                Some(owner) => name::FqTypeName::pack_spread(resolutions.defs(), owner, name),
+                None => name::FqTypeName::unresolved(&name::type_pack_name(name)),
+            };
+            // `[..i32]` spreads the pack its signature mints, mapped to `i32`.
+            if let Some(pack) = resolutions.repeat_pack(spread.id) {
+                let element = written_type_arg(&Type::Named(spread.clone()), resolutions);
+                return pack_of(pack, &name::repeat_pack_name(&spread.name))
+                    .with_args(vec![element]);
+            }
+            match resolutions.get(spread.id) {
+                Resolution::Binder(pack) => pack_of(pack, &spread.name),
+                Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => {
+                    name::FqTypeName::unresolved(&name::type_pack_name(&spread.name))
+                }
+            }
+        }
         ast::Type::Function(ft) => {
             let mut with_clause = Vec::new();
             for effect in &ft.effects {
@@ -2813,13 +2850,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                             resolutions,
                         );
                     }
-                    let written = get_type_name_static(ty);
-                    match resolutions.binder_owner(binder) {
-                        Some(owner) => {
-                            name::FqTypeName::binder_of(resolutions.defs(), owner, &written)
-                        }
-                        None => name::FqTypeName::binder(&written),
-                    }
+                    written_binder(binder, &get_type_name_static(ty), resolutions)
                 }
                 // A projection names no type until its base is one, and the
                 // trait declaring the member is part of that name
@@ -2830,13 +2861,10 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                     let ast::Type::NamespacedGeneric(ns) = ty else {
                         unreachable!("only `base::Assoc` resolves to a projection");
                     };
-                    let base = match resolutions.binder_owner(base) {
-                        Some(owner) => {
-                            name::FqTypeName::binder_of(resolutions.defs(), owner, &ns.namespace)
-                        }
-                        None => name::FqTypeName::binder(&ns.namespace),
-                    };
-                    name::FqTypeName::written_projection(base, &ns.name)
+                    name::FqTypeName::written_projection(
+                        written_binder(base, &ns.namespace, resolutions),
+                        &ns.name,
+                    )
                 }
                 None => name::FqTypeName::builtin(&get_type_name_static(ty)),
                 Some(Resolution::Unresolved) => {

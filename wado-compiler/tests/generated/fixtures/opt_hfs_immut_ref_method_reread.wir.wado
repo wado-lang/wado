@@ -1073,48 +1073,47 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
 }
 
 fn "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class"(self) {
+    let $load_1: i32;
     let text: ref "core:prelude/string.wado//String";
     let c: char;
     let $licm_chars_51: ref "core:prelude/list.wado//List<char>";
     let $licm_used_52: i32;
     let $licm_repr_53: ref Array<char>;
-    let $hfs_pos_54: i32;
-    self.pos = self.pos + 1;
+    self.pos = local.tee $load_1(self.pos + 1);
     local.tee text(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }).used = 1;
     builtin::array_set_u8(text.repr, 0, 91);
     $licm_used_52 = local.tee $licm_chars_51(self.chars).used;
     $licm_repr_53 = $licm_chars_51.repr;
-    $hfs_pos_54 = self.pos;
     block {
         l127: loop {
-            if $hfs_pos_54 >= $licm_used_52 {
-                self.pos = $hfs_pos_54;
+            if $load_1 >= $licm_used_52 {
+                self.pos = $load_1;
                 return text;
             }
-            if @unlikely(0 > $hfs_pos_54) {
+            if @unlikely(0 > $load_1) {
                 cold_path;
-                self.pos = $hfs_pos_54;
-                "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class$cold1$sroa[self.pos]"($hfs_pos_54, $licm_used_52);
+                self.pos = $load_1;
+                "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class$cold1$sroa[self.pos]"($load_1, $licm_used_52);
                 unreachable;
             }
-            c = builtin::array_get_value<char>($licm_repr_53, $hfs_pos_54);
-            $hfs_pos_54 = $hfs_pos_54 + 1;
+            c = builtin::array_get_value<char>($licm_repr_53, $load_1);
+            $load_1 = $load_1 + 1;
             if c == 92 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, c);
-                if $hfs_pos_54 < $licm_used_52 {
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, if @unlikely(((0 <= $hfs_pos_54) & ($hfs_pos_54 < $licm_used_52)) == 0) {
+                if $load_1 < $licm_used_52 {
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, if @unlikely(((0 <= $load_1) & ($load_1 < $licm_used_52)) == 0) {
                         cold_path;
-                        self.pos = $hfs_pos_54;
-                        "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class$cold0$sroa[self.pos]"($hfs_pos_54, $licm_used_52);
+                        self.pos = $load_1;
+                        "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class$cold0$sroa[self.pos]"($load_1, $licm_used_52);
                         unreachable;
-                    }; builtin::array_get_value<char>($licm_repr_53, $hfs_pos_54));
-                    $hfs_pos_54 = $hfs_pos_54 + 1;
+                    }; builtin::array_get_value<char>($licm_repr_53, $load_1));
+                    $load_1 = $load_1 + 1;
                 }
                 continue l127;
             }
             if c == 93 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, c);
-                self.pos = $hfs_pos_54;
+                self.pos = $load_1;
                 return text;
             }
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, c);

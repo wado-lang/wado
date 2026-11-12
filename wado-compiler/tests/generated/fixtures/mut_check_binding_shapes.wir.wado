@@ -94,7 +94,7 @@ global global:mut_check_binding_shapes.wado::$const_obj_0: ref Array<u8> = array
 global global:mut_check_binding_shapes.wado::$const_obj_1: ref "Array<mut_check_binding_shapes.wado/Held>" = array.new_fixed<ref "mut_check_binding_shapes.wado//Held">(struct.new "mut_check_binding_shapes.wado//Held::Only" { discriminant: 0, payload_0: struct.new "mut_check_binding_shapes.wado//Acc" { sum: 1 } });
 
 fn "mut_check_binding_shapes.wado/run"() with Stdout {
-    let $load_3: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let total: i32;
     let TABLE: ref "core:prelude/list.wado//List<i32>";
     let $match_8: ref null "mut_check_binding_shapes.wado//Held";
@@ -150,9 +150,9 @@ fn "mut_check_binding_shapes.wado/run"() with Stdout {
     $sroa_$iter_0_index_62 = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_146(x_146 = builtin::i64_extend_i32_s(total); select i64(x_146 < 0_i64, 0_i64 - x_146, x_146)));
     $sroa_$iter_0_index_62 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_75, $sroa_$iter_0_index_62, total);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(out_75.repr), $sroa_$iter_0_index_62, x_146, total);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(out_75.repr), $sroa_$iter_0_index_62, x_146, total);
     $sroa_view_repr_201 = global:mut_check_binding_shapes.wado::$const_obj_0;
-    if @unlikely(local.tee total(out_75.used + 1) > builtin::array_len($load_3)) {
+    if @unlikely(local.tee total(out_75.used + 1) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_75, total);
     }
@@ -167,11 +167,11 @@ fn "mut_check_binding_shapes.wado/run"() with Stdout {
     total = builtin::i32_wrap_i64(local.tee x_146("wasi/stream-new"()));
     $sroa_$iter_0_index_62 = builtin::i32_wrap_i64(x_146 >> 32_i64);
     total = "mut_check_binding_shapes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(total);
-    builtin::array_copy<u8>(local.tee $load_3(builtin::array_new<u8>(local.tee self_51(out_75.used) + 1)), 0, out_75.repr, 0, self_51);
-    builtin::array_set_u8($load_3, self_51, 10);
+    builtin::array_copy<u8>(local.tee $load_4(builtin::array_new<u8>(local.tee self_51(out_75.used) + 1)), 0, out_75.repr, 0, self_51);
+    builtin::array_set_u8($load_4, self_51, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         self_51 = self_51 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_index_62, $load_3, 0, self_51);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_index_62, $load_4, 0, self_51);
     });
     "wasi/stream-drop-writable"($sroa_$iter_0_index_62);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(total);

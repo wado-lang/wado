@@ -1079,7 +1079,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_template_hole_order.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let $load_8: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let x_170: i64;
     let n_247: i32;
@@ -1114,8 +1114,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_temp
     }
     new_used_251 = out_3.used;
     out_3.used = n_247;
-    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), new_used_251, $sroa_view_repr_762, 0, 1);
-    n_247 = $mv$t$h1 < 0;
+    builtin::array_copy<u8>(local.tee $load_10(out_3.repr), new_used_251, $sroa_view_repr_762, 0, 1);
+    new_used_251 = $mv$t$h1 < 0;
     x_170 = builtin::i64_extend_i32_s($mv$t$h1);
     x_170 = select i64(x_170 < 0_i64, 0_i64 - x_170, x_170);
     $mv$t$h1 = $inline_count_digits_u64_0: block -> i32 {
@@ -1178,8 +1178,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_temp
         }
         break $inline_count_digits_u64_0: 20;
     };
-    if n_247 {
-        if @unlikely(local.tee n_247(out_3.used + 1) > builtin::array_len($load_8)) {
+    if new_used_251 {
+        if @unlikely(local.tee n_247(n_247 + 1) > builtin::array_len($load_10)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, n_247);
         }

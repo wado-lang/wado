@@ -1678,8 +1678,8 @@ impl TypeSystem {
                 .filter(|param| !param.is_pack)
                 .filter_map(|param| {
                     let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
-                    let binder = ParamRef::declared(param, &self.resolutions)
-                        .binder(self.resolutions.defs());
+                    let binder =
+                        ParamRef::declared(param, &self.resolutions).binder(&self.resolutions);
                     (!table.awaits_inference(arg)).then(|| (binder, table.fq_type_name(arg)))
                 })
                 .collect();
@@ -2511,12 +2511,19 @@ impl TypeSystem {
         self.signatures.trait_sig(*key)
     }
 
-    /// The types a pack parameter's bound actually falls on.
+    /// The types a bound falls on at `type_arg`: each element where the bound
+    /// is on a pack, `type_arg` itself otherwise.
     ///
-    /// A pack is instantiated with the tuple that carries its elements, so the
-    /// bound is checked element-wise. A non-tuple argument is a pack of one.
-    pub(super) fn pack_elements(&self, type_arg: TypeId) -> Vec<TypeId> {
-        self.type_table.borrow().elem_types_or_self(type_arg)
+    /// `..T: Foo` binds every element of the pack, not the tuple that carries
+    /// them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and `String: Foo`, never
+    /// `[i32, String]: Foo`, which would ask for a variadic impl of `Foo` for
+    /// tuples. A non-tuple argument is a pack of one.
+    pub(super) fn bound_subjects(&self, each_element: bool, type_arg: TypeId) -> Vec<TypeId> {
+        if each_element {
+            self.type_table.borrow().elem_types_or_self(type_arg)
+        } else {
+            vec![type_arg]
+        }
     }
 
     /// Whether what the receiver substitutes for an `impl` block's parameters
@@ -2553,8 +2560,8 @@ impl TypeSystem {
             return None;
         }
         let affine_params = ctx.trait_ctx.affine_params();
-        let unmet = |param: &str, type_arg: TypeId| {
-            self.unmet_param_bound(ctx, header, param, type_arg, &affine_params, &[])
+        let unmet = |param: &str, subjects: &[TypeId]| {
+            self.unmet_param_bound(ctx, header, param, subjects, &affine_params, &[])
         };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
@@ -2563,7 +2570,7 @@ impl TypeSystem {
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
             let pointee = receiver.and_then(|id| self.pointee_of(id))?;
-            return unmet(inner.name.as_str(), pointee);
+            return unmet(inner.name.as_str(), &[pointee]);
         }
         // An existence or bounds check that threaded no positions has nothing
         // to compare against.
@@ -2577,16 +2584,13 @@ impl TypeSystem {
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
-        // `type_args` instantiates the same variadic parameter, so each is
-        // checked against its bounds.
+        // `type_args` is one element of the same pack.
         if let ast::Type::Tuple(elements) = impl_ty {
             return elements.iter().find_map(|elem| {
                 let ast::Type::TypePackSpread(ast::NamedType { name, .. }) = elem else {
                     return None;
                 };
-                type_args
-                    .iter()
-                    .find_map(|&type_arg| unmet(name.as_str(), type_arg))
+                unmet(name.as_str(), type_args)
             });
         }
         None
@@ -2611,7 +2615,7 @@ impl TypeSystem {
                 .iter()
                 .filter_map(|(slot, &arg)| {
                     let name = names.name_of(slot.index)?;
-                    let binder = ParamRef::of(def, name).binder(self.resolutions.defs());
+                    let binder = ParamRef::of(def, name).binder(&self.resolutions);
                     Some((binder, tt.fq_type_name(arg)))
                 })
                 .collect()
@@ -2619,39 +2623,47 @@ impl TypeSystem {
         let affine_params = ctx.trait_ctx.affine_params();
         slots.iter().find_map(|(slot, &type_arg)| {
             let param = names.name_of(slot.index)?;
-            self.unmet_param_bound(ctx, header, param, type_arg, &affine_params, &at)
+            let is_pack = header
+                .type_params
+                .iter()
+                .any(|p| p.name == param && p.is_pack);
+            let subjects = self.bound_subjects(is_pack, type_arg);
+            self.unmet_param_bound(ctx, header, param, &subjects, &affine_params, &at)
         })
     }
 
-    /// The bound or kind `header`'s parameter `param` places that `type_arg`
-    /// misses. The bound's own site says which trait it names and what it
-    /// writes for that trait's parameters, so the check compares declarations
-    /// rather than the spelling the impl header happened to write.
+    /// The bound or kind `header`'s parameter `param` places that one of
+    /// `subjects`, each taken whole, misses. The bound's own site says which
+    /// trait it names and what it writes for that trait's parameters, so the
+    /// check compares declarations rather than the spelling the impl header
+    /// happened to write.
     fn unmet_param_bound(
         &self,
         ctx: &Scope,
         header: &ImplHeader,
         param: &str,
-        type_arg: TypeId,
+        subjects: &[TypeId],
         affine_params: &[TypeId],
         at: &[(FqTypeName, FqTypeName)],
     ) -> Option<UnmetImplBound> {
         let declared = header.type_params.iter().find(|p| p.name == param)?;
-        let missing = if !declared.is_affine && self.is_affine(type_arg, affine_params) {
-            UnmetKind::Affine
-        } else {
-            let bounds: Vec<FqTraitName> = declared
-                .bounds
-                .iter()
-                .filter_map(|b| self.bound_written(b))
-                .map(|bound| spelled_at(&bound, at))
-                .collect();
-            UnmetKind::Trait(self.unmet_bound(ctx, type_arg, &bounds)?.clone())
-        };
-        Some(UnmetImplBound {
-            param: param.to_string(),
-            type_arg,
-            missing,
+        let bounds: Vec<FqTraitName> = declared
+            .bounds
+            .iter()
+            .filter_map(|b| self.bound_written(b))
+            .map(|bound| spelled_at(&bound, at))
+            .collect();
+        subjects.iter().find_map(|&subject| {
+            let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
+                UnmetKind::Affine
+            } else {
+                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
+            };
+            Some(UnmetImplBound {
+                param: param.to_string(),
+                type_arg: subject,
+                missing,
+            })
         })
     }
 }
@@ -2857,15 +2869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            // `..T: Foo` binds every element of the pack, not the tuple that
-            // carries them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and
-            // `String: Foo`, never `[i32, String]: Foo` — which would be a
-            // question about a variadic impl of `Foo` for tuples.
-            let subjects = if param.is_pack {
-                self.tysys.pack_elements(type_arg)
-            } else {
-                vec![type_arg]
-            };
+            let subjects = self.tysys.bound_subjects(param.is_pack, type_arg);
             let rigid = self
                 .tysys
                 .solver()
@@ -3910,7 +3914,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_args: vec![],
             method_info,
             impl_module_source,
-            blanket_type_param: None,
             blanket_binder: None,
             impl_struct_fq,
             is_blanket_ref_impl: false,
@@ -3930,13 +3933,12 @@ impl TypeSystem {
         impl_args: &[(ParamRef, TypeId)],
     ) -> Vec<(FqTypeName, FqTypeName)> {
         let tt = self.type_table.borrow();
-        let defs = self.resolutions.defs();
         // A pack spells no one type; its binder stays, and the bound with it.
         ParamRef::space(params, type_args, &self.resolutions)
             .iter()
             .chain(impl_args)
             .filter(|(_, arg)| !tt.any_type_pack(*arg, &|_| true))
-            .map(|(param, arg)| (param.binder(defs), tt.fq_type_name(*arg)))
+            .map(|(param, arg)| (param.binder(&self.resolutions), tt.fq_type_name(*arg)))
             .collect()
     }
 

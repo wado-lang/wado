@@ -79,22 +79,25 @@ import fn wasi/task-return from "wasi/task-return";
 global global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b) {
-    b.v = b.v + 1;
-    return b.v;
+    let $load_1: i32;
+    b.v = local.tee $load_1(b.v + 1);
+    return $load_1;
 }
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/add10"(b) {
-    b.v = b.v + 10;
-    return b.v;
+    let $load_1: i32;
+    b.v = local.tee $load_1(b.v + 10);
+    return $load_1;
 }
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/add100"(b) {
-    b.v = b.v + 100;
-    return b.v;
+    let $load_1: i32;
+    b.v = local.tee $load_1(b.v + 100);
+    return $load_1;
 }
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
-    let $load_2: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let b: ref "hfs_consecutive_mut_calls_no_inter_sync.wado//Buf";
     let sum: i32;
     let i: i32;
@@ -130,9 +133,9 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     $hfs_v_264 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_110(x_110 = builtin::i64_extend_i32_s(sum); select i64(x_110 < 0_i64, 0_i64 - x_110, x_110)));
     $hfs_v_264 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_39, $hfs_v_264, sum);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_39.repr), $hfs_v_264, x_110, sum);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(out_39.repr), $hfs_v_264, x_110, sum);
     $sroa_view_repr_201 = global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0;
-    if @unlikely(local.tee sum(out_39.used + 1) > builtin::array_len($load_2)) {
+    if @unlikely(local.tee sum(out_39.used + 1) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_39, sum);
     }
@@ -149,11 +152,11 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     sum = builtin::i32_wrap_i64(local.tee x_110("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x_110 >> 32_i64);
     sum = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee $hfs_v_264(out_39.used) + 1)), 0, out_39.repr, 0, $hfs_v_264);
-    builtin::array_set_u8($load_2, $hfs_v_264, 10);
+    builtin::array_copy<u8>(local.tee $load_4(builtin::array_new<u8>(local.tee $hfs_v_264(out_39.used) + 1)), 0, out_39.repr, 0, $hfs_v_264);
+    builtin::array_set_u8($load_4, $hfs_v_264, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $hfs_v_264 = $hfs_v_264 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i, $load_2, 0, $hfs_v_264);
+        "core:rt/cm_stream_write_raw_all_u8"(i, $load_4, 0, $hfs_v_264);
     });
     "wasi/stream-drop-writable"(i);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);

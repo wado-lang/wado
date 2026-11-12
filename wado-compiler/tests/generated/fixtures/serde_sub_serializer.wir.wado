@@ -194,8 +194,8 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     new_used_28 = "serde_sub_serializer.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_28);
     "core:rt/write_string_to_stream$dae[add_newline]"(start_29, self_22.repr, self_22.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_28);
-    ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    if @unlikely(local.tee new_used_28(local.tee self_22(ser.buf).used + 1) > builtin::array_len(self_22.repr)) {
+    ser.buf = local.tee self_22(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+    if @unlikely(local.tee new_used_28(self_22.used + 1) > builtin::array_len(self_22.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_22, new_used_28);
     }
@@ -229,8 +229,8 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
         start_29 = self_22.used;
         self_22.used = new_used_28;
         builtin::array_copy<u8>(self_22.repr, start_29, global:serde_sub_serializer.wado::$const_obj_4, 0, 7);
-        $local_11.count = $local_11.count + 1;
-        if $local_11.count > 0 {
+        $local_11.count = local.tee new_used_28($local_11.count + 1);
+        if new_used_28 > 0 {
             if @unlikely(local.tee new_used_28(local.tee self_22($local_11.parent.buf).used + 1) > builtin::array_len(self_22.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_22, new_used_28);

@@ -2385,7 +2385,7 @@ fn "core:prelude/traits.wado/reflect_blanket_pack_bound_recursive.wado/Node^core
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_blanket_pack_bound_recursive.wado/Node,()>::place"(self, key) {
     let $load_0: ref "core:collections/entries.wado//EntryLog<reflect_blanket_pack_bound_recursive.wado/Node,()>";
     let $load_2: ref Array<i32>;
-    let $load_12: ref Array<i32>;
+    let $load_13: ref Array<i32>;
     let e_2: i32;
     let $v1: i32;
     let $v2: i32;
@@ -2406,19 +2406,19 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_
     h_24.state = x = h_24.state ^ x; b_40 = h_24.key; multivalue_bind [x, b_40] = i64.mul_wide_u(x, b_40); x ^ b_40;
     "core:prelude/traits.wado/reflect_blanket_pack_bound_recursive.wado/Chain^core:prelude/traits.wado/Hash::hash<core:collections/hashmap.wado/SeededHasher>$sroa[self.value]"(key.next, h_24);
     b_20 = builtin::i32_wrap_i64(multivalue_bind [x, b_40] = i64.mul_wide_u(h_24.state, -4658895280553007687_i64); x ^ b_40 >>u 32_i64);
-    if local.tee $v1("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_blanket_pack_bound_recursive.wado/Node,()>::find_slot"($load_0, local.tee $load_2(self.fps), local.tee $load_12(self.table), self.shift, key, b_20)) >= 0 {
-        $v2 = builtin::array_get_value<i32>($load_12, $v1);
+    if local.tee $v1("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_blanket_pack_bound_recursive.wado/Node,()>::find_slot"($load_0, local.tee $load_2(self.fps), local.tee $load_13(self.table), self.shift, key, b_20)) >= 0 {
+        $v2 = builtin::array_get_value<i32>($load_13, $v1);
         if builtin::array_get_value<bool>($load_0.alive, $v2) {
             return $v2;
         }
-        builtin::array_set<i32>($load_12, $v1, e_2);
+        builtin::array_set<i32>($load_13, $v1, e_2);
     } else {
-        builtin::array_set<i32>($load_12, -1 - $v1, e_2);
+        builtin::array_set<i32>($load_13, -1 - $v1, e_2);
     }
     if e_2 == builtin::array_len($load_2) {
         $v1 = e_2 * 2;
-        builtin::array_copy<i32>(local.tee $load_12(builtin::array_new<i32>(select i32(4 > $v1, 4, $v1))), 0, $load_2, 0, e_2);
-        self.fps = $load_12;
+        builtin::array_copy<i32>(local.tee $load_13(builtin::array_new<i32>(select i32(4 > $v1, 4, $v1))), 0, $load_2, 0, e_2);
+        self.fps = $load_13;
     }
     builtin::array_set<i32>(self.fps, e_2, b_20);
     return -1;
@@ -2700,38 +2700,36 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 }
 
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_blanket_pack_bound_recursive.wado/Node,()>::rebuild_table$unchecked"(self, slots) {
-    let $load_0: ref "core:collections/entries.wado//EntryLog<reflect_blanket_pack_bound_recursive.wado/Node,()>";
+    let $load_1: i32;
+    let $load_2: ref "core:collections/entries.wado//EntryLog<reflect_blanket_pack_bound_recursive.wado/Node,()>";
     let alive: ref Array<bool>;
-    let table: ref Array<i32>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_36: i32;
     let $sroa_$iter_2_start_37: i32;
-    let $licm_arith_40: u32;
-    self.table = builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a;
-    self.shift = 32 - builtin::i32_ctz(slots);
+    self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
+    self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    alive = local.tee $load_0(self.log).alive;
-    a = self.fps;
-    table = self.table;
-    $sroa_v_end_36 = $load_0.count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_36 = $load_2.count;
     $sroa_$iter_2_start_37 = 0;
-    $licm_arith_40 = self.shift;
     b339: block {
         l340: loop {
             break_if b339 $sroa_$iter_2_start_37 >= $sroa_v_end_36;
             $sroa_$iter_2_start_37 = local.tee current($sroa_$iter_2_start_37) + 1;
             if builtin::array_get_value<bool>(alive, current) {
-                s = builtin::array_get_value<i32>(a, current) >>u $licm_arith_40;
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b342: block {
                     l343: loop {
-                        break_if b342 builtin::array_get_value<i32>(table, s) == -1;
+                        break_if b342 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
                         continue l343;
                     };
                 };
-                builtin::array_set<i32>(table, s, current);
+                builtin::array_set<i32>(a, s, current);
             }
             continue l340;
         };
@@ -2989,12 +2987,15 @@ fn "core:prelude/traits.wado/reflect_blanket_pack_bound_recursive.wado/Chain^cor
     let hi_15: i64;
     let self_17: ref "reflect_blanket_pack_bound_recursive.wado//Node";
     if @likely(ref.is_null(self) == 0) {
-        h.state = a_12 = h.state; $load_1 = h.key; multivalue_bind [a_12, hi_15] = i64.mul_wide_u(a_12, $load_1); a_12 ^ hi_15;
+        a_12 = h.state;
+        $load_1 = h.key;
+        multivalue_bind [a_12, hi_15] = i64.mul_wide_u(a_12, $load_1);
+        a_12 = a_12 ^ hi_15;
         if @unlikely(ref.is_null(self) != 0) {
             unreachable;
         }
-        a_12 = builtin::i64_extend_i32_s(local.tee self_17(ref.as_non_null(self)).value);
-        h.state = multivalue_bind [a_12, $load_1] = i64.mul_wide_u(h.state ^ a_12, $load_1); a_12 ^ $load_1;
+        hi_15 = builtin::i64_extend_i32_s(local.tee self_17(ref.as_non_null(self)).value);
+        h.state = multivalue_bind [a_12, $load_1] = i64.mul_wide_u(a_12 ^ hi_15, $load_1); a_12 ^ $load_1;
         "core:prelude/traits.wado/reflect_blanket_pack_bound_recursive.wado/Chain^core:prelude/traits.wado/Hash::hash<core:collections/hashmap.wado/SeededHasher>$sroa[self.value]"(self_17.next, h);
         return;
     }

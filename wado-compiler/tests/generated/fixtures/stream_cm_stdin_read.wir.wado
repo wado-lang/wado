@@ -247,7 +247,8 @@ global global:stream_cm_stdin_read.wado::$const_obj_0: ref Array<u8> = array.new
 global global:stream_cm_stdin_read.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 100, 32);
 
 fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
-    let $load_2: ref Array<u8>;
+    let $load_2: i32;
+    let $load_3: ref Array<u8>;
     let stdin_stream: ref null "core:prelude//$Resource";
     let _done: ref null "core:prelude//$Resource";
     let $pattern_temp_0: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
@@ -256,8 +257,8 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     let is_negative_81: bool;
     let x: i64;
     let q: u64;
+    let pair: i32;
     let tens: i32;
-    let start_167: i32;
     let $sroa_view_repr_532: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:stream_cm_stdin_read.wado::$modules_initialized);
@@ -270,8 +271,8 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     "wasi/stream-drop-readable"(stdin_stream.value);
     out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
     $sroa_view_repr_532 = global:stream_cm_stdin_read.wado::$const_obj_1;
-    out_19.used = 5;
-    builtin::array_copy<u8>(local.tee $load_2(out_19.repr), 0, $sroa_view_repr_532, 0, 5);
+    out_19.used = local.tee $load_2(5);
+    builtin::array_copy<u8>(local.tee $load_3(out_19.repr), 0, $sroa_view_repr_532, 0, 5);
     is_negative_81 = self_5 < 0;
     x = builtin::i64_extend_i32_s(self_5);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -336,50 +337,50 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
         break $inline_count_digits_u64_0: 20;
     };
     if is_negative_81 {
-        if @unlikely(local.tee is_negative_81(out_19.used + 1) > builtin::array_len($load_2)) {
+        if @unlikely(local.tee $load_2($load_2 + 1) > builtin::array_len($load_3)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, is_negative_81);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, $load_2);
         }
-        start_167 = out_19.used;
-        out_19.used = is_negative_81;
-        builtin::array_set_u8(out_19.repr, start_167, 45);
+        is_negative_81 = out_19.used;
+        out_19.used = $load_2;
+        builtin::array_set_u8(out_19.repr, is_negative_81, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_81(out_19.used + self_5) > builtin::array_len(out_19.repr)) {
+    if @unlikely(local.tee $load_2(out_19.used + self_5) > builtin::array_len(out_19.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, is_negative_81);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, $load_2);
     }
-    start_167 = out_19.used;
-    out_19.used = is_negative_81;
+    is_negative_81 = out_19.used;
+    out_19.used = $load_2;
     $sroa_view_repr_532 = out_19.repr;
-    self_5 = start_167 + self_5;
+    self_5 = is_negative_81 + self_5;
     b22: block {
         l23: loop {
-            break_if b22 (self_5 - start_167) < 2;
+            break_if b22 (self_5 - is_negative_81) < 2;
             q = x /u 100_i64;
-            tens = local.tee is_negative_81(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_532, self_5 - 1, (48 + is_negative_81) - (tens * 10));
+            tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_view_repr_532, self_5 - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8($sroa_view_repr_532, self_5 - 2, 48 + tens);
             self_5 = self_5 - 2;
             x = q;
             continue l23;
         };
     };
-    if self_5 > start_167 {
-        builtin::array_set_u8($sroa_view_repr_532, start_167, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if self_5 > is_negative_81 {
+        builtin::array_set_u8($sroa_view_repr_532, is_negative_81, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    $load_2 = global:stream_cm_stdin_read.wado::$const_obj_0;
-    if @unlikely(local.tee self_5(out_19.used + 6) > builtin::array_len($sroa_view_repr_532)) {
+    $load_3 = global:stream_cm_stdin_read.wado::$const_obj_0;
+    if @unlikely(local.tee self_5($load_2 + 6) > builtin::array_len($sroa_view_repr_532)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, self_5);
     }
-    is_negative_81 = out_19.used;
+    $load_2 = out_19.used;
     out_19.used = self_5;
-    builtin::array_copy<u8>(out_19.repr, is_negative_81, $load_2, 0, 6);
+    builtin::array_copy<u8>(out_19.repr, $load_2, $load_3, 0, 6);
     self_5 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_81 = builtin::i32_wrap_i64(x >> 32_i64);
+    $load_2 = builtin::i32_wrap_i64(x >> 32_i64);
     self_5 = "stream_cm_stdin_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_5);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_81, out_19.repr, out_19.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($load_2, out_19.repr, out_19.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_5);
     if ref.is_null(_done) == 0 {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(_done.value);
@@ -939,8 +940,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
     $av_10 = self.used;
     builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
-    self.used = $av_10 - 1;
-    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
+    self.used = local.tee index($av_10 - 1);
+    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, index, ref.null none);
     return v;
 }
 

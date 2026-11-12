@@ -436,9 +436,8 @@ global global:core:prelude/traits.wado::$const_obj_79: ref "core:prelude/string.
 global global:core:prelude/traits.wado::$const_obj_81: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 };
 
 fn "self_comparison_lint.wado/run"() with Stdout {
-    let $load_4: ref "core:prelude//$Cell<i32>";
+    let $load_8: ref "core:prelude//$Cell<i32>";
     let b_25: i32;
-    let c_35: ref "self_comparison_lint.wado//Counter";
     let t: ref "self_comparison_lint.wado//Tally";
     let ts_51: ref "core:prelude/list.wado//List<self_comparison_lint.wado/Tally>";
     let elements: ref "Array<self_comparison_lint.wado/Tally>";
@@ -478,14 +477,9 @@ fn "self_comparison_lint.wado/run"() with Stdout {
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_133, new_repr_154);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_133);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(b_25);
-    local.tee c_35(struct.new "self_comparison_lint.wado//Counter" { n: 0 }).n = 1;
-    c_35.n = 2;
-    c_35.n = 3;
-    c_35.n = 4;
-    local.tee $load_4(local.tee t(struct.new "self_comparison_lint.wado//Tally" { n: struct.new "core:prelude//$Cell<i32>" { value: 0 } }).n).value = 1;
-    b_25 = $load_4.value;
-    $load_4.value = b_25 + 1;
-    $sroa_$pattern_temp_0_1_14_133 = $load_4.value;
+    struct.new "self_comparison_lint.wado//Counter" { n: 0 }.n = 4;
+    local.tee $load_8(local.tee t(struct.new "self_comparison_lint.wado//Tally" { n: struct.new "core:prelude//$Cell<i32>" { value: 0 } }).n).value = local.tee b_25(1);
+    $load_8.value = local.tee $sroa_$pattern_temp_0_1_14_133(b_25 + 1);
     if @unlikely(b_25 == $sroa_$pattern_temp_0_1_14_133) {
         cold_path;
         "self_comparison_lint.wado/run$cold2"(b_25, $sroa_$pattern_temp_0_1_14_133);
@@ -498,15 +492,13 @@ fn "self_comparison_lint.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<self_comparison_lint.wado/Tally>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, b_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self_comparison_lint.wado:40"), used: 28 });
         unreachable;
     }
-    local.tee $load_4(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(local.tee elements(ts_51.repr), 0).n).value = $load_4.value + 1;
-    $sroa_$pattern_temp_0_1_14_133 = $load_4.value;
+    local.tee $load_8(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(local.tee elements(ts_51.repr), 0).n).value = local.tee $sroa_$pattern_temp_0_1_14_133($load_8.value + 1);
     if @unlikely(0 >= b_25) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<self_comparison_lint.wado/Tally>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, b_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self_comparison_lint.wado:40"), used: 28 });
         unreachable;
     }
-    local.tee $load_4(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(elements, 0).n).value = $load_4.value + 1;
-    b_25 = $load_4.value;
+    local.tee $load_8(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(elements, 0).n).value = local.tee b_25($load_8.value + 1);
     if @unlikely($sroa_$pattern_temp_0_1_14_133 == b_25) {
         cold_path;
         let $mv_arg_3: ref "core:prelude/string.wado//String";

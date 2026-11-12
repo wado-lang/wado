@@ -317,7 +317,7 @@ fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -
 fn method_args_at(
     template: &TirFunction,
     site: &CallSite<'_>,
-    type_table: &TypeTable,
+    type_table: &mut TypeTable,
 ) -> Option<Vec<TypeId>> {
     if !template.has_real_type_params() {
         return Some(Vec::new());

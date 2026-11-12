@@ -21,6 +21,7 @@ mod local_nullability;
 mod loop_unroll;
 mod nullability;
 mod nullable_ref;
+mod overwritten_stores;
 mod peephole;
 mod prune_dead_data;
 mod reuse_loads;
@@ -186,6 +187,9 @@ fn optimize_scoped(
     in_span(profiler, &scope.name("phase5_peephole"), || {
         wir_pass(scope, "reuse_struct_loads", module, profiler, |m| {
             reuse_loads::reuse_struct_loads(m);
+        });
+        wir_pass(scope, "elide_overwritten_stores", module, profiler, |m| {
+            overwritten_stores::elide_overwritten_stores(m);
         });
         wir_pass(scope, "run_peephole", module, profiler, |m| {
             let types = &m.types;

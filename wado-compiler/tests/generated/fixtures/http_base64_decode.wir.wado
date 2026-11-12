@@ -2239,9 +2239,9 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
         }
         builtin::array_set_u8(local.tee input(out.repr), $contract_arg_0, end);
-        out.used = $contract_arg_0 + 1;
+        out.used = local.tee end($contract_arg_0 + 1);
         $mv$table$used = (((remainder & 15) << 4) | ($mv$table$used >> 2)) & 255;
-        if @unlikely(local.tee end(out.used) >= builtin::array_len(input)) {
+        if @unlikely(end >= builtin::array_len(input)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
         }
@@ -2593,8 +2593,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
     $av_10 = self.used;
     builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
-    self.used = $av_10 - 1;
-    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
+    self.used = local.tee index($av_10 - 1);
+    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, index, ref.null none);
     return v;
 }
 
