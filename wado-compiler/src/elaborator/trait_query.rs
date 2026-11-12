@@ -2595,21 +2595,28 @@ impl TypeSystem {
         at: &[(FqTypeName, FqTypeName)],
     ) -> Option<UnmetImplBound> {
         let declared = header.type_params.iter().find(|p| p.name == param)?;
-        let missing = if !declared.is_affine && self.is_affine(type_arg, affine_params) {
-            UnmetKind::Affine
+        let bounds: Vec<FqTraitName> = declared
+            .bounds
+            .iter()
+            .filter_map(|b| self.bound_written(b))
+            .map(|bound| spelled_at(&bound, at))
+            .collect();
+        let subjects = if declared.is_pack {
+            self.pack_elements(type_arg)
         } else {
-            let bounds: Vec<FqTraitName> = declared
-                .bounds
-                .iter()
-                .filter_map(|b| self.bound_written(b))
-                .map(|bound| spelled_at(&bound, at))
-                .collect();
-            UnmetKind::Trait(self.unmet_bound(ctx, type_arg, &bounds)?.clone())
+            vec![type_arg]
         };
-        Some(UnmetImplBound {
-            param: param.to_string(),
-            type_arg,
-            missing,
+        subjects.into_iter().find_map(|subject| {
+            let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
+                UnmetKind::Affine
+            } else {
+                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
+            };
+            Some(UnmetImplBound {
+                param: param.to_string(),
+                type_arg: subject,
+                missing,
+            })
         })
     }
 }
