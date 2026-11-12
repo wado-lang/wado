@@ -319,6 +319,32 @@ node costs a call where the tree inlined it.
 At `-O1` the `exact` parser is 0.98 MB. `-O2` inlines each node function
 under the inliner's threshold at every call site.
 
+### A tournament scans its fallback only once another candidate won (landed, 2026-11)
+
+A longest-match tournament commits its last candidate when no scan wins, so
+that candidate's scan only matters once an earlier one succeeded. The emitter
+guards it on that (`unrefused_fallback`, and `fallback` in
+`emit_scan_tournament_winner`). A refusable or gated tournament, a shadow
+tournament and `trace` still scan every candidate, since each tells a lost
+tournament apart from the fallback. SQLite's parse fuel: +5.4%.
+
+### A token's fields share one array (landed, 2026-11)
+
+`TokenStream` keeps `kinds` dense, since every scan reads it, and stores the
+rest of a token (start, end, its trivia range and flags) side by side in one
+`List<i32>`, five slots per token. A trivia takes four slots in a second one.
+The lexer then grows two arrays where it grew ten, and a push checks one
+capacity.
+
+| input                                   | ms/iter, ten arrays | ms/iter, two |   change |
+| --------------------------------------- | ------------------: | -----------: | -------: |
+| 200 KB, mostly one-character trivia     |                4.81 |         4.20 |     +14% |
+| SQLite `queries.sql` (fits the pre-size) |               0.940 |        0.950 | in noise |
+
+Best of six alternating `wado run -O2` runs of a `core:benchmark` loop over
+`tokenize` and `parse`. SQLite's fuel moves +0.6%: a push still reads and
+writes the list's `used` once per slot.
+
 ### Standing rules (measured)
 
 The four rules these benchmarks established — live set over allocation count,
@@ -848,8 +874,9 @@ over a compare cascade, `String::grow` pre-sizing, index loops in place of
 own shapes:
 
 - **Re-sizing `TokenStream::new`'s arrays** (~8.5% self-time). The cost is
-  inherent WasmGC `array.new_default` zero-fill across 10 parallel `List<i32>`
-  arrays, each pre-sized to `chars/4`. Measured fill for the benchmark input:
+  inherent WasmGC `array.new_default` zero-fill, `chars/4` slots per token or
+  trivia field (measured with ten `List<i32>` columns, one per field, before
+  they were packed into three arrays). Measured fill for the benchmark input:
   2892 tokens + 2431 trivia vs a 3342 cap — only ~19% over-allocation; `chars/4`
   zero-fills ~3342/array vs ~8191 for grow-from-`[]` doubling (~2.4× better), so
   `[]` would be worse. Exact-sizing every array gained only ~2%, two-thirds

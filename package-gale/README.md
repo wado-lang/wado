@@ -380,6 +380,7 @@ Every generated parser module exports, at minimum:
 | `parse(input) -> ParseResult`                                | parse from the start rule                                      |
 | `parse_<rule>(input) -> ParseResult`                         | parse starting from any rule                                   |
 | `tokenize(input) -> TokenStream`                             | run only the lexer                                             |
+| `TokenStream` + `kind_at` / `start_at` / `end_at` / `trivia_*_at` | token `i`'s trivia are `trivia_lo_at(i)..<trivia_hi_at(i)` |
 | `to_string_tree(result: &ParseResult) -> String`             | ANTLR4-style S-expression of the tree                          |
 | `ParseResult { cst, tokens, diagnostics }`                   | `.ok()` is true on a clean parse                               |
 | `CstStore` + cursor methods                                  | the flat parse tree (see above)                                |

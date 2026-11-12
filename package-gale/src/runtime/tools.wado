@@ -29,17 +29,17 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     out.push_str(&tokens.output);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
-        let lo = tokens.triv_lo[i];
-        let hi = tokens.triv_hi[i];
+        let lo = tokens.trivia_lo_at(i);
+        let hi = tokens.trivia_hi_at(i);
         for let mut t = lo; t < hi; t += 1 {
-            if tokens.triv_chans[t] != 0 {
+            if tokens.trivia_channel_at(t) != 0 {
                 emit_lexer_token(
                     &mut out,
                     tokens,
-                    tokens.triv_kinds[t],
-                    tokens.triv_starts[t],
-                    tokens.triv_ends[t],
-                    tokens.triv_chans[t],
+                    tokens.trivia_kind_at(t),
+                    tokens.trivia_start_at(t),
+                    tokens.trivia_end_at(t),
+                    tokens.trivia_channel_at(t),
                     &mut cursor,
                     index,
                     eof_kind,
@@ -51,8 +51,8 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             &mut out,
             tokens,
             tokens.kinds[i],
-            tokens.starts[i],
-            tokens.ends[i],
+            tokens.start_at(i),
+            tokens.end_at(i),
             0,
             &mut cursor,
             index,
