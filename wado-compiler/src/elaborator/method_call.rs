@@ -3030,8 +3030,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The newtype `target`'s own key, where an impl block on the newtype itself
-    /// declares `method`: that declaration shadows the one its base supplies.
+    /// The newtype `target`'s own key, where its own impls answer `method`:
+    /// that declaration shadows the one its base supplies.
     fn own_newtype_static(&self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
         let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(target) else {
             return None;
@@ -3040,9 +3040,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.impls_answer(&key, method).then_some(key)
     }
 
-    /// Whether an impl block on `struct_name` itself declares `method_name`, of
-    /// either kind, which decides whether a newtype answers a qualified call or
-    /// its base does. No newtype fallback here, for that reason.
+    /// Whether `struct_name`'s own impls answer `method_name`, of either kind,
+    /// which decides whether a newtype answers a qualified call or its base
+    /// does. No newtype fallback here, for that reason.
     fn declares_method_directly(&self, struct_name: &str, method_name: &str) -> bool {
         self.impls_answer(&self.impl_target(struct_name), method_name)
     }
