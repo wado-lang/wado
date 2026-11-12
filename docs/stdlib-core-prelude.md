@@ -747,29 +747,29 @@ Attempts to convert a value of type `T` into `Self`.
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 bound. Implemented for every `Add<Output = Self>`.
 
-#### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
+#### `fn sum_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 ### `pub trait Product with ()`
 
 Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
 element bound. Implemented for every `Mul<Output = Self>`.
 
-#### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
+#### `fn product_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 ### `pub trait Extremum with ()`
 
 Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 `max`'s element bound. Implemented for every `Ord`.
 
-#### `fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
+#### `fn min_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
-#### `fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
+#### `fn max_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 ### `pub trait FromIterator with ()`
 
 Trait for creating a collection from any iterator of `Elem`.
 
-#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _`
+#### `fn from_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _`
 
 ### `pub trait LiteralSpread with ()`
 
@@ -5853,7 +5853,7 @@ Joins elements into a string with the given separator.
 
 #### `impl FromIterator for List<T>`
 
-##### `fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> with _`
+##### `fn from_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> List<T> with _`
 
 #### `impl From<Array<T>> for List<T>`
 
