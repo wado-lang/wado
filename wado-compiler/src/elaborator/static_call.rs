@@ -310,18 +310,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve what `query`'s spelling names, once, for every site that used to
     /// ask its own question.
     pub(super) fn resolve_static_callee(&mut self, query: StaticQuery<'_>) -> StaticLookup {
-        self.resolve_static_callee_inherited(query, None)
+        self.resolve_static_callee_inherited(query, None, None)
     }
 
     /// [`Self::resolve_static_callee`] at one link of the newtype chain whose
     /// head `inheriting` the call spelled. The arguments and the expected type
     /// read that head as this link, and a callee this link declares reads the
     /// link as the head; no other link is rewritten either way (`spec-types`,
-    /// "Method Signature Substitution").
+    /// "Method Signature Substitution"). `nearest` is the first link above
+    /// that left trait candidates out of scope, which a chain no link answers
+    /// reports.
     fn resolve_static_callee_inherited(
         &mut self,
         query: StaticQuery<'_>,
         inheriting: Option<TypeId>,
+        nearest: Option<(String, Vec<Candidate>)>,
     ) -> StaticLookup {
         let StaticQuery {
             site,
@@ -370,8 +373,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(key) => key.clone(),
             None => self.impl_target_at(site, receiver_name),
         };
+        let nearest = nearest.or_else(|| {
+            (!out_of_scope.is_empty()).then(|| (receiver_name.to_string(), out_of_scope))
+        });
         let Some((link_key, link_name)) = self.newtype_link_target(&key) else {
-            return self.out_of_scope_lookup(receiver_name, &out_of_scope);
+            let (name, out_of_scope) =
+                nearest.unwrap_or_else(|| (receiver_name.to_string(), Vec::new()));
+            return self.out_of_scope_lookup(&name, &out_of_scope);
         };
         let link_type = receiver_type.and_then(|ty| self.tysys.type_table.borrow().link_below(ty));
         self.resolve_static_callee_inherited(
@@ -388,6 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_return,
             },
             inheriting.or(receiver_type),
+            nearest,
         )
     }
 
@@ -540,6 +549,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         Err(out_of_scope)
+    }
+
+    /// Whether `key`'s own impls answer `method_name`: written in one of its
+    /// blocks, or a default of a trait one of them implements. A link that
+    /// does answers a newtype's call before the type it wraps.
+    pub(super) fn impls_answer(&self, key: &ImplTargetKey, method_name: &str) -> bool {
+        if self.impl_method_entries(key, method_name).next().is_some() {
+            return true;
+        }
+        let Some(name) = key.decl_name(self.tysys.resolutions.defs()) else {
+            return false;
+        };
+        !self
+            .trait_candidates(name, method_name, Some(key), &[])
+            .is_empty()
     }
 
     /// The link below `newtype` on its chain that [`Self::newtype_static_target`]

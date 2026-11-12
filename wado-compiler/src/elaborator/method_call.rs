@@ -3037,17 +3037,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         };
         let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-        let declares = self.impl_method_entries(&key, method).next().is_some();
-        declares.then_some(key)
+        self.impls_answer(&key, method).then_some(key)
     }
 
     /// Whether an impl block on `struct_name` itself declares `method_name`, of
     /// either kind, which decides whether a newtype answers a qualified call or
     /// its base does. No newtype fallback here, for that reason.
     fn declares_method_directly(&self, struct_name: &str, method_name: &str) -> bool {
-        self.impl_method_entries(&self.impl_target(struct_name), method_name)
-            .next()
-            .is_some()
+        self.impls_answer(&self.impl_target(struct_name), method_name)
     }
 
     /// What a qualified call returns, off the declaration it selected where it

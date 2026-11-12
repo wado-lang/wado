@@ -194,6 +194,37 @@ test "a chain retypes only the link that declares the method" {
     assert passed.v == 3 && raw.v == 8;
 }
 
+// A trait default a link's impl leaves unwritten is that link's own static, and
+// an impl on another instance of a link answers nothing.
+trait Mk {
+    fn mk() -> i32 {
+        return 5;
+    }
+}
+
+impl Mk for Wi {}
+
+impl<T> Wrap<T> {
+    fn only(s: String) -> i32 {
+        return 2;
+    }
+}
+
+type Gw<T> = Wrap<T>;
+
+impl Gw<i32> {
+    fn only() -> i32 {
+        return 1;
+    }
+}
+
+type Gs = Gw<String>;
+
+test "a link answers with its trait's default and only at its own instance" {
+    assert Wi::mk() == 5 && Outer::mk() == 5;
+    assert Gs::only("x") == 2 && Gw::<i32>::only() == 1;
+}
+
 test "static, another instance of the base stays the base" {
     let c: Wrap<bool> = Wi::make::<bool>();
     assert !c.v;

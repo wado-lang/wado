@@ -1,0 +1,12 @@
+// A static a newtype's own trait impl supplies is gated on trait scope too, and
+// the report names that trait whichever link of a chain the call starts at,
+// though the links below it supply nothing.
+
+use { Outer } from "./sub/trait_scope_newtype_static_lib.wado";
+
+export fn run() {
+    assert Outer::seed() == 7;
+}
+
+__DATA__
+{"compile_error": "'Seeded' is not imported here: 'Wi' has 'seed' through it; import the trait to call it", "compile_error_codes": ["TRAIT_NOT_IMPORTED"]}
