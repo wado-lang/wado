@@ -161,7 +161,11 @@ impl<'a> SharedEscape<'a> {
         };
         let mut locals: IndexSet<u32> = IndexSet::default();
         if let Slot::Param(id, pos) = slot {
-            assert_eq!(id.index(), func_idx, "a `Param` slot seeds its owner's body alone");
+            assert_eq!(
+                id.index(),
+                func_idx,
+                "a `Param` slot seeds its owner's body alone"
+            );
             // A position this body declares no parameter for is an argument
             // the walk cannot name, and an argument it cannot name is one
             // whose writes it cannot see.
@@ -673,7 +677,6 @@ impl BodyCensus {
         });
         census
     }
-
 }
 
 /// The bodies that can read each slot, every one ascending. A body that cannot
