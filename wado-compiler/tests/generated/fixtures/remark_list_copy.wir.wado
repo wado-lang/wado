@@ -78,11 +78,11 @@ import fn wasi/task-return from "wasi/task-return";
 global global:remark_list_copy.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "remark_list_copy.wado/run"() with Stdout {
+    let $load_2: i32;
     let $load_3: ref Array<u8>;
     let b: ref "core:prelude/list.wado//List<i32>";
     let elements: ref Array<i32>;
     let used_3: i32;
-    let self_22: i32;
     let out_49: ref "core:prelude/string.wado//String";
     let is_negative_116: bool;
     let x_120: i64;
@@ -94,8 +94,7 @@ fn "remark_list_copy.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(b);
     }
     builtin::array_set<i32>(b.repr, used_3, 4);
-    b.used = used_3 + 1;
-    self_22 = b.used;
+    b.used = local.tee $load_2(used_3 + 1);
     out_49 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__format_remark_list_copy_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_remark_list_copy_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -112,23 +111,23 @@ fn "remark_list_copy.wado/run"() with Stdout {
     is_negative_116 = out_49.used;
     out_49.used = used_3;
     builtin::array_copy<u8>(out_49.repr, is_negative_116, $sroa_view_repr_201, 0, 1);
-    used_3 = self_22 < 0;
-    self_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s(self_22); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
-    used_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_49, used_3, self_22);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_49.repr, used_3, x_120, self_22);
+    used_3 = $load_2 < 0;
+    $load_2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s($load_2); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
+    used_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_49, used_3, $load_2);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_49.repr, used_3, x_120, $load_2);
     $inline_core_prelude_string_wado_String__format_remark_list_copy_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_remark_list_copy_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
     used_3 = builtin::i32_wrap_i64(local.tee x_120("wasi/stream-new"()));
-    self_22 = builtin::i32_wrap_i64(x_120 >> 32_i64);
+    $load_2 = builtin::i32_wrap_i64(x_120 >> 32_i64);
     used_3 = "remark_list_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_3);
     builtin::array_copy<u8>(local.tee $load_3(builtin::array_new<u8>(local.tee is_negative_116(out_49.used) + 1)), 0, out_49.repr, 0, is_negative_116);
     builtin::array_set_u8($load_3, is_negative_116, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_116 = is_negative_116 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(self_22, $load_3, 0, is_negative_116);
+        "core:rt/cm_stream_write_raw_all_u8"($load_2, $load_3, 0, is_negative_116);
     });
-    "wasi/stream-drop-writable"(self_22);
+    "wasi/stream-drop-writable"($load_2);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_3);
 }
 

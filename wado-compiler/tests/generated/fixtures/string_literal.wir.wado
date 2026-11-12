@@ -390,18 +390,18 @@ global global:core:prelude/primitive.wado::$const_obj_16: ref "core:prelude/stri
 global global:core:prelude/primitive.wado::$const_obj_18: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "string_literal.wado/$test_3_string__from_a_char"() {
-    let $load_0: ref Array<u8>;
+    let $load_1: ref Array<u8>;
     let s_7: ref "core:prelude/string.wado//String";
     let i_18: i32;
     let i_31: i32;
     local.tee s_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }).used = 1;
-    builtin::array_set_u8(local.tee $load_0(s_7.repr), 0, 65);
+    builtin::array_set_u8(local.tee $load_1(s_7.repr), 0, 65);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
         i_18 = 0;
         b1: block {
             l2: loop {
                 break_if b1 i_18 >= 1;
-                if builtin::array_get_value<u8>($load_0, i_18) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_2, i_18) {
+                if builtin::array_get_value<u8>($load_1, i_18) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_2, i_18) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i_18 = i_18 + 1;
@@ -424,23 +424,23 @@ String::from('A'): "), used: 129 }, s1: struct.new "core:prelude/string.wado//St
             break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
         }
         i_31 = 0;
-        $load_0 = s_7.repr;
+        $load_1 = s_7.repr;
         b6: block {
             l7: loop {
                 break_if b6 (builtin::i64_extend_i32_s(i_31) + 3_i64) >= builtin::i64_extend_i32_s(i_18);
-                if builtin::array_get_value<u8>($load_0, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
+                if builtin::array_get_value<u8>($load_1, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($load_0, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
+                if builtin::array_get_value<u8>($load_1, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($load_0, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
+                if builtin::array_get_value<u8>($load_1, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($load_0, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
+                if builtin::array_get_value<u8>($load_1, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_31 = i_31 + 1;
@@ -450,7 +450,7 @@ String::from('A'): "), used: 129 }, s1: struct.new "core:prelude/string.wado//St
         b12: block {
             l13: loop {
                 break_if b12 i_31 >= i_18;
-                if builtin::array_get_value<u8>($load_0, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
+                if builtin::array_get_value<u8>($load_1, i_31) != builtin::array_get_value<u8>(global:string_literal.wado::$const_obj_1, i_31) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
                 i_31 = i_31 + 1;
@@ -1546,7 +1546,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         }
         start_9 = self.used;
         self.used = new_used;
-        new_used = self.used;
         if @unlikely(start_9 >=u new_used) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_9, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
@@ -1593,7 +1592,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(s
     }
     start_6 = self.used;
     self.used = new_used;
-    new_used = self.used;
     if @unlikely(start_6 >=u new_used) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_6, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });

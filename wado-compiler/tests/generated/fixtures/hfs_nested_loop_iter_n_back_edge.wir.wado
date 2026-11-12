@@ -79,7 +79,7 @@ fn "hfs_nested_loop_iter_n_back_edge.wado/bump"(s) {
 }
 
 fn "hfs_nested_loop_iter_n_back_edge.wado/run"() with Stdout {
-    let $load_3: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let state: ref "hfs_nested_loop_iter_n_back_edge.wado//State";
     let sum: i32;
     let outer: i32;
@@ -123,9 +123,9 @@ fn "hfs_nested_loop_iter_n_back_edge.wado/run"() with Stdout {
     $hfs_pos_262 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_108(x_108 = builtin::i64_extend_i32_s(sum); select i64(x_108 < 0_i64, 0_i64 - x_108, x_108)));
     $hfs_pos_262 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_37, $hfs_pos_262, sum);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(out_37.repr), $hfs_pos_262, x_108, sum);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(out_37.repr), $hfs_pos_262, x_108, sum);
     $sroa_view_repr_201 = global:hfs_nested_loop_iter_n_back_edge.wado::$const_obj_0;
-    if @unlikely(local.tee sum(out_37.used + 1) > builtin::array_len($load_3)) {
+    if @unlikely(local.tee sum(out_37.used + 1) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_37, sum);
     }
@@ -142,11 +142,11 @@ fn "hfs_nested_loop_iter_n_back_edge.wado/run"() with Stdout {
     sum = builtin::i32_wrap_i64(local.tee x_108("wasi/stream-new"()));
     outer = builtin::i32_wrap_i64(x_108 >> 32_i64);
     sum = "hfs_nested_loop_iter_n_back_edge.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee $load_3(builtin::array_new<u8>(local.tee $hfs_pos_262(out_37.used) + 1)), 0, out_37.repr, 0, $hfs_pos_262);
-    builtin::array_set_u8($load_3, $hfs_pos_262, 10);
+    builtin::array_copy<u8>(local.tee $load_4(builtin::array_new<u8>(local.tee $hfs_pos_262(out_37.used) + 1)), 0, out_37.repr, 0, $hfs_pos_262);
+    builtin::array_set_u8($load_4, $hfs_pos_262, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $hfs_pos_262 = $hfs_pos_262 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(outer, $load_3, 0, $hfs_pos_262);
+        "core:rt/cm_stream_write_raw_all_u8"(outer, $load_4, 0, $hfs_pos_262);
     });
     "wasi/stream-drop-writable"(outer);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);

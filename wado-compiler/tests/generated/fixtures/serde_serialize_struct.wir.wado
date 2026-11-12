@@ -332,8 +332,8 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/User^serde_serialize
             text.used = start_22;
             builtin::array_copy<u8>(text.repr, start_342, out_14.repr, 0, new_used_21);
         };
-        $local_4.count = $local_4.count + 1;
-        if $local_4.count > 0 {
+        $local_4.count = local.tee new_used_21($local_4.count + 1);
+        if new_used_21 > 0 {
             if @unlikely(local.tee new_used_21(local.tee out_14($local_4.ser.buf).used + 1) > builtin::array_len(out_14.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, new_used_21);
@@ -356,8 +356,8 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/User^serde_serialize
         start_22 = out_14.used;
         out_14.used = new_used_21;
         builtin::array_copy<u8>(out_14.repr, start_22, global:serde_serialize_struct.wado::$const_obj_14, 0, 2);
-        $local_4.count = $local_4.count + 1;
-        if $local_4.count > 0 {
+        $local_4.count = local.tee new_used_21($local_4.count + 1);
+        if new_used_21 > 0 {
             if @unlikely(local.tee new_used_21(local.tee out_14($local_4.ser.buf).used + 1) > builtin::array_len(out_14.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, new_used_21);

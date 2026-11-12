@@ -352,7 +352,7 @@ fn "retain_bounded_destination.wado/park"(slot, b) {
 }
 
 fn "retain_bounded_destination.wado/run"() {
-    let $load_9: ref "Array<retain_bounded_destination.wado/Bag>";
+    let $load_10: ref "Array<retain_bounded_destination.wado/Bag>";
     let filler: ref "retain_bounded_destination.wado//Bag";
     let kept: ref "core:prelude/list.wado//List<retain_bounded_destination.wado/Bag>";
     let unread: ref "retain_bounded_destination.wado//Slot";
@@ -390,15 +390,14 @@ tag_count(&seen): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<retain_bounded_destination.wado/Bag>::grow"(kept);
     }
-    builtin::array_set<ref "retain_bounded_destination.wado//Bag">(local.tee $load_9(kept.repr), used_27, filler);
-    kept.used = used_27 + 1;
-    used_27 = kept.used;
+    builtin::array_set<ref "retain_bounded_destination.wado//Bag">(local.tee $load_10(kept.repr), used_27, filler);
+    kept.used = local.tee used_27(used_27 + 1);
     if @unlikely(0 >= used_27) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<retain_bounded_destination.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, used_27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("retain_bounded_destination.wado:48"), used: 34 });
         unreachable;
     }
-    if @unlikely(local.tee self_44(builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_9, 0).tags.used) != 2) {
+    if @unlikely(local.tee self_44(builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_10, 0).tags.used) != 2) {
         cold_path;
         "retain_bounded_destination.wado/run$cold1"(self_44);
         unreachable;
@@ -408,7 +407,7 @@ tag_count(&seen): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
         "core:prelude/list.wado/core:prelude/list.wado/List<retain_bounded_destination.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, used_27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("retain_bounded_destination.wado:49"), used: 34 });
         unreachable;
     }
-    if @unlikely(local.tee used_27(builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_9, 1).tags.used) != 1) {
+    if @unlikely(local.tee used_27(builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">($load_10, 1).tags.used) != 1) {
         cold_path;
         "retain_bounded_destination.wado/run$cold0"(used_27);
         unreachable;
@@ -2072,18 +2071,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecke
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<retain_bounded_destination.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(t) {
-    let $load_0: ref Array<u8>;
+    let $load_0: i32;
+    let $load_1: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
-    let start_126: i32;
     let q: u64;
     let tens: i32;
     let $sroa_view_repr_497: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_27;
-    out_3.used = 1;
-    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, $sroa_view_repr_497, 0, 1);
+    out_3.used = local.tee $load_0(1);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_497, 0, 1);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -2148,37 +2147,37 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<retain_boun
         break $inline_count_digits_u64_0: 20;
     };
     if is_negative_65 {
-        if @unlikely(local.tee is_negative_65(out_3.used + 1) > builtin::array_len($load_0)) {
+        if @unlikely(local.tee $load_0($load_0 + 1) > builtin::array_len($load_1)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_0);
         }
-        start_126 = out_3.used;
-        out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_126, 45);
+        is_negative_65 = out_3.used;
+        out_3.used = $load_0;
+        builtin::array_set_u8(out_3.repr, is_negative_65, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
+    if @unlikely(local.tee $load_0(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_0);
     }
-    start_126 = out_3.used;
-    out_3.used = is_negative_65;
+    is_negative_65 = out_3.used;
+    out_3.used = $load_0;
     $sroa_view_repr_497 = out_3.repr;
-    t = start_126 + t;
+    t = is_negative_65 + t;
     b261: block {
         l262: loop {
-            break_if b261 (t - start_126) < 2;
+            break_if b261 (t - is_negative_65) < 2;
             q = x /u 100_i64;
-            tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + is_negative_65) - (tens * 10));
+            tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + $load_0) - (tens * 10));
             builtin::array_set_u8($sroa_view_repr_497, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l262;
         };
     };
-    if t > start_126 {
-        builtin::array_set_u8($sroa_view_repr_497, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > is_negative_65 {
+        builtin::array_set_u8($sroa_view_repr_497, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
@@ -2187,18 +2186,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<retain_boun
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<retain_bounded_destination.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
-    let $load_0: ref Array<u8>;
+    let $load_0: i32;
+    let $load_1: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
-    let start_126: i32;
     let q: u64;
     let tens: i32;
     let $sroa_view_repr_497: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_28;
-    out_3.used = 1;
-    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, $sroa_view_repr_497, 0, 1);
+    out_3.used = local.tee $load_0(1);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_497, 0, 1);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -2263,37 +2262,37 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<retain_boun
         break $inline_count_digits_u64_0: 20;
     };
     if is_negative_65 {
-        if @unlikely(local.tee is_negative_65(out_3.used + 1) > builtin::array_len($load_0)) {
+        if @unlikely(local.tee $load_0($load_0 + 1) > builtin::array_len($load_1)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_0);
         }
-        start_126 = out_3.used;
-        out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_126, 45);
+        is_negative_65 = out_3.used;
+        out_3.used = $load_0;
+        builtin::array_set_u8(out_3.repr, is_negative_65, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
+    if @unlikely(local.tee $load_0(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_0);
     }
-    start_126 = out_3.used;
-    out_3.used = is_negative_65;
+    is_negative_65 = out_3.used;
+    out_3.used = $load_0;
     $sroa_view_repr_497 = out_3.repr;
-    t = start_126 + t;
+    t = is_negative_65 + t;
     b286: block {
         l287: loop {
-            break_if b286 (t - start_126) < 2;
+            break_if b286 (t - is_negative_65) < 2;
             q = x /u 100_i64;
-            tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + is_negative_65) - (tens * 10));
+            tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + $load_0) - (tens * 10));
             builtin::array_set_u8($sroa_view_repr_497, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l287;
         };
     };
-    if t > start_126 {
-        builtin::array_set_u8($sroa_view_repr_497, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > is_negative_65 {
+        builtin::array_set_u8($sroa_view_repr_497, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

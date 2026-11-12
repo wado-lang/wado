@@ -582,6 +582,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<list_sort_b
     let $temp_inline_core_prelude_traits_wado_TemplateHole_list_sort_by_comparator_refs_elements_wado__tmpl_389f40c677c71e70_core_prelude_string_wado_String___fmt_34_0: ref "core:prelude/format.wado//Formatter";
     let x_536: i64;
     let q: u64;
+    let pair: i32;
     let tens: i32;
     let self_619: ref "core:prelude/string.wado//String";
     let start_639: i32;
@@ -777,8 +778,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<list_sort_b
         l76: loop {
             break_if b75 ($load_3 - start_639) < 2;
             q = x_536 /u 100_i64;
-            tens = local.tee start_72(builtin::i32_wrap_i64(x_536 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_1797, $load_3 - 1, (48 + start_72) - (tens * 10));
+            tens = local.tee pair(builtin::i32_wrap_i64(x_536 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_view_repr_1797, $load_3 - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8($sroa_view_repr_1797, $load_3 - 2, 48 + tens);
             $load_3 = $load_3 - 2;
             x_536 = q;
@@ -792,7 +793,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<list_sort_b
     $sroa_view_repr_1817 = $load_2.repr;
     $inline_core_prelude_string_wado_String__internal_push_view_178: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_178 $load_3 == 0;
-        if @unlikely(local.tee start_72(out_3.used + $load_3) > builtin::array_len($sroa_view_repr_1797)) {
+        if @unlikely(local.tee start_72(start_72 + $load_3) > builtin::array_len($sroa_view_repr_1797)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, start_72);
         }

@@ -72,7 +72,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "opt_dropped_value_in_stmt_tail.wado/drain"(n) {
-    let $load_6: ref Array<i32>;
+    let $load_7: ref Array<i32>;
     let xs: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
     let used_7: i32;
@@ -94,19 +94,19 @@ fn "opt_dropped_value_in_stmt_tail.wado/drain"(n) {
     if n > 3 {
         $inline_core_prelude_list_wado_List_i32___pop_4: block {
             break_if $inline_core_prelude_list_wado_List_i32___pop_4 local.tee i(xs.used) == 0;
-            xs.used = i - 1;
-            drop(builtin::array_get_value<i32>(xs.repr, xs.used));
+            xs.used = local.tee i(i - 1);
+            drop(builtin::array_get_value<i32>(xs.repr, i));
             break $inline_core_prelude_list_wado_List_i32___pop_4;
         };
     }
-    $load_6 = xs.repr;
+    $load_7 = xs.repr;
     b4: block {
         l5: loop {
             break_if b4 local.tee i(xs.used) <= 2;
             $inline_core_prelude_list_wado_List_i32___pop_6: block {
                 break_if $inline_core_prelude_list_wado_List_i32___pop_6 i == 0;
-                xs.used = i - 1;
-                drop(builtin::array_get_value<i32>($load_6, xs.used));
+                xs.used = local.tee i(i - 1);
+                drop(builtin::array_get_value<i32>($load_7, i));
                 break $inline_core_prelude_list_wado_List_i32___pop_6;
             };
             continue l5;
@@ -116,13 +116,13 @@ fn "opt_dropped_value_in_stmt_tail.wado/drain"(n) {
         if local.tee n(xs.used) > 1 {
             $inline_core_prelude_list_wado_List_i32___pop_8: block {
                 break_if $inline_core_prelude_list_wado_List_i32___pop_8 n == 0;
-                xs.used = n - 1;
-                drop(builtin::array_get_value<i32>($load_6, xs.used));
+                xs.used = local.tee n(n - 1);
+                drop(builtin::array_get_value<i32>($load_7, n));
                 break $inline_core_prelude_list_wado_List_i32___pop_8;
             };
         }
     } else {
-        if @unlikely(local.tee i(xs.used) >= builtin::array_len($load_6)) {
+        if @unlikely(local.tee i(xs.used) >= builtin::array_len($load_7)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
         }

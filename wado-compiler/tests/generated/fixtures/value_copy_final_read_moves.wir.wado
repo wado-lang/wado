@@ -224,7 +224,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "value_copy_final_read_moves.wado/each_iteration$dae[n]"() {
-    let $load_4: ref "Array<core:prelude/list.wado/List<i32>>";
+    let $load_5: ref "Array<core:prelude/list.wado/List<i32>>";
     let items: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     let i: i32;
     let xs: ref "core:prelude/list.wado//List<i32>";
@@ -245,15 +245,14 @@ fn "value_copy_final_read_moves.wado/each_iteration$dae[n]"() {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(items);
             }
-            builtin::array_set<ref "core:prelude/list.wado//List<i32>">(local.tee $load_4(items.repr), used_22, xs);
-            items.used = used_22 + 1;
-            used_22 = items.used;
+            builtin::array_set<ref "core:prelude/list.wado//List<i32>">(local.tee $load_5(items.repr), used_22, xs);
+            items.used = local.tee used_22(used_22 + 1);
             if @unlikely(i >= used_22) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(i, used_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_final_read_moves.wado:39"), used: 35 });
                 unreachable;
             }
-            if @unlikely(local.tee used_22(local.tee xs(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($load_4, i)).used) >= builtin::array_len(xs.repr)) {
+            if @unlikely(local.tee used_22(local.tee xs(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($load_5, i)).used) >= builtin::array_len(xs.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
             }

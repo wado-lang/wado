@@ -7,7 +7,7 @@ use { TableRegistry } from "./table_registry.wado";
 use { ParserPlan } from "./parser_plan.wado";
 use { decision_predicates } from "./gate_conditions.wado";
 use { Diagnostics, admits_is_untestable, admits_or_everything, admits_or_untestable } from "./gir.wado";
-use { Reading } from "./readings.wado";
+use { readings_of_position } from "./readings.wado";
 
 fn mk_ctx() -> EmitContext {
     let rules: List<ParserRule> = [];
@@ -30,13 +30,7 @@ fn ids(ctx: &mut EmitContext, names: List<String>) -> List<i32> {
 
 /// The id a site reading one `kind` interns as.
 fn intern_site(ctx: &mut EmitContext, kind: String) -> i32 {
-    let kinds = ids(ctx, [kind]);
-    return ctx.tables.intern_follow_site([
-        Reading {
-            kinds: [kinds],
-            ends: true,
-        },
-    ]);
+    return ctx.tables.intern_follow_site(readings_of_position(&ids(ctx, [kind]), 4));
 }
 
 test "an empty set is not a condition until the site says what it admits" {

@@ -250,25 +250,24 @@ pos: "), used: 96 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
 }
 
 fn "bug_store_load_forward_mut_call_arg.wado/step$spec0$sroa[xs.repr]"(xs, pos) {
-    let $hfs_value_17: i32;
-    pos.value = pos.value + 1;
-    $hfs_value_17 = pos.value;
+    let $load_1: i32;
+    pos.value = local.tee $load_1(pos.value + 1);
     b5: block {
         l6: loop {
-            if (if $hfs_value_17 < 3 -> i32 {
-                if @unlikely($hfs_value_17 >=u 3) {
+            if (if $load_1 < 3 -> i32 {
+                if @unlikely($load_1 >=u 3) {
                     cold_path;
-                    pos.value = $hfs_value_17;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($hfs_value_17, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_store_load_forward_mut_call_arg.wado:13"), used: 43 });
+                    pos.value = $load_1;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_1, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_store_load_forward_mut_call_arg.wado:13"), used: 43 });
                     unreachable;
-                }; builtin::array_get_value<i32>(xs, $hfs_value_17) == 0;
+                }; builtin::array_get_value<i32>(xs, $load_1) == 0;
             } else {
                 0;
             }) == 0 {
-                pos.value = $hfs_value_17;
+                pos.value = $load_1;
                 break b5;
             }
-            $hfs_value_17 = $hfs_value_17 + 1;
+            $load_1 = $load_1 + 1;
             continue l6;
         };
     };

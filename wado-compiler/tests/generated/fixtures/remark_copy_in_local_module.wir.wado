@@ -433,8 +433,8 @@ fn "sub/remark_copy_helper.wado/grow"(seed) {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(b);
     }
     builtin::array_set<i32>(b.repr, used_4, seed);
-    b.used = used_4 + 1;
-    return used_4 + b.used;
+    b.used = local.tee seed(used_4 + 1);
+    return used_4 + seed;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {

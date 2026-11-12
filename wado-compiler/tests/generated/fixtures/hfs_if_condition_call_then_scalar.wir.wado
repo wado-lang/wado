@@ -67,8 +67,9 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "hfs_if_condition_call_then_scalar.wado/probe"(b) {
-    b.v = b.v + 5;
-    return b.v;
+    let $load_1: i32;
+    b.v = local.tee $load_1(b.v + 5);
+    return $load_1;
 }
 
 fn "hfs_if_condition_call_then_scalar.wado/run"() with Stdout {

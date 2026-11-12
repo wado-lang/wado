@@ -375,16 +375,17 @@ without it. Unset, it costs nothing.
 
 Every generated parser module exports, at minimum:
 
-| Item                                                         | What it is                                                     |
-| ------------------------------------------------------------ | -------------------------------------------------------------- |
-| `parse(input) -> ParseResult`                                | parse from the start rule                                      |
-| `parse_<rule>(input) -> ParseResult`                         | parse starting from any rule                                   |
-| `tokenize(input) -> TokenStream`                             | run only the lexer                                             |
-| `to_string_tree(result: &ParseResult) -> String`             | ANTLR4-style S-expression of the tree                          |
-| `ParseResult { cst, tokens, diagnostics }`                   | `.ok()` is true on a clean parse                               |
-| `CstStore` + cursor methods                                  | the flat parse tree (see above)                                |
-| `RK_<RULE>: NodeKind`                                        | node-kind constant for each rule (match on `s.kind(node)`)     |
-| `<Rule>Alt` enum + `s.<rule>_alt(node) -> Option<<Rule>Alt>` | the matched `# Label`, for labeled rules (`None` if unstamped) |
+| Item                                                              | What it is                                                     |
+| ----------------------------------------------------------------- | -------------------------------------------------------------- |
+| `parse(input) -> ParseResult`                                     | parse from the start rule                                      |
+| `parse_<rule>(input) -> ParseResult`                              | parse starting from any rule                                   |
+| `tokenize(input) -> TokenStream`                                  | run only the lexer                                             |
+| `TokenStream` + `kind_at` / `start_at` / `end_at` / `trivia_*_at` | token `i`'s trivia are `trivia_lo_at(i)..<trivia_hi_at(i)`     |
+| `to_string_tree(result: &ParseResult) -> String`                  | ANTLR4-style S-expression of the tree                          |
+| `ParseResult { cst, tokens, diagnostics }`                        | `.ok()` is true on a clean parse                               |
+| `CstStore` + cursor methods                                       | the flat parse tree (see above)                                |
+| `RK_<RULE>: NodeKind`                                             | node-kind constant for each rule (match on `s.kind(node)`)     |
+| `<Rule>Alt` enum + `s.<rule>_alt(node) -> Option<<Rule>Alt>`      | the matched `# Label`, for labeled rules (`None` if unstamped) |
 
 `Diagnostic` carries `line`, `col`, `message`, a `code`, and a severity
 (`is_error()`); a resilient parse reports recovery edits as `Missing` /

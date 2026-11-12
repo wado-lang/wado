@@ -103,11 +103,15 @@ impl HighlightVisitor {
     }
 
     fn hl_capture_token(&mut self, toks: &TokenStream, idx: i32) {
-        for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
-            let id = self.classify(toks.triv_kinds[t], -1);
+        for let mut t = toks.trivia_lo_at(idx); t < toks.trivia_hi_at(idx); t += 1 {
+            let id = self.classify(toks.trivia_kind_at(t), -1);
             if id >= 0 {
                 self.captures.push(
-                    HighlightCapture { capture_id: id, start: toks.triv_starts[t], end: toks.triv_ends[t] },
+                    HighlightCapture {
+                        capture_id: id,
+                        start: toks.trivia_start_at(t),
+                        end: toks.trivia_end_at(t),
+                    },
                 );
             }
         }
@@ -117,7 +121,11 @@ impl HighlightVisitor {
         let id = self.classify(toks.kinds[idx], self.enclosing_rule_capture());
         if id >= 0 {
             self.captures.push(
-                HighlightCapture { capture_id: id, start: toks.starts[idx], end: toks.ends[idx] },
+                HighlightCapture {
+                    capture_id: id,
+                    start: toks.start_at(idx),
+                    end: toks.end_at(idx),
+                },
             );
         }
     }

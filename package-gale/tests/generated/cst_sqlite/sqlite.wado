@@ -132,16 +132,9 @@ pub flags TokenFlags {
 
 pub struct TokenStream {
     pub kinds: List<i32>,
-    pub starts: List<i32>,
-    pub ends: List<i32>,
-    pub triv_lo: List<i32>,
-    pub triv_hi: List<i32>,
+    token_fields: List<i32>,
     pub src: StrSlice,
-    pub triv_kinds: List<i32>,
-    pub triv_starts: List<i32>,
-    pub triv_ends: List<i32>,
-    pub triv_chans: List<i32>,
-    pub flags: List<TokenFlags>,
+    trivia_fields: List<i32>,
     pub output: String = "",
 }
 
@@ -150,16 +143,9 @@ impl TokenStream {
         let cap = src.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
-            starts: List::with_capacity(cap),
-            ends: List::with_capacity(cap),
-            triv_lo: List::with_capacity(cap),
-            triv_hi: List::with_capacity(cap),
+            token_fields: List::with_capacity(cap * 5),
             src,
-            triv_kinds: List::with_capacity(cap),
-            triv_starts: List::with_capacity(cap),
-            triv_ends: List::with_capacity(cap),
-            triv_chans: List::with_capacity(cap),
-            flags: List::with_capacity(cap),
+            trivia_fields: List::with_capacity(cap * 4),
         };
     }
 
@@ -167,25 +153,52 @@ impl TokenStream {
         return self.kinds.len();
     }
 
+    pub fn start_at(&self, i: i32) -> i32 {
+        return self.token_fields[i * 5];
+    }
+
+    pub fn end_at(&self, i: i32) -> i32 {
+        return self.token_fields[i * 5 + 1];
+    }
+
+    pub fn trivia_lo_at(&self, i: i32) -> i32 {
+        return self.token_fields[i * 5 + 2];
+    }
+
+    pub fn trivia_hi_at(&self, i: i32) -> i32 {
+        return self.token_fields[i * 5 + 3];
+    }
+
+    pub fn trivia_kind_at(&self, t: i32) -> i32 {
+        return self.trivia_fields[t * 4];
+    }
+
+    pub fn trivia_start_at(&self, t: i32) -> i32 {
+        return self.trivia_fields[t * 4 + 1];
+    }
+
+    pub fn trivia_end_at(&self, t: i32) -> i32 {
+        return self.trivia_fields[t * 4 + 2];
+    }
+
+    pub fn trivia_channel_at(&self, t: i32) -> i32 {
+        return self.trivia_fields[t * 4 + 3];
+    }
+
     internal fn trivia_mark(&self) -> i32 {
-        return self.triv_kinds.len();
+        return self.trivia_fields.len() >> 2;
     }
 
     internal fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
-        if self.triv_kinds.len() >= self.triv_kinds.capacity() {
+        if self.trivia_fields.len() >= self.trivia_fields.capacity() {
             builtin::cold_path();
-            self.triv_kinds.grow();
-            self.triv_starts.grow();
-            self.triv_ends.grow();
-            self.triv_chans.grow();
-            assert self.triv_starts.capacity() == self.triv_kinds.capacity()
-                && self.triv_ends.capacity() == self.triv_kinds.capacity()
-                && self.triv_chans.capacity() == self.triv_kinds.capacity(), "TokenStream trivia columns must grow in lockstep";
+            self.trivia_fields.grow();
+            assert self.trivia_fields.capacity() % 4 == 0, "TokenStream trivia_fields must hold whole trivia";
         }
-        unchecked self.triv_kinds.push_within_capacity(kind);
-        unchecked self.triv_starts.push_within_capacity(start);
-        unchecked self.triv_ends.push_within_capacity(end);
-        unchecked self.triv_chans.push_within_capacity(channel);
+        unchecked self.trivia_fields.push_within_capacity(kind);
+        unchecked self.trivia_fields.push_within_capacity(start);
+        unchecked self.trivia_fields.push_within_capacity(end);
+        unchecked self.trivia_fields.push_within_capacity(channel);
     }
 
     internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
@@ -205,23 +218,15 @@ impl TokenStream {
         if idx >= self.kinds.capacity() {
             builtin::cold_path();
             self.kinds.grow();
-            self.starts.grow();
-            self.ends.grow();
-            self.triv_lo.grow();
-            self.triv_hi.grow();
-            self.flags.grow();
-            assert self.starts.capacity() == self.kinds.capacity()
-                && self.ends.capacity() == self.kinds.capacity()
-                && self.triv_lo.capacity() == self.kinds.capacity()
-                && self.triv_hi.capacity() == self.kinds.capacity()
-                && self.flags.capacity() == self.kinds.capacity(), "TokenStream token columns must grow in lockstep";
+            self.token_fields.reserve(self.kinds.capacity() * 5 - self.token_fields.len());
+            assert self.token_fields.capacity() == self.kinds.capacity() * 5, "TokenStream token_fields must grow with kinds";
         }
         unchecked self.kinds.push_within_capacity(kind);
-        unchecked self.starts.push_within_capacity(start);
-        unchecked self.ends.push_within_capacity(end);
-        unchecked self.triv_lo.push_within_capacity(triv_lo);
-        unchecked self.triv_hi.push_within_capacity(triv_hi);
-        unchecked self.flags.push_within_capacity(flags);
+        unchecked self.token_fields.push_within_capacity(start);
+        unchecked self.token_fields.push_within_capacity(end);
+        unchecked self.token_fields.push_within_capacity(triv_lo);
+        unchecked self.token_fields.push_within_capacity(triv_hi);
+        unchecked self.token_fields.push_within_capacity(flags as u32 as i32);
         return idx;
     }
 
@@ -231,11 +236,11 @@ impl TokenStream {
     }
 
     pub fn flags_at(&self, i: i32) -> TokenFlags {
-        return self.flags[i];
+        return self.token_fields[i * 5 + 4] as u32 as TokenFlags;
     }
 
     internal fn set_flag(&mut self, i: i32, flag: TokenFlags) {
-        self.flags[i] |= flag;
+        self.token_fields[i * 5 + 4] = (self.flags_at(i) | flag) as u32 as i32;
     }
 
     internal fn mark_skipped(&mut self, i: i32) {
@@ -243,15 +248,15 @@ impl TokenStream {
     }
 
     pub fn is_synthetic(&self, i: i32) -> bool {
-        return self.flags[i] & TokenFlags::Synthetic != TokenFlags::none();
+        return self.flags_at(i) & TokenFlags::Synthetic != TokenFlags::none();
     }
 
     pub fn is_skipped(&self, i: i32) -> bool {
-        return self.flags[i] & TokenFlags::Skipped != TokenFlags::none();
+        return self.flags_at(i) & TokenFlags::Skipped != TokenFlags::none();
     }
 
     pub fn is_lex_error(&self, i: i32) -> bool {
-        return self.flags[i] & TokenFlags::LexError != TokenFlags::none();
+        return self.flags_at(i) & TokenFlags::LexError != TokenFlags::none();
     }
 
     pub fn kind_at(&self, i: i32) -> i32 {
@@ -259,32 +264,32 @@ impl TokenStream {
     }
 
     pub fn span_at(&self, i: i32) -> Span {
-        return Span::new(self.starts[i], self.ends[i]);
+        return Span::new(self.start_at(i), self.end_at(i));
     }
 
     pub fn is_empty_text(&self, i: i32) -> bool {
-        return self.starts[i] >= self.ends[i];
+        return self.start_at(i) >= self.end_at(i);
     }
 
     pub fn token_text(&self, i: i32) -> String {
-        return span_text(&self.src, self.starts[i], self.ends[i]);
+        return span_text(&self.src, self.start_at(i), self.end_at(i));
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        out.push_str(self.src.slice(self.starts[i], self.ends[i]));
+        out.push_str(self.src.slice(self.start_at(i), self.end_at(i)));
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        push_escaped(out, &self.src, self.starts[i], self.ends[i]);
+        push_escaped(out, &self.src, self.start_at(i), self.end_at(i));
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
         let mut out = String::new();
         for let mut i = start_tok; i <= end_tok; i += 1 {
             if i > start_tok {
-                for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
-                    if self.triv_chans[j] != 0 {
-                        out.push_str(self.src.slice(self.triv_starts[j], self.triv_ends[j]));
+                for let mut t = self.trivia_lo_at(i); t < self.trivia_hi_at(i); t += 1 {
+                    if self.trivia_channel_at(t) != 0 {
+                        out.push_str(self.src.slice(self.trivia_start_at(t), self.trivia_end_at(t)));
                     }
                 }
             }
@@ -389,7 +394,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.start_at(i), tokens.end_at(i));
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,
@@ -918,17 +923,17 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     out.push_str(&tokens.output);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
-        let lo = tokens.triv_lo[i];
-        let hi = tokens.triv_hi[i];
+        let lo = tokens.trivia_lo_at(i);
+        let hi = tokens.trivia_hi_at(i);
         for let mut t = lo; t < hi; t += 1 {
-            if tokens.triv_chans[t] != 0 {
+            if tokens.trivia_channel_at(t) != 0 {
                 emit_lexer_token(
                     &mut out,
                     tokens,
-                    tokens.triv_kinds[t],
-                    tokens.triv_starts[t],
-                    tokens.triv_ends[t],
-                    tokens.triv_chans[t],
+                    tokens.trivia_kind_at(t),
+                    tokens.trivia_start_at(t),
+                    tokens.trivia_end_at(t),
+                    tokens.trivia_channel_at(t),
                     &mut cursor,
                     index,
                     eof_kind,
@@ -940,8 +945,8 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             &mut out,
             tokens,
             tokens.kinds[i],
-            tokens.starts[i],
-            tokens.ends[i],
+            tokens.start_at(i),
+            tokens.end_at(i),
             0,
             &mut cursor,
             index,
@@ -994,6 +999,7 @@ internal global FOLLOW_CONT_BITS: i64 = 60;
 internal struct FollowTables {
     internal stride: i32,
     internal sets: List<i32>,
+    internal heads: List<i32>,
     internal starts: List<i32>,
     internal readings: List<i32>,
 }
@@ -1071,6 +1077,7 @@ fn follow_reads(
     eof_kind: i32,
 ) -> bool {
     let mut c = cont;
+    let kind = follow_kind_at(tokens, pos + depth, eof_kind);
     loop {
         let site = c & FOLLOW_ID_MASK;
         if site == 0 {
@@ -1081,11 +1088,8 @@ fn follow_reads(
             continue;
         }
         let rest = c >> FOLLOW_SLOT_BITS;
-        let readings = &tables.readings;
-        let mut at = tables.starts[site as i32 - 1];
-        let end = tables.starts[site as i32];
-        let heads = readings[at];
-        if !follow_set_has(tables, heads >> 1, follow_kind_at(tokens, pos + depth, eof_kind)) {
+        let heads = tables.heads[site as i32 - 1];
+        if !follow_set_has(tables, heads >> 1, kind) {
             if heads & 1 == 0 {
                 return false;
             }
@@ -1095,7 +1099,9 @@ fn follow_reads(
         if depth + 1 >= budget {
             return true;
         }
-        at += 1;
+        let readings = &tables.readings;
+        let mut at = tables.starts[site as i32 - 1];
+        let end = tables.starts[site as i32];
         while at < end {
             let len = readings[at] >> 1;
             let mut matched = 0;
@@ -4793,7 +4799,7 @@ impl Parser {
     }
 
     fn fail_on_token(&mut self, what: String, expected: &List<i32>, code: DiagnosticCode) {
-        if self.supersedes_pending(self.tokens.starts[self.pos]) {
+        if self.supersedes_pending(self.tokens.start_at(self.pos)) {
             self.fail(`${what} "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), expected, code);
             return;
         }
@@ -4801,7 +4807,7 @@ impl Parser {
     }
 
     fn fail_on_kind(&mut self, kind: i32) {
-        if self.speculating && !self.supersedes_pending(self.tokens.starts[self.pos]) {
+        if self.speculating && !self.supersedes_pending(self.tokens.start_at(self.pos)) {
             self.recovering = true;
             return;
         }
@@ -4944,7 +4950,7 @@ impl Parser {
     }
 
     fn peek_start(&self) -> i32 {
-        return self.tokens.starts[self.pos];
+        return self.tokens.start_at(self.pos);
     }
 
     fn peek_span(&self) -> Span {
@@ -4969,7 +4975,7 @@ impl Parser {
 
     fn last_end(&self) -> i32 {
         if self.pos == 0 { return 0; }
-        return self.tokens.ends[self.pos - 1];
+        return self.tokens.end_at(self.pos - 1);
     }
 
     fn expect(&mut self, kind: i32, sync: &List<i32>, may_end_rule: bool) -> i32 {
@@ -8791,7 +8797,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
             break osl_291_done;
         }
     }
-    if pos != osl_291_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_291_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_291_start && follow_yields(tokens, osl_291_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_291_start;
     }
     return pos;
@@ -10566,7 +10572,7 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = opt_scan_pos >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(12, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_16 { 0 } else { 1 });
     }
@@ -10715,7 +10721,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_7, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(15, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_19 { 0 } else { 1 });
     }
@@ -10747,7 +10753,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(17, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_21 { 0 } else { 1 });
     }
@@ -10767,7 +10773,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(18, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_23 { 0 } else { 1 });
         }
@@ -10823,7 +10829,7 @@ fn _parse_commit_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(20, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_25 { 0 } else { 1 });
     }
@@ -10843,7 +10849,7 @@ fn _parse_commit_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(21, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_27 { 0 } else { 1 });
         }
@@ -11008,7 +11014,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(26, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_33 { 0 } else { 1 });
     }
@@ -11099,7 +11105,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(28, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_37 { 0 } else { 1 });
     }
@@ -11126,7 +11132,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(29, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_39 { 0 } else { 1 });
         }
@@ -11374,7 +11380,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_3 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(35, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_49 { 0 } else { 1 });
     }
@@ -11683,7 +11689,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(43, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_62 { 0 } else { 1 });
         }
@@ -13230,7 +13236,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> (
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_3 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(64, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_96 { 0 } else { 1 });
     }
@@ -13303,7 +13309,7 @@ fn _parse_delete_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(67, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_101 { 0 } else { 1 });
     }
@@ -13367,7 +13373,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(69, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_104 { 0 } else { 1 });
     }
@@ -13443,7 +13449,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_2: bool = opt_scan_pos_2 >= 0;
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(70, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_106 { 0 } else { 1 });
     }
@@ -13486,7 +13492,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(73, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_112 { 0 } else { 1 });
         }
@@ -14064,7 +14070,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(86, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_135 { 0 } else { 1 });
     }
@@ -14155,7 +14161,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(88, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_139 { 0 } else { 1 });
     }
@@ -14182,7 +14188,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(89, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_141 { 0 } else { 1 });
         }
@@ -14854,7 +14860,7 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_2: bool = gd_best >= 0;
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_2 = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(101, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_161 { 0 } else { 1 });
     }
@@ -14955,7 +14961,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = opt_scan_pos >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(103, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_163 { 0 } else { 1 });
     }
@@ -15168,7 +15174,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(108, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_169 { 0 } else { 1 });
     }
@@ -15188,7 +15194,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_47, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(109, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_171 { 0 } else { 1 });
         }
@@ -15223,7 +15229,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(110, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_172 { 0 } else { 1 });
     }
@@ -15348,7 +15354,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(113, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_176 { 0 } else { 1 });
     }
@@ -15439,7 +15445,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(115, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_180 { 0 } else { 1 });
     }
@@ -15466,7 +15472,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(116, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_182 { 0 } else { 1 });
         }
@@ -15591,7 +15597,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_14, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(120, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_188 { 0 } else { 1 });
     }
@@ -15682,7 +15688,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(122, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_192 { 0 } else { 1 });
     }
@@ -15709,7 +15715,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(123, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_194 { 0 } else { 1 });
         }
@@ -16010,7 +16016,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(129, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_201 { 0 } else { 1 });
         }
@@ -16151,7 +16157,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_2 = pos;
                 }
-                opt_enter_3 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_3 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(132, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_206 { 0 } else { 1 });
         }
@@ -16218,7 +16224,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_3 = pos;
                 }
-                opt_enter_4 = opt_scan_pos_3 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter_4 = opt_scan_pos_3 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(133, 1, p.pos, if opt_enter_4 { 0 } else { 1 }, if rs_simulated_208 { 0 } else { 1 });
         }
@@ -16293,7 +16299,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         opt_scan_pos = pos;
                     }
-                    opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                    opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
                 }
                 atn_shadow(135, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_212 { 0 } else { 1 });
             }
@@ -16729,7 +16735,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(143, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_225 { 0 } else { 1 });
     }
@@ -17134,7 +17140,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_35, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(148, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_232 { 0 } else { 1 });
     }
@@ -17210,7 +17216,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_3: bool = opt_scan_pos_2 >= 0;
         if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_3 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(149, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_234 { 0 } else { 1 });
     }
@@ -17253,7 +17259,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(152, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_240 { 0 } else { 1 });
         }
@@ -17448,7 +17454,7 @@ fn _parse_type_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = opt_scan_pos >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(157, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_246 { 0 } else { 1 });
     }
@@ -17565,7 +17571,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     pos += 1;
                     opt_scan_pos = pos;
                 }
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_67, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(161, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_251 { 0 } else { 1 });
         }
@@ -17579,7 +17585,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rs_pick_253 < 0 && rs_pick_253 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
         let rs_simulated_253 = rs_pick_253 == 0;
         if !p.recovering && !p.speculating {
-            atn_shadow(163, 1, p.pos, if p.peek_kind() == TK_K_AUTOINCREMENT && (follow_yields(&p.kinds, p.pos + 1, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_253 { 0 } else { 1 });
+            atn_shadow(163, 1, p.pos, if p.peek_kind() == TK_K_AUTOINCREMENT && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, p.pos + 1, follow, &FOLLOW_TABLES, TK_EOF)) { 0 } else { 1 }, if rs_simulated_253 { 0 } else { 1 });
         }
         if rs_simulated_253 {
             p.expect(TK_K_AUTOINCREMENT, &EMPTY_SYNC, true);
@@ -17725,7 +17731,7 @@ fn _parse_conflict_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(166, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_256 { 0 } else { 1 });
     }
@@ -19095,7 +19101,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () 
                         }
                         opt_scan_pos_2 = pos;
                     }
-                    opt_enter_2 = opt_scan_pos_2 >= 0 && ((_kind_set_36((if opt_scan_pos_2 < p.kinds.len() { p.kinds[opt_scan_pos_2] } else { TK_EOF })) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF)) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                    opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || (_kind_set_36((if opt_scan_pos_2 < p.kinds.len() { p.kinds[opt_scan_pos_2] } else { TK_EOF })) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF)));
                 }
                 atn_shadow(194, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_283 { 0 } else { 1 });
             }
@@ -19230,7 +19236,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_81, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(198, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_297 { 0 } else { 1 });
     }
@@ -19554,7 +19560,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(204, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_306 { 0 } else { 1 });
     }
@@ -19605,7 +19611,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             let mut opt_enter: bool = opt_scan_pos >= 0;
             if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-                opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(206, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_309 { 0 } else { 1 });
         }
@@ -19739,7 +19745,7 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(210, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_313 { 0 } else { 1 });
     }
@@ -19763,7 +19769,7 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(211, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_315 { 0 } else { 1 });
     }
@@ -20071,7 +20077,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter_2: bool = gd_best >= 0;
         if opt_enter_2 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_2 = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(221, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_330 { 0 } else { 1 });
     }
@@ -20132,7 +20138,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_84, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(223, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_332 { 0 } else { 1 });
     }
@@ -20156,7 +20162,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(224, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_334 { 0 } else { 1 });
     }
@@ -20312,7 +20318,7 @@ fn _parse_result_column__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(230, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_340 { 0 } else { 1 });
     }
@@ -20345,7 +20351,7 @@ fn scan_result_column__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             break osl_220_done;
         }
     }
-    if pos != osl_220_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_220_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_220_start && follow_yields(tokens, osl_220_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_220_start;
     }
     return pos;
@@ -20521,7 +20527,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(234, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_345 { 0 } else { 1 });
     }
@@ -20568,7 +20574,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
         }
         let mut opt_enter_3: bool = gd_best >= 0;
         if opt_enter_3 && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter_3 = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_3 = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(236, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_348 { 0 } else { 1 });
     }
@@ -20630,7 +20636,7 @@ fn scan_table_or_subquery__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             break osl_230_done;
         }
     }
-    if pos != osl_230_start && !follow_yields(tokens, pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_230_start, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_230_start && follow_yields(tokens, osl_230_start, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow_push(FOLLOW_SITE_90, follow), &FOLLOW_TABLES, TK_EOF) {
         pos = osl_230_start;
     }
     if atn_decide_236(atn, tokens, pos, 0) == 0 {
@@ -20820,7 +20826,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
                 }
                 opt_scan_pos_2 = pos;
             }
-            opt_enter_2 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter_2 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(241, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_356 { 0 } else { 1 });
     }
@@ -20912,7 +20918,7 @@ fn scan_table_or_subquery__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             break osl_245_done;
         }
     }
-    if pos != osl_245_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_245_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_245_start && follow_yields(tokens, osl_245_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_245_start;
     }
     return pos;
@@ -21086,7 +21092,7 @@ fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () 
                 }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(245, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_362 { 0 } else { 1 });
     }
@@ -21136,7 +21142,7 @@ fn scan_table_or_subquery__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             break osl_252_done;
         }
     }
-    if pos != osl_252_start && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) && follow_yields(tokens, osl_252_start, follow, &FOLLOW_TABLES, TK_EOF) {
+    if pos != osl_252_start && follow_yields(tokens, osl_252_start, follow, &FOLLOW_TABLES, TK_EOF) && !follow_yields(tokens, pos, follow, &FOLLOW_TABLES, TK_EOF) {
         pos = osl_252_start;
     }
     return pos;
@@ -21451,7 +21457,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         let mut opt_enter: bool = gd_best >= 0;
         if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) {
-            opt_enter = gd_best >= 0 && (follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+            opt_enter = gd_best >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, gd_best, follow, &FOLLOW_TABLES, TK_EOF));
         }
         atn_shadow(253, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_371 { 0 } else { 1 });
     }
@@ -21768,7 +21774,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos = pos;
                 }
-                opt_enter_2 = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow_push(FOLLOW_SITE_50, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(260, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_379 { 0 } else { 1 });
         }
@@ -21909,7 +21915,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_2 = pos;
                 }
-                opt_enter_3 = opt_scan_pos_2 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
+                opt_enter_3 = opt_scan_pos_2 >= 0 && (!follow_yields(&p.kinds, p.pos, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_2, follow_push(FOLLOW_SITE_51, follow), &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(263, 1, p.pos, if opt_enter_3 { 0 } else { 1 }, if rs_simulated_384 { 0 } else { 1 });
         }
@@ -21976,7 +21982,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     opt_scan_pos_3 = pos;
                 }
-                opt_enter_4 = opt_scan_pos_3 >= 0 && (follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                opt_enter_4 = opt_scan_pos_3 >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos_3, follow, &FOLLOW_TABLES, TK_EOF));
             }
             atn_shadow(264, 1, p.pos, if opt_enter_4 { 0 } else { 1 }, if rs_simulated_386 { 0 } else { 1 });
         }
@@ -22051,7 +22057,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         opt_scan_pos = pos;
                     }
-                    opt_enter = opt_scan_pos >= 0 && (follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF) || !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF));
+                    opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_TABLES, TK_EOF) || follow_yields(&p.kinds, opt_scan_pos, follow, &FOLLOW_TABLES, TK_EOF));
                 }
                 atn_shadow(266, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_390 { 0 } else { 1 });
             }
@@ -23712,9 +23718,10 @@ global EXPECTED_121: List<i32> = [TK_IDENTIFIER, TK_OPEN_PAR, TK_STRING_LITERAL]
 
 global FOLLOW_TABLES: FollowTables = FollowTables {
     stride: 5,
-    sets: [1610612737, 1409433636, 8388674, -759136256, 805581824, 0, 0, 0, 0, 536870912, 1073741824, 16416, 2, 272629760, 268439552, 1073741825, 268451872, 66, -792690688, 268439552, -16777151, -1, -1, -1, 301989887, 1610612737, 1409433636, 8388674, -759136256, 268710912, -16776251, -1, -1, -1, 301989887, -9, -1, -1, -1, 301989887, -1, -1, -1, -1, 838860799, 1, 0, 0, 0, 0, 1073741825, 16416, 2, 272629760, 4096, 1073741825, 268451872, 66, -792690688, 4096, -16777151, -1, -1, -1, 33554431, 1610612737, 1409433636, 8388674, -759136256, 275456, -16776251, -1, -1, -1, 33554431, -9, -1, -1, -1, 33554431, 0, 1, 0, 0, 0, -16777216, -1, -1, -1, 10485759, 4, 0, 0, 0, 0, -16777212, -1, -1, -1, 10485759, -16777204, -1, -1, -1, 10485759, 0, 0, 0, 0, 64, 0, 0, 0, i32::MIN, 8192, -16776252, -1, -1, -1, 33554431, -10, -1, -1, -1, 33554431, -2, -1, -1, -1, 33554431, 0, 0, 33554440, 0, 256, 0, 0, 0, i32::MIN, 0, -16777152, -1, -1, -1, 33554431, 268435456, 0, 0, i32::MIN, 8192, 0, 0, 33554440, 4098, 256, 0, 0, 0, 2, 0, -16777216, -1, -1, -1, 33554431, 0, 0, 33554440, 4098, 256, -16776320, -1, -1, -1, 33554431, -16776316, -1, -1, -1, 33554431, 16, 0, 0, 2, 0, 16, 0, 0, 512, 0, -26, -1, -1, -1, 33554431, -18, -1, -1, -1, 33554431, 0, 0, 0, 4098, 0, 16, 0, 0, 0, 0, 24, 0, 0, 0, 0, 8, 0, 0, 0, 0, -16777208, -1, -1, -1, 33554431, -16776292, -1, -1, -1, 33554431, 8, 0, 0, 0, 1048576, -16777188, -1, -1, -1, 10485759, 0, 0, 0, 0, 524288, 0, 0, 0, 0, 1048576, 0, 67584, 512, 65536, 512, 0, 32, 0, 0, 0, 0, 67108864, 8388608, -2113929216, 271360, 0, 0, 2, 0, 0, 0, 67108864, 0, 0, 0, 0, 0, 1024, 0, 0, -16777210, -1, -1, -1, 10485759, 0, 0, 0, 0, 131072, 0, 0, 0, 4098, 131072, 0, 0, 0, 2, 131072, 0, 0, 0, 4098, 131072, 16, 0, 0, 2, 0, 0, 0, 8388608, 33554432, 0, 0, 0, 67108864, 2048, 0, -16776300, -1, -1, -1, 33554431, 0, 0, 0, 0, 32, 0, 0, 0, 1073741824, 0, 4, 0, 0, 1073741824, 0, 16, 0, 9216, 0, 131072, 16, 0, 1024, 0, 131072, 16, 0, 9216, 0, 131072, 16, 0, 8192, 0, 131072, 16, 0, 0, 0, 131072, 16, 0, 8192, 0, 131072, 0, 0, 8192, 0, 131072, 0, 0, 8192, 0, 131072, 0, 0, 8192, 0, 0, 0, 128, 0, 0, 0, 16, 0, 16384, 0, 0, 0, 0, 9216, 0, 131072, 0, 0, 1024, 0, 131072, 0, 0, 9216, 0, 131072, 0, 0, 16384, 0, 0, 0, 0, 0, 0, 1024, 0, 0, 0, 0, 1, -16777180, -1, -1, -1, 10485759, -16776308, -1, -1, -1, 33554431, 16, 0, 0, 0, 131072, 16, 0, 0, 4098, 131072, 16, 0, 0, 4098, 131072, 0, 8460288, 0, 1114272, 512, 0, 0, 0, 128, 512, 0, 8392704, 0, 1114272, 512, -16777216, -1, -1, -1, 29360127, 0, 8458240, 0, 1114272, 512, -16776832, -1, -1, -1, 29360127, 0, 8460288, 0, 1114272, 512, -16776828, -1, -1, -1, 29360127, 0, 0, 0, 0, 2097152, 384, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8, 0, 1024, 0, 0, 0, 0, 1024, 0, 0, 32768, 0, 0, 0, 16777216, 0, 65664, 301989888, 0, -16776820, -1, -1, -1, 12582911, 0, 0, 0, 0, 65536, 0, 0, 0, 0, 16, 0, 0, 3, 0, 65536, 0, 0, 1, 0, 0, 0, 0, 1, 0, 65536, 0, 0, 4, 0, 0, i32::MIN, 0, 0, 0, 0, 0, 16777216, 0, 1060, 0, 0, 16777216, 0, 0, 0, 0, 0, 0, 36, 0, 0, 16777216, 0, 1028, 0, 0, 50331904, 131072, 67108864, 0, 0, 0, 0, 1060, 0, 0, 16777216, 0, 32, 0, 0, 0, 0, 32, 0, 0, 0, 2097152, 0, 0, 0, 33554432, 131072, 0, 0, 0, 134221826, 0, 0, 0, 0, 134217730, 0, 0, 0, 0, 4096, 0, 0, 0, 0, 0, 1048576, 32, 0, 0, 0, 1048576, 0, 0, 0, 1, 0, 0, 9437184, 0, 0, 0, 0, 9437184, 8, 0, 0, 0, 9437184, -16777194, -1, -1, -1, 10485759, -16776226, -1, -1, -1, 33554431, 4, 1, 0, 0, 0, 4, 0, 0, 0, 9437184, 12, 0, 0, 0, 9437184, 16, 262144, -1606418432, 8, 0, 16, 0, 536870912, 0, 0, 16, 262144, -1606418432, 8, 0, -16777212, -1, -1, -1, 10485759, 16, 262144, -1606418432, 1032, 2048, 16, 0, 536870912, 1024, 0, 16, 262144, -1606418432, 1032, 0, 16, 262144, -1606418432, 1032, 2048, 1610612737, 1409433636, 8388674, -759136256, 805581824, -16776251, -1, -1, -1, 838860799, -9, -1, -1, -1, 838860799, 1610612745, 1409433636, 8388674, -759136256, 805581824, -3, -1, -1, -1, 838860799, 1610612745, 1409433636, 41943114, -759132158, 805582080, 1610612761, 1409433636, 8388674, -759136256, 805581824, 1610612761, 1417893924, 8388674, -758021984, 805582336, -16776227, -1, -1, -1, 838860799, 1610612761, 1417893932, 8388674, -758021984, 805582336, -520094215, 1543917671, -1161530289, -757032337, 815215888, -16777187, -1, -1, -1, 815792127, 1610612737, 1409501220, 8389186, -759070720, 806106624, 0, 67108864, 8388608, -2113929216, 9216, 1610612737, 1409433636, 8388674, -759132158, 805712897, 1610612761, 1409433636, 8388674, -759136254, 805581824, 16, 67108864, 8388608, -2113929216, 9216, 1610612761, 1409433636, 41952330, -759132158, 805713152, 1610612761, 1409695780, -1564467126, -759131126, 805715200, 1610612745, 1409433636, 41951306, -759132158, 805713152, -16777185, -1, -1, -1, 815792127, 1610612761, 1409695780, -1564467126, -759132150, 805713152, 1610612737, 1409433636, 41943114, -759132158, 805582080, -16776315, -1, -1, -1, 838860799],
-    starts: [0, 15, 31, 47, 56, 68, 74, 84, 98, 112, 126, 140, 154, 168, 180, 192, 204, 210, 219, 231, 241, 255, 269, 283, 296, 309, 315, 327, 334, 337, 351, 365, 379, 393, 404, 418, 432, 446, 452, 458, 472, 486, 502, 512, 516, 529, 539, 545, 555, 567, 570, 584, 597, 613, 629, 645, 649, 661, 668, 682, 689, 704, 716, 731, 745, 760, 774, 780, 786, 792, 798, 804, 810, 816, 822, 828, 834, 840, 846, 852, 858, 864, 870, 876, 882, 888, 894, 900, 906, 912],
-    readings: [0, 3, 1, 5, 2, 1, 7, 3, 4, 1, 8, 5, 6, 7, 8, 19, 1, 3, 9, 5, 9, 10, 7, 9, 11, 12, 8, 9, 13, 14, 15, 19, 1, 3, 9, 5, 9, 9, 7, 9, 9, 9, 8, 9, 9, 9, 9, 32, 5, 16, 17, 8, 16, 18, 19, 20, 43, 1, 3, 21, 5, 21, 17, 8, 21, 18, 19, 20, 44, 8, 22, 23, 24, 25, 52, 7, 26, 27, 28, 8, 26, 29, 23, 24, 61, 1, 5, 31, 32, 7, 33, 34, 28, 8, 33, 35, 24, 25, 73, 1, 5, 36, 32, 7, 36, 34, 32, 8, 36, 35, 24, 25, 75, 1, 5, 37, 32, 7, 37, 34, 32, 8, 37, 35, 38, 39, 81, 1, 5, 31, 32, 7, 40, 34, 32, 8, 40, 35, 24, 25, 63, 1, 5, 31, 32, 7, 31, 34, 32, 8, 31, 35, 24, 25, 83, 1, 5, 41, 32, 7, 41, 34, 32, 8, 41, 35, 24, 25, 84, 3, 43, 7, 42, 17, 44, 8, 42, 19, 45, 25, 84, 3, 43, 7, 42, 17, 46, 8, 41, 19, 47, 45, 84, 3, 43, 7, 43, 48, 49, 8, 41, 50, 19, 35, 102, 8, 51, 52, 23, 15, 18, 5, 9, 53, 8, 9, 52, 23, 15, 84, 3, 43, 7, 41, 32, 43, 8, 41, 35, 24, 25, 108, 7, 54, 55, 17, 8, 54, 55, 19, 56, 115, 1, 5, 57, 32, 7, 57, 34, 32, 8, 57, 35, 38, 39, 117, 1, 5, 59, 32, 7, 59, 34, 32, 8, 60, 35, 24, 25, 81, 1, 5, 31, 32, 7, 31, 34, 32, 8, 40, 35, 24, 25, 122, 5, 31, 32, 7, 31, 34, 32, 8, 36, 35, 24, 25, 44, 5, 27, 28, 7, 27, 34, 28, 8, 22, 23, 24, 25, 124, 8, 62, 63, 19, 56, 84, 3, 43, 7, 41, 32, 43, 8, 42, 64, 25, 25, 83, 1, 8, 41, 18, 35, 25, 86, 3, 43, 131, 1, 5, 65, 17, 7, 65, 66, 17, 8, 65, 67, 19, 20, 137, 1, 5, 69, 28, 7, 70, 34, 32, 8, 70, 23, 24, 25, 143, 1, 5, 72, 32, 7, 73, 34, 32, 8, 73, 35, 24, 25, 149, 1, 5, 57, 32, 7, 75, 34, 32, 8, 75, 35, 38, 25, 153, 1, 7, 76, 77, 32, 8, 76, 77, 35, 24, 157, 1, 5, 78, 32, 7, 78, 34, 32, 8, 78, 35, 24, 25, 159, 1, 5, 80, 32, 7, 81, 34, 32, 8, 81, 35, 24, 25, 165, 1, 5, 82, 32, 7, 82, 34, 32, 8, 82, 35, 38, 39, 166, 8, 83, 19, 56, 20, 168, 8, 84, 19, 85, 86, 175, 1, 5, 57, 32, 7, 57, 34, 32, 8, 72, 35, 38, 39, 177, 1, 5, 59, 32, 7, 59, 34, 32, 8, 89, 35, 24, 25, 181, 1, 3, 91, 5, 92, 93, 7, 94, 95, 93, 8, 96, 97, 35, 39, 82, 7, 41, 98, 43, 8, 41, 99, 98, 43, 201, 1, 3, 100, 203, 1, 3, 100, 7, 102, 103, 104, 8, 102, 103, 104, 100, 32, 7, 16, 17, 43, 8, 16, 19, 19, 105, 212, 8, 106, 35, 38, 39, 214, 7, 107, 32, 53, 8, 107, 35, 38, 39, 216, 3, 53, 7, 109, 32, 53, 8, 110, 35, 38, 39, 106, 3, 53, 223, 1, 5, 111, 32, 7, 111, 34, 32, 8, 111, 35, 38, 39, 224, 5, 112, 32, 7, 112, 34, 32, 8, 112, 35, 38, 39, 227, 1, 3, 114, 5, 115, 17, 7, 116, 17, 117, 8, 118, 19, 19, 20, 239, 1, 3, 114, 5, 120, 114, 7, 114, 121, 122, 8, 120, 114, 121, 122, 247, 1, 3, 124, 5, 125, 17, 7, 125, 17, 124, 8, 125, 18, 19, 20, 249, 1, 3, 124, 84, 3, 43, 7, 41, 17, 43, 8, 42, 19, 47, 47, 83, 1, 8, 41, 19, 19, 20, 253, 1, 5, 120, 127, 7, 127, 77, 17, 8, 127, 77, 18, 19, 257, 1, 3, 129, 5, 16, 129, 84, 3, 43, 5, 43, 129, 7, 42, 32, 130, 8, 42, 35, 25, 25, 84, 3, 43, 7, 41, 17, 43, 8, 41, 19, 131, 132, 86, 3, 43, 5, 43, 129, 7, 43, 16, 129, 8, 43, 133, 134, 135, 273, 1, 5, 137, 17, 7, 138, 17, 17, 8, 138, 19, 131, 132, 278, 3, 17, 5, 17, 129, 7, 19, 131, 44, 8, 19, 131, 132, 25, 281, 1, 5, 141, 32, 7, 142, 34, 32, 8, 143, 35, 24, 25, 2, 8, 1, 1, 1, 1, 288, 8, 144, 145, 146, 8, 294, 8, 147, 148, 8, 8, 298, 8, 149, 148, 8, 8, 300, 8, 150, 145, 8, 8, 302, 8, 151, 148, 8, 8, 302, 8, 151, 152, 8, 8, 306, 8, 153, 152, 8, 8, 308, 8, 154, 148, 8, 8, 84, 8, 42, 155, 152, 8, 84, 8, 42, 156, 145, 146, 314, 8, 157, 23, 8, 8, 316, 8, 158, 145, 146, 8, 318, 8, 159, 148, 8, 8, 294, 8, 147, 145, 146, 8, 320, 8, 160, 23, 8, 8, 322, 8, 161, 148, 8, 8, 324, 8, 162, 148, 8, 8, 326, 8, 163, 148, 8, 8, 38, 8, 19, 164, 8, 8, 330, 8, 165, 148, 8, 8, 332, 8, 166, 145, 146, 8, 84, 8, 42, 167, 8, 8],
+    sets: [1610612737, 1409433636, 8388674, -759136256, 805581824, 0, 0, 0, 0, 536870912, 1073741824, 16416, 2, 272629760, 268439552, 1073741825, 268451872, 66, -792690688, 268439552, -16777151, -1, -1, -1, 301989887, 1610612737, 1409433636, 8388674, -759136256, 268710912, -16776251, -1, -1, -1, 301989887, -9, -1, -1, -1, 301989887, -1, -1, -1, -1, 838860799, 1, 0, 0, 0, 0, 1073741825, 16416, 2, 272629760, 4096, 1073741825, 268451872, 66, -792690688, 4096, -16777151, -1, -1, -1, 33554431, 1610612737, 1409433636, 8388674, -759136256, 275456, -16776251, -1, -1, -1, 33554431, -9, -1, -1, -1, 33554431, 0, 1, 0, 0, 0, -16777216, -1, -1, -1, 10485759, 4, 0, 0, 0, 0, -16777212, -1, -1, -1, 10485759, -16777204, -1, -1, -1, 10485759, 0, 0, 0, 0, 64, 0, 0, 0, i32::MIN, 8192, -16776252, -1, -1, -1, 33554431, -10, -1, -1, -1, 33554431, -2, -1, -1, -1, 33554431, 0, 0, 33554440, 0, 256, 0, 0, 0, i32::MIN, 0, -16777152, -1, -1, -1, 33554431, 268435456, 0, 0, i32::MIN, 8192, 0, 0, 33554440, 4098, 256, 0, 0, 0, 2, 0, -16777216, -1, -1, -1, 33554431, -16776320, -1, -1, -1, 33554431, -16776316, -1, -1, -1, 33554431, 16, 0, 0, 2, 0, 16, 0, 0, 512, 0, -26, -1, -1, -1, 33554431, -18, -1, -1, -1, 33554431, 0, 0, 0, 4098, 0, 16, 0, 0, 0, 0, 24, 0, 0, 0, 0, 8, 0, 0, 0, 0, -16777208, -1, -1, -1, 33554431, -16776292, -1, -1, -1, 33554431, 8, 0, 0, 0, 1048576, -16777188, -1, -1, -1, 10485759, 0, 0, 0, 0, 524288, 0, 0, 0, 0, 1048576, 0, 67584, 512, 65536, 512, 0, 32, 0, 0, 0, 0, 67108864, 8388608, -2113929216, 271360, 0, 0, 2, 0, 0, 0, 67108864, 0, 0, 0, 0, 0, 1024, 0, 0, -16777210, -1, -1, -1, 10485759, 0, 0, 0, 0, 131072, 0, 0, 0, 4098, 131072, 0, 0, 0, 2, 131072, 0, 0, 8388608, 33554432, 0, 0, 0, 67108864, 2048, 0, -16776300, -1, -1, -1, 33554431, 0, 0, 0, 0, 32, 0, 0, 0, 1073741824, 0, 4, 0, 0, 1073741824, 0, 16, 0, 9216, 0, 131072, 16, 0, 1024, 0, 131072, 16, 0, 8192, 0, 131072, 16, 0, 0, 0, 131072, 0, 0, 8192, 0, 131072, 0, 0, 8192, 0, 0, 0, 128, 0, 0, 0, 16, 0, 16384, 0, 0, 0, 0, 9216, 0, 131072, 0, 0, 1024, 0, 131072, 0, 0, 16384, 0, 0, 0, 0, 0, 0, 1024, 0, 0, 0, 0, 1, -16777180, -1, -1, -1, 10485759, -16776308, -1, -1, -1, 33554431, 16, 0, 0, 4098, 131072, 0, 8460288, 0, 1114272, 512, 0, 0, 0, 128, 512, 0, 8392704, 0, 1114272, 512, -16777216, -1, -1, -1, 29360127, 0, 8458240, 0, 1114272, 512, -16776832, -1, -1, -1, 29360127, -16776828, -1, -1, -1, 29360127, 0, 0, 0, 0, 2097152, 384, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8, 0, 1024, 0, 0, 0, 0, 1024, 0, 0, 32768, 0, 0, 0, 16777216, 0, 65664, 301989888, 0, -16776820, -1, -1, -1, 12582911, 0, 0, 0, 0, 65536, 0, 0, 0, 0, 16, 0, 0, 3, 0, 65536, 0, 0, 1, 0, 0, 0, 0, 1, 0, 65536, 0, 0, 4, 0, 0, i32::MIN, 0, 0, 0, 0, 0, 16777216, 0, 1060, 0, 0, 16777216, 0, 0, 0, 0, 0, 0, 36, 0, 0, 16777216, 0, 1028, 0, 0, 50331904, 131072, 67108864, 0, 0, 0, 0, 1060, 0, 0, 16777216, 0, 32, 0, 0, 0, 0, 32, 0, 0, 0, 2097152, 0, 0, 0, 33554432, 131072, 0, 0, 0, 134221826, 0, 0, 0, 0, 134217730, 0, 0, 0, 0, 4096, 0, 0, 0, 0, 0, 1048576, 32, 0, 0, 0, 1048576, 0, 0, 0, 1, 0, 0, 9437184, 0, 0, 0, 0, 9437184, 8, 0, 0, 0, 9437184, -16777194, -1, -1, -1, 10485759, -16776226, -1, -1, -1, 33554431, 4, 1, 0, 0, 0, 4, 0, 0, 0, 9437184, 12, 0, 0, 0, 9437184, 16, 262144, -1606418432, 8, 0, 16, 0, 536870912, 0, 0, 16, 262144, -1606418432, 1032, 2048, 16, 0, 536870912, 1024, 0, 16, 262144, -1606418432, 1032, 0, -16776251, -1, -1, -1, 838860799, -9, -1, -1, -1, 838860799, 1610612745, 1409433636, 8388674, -759136256, 805581824, -3, -1, -1, -1, 838860799, 1610612745, 1409433636, 41943114, -759132158, 805582080, 1610612761, 1409433636, 8388674, -759136256, 805581824, 1610612761, 1417893924, 8388674, -758021984, 805582336, -16776227, -1, -1, -1, 838860799, 1610612761, 1417893932, 8388674, -758021984, 805582336, -520094215, 1543917671, -1161530289, -757032337, 815215888, -16777187, -1, -1, -1, 815792127, 1610612737, 1409501220, 8389186, -759070720, 806106624, 0, 67108864, 8388608, -2113929216, 9216, 1610612737, 1409433636, 8388674, -759132158, 805712897, 1610612761, 1409433636, 8388674, -759136254, 805581824, 16, 67108864, 8388608, -2113929216, 9216, 1610612761, 1409433636, 41952330, -759132158, 805713152, 1610612761, 1409695780, -1564467126, -759131126, 805715200, 1610612745, 1409433636, 41951306, -759132158, 805713152, -16777185, -1, -1, -1, 815792127, 1610612761, 1409695780, -1564467126, -759132150, 805713152, 1610612737, 1409433636, 41943114, -759132158, 805582080, -16776315, -1, -1, -1, 838860799],
+    heads: [0, 19, 19, 32, 43, 44, 52, 61, 71, 73, 79, 63, 81, 82, 82, 82, 100, 18, 82, 106, 113, 115, 79, 70, 44, 118, 82, 81, 84, 125, 131, 135, 139, 141, 145, 147, 151, 152, 154, 137, 161, 163, 80, 181, 183, 32, 192, 194, 196, 104, 203, 204, 207, 219, 227, 229, 82, 81, 233, 237, 82, 82, 84, 253, 38, 257, 2, 0, 266, 270, 272, 274, 274, 278, 280, 82, 82, 286, 288, 290, 266, 292, 294, 296, 298, 38, 302, 304, 82],
+    starts: [0, 14, 29, 44, 52, 63, 68, 77, 90, 103, 116, 129, 142, 155, 166, 177, 188, 193, 201, 212, 221, 234, 247, 260, 272, 284, 289, 300, 306, 308, 321, 334, 347, 360, 370, 383, 396, 409, 414, 419, 432, 445, 460, 469, 472, 484, 493, 498, 507, 518, 520, 533, 545, 560, 575, 590, 593, 604, 610, 623, 629, 643, 654, 668, 681, 695, 708, 713, 718, 723, 728, 733, 738, 743, 748, 753, 758, 763, 768, 773, 778, 783, 788, 793, 798, 803, 808, 813, 818, 823],
+    readings: [3, 1, 5, 2, 1, 7, 3, 4, 1, 8, 5, 6, 7, 8, 1, 3, 9, 5, 9, 10, 7, 9, 11, 12, 8, 9, 13, 14, 15, 1, 3, 9, 5, 9, 9, 7, 9, 9, 9, 8, 9, 9, 9, 9, 5, 16, 17, 8, 16, 18, 19, 20, 1, 3, 21, 5, 21, 17, 8, 21, 18, 19, 20, 8, 22, 23, 24, 25, 7, 26, 27, 28, 8, 26, 29, 23, 24, 1, 5, 31, 32, 7, 30, 33, 28, 8, 30, 34, 24, 25, 1, 5, 35, 32, 7, 35, 33, 32, 8, 35, 34, 24, 25, 1, 5, 36, 32, 7, 36, 33, 32, 8, 36, 34, 37, 38, 1, 5, 31, 32, 7, 39, 33, 32, 8, 39, 34, 24, 25, 1, 5, 31, 32, 7, 31, 33, 32, 8, 31, 34, 24, 25, 1, 5, 40, 32, 7, 40, 33, 32, 8, 40, 34, 24, 25, 3, 42, 7, 41, 17, 43, 8, 41, 19, 44, 25, 3, 42, 7, 41, 17, 45, 8, 40, 19, 46, 44, 3, 42, 7, 42, 47, 48, 8, 40, 49, 19, 34, 8, 50, 51, 23, 15, 5, 9, 52, 8, 9, 51, 23, 15, 3, 42, 7, 40, 32, 42, 8, 40, 34, 24, 25, 7, 53, 54, 17, 8, 53, 54, 19, 55, 1, 5, 56, 32, 7, 56, 33, 32, 8, 56, 34, 37, 38, 1, 5, 58, 32, 7, 58, 33, 32, 8, 57, 34, 24, 25, 1, 5, 31, 32, 7, 31, 33, 32, 8, 39, 34, 24, 25, 5, 31, 32, 7, 31, 33, 32, 8, 35, 34, 24, 25, 5, 27, 28, 7, 27, 33, 28, 8, 22, 23, 24, 25, 8, 59, 60, 19, 55, 3, 42, 7, 40, 32, 42, 8, 41, 61, 25, 25, 1, 8, 40, 18, 34, 25, 3, 42, 1, 5, 62, 17, 7, 62, 63, 17, 8, 62, 64, 19, 20, 1, 5, 66, 28, 7, 65, 33, 32, 8, 65, 23, 24, 25, 1, 5, 68, 32, 7, 67, 33, 32, 8, 67, 34, 24, 25, 1, 5, 56, 32, 7, 69, 33, 32, 8, 69, 34, 37, 25, 1, 7, 70, 71, 32, 8, 70, 71, 34, 24, 1, 5, 72, 32, 7, 72, 33, 32, 8, 72, 34, 24, 25, 1, 5, 74, 32, 7, 73, 33, 32, 8, 73, 34, 24, 25, 1, 5, 75, 32, 7, 75, 33, 32, 8, 75, 34, 37, 38, 8, 76, 19, 55, 20, 8, 77, 19, 78, 79, 1, 5, 56, 32, 7, 56, 33, 32, 8, 68, 34, 37, 38, 1, 5, 58, 32, 7, 58, 33, 32, 8, 80, 34, 24, 25, 1, 3, 82, 5, 83, 84, 7, 85, 86, 84, 8, 81, 87, 34, 38, 7, 40, 88, 42, 8, 40, 89, 88, 42, 1, 3, 90, 1, 3, 90, 7, 92, 93, 94, 8, 92, 93, 94, 90, 7, 16, 17, 42, 8, 16, 19, 19, 95, 8, 96, 34, 37, 38, 7, 97, 32, 52, 8, 97, 34, 37, 38, 3, 52, 7, 99, 32, 52, 8, 100, 34, 37, 38, 3, 52, 1, 5, 101, 32, 7, 101, 33, 32, 8, 101, 34, 37, 38, 5, 102, 32, 7, 102, 33, 32, 8, 102, 34, 37, 38, 1, 3, 104, 5, 105, 17, 7, 106, 17, 107, 8, 108, 19, 19, 20, 1, 3, 104, 5, 110, 104, 7, 104, 111, 112, 8, 110, 104, 111, 112, 1, 3, 114, 5, 115, 17, 7, 115, 17, 114, 8, 115, 18, 19, 20, 1, 3, 114, 3, 42, 7, 40, 17, 42, 8, 41, 19, 46, 46, 1, 8, 40, 19, 19, 20, 1, 5, 110, 117, 7, 117, 71, 17, 8, 117, 71, 18, 19, 1, 3, 119, 5, 16, 119, 3, 42, 5, 42, 119, 7, 41, 32, 120, 8, 41, 34, 25, 25, 3, 42, 7, 40, 17, 42, 8, 40, 19, 121, 122, 3, 42, 5, 42, 119, 7, 42, 16, 119, 8, 42, 123, 124, 125, 1, 5, 127, 17, 7, 126, 17, 17, 8, 126, 19, 121, 122, 3, 17, 5, 17, 119, 7, 19, 121, 43, 8, 19, 121, 122, 25, 1, 5, 129, 32, 7, 130, 33, 32, 8, 128, 34, 24, 25, 8, 1, 1, 1, 1, 8, 0, 131, 132, 8, 8, 133, 134, 8, 8, 8, 135, 134, 8, 8, 8, 136, 131, 8, 8, 8, 137, 134, 8, 8, 8, 137, 138, 8, 8, 8, 139, 138, 8, 8, 8, 140, 134, 8, 8, 8, 41, 141, 138, 8, 8, 41, 142, 131, 132, 8, 143, 23, 8, 8, 8, 144, 131, 132, 8, 8, 145, 134, 8, 8, 8, 133, 131, 132, 8, 8, 146, 23, 8, 8, 8, 147, 134, 8, 8, 8, 148, 134, 8, 8, 8, 149, 134, 8, 8, 8, 19, 150, 8, 8, 8, 151, 134, 8, 8, 8, 152, 131, 132, 8, 8, 41, 153, 8, 8],
 };
 global FOLLOW_SITE_0: i64 = 1;
 global FOLLOW_SITE_1: i64 = 2;

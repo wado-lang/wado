@@ -192,8 +192,8 @@ fn "closure_local_address_taken.wado/run"() {
     drop(black_box(local.tee f(struct.new "core:prelude//$Cell<fn>" { value: struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_local_address_taken.wado//$Closure_1" {}, func: ref.func "closure/closure_local_address_taken.wado/$closure_wrapper_1" } })));
     v = struct.new "closure_local_address_taken.wado//Pair" { a: 1 };
     drop(black_box(f));
-    v.a = 1 + 1000;
-    if @unlikely(local.tee $v0_2(v.a) != 1001) {
+    v.a = local.tee $v0_2(1 + 1000);
+    if @unlikely($v0_2 != 1001) {
         cold_path;
         "closure_local_address_taken.wado/run$cold0"($v0_2);
         unreachable;

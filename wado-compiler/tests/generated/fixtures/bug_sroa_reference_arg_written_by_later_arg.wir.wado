@@ -96,7 +96,7 @@ fn "bug_sroa_reference_arg_written_by_later_arg.wado/sum_int"(a, b) {
 }
 
 fn "bug_sroa_reference_arg_written_by_later_arg.wado/run"() with Stdout {
-    let $load_0: ref Array<u8>;
+    let $load_1: ref Array<u8>;
     let x_9: ref "core:prelude//$Cell<i32>";
     let r: i32;
     let out_35: ref "core:prelude/string.wado//String";
@@ -113,9 +113,9 @@ fn "bug_sroa_reference_arg_written_by_later_arg.wado/run"() with Stdout {
     is_negative_102 = $sroa_t_h0_252 < 0;
     $sroa_t_h0_252 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_106(x_106 = builtin::i64_extend_i32_s($sroa_t_h0_252); select i64(x_106 < 0_i64, 0_i64 - x_106, x_106)));
     is_negative_102 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_35, is_negative_102, $sroa_t_h0_252);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_35.repr), is_negative_102, x_106, $sroa_t_h0_252);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1(out_35.repr), is_negative_102, x_106, $sroa_t_h0_252);
     $sroa_view_repr_201 = global:bug_sroa_reference_arg_written_by_later_arg.wado::$const_obj_0;
-    if @unlikely(local.tee $sroa_t_h0_252(out_35.used + 1) > builtin::array_len($load_0)) {
+    if @unlikely(local.tee $sroa_t_h0_252(out_35.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_35, $sroa_t_h0_252);
     }
@@ -132,11 +132,11 @@ fn "bug_sroa_reference_arg_written_by_later_arg.wado/run"() with Stdout {
     $sroa_t_h0_252 = builtin::i32_wrap_i64(local.tee x_106("wasi/stream-new"()));
     r = builtin::i32_wrap_i64(x_106 >> 32_i64);
     $sroa_t_h0_252 = "bug_sroa_reference_arg_written_by_later_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_252);
-    builtin::array_copy<u8>(local.tee $load_0(builtin::array_new<u8>(local.tee is_negative_102(out_35.used) + 1)), 0, out_35.repr, 0, is_negative_102);
-    builtin::array_set_u8($load_0, is_negative_102, 10);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(local.tee is_negative_102(out_35.used) + 1)), 0, out_35.repr, 0, is_negative_102);
+    builtin::array_set_u8($load_1, is_negative_102, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_102 = is_negative_102 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(r, $load_0, 0, is_negative_102);
+        "core:rt/cm_stream_write_raw_all_u8"(r, $load_1, 0, is_negative_102);
     });
     "wasi/stream-drop-writable"(r);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_252);

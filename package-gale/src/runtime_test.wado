@@ -1,5 +1,6 @@
 use {
     Span,
+    TokenFlags,
     TokenStream,
     span_text,
     push_escaped,
@@ -66,7 +67,7 @@ test "Span::new creates span" {
     assert s.end == 5;
 }
 
-test "TokenStream push_token keeps parallel arrays in lockstep and reads back" {
+test "TokenStream reads back each token's and each trivia's fields" {
     // Source "ab c": tokens 'a'(0..1), 'b'(1..2), 'c'(3..4); a single space
     // (1 char) is leading trivia of 'c'.
     let mut ts = TokenStream::new("ab c".as_str_slice());
@@ -84,15 +85,39 @@ test "TokenStream push_token keeps parallel arrays in lockstep and reads back" {
     assert ts.kind_at(0) == 10;
     assert ts.kind_at(2) == 12;
     assert ts.span_at(2) == Span::new(3, 4);
+    assert ts.start_at(1) == 1 && ts.end_at(1) == 2;
     assert ts.token_text(0) == "a";
     assert ts.token_text(2) == "c";
     assert !ts.is_empty_text(0);
 
     // Token 2 owns exactly the one trivia entry; tokens 0 and 1 own none.
-    assert ts.triv_lo[0] == ts.triv_hi[0];
-    assert ts.triv_hi[2] - ts.triv_lo[2] == 1;
-    assert ts.triv_kinds[ts.triv_lo[2]] == 99;
-    assert ts.triv_chans[ts.triv_lo[2]] == 0;
+    assert ts.trivia_lo_at(0) == ts.trivia_hi_at(0);
+    assert ts.trivia_hi_at(2) - ts.trivia_lo_at(2) == 1;
+    let t = ts.trivia_lo_at(2);
+    assert ts.trivia_kind_at(t) == 99;
+    assert ts.trivia_start_at(t) == 2 && ts.trivia_end_at(t) == 3;
+    assert ts.trivia_channel_at(t) == 0;
+}
+
+test "TokenStream keeps every field across growth past its initial capacity" {
+    let mut ts = TokenStream::new("".as_str_slice());
+    for let i of 0..<40 {
+        let lo = ts.trivia_mark();
+        ts.push_trivia(100 + i, i * 3, i * 3 + 1, i & 3);
+        ts.push_trivia(200 + i, i * 3 + 1, i * 3 + 2, 1);
+        let _ = ts.push_token_flagged(i, i * 3 + 2, i * 3 + 3, lo, ts.trivia_mark(), TokenFlags::Synthetic);
+    }
+    ts.mark_skipped(7);
+    for let i of 0..<40 {
+        assert ts.kind_at(i) == i;
+        assert ts.start_at(i) == i * 3 + 2 && ts.end_at(i) == i * 3 + 3;
+        assert ts.trivia_lo_at(i) == i * 2 && ts.trivia_hi_at(i) == i * 2 + 2;
+        assert ts.trivia_kind_at(i * 2) == 100 + i && ts.trivia_kind_at(i * 2 + 1) == 200 + i;
+        assert ts.trivia_start_at(i * 2) == i * 3 && ts.trivia_end_at(i * 2 + 1) == i * 3 + 2;
+        assert ts.trivia_channel_at(i * 2) == i & 3;
+        assert ts.is_synthetic(i);
+        assert ts.is_skipped(i) == (i == 7);
+    }
 }
 
 test "TokenStream empty-text token reports empty (EOF sentinel)" {

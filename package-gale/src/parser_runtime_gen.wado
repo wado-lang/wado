@@ -672,7 +672,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fln.add_param("i", "i32");
         fln.set_return_type("i32");
         fln.emit_begin(w);
-        w.line("return line_at(&self.line_starts, self.tokens.starts[i]);");
+        w.line("return line_at(&self.line_starts, self.tokens.start_at(i));");
         w.end();
         w.blank();
 
@@ -681,7 +681,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fcol.add_param("i", "i32");
         fcol.set_return_type("i32");
         fcol.emit_begin(w);
-        w.line("return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).1;");
+        w.line("return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.start_at(i)).1;");
         w.end();
         w.blank();
 
@@ -692,7 +692,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fts0.add_param("i", "i32");
         fts0.set_return_type("i32");
         fts0.emit_begin(w);
-        w.line("return self.tokens.starts[i];");
+        w.line("return self.tokens.start_at(i);");
         w.end();
         w.blank();
 
@@ -859,7 +859,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     fot.add_param("expected", "&List<i32>");
     fot.add_param("code", "DiagnosticCode");
     fot.emit_begin(w);
-    w.begin("if self.supersedes_pending(self.tokens.starts[self.pos])");
+    w.begin("if self.supersedes_pending(self.tokens.start_at(self.pos))");
     w.line(
         "self.fail(`${what} \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), expected, code);",
     );
@@ -873,7 +873,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     fok.set_receiver("&mut self");
     fok.add_param("kind", "i32");
     fok.emit_begin(w);
-    w.begin("if self.speculating && !self.supersedes_pending(self.tokens.starts[self.pos])");
+    w.begin("if self.speculating && !self.supersedes_pending(self.tokens.start_at(self.pos))");
     w.line("self.recovering = true;");
     w.line("return;");
     w.end();
@@ -954,7 +954,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f2.set_receiver("&self");
     f2.set_return_type("i32");
     f2.emit_begin(w);
-    w.line("return self.tokens.starts[self.pos];");
+    w.line("return self.tokens.start_at(self.pos);");
     w.end();
     w.blank();
 
@@ -1000,7 +1000,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f6.set_return_type("i32");
     f6.emit_begin(w);
     w.line("if self.pos == 0 { return 0; }");
-    w.line("return self.tokens.ends[self.pos - 1];");
+    w.line("return self.tokens.end_at(self.pos - 1);");
     w.end();
     w.blank();
 

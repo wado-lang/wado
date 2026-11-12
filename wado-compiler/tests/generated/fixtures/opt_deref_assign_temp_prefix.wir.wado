@@ -74,12 +74,14 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "opt_deref_assign_temp_prefix.wado/mutate"(ra, rb) {
-    ra.x = 10;
-    ra.y = 20;
+    let $load_0: i32;
+    let $load_1: i32;
+    ra.x = local.tee $load_0(10);
+    ra.y = local.tee $load_1(20);
     rb.p = 1;
     rb.q = 2;
     rb.r = 3;
-    return (((ra.x + ra.y) + 1) + 2) + 3;
+    return ((($load_0 + $load_1) + 1) + 2) + 3;
 }
 
 fn "opt_deref_assign_temp_prefix.wado/run"() with Stdout {

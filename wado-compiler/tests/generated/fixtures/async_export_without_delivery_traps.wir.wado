@@ -63,20 +63,20 @@ import fn wasi/task-return from "wasi/task-return";
 global global:async_export_without_delivery_traps.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(103, 111, 116, 32);
 
 fn "async_export_without_delivery_traps.wado/run"() with Stdout {
-    let $load_0: ref Array<u8>;
+    let $load_0: i32;
+    let $load_1: ref Array<u8>;
     let out_12: ref "core:prelude/string.wado//String";
     let is_negative_78: bool;
     let x: i64;
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_143: i32;
-    let start_182: i32;
     let $sroa_view_repr_547: ref Array<u8>;
     $sroa_t_h0_143 = unreachable;
     out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     $sroa_view_repr_547 = global:async_export_without_delivery_traps.wado::$const_obj_0;
-    out_12.used = 4;
-    builtin::array_copy<u8>(local.tee $load_0(out_12.repr), 0, $sroa_view_repr_547, 0, 4);
+    out_12.used = local.tee $load_0(4);
+    builtin::array_copy<u8>(local.tee $load_1(out_12.repr), 0, $sroa_view_repr_547, 0, 4);
     is_negative_78 = $sroa_t_h0_143 < 0;
     x = builtin::i64_extend_i32_s($sroa_t_h0_143);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -141,51 +141,51 @@ fn "async_export_without_delivery_traps.wado/run"() with Stdout {
         break $inline_count_digits_u64_2: 20;
     };
     if is_negative_78 {
-        if @unlikely(local.tee is_negative_78(out_12.used + 1) > builtin::array_len($load_0)) {
+        if @unlikely(local.tee $load_0($load_0 + 1) > builtin::array_len($load_1)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_78);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, $load_0);
         }
-        start_182 = out_12.used;
-        out_12.used = is_negative_78;
-        builtin::array_set_u8(out_12.repr, start_182, 45);
+        is_negative_78 = out_12.used;
+        out_12.used = $load_0;
+        builtin::array_set_u8(out_12.repr, is_negative_78, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_78(out_12.used + $sroa_t_h0_143) > builtin::array_len(out_12.repr)) {
+    if @unlikely(local.tee $load_0(out_12.used + $sroa_t_h0_143) > builtin::array_len(out_12.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_78);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, $load_0);
     }
-    start_182 = out_12.used;
-    out_12.used = is_negative_78;
+    is_negative_78 = out_12.used;
+    out_12.used = $load_0;
     $sroa_view_repr_547 = out_12.repr;
-    $sroa_t_h0_143 = start_182 + $sroa_t_h0_143;
+    $sroa_t_h0_143 = is_negative_78 + $sroa_t_h0_143;
     b22: block {
         l23: loop {
-            break_if b22 ($sroa_t_h0_143 - start_182) < 2;
+            break_if b22 ($sroa_t_h0_143 - is_negative_78) < 2;
             q = x /u 100_i64;
-            tens = local.tee is_negative_78(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_547, $sroa_t_h0_143 - 1, (48 + is_negative_78) - (tens * 10));
+            tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_view_repr_547, $sroa_t_h0_143 - 1, (48 + $load_0) - (tens * 10));
             builtin::array_set_u8($sroa_view_repr_547, $sroa_t_h0_143 - 2, 48 + tens);
             $sroa_t_h0_143 = $sroa_t_h0_143 - 2;
             x = q;
             continue l23;
         };
     };
-    if $sroa_t_h0_143 > start_182 {
-        builtin::array_set_u8($sroa_view_repr_547, start_182, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_t_h0_143 > is_negative_78 {
+        builtin::array_set_u8($sroa_view_repr_547, is_negative_78, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
     };
     $sroa_t_h0_143 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_78 = builtin::i32_wrap_i64(x >> 32_i64);
+    $load_0 = builtin::i32_wrap_i64(x >> 32_i64);
     $sroa_t_h0_143 = "async_export_without_delivery_traps.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_143);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_547(builtin::array_new<u8>(local.tee start_182(out_12.used) + 1)), 0, out_12.repr, 0, start_182);
-    builtin::array_set_u8($sroa_view_repr_547, start_182, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_547(builtin::array_new<u8>(local.tee is_negative_78(out_12.used) + 1)), 0, out_12.repr, 0, is_negative_78);
+    builtin::array_set_u8($sroa_view_repr_547, is_negative_78, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_182 = start_182 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_78, $sroa_view_repr_547, 0, start_182);
+        is_negative_78 = is_negative_78 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($load_0, $sroa_view_repr_547, 0, is_negative_78);
     });
-    "wasi/stream-drop-writable"(is_negative_78);
+    "wasi/stream-drop-writable"($load_0);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_143);
 }
 

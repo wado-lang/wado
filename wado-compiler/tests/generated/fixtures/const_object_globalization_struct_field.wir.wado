@@ -228,8 +228,8 @@ global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/strin
 global global:core:prelude/primitive.wado::$const_obj_29: ref Array<u8> = array.new_fixed<u8>(78, 97, 78);
 
 fn "const_object_globalization_struct_field.wado/run"() with Stdout {
-    let $load_5: ref "core:prelude/list.wado//List<f64>";
-    let $load_7: ref Array<f64>;
+    let $load_6: ref "core:prelude/list.wado//List<f64>";
+    let $load_8: ref Array<f64>;
     let n_0: i32;
     let keep: ref "core:prelude/list.wado//List<const_object_globalization_struct_field.wado/Node>";
     let total: f64;
@@ -266,11 +266,11 @@ fn "const_object_globalization_struct_field.wado/run"() with Stdout {
             break_if b3 $sroa_$iter_0_start_160 >= n_0;
             value_29 = builtin::array_get_value<ref "const_object_globalization_struct_field.wado//Node">($sroa_$iter_1_repr_168, $sroa_$iter_0_start_160);
             $sroa_$iter_0_start_160 = $sroa_$iter_0_start_160 + 1;
-            total = total + ((current = local.tee $load_5(value_29.weights).used; if @unlikely(1 >= current) {
+            total = total + ((current = local.tee $load_6(value_29.weights).used; if @unlikely(1 >= current) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, current, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("const_object_globalization_struct_field.wado:26"), used: 47 });
                 unreachable;
-            }; builtin::array_get_value<f64>(local.tee $load_7($load_5.repr), 0) + builtin::array_get_value<f64>($load_7, 1)) + builtin::f64_convert_i32_s(value_29.id));
+            }; builtin::array_get_value<f64>(local.tee $load_8($load_6.repr), 0) + builtin::array_get_value<f64>($load_8, 1)) + builtin::f64_convert_i32_s(value_29.id));
             continue l4;
         };
     };
@@ -521,7 +521,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
 }
 
 fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
-    let $load_3: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let start_15: i32;
     let $av_141: i32;
     p = nd + p;
@@ -534,18 +534,18 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         }
         start_15 = buf.used;
         buf.used = $av_141;
-        builtin::array_set_u8(local.tee $load_3(buf.repr), start_15, 48);
-        builtin::array_set_u8($load_3, start_15 + 1, 46);
+        builtin::array_set_u8(local.tee $load_4(buf.repr), start_15, 48);
+        builtin::array_set_u8($load_4, start_15 + 1, 46);
         $inline_zeros_at_9: block {
             $av_141 = start_15 + 2;
             break_if $inline_zeros_at_9 p <= 0;
-            builtin::array_fill<u8>($load_3, $av_141, 48, p);
+            builtin::array_fill<u8>($load_4, $av_141, 48, p);
         };
         nd = (local.tee p((start_15 + 2) + p) + nd) - 1;
         b39: block {
             l40: loop {
                 break_if b39 nd < p;
-                builtin::array_set_u8($load_3, nd, 48 + builtin::i32_wrap_i64(d %u 10_i64));
+                builtin::array_set_u8($load_4, nd, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 nd = nd - 1;
                 continue l40;
@@ -559,11 +559,11 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         start_15 = buf.used;
         buf.used = $av_141;
         $av_141 = (start_15 + nd) - 1;
-        $load_3 = buf.repr;
+        $load_4 = buf.repr;
         b43: block {
             l44: loop {
                 break_if b43 $av_141 < start_15;
-                builtin::array_set_u8($load_3, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
+                builtin::array_set_u8($load_4, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l44;
@@ -572,7 +572,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         $inline_zeros_at_22: block {
             $av_141 = start_15 + nd;
             break_if $inline_zeros_at_22 local.tee p(p - nd) <= 0;
-            builtin::array_fill<u8>($load_3, $av_141, 48, p);
+            builtin::array_fill<u8>($load_4, $av_141, 48, p);
         };
     } else {
         if @unlikely(local.tee $av_141($av_141 + (nd + 1)) > builtin::array_len(buf.repr)) {
@@ -582,18 +582,18 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         start_15 = buf.used;
         buf.used = $av_141;
         $av_141 = (start_15 + nd) - 1;
-        $load_3 = buf.repr;
+        $load_4 = buf.repr;
         b46: block {
             l47: loop {
                 break_if b46 $av_141 < start_15;
-                builtin::array_set_u8($load_3, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
+                builtin::array_set_u8($load_4, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l47;
             };
         };
-        builtin::array_copy<u8>($load_3, (start_15 + p) + 1, $load_3, start_15 + p, nd - p);
-        builtin::array_set_u8($load_3, start_15 + p, 46);
+        builtin::array_copy<u8>($load_4, (start_15 + p) + 1, $load_4, start_15 + p, nd - p);
+        builtin::array_set_u8($load_4, start_15 + p, 46);
     }
 }
 

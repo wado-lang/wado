@@ -233,11 +233,11 @@ global global:trait_generic_assoc_type_return.wado::$const_obj_1: ref Array<u8> 
 global global:trait_generic_assoc_type_return.wado::$const_obj_2: ref "core:prelude/string.wado//StrSlice" = struct.new "core:prelude/string.wado//StrSlice" { repr: array.new_fixed<u8>(120, 121, 122, 49, 50, 51, 97, 98, 99), start: 0, end: 9 };
 
 fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
-    let $load_1: ref Array<u8>;
+    let $load_2: ref Array<u8>;
     let $v1_10: bool;
     let $contract_arg_0_64: ref "core:prelude/string.wado//StrSlice";
     let out_84: ref "core:prelude/string.wado//String";
-    let start_250: i32;
+    let is_negative_146: bool;
     let $sroa_view_repr_629: ref Array<u8>;
     if @unlikely((if local.tee $v1_10((builtin::array_get_value<u8>(global:trait_generic_assoc_type_return.wado::$const_obj_2.repr, 3) & 192) != 128) -> i32 {
         (builtin::array_get_value<u8>(global:trait_generic_assoc_type_return.wado::$const_obj_2.repr, 6) & 192) != 128;
@@ -266,27 +266,27 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
     if $v1_10 == 0 {
         out_84 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
         $sroa_view_repr_629 = global:trait_generic_assoc_type_return.wado::$const_obj_1;
-        out_84.used = 4;
-        builtin::array_copy<u8>(local.tee $load_1(out_84.repr), 0, $sroa_view_repr_629, 0, 4);
-        $v1_10 = $mv$$vr_17$0 < 0;
+        out_84.used = local.tee $v1_10(4);
+        builtin::array_copy<u8>(local.tee $load_2(out_84.repr), 0, $sroa_view_repr_629, 0, 4);
+        is_negative_146 = $mv$$vr_17$0 < 0;
         $mv$$vr_17$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $mv$$vr_17$1($mv$$vr_17$1 = builtin::i64_extend_i32_s($mv$$vr_17$0); select i64($mv$$vr_17$1 < 0_i64, 0_i64 - $mv$$vr_17$1, $mv$$vr_17$1)));
-        if $v1_10 {
-            if @unlikely(local.tee $v1_10(out_84.used + 1) > builtin::array_len($load_1)) {
+        if is_negative_146 {
+            if @unlikely(local.tee $v1_10($v1_10 + 1) > builtin::array_len($load_2)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_84, $v1_10);
             }
-            start_250 = out_84.used;
+            is_negative_146 = out_84.used;
             out_84.used = $v1_10;
-            builtin::array_set_u8(out_84.repr, start_250, 45);
+            builtin::array_set_u8(out_84.repr, is_negative_146, 45);
         } else {
         }
         if @unlikely(local.tee $v1_10(out_84.used + $mv$$vr_17$0) > builtin::array_len(out_84.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_84, $v1_10);
         }
-        start_250 = out_84.used;
+        is_negative_146 = out_84.used;
         out_84.used = $v1_10;
-        "core:prelude/primitive.wado/write_decimal_digits"(out_84.repr, start_250, $mv$$vr_17$1, $mv$$vr_17$0);
+        "core:prelude/primitive.wado/write_decimal_digits"(out_84.repr, is_negative_146, $mv$$vr_17$1, $mv$$vr_17$0);
         $inline_core_prelude_string_wado_String__internal_push_view_60: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_60;
         };

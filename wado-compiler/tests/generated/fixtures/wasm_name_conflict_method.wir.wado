@@ -62,7 +62,7 @@ global global:wasm_name_conflict_method.wado::$const_obj_0: ref Array<u8> = arra
 global global:wasm_name_conflict_method.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(97, 58, 32);
 
 fn "wasm_name_conflict_method.wado/run"() with Stdout {
-    let $load_0: ref Array<u8>;
+    let $load_1: ref Array<u8>;
     let out_9: ref "core:prelude/string.wado//String";
     let $sroa_view_repr_151: ref Array<u8>;
     let pos: i32;
@@ -72,8 +72,7 @@ fn "wasm_name_conflict_method.wado/run"() with Stdout {
     let tens: i32;
     out_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
     $sroa_view_repr_151 = global:wasm_name_conflict_method.wado::$const_obj_1;
-    out_9.used = 3;
-    builtin::array_copy<u8>(local.tee $load_0(out_9.repr), 0, $sroa_view_repr_151, 0, 3);
+    builtin::array_copy<u8>(local.tee $load_1(out_9.repr), 0, $sroa_view_repr_151, 0, 3);
     out_9.used = 5;
     pos = 5;
     t_555 = 42_i64;
@@ -82,15 +81,15 @@ fn "wasm_name_conflict_method.wado/run"() with Stdout {
             break_if b0 (pos - 3) < 2;
             q = t_555 /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(t_555 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_0, pos - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_0, pos - 2, 48 + tens);
+            builtin::array_set_u8($load_1, pos - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_1, pos - 2, 48 + tens);
             pos = pos - 2;
             t_555 = q;
             continue l1;
         };
     };
     if pos > 3 {
-        builtin::array_set_u8($load_0, 3, 48 + builtin::i32_wrap_i64(t_555 %u 10_i64));
+        builtin::array_set_u8($load_1, 3, 48 + builtin::i32_wrap_i64(t_555 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

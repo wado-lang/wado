@@ -1,7 +1,8 @@
-// A field chain read twice with no write between reuses the first read: every
-// `struct.get` costs wasmtime a null check and a load. A write to a field of
-// the same name, or a call that may write one, makes the next read load again;
-// a call on a path that never returns does not.
+// A field chain read twice with no write between reuses the first read, and
+// one read after a write to it reuses the value written: every `struct.get`
+// costs wasmtime a null check and a load. A write to a field of the same name
+// through another chain, or a call that may write one, makes the next read
+// load again; a call on a path that never returns does not.
 
 use { println, Stdout } from "core:cli";
 
@@ -66,9 +67,9 @@ __DATA__
     "wir_pass": {"O2": ["wir/reuse_struct_loads"]},
     "wir_expect:O2": [
         "w = local.tee $load_0(c.span).end - local.tee $load_2($load_0.start);",
-        "return ((w * 100) + $load_2) + c.pos;",
-        "return a + $load_0.start;",
-        "return c.pos + $load_0.end;",
+        "return ((w * 100) + $load_2) + $load_4;",
+        "return a + $load_2;",
+        "return $load_2 + $load_0.end;",
         "return $load_1 + $load_1;"
     ]
 }

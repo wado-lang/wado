@@ -454,9 +454,9 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     end_20 = bytes_2.used;
     builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
     $sroa_slice_repr_631 = global:spec_worlds_command_stdio.wado::$const_obj_1;
-    builder.used = 5;
+    builder.used = local.tee i_14(5);
     builtin::array_copy<u8>(local.tee out_26(builder.repr), 0, $sroa_slice_repr_631, 0, 5);
-    i_14 = end_20 < 0;
+    $mv$scalar$code = end_20 < 0;
     $cm_pair_7_52 = builtin::i64_extend_i32_s(end_20);
     $cm_pair_7_52 = select i64($cm_pair_7_52 < 0_i64, 0_i64 - $cm_pair_7_52, $cm_pair_7_52);
     end_20 = $inline_count_digits_u64_1: block -> i32 {
@@ -519,8 +519,8 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if i_14 {
-        if @unlikely(local.tee i_14(builder.used + 1) > builtin::array_len(out_26)) {
+    if $mv$scalar$code {
+        if @unlikely(local.tee i_14(i_14 + 1) > builtin::array_len(out_26)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, i_14);
         }
@@ -541,9 +541,9 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         l33: loop {
             break_if b32 (end_20 - $mv$scalar$code) < 2;
             q = $cm_pair_7_52 /u 100_i64;
-            $mv$scalar$advance = local.tee i_14(builtin::i32_wrap_i64($cm_pair_7_52 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_slice_repr_631, end_20 - 1, (48 + i_14) - ($mv$scalar$advance * 10));
-            builtin::array_set_u8($sroa_slice_repr_631, end_20 - 2, 48 + $mv$scalar$advance);
+            $mv$scalar$valid = local.tee $mv$scalar$advance(builtin::i32_wrap_i64($cm_pair_7_52 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_slice_repr_631, end_20 - 1, (48 + $mv$scalar$advance) - ($mv$scalar$valid * 10));
+            builtin::array_set_u8($sroa_slice_repr_631, end_20 - 2, 48 + $mv$scalar$valid);
             end_20 = end_20 - 2;
             $cm_pair_7_52 = q;
             continue l33;
@@ -553,7 +553,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         builtin::array_set_u8($sroa_slice_repr_631, $mv$scalar$code, 48 + builtin::i32_wrap_i64($cm_pair_7_52 %u 10_i64));
     }
     out_26 = global:spec_worlds_command_stdio.wado::$const_obj_0;
-    if @unlikely(local.tee end_20(builder.used + 6) > builtin::array_len($sroa_slice_repr_631)) {
+    if @unlikely(local.tee end_20(i_14 + 6) > builtin::array_len($sroa_slice_repr_631)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, end_20);
     }
@@ -1471,8 +1471,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/C
     v = struct.new "core:prelude/types.wado//CopySettlement" { handle: local.tee v(builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_0(self.repr), index)).handle, packed: v.packed };
     $av_10 = self.used;
     builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_0, index, $load_0, index + 1, ($av_10 - 1) - index);
-    self.used = $av_10 - 1;
-    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, self.used, ref.null none);
+    self.used = local.tee index($av_10 - 1);
+    builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_0, index, ref.null none);
     return v;
 }
 

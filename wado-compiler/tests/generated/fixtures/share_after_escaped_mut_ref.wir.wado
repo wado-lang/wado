@@ -214,24 +214,24 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "share_after_escaped_mut_ref.wado/run"() {
-    let $v0_6: i32;
-    let y_17: ref "share_after_escaped_mut_ref.wado//P";
+    let $load_0: i32;
+    let y_22: ref "share_after_escaped_mut_ref.wado//P";
     let elements: ref "Array<&mut share_after_escaped_mut_ref.wado/P>";
-    local.tee y_17(struct.new "share_after_escaped_mut_ref.wado//P" { a: 1 }).a = 5;
-    if @unlikely(local.tee $v0_6(10 + y_17.a) != 15) {
+    struct.new "share_after_escaped_mut_ref.wado//P" { a: 1 }.a = local.tee $load_0(5);
+    if @unlikely(local.tee $load_0(10 + $load_0) != 15) {
         cold_path;
-        "share_after_escaped_mut_ref.wado/run$cold2"($v0_6);
+        "share_after_escaped_mut_ref.wado/run$cold2"($load_0);
         unreachable;
     }
-    $v0_6 = builtin::array_len(local.tee elements(array.new_fixed<ref "share_after_escaped_mut_ref.wado//P">(local.tee y_17(struct.new "share_after_escaped_mut_ref.wado//P" { a: 1 }))));
-    if @unlikely(0 >= $v0_6) {
+    $load_0 = builtin::array_len(local.tee elements(array.new_fixed<ref "share_after_escaped_mut_ref.wado//P">(local.tee y_22(struct.new "share_after_escaped_mut_ref.wado//P" { a: 1 }))));
+    if @unlikely(0 >= $load_0) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<&mut share_after_escaped_mut_ref.wado/P>^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"(0, $v0_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("share_after_escaped_mut_ref.wado:22"), used: 35 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<&mut share_after_escaped_mut_ref.wado/P>^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"(0, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("share_after_escaped_mut_ref.wado:22"), used: 35 });
         unreachable;
     }; builtin::array_get_value<ref "share_after_escaped_mut_ref.wado//P">(elements, 0).a = 5;
-    if @unlikely(local.tee $v0_6(10 + y_17.a) != 15) {
+    if @unlikely(local.tee $load_0(10 + y_22.a) != 15) {
         cold_path;
-        "share_after_escaped_mut_ref.wado/run$cold1"($v0_6);
+        "share_after_escaped_mut_ref.wado/run$cold1"($load_0);
         unreachable;
     }
 }

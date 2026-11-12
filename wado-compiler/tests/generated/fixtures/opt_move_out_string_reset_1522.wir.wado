@@ -392,37 +392,37 @@ global global:core:prelude/primitive.wado::$const_obj_7: ref "core:prelude/strin
 global global:core:prelude/primitive.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "opt_move_out_string_reset_1522.wado/$test_0_moved_out_string_keeps_its_value_across_a_reset___1522_"() {
+    let $load_2: i32;
     let s: ref "core:prelude/string.wado//String";
     let text: ref "core:prelude/string.wado//String";
     let i_20: i32;
-    let i_30: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     text = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = s.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(5)), 0, $array_clone_src_1, 0, 5); $array_clone_dst_2, used: 5 };
     $array_clone_src_1 = builtin::array_new<u8>(0);
     s.repr = $array_clone_src_1;
-    s.used = 0;
-    text = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = text.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(5)), 0, $array_clone_src_1, 0, 5); $array_clone_dst_2, used: 5 };
+    s.used = local.tee $load_2(0);
+    text = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2 = text.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(5)), 0, $array_clone_dst_2, 0, 5); $array_clone_dst_5, used: 5 };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
         block {
         };
         i_20 = 0;
-        $array_clone_src_1 = text.repr;
+        $array_clone_dst_2 = text.repr;
         b2: block {
             l3: loop {
                 break_if b2 (builtin::i64_extend_i32_s(i_20) + 3_i64) >= builtin::i64_extend_i32_s(5);
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i_20 = i_20 + 1;
@@ -432,7 +432,7 @@ fn "opt_move_out_string_reset_1522.wado/$test_0_moved_out_string_keeps_its_value
         b8: block {
             l9: loop {
                 break_if b8 i_20 >= 5;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_1, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i_20 = i_20 + 1;
@@ -450,40 +450,39 @@ taken: "), used: 161 }, s1: struct.new "core:prelude/string.wado//String" { repr
         unreachable;
     }
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
-        if local.tee i_20(s.used) != 0 {
+        if $load_2 != 0 {
             break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
-        i_30 = 0;
-        $array_clone_src_1 = s.repr;
+        i_20 = 0;
         b13: block {
             l14: loop {
-                break_if b13 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(i_20);
-                if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_30) {
+                break_if b13 (builtin::i64_extend_i32_s(i_20) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
+                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_30 = i_30 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_30) {
+                i_20 = i_20 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_30 = i_30 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_30) {
+                i_20 = i_20 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_30 = i_30 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_30) {
+                i_20 = i_20 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_30 = i_30 + 1;
+                i_20 = i_20 + 1;
                 continue l14;
             };
         };
         b19: block {
             l20: loop {
-                break_if b19 i_30 >= i_20;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_30) {
+                break_if b19 i_20 >= $load_2;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:opt_move_out_string_reset_1522.wado::$const_obj_0, i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_30 = i_30 + 1;
+                i_20 = i_20 + 1;
                 continue l20;
             };
         };
@@ -501,12 +500,13 @@ s: "), used: 148 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
 
 fn "opt_move_out_string_reset_1522.wado/$test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_"() {
     let $load_2: i32;
+    let $load_3: ref "core:prelude/string.wado//String";
     let p_0: ref "opt_move_out_string_reset_1522.wado//Pair";
     let v_10: ref "core:prelude/string.wado//String";
     let i_21: i32;
     v_10 = local.tee p_0(struct.new "opt_move_out_string_reset_1522.wado//Pair" { a: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 101, 112), used: 4 }, b: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 } }).a;
     v_10 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_10.repr; $load_2 = v_10.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
-    p_0.a = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    p_0.a = local.tee $load_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
     v_10 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = v_10.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_2(v_10.used))), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
         if local.tee $load_2(v_10.used) != 4 {
@@ -556,13 +556,12 @@ condition: taken == \"keep\"
 taken: "), used: 165 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_10.used);
         unreachable;
     }
-    v_10 = p_0.a;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
-        if local.tee $load_2(v_10.used) != 0 {
+        if local.tee $load_2($load_3.used) != 0 {
             break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
         i_21 = 0;
-        $array_clone_src_1 = v_10.repr;
+        $array_clone_src_1 = $load_3.repr;
         b35: block {
             l36: loop {
                 break_if b35 (builtin::i64_extend_i32_s(i_21) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
@@ -598,7 +597,7 @@ taken: "), used: 165 }, s1: struct.new "core:prelude/string.wado//String" { repr
         break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_10("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_move_out_string_reset_1522.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "opt_move_out_string_reset_1522.wado//$tmpl$d48748ffcad618c0" { h0: v_10, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_ at opt_move_out_string_reset_1522.wado:37
+        "core:rt/panic"(local.tee v_10("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_move_out_string_reset_1522.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "opt_move_out_string_reset_1522.wado//$tmpl$d48748ffcad618c0" { h0: $load_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_ at opt_move_out_string_reset_1522.wado:37
 condition: p.a == \"\"
 p.a: "), used: 157 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_ at opt_move_out_string_reset_1522.wado:37
 condition: p.a == \"\"

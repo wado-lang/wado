@@ -405,8 +405,8 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_li
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(a);
             }
             builtin::array_set<i32>(a.repr, $load_1, 9);
-            a.used = $load_1 + 1;
-            break $inline_maybe_repoint_1: a.used;
+            a.used = local.tee $load_1($load_1 + 1);
+            break $inline_maybe_repoint_1: $load_1;
         } else {
         }
         break $inline_maybe_repoint_1: 0;
@@ -439,8 +439,8 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_2_an_arm_binding_out_of_a_fres
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(a_2);
     }
     builtin::array_set<i32>(a_2.repr, $av_25, 9);
-    a_2.used = $av_25 + 1;
-    if @unlikely(local.tee $av_25(a_2.used) != 3) {
+    a_2.used = local.tee $av_25($av_25 + 1);
+    if @unlikely($av_25 != 3) {
         cold_path;
         "value_copy_new_owner_needs_a_proof.wado/$test_2_an_arm_binding_out_of_a_fresh_holder_is_not_its_owner$cold1"($av_25);
         unreachable;

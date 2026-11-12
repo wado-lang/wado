@@ -199,7 +199,7 @@ fn "core:json/core:json/serialize_into<i32>$sroa[value.value]"(buf, value) {
 }
 
 fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, name, count) {
-    let $load_3: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let start_18: i32;
     if count > 0 {
         if @unlikely(local.tee count(buf.used + 2) > builtin::array_len(buf.repr)) {
@@ -208,16 +208,16 @@ fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"
         }
         start_18 = buf.used;
         buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_13, 0, 2);
-        if @unlikely(local.tee count(buf.used + 3) > builtin::array_len($load_3)) {
+        builtin::array_copy<u8>(local.tee $load_4(buf.repr), start_18, global:core:json::$const_obj_13, 0, 2);
+        if @unlikely(local.tee count(count + 3) > builtin::array_len($load_4)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, count);
         }
         start_18 = buf.used;
         buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, name.repr, 0, 1);
+        builtin::array_copy<u8>(local.tee $load_4(buf.repr), start_18, name.repr, 0, 1);
         count = start_18 + 1;
-        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_11, 0, 2);
+        builtin::array_copy<u8>($load_4, count, global:core:json::$const_obj_11, 0, 2);
         return;
     }
     if @unlikely(local.tee count(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -226,16 +226,16 @@ fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"
     }
     start_18 = buf.used;
     buf.used = count;
-    builtin::array_set_u8(local.tee $load_3(buf.repr), start_18, 34);
-    if @unlikely(local.tee count(buf.used + 3) > builtin::array_len($load_3)) {
+    builtin::array_set_u8(local.tee $load_4(buf.repr), start_18, 34);
+    if @unlikely(local.tee count(count + 3) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, count);
     }
     start_18 = buf.used;
     buf.used = count;
-    builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, name.repr, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_4(buf.repr), start_18, name.repr, 0, 1);
     count = start_18 + 1;
-    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_11, 0, 2);
+    builtin::array_copy<u8>($load_4, count, global:core:json::$const_obj_11, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {

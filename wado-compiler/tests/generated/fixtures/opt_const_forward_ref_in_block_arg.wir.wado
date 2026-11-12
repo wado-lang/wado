@@ -1445,6 +1445,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^cor
 }
 
 fn "opt_const_forward_ref_in_block_arg.wado/opt_const_forward_ref_in_block_arg.wado/Number::add_and_get"(self, delta) {
+    let $load_1: i32;
     b186: block {
         l187: loop {
             break_if b186 black_box(0) == 0;
@@ -1452,7 +1453,7 @@ fn "opt_const_forward_ref_in_block_arg.wado/opt_const_forward_ref_in_block_arg.w
             continue l187;
         };
     };
-    self.n = self.n + delta;
+    self.n = local.tee $load_1(self.n + delta);
     b188: block {
         l189: loop {
             break_if b188 black_box(0) == 0;
@@ -1460,7 +1461,7 @@ fn "opt_const_forward_ref_in_block_arg.wado/opt_const_forward_ref_in_block_arg.w
             continue l189;
         };
     };
-    return self.n;
+    return $load_1;
 }
 
 fn "opt_const_forward_ref_in_block_arg.wado/opt_const_forward_ref_in_block_arg.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t) {

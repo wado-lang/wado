@@ -77,8 +77,9 @@ import fn wasi/task-return from "wasi/task-return";
 global global:hfs_early_return_with_wrapped_call.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "hfs_early_return_with_wrapped_call.wado/external_inc_and_read"(b) {
-    b.v = b.v + 10;
-    return b.v;
+    let $load_1: i32;
+    b.v = local.tee $load_1(b.v + 10);
+    return $load_1;
 }
 
 fn "hfs_early_return_with_wrapped_call.wado/step"(b) {

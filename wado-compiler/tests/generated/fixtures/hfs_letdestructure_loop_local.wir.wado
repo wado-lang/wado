@@ -80,7 +80,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     let $load_1: ref "Array<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
-    let $load_9: i32;
+    let $load_11: i32;
     let pairs: ref "core:prelude/list.wado//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let total: i32;
     let a: ref "hfs_letdestructure_loop_local.wado//Acc";
@@ -119,10 +119,10 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
             })) == 0 {
                 a = local.tee v_28(ref.as_non_null($match_5)).0;
                 n_4 = v_28.1;
-                a.sum = a.sum + n_4;
-                total = total + local.tee $load_9(a.sum);
-                a.sum = $load_9 + n_4;
-                total = total + a.sum;
+                $load_11 = a.sum + n_4;
+                total = total + $load_11;
+                a.sum = local.tee n_4($load_11 + n_4);
+                total = total + n_4;
             } else {
                 break b2;
             }
@@ -218,9 +218,9 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
         l29: loop {
             break_if b28 (total - n_4) < 2;
             q = x /u 100_i64;
-            $load_9 = local.tee $sroa_$iter_0_index_169(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, total - 1, (48 + $sroa_$iter_0_index_169) - ($load_9 * 10));
-            builtin::array_set_u8(arr, total - 2, 48 + $load_9);
+            $load_11 = local.tee $sroa_$iter_0_index_169(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, total - 1, (48 + $sroa_$iter_0_index_169) - ($load_11 * 10));
+            builtin::array_set_u8(arr, total - 2, 48 + $load_11);
             total = total - 2;
             x = q;
             continue l29;

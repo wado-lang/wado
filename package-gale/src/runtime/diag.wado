@@ -97,7 +97,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.start_at(i), tokens.end_at(i));
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,

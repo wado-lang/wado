@@ -414,7 +414,7 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_0_a_whole_assignment_drops_the_old_fields"() {
     let $load_0: ref null "affine_assign_whole_aggregate_with_affine_fields.wado//Tok";
-    let $load_7: i32;
+    let $load_13: i32;
     let p: ref null "affine_assign_whole_aggregate_with_affine_fields.wado//Pair";
     let $v0: i32;
     let $v1: bool;
@@ -442,7 +442,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_0_a_whole_assign
         "affine_assign_whole_aggregate_with_affine_fields.wado/$test_0_a_whole_assignment_drops_the_old_fields$cold1"();
         unreachable;
     }
-    $v1 = local.tee $v0(local.tee $load_7(local.tee $load_0(p.x).id)) == 30;
+    $v1 = local.tee $v0(local.tee $load_13(local.tee $load_0(p.x).id)) == 30;
     $v2_seen = 0;
     $v3_seen = 0;
     if @unlikely((if $v1 -> i32 {
@@ -457,7 +457,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_0_a_whole_assign
         unreachable;
     }
     if ref.is_null($load_0) == 0 {
-        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $load_7;
+        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $load_13;
     }
     p.x = ref.null none;
     if ref.is_null(local.tee $load_0(p.y)) == 0 {
@@ -467,7 +467,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_0_a_whole_assign
 }
 
 fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_1_a_whole_assignment_after_a_field_moved_out"() {
-    let $load_9: i32;
+    let $load_15: i32;
     let p: ref null "affine_assign_whole_aggregate_with_affine_fields.wado//Pair";
     let $v0: i32;
     let $v1: bool;
@@ -478,11 +478,10 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_1_a_whole_assign
     let $moved_11: ref null "affine_assign_whole_aggregate_with_affine_fields.wado//Tok";
     let $stored_12: ref null "affine_assign_whole_aggregate_with_affine_fields.wado//Pair";
     $moved_11 = local.tee p(struct.new "affine_assign_whole_aggregate_with_affine_fields.wado//Pair" { x: struct.new "affine_assign_whole_aggregate_with_affine_fields.wado//Tok" { id: 1 }, y: struct.new "affine_assign_whole_aggregate_with_affine_fields.wado//Tok" { id: 2 } }).x;
-    p.x = ref.null none;
     global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $moved_11.id;
     $stored_12 = struct.new "affine_assign_whole_aggregate_with_affine_fields.wado//Pair" { x: struct.new "affine_assign_whole_aggregate_with_affine_fields.wado//Tok" { id: 30 }, y: struct.new "affine_assign_whole_aggregate_with_affine_fields.wado//Tok" { id: 400 } };
-    if ref.is_null(local.tee $moved_11(p.x)) == 0 {
-        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $moved_11.id;
+    if ref.is_null(ref.null none) == 0 {
+        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + ref.null none.id;
     }
     p.x = ref.null none;
     if ref.is_null(local.tee $moved_11(p.y)) == 0 {
@@ -498,7 +497,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_1_a_whole_assign
         "affine_assign_whole_aggregate_with_affine_fields.wado/$test_1_a_whole_assignment_after_a_field_moved_out$cold1"();
         unreachable;
     }
-    $v1 = local.tee $v0(local.tee $load_9(local.tee $moved_11(p.x).id)) == 30;
+    $v1 = local.tee $v0(local.tee $load_15(local.tee $moved_11(p.x).id)) == 30;
     $v2_seen = 0;
     $v3_seen = 0;
     if @unlikely((if $v1 -> i32 {
@@ -513,7 +512,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_1_a_whole_assign
         unreachable;
     }
     if ref.is_null($moved_11) == 0 {
-        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $load_9;
+        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $load_15;
     }
     p.x = ref.null none;
     if ref.is_null(local.tee $moved_11(p.y)) == 0 {
@@ -524,7 +523,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_1_a_whole_assign
 
 fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_2_a_reference_to_the_whole_reads_the_new_value"() {
     let $load_0: ref null "affine_assign_whole_aggregate_with_affine_fields.wado//Tok";
-    let $load_7: i32;
+    let $load_13: i32;
     let p: ref null "affine_assign_whole_aggregate_with_affine_fields.wado//Pair";
     let $v0: i32;
     let $v1: bool;
@@ -547,7 +546,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_2_a_reference_to
     p.y = $stored_11.y;
     $stored_11.x = ref.null none;
     $stored_11.y = ref.null none;
-    $v1 = local.tee $v0(local.tee $load_7(local.tee $load_0(p.x).id)) == 30;
+    $v1 = local.tee $v0(local.tee $load_13(local.tee $load_0(p.x).id)) == 30;
     $v2_seen = 0;
     $v3_seen = 0;
     if @unlikely((if $v1 -> i32 {
@@ -562,7 +561,7 @@ fn "affine_assign_whole_aggregate_with_affine_fields.wado/$test_2_a_reference_to
         unreachable;
     }
     if ref.is_null($load_0) == 0 {
-        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $load_7;
+        global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS = global:affine_assign_whole_aggregate_with_affine_fields.wado::DROPS + $load_13;
     }
     p.x = ref.null none;
     if ref.is_null(local.tee $load_0(p.y)) == 0 {

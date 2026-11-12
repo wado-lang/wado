@@ -315,7 +315,7 @@ fn "closure_capture_for_header_write.wado/run"() {
     updated = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     b9: block {
         l10: loop {
-            break_if b9 n.value = n.value + 1; n.value < 3 == 0;
+            break_if b9 n.value = local.tee k_2(n.value + 1); k_2 < 3 == 0;
             value_72 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_write.wado//$Closure_1" { $capture_0: n }, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_1" };
             if @unlikely(local.tee k_2(updated.used) >= builtin::array_len(updated.repr)) {
                 cold_path;

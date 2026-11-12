@@ -81,8 +81,9 @@ fn "opt_scalar_forward_call_clobber.wado/reset"(r) {
 }
 
 fn "opt_scalar_forward_call_clobber.wado/advance"(r) {
-    r.used = r.used + 10;
-    return r.used;
+    let $load_1: i32;
+    r.used = local.tee $load_1(r.used + 10);
+    return $load_1;
 }
 
 fn "opt_scalar_forward_call_clobber.wado/sink"(a, b) with Stdout {

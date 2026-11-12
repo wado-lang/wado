@@ -2353,7 +2353,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     if yields_unless_viable && walks_iteration {
         let resumes = continuation_resumes_at(ctx, &re.after_iteration, "tokens", "tokens", "pos");
         let yielded = repeat_continuation_yields(ctx, &re.exit, "tokens", "sp");
-        gen_scan_rewind_break(w, ctx, "sp", `!${resumes} && ${yielded}`);
+        gen_scan_rewind_break(w, ctx, "sp", `${yielded} && !${resumes}`);
     }
     w.end();
 }
@@ -2390,7 +2390,7 @@ fn gen_scan_yield_unless_resumed<S: AsStrSlice>(
 ) {
     let resumes = continuation_resumes_at(ctx, &re.after_iteration, "tokens", "tokens", "pos");
     let yielded = repeat_continuation_yields(ctx, &re.exit, "tokens", &start);
-    w.begin(`if pos != ${start} && !${resumes} && ${yielded}`);
+    w.begin(`if pos != ${start} && ${yielded} && !${resumes}`);
     gen_scan_rewind(w, ctx, &start);
     w.end();
 }
@@ -4295,7 +4295,7 @@ fn gen_alt_dispatch(
     let dd = match *dispatch {
         Direct(d) => d,
         Tournament(td) => {
-            let winner = gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc);
+            let winner = gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc, td.alts[td.alts.len() - 1]);
             gen_alt_commit(w, alts, &td.alts, &winner, ctx, nc);
             return;
         },
@@ -4317,7 +4317,7 @@ fn gen_alt_dispatch(
         if picked.len() == 1 {
             gen_group_alt_body(&mut body, alt_by_index(alts, picked[0]), ctx, nc, &branch_proven_first(&branches, i));
         } else {
-            let winner = gen_scan_winner_tournament(&mut body, picked, scan_alts, ctx, nc);
+            let winner = gen_scan_winner_tournament(&mut body, picked, scan_alts, ctx, nc, picked[picked.len() - 1]);
             gen_alt_commit(&mut body, alts, picked, &winner, ctx, nc);
         }
         bodies.push(body);
@@ -6432,7 +6432,7 @@ fn optional_entry_yielding<S: AsStrSlice>(
     };
     let resumes = continuation_resumes_at(ctx, &r.after_iteration, "&p.kinds", "p.kinds", &scan_pos);
     let yields = repeat_continuation_yields(ctx, &r.exit, "&p.kinds", "p.pos");
-    w.line(`${verdict} = ${scan_pos} >= 0 && (${resumes} || !${yields});`);
+    w.line(`${verdict} = ${scan_pos} >= 0 && (!${yields} || ${resumes});`);
     w.end();
     return verdict;
 }
@@ -6575,7 +6575,8 @@ fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 ) -> String {
     let end = `${pos} + 1`;
     let resumes = continuation_resumes_at(ctx, after_iteration, &tokens, stream, &end);
-    return `(${resumes} || !${repeat_continuation_yields(ctx, exit, tokens, pos)})`;
+    let yields = repeat_continuation_yields(ctx, exit, tokens, pos);
+    return `(!${yields} || ${resumes})`;
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy loop's iteration entry,
@@ -7685,12 +7686,15 @@ fn emit_argmax_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 
 /// Longest-match scan tournament over `sorted_group`, ties to the lowest alt
 /// index as ANTLR4 resolves them. Returns the variable holding the winner, or -1.
+/// `fallback` is the alternative the caller commits to where no scan wins, or
+/// -1 for a caller that tells -1 apart from it.
 fn gen_scan_winner_tournament(
     w: &mut CodeWriter,
     sorted_group: &List<i32>,
     scan_alts: &List<ScanBody>,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
+    fallback: i32,
 ) -> String {
     let winner_var = dedup_name("gd_winner", name_counts);
     let best_var = dedup_name("gd_best", name_counts);
@@ -7700,13 +7704,15 @@ fn gen_scan_winner_tournament(
     // wherever `best` is declared — both declarers, not just the one a fixture
     // happened to reach.
     gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
-    gen_scan_winner_round(w, sorted_group, scan_alts, ctx, name_counts, &winner_var, &best_var);
+    gen_scan_winner_round(w, sorted_group, scan_alts, ctx, name_counts, &winner_var, &best_var, fallback);
     return winner_var;
 }
 
 /// One tournament over caller-owned winner / best variables. A decision
 /// spanning several branches runs one round per branch and keeps a single
 /// answer, so the branch a lookahead selects still decides by scan length.
+/// The last candidate scans only once another has won where it is `fallback`:
+/// the caller commits to it either way, whatever its scan would find.
 fn gen_scan_winner_round<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     sorted_group: &List<i32>,
@@ -7715,8 +7721,10 @@ fn gen_scan_winner_round<S: AsStrSlice, S1: AsStrSlice>(
     name_counts: &mut List<[String, i32]>,
     winner_var: S,
     best_var: S1,
+    fallback: i32 = -1,
 ) {
-    for let ai of &sorted_group.sorted() {
+    let order = sorted_group.sorted();
+    for let ai of &order {
         let ai = *ai;
         let sb = &scan_alts[ai];
         if sb.elements.is_empty() {
@@ -7724,11 +7732,18 @@ fn gen_scan_winner_round<S: AsStrSlice, S1: AsStrSlice>(
             let epsilon = "p.pos";
             emit_argmax_commit(w, best_var, winner_var, &epsilon, ai, &ScanOrigin::Parser, ctx);
         } else {
+            let unless_lost = ai == fallback && ai == order[order.len() - 1];
+            if unless_lost {
+                w.begin(`if ${best_var} >= 0`);
+            }
             let end_var = dedup_name("gd_end", name_counts);
             w.line(`let mut ${end_var}: i32 = -1;`);
             gen_scan_gate_save(w, ctx, &end_var, /*mutable=*/ true);
             gen_scan_alt_end(w, sb, &end_var, ctx, name_counts);
             emit_argmax_commit(w, best_var, winner_var, &end_var, ai, &ScanOrigin::Entry(end_var), ctx);
+            if unless_lost {
+                w.end();
+            }
         }
     }
 }
@@ -8012,6 +8027,12 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut EmitConte
     close_call_capture(w, &span_field);
 }
 
+/// The alternative `gen_group_scan_dispatch` commits to where no scan wins: its
+/// last arm, unless a refused tournament reports no viable alternative instead.
+fn unrefused_fallback(sorted_group: &List<i32>, refusable: bool) -> i32 {
+    return if refusable { -1 } else { sorted_group[sorted_group.len() - 1] };
+}
+
 /// The branch body for alternatives sharing a first token: scan them all from
 /// the same start and commit to the winner. Where a predicate can refuse every
 /// one (`refusable`), the winner may be none, which is no viable alternative.
@@ -8030,7 +8051,8 @@ fn gen_group_scan_dispatch(
     let winner_var = if let Some(var) = decided {
         var;
     } else {
-        gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts);
+        let fallback = unrefused_fallback(sorted_group, refusable);
+        gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts, fallback);
     };
     if refusable {
         w.begin(`if ${winner_var} < 0`);
@@ -8283,7 +8305,7 @@ fn gen_group_branch_body(
         if shadowed {
             assert group_all_scannable(&sorted_group, alts, ctx);
             let mut lines = CodeWriter::with_capacity(512);
-            let winner = gen_scan_winner_tournament(&mut lines, &sorted_group, g_op_scan_alts, ctx, name_counts);
+            let winner = gen_scan_winner_tournament(&mut lines, &sorted_group, g_op_scan_alts, ctx, name_counts, -1);
             gen_group_shadow(w, dec, &var, &winner, lines, ctx);
         }
         gen_group_scan_dispatch(
@@ -8301,8 +8323,15 @@ fn gen_group_branch_body(
         return;
     }
     assert group_all_scannable(&sorted_group, alts, ctx);
-    let winner = gen_scan_winner_tournament(w, &sorted_group, g_op_scan_alts, ctx, name_counts);
     let refusable = sorted_group.iter_ref().any(|i| scan_body_is_gated(&g_op_scan_alts[*i]));
+    let winner = gen_scan_winner_tournament(
+        w,
+        &sorted_group,
+        g_op_scan_alts,
+        ctx,
+        name_counts,
+        unrefused_fallback(&sorted_group, refusable),
+    );
     gen_group_scan_dispatch(
         w,
         alts,
@@ -8831,8 +8860,13 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     ctx: &mut EmitContext,
     fall_through_on_no_match: bool = false,
 ) {
-    let any_gated = emit_scan_tournament_winner(w, sorted_indices, &rule_display, ctx);
-    let guard_pick = fall_through_on_no_match || any_gated;
+    // A gated candidate scores -1 for a reason the lookahead did not predict, so
+    // a gated tournament can end with nothing viable. `emit_index_pick_dispatch`
+    // runs its last alternative untested, which holds only while some
+    // alternative always matches.
+    let guard_pick = fall_through_on_no_match || !candidates_ungated(sorted_indices, ctx);
+    let fallback = if guard_pick || ctx.settings.trace { -1 } else { sorted_indices[sorted_indices.len() - 1] };
+    emit_scan_tournament_winner(w, sorted_indices, &rule_display, ctx, fallback);
     if guard_pick {
         w.begin("if _sd_best_i >= 0");
     }
@@ -8842,23 +8876,31 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     }
 }
 
+/// Whether no candidate among `indices` carries an alt-initial gate.
+fn candidates_ungated(indices: &List<i32>, ctx: &EmitContext) -> bool {
+    let rule = ctx.current_rule();
+    return indices.iter_ref().all(|idx| !ctx.alt_has_gate(&rule.alternatives[*idx]));
+}
+
 /// The tournament's winner among `sorted_indices`, into `_sd_best_i`: -1 where
-/// no alternative scans. Answers whether a gate refused a candidate.
+/// no alternative scans. `fallback`, the alternative the pick commits to where
+/// none wins, scans only where another did: the pick is the same either way.
 fn emit_scan_tournament_winner<S: AsStrSlice>(
     w: &mut CodeWriter,
     sorted_indices: &List<i32>,
     rule_display: S,
     ctx: &mut EmitContext,
-) -> bool {
+    fallback: i32,
+) {
     w.line("let _sd_tokens = &p.kinds;");
     w.line("let _sd_pos = p.pos;");
-    // A gated candidate scores -1 for a reason the lookahead did not predict, so
-    // a gated tournament can end with nothing viable. `emit_index_pick_dispatch`
-    // runs its last alternative untested, which held only while some alternative
-    // always matched.
-    let mut any_gated = false;
+    let mut others: List<String> = [];
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
+        if idx == fallback {
+            continue;
+        }
+        others.push(`_sd_p_${idx} >= 0`);
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         // Without the caller follow, a trailing token the helper's
         // `follow_yields` gate rejects still counts toward the score.
@@ -8872,13 +8914,21 @@ fn emit_scan_tournament_winner<S: AsStrSlice>(
             w.call(scan);
             continue;
         };
-        any_gated = true;
         if alt_scan_checks_gate(idx, ctx) {
             w.call(scan);
         } else {
             ctx.cursor.note_ref(&scan.callee);
             w.line(`let _sd_p_${idx} = if ${gate} { ${scan.callee}(${scan.args.join(", ")}) } else { -1 };`);
         }
+    }
+    if fallback >= 0 {
+        assert !others.is_empty(), "a tournament has a candidate besides its fallback";
+        gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
+        let scan = alt_scan_call(fallback, ctx, "_sd_tokens", "_sd_pos", CallForm::Return);
+        ctx.cursor.note_ref(&scan.callee);
+        w.line(
+            `let _sd_p_${fallback} = if ${others.join(" || ")} { ${scan.callee}(${scan.args.join(", ")}) } else { -1 };`,
+        );
     }
     if ctx.settings.trace {
         let rlit = wado`"${rule_display.to_string()}"`;
@@ -8897,7 +8947,6 @@ fn emit_scan_tournament_winner<S: AsStrSlice>(
         let end_expr = `_sd_p_${idx}`;
         emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
     }
-    return any_gated;
 }
 
 /// Under `prediction: "verify"`, run the tournament the rule's body decision
@@ -8915,7 +8964,7 @@ fn gen_tournament_shadow<S: AsStrSlice>(
 ) {
     assert alts_all_scan_full(sorted_indices, alts, ctx), "every alternative reaching codegen scans in full";
     let mut lines = CodeWriter::with_capacity(512);
-    let _ = emit_scan_tournament_winner(&mut lines, sorted_indices, rule_display, ctx);
+    emit_scan_tournament_winner(&mut lines, sorted_indices, rule_display, ctx, -1);
     let winner = shadow_number("_sd_best_i", sorted_indices, numbers);
     lines.line(`${atn_shadow_call(decision, AtnPicker::Tournament, "p.pos", winner, "_atn_alt")};`);
     gen_shadow_block(w, "_atn_alt >= 0", lines, ctx);

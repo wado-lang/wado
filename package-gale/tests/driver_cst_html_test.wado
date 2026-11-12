@@ -120,9 +120,9 @@ test "HIDDEN channel: TAG_WHITESPACE routed to trivia" {
         if tokens.kinds[i] == TK_TAG_NAME {
             tag_name_count += 1;
             if tag_name_count == 2 {
-                for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
-                    if tokens.triv_kinds[j] == TK_TAG_WHITESPACE {
-                        assert tokens.triv_chans[j] == 1, "expected HIDDEN channel 1";
+                for let mut j = tokens.trivia_lo_at(i); j < tokens.trivia_hi_at(i); j += 1 {
+                    if tokens.trivia_kind_at(j) == TK_TAG_WHITESPACE {
+                        assert tokens.trivia_channel_at(j) == 1, "expected HIDDEN channel 1";
                         found_hidden_ws = true;
                     }
                 }
