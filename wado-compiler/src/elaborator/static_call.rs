@@ -26,6 +26,7 @@ use super::tysys::TypeSystem;
 /// One `Type::method(...)` spelling as the resolution reads it: what it names,
 /// and what the call site already knows about it. Carried as one value, so a
 /// fact a rung needs reaches it whatever site asked.
+#[derive(Clone, Copy)]
 pub(super) struct StaticQuery<'a> {
     /// The reference site of the receiver's name, where the caller has one.
     pub(super) site: Option<ast::AstId>,
@@ -400,6 +401,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// Every declaration of `query`'s method the receiver at `key` supplies,
+    /// its own and its traits', split into those the call reaches and those
+    /// whose trait is out of its scope. `receiver_key` as the caller gave it
+    /// for the traits: a key derived from the name narrows the search to a
+    /// declaration the impls may not be indexed under, putting a primitive's
+    /// `impl FromStr for f32` out of reach.
+    ///
+    /// A qualified spelling names a trait, so the receiver's own declaration
+    /// is not what it asks for.
+    fn link_candidates(
+        &mut self,
+        query: &StaticQuery<'_>,
+        key: &ImplTargetKey,
+        declaring_args: &[TypeId],
+    ) -> (Vec<Candidate>, Vec<Candidate>) {
+        let mut candidates = if query.required_trait.is_some() {
+            Vec::new()
+        } else {
+            self.own_candidates(key, query.method_name, declaring_args)
+        };
+        candidates.extend(self.trait_candidates(
+            query.receiver_name,
+            query.method_name,
+            query.receiver_key,
+            declaring_args,
+        ));
+        candidates.extend(self.blanket_candidates(query.method_name, query.receiver_type));
+        // As a method call's, a trait's declarations answer only where the
+        // trait is in scope (WEP 2026-09-01, "Scope"). A qualified spelling
+        // names its trait, which is what scope asks of a call.
+        if let Some(required) = query.required_trait {
+            candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
+            return (candidates, Vec::new());
+        }
+        let frame = self.frame_module();
+        let resolutions = &self.tysys.resolutions;
+        candidates.into_iter().partition(|c| {
+            c.supply
+                .as_ref()
+                .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
+        })
+    }
+
     /// What this link answers, or, where it answers nothing, the trait
     /// candidates it left out of scope.
     fn resolve_static_callee_at_link(
@@ -426,58 +470,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => self.impl_target_at(site, receiver_name),
         };
 
-        // Every declaration the receiver supplies, its own and its traits'.
-        // `receiver_key` as the caller gave it for the traits: a key derived
-        // from the name narrows the search to a declaration the impls may not
-        // be indexed under, putting a primitive's `impl FromStr for f32` out of
-        // reach.
-        //
-        // A qualified spelling names a trait, so the receiver's own declaration
-        // is not what it asks for and no case of the name shadows the answer.
         let declaring_args = self
             .tysys
             .receiver_declaring_args(receiver_type, receiver_args, key.decl())
             .unwrap_or_default();
-        let mut candidates = if required_trait.is_some() {
-            Vec::new()
-        } else {
-            self.own_candidates(&key, method_name, &declaring_args)
-        };
+        let (candidates, out_of_scope) = self.link_candidates(&query, &key, &declaring_args);
 
         // A case or member the receiver declares is written on the type, and
         // shadows a static it only *inherits*: its own arm builds the
         // constructor, so the spelling is not a call at all. It does not shadow
         // the receiver's own declaration — that is a type declaring one name
-        // twice, and answering with the case would hide it.
+        // twice, and answering with the case would hide it — nor what a
+        // qualified spelling's trait supplies.
         if required_trait.is_none()
-            && candidates.is_empty()
+            && !candidates.iter().any(|c| c.supply.is_none())
             && self.declares_case_named(&key, method_name)
         {
             return Ok(StaticLookup::NotStatic);
         }
 
-        candidates.extend(self.trait_candidates(
-            receiver_name,
-            method_name,
-            receiver_key,
-            &declaring_args,
-        ));
-        candidates.extend(self.blanket_candidates(method_name, receiver_type));
-        // As a method call's, a trait's declarations answer only where the
-        // trait is in scope (WEP 2026-09-01, "Scope"). A qualified spelling
-        // names its trait, which is what scope asks of a call.
-        let mut out_of_scope = Vec::new();
-        if let Some(required) = required_trait {
-            candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
-        } else {
-            let frame = self.frame_module();
-            let resolutions = &self.tysys.resolutions;
-            (candidates, out_of_scope) = candidates.into_iter().partition(|c| {
-                c.supply
-                    .as_ref()
-                    .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
-            });
-        }
         let resolved = match self.select_candidate(
             candidates,
             arg_types,
@@ -551,19 +562,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Err(out_of_scope)
     }
 
-    /// Whether `key`'s own impls answer `method_name`: written in one of its
-    /// blocks, or a default of a trait one of them implements. A link that
-    /// does answers a newtype's call before the type it wraps.
-    pub(super) fn impls_answer(&self, key: &ImplTargetKey, method_name: &str) -> bool {
-        if self.impl_method_entries(key, method_name).next().is_some() {
-            return true;
-        }
-        let Some(name) = key.decl_name(self.tysys.resolutions.defs()) else {
+    /// Whether `key`'s own impls answer `method_name` for a call here, as
+    /// [`Self::link_candidates`] reads them for the resolution: a trait's
+    /// default counts, and a trait out of scope does not. A link that does
+    /// answers a newtype's call before the type it wraps.
+    pub(super) fn impls_answer(&mut self, key: &ImplTargetKey, method_name: &str) -> bool {
+        let Some(name) = key
+            .decl_name(self.tysys.resolutions.defs())
+            .map(str::to_string)
+        else {
             return false;
         };
-        !self
-            .trait_candidates(name, method_name, Some(key), &[])
-            .is_empty()
+        let query = StaticQuery {
+            receiver_key: Some(key),
+            ..StaticQuery::of(&name, method_name)
+        };
+        let (reached, _) = self.link_candidates(&query, key, &[]);
+        !reached.is_empty()
     }
 
     /// The link below `newtype` on its chain that [`Self::newtype_static_target`]

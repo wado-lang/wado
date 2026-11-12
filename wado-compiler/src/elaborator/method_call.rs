@@ -2417,12 +2417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.newtype_static_receiver(target_type_id, base_type, &static_call.method)
             }
             ResolvedType::Flags { .. } => {
-                let own = nominal_receiver(&self.tysys.type_table.borrow(), target_type_id);
-                if self.declares_method_directly(&own.0, &static_call.method) {
-                    own
-                } else {
-                    primitive_receiver(PrimitiveType::U32)
-                }
+                nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
             // Resolving the target reported why it failed.
             _ if target_type_id == TypeTable::ERROR => return TypeTable::ERROR,
@@ -3002,7 +2997,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The receiver a qualified call on a newtype names: the newtype where it
     /// declares `method` itself, else the base it inherits the method from.
     fn newtype_static_receiver(
-        &self,
+        &mut self,
         newtype: TypeId,
         base: TypeId,
         method: &str,
@@ -3032,7 +3027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The newtype `target`'s own key, where its own impls answer `method`:
     /// that declaration shadows the one its base supplies.
-    fn own_newtype_static(&self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
+    fn own_newtype_static(&mut self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
         let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(target) else {
             return None;
         };
@@ -3043,8 +3038,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `struct_name`'s own impls answer `method_name`, of either kind,
     /// which decides whether a newtype answers a qualified call or its base
     /// does. No newtype fallback here, for that reason.
-    fn declares_method_directly(&self, struct_name: &str, method_name: &str) -> bool {
-        self.impls_answer(&self.impl_target(struct_name), method_name)
+    fn declares_method_directly(&mut self, struct_name: &str, method_name: &str) -> bool {
+        let key = self.impl_target(struct_name);
+        self.impls_answer(&key, method_name)
     }
 
     /// What a qualified call returns, off the declaration it selected where it

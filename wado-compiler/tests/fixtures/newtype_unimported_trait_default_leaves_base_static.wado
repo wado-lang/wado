@@ -1,0 +1,13 @@
+// A newtype's trait impl answers only where its trait is in scope. With `Tr`
+// unimported, `N::mk()` is the base's own `mk`, however many links the call
+// starts above `N`.
+
+use { N, Outer } from "./sub/newtype_unimported_trait_default_lib.wado";
+
+test {
+    assert N::mk() == 1;
+    assert Outer::mk() == 1;
+}
+
+__DATA__
+{"test": {}}
