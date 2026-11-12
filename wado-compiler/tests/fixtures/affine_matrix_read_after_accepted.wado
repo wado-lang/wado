@@ -212,11 +212,9 @@ fn case_8(flag: bool) {
     log_stdout("case 8");
     let t = Tok { id: 8 };
     log_stdout("before");
-    match flag {
-        true => {
-            look_tok(&t);
-        },
-        false => {},
+    if flag {
+        look_tok(&t);
+        return;
     }
     log_stdout("after");
     look_tok(&t);
@@ -226,9 +224,9 @@ fn case_9(flag: bool) {
     log_stdout("case 9");
     let t = Tok { id: 9 };
     log_stdout("before");
-    loop {
-        look_tok(&t);
-        break;
+    if flag {
+        keep(t);
+        return;
     }
     log_stdout("after");
     look_tok(&t);
@@ -238,8 +236,9 @@ fn case_10(flag: bool) {
     log_stdout("case 10");
     let t = Tok { id: 10 };
     log_stdout("before");
-    blk: {
-        look_tok(&t);
+    if flag {
+        let u = pass(t);
+        return;
     }
     log_stdout("after");
     look_tok(&t);
@@ -249,9 +248,9 @@ fn case_11(flag: bool) {
     log_stdout("case 11");
     let t = Tok { id: 11 };
     log_stdout("before");
-    while flag {
-        look_tok(&t);
-        break;
+    if flag {
+        let mut xs: List<Tok> = []; xs.push(t);
+        return;
     }
     log_stdout("after");
     look_tok(&t);
@@ -262,7 +261,7 @@ fn case_12(flag: bool) {
     let t = Tok { id: 12 };
     log_stdout("before");
     if flag {
-        look_tok(&t);
+        let mut o = Option::Some(t); let u = o.take();
         return;
     }
     log_stdout("after");
@@ -274,7 +273,7 @@ fn case_13(flag: bool) {
     let t = Tok { id: 13 };
     log_stdout("before");
     if flag {
-        keep(t);
+        let xs: List<Tok> = [t]; for let x of xs {}
         return;
     }
     log_stdout("after");
@@ -286,7 +285,7 @@ fn case_14(flag: bool) {
     let t = Tok { id: 14 };
     log_stdout("before");
     if flag {
-        let u = pass(t);
+        with Ask => t do { let _ = Ask::ask(); }
         return;
     }
     log_stdout("after");
@@ -298,7 +297,7 @@ fn case_15(flag: bool) {
     let t = Tok { id: 15 };
     log_stdout("before");
     if flag {
-        let mut xs: List<Tok> = []; xs.push(t);
+        let mut sink = Sink { n: 0 }; with SinkTok => &mut sink do { let _ = SinkTok::put(t); }
         return;
     }
     log_stdout("after");
@@ -309,9 +308,11 @@ fn case_16(flag: bool) {
     log_stdout("case 16");
     let t = Tok { id: 16 };
     log_stdout("before");
-    if flag {
-        let mut o = Option::Some(t); let u = o.take();
-        return;
+    match flag {
+        true => {
+            look_tok(&t);
+        },
+        false => {},
     }
     log_stdout("after");
     look_tok(&t);
@@ -321,9 +322,9 @@ fn case_17(flag: bool) {
     log_stdout("case 17");
     let t = Tok { id: 17 };
     log_stdout("before");
-    if flag {
-        let xs: List<Tok> = [t]; for let x of xs {}
-        return;
+    loop {
+        look_tok(&t);
+        break;
     }
     log_stdout("after");
     look_tok(&t);
@@ -333,9 +334,8 @@ fn case_18(flag: bool) {
     log_stdout("case 18");
     let t = Tok { id: 18 };
     log_stdout("before");
-    if flag {
-        with Ask => t do { let _ = Ask::ask(); }
-        return;
+    blk: {
+        look_tok(&t);
     }
     log_stdout("after");
     look_tok(&t);
@@ -345,9 +345,9 @@ fn case_19(flag: bool) {
     log_stdout("case 19");
     let t = Tok { id: 19 };
     log_stdout("before");
-    if flag {
-        let mut sink = Sink { n: 0 }; with SinkTok => &mut sink do { let _ = SinkTok::put(t); }
-        return;
+    while flag {
+        look_tok(&t);
+        break;
     }
     log_stdout("after");
     look_tok(&t);

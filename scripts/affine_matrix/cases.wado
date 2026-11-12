@@ -231,45 +231,70 @@ impl Context {
 }
 
 impl Case {
-    /// Every case: each consumer in each context, and a conditional context
-    /// both taken and skipped. Where `t` comes from bears neither on the order
-    /// of the body's drops nor on what dropping its type does, so only
-    /// `Literal` takes a companion or a type other than `Tok`.
+    /// Each consumer in each context, a conditional context both taken and
+    /// skipped: the pairings the model's rule reads. Where `t` comes from, its
+    /// companion and its type each meet every consumer and every context once
+    /// or more, by turns, rather than every pairing of the two. Where `t` comes
+    /// from bears neither on the order of the body's drops nor on what dropping
+    /// its type does, so only `Literal` takes a companion or a type other than
+    /// `Tok`.
     pub fn all() -> List<Case> {
-        let mut cases: List<Case> = [];
+        let mut kinds: List<[Producer, Companion, Value]> = [];
         for let producer of Producer::all() {
-            let mut shapes: List<[Companion, Value]> = [
-                [None, Tok],
-            ];
-            if producer matches { Literal } {
-                shapes.push([Before, Tok]);
-                shapes.push([After, Tok]);
-                shapes.push([None, Shell]);
-                shapes.push([None, Guard]);
+            kinds.push([producer, None, Tok]);
+        }
+        kinds.push([Literal, Before, Tok]);
+        kinds.push([Literal, After, Tok]);
+        kinds.push([Literal, None, Shell]);
+        kinds.push([Literal, None, Guard]);
+        let mut placements: List<[Context, bool]> = [];
+        for let context of Context::all() {
+            placements.push([context, true]);
+            if context.is_conditional() {
+                placements.push([context, false]);
             }
-            for let [companion, value] of shapes {
-                for let consumer of Consumer::all() {
-                    for let context of Context::all() {
-                        cases.push(Case { producer, companion, value, consumer, context, flag: true });
-                        if context.is_conditional() {
-                            cases.push(Case { producer, companion, value, consumer, context, flag: false });
-                        }
-                    }
-                }
+        }
+        // Each turn needs as many placements as kinds: a consumer then meets
+        // every kind, and a placement meets every kind across the consumers.
+        assert placements.len() >= kinds.len();
+        let consumers = Consumer::all();
+        assert consumers.len() >= kinds.len();
+        let mut cases: List<Case> = [];
+        for let c of 0..<consumers.len() {
+            for let p of 0..<placements.len() {
+                let [producer, companion, value] = kinds[(c + p) % kinds.len()];
+                let [context, flag] = placements[p];
+                cases.push(Case { producer, companion, value, consumer: consumers[c], context, flag });
             }
         }
         return cases;
     }
 
-    pub fn label(&self) -> String {
-        return `${self.producer:?} ${self.value:?} (companion ${self.companion:?}), ${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
-    }
-
-    /// Whether the case varies only its consumer, context and flag. Where `t`
-    /// comes from, its type and its companion do not decide whether a
-    /// program compiles.
-    pub fn is_plain(&self) -> bool {
-        return self.producer matches { Literal } && self.companion matches { None } && self.value matches { Tok };
+    /// The plain case of each consumer in `If` and in `Straight`, of each
+    /// context under a `Call` and a `Borrow`, and of each consumer where
+    /// `IfReturn` leaves before the read: what a probe of the move check asks
+    /// of every consumer and of every context. Where `t` comes from, its type
+    /// and its companion do not decide whether a program compiles, and `flag`
+    /// is only read at run time, so one value of each suffices.
+    pub fn probed() -> List<Case> {
+        let mut pairs: List<[Consumer, Context]> = [];
+        for let consumer of Consumer::all() {
+            pairs.push([consumer, Straight]);
+            pairs.push([consumer, If]);
+            pairs.push([consumer, IfReturn]);
+        }
+        for let context of Context::all() {
+            pairs.push([Call, context]);
+            pairs.push([Borrow, context]);
+        }
+        let mut cases: List<Case> = [];
+        for let [consumer, context] of pairs {
+            let case = Case { producer: Literal, companion: None, value: Tok, consumer, context, flag: true };
+            if !cases.into_iter().any(|c| c.consumer == consumer && c.context == context) {
+                cases.push(case);
+            }
+        }
+        return cases;
     }
 
     fn runs_consumer(&self) -> bool {

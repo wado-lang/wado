@@ -145,11 +145,9 @@ fn case_2(flag: bool) {
     let t = Tok { id: 2 };
     log_stdout("before");
     let f = || {
-        match flag {
-            true => {
-                look_tok(&t);
-            },
-            false => {},
+        if flag {
+            look_tok(&t);
+            return;
         }
     };
     f();
@@ -161,9 +159,11 @@ fn case_3(flag: bool) {
     let t = Tok { id: 3 };
     log_stdout("before");
     let f = || {
-        loop {
-            look_tok(&t);
-            break;
+        match flag {
+            true => {
+                look_tok(&t);
+            },
+            false => {},
         }
     };
     f();
@@ -175,8 +175,9 @@ fn case_4(flag: bool) {
     let t = Tok { id: 4 };
     log_stdout("before");
     let f = || {
-        blk: {
+        loop {
             look_tok(&t);
+            break;
         }
     };
     f();
@@ -188,9 +189,8 @@ fn case_5(flag: bool) {
     let t = Tok { id: 5 };
     log_stdout("before");
     let f = || {
-        while flag {
+        blk: {
             look_tok(&t);
-            break;
         }
     };
     f();
@@ -202,9 +202,9 @@ fn case_6(flag: bool) {
     let t = Tok { id: 6 };
     log_stdout("before");
     let f = || {
-        if flag {
+        while flag {
             look_tok(&t);
-            return;
+            break;
         }
     };
     f();

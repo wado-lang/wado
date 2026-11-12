@@ -1,6 +1,6 @@
 //! Writes the `affine_matrix_*` e2e fixtures from the cases in `cases.wado`:
-//! the drop order of every case, a few hundred to a fixture, and each pairing a
-//! probe rejects as a fixture of its own, since a rejection names no case. The
+//! the drop order of every case in one fixture, and each pairing a probe
+//! rejects as a fixture of its own, since a rejection names no case. The
 //! pairings a probe accepts share one fixture per probe.
 //!
 //! Run from the repository root: `mise run gen-affine-matrix`.
@@ -13,10 +13,6 @@ use { Case, expected, in_closure_program, program, read_after_program } from "./
 global FIXTURES: String = "wado-compiler/tests/fixtures";
 global PREFIX: String = "affine_matrix_";
 
-/// Cases per drop-order fixture: one holding them all compiles for minutes at
-/// `-O3`.
-global CHUNK: i32 = 200;
-
 global READ_AFTER_MOVE: String = "affine value `t` used after it was moved";
 global MOVE_IN_CLOSURE: String = "a closure captures `t` by reference, so its body cannot move it";
 
@@ -27,18 +23,10 @@ export fn run() with Preopens {
         }
     }
     let all = Case::all();
-    for let start of (0..<all.len()).step_by(CHUNK) {
-        let mut cases: List<Case> = [];
-        for let i of start..<i32::min(start + CHUNK, all.len()) {
-            cases.push(all[i]);
-        }
-        write(`drops_${start / CHUNK}`, &program(&cases), stdout_is(&expected(&cases)));
-    }
-    // `flag` is only read at run time, so one value of it suffices.
-    let probed: List<Case> = all.into_iter().filter(|c| c.is_plain() && c.flag).collect();
+    write("drops", &program(&all), stdout_is(&expected(&all)));
     let mut readable: List<Case> = [];
     let mut borrowing: List<Case> = [];
-    for let case of probed {
+    for let case of Case::probed() {
         if case.readable_after() {
             readable.push(case);
         } else {
