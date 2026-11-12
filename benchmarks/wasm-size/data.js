@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794449126274,
+  "lastUpdate": 1794459902801,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76749,6 +76749,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d4f27ab28b4c1a7926a0b6aeaf0bdb7df3787f70"
         },
         "date": 1794449125080,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21815,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 429302,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0c5399441010e924265d7984c22d3d80968d4942",
+          "message": "Merge pull request #2610 from wado-lang/ccr-fcd51a39-e9jsrm\n\nfix(elaborator): a pack spread beside fixed elements binds in impl targets and bounds",
+          "timestamp": "2026-11-12T13:44:03+09:00",
+          "tree_id": "c102469d377196398180eabd716f2887907bb7ca",
+          "url": "https://github.com/wado-lang/wado/commit/0c5399441010e924265d7984c22d3d80968d4942"
+        },
+        "date": 1794459901695,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
