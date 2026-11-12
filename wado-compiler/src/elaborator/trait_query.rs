@@ -2506,18 +2506,15 @@ impl TypeSystem {
         self.signatures.trait_sig(*key)
     }
 
-    /// The types `param`'s bounds and kind fall on at `type_arg`.
+    /// The types a bound falls on at `type_arg`: each element where the bound
+    /// is on a pack, `type_arg` itself otherwise.
     ///
     /// `..T: Foo` binds every element of the pack, not the tuple that carries
     /// them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and `String: Foo`, never
     /// `[i32, String]: Foo`, which would ask for a variadic impl of `Foo` for
     /// tuples. A non-tuple argument is a pack of one.
-    pub(super) fn bound_subjects(
-        &self,
-        param: &ast::GenericParam,
-        type_arg: TypeId,
-    ) -> Vec<TypeId> {
-        if param.is_pack {
+    pub(super) fn bound_subjects(&self, each_element: bool, type_arg: TypeId) -> Vec<TypeId> {
+        if each_element {
             self.type_table.borrow().elem_types_or_self(type_arg)
         } else {
             vec![type_arg]
@@ -2648,7 +2645,7 @@ impl TypeSystem {
             .filter_map(|b| self.bound_written(b))
             .map(|bound| spelled_at(&bound, at))
             .collect();
-        self.bound_subjects(declared, type_arg)
+        self.bound_subjects(declared.is_pack, type_arg)
             .into_iter()
             .find_map(|subject| {
                 let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
@@ -2866,7 +2863,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            let subjects = self.tysys.bound_subjects(param, type_arg);
+            let subjects = self.tysys.bound_subjects(param.is_pack, type_arg);
             let rigid = self
                 .tysys
                 .solver()

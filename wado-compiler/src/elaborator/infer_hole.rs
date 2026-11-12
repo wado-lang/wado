@@ -761,12 +761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }) {
             return false;
         }
-        let subjects = if link.each_element {
-            self.tysys.pack_elements(owner)
-        } else {
-            vec![owner]
-        };
-        for subject in subjects {
+        for subject in self.tysys.bound_subjects(link.each_element, owner) {
             self.settle_projection_of(link, subject, written.as_deref());
         }
         true
@@ -853,12 +848,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         for (solution, param_name, bound, span) in checks {
-            let subjects = if bound.each_element {
-                self.tysys.pack_elements(solution)
-            } else {
-                vec![solution]
-            };
-            for subject in subjects {
+            for subject in self.tysys.bound_subjects(bound.each_element, solution) {
                 self.enforce_single_bound_args(
                     subject,
                     &bound.written,
