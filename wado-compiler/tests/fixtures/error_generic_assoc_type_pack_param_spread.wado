@@ -1,5 +1,6 @@
-// A generic associated type's pack parameter is rejected where it is
-// declared, and a spread of it in a bound or a binding reports nothing more.
+//! A generic associated type's pack parameter is rejected where each of the
+//! trait and the impl declares it, and a spread of it in a bound or a binding
+//! reports nothing more.
 
 trait Tr<X> with () {}
 
@@ -17,5 +18,5 @@ export fn run() {}
 
 __DATA__
 {
-  "compile_error": ":7:17: analysis error: associated type `Packed` takes only plain type parameters, which `T` is not"
+  "compile_error": ":14:17: analysis error: associated type `Packed` takes only plain type parameters, which `T` is not; 8:17: associated type `Packed` takes only plain type parameters, which `T` is not"
 }
