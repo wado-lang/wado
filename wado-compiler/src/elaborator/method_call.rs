@@ -2859,7 +2859,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             monomorph_info: Some(MonomorphInfo {
                 generic_name: template_name,
                 impl_type_args: vec![receiver_type_id],
-                method_type_args: method_type_args.to_vec(),
+                method_type_args: method_type_args.clone(),
                 is_blanket: true,
             }),
             method_info: Some(method_info),
@@ -2885,7 +2885,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 defaults_module,
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),
-                type_args: method_type_args.to_vec(),
+                type_args: method_type_args,
                 param_defaults: static_method_defaults,
                 param_types,
                 self_in_args: false,
