@@ -2408,7 +2408,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match &order {
             Some(Ordered::AmbiguousBlankets(defs)) => {
                 let receiver = receiver_type_id.expect("the order answers a receiver it can say");
-                // A turbofish no tied impl takes leaves no tie to report.
+                // The tied blocks yield no match only after an error already
+                // reported, as the assert above allows.
                 if let [first, ..] = found_traits.as_slice() {
                     let trait_ = self.trait_at(first.trait_decl, &first.trait_args);
                     self.report_tied_impls(defs, &trait_, receiver, span);

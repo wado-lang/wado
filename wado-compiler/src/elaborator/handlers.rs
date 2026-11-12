@@ -293,7 +293,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn collect_effect_impls_for_type(
         &self,
         handler_type: TypeId,
-    ) -> (Vec<HandlerEffectEntry>, Vec<(Vec<Option<DefId>>, FqTraitName)>) {
+    ) -> (
+        Vec<HandlerEffectEntry>,
+        Vec<(Vec<Option<DefId>>, FqTraitName)>,
+    ) {
         let defs = self.tysys.resolutions.defs();
         let mut out: Vec<HandlerEffectEntry> = Vec::new();
         let mut ties: Vec<(Vec<Option<DefId>>, FqTraitName)> = Vec::new();
