@@ -776,26 +776,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some((link_key, link_name))
     }
 
-    /// The link down the newtype `key`'s chain that a static named
-    /// `method_name` is inherited from: the first whose own impls answer it,
-    /// else the chain's last link.
-    pub(super) fn newtype_static_target(
-        &mut self,
-        key: &trait_env::ImplTargetKey,
-        method_name: &str,
-    ) -> Option<(trait_env::ImplTargetKey, String)> {
-        let mut link = self.newtype_link_target(key)?;
-        loop {
-            if self.impls_answer(&link.0, method_name, None) {
-                return Some(link);
-            }
-            match self.newtype_link_target(&link.0) {
-                Some(next) => link = next,
-                None => return Some(link),
-            }
-        }
-    }
-
     /// The declaration a `Type::method` call resolves to, seeing through a
     /// transparent alias. Every site that records the use→def edge for such a
     /// call ends its ladder here, so none of them stops one alias short.

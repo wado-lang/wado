@@ -253,6 +253,64 @@ struct Candidate {
     return_type: TypeId,
 }
 
+/// The link of a newtype chain a static call belongs to: the first, from the
+/// spelled head down, whose own impls, cases or derivations answer the name.
+pub(super) struct StaticOwner {
+    pub(super) key: ImplTargetKey,
+    pub(super) name: String,
+    /// The link's type, where the call knows the head's.
+    pub(super) ty: Option<TypeId>,
+    /// The spelled head's type, where the owner is a link below it.
+    pub(super) head: Option<TypeId>,
+    below_head: bool,
+    /// The nearest link that left traits out of scope, which a report names
+    /// where no link answers.
+    nearest: Option<(String, Vec<Candidate>)>,
+}
+
+impl StaticOwner {
+    /// `query` asked of this link. Below the head the caller's site and key
+    /// name another type, so the link's own key stands for both.
+    fn query<'q>(&'q self, query: &StaticQuery<'q>) -> StaticQuery<'q> {
+        let (site, receiver_key) = if self.below_head {
+            (None, Some(&self.key))
+        } else {
+            (query.site, query.receiver_key)
+        };
+        StaticQuery {
+            site,
+            receiver_key,
+            receiver_name: &self.name,
+            receiver_type: self.ty,
+            ..*query
+        }
+    }
+
+    fn out_of_scope_lookup<H: CompilerHost>(
+        self,
+        e: &Elaborator<'_, H>,
+        out_of_scope: Vec<Candidate>,
+    ) -> StaticLookup {
+        let (name, out_of_scope) = self.nearest.unwrap_or((self.name, out_of_scope));
+        e.out_of_scope_lookup(&name, &out_of_scope)
+    }
+}
+
+/// What one link offers a name, read without the call's arguments.
+enum LinkOffer {
+    /// A case or member the link declares: not a call.
+    NotStatic,
+    Candidates {
+        reached: Vec<Candidate>,
+        out_of_scope: Vec<Candidate>,
+        declaring_args: Vec<TypeId>,
+    },
+    Derived(Box<StaticCallee>),
+    Nothing {
+        out_of_scope: Vec<Candidate>,
+    },
+}
+
 /// Narrow to the candidates the rule prefers, where any of them qualifies.
 /// A rule that no candidate satisfies decides nothing and leaves the field.
 fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
@@ -311,94 +369,98 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve what `query`'s spelling names, once, for every site that used to
     /// ask its own question.
     pub(super) fn resolve_static_callee(&mut self, query: StaticQuery<'_>) -> StaticLookup {
-        self.resolve_static_callee_inherited(query, None, None)
-    }
-
-    /// [`Self::resolve_static_callee`] at one link of the newtype chain whose
-    /// head `inheriting` the call spelled. The arguments and the expected type
-    /// read that head as this link, and a callee this link declares reads the
-    /// link as the head; no other link is rewritten either way (`spec-types`,
-    /// "Method Signature Substitution"). `nearest` is the first link above
-    /// that left trait candidates out of scope, which a chain no link answers
-    /// reports.
-    fn resolve_static_callee_inherited(
-        &mut self,
-        query: StaticQuery<'_>,
-        inheriting: Option<TypeId>,
-        nearest: Option<(String, Vec<Candidate>)>,
-    ) -> StaticLookup {
-        let StaticQuery {
-            site,
-            receiver_name,
-            receiver_key,
-            method_name,
-            arg_types: written_args,
-            receiver_type,
-            receiver_args,
-            method_args,
-            required_trait,
-            expected_return,
-        } = query;
-        let link = inheriting.zip(receiver_type);
+        let (owner, offer) = self.static_owner_walk(&query);
+        // The arguments and the expected type read the spelled head as the
+        // owner, and a callee the owner declares reads the owner as the head;
+        // no other link is rewritten either way (`spec-types`, "Method
+        // Signature Substitution").
+        let link = owner.head.zip(owner.ty);
         let at_link = |e: &Self, ty: TypeId| match link {
             Some((head, link)) => e.tysys.substitute_newtype_in_type(ty, head, link),
             None => ty,
         };
-        let arg_types: Vec<TypeId> = written_args.iter().map(|&t| at_link(self, t)).collect();
-        let answered = self.resolve_static_callee_at_link(StaticQuery {
-            site,
-            receiver_name,
-            receiver_key,
-            method_name,
+        let arg_types: Vec<TypeId> = query.arg_types.iter().map(|&t| at_link(self, t)).collect();
+        let at = StaticQuery {
             arg_types: &arg_types,
-            receiver_type,
-            receiver_args,
-            method_args,
-            required_trait,
-            expected_return: expected_return.map(|t| at_link(self, t)),
-        });
-        let out_of_scope = match answered {
-            Ok(mut lookup) => {
-                if let (StaticLookup::Found(callee), Some((head, link))) = (&mut lookup, link) {
-                    self.retype_callee(callee, link, head);
-                }
-                return lookup;
-            }
-            Err(out_of_scope) => out_of_scope,
+            expected_return: query.expected_return.map(|t| at_link(self, t)),
+            ..owner.query(&query)
         };
-        // A newtype reaches what it wraps, one link of a chain at a time, so a
-        // link's own impls answer before its base's. Read from
-        // the alias's declaration, since a namespaced `lib::Q::twice()` leaves
-        // the caller's frame no `Q` to look one up by.
-        let key = match receiver_key {
-            Some(key) => key.clone(),
-            None => self.impl_target_at(site, receiver_name),
-        };
-        let nearest = nearest.or_else(|| {
-            (!out_of_scope.is_empty()).then(|| (receiver_name.to_string(), out_of_scope))
-        });
-        let Some((link_key, link_name)) = self.newtype_link_target(&key) else {
-            let (name, out_of_scope) =
-                nearest.unwrap_or_else(|| (receiver_name.to_string(), Vec::new()));
-            return self.out_of_scope_lookup(&name, &out_of_scope);
-        };
-        let link_type = receiver_type.and_then(|ty| self.tysys.type_table.borrow().link_below(ty));
-        self.resolve_static_callee_inherited(
-            StaticQuery {
-                site: None,
-                receiver_name: &link_name,
-                receiver_key: Some(&link_key),
-                method_name,
-                arg_types: written_args,
-                receiver_type: link_type.or(receiver_type),
-                receiver_args,
-                method_args,
-                required_trait,
-                expected_return,
+        let mut lookup = match offer {
+            LinkOffer::NotStatic => return StaticLookup::NotStatic,
+            LinkOffer::Derived(callee) => StaticLookup::Found(callee),
+            LinkOffer::Candidates {
+                reached,
+                out_of_scope,
+                declaring_args,
+            } => match self.select_at_link(at, &owner.key, reached, &declaring_args) {
+                Some(lookup) => lookup,
+                None => match self.derived_callee(&at, &owner.key) {
+                    Some(callee) => StaticLookup::Found(callee),
+                    None => return owner.out_of_scope_lookup(self, out_of_scope),
+                },
             },
-            inheriting.or(receiver_type),
-            nearest,
-        )
+            LinkOffer::Nothing { out_of_scope } => {
+                return owner.out_of_scope_lookup(self, out_of_scope);
+            }
+        };
+        if let (StaticLookup::Found(callee), Some((head, link))) = (&mut lookup, link) {
+            self.retype_callee(callee, link, head);
+        }
+        lookup
+    }
+
+    /// The link of the newtype chain `query`'s receiver heads that the call
+    /// belongs to, and what it offers: the first, from the head down, whose
+    /// own impls, cases or derivations answer the name. Read without the
+    /// arguments, so a site that needs the callee's frame before they are
+    /// elaborated reads the link the resolution then selects in. A link the
+    /// name reaches owns the call even where no declaration there admits the
+    /// arguments (`spec-types`, "Inherited Associated Functions and Traits").
+    fn static_owner_walk(&mut self, query: &StaticQuery<'_>) -> (StaticOwner, LinkOffer) {
+        // One vantage: the key the caller resolved, else the one its reference
+        // site answered for, else the name's own. Deriving a second key when
+        // the first misses makes the order a silent tiebreak.
+        let mut owner = StaticOwner {
+            key: match query.receiver_key {
+                Some(key) => key.clone(),
+                None => self.impl_target_at(query.site, query.receiver_name),
+            },
+            name: query.receiver_name.to_string(),
+            ty: query.receiver_type,
+            head: None,
+            below_head: false,
+            nearest: None,
+        };
+        loop {
+            let offer = self.link_offer(&owner.query(query), &owner.key);
+            let LinkOffer::Nothing { out_of_scope } = offer else {
+                return (owner, offer);
+            };
+            // A newtype reaches what it wraps, one link of a chain at a time,
+            // so a link's own impls answer before its base's. Read from the
+            // alias's declaration, since a namespaced `lib::Q::twice()` leaves
+            // the caller's frame no `Q` to look one up by.
+            let Some((link_key, link_name)) = self.newtype_link_target(&owner.key) else {
+                return (owner, LinkOffer::Nothing { out_of_scope });
+            };
+            if owner.nearest.is_none() && !out_of_scope.is_empty() {
+                owner.nearest = Some((owner.name.clone(), out_of_scope));
+            }
+            let link_type = owner
+                .ty
+                .and_then(|ty| self.tysys.type_table.borrow().link_below(ty));
+            owner.head = query.receiver_type;
+            owner.below_head = true;
+            owner.ty = link_type.or(owner.ty);
+            owner.key = link_key;
+            owner.name = link_name;
+        }
+    }
+
+    /// [`Self::static_owner_walk`]'s link alone, for a site that reads the
+    /// callee's frame before the call resolves.
+    pub(super) fn static_owner(&mut self, query: &StaticQuery<'_>) -> StaticOwner {
+        self.static_owner_walk(query).0
     }
 
     /// Every declaration of `query`'s method the receiver at `key` supplies,
@@ -444,37 +506,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// What this link answers, or, where it answers nothing, the trait
-    /// candidates it left out of scope.
-    fn resolve_static_callee_at_link(
-        &mut self,
-        query: StaticQuery<'_>,
-    ) -> Result<StaticLookup, Vec<Candidate>> {
-        let StaticQuery {
-            site,
-            receiver_name,
-            receiver_key,
-            method_name,
-            arg_types,
-            receiver_type,
-            receiver_args,
-            method_args,
-            required_trait,
-            expected_return,
-        } = query;
-        // One vantage: the key the caller resolved, else the one its reference
-        // site answered for, else the name's own. Deriving a second key when
-        // the first misses makes the order a silent tiebreak.
-        let key = match receiver_key {
-            Some(key) => key.clone(),
-            None => self.impl_target_at(site, receiver_name),
-        };
-
+    /// What the link at `key` offers `query`'s name, read without the
+    /// arguments.
+    fn link_offer(&mut self, query: &StaticQuery<'_>, key: &ImplTargetKey) -> LinkOffer {
         let declaring_args = self
             .tysys
-            .receiver_declaring_args(receiver_type, receiver_args, key.decl())
+            .receiver_declaring_args(query.receiver_type, query.receiver_args, key.decl())
             .unwrap_or_default();
-        let (candidates, out_of_scope) = self.link_candidates(&query, &key, &declaring_args);
+        let (reached, out_of_scope) = self.link_candidates(query, key, &declaring_args);
 
         // A case or member the receiver declares is written on the type, and
         // shadows a static it only *inherits*: its own arm builds the
@@ -482,30 +521,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the receiver's own declaration — that is a type declaring one name
         // twice, and answering with the case would hide it — nor what a
         // qualified spelling's trait supplies.
-        if required_trait.is_none()
-            && !candidates.iter().any(|c| c.supply.is_none())
-            && self.declares_case_named(&key, method_name)
+        if query.required_trait.is_none()
+            && !reached.iter().any(|c| c.supply.is_none())
+            && self.declares_case_named(key, query.method_name)
         {
-            return Ok(StaticLookup::NotStatic);
+            return LinkOffer::NotStatic;
         }
+        if !reached.is_empty() {
+            return LinkOffer::Candidates {
+                reached,
+                out_of_scope,
+                declaring_args,
+            };
+        }
+        match self.derived_callee(query, key) {
+            Some(callee) => LinkOffer::Derived(callee),
+            None => LinkOffer::Nothing { out_of_scope },
+        }
+    }
 
-        let resolved = match self.select_candidate(
+    /// The declaration the arguments select among the owner's `candidates`,
+    /// `None` where they select none.
+    fn select_at_link(
+        &mut self,
+        query: StaticQuery<'_>,
+        key: &ImplTargetKey,
+        candidates: Vec<Candidate>,
+        declaring_args: &[TypeId],
+    ) -> Option<StaticLookup> {
+        let StaticQuery {
+            receiver_name,
+            method_name,
+            arg_types,
+            receiver_type,
+            receiver_args,
+            method_args,
+            expected_return,
+            ..
+        } = query;
+        match self.select_candidate(
             candidates,
             arg_types,
-            &declaring_args,
+            declaring_args,
             receiver_type,
             expected_return,
         ) {
             Selection::One(candidate) => self.callee_of_candidate(
-                (receiver_name, &key),
+                (receiver_name, key),
                 method_name,
                 &candidate,
                 receiver_type,
                 (receiver_args, method_args),
             ),
-            Selection::Ambiguous(alternatives) => {
-                return Ok(StaticLookup::Ambiguous(alternatives));
-            }
+            Selection::Ambiguous(alternatives) => Some(StaticLookup::Ambiguous(alternatives)),
             // Nothing picked a declaration, so there is none to mangle and no
             // list to check. `i32::from(b)` names one `From` impl per source
             // type, and the call site's own preselect is what reads the
@@ -516,98 +584,98 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let on_never =
                     receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
                 let traits = if on_never { Vec::new() } else { traits };
-                return Ok(self.overloaded_callee(&key, method_name, traits));
+                Some(self.overloaded_callee(key, method_name, traits))
             }
-            Selection::Tied { blocks, trait_args } => {
-                return Ok(StaticLookup::Tied {
-                    receiver: receiver_name.to_string(),
-                    blocks,
-                    trait_args,
-                });
-            }
+            Selection::Tied { blocks, trait_args } => Some(StaticLookup::Tied {
+                receiver: receiver_name.to_string(),
+                blocks,
+                trait_args,
+            }),
             Selection::None => None,
-        };
-        if let Some(resolved) = resolved {
-            return Ok(resolved);
         }
+    }
 
+    /// What a derivation answers the name with at `key`, where no declaration
+    /// does. A newtype derives nothing itself: it inherits what the link it
+    /// wraps derives, which then owns the call.
+    fn derived_callee(
+        &mut self,
+        query: &StaticQuery<'_>,
+        key: &ImplTargetKey,
+    ) -> Option<Box<StaticCallee>> {
+        if self.newtype_link_target(key).is_some() {
+            return None;
+        }
+        let method_name = query.method_name;
         // The auto-derived `Default`: synthesis emits the body, so no
         // declaration backs it. It takes no arguments and answers with the
         // receiver's own type.
-        if let Some((method_ref, return_type)) = self.auto_derived_default_ref(&key, method_name) {
-            return Ok(StaticLookup::Found(Box::new(StaticCallee {
+        if let Some((method_ref, return_type)) = self.auto_derived_default_ref(key, method_name) {
+            return Some(Box::new(StaticCallee {
                 params: CalleeParams::default(),
                 own_params: Vec::new(),
                 return_type,
                 method_ref,
-            })));
+            }));
         }
         // The auto-derived `eq` / `cmp`, which the method-call spelling reaches
         // through the same derivation: the receiver leads the arguments.
         let derived_receiver = match key.decl() {
             Some(def) if self.tysys.auto_derive_by_method(method_name).is_some() => {
-                self.derived_receiver_type(def, receiver_type, receiver_args)
+                self.derived_receiver_type(def, query.receiver_type, query.receiver_args)
             }
-            Some(_) | None => receiver_type.map(|receiver| (receiver, DerivedAt::Instance)),
+            Some(_) | None => query
+                .receiver_type
+                .map(|receiver| (receiver, DerivedAt::Instance)),
         };
-        if let Some((receiver_type, at)) = derived_receiver
-            && let Some(derived) =
-                self.try_auto_derived_method_match(method_name, receiver_type, at)
-        {
-            let mut callee = self.derived_instance_callee(derived, method_name, receiver_type);
-            self.retype_to_newtype(&mut callee, receiver_type);
-            return Ok(StaticLookup::Found(Box::new(callee)));
-        }
-
-        Err(out_of_scope)
+        let (receiver_type, at) = derived_receiver?;
+        let derived = self.try_auto_derived_method_match(method_name, receiver_type, at)?;
+        Some(Box::new(self.derived_instance_callee(
+            derived,
+            method_name,
+            receiver_type,
+        )))
     }
 
-    /// Whether `key`'s own impls answer `method_name` for a call here, as
-    /// [`Self::link_candidates`] reads them for the resolution: a trait's
-    /// default counts, a trait out of scope does not, and a qualified
-    /// spelling's `required_trait` alone does. A link that does answers a
-    /// newtype's call before the type it wraps.
-    pub(super) fn impls_answer(
-        &mut self,
-        key: &ImplTargetKey,
-        method_name: &str,
-        required_trait: Option<DefId>,
-    ) -> bool {
-        let Some(name) = key
-            .decl_name(self.tysys.resolutions.defs())
-            .map(str::to_string)
-        else {
-            return false;
-        };
-        let query = StaticQuery {
-            receiver_key: Some(key),
-            required_trait,
-            ..StaticQuery::of(&name, method_name)
-        };
-        let (reached, _) = self.link_candidates(&query, key, &[]);
-        !reached.is_empty()
-    }
-
-    /// The link below `newtype` on its chain that [`Self::newtype_static_target`]
-    /// answers with, and its key, where that link is itself a newtype or a
-    /// `flags`: its statics answer before the base's.
-    pub(super) fn newtype_link_declaring(
+    /// The link of `newtype`'s chain its static named `method_name` belongs
+    /// to, through `required_trait` where the spelling names one: the link's
+    /// type and key. `None` where `newtype` is no newtype.
+    pub(super) fn newtype_static_owner(
         &mut self,
         newtype: TypeId,
         method_name: &str,
+        required_trait: Option<DefId>,
     ) -> Option<(TypeId, ImplTargetKey)> {
         let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(newtype) else {
             return None;
         };
-        let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-        let (link_key, _) = self.newtype_static_target(&key, method_name)?;
-        let table = self.tysys.type_table.borrow();
-        let link = table.link_declared_on(newtype, link_key.decl()?)?;
-        let declares = matches!(
-            table.get(link),
-            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
-        );
-        declares.then_some((link, link_key))
+        let defs = self.tysys.resolutions.defs();
+        let key = ImplTargetKey::of_decl(defs, def);
+        let name = defs.name(def).to_string();
+        let owner = self.static_owner(&StaticQuery {
+            receiver_key: Some(&key),
+            receiver_type: Some(newtype),
+            required_trait,
+            ..StaticQuery::of(&name, method_name)
+        });
+        Some((owner.ty?, owner.key))
+    }
+
+    /// The link below the newtype `key` its static named `method_name`
+    /// belongs to, with its name. `None` where `key` is no newtype, or where
+    /// its own impls answer the name.
+    pub(super) fn newtype_static_target(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<(ImplTargetKey, String)> {
+        self.newtype_link_target(key)?;
+        let name = key.decl_name(self.tysys.resolutions.defs())?.to_string();
+        let owner = self.static_owner(&StaticQuery {
+            receiver_key: Some(key),
+            ..StaticQuery::of(&name, method_name)
+        });
+        (owner.key != *key).then_some((owner.key, owner.name))
     }
 
     /// The base `receiver` wraps, if it is a newtype, and `arg_types` as that
@@ -648,19 +716,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             arg_types.iter().copied().map(represent).collect(),
             expected.map(represent),
         )
-    }
-
-    /// The derived `callee` as a newtype inherits it: the chain's end, which
-    /// the derivation is written for, becomes `receiver` in each parameter and
-    /// the return type (`spec-types`, "Method Signature Substitution"). Any
-    /// other receiver is left as is.
-    fn retype_to_newtype(&self, callee: &mut StaticCallee, receiver: TypeId) {
-        let base = self
-            .tysys
-            .type_table
-            .borrow()
-            .inherited_base(receiver, None);
-        self.retype_callee(callee, base, receiver);
     }
 
     /// `callee` with `from` read as `to` in each parameter and the return type.

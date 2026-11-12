@@ -809,6 +809,42 @@ b.push(0xff);
 assert b.len() == 1 && b[0] == 0xff;
 ```
 
+On a chain of newtypes, one link answers a static: the first, from the spelled
+newtype down, whose own declarations answer its name. Its impls and cases
+count, and so does a trait default its impl leaves to answer. A derived trait
+counts at the type it is derived for, never at a newtype, which inherits it. The
+arguments then select among that link's declarations only. A link below it is
+not asked, even where its declaration would take the arguments. Here `Base`
+declares `fn mk(x: i32) -> i32`, so `N::mk(1)` is an argument error, not a call
+of `Base::mk`:
+
+<!-- {"fixture":"newtype_link_owns_static.wado"} -->
+
+```wado
+type N = Base;
+
+impl Conv<String> for N {
+    fn mk(t: String) -> i32 {
+        return t.len();
+    }
+}
+
+impl Conv<bool> for N {
+    fn mk(t: bool) -> i32 {
+        return if t { 1 } else { 0 };
+    }
+}
+
+type Outer = N;
+
+test {
+    assert Base::mk(7) == 7;
+    assert N::mk("abc") == 3;
+    assert N::mk(true) == 1;
+    assert Outer::mk("ab") == 2;
+}
+```
+
 A newtype implements every trait its base implements. It satisfies a bound
 the base satisfies (`fn max<T: Ord>(a: T, b: T)` takes two `Meters`). `for-of`
 iterates it as it iterates the base, by value and through `&`, and `collect()`

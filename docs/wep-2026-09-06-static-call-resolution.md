@@ -99,8 +99,9 @@ leave the namespaced spelling to fall through to an unknown function.
 The lookups differed less on _where they looked_ than on what they did when they
 did not fully find something, so each of these had to be named:
 
-- A rung that cannot resolve falls through to the next. It is not a spelling
-  that names nothing.
+- A link of a newtype chain that offers nothing for the name passes the call to
+  the link below. A link that offers something keeps it, whatever the arguments
+  then select (see below).
 - A declaration whose slots the receiver has not filled resolves, and has a
   return type. Only the _types_ wait on the receiver: how many parameters there
   are, what they are called and which carry defaults are the declaration's own,
@@ -246,6 +247,30 @@ call: a receiver-taking declaration has the receiver at argument zero, so its
 own parameters begin at argument one. Reading from argument zero for both kinds
 compares a receiver against the parameter two impls differ on, which separates
 nothing and admits nothing.
+
+### The owning link is decided before the arguments
+
+On a chain of newtypes, the call belongs to the first link, from the spelled
+head down, that offers anything for the name: a declaration its impls reach,
+a trait default its impl leaves to answer, a case it declares, or a derivation.
+A newtype derives nothing itself, so a derivation is offered at the link it is
+written for. `static_owner_walk` finds the owner without reading the arguments,
+and the selection then runs among that link's candidates only.
+
+The arguments cannot decide it, because they are typed against the owner. A
+site that resolves the parameter list first, to give each argument its expected
+type, needs the owner before any argument exists. Choosing the link by whether
+its candidates admit the arguments made that circular. Each early site guessed
+the owner with a name-based predicate of its own, and the resolution then chose
+by the arguments, so two answers existed for one call. Every review of the
+newtype static paths found another site where the guess and the resolution
+parted.
+
+The rule adds no rejection a caller could see. A link whose candidates the
+arguments rejected used to pass the call down, but the call site had already
+typed the arguments against that link and reported the mismatch, so the base
+never answered. The rule states what callers already saw, and the sites that
+need the owner early ask the walk for it.
 
 ### The receiver fills the declaring slots, once
 

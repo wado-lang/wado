@@ -1877,13 +1877,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // lookup (follow newtypes to base). The canonical key disambiguates
         // two modules' same-named structs whose methods both live in the
         // global `ImplMethodIndex`.
-        let own_static =
-            self.own_newtype_static(target_type_id, &static_call.method, required_trait);
-        let inherited = own_static.is_none();
-        let declaring_key = own_static.or_else(|| {
-            self.newtype_link_declaring(target_type_id, &static_call.method)
-                .map(|(_, key)| key)
-        });
+        let owner =
+            self.newtype_static_owner(target_type_id, &static_call.method, required_trait);
+        let inherited = !owner
+            .as_ref()
+            .is_some_and(|(link, _)| *link == target_type_id);
+        let declaring_key = owner
+            .filter(|(link, _)| self.is_declaring_link(*link))
+            .map(|(_, key)| key);
         let (struct_name_for_lookup, struct_key_for_lookup) = match declaring_key {
             Some(key) => (
                 key.decl_name(self.tysys.resolutions.defs())
@@ -2998,8 +2999,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The receiver a qualified call on a newtype names: the newtype where it
-    /// declares `method` itself, else the base it inherits the method from.
+    /// The receiver a qualified call on a newtype names: the link of its chain
+    /// that owns `method` where that is a newtype or a `flags`, else the base
+    /// it inherits the method from.
     fn newtype_static_receiver(
         &mut self,
         newtype: TypeId,
@@ -3007,12 +3009,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         required_trait: Option<DefId>,
     ) -> QualifiedReceiver {
-        let own_static = self.own_newtype_static(newtype, method, required_trait);
+        let owner = self
+            .newtype_static_owner(newtype, method, required_trait)
+            .map(|(link, _)| link)
+            .filter(|&link| self.is_declaring_link(link));
         let type_table = self.tysys.type_table.borrow();
-        let own = nominal_receiver(&type_table, newtype);
-        if own_static.is_some() {
-            return own;
+        if let Some(link) = owner {
+            return nominal_receiver(&type_table, link);
         }
+        let own = nominal_receiver(&type_table, newtype);
         if type_table.instance_parts(base).is_some() {
             return nominal_receiver(&type_table, base);
         }
@@ -3030,21 +3035,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The newtype `target`'s own key, where its own impls answer `method`,
-    /// through `required_trait` where the spelling names one: that
-    /// declaration shadows the one its base supplies.
-    fn own_newtype_static(
-        &mut self,
-        target: TypeId,
-        method: &str,
-        required_trait: Option<DefId>,
-    ) -> Option<ImplTargetKey> {
-        let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(target) else {
-            return None;
-        };
-        let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-        self.impls_answer(&key, method, required_trait)
-            .then_some(key)
+    /// Whether a static's owning `link` is a newtype or a `flags`, whose
+    /// statics are mangled under the link itself rather than the base it
+    /// represents.
+    fn is_declaring_link(&self, link: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(link),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
+        )
     }
 
     /// What a qualified call returns, off the declaration it selected where it
@@ -3595,16 +3593,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
             self.lookup_newtype(struct_name)
         {
-            if self
-                .own_newtype_static(newtype_id, method_name, None)
-                .is_some()
-            {
+            let owner = self
+                .newtype_static_owner(newtype_id, method_name, None)
+                .map(|(link, _)| link);
+            if owner == Some(newtype_id) {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,
                     mangled_func_name.to_string(),
                 )
-            } else if let Some((link, _)) = self.newtype_link_declaring(newtype_id, method_name) {
+            } else if let Some(link) = owner.filter(|&link| self.is_declaring_link(link)) {
                 let link_name = self.tysys.type_table.borrow().name(link);
                 let link_fq = self.qualified_receiver_name(&link_name, link);
                 let mangled = MethodName::format_local(&link_fq, None, method_name);
