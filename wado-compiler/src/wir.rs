@@ -789,6 +789,16 @@ impl WirType {
         }
     }
 
+    /// The width a struct field or array element of this type is stored in,
+    /// where that is narrower than the `i32` a value of it occupies.
+    pub fn packed_bits(&self) -> Option<u32> {
+        match self {
+            Self::I8 | Self::U8 | Self::Bool => Some(8),
+            Self::I16 | Self::U16 => Some(16),
+            _ => None,
+        }
+    }
+
     /// Returns true if this type is a non-nullable reference.
     pub fn is_nonnull_ref(&self) -> bool {
         matches!(
@@ -1799,7 +1809,7 @@ impl WirInstr {
     /// Whether control can leave `self` other than by falling through, where
     /// `labels` is how many labels a branch out of `self` crosses before it
     /// leaves.
-    fn leaves(&self, labels: u32) -> bool {
+    pub(crate) fn leaves(&self, labels: u32) -> bool {
         let under = |body: &[Self]| body.iter().any(|i| i.leaves(labels + 1));
         match self {
             Self::Return { .. } => true,

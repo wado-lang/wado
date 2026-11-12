@@ -1,0 +1,83 @@
+// A field read with nothing between it and the last write to that field reads
+// the value written, and a write that the next write to the same field
+// replaces before anything can read it is not made. `List::push` is the shape:
+// each push reads `used` and writes it back.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    used: i32,
+}
+
+#[inline(never)]
+fn bump(c: &mut Counter) -> i32 {
+    c.used = c.used + 1;
+    c.used = c.used + 2;
+    c.used = c.used + 3;
+    return c.used;
+}
+
+#[inline(never)]
+fn fill(xs: &mut List<i32>) {
+    xs.reserve(3);
+    unchecked xs.push_within_capacity(4);
+    unchecked xs.push_within_capacity(5);
+    unchecked xs.push_within_capacity(6);
+}
+
+// `d` may be `c`, so the read between the writes keeps the first.
+#[inline(never)]
+fn observed(c: &mut Counter, d: &Counter) -> i32 {
+    c.used = 10;
+    let seen = d.used;
+    c.used = 20;
+    return seen + c.used;
+}
+
+#[inline(never)]
+fn peek(c: &Counter) -> i32 {
+    return builtin::black_box(c).used;
+}
+
+// `peek` writes nothing but reads `used`.
+#[inline(never)]
+fn across_call(c: &mut Counter) -> i32 {
+    c.used = 7;
+    let seen = peek(c);
+    c.used = 8;
+    return seen * 10 + c.used;
+}
+
+// The second write never runs where the function returns first.
+#[inline(never)]
+fn early(c: &mut Counter, stop: bool) -> i32 {
+    c.used = 1;
+    if stop {
+        return 0;
+    }
+    c.used = 2;
+    return c.used;
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { used: 0 };
+    println(`${bump(&mut c)} ${c.used}`);
+    let mut xs: List<i32> = [1];
+    fill(&mut xs);
+    println(`${xs:?}`);
+    println(`${observed(&mut c, &c)}`);
+    println(`${across_call(&mut c)}`);
+    println(`${early(&mut c, builtin::black_box(true))} ${c.used}`);
+}
+
+__DATA__
+{
+    "stdout": "6 6\n[1, 4, 5, 6]\n30\n78\n0 1\n",
+    "wir_pass": {"O2": ["wir/reuse_struct_loads", "wir/elide_overwritten_stores"]},
+    "wir_expect:O2": [
+        "$load_2 = (c.used + 1) + 2;",
+        "c.used = local.tee $load_2($load_2 + 3);",
+        "return $load_2;",
+        "required = required + 1;"
+    ]
+}

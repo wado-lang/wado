@@ -94,18 +94,20 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 fn "wir_reuse_struct_load.wado/width_and_offset"(c) {
     let $load_0: ref "wir_reuse_struct_load.wado//Span";
     let $load_2: i32;
+    let $load_4: i32;
     let w: i32;
     w = local.tee $load_0(c.span).end - local.tee $load_2($load_0.start);
-    c.pos = c.pos + 1;
-    return ((w * 100) + $load_2) + c.pos;
+    c.pos = local.tee $load_4(c.pos + 1);
+    return ((w * 100) + $load_2) + $load_4;
 }
 
 fn "wir_reuse_struct_load.wado/shift"(c) {
     let $load_0: ref "wir_reuse_struct_load.wado//Span";
+    let $load_2: i32;
     let a: i32;
     a = local.tee $load_0(c.span).start;
-    $load_0.start = a + 5;
-    return a + $load_0.start;
+    $load_0.start = local.tee $load_2(a + 5);
+    return a + $load_2;
 }
 
 fn "wir_reuse_struct_load.wado/stretch"(s, n) {
@@ -115,8 +117,9 @@ fn "wir_reuse_struct_load.wado/stretch"(s, n) {
 
 fn "wir_reuse_struct_load.wado/around_call"(c) {
     let $load_0: ref "wir_reuse_struct_load.wado//Span";
-    c.pos = "wir_reuse_struct_load.wado/stretch"(local.tee $load_0(c.span), $load_0.end);
-    return c.pos + $load_0.end;
+    let $load_2: i32;
+    c.pos = local.tee $load_2("wir_reuse_struct_load.wado/stretch"(local.tee $load_0(c.span), $load_0.end));
+    return $load_2 + $load_0.end;
 }
 
 fn "wir_reuse_struct_load.wado/guarded"(c, i) {
