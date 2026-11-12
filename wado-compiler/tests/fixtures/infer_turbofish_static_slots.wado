@@ -1,0 +1,41 @@
+// A static spelled with the receiver's turbofish (`N::<i32>::make`) solves the
+// method's own slots as the bare spelling does: from the type expected of the
+// call, or from a sibling `match` arm the call's value meets.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = i32;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+struct N<X> {
+    x: X,
+}
+
+impl<X> N<X> {
+    fn make<T, H: Holder<Item = X>>(_t: T) -> H {
+        return H::empty();
+    }
+}
+
+test "the expected type settles the slot" {
+    let b: Box = N::<i32>::make(1);
+    assert b.v == 3;
+}
+
+test "a sibling arm settles the slot" {
+    let [_n, b] = match builtin::black_box(true) {
+        true => [3, N::<i32>::make(1)],
+        false => [0, Box { v: 0 }],
+    };
+    assert b.v == 3;
+}

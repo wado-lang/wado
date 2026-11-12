@@ -40,7 +40,7 @@ use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator, util};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-use crate::elaborator::call::slot_type_bindings;
+use crate::elaborator::call::{StaticCallee, StaticTypeArgs, slot_type_bindings};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -2207,6 +2207,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_ref()
                 .map_or_else(|| own_ids.clone(), |inst| inst.vars.clone());
             let mut solved_for = param_types.clone();
+            let mut solved_return = None;
             if inst.is_some() {
                 let open: Vec<TypeId> = solving
                     .iter()
@@ -2224,6 +2225,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     inherited.then_some(target_type_id),
                     &mut solved_for,
                 );
+                solved_return = expected_type.map(|expected| {
+                    let declaring = sig
+                        .declaring_impl
+                        .map(|id| self.tysys.signatures.impl_sig(id));
+                    let declared = sig
+                        .instantiate_call_with(
+                            &self.tysys.type_table,
+                            declaring,
+                            &declaring_args,
+                            &open,
+                        )
+                        .return_type;
+                    (self.answer_frame_projections(declared), expected)
+                });
             }
             let mut infer = InferCtx::new(&self.tysys.type_table, solving.clone());
             for (i, (&param_type, &arg)) in solved_for.iter().zip(args.iter()).enumerate() {
@@ -2232,6 +2247,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     infer.add(param_type, arg);
                 }
+            }
+            if let Some((declared, expected)) = solved_return {
+                infer.add_expected_return(declared, expected);
             }
             let (mut inferred, bindings) = infer.solve_with_bindings();
             if let Some(inst) = &inst {
@@ -2274,7 +2292,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && !spelled[i]
                     && method_type_args[i] == merged[i]
             });
-            if let Some((i, _)) = unanswered
+            if unanswered.is_some()
+                && !defaulted
+                && strict
+                && self.defers_uninferred(&args, &method_type_args, expected_type)
+            {
+                let mut static_args = StaticTypeArgs {
+                    params: sig.own_params.clone(),
+                    impl_args: declaring_args.clone(),
+                    method_args: method_type_args,
+                };
+                self.defer_or_report_uninferred_static_method_type_args(
+                    StaticCallee {
+                        type_name: &receiver,
+                        method_name: &static_call.method,
+                        receiver_key: struct_key_for_lookup.as_ref(),
+                    },
+                    &mut static_args,
+                    &args,
+                    expected_type,
+                    Some(target_type_id),
+                    static_call.span,
+                );
+                method_type_args = static_args.method_args;
+            } else if let Some((i, _)) = unanswered
                 && !defaulted
                 && strict
             {

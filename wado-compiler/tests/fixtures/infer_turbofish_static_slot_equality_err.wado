@@ -1,0 +1,37 @@
+// The slot a sibling arm settles is held to its bound's equality: `Box::Item`
+// is `bool`, and the receiver's turbofish makes `X` `i32`.
+trait Holder with () {
+    type Item;
+    fn empty() -> Self;
+}
+
+struct Box {
+    v: i32,
+}
+
+impl Holder for Box {
+    type Item = bool;
+    fn empty() -> Box {
+        return Box { v: 3 };
+    }
+}
+
+struct N<X> {
+    x: X,
+}
+
+impl<X> N<X> {
+    fn make<T, H: Holder<Item = X>>(_t: T) -> H {
+        return H::empty();
+    }
+}
+
+test {
+    let [_n, _b] = match builtin::black_box(true) {
+        true => [3, N::<i32>::make(1)],
+        false => [0, Box { v: 0 }],
+    };
+}
+
+__DATA__
+{"compile_error": ":31:21: error: type 'Box' does not satisfy the associated type 'Holder::Item = i32': it is 'bool'"}

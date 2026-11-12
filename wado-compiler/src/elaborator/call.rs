@@ -13,7 +13,7 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeArgMap, TypeId,
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId,
     TypeParamId,
 };
 use crate::type_table::TypeTable;
@@ -44,7 +44,9 @@ use super::{Elaborator, InstanceImpl, InstanceOrder};
 use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
+use crate::elaborator::SelfBinding;
 use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::method_lookup::MethodInferenceInput;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
@@ -164,11 +166,11 @@ pub(super) struct StaticCallee<'a> {
 }
 
 /// What [`Elaborator::static_call_type_args`] settles for one static call.
-struct StaticTypeArgs {
+pub(super) struct StaticTypeArgs {
     /// The method's own type parameters, `method_args` indexed alike.
-    params: Vec<ast::GenericParam>,
-    impl_args: Vec<TypeId>,
-    method_args: Vec<TypeId>,
+    pub(super) params: Vec<ast::GenericParam>,
+    pub(super) impl_args: Vec<TypeId>,
+    pub(super) method_args: Vec<TypeId>,
 }
 
 /// Where a resolved argument came from, for its diagnostics. A tagged
@@ -3679,7 +3681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// function's. A slot it reports is the error type from then on: left as
     /// the callee's own binder, it reads as whatever the caller declares under
     /// that name. `receiver` is what `Self` means at the call.
-    fn defer_or_report_uninferred_static_method_type_args(
+    pub(super) fn defer_or_report_uninferred_static_method_type_args(
         &mut self,
         callee: StaticCallee,
         type_args: &mut StaticTypeArgs,
@@ -3833,7 +3835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// call's value reaches, a sibling branch's type among them. It does where
     /// no type is expected of the call and its arguments hold no variable but
     /// the call's own `type_args`, as a closure argument typed by them does.
-    fn defers_uninferred(
+    pub(super) fn defers_uninferred(
         &self,
         args: &[TypeId],
         type_args: &[TypeId],
@@ -5817,71 +5819,76 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .chain(method_info_result.param_types.iter().copied())
                 .collect();
             let method_slots = method_info_result.method_type_param_ids.clone();
+            let own_params = method_info_result.method_own_params.clone();
+            let declared_return = method_info_result.return_type;
+            let trait_decl = found_trait.canonical();
 
-            // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
-            let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
-            let args = if let Some(args) = given_args {
-                args.to_vec()
-            } else {
-                let spelled = self.bind_slots(&param_types, &method_slots, &method_type_args);
-                self.resolve_args_against_settled_params(&call.args, &spelled, ctx)
+            // The method's own slots are solved as an instance call's are: from
+            // the arguments, the type expected of the call, the bounds'
+            // equalities, or a later use the call's value meets. `Self`, the
+            // receiver's param, is settled in this body, and monomorphization
+            // substitutes it.
+            let written = self.resolve_turbofish_args(&call.type_args);
+            let of = Instantiation {
+                kind: InstanceKind::Method,
+                name: method_name,
+                span: call.span,
+                type_args: &written,
+                self_binding: Some(SelfBinding {
+                    type_id: type_param_type_id,
+                    declaring_trait: trait_decl,
+                }),
+                impl_args: &[],
+            };
+            let (mut args, inst) = match given_args {
+                Some(args) => {
+                    let inst =
+                        (!method_slots.is_empty()).then(|| self.instantiate(&method_slots, &of));
+                    (args.to_vec(), inst)
+                }
+                None => self.resolve_args_through_slots(
+                    ctx,
+                    &call.args,
+                    &param_types,
+                    &method_slots,
+                    &own_params,
+                    &of,
+                    expected_type.map(|expected| ExpectedReturn {
+                        declared: declared_return,
+                        expected,
+                    }),
+                ),
             };
             // The method's parameters exclude the receiver, so each pairs with
             // the argument after it.
-            let params_args = &args[receiver..];
-            let params_arg_exprs = call.args.get(receiver..).unwrap_or_default();
-
-            // If no explicit type args, infer method-level type params from argument
-            // types via the shared `InferCtx` solver. The lookup moved the method's
-            // own slots past every frame's (`MethodSig::instantiate_received`), so
-            // a caller's parameter of the same index is not among them.
-            if method_type_args.is_empty()
-                && !method_info_result.param_types.is_empty()
-                && !method_info_result.method_type_param_ids.is_empty()
-            {
-                let method_param_ids = method_info_result.method_type_param_ids.clone();
-                let mut infer = InferCtx::new(&self.tysys.type_table, method_param_ids.clone());
-                for (i, (param_type, arg)) in method_info_result
-                    .param_types
-                    .iter()
-                    .zip(params_args)
-                    .enumerate()
-                {
-                    if answers_last(params_arg_exprs.get(i)) {
-                        infer.add_deferred(*param_type, *arg);
-                    } else {
-                        infer.add(*param_type, *arg);
-                    }
-                }
-                let (inferred, bindings) = infer.solve_with_bindings();
-                // Only adopt the inferred vector if the solver actually bound at
-                // least one method-level parameter; otherwise leave
-                // `method_type_args` empty so downstream code treats the call as
-                // having no inferred method args (matching the legacy behaviour).
-                if method_param_ids.iter().any(|p| bindings.contains_key(p)) {
-                    method_type_args = inferred;
-                }
-            }
-
-            // Only the method's own type params are bound here. `Self`, the
-            // receiver's param, is settled in this body, and monomorphization
-            // substitutes it.
-            let settled = self.bind_slots(&param_types, &method_slots, &method_type_args);
-            let unbound: &[TypeId] = if method_type_args.is_empty() {
-                &method_slots
-            } else {
-                &[]
-            };
+            let (method_type_args, subst) = self.bind_method_type_args(
+                written.clone(),
+                MethodInferenceInput {
+                    receiver_type: type_param_type_id,
+                    method_name,
+                    slots: &method_slots,
+                    own_params: &own_params,
+                    param_types: &method_info_result.param_types,
+                    args: &args[receiver..],
+                    raw_args: call.args.get(receiver..).unwrap_or_default(),
+                    decl_return_type: declared_return,
+                    expected_return_type: expected_type,
+                    trait_decl,
+                    declaring_module: found_trait.module().cloned(),
+                    impl_args: &[],
+                    inst: inst.as_ref(),
+                    span: call.span,
+                },
+            );
+            let settled: Vec<TypeId> = param_types
+                .iter()
+                .map(|&t| self.substitute_ctx_in_frame(&subst, t))
+                .collect();
+            self.recoerce_literal_args(&call.args, &mut args, &settled);
             for (i, (&arg, &param)) in args.iter().zip(&settled).enumerate() {
-                if !self.tysys.type_table.borrow().mentions_any(param, unbound) {
-                    self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
-                }
+                self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
             }
-            let final_return_type = self.bind_slots(
-                &[method_info_result.return_type],
-                &method_slots,
-                &method_type_args,
-            )[0];
+            let final_return_type = self.substitute_ctx_in_frame(&subst, declared_return);
 
             let method_type_arg_names: Vec<FqTypeName> = method_type_args
                 .iter()
@@ -6025,34 +6032,5 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: call.span,
         });
         TypeTable::ERROR
-    }
-
-    /// Resolve `args`, each against the parameter it fills. A parameter still
-    /// carrying a type param is the instantiation's to settle, so it hints
-    /// nothing.
-    fn resolve_args_against_settled_params(
-        &mut self,
-        args: &[ast::Expr],
-        param_types: &[TypeId],
-        ctx: &mut FunctionContext,
-    ) -> Vec<TypeId> {
-        args.iter()
-            .zip(param_types)
-            .map(|(arg, &param)| {
-                let expected =
-                    Some(param).filter(|&p| !self.tysys.type_table.borrow().contains_type_param(p));
-                self.resolve_expr(arg, ctx, expected)
-            })
-            .collect()
-    }
-
-    /// `types` with each of `slots` replaced by the argument in its place.
-    fn bind_slots(&self, types: &[TypeId], slots: &[TypeId], args: &[TypeId]) -> Vec<TypeId> {
-        let substitution = SubstitutionContext::new().bind(slots, args);
-        let mut table = self.tysys.type_table.borrow_mut();
-        types
-            .iter()
-            .map(|&t| substitution.substitute(t, &mut table))
-            .collect()
     }
 }
