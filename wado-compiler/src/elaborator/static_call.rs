@@ -564,9 +564,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `key`'s own impls answer `method_name` for a call here, as
     /// [`Self::link_candidates`] reads them for the resolution: a trait's
-    /// default counts, and a trait out of scope does not. A link that does
-    /// answers a newtype's call before the type it wraps.
-    pub(super) fn impls_answer(&mut self, key: &ImplTargetKey, method_name: &str) -> bool {
+    /// default counts, a trait out of scope does not, and a qualified
+    /// spelling's `required_trait` alone does. A link that does answers a
+    /// newtype's call before the type it wraps.
+    pub(super) fn impls_answer(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        required_trait: Option<DefId>,
+    ) -> bool {
         let Some(name) = key
             .decl_name(self.tysys.resolutions.defs())
             .map(str::to_string)
@@ -575,6 +581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let query = StaticQuery {
             receiver_key: Some(key),
+            required_trait,
             ..StaticQuery::of(&name, method_name)
         };
         let (reached, _) = self.link_candidates(&query, key, &[]);

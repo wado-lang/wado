@@ -786,7 +786,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Option<(trait_env::ImplTargetKey, String)> {
         let mut link = self.newtype_link_target(key)?;
         loop {
-            if self.impls_answer(&link.0, method_name) {
+            if self.impls_answer(&link.0, method_name, None) {
                 return Some(link);
             }
             match self.newtype_link_target(&link.0) {

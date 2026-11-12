@@ -1877,7 +1877,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // lookup (follow newtypes to base). The canonical key disambiguates
         // two modules' same-named structs whose methods both live in the
         // global `ImplMethodIndex`.
-        let own_static = self.own_newtype_static(target_type_id, &static_call.method);
+        let own_static =
+            self.own_newtype_static(target_type_id, &static_call.method, required_trait);
         let inherited = own_static.is_none();
         let declaring_key = own_static.or_else(|| {
             self.newtype_link_declaring(target_type_id, &static_call.method)
@@ -2413,9 +2414,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     vec![elem],
                 )
             }
-            ResolvedType::Newtype { base_type, .. } => {
-                self.newtype_static_receiver(target_type_id, base_type, &static_call.method)
-            }
+            ResolvedType::Newtype { base_type, .. } => self.newtype_static_receiver(
+                target_type_id,
+                base_type,
+                &static_call.method,
+                required_trait,
+            ),
             ResolvedType::Flags { .. } => {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
@@ -3001,8 +3005,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         newtype: TypeId,
         base: TypeId,
         method: &str,
+        required_trait: Option<DefId>,
     ) -> QualifiedReceiver {
-        let own_static = self.own_newtype_static(newtype, method);
+        let own_static = self.own_newtype_static(newtype, method, required_trait);
         let type_table = self.tysys.type_table.borrow();
         let own = nominal_receiver(&type_table, newtype);
         if own_static.is_some() {
@@ -3025,14 +3030,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The newtype `target`'s own key, where its own impls answer `method`:
-    /// that declaration shadows the one its base supplies.
-    fn own_newtype_static(&mut self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
+    /// The newtype `target`'s own key, where its own impls answer `method`,
+    /// through `required_trait` where the spelling names one: that
+    /// declaration shadows the one its base supplies.
+    fn own_newtype_static(
+        &mut self,
+        target: TypeId,
+        method: &str,
+        required_trait: Option<DefId>,
+    ) -> Option<ImplTargetKey> {
         let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(target) else {
             return None;
         };
         let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-        self.impls_answer(&key, method).then_some(key)
+        self.impls_answer(&key, method, required_trait)
+            .then_some(key)
     }
 
     /// What a qualified call returns, off the declaration it selected where it
@@ -3583,7 +3595,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
             self.lookup_newtype(struct_name)
         {
-            if self.own_newtype_static(newtype_id, method_name).is_some() {
+            if self
+                .own_newtype_static(newtype_id, method_name, None)
+                .is_some()
+            {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,
