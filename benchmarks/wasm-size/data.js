@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794466687587,
+  "lastUpdate": 1794486886279,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76881,6 +76881,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c81baf925968fd6280ac7aaa6952eb6d9f850ea2"
         },
         "date": 1794466687176,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4759cdc0bd9197035050d047eb43a7746d2fe3e3",
+          "message": "Merge pull request #2613 from wado-lang/compiler/projection-followups\n\nfix(compiler): static calls infer their type arguments as instance calls do",
+          "timestamp": "2026-11-12T21:19:02+09:00",
+          "tree_id": "0b6db726e917c3270c3447702217c1754673344e",
+          "url": "https://github.com/wado-lang/wado/commit/4759cdc0bd9197035050d047eb43a7746d2fe3e3"
+        },
+        "date": 1794486885461,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
