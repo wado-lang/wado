@@ -1880,9 +1880,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // key disambiguates two modules' same-named structs whose methods both
         // live in the global `ImplMethodIndex`.
         let owner = self.newtype_static_owner(target_type_id, &static_call.method, required_trait);
-        let inherited = !owner
+        let inherited = owner
             .as_ref()
-            .is_some_and(|(link, _)| *link == target_type_id);
+            .is_none_or(|(link, _)| *link != target_type_id);
         let declaring_key = owner
             .filter(|(link, _)| self.is_declaring_link(*link))
             .map(|(_, key)| key);
